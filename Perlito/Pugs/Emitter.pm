@@ -477,7 +477,7 @@ class Use {
 
 =head1 NAME 
 
-MiniPerl6::Pugs::Emit - Code generator for adapting MiniPerl6 dialect to Pugs
+Perlito::Pugs::Emit - Code generator for adapting Perlito dialect to Pugs
 
 =head1 SYNOPSIS
 
@@ -485,7 +485,7 @@ MiniPerl6::Pugs::Emit - Code generator for adapting MiniPerl6 dialect to Pugs
 
 =head1 DESCRIPTION
 
-This module generates Perl5 code for the MiniPerl6 compiler.
+This module generates Perl5 code for the Perlito compiler.
 
 =head1 AUTHORS
 

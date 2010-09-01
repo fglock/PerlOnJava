@@ -979,7 +979,7 @@ class Use {
 
 =head1 NAME
 
-MiniPerl6::PAST::Emit - Code generator for MiniPerl6-in-PAST
+Perlito::PAST::Emit - Code generator for Perlito-in-PAST
 
 =head1 SYNOPSIS
 
@@ -987,7 +987,7 @@ MiniPerl6::PAST::Emit - Code generator for MiniPerl6-in-PAST
 
 =head1 DESCRIPTION
 
-This module generates PAST code for the MiniPerl6 compiler.
+This module generates PAST code for the Perlito compiler.
 
 =head1 AUTHORS
 
