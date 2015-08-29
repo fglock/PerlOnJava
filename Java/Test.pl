@@ -8,8 +8,7 @@
 #   one liner:
 #   $ touch Test.class ; rm Test.class ; perl perlito5.pl -Isrc5/lib -I. -It -Cjava misc/Java/Test.pl > Test.java ; javac Test.java ; java Test
 #
-
-print "1..75\n";
+print "1..94\n";
 print "ok 1 - print() works\n";
 say   "ok 2 - say() works";
 
@@ -254,6 +253,7 @@ say "ok 45 - data structure";
 if (keys(%$hh) != 2) { print "not " }
 say "ok 46 - data structure";
 
+{
 my $a;
 @$a = (10,20,30);
 if (@$aa != 3) { print "not " }
@@ -302,6 +302,7 @@ say "ok 53 - data structure @{[ %main::a ]}";
 @main::a = ( @main::a, %main::a );
 if (@main::a != 10) { print "not " }
 say "ok 54 - data structure [ @main::a ]";
+}
 
 # closure
 my $x = 3;
@@ -405,10 +406,89 @@ my @a = (@y) x 2;
 print 'not ' unless join( ',', @a ) eq 'ryba,lufa,ryba,lufa';
 say "ok 74 - long list replication in list context: [ @a ]";
 
-# TODO - range not yet implemented
-# my @yarr = 1..4;
-# print 'not ' unless (shift @yarr) == 1;
-# say "ok 75 - array shift: [ @yarr ]";
+@a = ( qw/ryba lufa ryba/ );
+$x = grep { $_ eq 'ryba' } @a;
+print 'not ' unless $x == 2;
+say "ok 75 - simple grep {eq} in scalar context works: [ @a ]";
+
+@a = ( qw/ryba lufa ryba koza/ );
+$x = grep { $_ =~ /[bz]a$/ } @a;
+print 'not ' unless $x == 3;
+say "ok 76 - simple grep {=~} in scalar context works: [ @a ]";
+
+@a = ( qw/ryba lufa ryba/ );
+@y = grep { $_ eq 'ryba' } @a;
+print 'not ' unless @y == 2 and $y[0] eq 'ryba' and $y[1] eq 'ryba';
+say "ok 77 - simple grep {eq} in list context works: [ @a => @y ]";
+
+@a = ( qw/ryb luf ryb/ );
+@y = map { $_ . 'a' } @a;
+print 'not ' unless @y == 3 and $y[0] eq 'ryba' and $y[1] eq 'lufa';
+say "ok 78 - simple map {.} in list context works: [ @a => @y ]";
+
+@a = ( qw/ryb luf ryb/ );
+$x = map { $_ . 'a' } @a;
+print 'not ' unless $x == 3;
+say "ok 79 - simple map {.} in scalar context works: [ @a => @y ]";
+
+@a = ( qw/ryb luf ryb/ );
+@y = map { $_ =~ /^ry/ ? $_ . 'a' : () } @a;
+print 'not ' unless @y == 2 and $y[0] eq 'ryba' and $y[1] eq 'ryba';
+say "ok 80 - map { ? . : () } in list context works: [ @a => @y ]";
+
+@a = ( qw/ryb luf ryb/ );
+$x = map { $_ =~ /^ry/ ? $_ . 'a' : () } @a;
+print 'not ' unless $x == 2;
+say "ok 81 - map { ? . : () } in scalar context works: [ @a => @y ]";
+
+#@a = ( qw/ryba lufa/ );
+#@y = map { $_ =~ /^ry/ ? $_, $_ : $_ } @a;
+#print 'not ' unless @y == 3 and $y[0] eq $y[1] and $y[0] eq 'ryba';
+#say "ok 82 - map { ? ( , ) : () } in list context works: [ @a => @y ]";
+
+@a = qw/ryba lufa koza/;
+@y = sort { $a cmp $b } @a;
+print 'not ' unless $y[0] eq 'koza' and $y[1] eq 'lufa' and $y[2] eq 'ryba';
+say "ok 83 - sort {cmp} works: [ @a => @y ]";
+
+@a = qw/ryba lufa koza/;
+@y = sort { $a cmp $b } @a;
+print 'not ' unless $a[0] eq 'ryba' and $a[1] eq 'lufa' and $a[2] eq 'koza';
+say "ok 84 - sort {cmp} preserves the original array: [ @a => @y ]";
+
+{
+    package Just::For::Fun;
+
+    $a = "something";
+
+    @a = qw/ryba lufa koza/;
+    @y = sort { $a cmp $b } @a;
+    print 'not ' unless $a eq 'something' and $y[0] eq 'koza' and $y[1] eq 'lufa' and $y[2] eq 'ryba';
+    say "ok 85 - sort localizes \$a & \$b properly [ @a => @y ]";
+}
+
+my $val = '2015-08-28';
+$val =~ s/-//g;
+print 'not ' unless $val eq '20150828';
+say 'ok 86 - search-replace regex works';
+
+my @range = 1..4;
+print 'not ' unless ($range[0] == 1 && $range[1] == 2 && $range[2] == 3 && $range[3] == 4 && !defined $range[4]);
+say 'ok 87 - range in list context works';
+
+my @yarr = 1..4;
+print 'not ' unless (shift @yarr) == 1;
+say "ok 88 - array shift: [ @yarr ]";
+
+for (89..90) {
+    say "ok $_ - for loop with \$_";
+}
+for my $x (91..92) {
+    say "ok $x - for loop with lexical";
+}
+for $x_global (93..94) {
+    say "ok $x_global - for loop with global";
+}
 
 __END__
 
