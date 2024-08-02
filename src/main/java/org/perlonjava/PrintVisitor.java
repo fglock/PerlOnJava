@@ -96,7 +96,7 @@ public class PrintVisitor implements Visitor {
     @Override
     public void visit(StringNode node) throws Exception {
         appendIndent();
-        sb.append("StringNode: ").append(node.value).append("\n");
+        sb.append("StringNode: '").append(node.value).append("'\n");
     }
 
     @Override
