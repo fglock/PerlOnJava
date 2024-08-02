@@ -16,6 +16,10 @@ public class Runtime {
     public static HashMap<String, EmitterContext> evalContext =
         new HashMap<String, EmitterContext>(); // storage for eval string compiler context
 
+    // this is not safe, because the values are mutable - need to create an immutable version
+    // public static zero = new Runtime(0);
+    // public static one = new Runtime(1);
+
     // Constructors
     public Runtime() {
         this.type = Type.UNDEF;
@@ -196,6 +200,27 @@ public class Runtime {
   public Runtime unaryMinus() {
     return new Runtime(0).subtract(this);
   }
+
+    public Runtime not() {
+        if ( this.getBoolean() ) {
+            return new Runtime(0);
+        }
+        return new Runtime(1);
+    }
+
+    public Runtime or(Runtime arg2) {
+        if ( this.getBoolean() ) {
+            return this;
+        }
+        return arg2;
+    }
+
+    public Runtime and(Runtime arg2) {
+        if ( this.getBoolean() ) {
+            return arg2;
+        }
+        return this;
+    }
 
     public Runtime add(Runtime arg2) {
         Runtime arg1 = this;

@@ -261,8 +261,15 @@ public class Parser {
         consume(TokenType.OPERATOR, "\""); // Consume the closing double quote
         
         // Join the parts
-        if (parts.size() == 1) {
-            return parts.get(0);    // TODO make sure to stringify
+        if (parts.size() == 0) {
+            return new StringNode("", tokenIndex);
+        } else if (parts.size() == 1) {
+            Node result = parts.get(0);
+            if (result instanceof StringNode) {
+                return parts.get(0);
+            }
+            // stringify using:  "" . $a
+            return new BinaryOperatorNode(".", new StringNode("", tokenIndex), parts.get(0), tokenIndex);
         } else {
             Node result = parts.get(0);
             for (int i = 1; i < parts.size(); i++) {
