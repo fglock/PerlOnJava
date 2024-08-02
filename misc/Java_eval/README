@@ -1,0 +1,29 @@
+resources for in-memory compilation:
+
+    JavaCompiler uses the file system. It could be combined with -classpath <path>
+    and a temporary directory:
+
+        http://docs.oracle.com/javase/7/docs/api/java/nio/file/Files.html#createTempDirectory(java.lang.String,%20java.nio.file.attribute.FileAttribute...)
+        http://stackoverflow.com/questions/1563909/how-to-set-classpath-when-i-use-javax-tools-javacompiler-compile-the-source
+
+    http://www.ateam-oracle.com/dynamic-java-compilation/
+        Code:
+        http://www.ateam-oracle.com/wp-content/uploads/2011/07/InFlightCompilation.zip    
+
+    https://github.com/trung/InMemoryJavaCompiler
+                <name>Apache License, Version 2.0</name>
+                 <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+    
+    https://github.com/turpid-monkey/InMemoryJavaCompiler
+
+    http://unkrig.de/w/Janino
+        (almost) complete Java™ compiler
+
+        http://stackoverflow.com/questions/16655577/janino-dynamic-compile-interface-class
+        Janino is a Java 1.4 compatible compiler -- i.e., it can't handle generics, which were introduced in Java 5. Line 22 is the line that begins List<Course> -- a use of generics, which this compiler can't handle.
+
+    http://udn.yyuap.com/doc/jdk6-api-zh/javax/tools/JavaCompiler.html
+
+        // reuse the same file manager to allow caching of jar files
+
+

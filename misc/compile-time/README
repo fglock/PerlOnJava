@@ -1,0 +1,20 @@
+
+The "first" scratchpad of a closure is created at compile-time.
+
+
+http://www.perlmonks.org/?node_id=964726
+
+at creation time, the sub is given its pad, with the first instance of each of its lexical vars created and stored within
+...
+On first execution, all the vars are available in the pad. On return from the sub, all the sub's own lexical vars are abandoned, and new empty ones created in the pad, ready for the next execution (if any).
+
+
+http://grokbase.com/t/perl/inline/013epgpdvs/very-ot-technical-query-re-scratchpad-lookups-for-my-vars
+
+a lexical variable
+is unique to its code value's (CV) context which was determined at parse
+time. However, if you recursively call that CV, then Perl has to allocate a
+new value for the lexical.
+
+
+
