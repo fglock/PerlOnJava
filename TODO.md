@@ -4,10 +4,10 @@
 - Loops
 - `$_`, `$@`
 - Ternary operator
+- `eval` block, catch error: create the $@ variable
 
 ## Harder to Implement
 - `BEGIN` block
-- `eval` block, catch error
 - Test suite
 
 ## Easy, but Low Impact

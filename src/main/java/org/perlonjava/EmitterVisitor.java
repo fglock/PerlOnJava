@@ -75,7 +75,7 @@ public class EmitterVisitor implements Visitor {
   }
 
   /**
-   * Emits a call to a built-in method on the Runtime class.
+   * Emits a call to a binary built-in method on the Runtime class.
    * It assumes that the parameter to the call is already in the stack.
    * 
    * @param operator The name of the built-in method to call.
@@ -119,6 +119,14 @@ public class EmitterVisitor implements Visitor {
         case "=":
             handleBinaryBuiltin("set");
             break;
+        case "||":
+        case "or":
+            handleBinaryBuiltin("or");
+            break;
+        case "&&":
+        case "and":
+            handleBinaryBuiltin("and");
+            break;
         case "->":
             handleArrowOperator(node);
             break;
@@ -152,6 +160,19 @@ public class EmitterVisitor implements Visitor {
     }
   }
 
+  /**
+   * Emits a call to a unary built-in method on the Runtime class.
+   * 
+   * @param operator The name of the built-in method to call.
+   */
+  private void handleUnaryBuiltin(UnaryOperatorNode node, String operator) throws Exception {
+    node.operand.accept(this.with(ContextType.SCALAR));
+    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", operator, "()LRuntime;", false);
+    if (ctx.contextType == ContextType.VOID) {
+        ctx.mv.visitInsn(Opcodes.POP);
+    }
+  }
+
   @Override
   public void visit(UnaryOperatorNode node) throws Exception {
     String operator = node.operator;
@@ -176,21 +197,17 @@ public class EmitterVisitor implements Visitor {
             handleEvalOperator(node);
             break;
         case "-":
-            handleUnaryMinusOperator(node);
+            handleUnaryBuiltin(node, "unaryMinus");
             break;
         case "+":
             handleUnaryPlusOperator(node);
             break;
+        case "!":
+        case "not":
+            handleUnaryBuiltin(node, "not");
+            break;
         default:
             throw new UnsupportedOperationException("Unsupported operator: " + operator);
-    }
-  }
-
-  private void handleUnaryMinusOperator(UnaryOperatorNode node) throws Exception {
-    node.operand.accept(this.with(ContextType.SCALAR));
-    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "unaryMinus", "()LRuntime;", false);
-    if (ctx.contextType == ContextType.VOID) {
-        ctx.mv.visitInsn(Opcodes.POP);
     }
   }
 
