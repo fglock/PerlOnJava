@@ -225,7 +225,7 @@ public class EmitterVisitor implements Visitor {
         ctx.logDebug("GETVAR " + var);
         int varIndex = ctx.symbolTable.getVariableIndex(var);
         if (varIndex == -1) {
-            ctx.logDebug(
+            System.out.println(
                 "Warning: Global symbol \""
                 + var
                 + "\" requires explicit package name (did you forget to declare \"my "
@@ -263,7 +263,7 @@ public class EmitterVisitor implements Visitor {
                 String var = sigil + ((IdentifierNode) identifierNode).name;
                 ctx.logDebug("MY " + var);
                 if (ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
-                    ctx.logDebug(
+                    System.out.println(
                         "Warning: \"my\" variable "
                         + var
                         + " masks earlier declaration in same ctx.symbolTable"
