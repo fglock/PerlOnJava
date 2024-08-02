@@ -1,7 +1,0 @@
-Changes
-Makefile.PL
-MANIFEST
-README
-ReturnHelloWorld.xs
-t/ReturnHelloWorld.t
-lib/ReturnHelloWorld.pm
