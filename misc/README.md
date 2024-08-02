@@ -4,6 +4,6 @@
 Experimental code
 -----------
 
-This directory contains experimental code and examples
+This directory contains experimental code, snippets and examples
 
 
