@@ -28,6 +28,8 @@ public class Runtime {
     public Type type;
     public Object value;
 
+    public Object codeObject;  // apply() needs this
+
     // Temporary storage for anonymous subroutines and eval string compiler context
     public static HashMap<String, Class<?>> anonSubs =
         new HashMap<String, Class<?>>(); // temp storage for make_sub()
@@ -61,6 +63,11 @@ public class Runtime {
 
     public Runtime(String value) {
         this.type = Type.STRING;
+        this.value = value;
+    }
+
+    public Runtime(Method value) {
+        this.type = Type.CODE;
         this.value = value;
     }
 
@@ -121,6 +128,7 @@ public class Runtime {
     public Runtime set(Runtime value) {
         this.type = value.type;
         this.value = value.value;
+        this.codeObject = this.codeObject;
         return this;
     }
 
@@ -157,20 +165,21 @@ public class Runtime {
     }
 
   // Factory method to create a CODE object (anonymous subroutine)
-  public static Runtime make_sub(String className) throws Exception {
+  public static Runtime make_sub(Object codeObject) throws Exception {
     // finish setting up a CODE object
-    Class<?> clazz = Runtime.anonSubs.remove(className);
+    Class<?> clazz = codeObject.getClass();
     Method mm = clazz.getMethod("apply", Runtime.class, ContextType.class);
     Runtime r = new Runtime();
     r.value = mm;
     r.type = Type.CODE;
+    r.codeObject = codeObject;  // XXX TODO Cleanup - store a single object instead of two
     return r;
   }
 
   // Method to apply (execute) a subroutine reference
   public Runtime apply(Runtime a, ContextType callContext) throws Exception {
     if (type == Type.CODE) {
-        return (Runtime) ((Method) value).invoke(null, a, callContext);
+        return (Runtime) ((Method) value).invoke(this.codeObject, a, callContext);
     } else {
         throw new IllegalStateException("Variable does not contain a code reference");
     }
