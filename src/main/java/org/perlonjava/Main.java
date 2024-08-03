@@ -1,4 +1,6 @@
 import java.util.*;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 
 /**
  * The Main class serves as the entry point for the Perl-to-Java bytecode compiler and runtime
@@ -28,8 +30,9 @@ public class Main {
                     + "print $x ;"
                     + "$a = 12 ;"
                     + "print $a ;"
+                    + " print ( sub { print @_ } ) ;"    // anon sub
                     + " ( sub { print @_ } )->(88888) ;"    // anon sub
-                    + "eval ' $a = $a + 1 '; "    // eval string
+               //     + "eval ' $a = $a + 1 '; "    // eval string
                     + "print $a ;"
                     + "do { $a; if (1) { print 123 } elsif (3) { print 345 } else { print 456 } } ;"
                     + "print \"Finished; value is $a\\n\"; "
@@ -92,8 +95,9 @@ public class Main {
 
             // Enter a new scope in the symbol table and add special Perl variables
             ctx.symbolTable.enterScope();
-            ctx.symbolTable.addVariable("@_"); // Argument list is local variable 0
-            ctx.symbolTable.addVariable("wantarray"); // Call context is local variable 1
+            ctx.symbolTable.addVariable("this"); // anon sub instance is local variable 0
+            ctx.symbolTable.addVariable("@_"); // Argument list is local variable 1
+            ctx.symbolTable.addVariable("wantarray"); // Call context is local variable 2
 
             ctx.logDebug("parse code: " + code);
             ctx.logDebug("  call context " + ctx.contextType);
@@ -134,10 +138,17 @@ public class Main {
                 System.exit(0); // success
             }
 
-            // Convert the generated class into a Runtime object
-            Runtime.anonSubs.put(ctx.javaClassName, generatedClass); // Store the class in the runtime map
-            Runtime anonSub = Runtime.make_sub(ctx.javaClassName); // Create a Runtime instance for the generated class
-            Runtime result = anonSub.apply(new Runtime(999), ContextType.SCALAR); // Execute the generated method
+            // Find the constructor
+            Constructor<?> constructor = generatedClass.getConstructor();
+
+            // Instantiate the class
+            Object instance = constructor.newInstance();
+
+            // Find the apply method
+            Method applyMethod = generatedClass.getMethod("apply", Runtime.class, ContextType.class);
+
+            // Invoke the method
+            Runtime result = (Runtime) applyMethod.invoke(instance, new Runtime(), ContextType.SCALAR);
 
             // Print the result of the execution
             ctx.logDebug("Result of generatedMethod: " + result);

@@ -1,7 +1,5 @@
 import java.util.*;
-import org.objectweb.asm.ClassWriter;
-import org.objectweb.asm.Label;
-import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.*;
 
 /**
  * ASMMethodCreator is a utility class that uses the ASM library to dynamically generate Java classes
@@ -13,9 +11,6 @@ public class ASMMethodCreator implements Opcodes {
     // Counter for generating unique class names
     static int classCounter = 0;
 
-    // Custom class loader to load generated classes
-    static CustomClassLoader loader = new CustomClassLoader();
-
     // Generate a unique internal class name
     public static String generateClassName() {
         return "org/perlito/anon" + classCounter++;
@@ -26,7 +21,7 @@ public class ASMMethodCreator implements Opcodes {
      * syntax tree (AST).
      *
      * @param ctx The emitter context containing information for code generation.
-     * @param env An array of environment variable names to be included as static fields in the class.
+     * @param env An array of environment variable names to be included as instance fields in the class.
      * @param ast The abstract syntax tree representing the method body.
      * @return The generated class.
      * @throws Exception If an error occurs during class creation.
@@ -35,16 +30,12 @@ public class ASMMethodCreator implements Opcodes {
         // Create a ClassWriter with COMPUTE_FRAMES and COMPUTE_MAXS options for automatic frame and max stack size calculation
         ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
 
-        // FIXME: this method signature says we return Runtime,
-        // for this reason we can't run the closure in VOID context
-        //
-        // In order to work around this, the VOID callers will use Opcodes.POP to cleanup the stack.
-        //
+        // Ensure the context type is not VOID
         if (ctx.contextType == ContextType.VOID) {
             ctx.contextType = ContextType.SCALAR;
         }
 
-        // Create a "Java" class name with dots instead of slash
+        // Create a "Java" class name with dots instead of slashes
         String javaClassNameDot = ctx.javaClassName.replace('/', '.');
 
         // Set the source file name for runtime error messages
@@ -53,55 +44,45 @@ public class ASMMethodCreator implements Opcodes {
         // Define the class with version, access flags, name, signature, superclass, and interfaces
         cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, ctx.javaClassName, null, "java/lang/Object", null);
 
-        // Add static fields to the class for closure variables
+        // Add instance fields to the class for closure variables
         for (String fieldName : env) {
-            ctx.logDebug("Create static field: " + fieldName);
-            cw.visitField(Opcodes.ACC_PUBLIC + Opcodes.ACC_STATIC, fieldName, "LRuntime;", null, null).visitEnd();
+            ctx.logDebug("Create instance field: " + fieldName);
+            cw.visitField(Opcodes.ACC_PUBLIC, fieldName, "LRuntime;", null, null).visitEnd();
         }
 
-        // Create the class initializer method
-        ctx.mv = cw.visitMethod(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
-        ctx.mv.visitCode();
-        // The static initializer is currently empty. If static field initialization is needed, uncomment the following block.
-        /*
-        for (int i = 0; i < env.length; i++) { // Initialize the static fields
-            String fieldName = env[i];
-            ctx.logDebug("Init static field: " + fieldName);
-            ctx.mv.visitTypeInsn(Opcodes.NEW, "Runtime");
-            ctx.mv.visitInsn(Opcodes.DUP);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "Runtime", "<init>", "()V", false); // Create a new instance of Runtime
-            ctx.mv.visitFieldInsn(Opcodes.PUTSTATIC, ctx.javaClassName, fieldName, "LRuntime;"); // Set the static field
+        // Add a constructor with parameters for initializing the fields
+        StringBuilder constructorDescriptor = new StringBuilder("(");
+        for (int i = 3; i < env.length; i++) {
+            constructorDescriptor.append("LRuntime;");
         }
-        */
-        ctx.mv.visitInsn(Opcodes.RETURN);
-        ctx.mv.visitMaxs(0, 0);
-        ctx.mv.visitEnd();
-
-        // Add a constructor without parameters
-        ctx.mv = cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+        constructorDescriptor.append(")V");
+        ctx.logDebug("constructorDescriptor: " + constructorDescriptor.toString());
+        ctx.mv = cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", constructorDescriptor.toString(), null, null);
         ctx.mv.visitCode();
         ctx.mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
         ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false); // Call the superclass constructor
+        for (int i = 3; i < env.length; i++) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, i - 2); // Load the constructor argument
+            ctx.mv.visitFieldInsn(Opcodes.PUTFIELD, ctx.javaClassName, env[i], "LRuntime;"); // Set the instance field
+        }
         ctx.mv.visitInsn(Opcodes.RETURN); // Return void
         ctx.mv.visitMaxs(0, 0); // Automatically computed
         ctx.mv.visitEnd();
 
-        // Create the main method for the generated class
+        // Create the public "apply" method for the generated class
         ctx.logDebug("Create the method");
-        String returnType = "(LRuntime;LContextType;)Ljava/lang/Object;";
-
-        // Define the method as public and static
-        ctx.mv = cw.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "apply", returnType, null, new String[] {"java/lang/Exception"});
+        ctx.mv = cw.visitMethod(Opcodes.ACC_PUBLIC, "apply", "(LRuntime;LContextType;)LRuntime;", null, new String[] {"java/lang/Exception"});
 
         // Generate the subroutine block
         ctx.mv.visitCode();
 
-        // Initialize local variables with closure values from static fields
-        // Skip indices 0 and 1 because they are reserved for special arguments ("@_" and call context)
-        for (int i = 2; i < env.length; i++) {
-            String fieldName = env[i];
-            ctx.logDebug("Init closure variable: " + fieldName);
-            ctx.mv.visitFieldInsn(Opcodes.GETSTATIC, ctx.javaClassName, fieldName, "LRuntime;");
+        // Initialize local variables with closure values from instance fields
+        // Skip indices 0 to 2 because they are reserved for special arguments (this, "@_" and call context)
+        for (int i = 3; i < env.length; i++) {
+            ctx.logDebug("Init closure variable: " + env[i]);
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
+            ctx.mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassName, env[i], "LRuntime;");
             ctx.mv.visitVarInsn(Opcodes.ASTORE, i);
         }
 
@@ -123,8 +104,17 @@ public class ASMMethodCreator implements Opcodes {
         cw.visitEnd();
         byte[] classData = cw.toByteArray(); // Generate the bytecode
 
+        // Custom class loader to load generated classes
+        CustomClassLoader loader = new CustomClassLoader();
         // Define the class using the custom class loader
         return loader.defineClass(javaClassNameDot, classData);
     }
+
+    // // Custom class loader
+    // static class CustomClassLoader extends ClassLoader {
+    //     public Class<?> defineClass(String name, byte[] b) {
+    //         return defineClass(name, b, 0, b.length);
+    //     }
+    // }
 }
 

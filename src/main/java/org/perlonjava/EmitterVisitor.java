@@ -1,5 +1,4 @@
-import org.objectweb.asm.Label;
-import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.*;
 import java.util.*;
 
 public class EmitterVisitor implements Visitor {
@@ -102,7 +101,7 @@ public class EmitterVisitor implements Visitor {
 
     switch (operator) {
         case "+":
-            handleBinaryBuiltin("add"); // TODO optimize use: ctx.mv.visitInsn(Opcodes.IADD)
+            handleBinaryBuiltin("add"); // TODO optimize use: ctx.mv.visitInsn(IADD)
             break;
         case "-":
             handleBinaryBuiltin("subtract");
@@ -372,8 +371,8 @@ public class EmitterVisitor implements Visitor {
             // which will then become the actual closure variables
             
             // initialize the static fields in the generated class
-            // skip 0 and 1 because they are the "@_" argument list and the call context
-            for (int i = 2; i < newEnv.length; i++) {
+            // Skip indices 0 to 2 because they are reserved for special arguments (this, "@_" and call context)
+            for (int i = 3; i < newEnv.length; i++) {
               ctx.mv.visitVarInsn(Opcodes.ALOAD, i); // copy local variable to the new class
               ctx.mv.visitFieldInsn(Opcodes.PUTSTATIC, evalCtx.javaClassName, newEnv[i], "LRuntime;");
             }
@@ -408,7 +407,7 @@ public class EmitterVisitor implements Visitor {
             //--------------
             // Mark the end of the try block
             ctx.mv.visitLabel(tryEnd);
-            // GOTO to skip the catch block if no exception occurs
+            // Opcodes.GOTO to skip the catch block if no exception occurs
             ctx.mv.visitJumpInsn(Opcodes.GOTO, endCatch);            
 
             // Handle the exception
@@ -447,6 +446,9 @@ public class EmitterVisitor implements Visitor {
   public void visit(AnonSubNode node) throws Exception {
 
     ctx.logDebug("SUB start");
+    if (ctx.contextType == ContextType.VOID) {
+        return; 
+    }
 
     // XXX TODO - if the sub has an empty block, we return an empty list
     // XXX TODO - when calling a sub with no arguments, we use an empty list argument
@@ -476,24 +478,69 @@ public class EmitterVisitor implements Visitor {
             ctx.debugEnabled
             );
     Class<?> generatedClass = ASMMethodCreator.createClassWithMethod(subCtx, newEnv, node.block);
-    String newClassNameDot = generatedClass.getName();
-    String newClassName = newClassNameDot.replace('.', '/');
-    ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + newClassName);
+    String newClassNameDot = ctx.javaClassName.replace('/', '.');
+    ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + ctx.javaClassName);
     ctx.logDebug("Generated class env:  " + newEnv);
+    Runtime.anonSubs.put(ctx.javaClassName, generatedClass);    // cache the class
 
-    // initialize the static fields
-    // skip 0 and 1 because they are the "@_" argument list and the call context
-    for (int i = 2; i < newEnv.length; i++) {
-      ctx.mv.visitVarInsn(Opcodes.ALOAD, i); // copy local variable to the new class
-      ctx.mv.visitFieldInsn(Opcodes.PUTSTATIC, newClassName, newEnv[i], "LRuntime;");
-    }
+    /* The following ASM code is equivalento to:
+     *  // get the class
+     *  Class<?> generatedClass = Runtime.anonSubs.get("java.Class.Name");
+     *  // Find the constructor
+     *  Constructor<?> constructor = generatedClass.getConstructor(Runtime.class, Runtime.class);
+     *  // Instantiate the class
+     *  Object instance = constructor.newInstance();
+     *  // Find the apply method
+     *  Method applyMethod = generatedClass.getMethod("apply", Runtime.class, ContextType.class);
+     *  // construct a CODE variable
+     *  Runtime.new(applyMethod);
+     */
 
-    // this will be called at runtime: Runtime.make_sub(javaClassName);
-    // TODO move the "make_sub" to ASM
-    Runtime.anonSubs.put(newClassName, generatedClass);
-    ctx.mv.visitLdcInsn(newClassName);
-    ctx.mv.visitMethodInsn(
-        Opcodes.INVOKESTATIC, "Runtime", "make_sub", "(Ljava/lang/String;)LRuntime;", false);
+    int skipVariables = 3;  // skip (this, @_, wantarray)
+
+        // 1. Get the class from Runtime.anonSubs
+        ctx.mv.visitFieldInsn(Opcodes.GETSTATIC, "Runtime", "anonSubs", "Ljava/util/HashMap;");
+        ctx.mv.visitLdcInsn(ctx.javaClassName);
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "get", "(Ljava/lang/Object;)Ljava/lang/Object;", false);
+        ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Class");
+
+        // the stack contains the Class
+
+        // 2. Find the constructor (Runtime, Runtime, ...)
+        ctx.mv.visitInsn(Opcodes.DUP);
+        ctx.mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
+        ctx.mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class"); // Create a new array of Class
+        for (int i = 0; i < newEnv.length - skipVariables; i++) {
+            ctx.mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
+            ctx.mv.visitIntInsn(Opcodes.BIPUSH, i); // Push the index
+            ctx.mv.visitLdcInsn(Type.getType("LRuntime;")); // Push the Class object for Runtime
+            ctx.mv.visitInsn(Opcodes.AASTORE); // Store the Class object in the array
+        }
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Class", "getConstructor", "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;", false);
+
+        // the stack contains the Constructor
+
+        // 3. Instantiate the class
+        ctx.mv.visitInsn(Opcodes.DUP);
+        ctx.mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
+        ctx.mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object"); // Create a new array of Object
+        for (int i = skipVariables; i < newEnv.length; i++) {
+            ctx.mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
+            ctx.mv.visitIntInsn(Opcodes.BIPUSH, i - skipVariables); // Push the index
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, i); // Load the constructor argument
+            ctx.mv.visitInsn(Opcodes.AASTORE); // Store the argument in the array
+        }
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/reflect/Constructor", "newInstance", "([Ljava/lang/Object;)Ljava/lang/Object;", false);
+        ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Object");
+
+        // the stack contains an instance of the class
+         ctx.mv.visitMethodInsn(
+        Opcodes.INVOKESTATIC, "Runtime", "make_sub", "(Ljava/lang/Object;)LRuntime;", false);
+
+     if (ctx.contextType == ContextType.VOID) {
+       ctx.mv.visitInsn(Opcodes.POP);
+     }
+
     ctx.logDebug("SUB end");
   }
 
