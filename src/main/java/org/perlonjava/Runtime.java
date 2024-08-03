@@ -1,16 +1,34 @@
 import java.lang.reflect.Method;
 import java.util.*;
 
+/**
+ * The Runtime class simulates Perl scalar variables.
+ * 
+ * In Perl, a scalar variable can hold:
+ * - An integer
+ * - A double (floating-point number)
+ * - A string
+ * - A reference (to arrays, hashes, subroutines, etc.)
+ * - A code reference (anonymous subroutine)
+ * - Undefined value
+ * - Special literals (like filehandles, typeglobs, regular expressions, etc.)
+ *
+ * Perl scalars are dynamically typed, meaning their type can change at runtime.
+ * This class tries to mimic this behavior by using an enum `Type` to track the type of the value stored in the scalar.
+ */
 public class Runtime {
+    // Enum to represent the type of value stored in the scalar
     private enum Type {
         INTEGER, DOUBLE, STRING, CODE, UNDEF, REFERENCE
         // also BLESSED and special literals like filehandles, typeglobs, and regular expressions
     }
 
+    // Fields to store the type and value of the scalar variable
     // TODO add cache for integer/string values
     public Type type;
     public Object value;
 
+    // Temporary storage for anonymous subroutines and eval string compiler context
     public static HashMap<String, Class<?>> anonSubs =
         new HashMap<String, Class<?>>(); // temp storage for make_sub()
     public static HashMap<String, EmitterContext> evalContext =
@@ -138,6 +156,7 @@ public class Runtime {
         }
     }
 
+  // Factory method to create a CODE object (anonymous subroutine)
   public static Runtime make_sub(String className) throws Exception {
     // finish setting up a CODE object
     Class<?> clazz = Runtime.anonSubs.remove(className);
@@ -148,6 +167,7 @@ public class Runtime {
     return r;
   }
 
+  // Method to apply (execute) a subroutine reference
   public Runtime apply(Runtime a, ContextType callContext) throws Exception {
     if (type == Type.CODE) {
         return (Runtime) ((Method) value).invoke(null, a, callContext);
@@ -156,6 +176,7 @@ public class Runtime {
     }
   }
 
+  // Method to compile the text of eval string into an anonymous subroutine
   public static void eval_string(Runtime code, String evalTag) throws Exception {
     // retrieve the eval context that was saved at program compile-time
     EmitterContext evalCtx = Runtime.evalContext.get(evalTag);
@@ -188,6 +209,83 @@ public class Runtime {
     return;
   }
 
+    // Helper method to convert String to Integer or Double
+    private Runtime parseNumber() {
+        String str = (String) this.value;
+
+        // Remove leading and trailing spaces from the input string
+        str = str.trim();
+    
+        // StringBuilder to accumulate the numeric part of the string
+        StringBuilder number = new StringBuilder();
+        boolean hasDecimal = false;
+        boolean hasExponent = false;
+        boolean hasSign = false;
+        boolean inExponent = false;
+        boolean validExponent = false;
+
+        // Iterate through each character in the string
+        for (char c : str.toCharArray()) {
+            // Check if the character is a digit, decimal point, exponent, or sign
+            if (Character.isDigit(c) || (c == '.' && !hasDecimal) || ((c == 'e' || c == 'E') && !hasExponent) || (c == '-' && !hasSign)) {
+                number.append(c);
+
+                // Update flags based on the character
+                if (c == '.') {
+                    hasDecimal = true; // Mark that a decimal point has been encountered
+                } else if (c == 'e' || c == 'E') {
+                    hasExponent = true; // Mark that an exponent has been encountered
+                    hasSign = false; // Reset the sign flag for the exponent part
+                    inExponent = true; // Mark that we are now in the exponent part
+                } else if (c == '-') {
+                    if (!inExponent) {
+                        hasSign = true; // Mark that a sign has been encountered
+                    }
+                } else if (Character.isDigit(c) && inExponent) {
+                    validExponent = true; // Mark that the exponent part has valid digits
+                }
+            } else {
+                // Stop parsing at the first invalid character in the exponent part
+                if (inExponent && !Character.isDigit(c) && c != '-') {
+                    break;
+                }
+                // Stop parsing at the first non-numeric character
+                if (!inExponent) {
+                    break;
+                }
+            }
+        }
+        
+        // If the exponent part is invalid, remove it
+        if (hasExponent && !validExponent) {
+            int exponentIndex = number.indexOf("e");
+            if (exponentIndex == -1) {
+                exponentIndex = number.indexOf("E");
+            }
+            if (exponentIndex != -1) {
+                number.setLength(exponentIndex); // Truncate the string at the exponent
+            }
+        }
+
+        try {
+            // Convert the accumulated numeric part to a string
+            String numberStr = number.toString();
+    
+            // Determine if the number should be parsed as a double or long
+            if (hasDecimal || hasExponent) {
+                double parsedValue = Double.parseDouble(numberStr);
+                return new Runtime(parsedValue);
+            } else {
+                long parsedValue = Long.parseLong(numberStr);
+                return new Runtime(parsedValue);
+            }
+        } catch (NumberFormatException e) {
+            // Return a Runtime object with value of 0 if parsing fails
+            return new Runtime(0);
+        }
+    }
+
+  // Methods that implement Perl operators
   public Runtime print() {
     System.out.print(this.toString());
     return new Runtime(1);
@@ -279,81 +377,6 @@ public class Runtime {
             return new Runtime(arg1.getDouble() / arg2.getDouble());
         } else {
             return new Runtime(arg1.getLong() / arg2.getLong());
-        }
-    }
-
-    private Runtime parseNumber() {
-        String str = (String) this.value;
-
-        // Remove leading and trailing spaces from the input string
-        str = str.trim();
-    
-        // StringBuilder to accumulate the numeric part of the string
-        StringBuilder number = new StringBuilder();
-        boolean hasDecimal = false;
-        boolean hasExponent = false;
-        boolean hasSign = false;
-        boolean inExponent = false;
-        boolean validExponent = false;
-
-        // Iterate through each character in the string
-        for (char c : str.toCharArray()) {
-            // Check if the character is a digit, decimal point, exponent, or sign
-            if (Character.isDigit(c) || (c == '.' && !hasDecimal) || ((c == 'e' || c == 'E') && !hasExponent) || (c == '-' && !hasSign)) {
-                number.append(c);
-
-                // Update flags based on the character
-                if (c == '.') {
-                    hasDecimal = true; // Mark that a decimal point has been encountered
-                } else if (c == 'e' || c == 'E') {
-                    hasExponent = true; // Mark that an exponent has been encountered
-                    hasSign = false; // Reset the sign flag for the exponent part
-                    inExponent = true; // Mark that we are now in the exponent part
-                } else if (c == '-') {
-                    if (!inExponent) {
-                        hasSign = true; // Mark that a sign has been encountered
-                    }
-                } else if (Character.isDigit(c) && inExponent) {
-                    validExponent = true; // Mark that the exponent part has valid digits
-                }
-            } else {
-                // Stop parsing at the first invalid character in the exponent part
-                if (inExponent && !Character.isDigit(c) && c != '-') {
-                    break;
-                }
-                // Stop parsing at the first non-numeric character
-                if (!inExponent) {
-                    break;
-                }
-            }
-        }
-        
-        // If the exponent part is invalid, remove it
-        if (hasExponent && !validExponent) {
-            int exponentIndex = number.indexOf("e");
-            if (exponentIndex == -1) {
-                exponentIndex = number.indexOf("E");
-            }
-            if (exponentIndex != -1) {
-                number.setLength(exponentIndex); // Truncate the string at the exponent
-            }
-        }
-
-        try {
-            // Convert the accumulated numeric part to a string
-            String numberStr = number.toString();
-    
-            // Determine if the number should be parsed as a double or long
-            if (hasDecimal || hasExponent) {
-                double parsedValue = Double.parseDouble(numberStr);
-                return new Runtime(parsedValue);
-            } else {
-                long parsedValue = Long.parseLong(numberStr);
-                return new Runtime(parsedValue);
-            }
-        } catch (NumberFormatException e) {
-            // Return a Runtime object with value of 0 if parsing fails
-            return new Runtime(0);
         }
     }
 }
