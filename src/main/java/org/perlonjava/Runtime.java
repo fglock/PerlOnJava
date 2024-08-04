@@ -128,7 +128,7 @@ public class Runtime {
     public Runtime set(Runtime value) {
         this.type = value.type;
         this.value = value.value;
-        this.codeObject = this.codeObject;
+        this.codeObject = value.codeObject;
         return this;
     }
 
@@ -154,9 +154,9 @@ public class Runtime {
             case STRING:
                 return (String) value;
             case REFERENCE:
-                return "CODE(" + value.hashCode() + ")";
-            case CODE:
                 return "REF(" + value.hashCode() + ")";
+            case CODE:
+                return "CODE(" + value.hashCode() + ")";
             case UNDEF:
                 return "";
             default:
