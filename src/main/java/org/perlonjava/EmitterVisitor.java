@@ -342,16 +342,35 @@ public class EmitterVisitor implements Visitor {
 
       int skipVariables = 3; // skip (this, @_, wantarray)
 
+      MethodVisitor mv = ctx.mv;
+
+      // --------------------------------
+      // Start of try-catch block
+      // --------------------------------
+
+      Label tryStart = new Label();
+      Label tryEnd = new Label();
+      Label catchBlock = new Label();
+      Label endCatch = new Label();
+
+      // Define the try-catch block
+      mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Exception");
+
+      mv.visitLabel(tryStart);
+      // --------------------------------
+      // Start of the try block
+      // --------------------------------
+
       // Stack at this step: [Runtime(String)]
 
       // 1. Call Runtime.eval_string(code, evalTag)
 
       // Push the evalTag String to the stack
       // the compiled code will use this tag to retrieve the compiler environment
-      ctx.mv.visitLdcInsn(evalTag);
+      mv.visitLdcInsn(evalTag);
       // Stack: [Runtime(String), String]
 
-      ctx.mv.visitMethodInsn(
+      mv.visitMethodInsn(
           Opcodes.INVOKESTATIC,
           "Runtime",
           "eval_string",
@@ -361,26 +380,26 @@ public class EmitterVisitor implements Visitor {
       // Stack after this step: [Class]
 
       // 2. Find the constructor (Runtime, Runtime, ...)
-      ctx.mv.visitIntInsn(
+      mv.visitIntInsn(
           Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
       // Stack: [Class, int]
-      ctx.mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class"); // Create a new array of Class
+      mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class"); // Create a new array of Class
       // Stack: [Class, Class[]]
 
       for (int i = 0; i < newEnv.length - skipVariables; i++) {
-        ctx.mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
+        mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
         // Stack: [Class, Class[], Class[]]
 
-        ctx.mv.visitIntInsn(Opcodes.BIPUSH, i); // Push the index
+        mv.visitIntInsn(Opcodes.BIPUSH, i); // Push the index
         // Stack: [Class, Class[], Class[], int]
 
-        ctx.mv.visitLdcInsn(Type.getType("LRuntime;")); // Push the Class object for Runtime
+        mv.visitLdcInsn(Type.getType("LRuntime;")); // Push the Class object for Runtime
         // Stack: [Class, Class[], Class[], int, Class]
 
-        ctx.mv.visitInsn(Opcodes.AASTORE); // Store the Class object in the array
+        mv.visitInsn(Opcodes.AASTORE); // Store the Class object in the array
         // Stack: [Class, Class[]]
       }
-      ctx.mv.visitMethodInsn(
+      mv.visitMethodInsn(
           Opcodes.INVOKEVIRTUAL,
           "java/lang/Class",
           "getConstructor",
@@ -389,55 +408,80 @@ public class EmitterVisitor implements Visitor {
       // Stack: [Constructor]
 
       // 3. Instantiate the class
-      ctx.mv.visitIntInsn(
+      mv.visitIntInsn(
           Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
       // Stack: [Constructor, int]
-      ctx.mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object"); // Create a new array of Object
+      mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object"); // Create a new array of Object
       // Stack: [Constructor, Object[]]
       for (int i = skipVariables; i < newEnv.length; i++) {
-        ctx.mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
+        mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
         // Stack: [Constructor, Object[], Object[]]
-        ctx.mv.visitIntInsn(Opcodes.BIPUSH, i - skipVariables); // Push the index
+        mv.visitIntInsn(Opcodes.BIPUSH, i - skipVariables); // Push the index
         // Stack: [Constructor, Object[], Object[], int]
-        ctx.mv.visitVarInsn(Opcodes.ALOAD, i); // Load the constructor argument
+        mv.visitVarInsn(Opcodes.ALOAD, i); // Load the constructor argument
         // Stack: [Constructor, Object[], Object[], int, arg]
-        ctx.mv.visitInsn(Opcodes.AASTORE); // Store the argument in the array
+        mv.visitInsn(Opcodes.AASTORE); // Store the argument in the array
         // Stack: [Constructor, Object[]]
       }
-      ctx.mv.visitMethodInsn(
+      mv.visitMethodInsn(
           Opcodes.INVOKEVIRTUAL,
           "java/lang/reflect/Constructor",
           "newInstance",
           "([Ljava/lang/Object;)Ljava/lang/Object;",
           false);
-      ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Object");
+      mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Object");
 
       // Stack after this step: [initialized class Instance]
 
       // 4. Create a CODE variable using Runtime.make_sub
-      ctx.mv.visitMethodInsn(
+      mv.visitMethodInsn(
           Opcodes.INVOKESTATIC, "Runtime", "make_sub", "(Ljava/lang/Object;)LRuntime;", false);
       // Stack: [Runtime(Code)]
 
-      ctx.mv.visitVarInsn(Opcodes.ALOAD, 1); // push @_ to the stack
-      ctx.mv.visitFieldInsn(
+      mv.visitVarInsn(Opcodes.ALOAD, 1); // push @_ to the stack
+      mv.visitFieldInsn(
           Opcodes.GETSTATIC,
           "ContextType",
           ctx.contextType.toString(),
           "LContextType;"); // call context
-      ctx.mv.visitMethodInsn(
+      mv.visitMethodInsn(
           Opcodes.INVOKEVIRTUAL,
           "Runtime",
           "apply",
           "(LRuntime;LContextType;)LRuntime;",
           false); // generate an .apply() call
 
+      // --------------------------------
+      // End of the try block
+      // --------------------------------
+      mv.visitLabel(tryEnd);
+
+      // Jump over the catch block if no exception occurs
+      mv.visitJumpInsn(Opcodes.GOTO, endCatch);
+
+      // Start of the catch block
+      mv.visitLabel(catchBlock);
+
+      // The exception object is on the stack
+      // Example: print the stack trace of the caught exception
+      mv.visitMethodInsn(
+          Opcodes.INVOKEVIRTUAL, "java/lang/Exception", "printStackTrace", "()V", false);
+
+      // Restore the stack state to match the end of the try block if needed
+      mv.visitVarInsn(Opcodes.ALOAD, 1); // push @_ to the stack
+
+      // End of the catch block
+      mv.visitLabel(endCatch);
+
+      // --------------------------------
+      // End of try-catch block
+      // --------------------------------
+
       // 5. Clean up the stack if context is VOID
       if (ctx.contextType == ContextType.VOID) {
-        ctx.mv.visitInsn(Opcodes.POP); // Remove the Runtime object from the stack
+        mv.visitInsn(Opcodes.POP); // Remove the Runtime object from the stack
       }
-
-      // If the context is not VOID, the stack should contain [Runtime] (the CODE variable)
+      // If the context is not VOID, the stack should contain [Runtime]
       // If the context is VOID, the stack should be empty
 
       return;
