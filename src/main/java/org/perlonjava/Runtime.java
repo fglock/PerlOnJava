@@ -186,7 +186,9 @@ public class Runtime {
   }
 
   // Method to compile the text of eval string into an anonymous subroutine
-  public static void eval_string(Runtime code, String evalTag) throws Exception {
+  public static Class<?> eval_string(Runtime code, String evalTag) throws Exception {
+    System.out.println("EVAL will compile: '" + code + "'");
+
     // retrieve the eval context that was saved at program compile-time
     EmitterContext evalCtx = Runtime.evalContext.get(evalTag);
 
@@ -215,7 +217,7 @@ public class Runtime {
             newEnv, // Closure variables
             ast
     );
-    return;
+    return generatedClass;
   }
 
     // Helper method to convert String to Integer or Double
