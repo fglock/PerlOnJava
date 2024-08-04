@@ -32,7 +32,7 @@ public class Main {
                     + "print $a ;"
                     + " print ( sub { print @_ } ) ;"    // anon sub
                     + " ( sub { print @_ } )->(88888) ;"    // anon sub
-               //     + "eval ' $a = $a + 1 '; "    // eval string
+                    + "eval ' $a = $a + 1 '; "    // eval string
                     + "print $a ;"
                     + "do { $a; if (1) { print 123 } elsif (3) { print 345 } else { print 456 } } ;"
                     + "print \"Finished; value is $a\\n\"; "
