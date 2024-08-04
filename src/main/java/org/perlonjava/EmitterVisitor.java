@@ -497,49 +497,57 @@ public class EmitterVisitor implements Visitor {
      */
 
     int skipVariables = 3;  // skip (this, @_, wantarray)
-
-        // 1. Get the class from Runtime.anonSubs
-        ctx.mv.visitFieldInsn(Opcodes.GETSTATIC, "Runtime", "anonSubs", "Ljava/util/HashMap;");
-        ctx.mv.visitLdcInsn(ctx.javaClassName);
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "get", "(Ljava/lang/Object;)Ljava/lang/Object;", false);
-        ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Class");
-
-        // the stack contains the Class
-
-        // 2. Find the constructor (Runtime, Runtime, ...)
-        ctx.mv.visitInsn(Opcodes.DUP);
-        ctx.mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
-        ctx.mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class"); // Create a new array of Class
-        for (int i = 0; i < newEnv.length - skipVariables; i++) {
-            ctx.mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
-            ctx.mv.visitIntInsn(Opcodes.BIPUSH, i); // Push the index
-            ctx.mv.visitLdcInsn(Type.getType("LRuntime;")); // Push the Class object for Runtime
-            ctx.mv.visitInsn(Opcodes.AASTORE); // Store the Class object in the array
-        }
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Class", "getConstructor", "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;", false);
-
-        // the stack contains the Constructor
-
-        // 3. Instantiate the class
-        ctx.mv.visitInsn(Opcodes.DUP);
-        ctx.mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
-        ctx.mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object"); // Create a new array of Object
-        for (int i = skipVariables; i < newEnv.length; i++) {
-            ctx.mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
-            ctx.mv.visitIntInsn(Opcodes.BIPUSH, i - skipVariables); // Push the index
-            ctx.mv.visitVarInsn(Opcodes.ALOAD, i); // Load the constructor argument
-            ctx.mv.visitInsn(Opcodes.AASTORE); // Store the argument in the array
-        }
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/reflect/Constructor", "newInstance", "([Ljava/lang/Object;)Ljava/lang/Object;", false);
-        ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Object");
-
-        // the stack contains an instance of the class
-         ctx.mv.visitMethodInsn(
-        Opcodes.INVOKESTATIC, "Runtime", "make_sub", "(Ljava/lang/Object;)LRuntime;", false);
-
-     if (ctx.contextType == ContextType.VOID) {
-       ctx.mv.visitInsn(Opcodes.POP);
-     }
+    
+    // 1. Get the class from Runtime.anonSubs
+    ctx.mv.visitFieldInsn(Opcodes.GETSTATIC, "Runtime", "anonSubs", "Ljava/util/HashMap;");
+    ctx.mv.visitLdcInsn(ctx.javaClassName);
+    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "get", "(Ljava/lang/Object;)Ljava/lang/Object;", false);
+    ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Class");
+    
+    // Stack after this step: [Class]
+    
+    // 2. Find the constructor (Runtime, Runtime, ...)
+    ctx.mv.visitInsn(Opcodes.DUP);
+    ctx.mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
+    ctx.mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class"); // Create a new array of Class
+    for (int i = 0; i < newEnv.length - skipVariables; i++) {
+        ctx.mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
+        ctx.mv.visitIntInsn(Opcodes.BIPUSH, i); // Push the index
+        ctx.mv.visitLdcInsn(Type.getType("LRuntime;")); // Push the Class object for Runtime
+        ctx.mv.visitInsn(Opcodes.AASTORE); // Store the Class object in the array
+    }
+    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Class", "getConstructor", "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;", false);
+    
+    // Stack after this step: [Class, Constructor]
+    
+    // 3. Instantiate the class
+    ctx.mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
+    ctx.mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object"); // Create a new array of Object
+    for (int i = skipVariables; i < newEnv.length; i++) {
+        ctx.mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
+        ctx.mv.visitIntInsn(Opcodes.BIPUSH, i - skipVariables); // Push the index
+        ctx.mv.visitVarInsn(Opcodes.ALOAD, i); // Load the constructor argument
+        ctx.mv.visitInsn(Opcodes.AASTORE); // Store the argument in the array
+    }
+    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/reflect/Constructor", "newInstance", "([Ljava/lang/Object;)Ljava/lang/Object;", false);
+    ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Object");
+    
+    // Stack after this step: [Class, Constructor, Object]
+    
+    // 4. Create a CODE variable using Runtime.make_sub
+    ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "Runtime", "make_sub", "(Ljava/lang/Object;)LRuntime;", false);
+    
+    // Stack after this step: [Class, Constructor, Runtime]
+    ctx.mv.visitInsn(Opcodes.SWAP); // move the Runtime object up
+    ctx.mv.visitInsn(Opcodes.POP); // Remove the Constructor
+    
+    // 5. Clean up the stack if context is VOID
+    if (ctx.contextType == ContextType.VOID) {
+        ctx.mv.visitInsn(Opcodes.POP); // Remove the Runtime object from the stack
+    }
+    
+    // If the context is not VOID, the stack should contain [Runtime] (the CODE variable)
+    // If the context is VOID, the stack should be empty
 
     ctx.logDebug("SUB end");
   }
