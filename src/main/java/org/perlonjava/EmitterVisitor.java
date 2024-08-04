@@ -1,5 +1,5 @@
-import org.objectweb.asm.*;
 import java.util.*;
+import org.objectweb.asm.*;
 
 public class EmitterVisitor implements Visitor {
   private final EmitterContext ctx;
@@ -12,10 +12,11 @@ public class EmitterVisitor implements Visitor {
   }
 
   /**
-   * Returns an EmitterVisitor with the specified context type.
-   * Uses a cache to avoid creating new instances unnecessarily.
+   * Returns an EmitterVisitor with the specified context type. Uses a cache to avoid creating new
+   * instances unnecessarily.
    *
-   * <p>Example usage:</p>
+   * <p>Example usage:
+   *
    * <pre>
    *   // emits the condition code in scalar context
    *   node.condition.accept(this.with(ContextType.SCALAR));
@@ -70,105 +71,101 @@ public class EmitterVisitor implements Visitor {
   @Override
   public void visit(IdentifierNode node) throws Exception {
     // Emit code for identifier
-    throw new PerlCompilerException(node.tokenIndex, "Not implemented: bare word " + node.name, ctx.errorUtil);
+    throw new PerlCompilerException(
+        node.tokenIndex, "Not implemented: bare word " + node.name, ctx.errorUtil);
   }
 
   /**
-   * Emits a call to a binary built-in method on the Runtime class.
-   * It assumes that the parameter to the call is already in the stack.
-   * 
+   * Emits a call to a binary built-in method on the Runtime class. It assumes that the parameter to
+   * the call is already in the stack.
+   *
    * @param operator The name of the built-in method to call.
    */
   private void handleBinaryBuiltin(String operator) {
     ctx.mv.visitMethodInsn(
-         Opcodes.INVOKEVIRTUAL,
-         "Runtime",
-         operator,
-         "(LRuntime;)LRuntime;",
-         false);
-     if (ctx.contextType == ContextType.VOID) {
-       ctx.mv.visitInsn(Opcodes.POP);
-     }
+        Opcodes.INVOKEVIRTUAL, "Runtime", operator, "(LRuntime;)LRuntime;", false);
+    if (ctx.contextType == ContextType.VOID) {
+      ctx.mv.visitInsn(Opcodes.POP);
+    }
   }
 
-@Override
+  @Override
   public void visit(BinaryOperatorNode node) throws Exception {
     String operator = node.operator;
     ctx.logDebug("visit(BinaryOperatorNode) " + operator + " in context " + ctx.contextType);
-    EmitterVisitor scalarVisitor = this.with(ContextType.SCALAR); // execute operands in scalar context
+    EmitterVisitor scalarVisitor =
+        this.with(ContextType.SCALAR); // execute operands in scalar context
     node.left.accept(scalarVisitor); // target
     node.right.accept(scalarVisitor); // parameter
 
     switch (operator) {
-        case "+":
-            handleBinaryBuiltin("add"); // TODO optimize use: ctx.mv.visitInsn(IADD)
-            break;
-        case "-":
-            handleBinaryBuiltin("subtract");
-            break;
-        case "*":
-            handleBinaryBuiltin("multiply");
-            break;
-        case "/":
-            handleBinaryBuiltin("divide");
-            break;
-        case ".":
-            handleBinaryBuiltin("stringConcat");
-            break;
-        case "=":
-            handleBinaryBuiltin("set");
-            break;
-        case "||":
-        case "or":
-            handleBinaryBuiltin("or");
-            break;
-        case "&&":
-        case "and":
-            handleBinaryBuiltin("and");
-            break;
-        case "->":
-            handleArrowOperator(node);
-            break;
-        default:
-            throw new RuntimeException("Unexpected infix operator: " + operator);
+      case "+":
+        handleBinaryBuiltin("add"); // TODO optimize use: ctx.mv.visitInsn(IADD)
+        break;
+      case "-":
+        handleBinaryBuiltin("subtract");
+        break;
+      case "*":
+        handleBinaryBuiltin("multiply");
+        break;
+      case "/":
+        handleBinaryBuiltin("divide");
+        break;
+      case ".":
+        handleBinaryBuiltin("stringConcat");
+        break;
+      case "=":
+        handleBinaryBuiltin("set");
+        break;
+      case "||":
+      case "or":
+        handleBinaryBuiltin("or");
+        break;
+      case "&&":
+      case "and":
+        handleBinaryBuiltin("and");
+        break;
+      case "->":
+        handleArrowOperator(node);
+        break;
+      default:
+        throw new RuntimeException("Unexpected infix operator: " + operator);
     }
   }
 
-  /**
-   * Handles the `->` operator.
-   */
+  /** Handles the `->` operator. */
   private void handleArrowOperator(BinaryOperatorNode node) throws Exception {
     if (node.right instanceof ListNode) { // ->()
-        ctx.logDebug("visit(BinaryOperatorNode) ->() ");
-        ctx.mv.visitFieldInsn(
-            Opcodes.GETSTATIC,
-            "ContextType",
-            ctx.contextType.toString(),
-            "LContextType;"); // call context
-        ctx.mv.visitMethodInsn(
-            Opcodes.INVOKEVIRTUAL,
-            "Runtime",
-            "apply",
-            "(LRuntime;LContextType;)LRuntime;",
-            false); // generate an .apply() call
-        if (ctx.contextType == ContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
+      ctx.logDebug("visit(BinaryOperatorNode) ->() ");
+      ctx.mv.visitFieldInsn(
+          Opcodes.GETSTATIC,
+          "ContextType",
+          ctx.contextType.toString(),
+          "LContextType;"); // call context
+      ctx.mv.visitMethodInsn(
+          Opcodes.INVOKEVIRTUAL,
+          "Runtime",
+          "apply",
+          "(LRuntime;LContextType;)LRuntime;",
+          false); // generate an .apply() call
+      if (ctx.contextType == ContextType.VOID) {
+        ctx.mv.visitInsn(Opcodes.POP);
+      }
     } else {
-        throw new RuntimeException("Unexpected right operand for `->` operator: " + node.right);
+      throw new RuntimeException("Unexpected right operand for `->` operator: " + node.right);
     }
   }
 
   /**
    * Emits a call to a unary built-in method on the Runtime class.
-   * 
+   *
    * @param operator The name of the built-in method to call.
    */
   private void handleUnaryBuiltin(UnaryOperatorNode node, String operator) throws Exception {
     node.operand.accept(this.with(ContextType.SCALAR));
     ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", operator, "()LRuntime;", false);
     if (ctx.contextType == ContextType.VOID) {
-        ctx.mv.visitInsn(Opcodes.POP);
+      ctx.mv.visitInsn(Opcodes.POP);
     }
   }
 
@@ -178,65 +175,64 @@ public class EmitterVisitor implements Visitor {
     ctx.logDebug("visit(UnaryOperatorNode) " + operator + " in context " + ctx.contextType);
 
     switch (operator) {
-        case "$":
-        case "@":
-        case "%":
-            handleVariableOperator(node, operator);
-            break;
-        case "print":
-            handlePrintOperator(node);
-            break;
-        case "my":
-            handleMyOperator(node);
-            break;
-        case "return":
-            handleReturnOperator(node);
-            break;
-        case "eval":
-            handleEvalOperator(node);
-            break;
-        case "-":
-            handleUnaryBuiltin(node, "unaryMinus");
-            break;
-        case "+":
-            handleUnaryPlusOperator(node);
-            break;
-        case "!":
-        case "not":
-            handleUnaryBuiltin(node, "not");
-            break;
-        default:
-            throw new UnsupportedOperationException("Unsupported operator: " + operator);
+      case "$":
+      case "@":
+      case "%":
+        handleVariableOperator(node, operator);
+        break;
+      case "print":
+        handlePrintOperator(node);
+        break;
+      case "my":
+        handleMyOperator(node);
+        break;
+      case "return":
+        handleReturnOperator(node);
+        break;
+      case "eval":
+        handleEvalOperator(node);
+        break;
+      case "-":
+        handleUnaryBuiltin(node, "unaryMinus");
+        break;
+      case "+":
+        handleUnaryPlusOperator(node);
+        break;
+      case "!":
+      case "not":
+        handleUnaryBuiltin(node, "not");
+        break;
+      default:
+        throw new UnsupportedOperationException("Unsupported operator: " + operator);
     }
   }
 
   private void handleUnaryPlusOperator(UnaryOperatorNode node) throws Exception {
     node.operand.accept(this.with(ContextType.SCALAR));
     if (ctx.contextType == ContextType.VOID) {
-        ctx.mv.visitInsn(Opcodes.POP);
+      ctx.mv.visitInsn(Opcodes.POP);
     }
   }
 
   private void handleVariableOperator(UnaryOperatorNode node, String operator) throws Exception {
     String sigil = operator;
     if (node.operand instanceof IdentifierNode) { // $a @a %a
-        String var = sigil + ((IdentifierNode) node.operand).name;
-        ctx.logDebug("GETVAR " + var);
-        int varIndex = ctx.symbolTable.getVariableIndex(var);
-        if (varIndex == -1) {
-            System.out.println(
-                "Warning: Global symbol \""
+      String var = sigil + ((IdentifierNode) node.operand).name;
+      ctx.logDebug("GETVAR " + var);
+      int varIndex = ctx.symbolTable.getVariableIndex(var);
+      if (varIndex == -1) {
+        System.out.println(
+            "Warning: Global symbol \""
                 + var
                 + "\" requires explicit package name (did you forget to declare \"my "
                 + var
-                + "\"?)"
-            );
-        }
-        if (ctx.contextType != ContextType.VOID) {
-            ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
-        }
-        ctx.logDebug("GETVAR end " + varIndex);
-        return;
+                + "\"?)");
+      }
+      if (ctx.contextType != ContextType.VOID) {
+        ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
+      }
+      ctx.logDebug("GETVAR end " + varIndex);
+      return;
     }
     // TODO special variables $1 $`
     // TODO ${a} ${[ 123 ]}
@@ -247,7 +243,7 @@ public class EmitterVisitor implements Visitor {
     node.operand.accept(this.with(ContextType.SCALAR));
     ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "print", "()LRuntime;", false);
     if (ctx.contextType == ContextType.VOID) {
-        ctx.mv.visitInsn(Opcodes.POP);
+      ctx.mv.visitInsn(Opcodes.POP);
     }
     // TODO print FILE 123
   }
@@ -255,34 +251,39 @@ public class EmitterVisitor implements Visitor {
   private void handleMyOperator(UnaryOperatorNode node) throws Exception {
     Node sigilNode = node.operand;
     if (sigilNode instanceof UnaryOperatorNode) { // my + $ @ %
-        String sigil = ((UnaryOperatorNode) sigilNode).operator;
-        if (sigil.equals("$") || sigil.equals("@") || sigil.equals("%")) {
-            Node identifierNode = ((UnaryOperatorNode) sigilNode).operand;
-            if (identifierNode instanceof IdentifierNode) { // my $a
-                String var = sigil + ((IdentifierNode) identifierNode).name;
-                ctx.logDebug("MY " + var);
-                if (ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
-                    System.out.println(
-                        "Warning: \"my\" variable "
-                        + var
-                        + " masks earlier declaration in same ctx.symbolTable"
-                    );
-                }
-                int varIndex = ctx.symbolTable.addVariable(var);
-                // TODO optimization - SETVAR+MY can be combined
-                ctx.mv.visitTypeInsn(Opcodes.NEW, "Runtime");
-                ctx.mv.visitInsn(Opcodes.DUP);
-                ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "Runtime", "<init>", "()V", false); // Create a new instance of Runtime
-                if (ctx.contextType != ContextType.VOID) {
-                    ctx.mv.visitInsn(Opcodes.DUP);
-                }
-                ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
-                return;
-            }
+      String sigil = ((UnaryOperatorNode) sigilNode).operator;
+      if (sigil.equals("$") || sigil.equals("@") || sigil.equals("%")) {
+        Node identifierNode = ((UnaryOperatorNode) sigilNode).operand;
+        if (identifierNode instanceof IdentifierNode) { // my $a
+          String var = sigil + ((IdentifierNode) identifierNode).name;
+          ctx.logDebug("MY " + var);
+          if (ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
+            System.out.println(
+                "Warning: \"my\" variable "
+                    + var
+                    + " masks earlier declaration in same ctx.symbolTable");
+          }
+          int varIndex = ctx.symbolTable.addVariable(var);
+          // TODO optimization - SETVAR+MY can be combined
+          ctx.mv.visitTypeInsn(Opcodes.NEW, "Runtime");
+          ctx.mv.visitInsn(Opcodes.DUP);
+          ctx.mv.visitMethodInsn(
+              Opcodes.INVOKESPECIAL,
+              "Runtime",
+              "<init>",
+              "()V",
+              false); // Create a new instance of Runtime
+          if (ctx.contextType != ContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.DUP);
+          }
+          ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+          return;
         }
+      }
     }
     // TODO my ($a, $b)
-    throw new PerlCompilerException(node.tokenIndex, "Not implemented: " + node.operator, ctx.errorUtil);
+    throw new PerlCompilerException(
+        node.tokenIndex, "Not implemented: " + node.operator, ctx.errorUtil);
   }
 
   private void handleReturnOperator(UnaryOperatorNode node) throws Exception {
@@ -293,152 +294,153 @@ public class EmitterVisitor implements Visitor {
 
   private void handleEvalOperator(UnaryOperatorNode node) throws Exception {
     if (node.operand instanceof BlockNode) { // eval block
-        // TODO eval block
-        throw new PerlCompilerException(node.tokenIndex, "Not implemented: eval block", ctx.errorUtil);
+      // TODO eval block
+      throw new PerlCompilerException(
+          node.tokenIndex, "Not implemented: eval block", ctx.errorUtil);
     } else { // eval string
 
+      // TODO - this can be cached and reused at runtime for performance
+      // retrieve the closure variable list into "newEnv" array
+      // we save all variables, because we don't yet what code we are going to compile.
+      Map<Integer, String> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
+      String[] newEnv = new String[visibleVariables.size()];
+      ctx.logDebug("(eval) ctx.symbolTable.getAllVisibleVariables");
+      for (Integer index : visibleVariables.keySet()) {
+        String variableName = visibleVariables.get(index);
+        ctx.logDebug("  " + index + " " + variableName);
+        newEnv[index] = variableName;
+      }
 
-            // TODO - this can be cached and reused at runtime for performance
-            // retrieve the closure variable list into "newEnv" array
-            // we save all variables, because we don't yet what code we are going to compile.
-            Map<Integer, String> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
-            String[] newEnv = new String[visibleVariables.size()];
-            ctx.logDebug("(eval) ctx.symbolTable.getAllVisibleVariables");
-            for (Integer index : visibleVariables.keySet()) {
-              String variableName = visibleVariables.get(index);
-              ctx.logDebug("  " + index + " " + variableName);
-              newEnv[index] = variableName;
-            }
+      // save the eval context in a HashMap in Runtime class
+      String evalTag = "eval" + Integer.toString(ASMMethodCreator.classCounter++);
+      // create the eval context
+      EmitterContext evalCtx =
+          new EmitterContext(
+              "(eval)", // filename
+              ASMMethodCreator.generateClassName(), // internal java class name
+              ctx.symbolTable.clone(), // clone the symbolTable
+              null, // return label
+              null, // method visitor
+              ctx.contextType, // call context
+              true, // is boxed
+              ctx.errorUtil, // error message utility
+              ctx.debugEnabled);
+      Runtime.evalContext.put(evalTag, evalCtx);
 
+      // Here the compiled code will call Runtime.eval_string(code, evalTag) method.
+      // It will compile the string and return a new Class.
+      //
+      // XXX TODO - We need to catch any errors and set Perl error variable "$@"
+      //
+      // The generated method closure variables are going to be initialized in the next step.
+      // Then we can call the method.
 
-            // save the eval context in a HashMap in Runtime class
-            String evalTag = "eval" + Integer.toString(ASMMethodCreator.classCounter++);
-            // create the eval context
-            EmitterContext evalCtx =
-                new EmitterContext(
-                    "(eval)", // filename
-                    ASMMethodCreator.generateClassName(), // internal java class name
-                    ctx.symbolTable.clone(), // clone the symbolTable
-                    null, // return label
-                    null, // method visitor
-                    ctx.contextType, // call context
-                    true, // is boxed
-                    ctx.errorUtil,  // error message utility
-                    ctx.debugEnabled
-                    );
-            Runtime.evalContext.put(evalTag, evalCtx);
+      // Retrieve the eval argument and push to the stack
+      // This is the code string that we will compile into a class.
+      // The string is evaluated outside of the try-catch block.
+      node.operand.accept(this.with(ContextType.SCALAR));
 
-            // Here the compiled code will call Runtime.eval_string(code, evalTag) method.
-            // It will compile the string and generate a new Class.
-            //
-            // This call returns void.
-            // XXX TODO - We need to catch any errors and set Perl error variable "$@"
-            //
-            // The generated method closure variables are going to be initialized in the next step.
-            // Then we can call the method.
+      int skipVariables = 3; // skip (this, @_, wantarray)
 
-            // Retrieve the eval argument and push to the stack
-            // This is the code string that we will compile into a class.
-            // The string is evaluated outside of the try-catch block.
-            node.operand.accept(this.with(ContextType.SCALAR));
+      // Stack at this step: [Runtime(String)]
 
-            // Push the evalTag String to the stack
-            ctx.mv.visitLdcInsn(evalTag);
+      // 1. Call Runtime.eval_string(code, evalTag)
 
-            //--------------
-            // Start of the Try-catch block to handle exceptions
-            Label tryStart = new Label();
-            Label tryEnd = new Label();
-            Label catchBlock = new Label();
-            Label endCatch = new Label(); // Label to mark the end of the catch block
+      // Push the evalTag String to the stack
+      // the compiled code will use this tag to retrieve the compiler environment
+      ctx.mv.visitLdcInsn(evalTag);
+      // Stack: [Runtime(String), String]
 
-            ctx.mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Exception");
-            ctx.mv.visitLabel(tryStart);    // Mark the start of the try block
-            //--------------
+      ctx.mv.visitMethodInsn(
+          Opcodes.INVOKESTATIC,
+          "Runtime",
+          "eval_string",
+          "(LRuntime;Ljava/lang/String;)Ljava/lang/Class;",
+          false);
 
-            // call Runtime.eval_string(code, evalTag)
-            ctx.mv.visitMethodInsn(
-                Opcodes.INVOKESTATIC, 
-                "Runtime", 
-                "eval_string", 
-                "(LRuntime;Ljava/lang/String;)V", 
-                false);
+      // Stack after this step: [Class]
 
-            // From now on, we are generating the code that will call the generated method.
-            // The generated method fields need to be initialized to the content of our local variables
-            //
-            // When the generated method is called, these fields will be copied to it's local variables,
-            // which will then become the actual closure variables
-            
-            // initialize the static fields in the generated class
-            // Skip indices 0 to 2 because they are reserved for special arguments (this, "@_" and call context)
-            for (int i = 3; i < newEnv.length; i++) {
-              ctx.mv.visitVarInsn(Opcodes.ALOAD, i); // copy local variable to the new class
-              ctx.mv.visitFieldInsn(Opcodes.PUTSTATIC, evalCtx.javaClassName, newEnv[i], "LRuntime;");
-            }
+      // 2. Find the constructor (Runtime, Runtime, ...)
+      ctx.mv.visitIntInsn(
+          Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
+      // Stack: [Class, int]
+      ctx.mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class"); // Create a new array of Class
+      // Stack: [Class, Class[]]
 
-            // Finally, we can call the generated static method "apply" with argument "@_"
+      for (int i = 0; i < newEnv.length - skipVariables; i++) {
+        ctx.mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
+        // Stack: [Class, Class[], Class[]]
 
-            // Load the first argument (Runtime instance)
-            ctx.mv.visitVarInsn(Opcodes.ALOAD, 0); // 0 is the index of "@_" in local variables
-            
-            // Load the second argument (ContextType enum constant field)
-            ctx.mv.visitFieldInsn(
-                Opcodes.GETSTATIC, 
-                "ContextType",              // internal class name
-                ctx.contextType.name(),     // return context type of the eval (VOID, SCALAR, LIST)
-                "LContextType;"             // descriptor
-            );
+        ctx.mv.visitIntInsn(Opcodes.BIPUSH, i); // Push the index
+        // Stack: [Class, Class[], Class[], int]
 
-            // Call the static method "apply" in the class with name stored in evalCtx.javaClassName
-            ctx.mv.visitMethodInsn(
-                Opcodes.INVOKESTATIC,                // Opcode for calling a static method
-                evalCtx.javaClassName,               // Internal name of the class
-                "apply",                             // Name of the method to be called
-                "(LRuntime;LContextType;)Ljava/lang/Object;", // Method descriptor
-                false                                // Whether the method is an interface method
-            );
+        ctx.mv.visitLdcInsn(Type.getType("LRuntime;")); // Push the Class object for Runtime
+        // Stack: [Class, Class[], Class[], int, Class]
 
-            // if the calling context is VOID, we can cleanup the stack
-            if (ctx.contextType == ContextType.VOID) {
-              ctx.mv.visitInsn(Opcodes.POP);
-            }
+        ctx.mv.visitInsn(Opcodes.AASTORE); // Store the Class object in the array
+        // Stack: [Class, Class[]]
+      }
+      ctx.mv.visitMethodInsn(
+          Opcodes.INVOKEVIRTUAL,
+          "java/lang/Class",
+          "getConstructor",
+          "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;",
+          false);
+      // Stack: [Constructor]
 
-            //--------------
-            // Mark the end of the try block
-            ctx.mv.visitLabel(tryEnd);
-            // Opcodes.GOTO to skip the catch block if no exception occurs
-            ctx.mv.visitJumpInsn(Opcodes.GOTO, endCatch);            
+      // 3. Instantiate the class
+      ctx.mv.visitIntInsn(
+          Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
+      // Stack: [Constructor, int]
+      ctx.mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object"); // Create a new array of Object
+      // Stack: [Constructor, Object[]]
+      for (int i = skipVariables; i < newEnv.length; i++) {
+        ctx.mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
+        // Stack: [Constructor, Object[], Object[]]
+        ctx.mv.visitIntInsn(Opcodes.BIPUSH, i - skipVariables); // Push the index
+        // Stack: [Constructor, Object[], Object[], int]
+        ctx.mv.visitVarInsn(Opcodes.ALOAD, i); // Load the constructor argument
+        // Stack: [Constructor, Object[], Object[], int, arg]
+        ctx.mv.visitInsn(Opcodes.AASTORE); // Store the argument in the array
+        // Stack: [Constructor, Object[]]
+      }
+      ctx.mv.visitMethodInsn(
+          Opcodes.INVOKEVIRTUAL,
+          "java/lang/reflect/Constructor",
+          "newInstance",
+          "([Ljava/lang/Object;)Ljava/lang/Object;",
+          false);
+      ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Object");
 
-            // Handle the exception
-            ctx.mv.visitLabel(catchBlock);  // start of the catch block
+      // Stack after this step: [initialized class Instance]
 
-            // the exception object is in the stack
+      // 4. Create a CODE variable using Runtime.make_sub
+      ctx.mv.visitMethodInsn(
+          Opcodes.INVOKESTATIC, "Runtime", "make_sub", "(Ljava/lang/Object;)LRuntime;", false);
+      // Stack: [Runtime(Code)]
 
-            // TODO START   - we need to store the exception string in "$@" variable
-            //
-            // ctx.mv.visitInsn(Opcodes.POP);  // XXX FIXME ignore the exception
+      ctx.mv.visitVarInsn(Opcodes.ALOAD, 1); // push @_ to the stack
+      ctx.mv.visitFieldInsn(
+          Opcodes.GETSTATIC,
+          "ContextType",
+          ctx.contextType.toString(),
+          "LContextType;"); // call context
+      ctx.mv.visitMethodInsn(
+          Opcodes.INVOKEVIRTUAL,
+          "Runtime",
+          "apply",
+          "(LRuntime;LContextType;)LRuntime;",
+          false); // generate an .apply() call
 
-            //  int exceptionIndex = ...; // Assign an index to store the exception
-            //  ctx.mv.visitVarInsn(Opcodes.ASTORE, exceptionIndex); // Store the exception in a local variable
-            //  
-            // Print the exception or handle it as needed
-            // ctx.mv.visitVarInsn(Opcodes.ALOAD, exceptionIndex);
-            ctx.mv.visitMethodInsn(
-                Opcodes.INVOKEVIRTUAL,
-                "java/lang/Exception",
-                "printStackTrace",
-                "()V",
-                false
-            );
-            // TODO END
+      // 5. Clean up the stack if context is VOID
+      if (ctx.contextType == ContextType.VOID) {
+        ctx.mv.visitInsn(Opcodes.POP); // Remove the Runtime object from the stack
+      }
 
+      // If the context is not VOID, the stack should contain [Runtime] (the CODE variable)
+      // If the context is VOID, the stack should be empty
 
-            // Mark the end of the catch block
-            ctx.mv.visitLabel(endCatch);
-            //--------------
-            
-            return;
+      return;
     }
   }
 
@@ -447,7 +449,7 @@ public class EmitterVisitor implements Visitor {
 
     ctx.logDebug("SUB start");
     if (ctx.contextType == ContextType.VOID) {
-        return; 
+      return;
     }
 
     // XXX TODO - if the sub has an empty block, we return an empty list
@@ -474,14 +476,13 @@ public class EmitterVisitor implements Visitor {
             null, // method visitor
             ContextType.RUNTIME, // call context
             true, // is boxed
-            ctx.errorUtil,  // error message utility
-            ctx.debugEnabled
-            );
+            ctx.errorUtil, // error message utility
+            ctx.debugEnabled);
     Class<?> generatedClass = ASMMethodCreator.createClassWithMethod(subCtx, newEnv, node.block);
     String newClassNameDot = ctx.javaClassName.replace('/', '.');
     ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + ctx.javaClassName);
     ctx.logDebug("Generated class env:  " + newEnv);
-    Runtime.anonSubs.put(ctx.javaClassName, generatedClass);    // cache the class
+    Runtime.anonSubs.put(ctx.javaClassName, generatedClass); // cache the class
 
     /* The following ASM code is equivalento to:
      *  // get the class
@@ -496,56 +497,74 @@ public class EmitterVisitor implements Visitor {
      *  Runtime.new(applyMethod);
      */
 
-    int skipVariables = 3;  // skip (this, @_, wantarray)
-    
+    int skipVariables = 3; // skip (this, @_, wantarray)
+
     // 1. Get the class from Runtime.anonSubs
     ctx.mv.visitFieldInsn(Opcodes.GETSTATIC, "Runtime", "anonSubs", "Ljava/util/HashMap;");
     ctx.mv.visitLdcInsn(ctx.javaClassName);
-    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "get", "(Ljava/lang/Object;)Ljava/lang/Object;", false);
+    ctx.mv.visitMethodInsn(
+        Opcodes.INVOKEVIRTUAL,
+        "java/util/HashMap",
+        "get",
+        "(Ljava/lang/Object;)Ljava/lang/Object;",
+        false);
     ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Class");
-    
+
     // Stack after this step: [Class]
-    
+
     // 2. Find the constructor (Runtime, Runtime, ...)
     ctx.mv.visitInsn(Opcodes.DUP);
-    ctx.mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
+    ctx.mv.visitIntInsn(
+        Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
     ctx.mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class"); // Create a new array of Class
     for (int i = 0; i < newEnv.length - skipVariables; i++) {
-        ctx.mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
-        ctx.mv.visitIntInsn(Opcodes.BIPUSH, i); // Push the index
-        ctx.mv.visitLdcInsn(Type.getType("LRuntime;")); // Push the Class object for Runtime
-        ctx.mv.visitInsn(Opcodes.AASTORE); // Store the Class object in the array
+      ctx.mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
+      ctx.mv.visitIntInsn(Opcodes.BIPUSH, i); // Push the index
+      ctx.mv.visitLdcInsn(Type.getType("LRuntime;")); // Push the Class object for Runtime
+      ctx.mv.visitInsn(Opcodes.AASTORE); // Store the Class object in the array
     }
-    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Class", "getConstructor", "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;", false);
-    
+    ctx.mv.visitMethodInsn(
+        Opcodes.INVOKEVIRTUAL,
+        "java/lang/Class",
+        "getConstructor",
+        "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;",
+        false);
+
     // Stack after this step: [Class, Constructor]
-    
+
     // 3. Instantiate the class
-    ctx.mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
+    ctx.mv.visitIntInsn(
+        Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
     ctx.mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object"); // Create a new array of Object
     for (int i = skipVariables; i < newEnv.length; i++) {
-        ctx.mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
-        ctx.mv.visitIntInsn(Opcodes.BIPUSH, i - skipVariables); // Push the index
-        ctx.mv.visitVarInsn(Opcodes.ALOAD, i); // Load the constructor argument
-        ctx.mv.visitInsn(Opcodes.AASTORE); // Store the argument in the array
+      ctx.mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
+      ctx.mv.visitIntInsn(Opcodes.BIPUSH, i - skipVariables); // Push the index
+      ctx.mv.visitVarInsn(Opcodes.ALOAD, i); // Load the constructor argument
+      ctx.mv.visitInsn(Opcodes.AASTORE); // Store the argument in the array
     }
-    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/reflect/Constructor", "newInstance", "([Ljava/lang/Object;)Ljava/lang/Object;", false);
+    ctx.mv.visitMethodInsn(
+        Opcodes.INVOKEVIRTUAL,
+        "java/lang/reflect/Constructor",
+        "newInstance",
+        "([Ljava/lang/Object;)Ljava/lang/Object;",
+        false);
     ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Object");
-    
+
     // Stack after this step: [Class, Constructor, Object]
-    
+
     // 4. Create a CODE variable using Runtime.make_sub
-    ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "Runtime", "make_sub", "(Ljava/lang/Object;)LRuntime;", false);
-    
+    ctx.mv.visitMethodInsn(
+        Opcodes.INVOKESTATIC, "Runtime", "make_sub", "(Ljava/lang/Object;)LRuntime;", false);
+
     // Stack after this step: [Class, Constructor, Runtime]
     ctx.mv.visitInsn(Opcodes.SWAP); // move the Runtime object up
     ctx.mv.visitInsn(Opcodes.POP); // Remove the Constructor
-    
+
     // 5. Clean up the stack if context is VOID
     if (ctx.contextType == ContextType.VOID) {
-        ctx.mv.visitInsn(Opcodes.POP); // Remove the Runtime object from the stack
+      ctx.mv.visitInsn(Opcodes.POP); // Remove the Runtime object from the stack
     }
-    
+
     // If the context is not VOID, the stack should contain [Runtime] (the CODE variable)
     // If the context is VOID, the stack should be empty
 
@@ -555,66 +574,68 @@ public class EmitterVisitor implements Visitor {
   @Override
   public void visit(IfNode node) throws Exception {
     ctx.logDebug("IF start");
-    
+
     // Enter a new scope in the symbol table
     ctx.symbolTable.enterScope();
-    
+
     // Create labels for the else and end branches
     Label elseLabel = new Label();
     Label endLabel = new Label();
-    
+
     // Visit the condition node in scalar context
     node.condition.accept(this.with(ContextType.SCALAR));
-    
+
     // Convert the result to a boolean
     ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "getBoolean", "()Z", false);
-    
+
     // Jump to the else label if the condition is false
     ctx.mv.visitJumpInsn(Opcodes.IFEQ, elseLabel);
-    
+
     // Visit the then branch
     node.thenBranch.accept(this);
-    
+
     // Jump to the end label after executing the then branch
     ctx.mv.visitJumpInsn(Opcodes.GOTO, endLabel);
-    
+
     // Visit the else label
     ctx.mv.visitLabel(elseLabel);
-    
+
     // Visit the else branch if it exists
     if (node.elseBranch != null) {
-        node.elseBranch.accept(this);
+      node.elseBranch.accept(this);
     }
-    
+
     // Visit the end label
     ctx.mv.visitLabel(endLabel);
-    
+
     // Exit the scope in the symbol table
     ctx.symbolTable.exitScope();
-    
+
     ctx.logDebug("IF end");
   }
-
 
   @Override
   public void visit(TernaryOperatorNode node) throws Exception {
     node.condition.accept(this);
     // Emit code for ternary operator
-    throw new PerlCompilerException(node.tokenIndex, "Not implemented: ternary operator", ctx.errorUtil);
+    throw new PerlCompilerException(
+        node.tokenIndex, "Not implemented: ternary operator", ctx.errorUtil);
   }
 
   @Override
   public void visit(PostfixOperatorNode node) throws Exception {
     node.operand.accept(this);
     // Emit code for postfix operator
-    throw new PerlCompilerException(node.tokenIndex, "Not implemented: postfix operator " + node.operator, ctx.errorUtil);
+    throw new PerlCompilerException(
+        node.tokenIndex, "Not implemented: postfix operator " + node.operator, ctx.errorUtil);
   }
 
   @Override
   public void visit(BlockNode node) throws Exception {
     ctx.logDebug("generateCodeBlock start");
     ctx.symbolTable.enterScope();
-    EmitterVisitor voidVisitor = this.with(ContextType.VOID);  // statements in the middle of the block have context VOID
+    EmitterVisitor voidVisitor =
+        this.with(ContextType.VOID); // statements in the middle of the block have context VOID
     List<Node> list = node.elements;
     for (int i = 0; i < list.size(); i++) {
       Node element = list.get(i);
@@ -646,11 +667,15 @@ public class EmitterVisitor implements Visitor {
       return;
     }
     if (ctx.isBoxed) { // expect a Runtime object
-        ctx.mv.visitTypeInsn(Opcodes.NEW, "Runtime");
-        ctx.mv.visitInsn(Opcodes.DUP);
-        ctx.mv.visitLdcInsn(node.value); // emit string
-        ctx.mv.visitMethodInsn(
-            Opcodes.INVOKESPECIAL, "Runtime", "<init>", "(Ljava/lang/String;)V", false); // Call new Runtime(String)
+      ctx.mv.visitTypeInsn(Opcodes.NEW, "Runtime");
+      ctx.mv.visitInsn(Opcodes.DUP);
+      ctx.mv.visitLdcInsn(node.value); // emit string
+      ctx.mv.visitMethodInsn(
+          Opcodes.INVOKESPECIAL,
+          "Runtime",
+          "<init>",
+          "(Ljava/lang/String;)V",
+          false); // Call new Runtime(String)
     } else {
       ctx.mv.visitLdcInsn(node.value); // emit string
     }
