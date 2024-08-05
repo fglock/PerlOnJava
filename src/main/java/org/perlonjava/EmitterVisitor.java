@@ -606,6 +606,9 @@ public class EmitterVisitor implements Visitor {
   public void visit(ForNode node) throws Exception {
     ctx.logDebug("FOR start");
 
+    EmitterVisitor voidVisitor =
+        this.with(ContextType.VOID); // some parts have context VOID
+
     // Enter a new scope in the symbol table
     ctx.symbolTable.enterScope();
 
@@ -616,7 +619,7 @@ public class EmitterVisitor implements Visitor {
 
     // Visit the initialization node
     if (node.initialization != null) {
-        node.initialization.accept(this);
+        node.initialization.accept(voidVisitor);
     }
 
     // Jump to the condition check
@@ -626,11 +629,11 @@ public class EmitterVisitor implements Visitor {
     ctx.mv.visitLabel(startLabel);
 
     // Visit the loop body
-    node.body.accept(this);
+    node.body.accept(voidVisitor);
 
     // Visit the increment node
     if (node.increment != null) {
-        node.increment.accept(this);
+        node.increment.accept(voidVisitor);
     }
 
     // Visit the condition label
@@ -655,6 +658,11 @@ public class EmitterVisitor implements Visitor {
 
     // Exit the scope in the symbol table
     ctx.symbolTable.exitScope();
+
+    // If the context is not VOID, push "unde" to the stack
+    if (ctx.contextType != ContextType.VOID) {
+      ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "Runtime", "undef", "()LRuntime;", false);
+    }
 
     ctx.logDebug("FOR end");
   }
