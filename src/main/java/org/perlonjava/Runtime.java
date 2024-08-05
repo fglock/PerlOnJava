@@ -32,6 +32,7 @@ public class Runtime {
 
   public Object codeObject; // apply() needs this
 
+  private static Map<String, Runtime> globalVariables = new HashMap<>();
   // Temporary storage for anonymous subroutines and eval string compiler context
   public static HashMap<String, Class<?>> anonSubs =
       new HashMap<String, Class<?>>(); // temp storage for make_sub()
@@ -42,10 +43,41 @@ public class Runtime {
   // public static zero = new Runtime(0);
   // public static one = new Runtime(1);
 
+  // Static methods
+  public static Runtime setGlobalVariable(String key, Runtime value) {
+      Runtime var = globalVariables.get(key);
+      if (var == null) {
+        var = new Runtime();
+        globalVariables.put(key, var);
+      }
+      return var.set(value);
+  }
+
+  public static Runtime setGlobalVariable(String key, String value) {
+      Runtime var = globalVariables.get(key);
+      if (var == null) {
+        var = new Runtime();
+        globalVariables.put(key, var);
+      }
+      return var.set(value);
+  }
+
+  public static Runtime getGlobalVariable(String key) {
+      Runtime var = globalVariables.get(key);
+      if (var == null) {
+        var = new Runtime();
+        globalVariables.put(key, var);
+      }
+      return var;
+  }
+
+  public static boolean existsGlobalVariable(String key) {
+      return globalVariables.containsKey(key);
+  }
+
   // Constructors
   public Runtime() {
     this.type = Type.UNDEF;
-    this.value = value;
   }
 
   public Runtime(long value) {
@@ -65,11 +97,6 @@ public class Runtime {
 
   public Runtime(String value) {
     this.type = Type.STRING;
-    this.value = value;
-  }
-
-  public Runtime(Method value) {
-    this.type = Type.CODE;
     this.value = value;
   }
 
@@ -216,7 +243,10 @@ public class Runtime {
       ast = parser.parse(); // Generate the abstract syntax tree (AST)
     } catch (Exception e) {
       // compilation error in eval-string
-      // XXX TODO set the $@ error variable
+
+      // Set the global error variable "$@" using Runtime.setGlobalVariable(key, value)
+      Runtime.setGlobalVariable("$@", e.toString());
+
       ast = new UnaryOperatorNode("undef", null, 1); // return an "undef" ast
     }
 
