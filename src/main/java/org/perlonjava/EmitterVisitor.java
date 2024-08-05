@@ -231,6 +231,15 @@ public class EmitterVisitor implements Visitor {
       ctx.logDebug("GETVAR " + var);
       int varIndex = ctx.symbolTable.getVariableIndex(var);
       if (varIndex == -1) {
+
+        if (Runtime.existsGlobalVariable(var)) {
+            if (ctx.contextType != ContextType.VOID) {
+                ctx.mv.visitLdcInsn(var);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "Runtime", "getGlobalVariable", "(Ljava/lang/String;)LRuntime;", false);
+            }
+            return;
+        }
+
         System.out.println(
             "Warning: Global symbol \""
                 + var

@@ -149,11 +149,21 @@ public class ASMMethodCreator implements Opcodes {
 
       // The exception object is on the stack
       // Example: print the stack trace of the caught exception
-      mv.visitMethodInsn(
-          Opcodes.INVOKEVIRTUAL, "java/lang/Exception", "printStackTrace", "()V", false);
+      //   mv.visitMethodInsn(
+      //      Opcodes.INVOKEVIRTUAL, "java/lang/Exception", "printStackTrace", "()V", false);
+
+      // Convert the exception to a string
+      mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Exception", "toString", "()Ljava/lang/String;", false);
+
+      // Set the global error variable "$@" using Runtime.setGlobalVariable(key, value)
+      mv.visitLdcInsn("$@");
+      mv.visitInsn(Opcodes.SWAP);
+      mv.visitMethodInsn(Opcodes.INVOKESTATIC, "Runtime", "setGlobalVariable", "(Ljava/lang/String;Ljava/lang/String;)LRuntime;", false);
+      mv.visitInsn(Opcodes.POP);    // throw away the Runtime result
 
       // Restore the stack state to match the end of the try block if needed
-      mv.visitVarInsn(Opcodes.ALOAD, 1); // push @_ to the stack
+      // Return "undef"
+      mv.visitMethodInsn(Opcodes.INVOKESTATIC, "Runtime", "undef", "()LRuntime;", false);
 
       // End of the catch block
       mv.visitLabel(endCatch);
