@@ -162,8 +162,15 @@ public class EmitterVisitor implements Visitor {
    * @param operator The name of the built-in method to call.
    */
   private void handleUnaryBuiltin(UnaryOperatorNode node, String operator) throws Exception {
-    node.operand.accept(this.with(ContextType.SCALAR));
-    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", operator, "()LRuntime;", false);
+    if (node.operand == null) {
+      // Unary operator with optional arguments, called without arguments
+      // example: undef()
+      ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "Runtime", operator, "()LRuntime;", false);
+    }
+    else {
+      node.operand.accept(this.with(ContextType.SCALAR));
+      ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", operator, "()LRuntime;", false);
+    }
     if (ctx.contextType == ContextType.VOID) {
       ctx.mv.visitInsn(Opcodes.POP);
     }
@@ -201,6 +208,9 @@ public class EmitterVisitor implements Visitor {
       case "!":
       case "not":
         handleUnaryBuiltin(node, "not");
+        break;
+      case "undef":
+        handleUnaryBuiltin(node, operator);
         break;
       default:
         throw new UnsupportedOperationException("Unsupported operator: " + operator);

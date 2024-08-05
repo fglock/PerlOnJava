@@ -203,14 +203,22 @@ public class Runtime {
       newEnv[index] = variableName;
     }
 
+    Node ast;
+
     // Process the string source code to create the Token list
     Lexer lexer = new Lexer(code.toString());
     List<Token> tokens = lexer.tokenize(); // Tokenize the Perl code
-    // Create the AST
-    // Create an instance of ErrorMessageUtil with the file name and token list
-    ErrorMessageUtil errorUtil = new ErrorMessageUtil(evalCtx.fileName, tokens);
-    Parser parser = new Parser(errorUtil, tokens); // Parse the tokens
-    Node ast = parser.parse(); // Generate the abstract syntax tree (AST)
+    try {
+      // Create the AST
+      // Create an instance of ErrorMessageUtil with the file name and token list
+      ErrorMessageUtil errorUtil = new ErrorMessageUtil(evalCtx.fileName, tokens);
+      Parser parser = new Parser(errorUtil, tokens); // Parse the tokens
+      ast = parser.parse(); // Generate the abstract syntax tree (AST)
+    } catch (Exception e) {
+      // compilation error in eval-string
+      // XXX TODO set the $@ error variable
+      ast = new UnaryOperatorNode("undef", null, 1); // return an "undef" ast
+    }
 
     evalCtx.errorUtil = new ErrorMessageUtil(evalCtx.fileName, tokens);
     Class<?> generatedClass =
@@ -302,6 +310,10 @@ public class Runtime {
   }
 
   // Methods that implement Perl operators
+  public static Runtime undef() {
+    return new Runtime();
+  }
+
   public Runtime print() {
     System.out.print(this.toString());
     return new Runtime(1);
