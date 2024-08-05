@@ -7,21 +7,23 @@
 - [ ] Basic Operations (Some are implemented)
 - [x] Simple arithmetic
 - [ ] Comparison operators (Some are implemented)
-- [ ] String Interpolation
+- [ ] String Interpolation (Incomplete)
 - [x] Interpolate simple scalars
 - [x] Expand backslash-n and simple sequences
 - [x] String numification
-- [ ] String increment
+- [x] String increment
 - [ ] Tied Scalars
 - [ ] File handles
 
 ## Arrays and List
 - [ ] Basic Array Operations
 - [ ] Array Slices
+- [ ] Array literals
 - [ ] Tied Arrays
 
 ## Hashes
 - [ ] Basic Hash Operations
+- [ ] Hash literals
 - [ ] Tied Hashes
 
 ## Subroutines
@@ -44,8 +46,7 @@
 - [ ] eval block
 - [x] do block
 - [ ] do file
-- [ ] print statement
-- [x] simple print statement
+- [ ] print statement (Simple print statement implemented)
 - [x] short-circuit and, or
 - [x] low-precedence/high precedence operators: `not`, `or`, `and`
 
