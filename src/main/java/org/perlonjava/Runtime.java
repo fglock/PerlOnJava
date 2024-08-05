@@ -216,7 +216,9 @@ public class Runtime {
     Class<?> generatedClass =
         ASMMethodCreator.createClassWithMethod(
             evalCtx, newEnv, // Closure variables
-            ast);
+            ast,
+            true  // use try-catch
+    );
     return generatedClass;
   }
 

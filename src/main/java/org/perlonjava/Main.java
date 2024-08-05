@@ -132,7 +132,8 @@ public class Main {
             Class<?> generatedClass = ASMMethodCreator.createClassWithMethod(
                     ctx,
                     new String[] {}, // Closure variables
-                    ast
+                    ast,
+                    false   // no try-catch
             );
             if (compileOnly) {
                 System.exit(0); // success
