@@ -153,7 +153,7 @@ public class ASMMethodCreator implements Opcodes {
       //      Opcodes.INVOKEVIRTUAL, "java/lang/Exception", "printStackTrace", "()V", false);
 
       // Convert the exception to a string
-      mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Exception", "toString", "()Ljava/lang/String;", false);
+      mv.visitMethodInsn(Opcodes.INVOKESTATIC, "ErrorMessageUtil", "stringifyException", "(Ljava/lang/Exception;)Ljava/lang/String;", false);
 
       // Set the global error variable "$@" using Runtime.setGlobalVariable(key, value)
       mv.visitLdcInsn("$@");

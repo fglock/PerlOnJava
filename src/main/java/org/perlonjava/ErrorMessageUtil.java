@@ -105,6 +105,23 @@ public class ErrorMessageUtil {
         return "\"" + escaped.toString() + "\"";
     }
 
+    /**
+     * Stringifies a runtime exception
+     *
+     * @param e the Exception object
+     */
+    public static String stringifyException(Exception e) {
+        StackTraceElement[] stackTrace = e.getStackTrace();
+        if (stackTrace.length > 0) {
+            StackTraceElement element = stackTrace[0];
+            String fileName = element.getFileName();
+            int lineNumber = element.getLineNumber();
+            return String.format("Exception: %s at %s:%d", e.toString(), fileName, lineNumber);
+        } else {
+            return e.toString();
+        }
+    }
+
     public static void main(String[] args) {
         // Example usage
         List<Token> tokens = new ArrayList<>();
