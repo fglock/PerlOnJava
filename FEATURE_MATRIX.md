@@ -6,7 +6,8 @@
 - [x] Basic types: integer, double, string, CODE, undef
 - [ ] Basic Operations (Some are implemented)
 - [x] Simple arithmetic
-- [ ] Comparison operators (Some are implemented)
+- [ ] Numeric Comparison operators (Some are implemented)
+- [ ] String Comparison operators
 - [ ] String Interpolation (Incomplete)
 - [x] Interpolate simple scalars
 - [x] Expand backslash-n and simple sequences
