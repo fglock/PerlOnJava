@@ -265,6 +265,61 @@ public class Runtime {
     return generatedClass;
   }
 
+
+  // Helper method to autoincrement a String variable
+    private static final String _string_increment(String s) {
+        if (s.length() < 2) {
+            final int c = s.codePointAt(0);
+            if ((c >= '0' && c <= '8') || (c >= 'A' && c <= 'Y') || (c >= 'a' && c <= 'y')) {
+                return "" + (char)(c + 1);
+            }
+            if (c == '9') {
+                return "10";
+            }
+            if (c == 'Z') {
+                return "AA";
+            }
+            if (c == 'z') {
+                return "aa";
+            }
+            return "1";
+        }
+        String c = _string_increment(s.substring(s.length()-1, s.length()));
+        if (c.length() == 1) {
+            // AAAC => AAAD
+            return s.substring(0, s.length()-1) + c;
+        }
+        // AAAZ => AABA
+        return _string_increment(s.substring(0, s.length()-1)) + c.substring(c.length()-1, c.length());
+    }
+
+  // Helper method to autoincrement a String variable
+  private Runtime stringIncrement() {
+    String str = (String) this.value;
+
+    if (str.isEmpty()) {
+        this.value = (long) 1;
+        this.type = Type.INTEGER;
+        return this;
+    }
+    char c = ((String) this.value).charAt(0);
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+        // Handle non-numeric increment
+        String s = (String) this.value;
+        int length = s.length();
+        c = s.charAt(length - 1);
+        if ((c >= '0' && c <= '8') || (c >= 'A' && c <= 'Y') || (c >= 'a' && c <= 'y')) {
+            this.value = s.substring(0, length-1) + (char)(c + 1);
+        } else {
+            this.value = _string_increment(s);
+        }
+        return this;
+    }
+    // Handle numeric increment
+    this.set(this.parseNumber());
+    return this.preAutoIncrement();
+  }
+
   // Helper method to convert String to Integer or Double
   private Runtime parseNumber() {
     String str = (String) this.value;
@@ -457,5 +512,40 @@ public class Runtime {
     } else {
       return new Runtime(arg1.getLong() < arg2.getLong());
     }
+  }
+
+  public Runtime preAutoIncrement() {
+    switch (type) {
+      case INTEGER:
+        this.value = (long) this.value + 1;
+        return this;
+      case DOUBLE:
+        this.value = (double) this.value + 1;
+        return this;
+      case STRING:
+        return this.stringIncrement();
+    }
+    this.type = Type.INTEGER;
+    this.value = 1;
+    return this;
+  }
+
+  public Runtime postAutoIncrement() {
+    Runtime old = new Runtime().set(this);
+    switch (type) {
+      case INTEGER:
+        this.value = (long) this.value + 1;
+        break;
+      case DOUBLE:
+        this.value = (double) this.value + 1;
+        break;
+      case STRING:
+        this.stringIncrement();
+        break;
+      default:
+        this.type = Type.INTEGER;
+        this.value = 1;
+    }
+    return old;
   }
 }
