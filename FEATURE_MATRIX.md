@@ -3,8 +3,8 @@
 ## Scalars
 - [x] `my` variable declaration
 - [x] variable assignment
-- [x] Basic types: integer, double, string, CODE
-- [ ] Basic Operations
+- [x] Basic types: integer, double, string, CODE, undef
+- [ ] Basic Operations (Some are implemented)
 - [x] Simple arithmetic
 - [ ] Comparison operators (Some are implemented)
 - [ ] String Interpolation
@@ -13,8 +13,9 @@
 - [x] String numification
 - [ ] String increment
 - [ ] Tied Scalars
+- [ ] File handles
 
-## Arrays
+## Arrays and List
 - [ ] Basic Array Operations
 - [ ] Array Slices
 - [ ] Tied Arrays
@@ -52,5 +53,5 @@
 - [ ] Global variables
 - [x] Global variable infrastructure
 - [x] @_ and $@ special variables
-
+- [ ] $_ special variable
 
