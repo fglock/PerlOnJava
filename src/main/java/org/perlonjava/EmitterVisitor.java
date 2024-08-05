@@ -269,6 +269,9 @@ public class EmitterVisitor implements Visitor {
       case "undef":
         handleUnaryBuiltin(node, operator);
         break;
+      case "++":
+        handleUnaryBuiltin(node, "preAutoIncrement");
+        break;
       default:
         throw new UnsupportedOperationException("Unsupported operator: " + operator);
     }

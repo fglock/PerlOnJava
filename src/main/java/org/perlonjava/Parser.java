@@ -146,7 +146,7 @@ public class Parser {
                 break;
             }
 
-            int tokenPrecedence = getPrecedence(token);
+            int tokenPrecedence = getPrecedence(token.text);
 
             if (tokenPrecedence < precedence) {
                 break;
@@ -174,11 +174,11 @@ public class Parser {
               return new UnaryOperatorNode("undef", null, tokenIndex);
             case "not":
               // Handle 'not' keyword as a unary operator with an operand
-              operand = parseExpression(getPrecedence(token) + 1);
+              operand = parseExpression(getPrecedence(token.text) + 1);
               return new UnaryOperatorNode("not", operand, tokenIndex);
             case "print":
               // Handle 'print' keyword as a unary operator with an operand
-              operand = parsePrimary();
+              operand = parseExpression(getPrecedence("print") + 1);
               return new UnaryOperatorNode("print", operand, tokenIndex);
             case "my":
               // Handle 'my' keyword as a unary operator with an operand
@@ -186,7 +186,7 @@ public class Parser {
               return new UnaryOperatorNode("my", operand, tokenIndex);
             case "return":
               // Handle 'return' keyword as a unary operator with an operand
-              operand = parsePrimary();
+              operand = parseExpression(getPrecedence("print") + 1);
               return new UnaryOperatorNode("return", operand, tokenIndex);
             case "eval":
               // Handle 'eval' keyword which can be followed by a block or an expression
@@ -249,7 +249,7 @@ public class Parser {
                     return new UnaryOperatorNode("$", new IdentifierNode(consume().text, tokenIndex), tokenIndex);
                 }
 
-                operand = parseExpression(getPrecedence(token) + 1);
+                operand = parseExpression(getPrecedence(token.text) + 1);
                 return new UnaryOperatorNode(token.text, operand, tokenIndex);
               }
               break;
@@ -514,9 +514,9 @@ public class Parser {
         }
     }
 
-    private int getPrecedence(Token token) {
+    private int getPrecedence(String operator) {
         // Define precedence levels for operators
-        switch (token.text) {
+        switch (operator) {
             case "or":
             case "xor":
                 return 1;
@@ -524,7 +524,8 @@ public class Parser {
                 return 2;
             case "not":
                 return 3;
-
+            case "print":
+                return 4;
             case "=":
                 return 6; // Lower precedence for assignment
             case "?":
