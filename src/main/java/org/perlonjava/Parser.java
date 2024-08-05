@@ -135,6 +135,10 @@ public class Parser {
 
     switch (token.type) {
       case IDENTIFIER:
+        if (token.text.equals("undef")) {
+          // Node operand = parseExpression(getPrecedence(token) + 1); // TODO zero or 1 operators
+          return new UnaryOperatorNode("undef", null, tokenIndex);
+        }
         if (token.text.equals("not")) {
           Node operand = parseExpression(getPrecedence(token) + 1);
           return new UnaryOperatorNode("not", operand, tokenIndex);
