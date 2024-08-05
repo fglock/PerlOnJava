@@ -344,23 +344,6 @@ public class EmitterVisitor implements Visitor {
 
       MethodVisitor mv = ctx.mv;
 
-      // --------------------------------
-      // Start of try-catch block
-      // --------------------------------
-
-      Label tryStart = new Label();
-      Label tryEnd = new Label();
-      Label catchBlock = new Label();
-      Label endCatch = new Label();
-
-      // Define the try-catch block
-      mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Exception");
-
-      mv.visitLabel(tryStart);
-      // --------------------------------
-      // Start of the try block
-      // --------------------------------
-
       // Stack at this step: [Runtime(String)]
 
       // 1. Call Runtime.eval_string(code, evalTag)
@@ -451,32 +434,6 @@ public class EmitterVisitor implements Visitor {
           "(LRuntime;LContextType;)LRuntime;",
           false); // generate an .apply() call
 
-      // --------------------------------
-      // End of the try block
-      // --------------------------------
-      mv.visitLabel(tryEnd);
-
-      // Jump over the catch block if no exception occurs
-      mv.visitJumpInsn(Opcodes.GOTO, endCatch);
-
-      // Start of the catch block
-      mv.visitLabel(catchBlock);
-
-      // The exception object is on the stack
-      // Example: print the stack trace of the caught exception
-      mv.visitMethodInsn(
-          Opcodes.INVOKEVIRTUAL, "java/lang/Exception", "printStackTrace", "()V", false);
-
-      // Restore the stack state to match the end of the try block if needed
-      mv.visitVarInsn(Opcodes.ALOAD, 1); // push @_ to the stack
-
-      // End of the catch block
-      mv.visitLabel(endCatch);
-
-      // --------------------------------
-      // End of try-catch block
-      // --------------------------------
-
       // 5. Clean up the stack if context is VOID
       if (ctx.contextType == ContextType.VOID) {
         mv.visitInsn(Opcodes.POP); // Remove the Runtime object from the stack
@@ -522,7 +479,12 @@ public class EmitterVisitor implements Visitor {
             true, // is boxed
             ctx.errorUtil, // error message utility
             ctx.debugEnabled);
-    Class<?> generatedClass = ASMMethodCreator.createClassWithMethod(subCtx, newEnv, node.block);
+    Class<?> generatedClass = ASMMethodCreator.createClassWithMethod(
+            subCtx,
+            newEnv,
+            node.block, 
+            false   // no try-catch
+        );
     String newClassNameDot = ctx.javaClassName.replace('/', '.');
     ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + ctx.javaClassName);
     ctx.logDebug("Generated class env:  " + newEnv);

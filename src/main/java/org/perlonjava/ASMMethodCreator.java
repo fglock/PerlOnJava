@@ -24,10 +24,11 @@ public class ASMMethodCreator implements Opcodes {
    * @param env An array of environment variable names to be included as instance fields in the
    *     class.
    * @param ast The abstract syntax tree representing the method body.
+   * @param useTryCatch Flag to enable try-catch
    * @return The generated class.
    * @throws Exception If an error occurs during class creation.
    */
-  public static Class<?> createClassWithMethod(EmitterContext ctx, String[] env, Node ast)
+  public static Class<?> createClassWithMethod(EmitterContext ctx, String[] env, Node ast, boolean useTryCatch)
       throws Exception {
     // Create a ClassWriter with COMPUTE_FRAMES and COMPUTE_MAXS options for automatic frame and max
     // stack size calculation
@@ -90,32 +91,89 @@ public class ASMMethodCreator implements Opcodes {
             null,
             new String[] {"java/lang/Exception"});
 
+    MethodVisitor mv = ctx.mv;
+
     // Generate the subroutine block
-    ctx.mv.visitCode();
+    mv.visitCode();
 
     // Initialize local variables with closure values from instance fields
     // Skip indices 0 to 2 because they are reserved for special arguments (this, "@_" and call
     // context)
     for (int i = 3; i < env.length; i++) {
       ctx.logDebug("Init closure variable: " + env[i]);
-      ctx.mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
-      ctx.mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassName, env[i], "LRuntime;");
-      ctx.mv.visitVarInsn(Opcodes.ASTORE, i);
+      mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
+      mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassName, env[i], "LRuntime;");
+      mv.visitVarInsn(Opcodes.ASTORE, i);
     }
 
     // Create a label for the return point
     ctx.returnLabel = new Label();
 
-    // Visit the AST to generate bytecode
+    // Prepare to visit the AST to generate bytecode
     EmitterVisitor visitor = new EmitterVisitor(ctx);
-    ast.accept(visitor);
 
-    // Handle the return value
-    ctx.logDebug("Return the last value");
-    ctx.mv.visitLabel(ctx.returnLabel); // "return" from other places arrive here
-    ctx.mv.visitInsn(Opcodes.ARETURN); // returns an Object
-    ctx.mv.visitMaxs(0, 0); // Automatically computed
-    ctx.mv.visitEnd();
+    if (useTryCatch) {
+      // --------------------------------
+      // Start of try-catch block
+      // --------------------------------
+
+      Label tryStart = new Label();
+      Label tryEnd = new Label();
+      Label catchBlock = new Label();
+      Label endCatch = new Label();
+
+      // Define the try-catch block
+      mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Exception");
+
+      mv.visitLabel(tryStart);
+      // --------------------------------
+      // Start of the try block
+      // --------------------------------
+
+      ast.accept(visitor);
+
+      // Handle the return value
+      ctx.logDebug("Return the last value");
+      mv.visitLabel(ctx.returnLabel); // "return" from other places arrive here
+
+      // --------------------------------
+      // End of the try block
+      // --------------------------------
+      mv.visitLabel(tryEnd);
+
+      // Jump over the catch block if no exception occurs
+      mv.visitJumpInsn(Opcodes.GOTO, endCatch);
+
+      // Start of the catch block
+      mv.visitLabel(catchBlock);
+
+      // The exception object is on the stack
+      // Example: print the stack trace of the caught exception
+      mv.visitMethodInsn(
+          Opcodes.INVOKEVIRTUAL, "java/lang/Exception", "printStackTrace", "()V", false);
+
+      // Restore the stack state to match the end of the try block if needed
+      mv.visitVarInsn(Opcodes.ALOAD, 1); // push @_ to the stack
+
+      // End of the catch block
+      mv.visitLabel(endCatch);
+
+      // --------------------------------
+      // End of try-catch block
+      // --------------------------------
+    } else {
+      // no try-catch
+
+      ast.accept(visitor);
+
+      // Handle the return value
+      ctx.logDebug("Return the last value");
+      mv.visitLabel(ctx.returnLabel); // "return" from other places arrive here
+    }
+
+    mv.visitInsn(Opcodes.ARETURN); // returns an Object
+    mv.visitMaxs(0, 0); // Automatically computed
+    mv.visitEnd();
 
     // Complete the class
     cw.visitEnd();
