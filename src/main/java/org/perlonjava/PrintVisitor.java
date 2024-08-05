@@ -46,9 +46,12 @@ public class PrintVisitor implements Visitor {
     public void visit(UnaryOperatorNode node) throws Exception {
         appendIndent();
         sb.append("UnaryOperatorNode: ").append(node.operator).append("\n");
-        indentLevel++;
-        node.operand.accept(this);
-        indentLevel--;
+        if (node.operand != null) {
+            appendIndent();
+            indentLevel++;
+            node.operand.accept(this);
+            indentLevel--;
+        }
     }
 
     @Override

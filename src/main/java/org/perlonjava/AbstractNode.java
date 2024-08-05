@@ -31,6 +31,7 @@ public abstract class AbstractNode implements Node {
       this.accept(printVisitor);
       return printVisitor.getResult();
       } catch (Exception e) {
+        e.printStackTrace(); // Print any exceptions that occur during the process
         return e.toString();
       }
     }
