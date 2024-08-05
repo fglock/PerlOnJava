@@ -5,11 +5,11 @@
 - [x] variable assignment
 - [x] Basic types: integer, double, string, CODE
 - [ ] Basic Operations
--- [x] Simple arithmetic
--- [ ] Comparison operators (Some are implemented)
+- [x] Simple arithmetic
+- [ ] Comparison operators (Some are implemented)
 - [ ] String Interpolation
--- [x] Interpolate simple scalars
--- [x] Expand backslash-n and simple sequences
+- [x] Interpolate simple scalars
+- [x] Expand backslash-n and simple sequences
 - [x] String numification
 - [ ] String increment
 - [ ] Tied Scalars
@@ -25,8 +25,8 @@
 
 ## Subroutines
 - [x] Anonymous subroutines with closure variables
--- [x] return from inside a block
--- [x] assigning to a closure variable mutates the variable in the original context
+- [x] return from inside a block
+- [x] assigning to a closure variable mutates the variable in the original context
 
 ## Regular Expressions
 - [ ] Basic Matching
@@ -34,21 +34,21 @@
 
 ## Statements and special operators
 - [x] context void, scalar, list
--- [ ] wantarray
+- [ ] wantarray
 - [ ] BEGIN block
 - [x] if/else/elsif
 - [x] 3-argument for loop
 - [x] eval string with closure variables
--- [x] eval string sets $@ on error; returns undef
+- [x] eval string sets $@ on error; returns undef
 - [ ] eval block
 - [x] do block
 - [ ] do file
 - [ ] print statement
--- [x] simple print statement
+- [x] simple print statement
 
 ## Namespaces and global variables
 - [ ] Global variables
--- [x] Global variable infrastructure
--- [x] @_ and $@ special variables
+- [x] Global variable infrastructure
+- [x] @_ and $@ special variables
 
 
