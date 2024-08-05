@@ -247,6 +247,9 @@ public class EmitterVisitor implements Visitor {
       case "print":
         handlePrintOperator(node);
         break;
+      case "say":
+        handleUnaryBuiltin(node, "say");
+        break;
       case "my":
         handleMyOperator(node);
         break;
