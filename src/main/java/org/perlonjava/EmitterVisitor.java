@@ -95,8 +95,20 @@ public class EmitterVisitor implements Visitor {
     ctx.logDebug("visit(BinaryOperatorNode) " + operator + " in context " + ctx.contextType);
     EmitterVisitor scalarVisitor =
         this.with(ContextType.SCALAR); // execute operands in scalar context
-    node.left.accept(scalarVisitor); // target
-    node.right.accept(scalarVisitor); // parameter
+    node.left.accept(scalarVisitor); // target - left parameter
+
+    switch (operator) { // handle operators that support short-circuit
+      case "||":
+      case "or":
+        handleOrOperator(node);
+        return;
+      case "&&":
+      case "and":
+        handleAndOperator(node);
+        return;
+    }
+
+    node.right.accept(scalarVisitor); // right parameter
 
     switch (operator) {
       case "+":
@@ -123,19 +135,59 @@ public class EmitterVisitor implements Visitor {
       case "=":
         handleBinaryBuiltin("set");
         break;
-      case "||":
-      case "or":
-        handleBinaryBuiltin("or");
-        break;
-      case "&&":
-      case "and":
-        handleBinaryBuiltin("and");
-        break;
       case "->":
         handleArrowOperator(node);
         break;
       default:
         throw new RuntimeException("Unexpected infix operator: " + operator);
+    }
+  }
+
+  private void handleAndOperator(BinaryOperatorNode node) throws Exception {
+    Label endLabel = new Label();    // Label for the end of the operation
+
+    // the left parameter is in the stack
+    ctx.mv.visitInsn(Opcodes.DUP);
+    // stack is [left, left]
+
+    // Convert the result to a boolean
+    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "getBoolean", "()Z", false);
+    // stack is [left, boolean]
+
+    // If the left operand boolean value is false, return left operand
+    ctx.mv.visitJumpInsn(Opcodes.IFEQ, endLabel);
+
+    ctx.mv.visitInsn(Opcodes.POP); // remove left operand
+    node.right.accept(this.with(ContextType.SCALAR)); // right operand in scalar context
+    // stack is [right]
+
+    ctx.mv.visitLabel(endLabel);
+    if (ctx.contextType == ContextType.VOID) {
+      ctx.mv.visitInsn(Opcodes.POP);
+    }
+  }
+
+  private void handleOrOperator(BinaryOperatorNode node) throws Exception {
+    Label endLabel = new Label();    // Label for the end of the operation
+
+    // the left parameter is in the stack
+    ctx.mv.visitInsn(Opcodes.DUP);
+    // stack is [left, left]
+
+    // Convert the result to a boolean
+    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "getBoolean", "()Z", false);
+    // stack is [left, boolean]
+
+    // If the left operand boolean value is true, return left operand
+    ctx.mv.visitJumpInsn(Opcodes.IFNE, endLabel);
+
+    ctx.mv.visitInsn(Opcodes.POP); // remove left operand
+    node.right.accept(this.with(ContextType.SCALAR)); // right operand in scalar context
+    // stack is [right]
+
+    ctx.mv.visitLabel(endLabel);
+    if (ctx.contextType == ContextType.VOID) {
+      ctx.mv.visitInsn(Opcodes.POP);
     }
   }
 
