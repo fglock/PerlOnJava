@@ -13,8 +13,9 @@
 - [x] Expand backslash-n and simple sequences
 - [x] String numification
 - [x] Autoincrement, Autodecrement; String increment
-- [ ] Tied Scalars
 - [ ] File handles
+- [ ] Tied Scalars
+- [ ] Cached string/numeric conversions; dualvars
 
 ## Arrays and List
 - [ ] Basic Array Operations
