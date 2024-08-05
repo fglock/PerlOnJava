@@ -2,9 +2,9 @@
 
 ## Easy Wins
 - Loops
-- `$_`, `$@`
+- `$_`
 - Ternary operator
-- `eval` block, catch error: create the $@ variable
+- eval block
 
 ## Harder to Implement
 - `BEGIN` block

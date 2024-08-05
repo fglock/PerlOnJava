@@ -210,6 +210,11 @@ public class Parser {
             default:
               // Handle unary operators
               if (UNARY_OP.contains(token.text)) {
+
+                if (token.text.equals("$") && peek().type == TokenType.OPERATOR) { // Handle $@ variable
+                    return new UnaryOperatorNode("$", new IdentifierNode(consume().text, tokenIndex), tokenIndex);
+                }
+
                 operand = parseExpression(getPrecedence(token) + 1);
                 return new UnaryOperatorNode(token.text, operand, tokenIndex);
               }
