@@ -700,6 +700,12 @@ public class EmitterVisitor implements Visitor {
     if (node.elseBranch != null) {
       node.elseBranch.accept(this);
     }
+    else {
+      // If the context is not VOID, push "undef" to the stack
+      if (ctx.contextType != ContextType.VOID) {
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "Runtime", "undef", "()LRuntime;", false);
+      }
+    }
 
     // Visit the end label
     ctx.mv.visitLabel(endLabel);
