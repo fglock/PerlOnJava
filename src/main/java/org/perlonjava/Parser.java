@@ -51,9 +51,10 @@ public class Parser {
 
         if (token.type == TokenType.IDENTIFIER) {
             switch (token.text) {
-                case "if": {
+                case "if":
                     return parseIfStatement();
-                }
+                case "for":
+                    return parseForStatement();
             }
         }
         if (token.type == TokenType.OPERATOR && token.text.equals("{")) { // bare-block
@@ -80,6 +81,39 @@ public class Parser {
         Node block = parseBlock();
         consume(TokenType.OPERATOR, "}");
         return new AnonSubNode(block, tokenIndex);
+    }
+
+    private Node parseForStatement() {
+        consume(TokenType.IDENTIFIER);  // "for"
+        consume(TokenType.OPERATOR, "(");
+    
+        // Parse the initialization part
+        Node initialization = null;
+        if (!peek().text.equals(";")) {
+            initialization = parseExpression(0);
+        }
+        consume(TokenType.OPERATOR, ";");
+    
+        // Parse the condition part
+        Node condition = null;
+        if (!peek().text.equals(";")) {
+            condition = parseExpression(0);
+        }
+        consume(TokenType.OPERATOR, ";");
+    
+        // Parse the increment part
+        Node increment = null;
+        if (!peek().text.equals(")")) {
+            increment = parseExpression(0);
+        }
+        consume(TokenType.OPERATOR, ")");
+    
+        // Parse the body of the loop
+        consume(TokenType.OPERATOR, "{");
+        Node body = parseBlock();
+        consume(TokenType.OPERATOR, "}");
+    
+        return new ForNode(initialization, condition, increment, body, tokenIndex);
     }
 
     private Node parseIfStatement() {

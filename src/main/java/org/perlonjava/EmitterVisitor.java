@@ -597,6 +597,63 @@ public class EmitterVisitor implements Visitor {
   }
 
   @Override
+  public void visit(ForNode node) throws Exception {
+    ctx.logDebug("FOR start");
+
+    // Enter a new scope in the symbol table
+    ctx.symbolTable.enterScope();
+
+    // Create labels for the start of the loop, the condition check, and the end of the loop
+    Label startLabel = new Label();
+    Label conditionLabel = new Label();
+    Label endLabel = new Label();
+
+    // Visit the initialization node
+    if (node.initialization != null) {
+        node.initialization.accept(this);
+    }
+
+    // Jump to the condition check
+    ctx.mv.visitJumpInsn(Opcodes.GOTO, conditionLabel);
+
+    // Visit the start label
+    ctx.mv.visitLabel(startLabel);
+
+    // Visit the loop body
+    node.body.accept(this);
+
+    // Visit the increment node
+    if (node.increment != null) {
+        node.increment.accept(this);
+    }
+
+    // Visit the condition label
+    ctx.mv.visitLabel(conditionLabel);
+
+    // Visit the condition node in scalar context
+    if (node.condition != null) {
+        node.condition.accept(this.with(ContextType.SCALAR));
+
+        // Convert the result to a boolean
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "getBoolean", "()Z", false);
+
+        // Jump to the end label if the condition is false
+        ctx.mv.visitJumpInsn(Opcodes.IFEQ, endLabel);
+    }
+
+    // Jump to the start label to continue the loop
+    ctx.mv.visitJumpInsn(Opcodes.GOTO, startLabel);
+
+    // Visit the end label
+    ctx.mv.visitLabel(endLabel);
+
+    // Exit the scope in the symbol table
+    ctx.symbolTable.exitScope();
+
+    ctx.logDebug("FOR end");
+  }
+
+  @Override
   public void visit(IfNode node) throws Exception {
     ctx.logDebug("IF start");
 
