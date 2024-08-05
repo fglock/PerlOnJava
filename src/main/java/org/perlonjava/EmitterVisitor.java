@@ -111,6 +111,12 @@ public class EmitterVisitor implements Visitor {
       case "/":
         handleBinaryBuiltin("divide");
         break;
+      case "<":
+        handleBinaryBuiltin("lessThan");
+        break;
+      case "<=":
+        handleBinaryBuiltin("lessEqualThan");
+        break;
       case ".":
         handleBinaryBuiltin("stringConcat");
         break;
