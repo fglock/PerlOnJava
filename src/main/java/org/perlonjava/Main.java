@@ -100,6 +100,7 @@ public class Main {
             ctx.symbolTable.addVariable("wantarray"); // Call context is local variable 2
 
             Runtime.getGlobalVariable("$@");    // initialize $@ to "undef"
+            Runtime.getGlobalVariable("$_");    // initialize $_ to "undef"
 
             ctx.logDebug("parse code: " + code);
             ctx.logDebug("  call context " + ctx.contextType);
