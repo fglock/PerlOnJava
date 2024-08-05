@@ -116,7 +116,7 @@ public class ErrorMessageUtil {
             StackTraceElement element = stackTrace[0];
             String fileName = element.getFileName();
             int lineNumber = element.getLineNumber();
-            return String.format("Exception: %s at %s:%d", e.toString(), fileName, lineNumber);
+            return String.format("Exception: %s at %s:%d\n", e.toString(), fileName, lineNumber);
         } else {
             return e.toString();
         }
