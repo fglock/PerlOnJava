@@ -1,213 +1,231 @@
 import java.util.*;
 
 public class Parser {
-  private final List<Token> tokens;
-  private final ErrorMessageUtil errorUtil;
-  private int tokenIndex = 0;
-  private static final Set<String> TERMINATORS =
-      new HashSet<>(Arrays.asList(":", ";", ")", "}", "]"));
-  private static final Set<String> UNARY_OP =
-      new HashSet<>(
-          Arrays.asList(
-              "!",
-              "\\",
-              "-",
-              "+",
-              "--",
-              "++", // operators
-              "$",
-              "@",
-              "%",
-              "*",
-              "&",
-              "$#" // sigils
-              ));
+    private final List<Token> tokens;
+    private final ErrorMessageUtil errorUtil;
+    private int tokenIndex = 0;
+    private static final Set<String> TERMINATORS =
+            new HashSet<>(Arrays.asList(":", ";", ")", "}", "]"));
+    private static final Set<String> UNARY_OP =
+            new HashSet<>(
+                    Arrays.asList(
+                            "!",
+                            "\\",
+                            "-",
+                            "+",
+                            "--",
+                            "++", // operators
+                            "$",
+                            "@",
+                            "%",
+                            "*",
+                            "&",
+                            "$#" // sigils
+                    ));
 
-  public Parser(ErrorMessageUtil errorUtil, List<Token> tokens) {
-    this.errorUtil = errorUtil;
-    this.tokens = tokens;
-  }
+    public Parser(ErrorMessageUtil errorUtil, List<Token> tokens) {
+        this.errorUtil = errorUtil;
+        this.tokens = tokens;
+    }
 
-  public Node parse() {
-    return parseBlock();
-  }
+    public Node parse() {
+        return parseBlock();
+    }
 
-  private Node parseBlock() {
-      List<Node> statements = new ArrayList<>();
-      Token token = peek();
-      while (token.type != TokenType.EOF && !(token.type == TokenType.OPERATOR && token.text.equals("}"))) {
-          if (token.text.equals(";")) {
-            consume();
-          }
-          else {
-            statements.add(parseStatement());
-          }
-          token = peek();
-      }
-      return new BlockNode(statements, tokenIndex);
-  }
-
-  public Node parseStatement() {
-      Token token = peek();
-
-      if (token.type == TokenType.IDENTIFIER) {
-          switch (token.text) {
-            case "if": {
-              return parseIfStatement();
+    private Node parseBlock() {
+        List<Node> statements = new ArrayList<>();
+        Token token = peek();
+        while (token.type != TokenType.EOF && !(token.type == TokenType.OPERATOR && token.text.equals("}"))) {
+            if (token.text.equals(";")) {
+                consume();
+            } else {
+                statements.add(parseStatement());
             }
-         }
-      }
-      if (token.type == TokenType.OPERATOR && token.text.equals("{")) { // bare-block
-        consume(TokenType.OPERATOR, "{");
-        Node block = parseBlock();
-        consume(TokenType.OPERATOR, "}");
-        return block;
-      }
-      Node expression = parseExpression(0);
-      token = peek();
-      if (token.type != TokenType.EOF && !token.text.equals("}") && !token.text.equals(";")) {
-        throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, errorUtil);
-      }
-      if (token.text.equals(";")) {
-        consume();
-      }
-      return expression;
-  }
-
-  private Node parseAnonSub(Token token) {
-    // token == "sub"
-    // TODO - optional name, subroutine prototype
-    consume(TokenType.OPERATOR, "{");
-    Node block = parseBlock();
-    consume(TokenType.OPERATOR, "}");
-    return new AnonSubNode(block, tokenIndex);
-  }
-
-  private Node parseIfStatement() {
-    consume(TokenType.IDENTIFIER);  // "if", "elsif"
-    consume(TokenType.OPERATOR, "(");
-    Node condition = parseExpression(0);
-    consume(TokenType.OPERATOR, ")");
-    consume(TokenType.OPERATOR, "{");
-    Node thenBranch = parseBlock();
-    consume(TokenType.OPERATOR, "}");
-    Node elseBranch = null;
-    Token token = peek();
-    if (token.text.equals("else")) {
-        consume(TokenType.IDENTIFIER);  // "else"
-        consume(TokenType.OPERATOR, "{");
-        elseBranch = parseBlock();
-        consume(TokenType.OPERATOR, "}");
-    }
-    else if (token.text.equals("elsif")) {
-        elseBranch = parseIfStatement();
-    }
-    return new IfNode(condition, thenBranch, elseBranch, tokenIndex);
-  }
-
-  private Node parseExpression(int precedence) {
-    Node left = parsePrimary();
-
-    while (true) {
-      Token token = peek();
-      if (token.type == TokenType.EOF || TERMINATORS.contains(token.text)) {
-        break;
-      }
-
-      int tokenPrecedence = getPrecedence(token);
-
-      if (tokenPrecedence < precedence) {
-        break;
-      }
-
-      if (isRightAssociative(token)) {
-        left = parseInfix(left, tokenPrecedence - 1);
-      } else {
-        left = parseInfix(left, tokenPrecedence);
-      }
+            token = peek();
+        }
+        return new BlockNode(statements, tokenIndex);
     }
 
-    return left;
-  }
+    public Node parseStatement() {
+        Token token = peek();
 
-  private Node parsePrimary() {
-    Token token = consume();
-
-    switch (token.type) {
-      case IDENTIFIER:
-        if (token.text.equals("undef")) {
-          // Node operand = parseExpression(getPrecedence(token) + 1); // TODO zero or 1 operators
-          return new UnaryOperatorNode("undef", null, tokenIndex);
+        if (token.type == TokenType.IDENTIFIER) {
+            switch (token.text) {
+                case "if": {
+                    return parseIfStatement();
+                }
+            }
         }
-        if (token.text.equals("not")) {
-          Node operand = parseExpression(getPrecedence(token) + 1);
-          return new UnaryOperatorNode("not", operand, tokenIndex);
-        }
-        if (token.text.equals("print")) {
-          Node operand = parsePrimary();
-          return new UnaryOperatorNode("print", operand, tokenIndex);
-        }
-        if (token.text.equals("my")) {
-          Node operand = parsePrimary();
-          return new UnaryOperatorNode("my", operand, tokenIndex);
-        }
-        if (token.text.equals("return")) {
-          Node operand = parsePrimary();
-          return new UnaryOperatorNode("return", operand, tokenIndex);
-        }
-        if (token.text.equals("eval")) {
-          Node operand;
-          token = peek();
-          if (token.type == TokenType.OPERATOR && token.text.equals("{")) { // eval block
-            consume(TokenType.OPERATOR, "{");
-            operand = parseBlock();
-            consume(TokenType.OPERATOR, "}");
-          }
-          else { // eval string
-            operand = parsePrimary();
-          }
-          return new UnaryOperatorNode("eval", operand, tokenIndex);
-        }
-        if (token.text.equals("do")) {
-          token = peek();
-          if (token.type == TokenType.OPERATOR && token.text.equals("{")) {
+        if (token.type == TokenType.OPERATOR && token.text.equals("{")) { // bare-block
             consume(TokenType.OPERATOR, "{");
             Node block = parseBlock();
             consume(TokenType.OPERATOR, "}");
             return block;
-          }
         }
-        if (token.text.equals("sub")) {
-          return parseAnonSub(token);
+        Node expression = parseExpression(0);
+        token = peek();
+        if (token.type != TokenType.EOF && !token.text.equals("}") && !token.text.equals(";")) {
+            throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, errorUtil);
         }
-        return new IdentifierNode(token.text, tokenIndex);
-      case NUMBER:
-        return parseNumber(token);
-      case STRING:
-        return new StringNode(token.text, tokenIndex);
-      case OPERATOR:
-        if (token.text.equals("(")) {
-          Node expr = parseExpression(0);
-          consume(TokenType.OPERATOR, ")");
-          return expr;
-        } else if (UNARY_OP.contains(token.text)) {
-          Node operand = parseExpression(getPrecedence(token) + 1);
-          return new UnaryOperatorNode(token.text, operand, tokenIndex);
-        } else if (token.text.equals(".")) {
-          return parseFractionalNumber();
-        } else if (token.text.equals("'")) {
-          return parseSingleQuotedString();
-        } else if (token.text.equals("\"")) {
-          return parseDoubleQuotedString();
+        if (token.text.equals(";")) {
+            consume();
         }
-        break;
-      case EOF:
-        return null; // End of input
-      default:
-        throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, errorUtil);
+        return expression;
     }
-    throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, errorUtil);
-  }
+
+    private Node parseAnonSub(Token token) {
+        // token == "sub"
+        // TODO - optional name, subroutine prototype
+        consume(TokenType.OPERATOR, "{");
+        Node block = parseBlock();
+        consume(TokenType.OPERATOR, "}");
+        return new AnonSubNode(block, tokenIndex);
+    }
+
+    private Node parseIfStatement() {
+        consume(TokenType.IDENTIFIER);  // "if", "elsif"
+        consume(TokenType.OPERATOR, "(");
+        Node condition = parseExpression(0);
+        consume(TokenType.OPERATOR, ")");
+        consume(TokenType.OPERATOR, "{");
+        Node thenBranch = parseBlock();
+        consume(TokenType.OPERATOR, "}");
+        Node elseBranch = null;
+        Token token = peek();
+        if (token.text.equals("else")) {
+            consume(TokenType.IDENTIFIER);  // "else"
+            consume(TokenType.OPERATOR, "{");
+            elseBranch = parseBlock();
+            consume(TokenType.OPERATOR, "}");
+        } else if (token.text.equals("elsif")) {
+            elseBranch = parseIfStatement();
+        }
+        return new IfNode(condition, thenBranch, elseBranch, tokenIndex);
+    }
+
+    private Node parseExpression(int precedence) {
+        Node left = parsePrimary();
+
+        while (true) {
+            Token token = peek();
+            if (token.type == TokenType.EOF || TERMINATORS.contains(token.text)) {
+                break;
+            }
+
+            int tokenPrecedence = getPrecedence(token);
+
+            if (tokenPrecedence < precedence) {
+                break;
+            }
+
+            if (isRightAssociative(token)) {
+                left = parseInfix(left, tokenPrecedence - 1);
+            } else {
+                left = parseInfix(left, tokenPrecedence);
+            }
+        }
+
+        return left;
+    }
+
+    private Node parsePrimary() {
+      Token token = consume(); // Consume the next token from the input
+      Node operand;
+    
+      switch (token.type) {
+        case IDENTIFIER:
+          switch (token.text) {
+            case "undef":
+              // Handle 'undef' keyword as a unary operator with no operand
+              return new UnaryOperatorNode("undef", null, tokenIndex);
+            case "not":
+              // Handle 'not' keyword as a unary operator with an operand
+              operand = parseExpression(getPrecedence(token) + 1);
+              return new UnaryOperatorNode("not", operand, tokenIndex);
+            case "print":
+              // Handle 'print' keyword as a unary operator with an operand
+              operand = parsePrimary();
+              return new UnaryOperatorNode("print", operand, tokenIndex);
+            case "my":
+              // Handle 'my' keyword as a unary operator with an operand
+              operand = parsePrimary();
+              return new UnaryOperatorNode("my", operand, tokenIndex);
+            case "return":
+              // Handle 'return' keyword as a unary operator with an operand
+              operand = parsePrimary();
+              return new UnaryOperatorNode("return", operand, tokenIndex);
+            case "eval":
+              // Handle 'eval' keyword which can be followed by a block or an expression
+              token = peek();
+              if (token.type == TokenType.OPERATOR && token.text.equals("{")) {
+                // If the next token is '{', parse a block
+                consume(TokenType.OPERATOR, "{");
+                operand = parseBlock();
+                consume(TokenType.OPERATOR, "}");
+              } else {
+                // Otherwise, parse a primary expression
+                operand = parsePrimary();
+              }
+              return new UnaryOperatorNode("eval", operand, tokenIndex);
+            case "do":
+              // Handle 'do' keyword which can be followed by a block
+              token = peek();
+              if (token.type == TokenType.OPERATOR && token.text.equals("{")) {
+                consume(TokenType.OPERATOR, "{");
+                Node block = parseBlock();
+                consume(TokenType.OPERATOR, "}");
+                return block;
+              }
+              break;
+            case "sub":
+              // Handle 'sub' keyword to parse an anonymous subroutine
+              return parseAnonSub(token);
+            default:
+              // Handle any other identifier as a simple identifier node
+              return new IdentifierNode(token.text, tokenIndex);
+          }
+          break;
+        case NUMBER:
+          // Handle number literals
+          return parseNumber(token);
+        case STRING:
+          // Handle string literals
+          return new StringNode(token.text, tokenIndex);
+        case OPERATOR:
+          switch (token.text) {
+            case "(":
+              // Handle parentheses to parse a nested expression
+              Node expr = parseExpression(0);
+              consume(TokenType.OPERATOR, ")");
+              return expr;
+            case ".":
+              // Handle fractional numbers
+              return parseFractionalNumber();
+            case "'":
+              // Handle single-quoted strings
+              return parseSingleQuotedString();
+            case "\"":
+              // Handle double-quoted strings
+              return parseDoubleQuotedString();
+            default:
+              // Handle unary operators
+              if (UNARY_OP.contains(token.text)) {
+                operand = parseExpression(getPrecedence(token) + 1);
+                return new UnaryOperatorNode(token.text, operand, tokenIndex);
+              }
+              break;
+          }
+          break;
+        case EOF:
+          // Handle end of input
+          return null;
+        default:
+          // Throw an exception for any unexpected token
+          throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, errorUtil);
+      }
+      // Throw an exception if no valid case was found
+      throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, errorUtil);
+    }
 
     private Node parseDoubleQuotedString() {
         StringBuilder str = new StringBuilder();
@@ -263,7 +281,7 @@ public class Parser {
             parts.add(new StringNode(str.toString(), tokenIndex));
         }
         consume(TokenType.OPERATOR, "\""); // Consume the closing double quote
-        
+
         // Join the parts
         if (parts.size() == 0) {
             return new StringNode("", tokenIndex);
@@ -283,268 +301,268 @@ public class Parser {
         }
     }
 
-  private Node parseSingleQuotedString() {
-      StringBuilder str = new StringBuilder();
-      while (!peek().text.equals("'")) {
-          String text = consume().text;
-          if (text.equals("\\")) {
-              // Handle escaped characters
-              text = consume().text;
-              if (text.equals("\\") || text.equals("'")) {
-                  str.append(text);
-              } else {
-                  str.append("\\").append(text);
-              }
-          } else {
-              str.append(text);
-          }
-      }
-      consume(TokenType.OPERATOR, "'"); // Consume the closing single quote
-      return new StringNode(str.toString(), tokenIndex);
-  }
-
-  private Node parseNumber(Token token) {
-    StringBuilder number = new StringBuilder(token.text);
-
-    // Check for fractional part
-    if (tokens.get(tokenIndex).text.equals(".")) {
-      number.append(consume().text); // consume '.'
-      if (tokens.get(tokenIndex).type == TokenType.NUMBER) {
-        number.append(consume().text); // consume digits after '.'
-      }
-    }
-    // Check for exponent part
-    checkNumberExponent(number);
-
-    return new NumberNode(number.toString(), tokenIndex);
-  }
-
-  private Node parseFractionalNumber() {
-    StringBuilder number = new StringBuilder("0.");
-
-    number.append(consume(TokenType.NUMBER).text); // consume digits after '.'
-    // Check for exponent part
-    checkNumberExponent(number);
-    return new NumberNode(number.toString(), tokenIndex);
-  }
-
-  private void checkNumberExponent(StringBuilder number) {
-    // Check for exponent part
-    if (tokens.get(tokenIndex).text.startsWith("e") || tokens.get(tokenIndex).text.startsWith("E")) {
-        String exponentPart = consume().text; // consume 'e' or 'E' and possibly more 'E10'
-        number.append(exponentPart.charAt(0)); // append 'e' or 'E'
-
-        int index = 1;
-        // Check if the rest of the token contains digits (e.g., "E10")
-        while (index < exponentPart.length()) {
-            if (!Character.isDigit(exponentPart.charAt(index))) {
-                throw new PerlCompilerException(tokenIndex, "Malformed number", errorUtil);
+    private Node parseSingleQuotedString() {
+        StringBuilder str = new StringBuilder();
+        while (!peek().text.equals("'")) {
+            String text = consume().text;
+            if (text.equals("\\")) {
+                // Handle escaped characters
+                text = consume().text;
+                if (text.equals("\\") || text.equals("'")) {
+                    str.append(text);
+                } else {
+                    str.append("\\").append(text);
+                }
+            } else {
+                str.append(text);
             }
-            number.append(exponentPart.charAt(index));
-            index++;
         }
+        consume(TokenType.OPERATOR, "'"); // Consume the closing single quote
+        return new StringNode(str.toString(), tokenIndex);
+    }
 
-        // If the exponent part was not fully consumed, check for separate tokens
-        if (index == 1) {
-            // Check for optional sign
-            if (tokens.get(tokenIndex).text.equals("-") || tokens.get(tokenIndex).text.equals("+")) {
-                number.append(consume().text); // consume '-' or '+'
+    private Node parseNumber(Token token) {
+        StringBuilder number = new StringBuilder(token.text);
+
+        // Check for fractional part
+        if (tokens.get(tokenIndex).text.equals(".")) {
+            number.append(consume().text); // consume '.'
+            if (tokens.get(tokenIndex).type == TokenType.NUMBER) {
+                number.append(consume().text); // consume digits after '.'
+            }
+        }
+        // Check for exponent part
+        checkNumberExponent(number);
+
+        return new NumberNode(number.toString(), tokenIndex);
+    }
+
+    private Node parseFractionalNumber() {
+        StringBuilder number = new StringBuilder("0.");
+
+        number.append(consume(TokenType.NUMBER).text); // consume digits after '.'
+        // Check for exponent part
+        checkNumberExponent(number);
+        return new NumberNode(number.toString(), tokenIndex);
+    }
+
+    private void checkNumberExponent(StringBuilder number) {
+        // Check for exponent part
+        if (tokens.get(tokenIndex).text.startsWith("e") || tokens.get(tokenIndex).text.startsWith("E")) {
+            String exponentPart = consume().text; // consume 'e' or 'E' and possibly more 'E10'
+            number.append(exponentPart.charAt(0)); // append 'e' or 'E'
+
+            int index = 1;
+            // Check if the rest of the token contains digits (e.g., "E10")
+            while (index < exponentPart.length()) {
+                if (!Character.isDigit(exponentPart.charAt(index))) {
+                    throw new PerlCompilerException(tokenIndex, "Malformed number", errorUtil);
+                }
+                number.append(exponentPart.charAt(index));
+                index++;
             }
 
-            // Consume exponent digits
-            number.append(consume(TokenType.NUMBER).text);
+            // If the exponent part was not fully consumed, check for separate tokens
+            if (index == 1) {
+                // Check for optional sign
+                if (tokens.get(tokenIndex).text.equals("-") || tokens.get(tokenIndex).text.equals("+")) {
+                    number.append(consume().text); // consume '-' or '+'
+                }
+
+                // Consume exponent digits
+                number.append(consume(TokenType.NUMBER).text);
+            }
         }
     }
-  }
 
-  private Node parseInfix(Node left, int precedence) {
-    Token token = consume();
+    private Node parseInfix(Node left, int precedence) {
+        Token token = consume();
 
-    if (isTernaryOperator(token)) {
-      Node middle = parseExpression(0);
-      consume(TokenType.OPERATOR, ":");
-      Node right = parseExpression(precedence);
-      return new TernaryOperatorNode(token.text, left, middle, right, tokenIndex);
-    }
-
-    Node right;
-    switch (token.text) {
-      case "or":
-      case "xor":
-      case "and":
-      case "||":
-      case "//":
-      case "&&":
-      case "==":
-      case "!=":
-      case "<=>":
-      case "eq":
-      case "ne":
-      case "cmp":
-      case "<":
-      case ">":
-      case "<=":
-      case ">=":
-      case "lt":
-      case "gt":
-      case "le":
-      case "ge":
-      case "+":
-      case "-":
-      case "*":
-      case "**":
-      case "/":
-      case "%":
-      case ".":
-      case "=":
-      case "=~":
-      case "!~":
-      case "x":
-      case "..":
-      case "...":
-        right = parseExpression(precedence);
-        return new BinaryOperatorNode(token.text, left, right, tokenIndex);
-      case "->":
-        if (peek().text.equals("(") ) {
-            right = parseList();
-            return new BinaryOperatorNode(token.text, left, right, tokenIndex);
+        if (isTernaryOperator(token)) {
+            Node middle = parseExpression(0);
+            consume(TokenType.OPERATOR, ":");
+            Node right = parseExpression(precedence);
+            return new TernaryOperatorNode(token.text, left, middle, right, tokenIndex);
         }
-        right = parseExpression(precedence);
-        return new BinaryOperatorNode(token.text, left, right, tokenIndex);
-      case "--":
-      case "++":
-        return new PostfixOperatorNode(token.text, left, tokenIndex);
+
+        Node right;
+        switch (token.text) {
+            case "or":
+            case "xor":
+            case "and":
+            case "||":
+            case "//":
+            case "&&":
+            case "==":
+            case "!=":
+            case "<=>":
+            case "eq":
+            case "ne":
+            case "cmp":
+            case "<":
+            case ">":
+            case "<=":
+            case ">=":
+            case "lt":
+            case "gt":
+            case "le":
+            case "ge":
+            case "+":
+            case "-":
+            case "*":
+            case "**":
+            case "/":
+            case "%":
+            case ".":
+            case "=":
+            case "=~":
+            case "!~":
+            case "x":
+            case "..":
+            case "...":
+                right = parseExpression(precedence);
+                return new BinaryOperatorNode(token.text, left, right, tokenIndex);
+            case "->":
+                if (peek().text.equals("(")) {
+                    right = parseList();
+                    return new BinaryOperatorNode(token.text, left, right, tokenIndex);
+                }
+                right = parseExpression(precedence);
+                return new BinaryOperatorNode(token.text, left, right, tokenIndex);
+            case "--":
+            case "++":
+                return new PostfixOperatorNode(token.text, left, tokenIndex);
+        }
+        throw new PerlCompilerException(tokenIndex, "Unexpected infix operator: " + token, errorUtil);
     }
-    throw new PerlCompilerException(tokenIndex, "Unexpected infix operator: " + token, errorUtil);
-  }
 
-  private Token peek() {
-    while (tokenIndex < tokens.size()
-        && (tokens.get(tokenIndex).type == TokenType.WHITESPACE
-            || tokens.get(tokenIndex).type == TokenType.NEWLINE)) {
-      tokenIndex++;
+    private Token peek() {
+        while (tokenIndex < tokens.size()
+                && (tokens.get(tokenIndex).type == TokenType.WHITESPACE
+                || tokens.get(tokenIndex).type == TokenType.NEWLINE)) {
+            tokenIndex++;
+        }
+        if (tokenIndex >= tokens.size()) {
+            return new Token(TokenType.EOF, "");
+        }
+        return tokens.get(tokenIndex);
     }
-    if (tokenIndex >= tokens.size()) {
-      return new Token(TokenType.EOF, "");
+
+    private Token consume() {
+        while (tokenIndex < tokens.size()
+                && (tokens.get(tokenIndex).type == TokenType.WHITESPACE
+                || tokens.get(tokenIndex).type == TokenType.NEWLINE)) {
+            tokenIndex++;
+        }
+        // if (tokenIndex >= tokens.size()) {
+        //   return new Token(TokenType.EOF, "");
+        // }
+        return tokens.get(tokenIndex++);
     }
-    return tokens.get(tokenIndex);
-  }
 
-  private Token consume() {
-    while (tokenIndex < tokens.size()
-        && (tokens.get(tokenIndex).type == TokenType.WHITESPACE
-            || tokens.get(tokenIndex).type == TokenType.NEWLINE)) {
-      tokenIndex++;
+    private Token consume(TokenType type) {
+        Token token = consume();
+        if (token.type != type) {
+            throw new PerlCompilerException(tokenIndex, "Expected token " + type + " but got " + token, errorUtil);
+        }
+        return token;
     }
-    // if (tokenIndex >= tokens.size()) {
-    //   return new Token(TokenType.EOF, "");
-    // }
-    return tokens.get(tokenIndex++);
-  }
 
-  private Token consume(TokenType type) {
-    Token token = consume();
-    if (token.type != type) {
-      throw new PerlCompilerException(tokenIndex, "Expected token " + type + " but got " + token, errorUtil);
+    private void consume(TokenType type, String text) {
+        Token token = consume();
+        if (token.type != type || !token.text.equals(text)) {
+            throw new PerlCompilerException(tokenIndex, "Expected token " + type + " with text " + text + " but got " + token, errorUtil);
+        }
     }
-    return token;
-  }
 
-  private void consume(TokenType type, String text) {
-    Token token = consume();
-    if (token.type != type || !token.text.equals(text)) {
-      throw new PerlCompilerException(tokenIndex, "Expected token " + type + " with text " + text + " but got " + token, errorUtil);
+    private int getPrecedence(Token token) {
+        // Define precedence levels for operators
+        switch (token.text) {
+            case "or":
+            case "xor":
+                return 1;
+            case "and":
+                return 2;
+            case "not":
+                return 3;
+
+            case "=":
+                return 6; // Lower precedence for assignment
+            case "?":
+                return 7; // Precedence for ternary operator
+
+            case "||":
+            case "^^":
+            case "//":
+                return 9;
+            case "&&":
+                return 10;
+
+            case "+":
+            case "-":
+                return 13;
+            case "*":
+            case "/":
+                return 14;
+
+            case "**":
+                return 17;
+            case "++":
+            case "--":
+                return 18;
+            case "->":
+                return 19;
+            case "$":
+                return 20; // Higher precedence for prefix operator
+            default:
+                return 0;
+        }
     }
-  }
 
-  private int getPrecedence(Token token) {
-    // Define precedence levels for operators
-    switch (token.text) {
-      case "or":
-      case "xor":
-        return 1;
-      case "and":
-        return 2;
-      case "not":
-        return 3;
-
-      case "=":
-        return 6; // Lower precedence for assignment
-      case "?":
-        return 7; // Precedence for ternary operator
-
-      case "||":
-      case "^^":
-      case "//":
-        return 9;
-      case "&&":
-        return 10;
-
-      case "+":
-      case "-":
-        return 13;
-      case "*":
-      case "/":
-        return 14;
-
-      case "**":
-        return 17;
-      case "++":
-      case "--":
-        return 18;
-      case "->":
-        return 19;
-      case "$":
-        return 20; // Higher precedence for prefix operator
-      default:
-        return 0;
+    private boolean isRightAssociative(Token token) {
+        // Define right associative operators
+        switch (token.text) {
+            case "=":
+            case "-=":
+            case "+=":
+            case "**":
+            case "?":
+                return true;
+            default:
+                return false;
+        }
     }
-  }
 
-  private boolean isRightAssociative(Token token) {
-    // Define right associative operators
-    switch (token.text) {
-      case "=":
-      case "-=":
-      case "+=":
-      case "**":
-      case "?":
-        return true;
-      default:
-        return false;
+    private boolean isTernaryOperator(Token token) {
+        return token.text.equals("?");
     }
-  }
 
-  private boolean isTernaryOperator(Token token) {
-    return token.text.equals("?");
-  }
-
-  // Example of a method to parse a list
-  private Node parseList() {
-    List<Node> elements = new ArrayList<>();
-    consume(TokenType.OPERATOR, "(");
-    while (!peek().text.equals(")")) {
-      elements.add(parseExpression(0));
-      if (peek().text.equals(",")) {
-        consume();
-      }
+    // Example of a method to parse a list
+    private Node parseList() {
+        List<Node> elements = new ArrayList<>();
+        consume(TokenType.OPERATOR, "(");
+        while (!peek().text.equals(")")) {
+            elements.add(parseExpression(0));
+            if (peek().text.equals(",")) {
+                consume();
+            }
+        }
+        consume(TokenType.OPERATOR, ")");
+        return new ListNode(elements, tokenIndex);
     }
-    consume(TokenType.OPERATOR, ")");
-    return new ListNode(elements, tokenIndex);
-  }
 
-  public static void main(String[] args) throws Exception {
-    String fileName = "example.pl";
-    String code = "my $var = 42; 1 ? 2 : 3; print \"Hello, World!\\n\";";
-    if (args.length >= 2 && args[0].equals("-e")) {
-      code = args[1]; // Read the code from the command line parameter
-      fileName = "-e";
+    public static void main(String[] args) throws Exception {
+        String fileName = "example.pl";
+        String code = "my $var = 42; 1 ? 2 : 3; print \"Hello, World!\\n\";";
+        if (args.length >= 2 && args[0].equals("-e")) {
+            code = args[1]; // Read the code from the command line parameter
+            fileName = "-e";
+        }
+        Lexer lexer = new Lexer(code);
+        List<Token> tokens = lexer.tokenize();
+        ErrorMessageUtil errorMessageUtil = new ErrorMessageUtil(fileName, tokens);
+        Parser parser = new Parser(errorMessageUtil, tokens);
+        Node ast = parser.parse();
+        System.out.println(ast);
     }
-    Lexer lexer = new Lexer(code);
-    List<Token> tokens = lexer.tokenize();
-    ErrorMessageUtil errorMessageUtil = new ErrorMessageUtil(fileName, tokens);
-    Parser parser = new Parser(errorMessageUtil, tokens);
-    Node ast = parser.parse();
-    System.out.println(ast);
-  }
 }
