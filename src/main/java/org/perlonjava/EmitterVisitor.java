@@ -659,7 +659,7 @@ public class EmitterVisitor implements Visitor {
     // Exit the scope in the symbol table
     ctx.symbolTable.exitScope();
 
-    // If the context is not VOID, push "unde" to the stack
+    // If the context is not VOID, push "undef" to the stack
     if (ctx.contextType != ContextType.VOID) {
       ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "Runtime", "undef", "()LRuntime;", false);
     }
