@@ -45,6 +45,8 @@
 - [ ] do file
 - [ ] print statement
 - [x] simple print statement
+- [x] short-circuit and, or
+- [x] low-precedence/high precedence operators: `not`, `or`, `and`
 
 ## Namespaces and global variables
 - [ ] Global variables
