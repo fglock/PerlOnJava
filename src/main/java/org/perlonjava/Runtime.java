@@ -369,20 +369,6 @@ public class Runtime {
     return new Runtime(1);
   }
 
-  public Runtime or(Runtime arg2) {
-    if (this.getBoolean()) {
-      return this;
-    }
-    return arg2;
-  }
-
-  public Runtime and(Runtime arg2) {
-    if (this.getBoolean()) {
-      return arg2;
-    }
-    return this;
-  }
-
   public Runtime add(Runtime arg2) {
     Runtime arg1 = this;
     if (arg1.type == Type.STRING) {
