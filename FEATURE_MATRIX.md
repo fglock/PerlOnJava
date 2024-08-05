@@ -11,7 +11,7 @@
 - [x] Interpolate simple scalars
 - [x] Expand backslash-n and simple sequences
 - [x] String numification
-- [x] String increment
+- [x] Autoincrement, Autodecrement; String increment
 - [ ] Tied Scalars
 - [ ] File handles
 
