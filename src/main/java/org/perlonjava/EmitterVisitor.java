@@ -275,6 +275,9 @@ public class EmitterVisitor implements Visitor {
       case "++":
         handleUnaryBuiltin(node, "preAutoIncrement");
         break;
+      case "--":
+        handleUnaryBuiltin(node, "preAutoDecrement");
+        break;
       default:
         throw new UnsupportedOperationException("Unsupported operator: " + operator);
     }
@@ -790,8 +793,10 @@ public class EmitterVisitor implements Visitor {
     ctx.logDebug("visit(PostfixOperatorNode) " + operator + " in context " + ctx.contextType);
     switch (operator) {
       case "++":
+      case "--":
+        String runtimeMethod = (operator.equals("++") ? "postAutoIncrement" : "postAutoDecrement" );
         node.operand.accept(this.with(ContextType.SCALAR));
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "postAutoIncrement", "()LRuntime;", false);
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", runtimeMethod, "()LRuntime;", false);
         if (ctx.contextType == ContextType.VOID) {
           ctx.mv.visitInsn(Opcodes.POP);
         }

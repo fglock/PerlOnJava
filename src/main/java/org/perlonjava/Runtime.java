@@ -553,4 +553,44 @@ public class Runtime {
     }
     return old;
   }
+
+  public Runtime preAutoDecrement() {
+    switch (type) {
+      case INTEGER:
+        this.value = (long) this.value - 1;
+        return this;
+      case DOUBLE:
+        this.value = (double) this.value - 1;
+        return this;
+      case STRING:
+        // Handle numeric decrement
+        this.set(this.parseNumber());
+        return this.preAutoDecrement();
+    }
+    this.type = Type.INTEGER;
+    this.value = -1;
+    return this;
+  }
+
+  public Runtime postAutoDecrement() {
+    Runtime old = new Runtime().set(this);
+    switch (type) {
+      case INTEGER:
+        this.value = (long) this.value - 1;
+        break;
+      case DOUBLE:
+        this.value = (double) this.value - 1;
+        break;
+      case STRING:
+        // Handle numeric decrement
+        this.set(this.parseNumber());
+        this.preAutoDecrement();
+        break;
+      default:
+        this.type = Type.INTEGER;
+        this.value = 1;
+    }
+    return old;
+  }
+
 }
