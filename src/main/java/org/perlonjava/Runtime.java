@@ -409,6 +409,11 @@ public class Runtime {
     return new Runtime(1);
   }
 
+  public Runtime say() {
+    System.out.println(this.toString());
+    return new Runtime(1);
+  }
+
   public Runtime stringConcat(Runtime b) {
     return new Runtime(this.toString() + b.toString());
   }

@@ -180,6 +180,10 @@ public class Parser {
               // Handle 'print' keyword as a unary operator with an operand
               operand = parseExpression(getPrecedence("print") + 1);
               return new UnaryOperatorNode("print", operand, tokenIndex);
+            case "say":
+              // Handle 'say' keyword as a unary operator with an operand
+              operand = parseExpression(getPrecedence("print") + 1);
+              return new UnaryOperatorNode("say", operand, tokenIndex);
             case "my":
               // Handle 'my' keyword as a unary operator with an operand
               operand = parsePrimary();
