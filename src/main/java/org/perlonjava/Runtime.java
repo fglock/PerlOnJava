@@ -100,6 +100,11 @@ public class Runtime {
     this.value = value;
   }
 
+  public Runtime(boolean value) {
+    this.type = Type.INTEGER;
+    this.value = (long) (value ? 1 : 0);
+  }
+
   // Getters
   public long getLong() {
     switch (type) {
@@ -435,6 +440,36 @@ public class Runtime {
       return new Runtime(arg1.getDouble() / arg2.getDouble());
     } else {
       return new Runtime(arg1.getLong() / arg2.getLong());
+    }
+  }
+
+  public Runtime lessEqualThan(Runtime arg2) {
+    Runtime arg1 = this;
+    if (arg1.type == Type.STRING) {
+      arg1 = arg1.parseNumber();
+    }
+    if (arg2.type == Type.STRING) {
+      arg2 = arg2.parseNumber();
+    }
+    if (arg1.type == Type.DOUBLE || arg2.type == Type.DOUBLE) {
+      return new Runtime(arg1.getDouble() <= arg2.getDouble());
+    } else {
+      return new Runtime(arg1.getLong() <= arg2.getLong());
+    }
+  }
+
+  public Runtime lessThan(Runtime arg2) {
+    Runtime arg1 = this;
+    if (arg1.type == Type.STRING) {
+      arg1 = arg1.parseNumber();
+    }
+    if (arg2.type == Type.STRING) {
+      arg2 = arg2.parseNumber();
+    }
+    if (arg1.type == Type.DOUBLE || arg2.type == Type.DOUBLE) {
+      return new Runtime(arg1.getDouble() < arg2.getDouble());
+    } else {
+      return new Runtime(arg1.getLong() < arg2.getLong());
     }
   }
 }
