@@ -144,7 +144,7 @@ public class EmitterVisitor implements Visitor {
   }
 
   private void handleAndOperator(BinaryOperatorNode node) throws Exception {
-    Label endLabel = new Label();    // Label for the end of the operation
+    Label endLabel = new Label(); // Label for the end of the operation
 
     // the left parameter is in the stack
     ctx.mv.visitInsn(Opcodes.DUP);
@@ -168,7 +168,7 @@ public class EmitterVisitor implements Visitor {
   }
 
   private void handleOrOperator(BinaryOperatorNode node) throws Exception {
-    Label endLabel = new Label();    // Label for the end of the operation
+    Label endLabel = new Label(); // Label for the end of the operation
 
     // the left parameter is in the stack
     ctx.mv.visitInsn(Opcodes.DUP);
@@ -224,8 +224,7 @@ public class EmitterVisitor implements Visitor {
       // Unary operator with optional arguments, called without arguments
       // example: undef()
       ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "Runtime", operator, "()LRuntime;", false);
-    }
-    else {
+    } else {
       node.operand.accept(this.with(ContextType.SCALAR));
       ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", operator, "()LRuntime;", false);
     }
@@ -291,11 +290,16 @@ public class EmitterVisitor implements Visitor {
       if (varIndex == -1) {
 
         if (Runtime.existsGlobalVariable(var)) {
-            if (ctx.contextType != ContextType.VOID) {
-                ctx.mv.visitLdcInsn(var);
-                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "Runtime", "getGlobalVariable", "(Ljava/lang/String;)LRuntime;", false);
-            }
-            return;
+          if (ctx.contextType != ContextType.VOID) {
+            ctx.mv.visitLdcInsn(var);
+            ctx.mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "Runtime",
+                "getGlobalVariable",
+                "(Ljava/lang/String;)LRuntime;",
+                false);
+          }
+          return;
         }
 
         System.out.println(
@@ -556,12 +560,10 @@ public class EmitterVisitor implements Visitor {
             true, // is boxed
             ctx.errorUtil, // error message utility
             ctx.debugEnabled);
-    Class<?> generatedClass = ASMMethodCreator.createClassWithMethod(
-            subCtx,
-            newEnv,
-            node.block, 
-            false   // no try-catch
-        );
+    Class<?> generatedClass =
+        ASMMethodCreator.createClassWithMethod(
+            subCtx, newEnv, node.block, false // no try-catch
+            );
     String newClassNameDot = ctx.javaClassName.replace('/', '.');
     ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + ctx.javaClassName);
     ctx.logDebug("Generated class env:  " + newEnv);
@@ -658,8 +660,7 @@ public class EmitterVisitor implements Visitor {
   public void visit(ForNode node) throws Exception {
     ctx.logDebug("FOR start");
 
-    EmitterVisitor voidVisitor =
-        this.with(ContextType.VOID); // some parts have context VOID
+    EmitterVisitor voidVisitor = this.with(ContextType.VOID); // some parts have context VOID
 
     // Enter a new scope in the symbol table
     ctx.symbolTable.enterScope();
@@ -671,7 +672,7 @@ public class EmitterVisitor implements Visitor {
 
     // Visit the initialization node
     if (node.initialization != null) {
-        node.initialization.accept(voidVisitor);
+      node.initialization.accept(voidVisitor);
     }
 
     // Jump to the condition check
@@ -685,7 +686,7 @@ public class EmitterVisitor implements Visitor {
 
     // Visit the increment node
     if (node.increment != null) {
-        node.increment.accept(voidVisitor);
+      node.increment.accept(voidVisitor);
     }
 
     // Visit the condition label
@@ -693,13 +694,13 @@ public class EmitterVisitor implements Visitor {
 
     // Visit the condition node in scalar context
     if (node.condition != null) {
-        node.condition.accept(this.with(ContextType.SCALAR));
+      node.condition.accept(this.with(ContextType.SCALAR));
 
-        // Convert the result to a boolean
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "getBoolean", "()Z", false);
+      // Convert the result to a boolean
+      ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "getBoolean", "()Z", false);
 
-        // Jump to the end label if the condition is false
-        ctx.mv.visitJumpInsn(Opcodes.IFEQ, endLabel);
+      // Jump to the end label if the condition is false
+      ctx.mv.visitJumpInsn(Opcodes.IFEQ, endLabel);
     }
 
     // Jump to the start label to continue the loop
@@ -751,8 +752,7 @@ public class EmitterVisitor implements Visitor {
     // Visit the else branch if it exists
     if (node.elseBranch != null) {
       node.elseBranch.accept(this);
-    }
-    else {
+    } else {
       // If the context is not VOID, push "undef" to the stack
       if (ctx.contextType != ContextType.VOID) {
         ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "Runtime", "undef", "()LRuntime;", false);
@@ -780,6 +780,17 @@ public class EmitterVisitor implements Visitor {
   public void visit(PostfixOperatorNode node) throws Exception {
     node.operand.accept(this);
     // Emit code for postfix operator
+    String operator = node.operator;
+    ctx.logDebug("visit(PostfixOperatorNode) " + operator + " in context " + ctx.contextType);
+    switch (operator) {
+      case "++":
+        node.operand.accept(this.with(ContextType.SCALAR));
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "postAutoIncrement", "()LRuntime;", false);
+        if (ctx.contextType == ContextType.VOID) {
+          ctx.mv.visitInsn(Opcodes.POP);
+        }
+        return;
+    }
     throw new PerlCompilerException(
         node.tokenIndex, "Not implemented: postfix operator " + node.operator, ctx.errorUtil);
   }
