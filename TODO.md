@@ -27,9 +27,6 @@
 - References
 - Blessed objects
 
-## Parser
-- Low-precedence operators: `not`, `or`, `and`
-
 ## Cleanup
 - Cleanup the closure code to only add the lexical variables mentioned in the AST
 
