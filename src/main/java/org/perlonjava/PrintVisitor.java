@@ -52,6 +52,51 @@ public class PrintVisitor implements Visitor {
     }
 
     @Override
+    public void visit(ForNode node) throws Exception {
+        appendIndent();
+        sb.append("ForNode:\n");
+        indentLevel++;
+        
+        // Visit the initialization part
+        if (node.initialization != null) {
+            appendIndent();
+            sb.append("Initialization:\n");
+            indentLevel++;
+            node.initialization.accept(this);
+            indentLevel--;
+        }
+        
+        // Visit the condition part
+        if (node.condition != null) {
+            appendIndent();
+            sb.append("Condition:\n");
+            indentLevel++;
+            node.condition.accept(this);
+            indentLevel--;
+        }
+        
+        // Visit the increment part
+        if (node.increment != null) {
+            appendIndent();
+            sb.append("Increment:\n");
+            indentLevel++;
+            node.increment.accept(this);
+            indentLevel--;
+        }
+        
+        // Visit the body of the loop
+        if (node.body != null) {
+            appendIndent();
+            sb.append("Body:\n");
+            indentLevel++;
+            node.body.accept(this);
+            indentLevel--;
+        }
+        
+        indentLevel--;
+    }
+
+    @Override
     public void visit(IfNode node) throws Exception {
         appendIndent();
         sb.append("IfNode:\n");

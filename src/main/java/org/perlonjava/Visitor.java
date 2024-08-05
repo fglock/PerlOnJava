@@ -81,6 +81,13 @@ public interface Visitor {
     void visit(StringNode node) throws Exception;
 
     /**
+     * Visit a ForNode.
+     *
+     * @param node the ForNode to visit
+     */
+    void visit(ForNode node) throws Exception;
+
+    /**
      * Visit a IfNode.
      *
      * @param node the IfNode to visit
