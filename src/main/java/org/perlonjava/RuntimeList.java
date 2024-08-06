@@ -37,6 +37,11 @@ public class RuntimeList implements ContextProvider {
         return elements.size();
     }
 
+    // Get the array value of the List
+    public RuntimeArray getArray() {
+      return new RuntimeArray(this);
+    }
+
     // Get the list value of the list
     public RuntimeList getList() {
         return this;

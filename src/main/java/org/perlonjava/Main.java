@@ -34,7 +34,8 @@ public class Main {
                     + "$a = 12 ;"
                     + "say $a ;"
                     + " say ( sub { say @_ } ) ;"    // anon sub
-                    + " ( sub { say @_ } )->(88888) ;"    // anon sub
+                    + " ( sub { say 'HERE' } )->(88888) ;"    // anon sub
+            // XXX  + " ( sub { say @_ } )->(88888) ;"    // anon sub
                     + "eval ' $a = $a + 1 '; "    // eval string
                     + "say $a ;"
                     + "do { $a; if (1) { say 123 } elsif (3) { say 345 } else { say 456 } } ;"
@@ -164,10 +165,10 @@ public class Main {
             Object instance = constructor.newInstance();
 
             // Find the apply method
-            Method applyMethod = generatedClass.getMethod("apply", Runtime.class, ContextType.class);
+            Method applyMethod = generatedClass.getMethod("apply", RuntimeArray.class, ContextType.class);
 
             // Invoke the method
-            RuntimeList result = (RuntimeList) applyMethod.invoke(instance, new Runtime(), ContextType.SCALAR);
+            RuntimeList result = (RuntimeList) applyMethod.invoke(instance, new RuntimeArray(), ContextType.SCALAR);
 
             // Print the result of the execution
             ctx.logDebug("Result of generatedMethod: " + result);

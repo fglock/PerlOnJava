@@ -151,6 +151,11 @@ public class Runtime implements ContextProvider {
     }
   }
 
+  // Get the array value of the Scalar
+  public RuntimeArray getArray() {
+    return new RuntimeArray(this);
+  }
+
   // Get the list value of the Scalar
   public RuntimeList getList() {
     return new RuntimeList(this);
@@ -204,7 +209,7 @@ public class Runtime implements ContextProvider {
   public static Runtime make_sub(Object codeObject) throws Exception {
     // finish setting up a CODE object
     Class<?> clazz = codeObject.getClass();
-    Method mm = clazz.getMethod("apply", Runtime.class, ContextType.class);
+    Method mm = clazz.getMethod("apply", RuntimeArray.class, ContextType.class);
     Runtime r = new Runtime();
     r.value = new RuntimeCode(mm, codeObject);
     r.type = Type.CODE;
@@ -212,7 +217,7 @@ public class Runtime implements ContextProvider {
   }
 
   // Method to apply (execute) a subroutine reference
-  public RuntimeList apply(Runtime a, ContextType callContext) throws Exception {
+  public RuntimeList apply(RuntimeArray a, ContextType callContext) throws Exception {
     if (type == Type.CODE) {
       RuntimeCode code = (RuntimeCode) this.value;
       return (RuntimeList) code.methodObject.invoke(code.codeObject, a, callContext);
