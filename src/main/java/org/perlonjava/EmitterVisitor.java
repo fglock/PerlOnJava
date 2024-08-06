@@ -1027,11 +1027,9 @@ public class EmitterVisitor implements Visitor {
         element.accept(this);
 
         // Call the add method to add the element to the RuntimeList
-        //
-        // XXX TODO - this needs an addToList() in ContextProvider
-        //            in order to allow (1, 2, $x, @x, %x)
-        //
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", "add", "(LRuntime;)V", false);
+        // This calls ContextProvider.addToList() in order to allow (1, 2, $x, @x, %x)
+        mv.visitInsn(Opcodes.SWAP);
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "addToList", "(LRuntimeList;)V", true);
 
         // The stack now has the RuntimeList instance again
     }

@@ -63,6 +63,10 @@ public class RuntimeArray implements ContextProvider {
         return elements.get(index);
     }
 
+    public void addToList(RuntimeList list) {
+        list.add(this.getList());
+    }
+
     // Set the whole array to a Scalar
     public RuntimeList set(Runtime value) {
       this.elements.clear();
