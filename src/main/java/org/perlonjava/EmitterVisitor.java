@@ -828,10 +828,37 @@ public class EmitterVisitor implements Visitor {
 
   @Override
   public void visit(TernaryOperatorNode node) throws Exception {
-    node.condition.accept(this);
-    // Emit code for ternary operator
-    throw new PerlCompilerException(
-        node.tokenIndex, "Not implemented: ternary operator", ctx.errorUtil);
+    ctx.logDebug("TERNARY_OP start");
+
+    // Create labels for the else and end branches
+    Label elseLabel = new Label();
+    Label endLabel = new Label();
+
+    // Visit the condition node in scalar context
+    node.condition.accept(this.with(ContextType.SCALAR));
+
+    // Convert the result to a boolean
+    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "getBoolean", "()Z", false);
+
+    // Jump to the else label if the condition is false
+    ctx.mv.visitJumpInsn(Opcodes.IFEQ, elseLabel);
+
+    // Visit the then branch
+    node.trueExpr.accept(this);
+
+    // Jump to the end label after executing the then branch
+    ctx.mv.visitJumpInsn(Opcodes.GOTO, endLabel);
+
+    // Visit the else label
+    ctx.mv.visitLabel(elseLabel);
+
+    // Visit the else branch
+    node.falseExpr.accept(this);
+
+    // Visit the end label
+    ctx.mv.visitLabel(endLabel);
+
+    ctx.logDebug("TERNARY_OP end");
   }
 
   @Override
