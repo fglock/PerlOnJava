@@ -247,12 +247,28 @@ public class Parser {
               // Handle unary operators
               if (UNARY_OP.contains(token.text)) {
 
-                if (token.text.equals("$") && peek().type == TokenType.OPERATOR) { // Handle $@ variable
-                    return new UnaryOperatorNode("$", new IdentifierNode(consume().text, tokenIndex), tokenIndex);
+                String text = token.text;
+                int saveIndex = tokenIndex;
+
+                if ((text.equals("$") || text.equals("@") || text.equals("%")) 
+                    && (peek().type == TokenType.OPERATOR || peek().type == TokenType.IDENTIFIER)) 
+                {
+                    // Handle normal variables and special variables lile $@ 
+
+                    Token nextToken = consume();    // operator or identifier
+
+                    // handle the special case for $$a
+                    if (peek().type == TokenType.OPERATOR || peek().type == TokenType.IDENTIFIER) {
+                        // wrong guess: this is not a special variable
+                        tokenIndex = saveIndex; // backtrack
+                    } 
+                    else {
+                        return new UnaryOperatorNode(text, new IdentifierNode(nextToken.text, tokenIndex), tokenIndex);
+                    }
                 }
 
-                operand = parseExpression(getPrecedence(token.text) + 1);
-                return new UnaryOperatorNode(token.text, operand, tokenIndex);
+                operand = parseExpression(getPrecedence(text) + 1);
+                return new UnaryOperatorNode(text, operand, tokenIndex);
               }
               break;
           }
