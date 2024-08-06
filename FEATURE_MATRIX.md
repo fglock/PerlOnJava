@@ -57,6 +57,7 @@
 - [ ] print statement (Simple `print` and `say` statement implemented)
 - [x] short-circuit and, or
 - [x] low-precedence/high precedence operators: `not`, `or`, `and`
+- [x] ternary operator
 
 ## Namespaces and global variables
 - [x] Global variable infrastructure
