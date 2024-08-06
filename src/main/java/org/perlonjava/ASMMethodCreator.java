@@ -182,7 +182,7 @@ public class ASMMethodCreator implements Opcodes {
     }
 
     // Transform the value in the stack to RuntimeList
-    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "getList", "()LRuntimeList;", false);
+    mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "getList", "()LRuntimeList;", true);
 
     mv.visitInsn(Opcodes.ARETURN); // returns an Object
     mv.visitMaxs(0, 0); // Automatically computed
