@@ -24,5 +24,13 @@ public interface ContextProvider {
      * @return a Runtime object.
      */
     Runtime getScalar();
+
+    /**
+     * Add itself to a RuntimeList.
+     * 
+     * @param list The RuntimeList object
+     * @return void.
+     */
+    void addToList(RuntimeList list);
 }
 

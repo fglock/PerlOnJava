@@ -114,6 +114,10 @@ public class RuntimeHash implements ContextProvider {
         return new Runtime(1);  // XXX check this
     }
 
+    public void addToList(RuntimeList list) {
+        list.add(this.getList());
+    }
+
     // Convert the hash to a string (for debugging purposes)
     @Override
     public String toString() {
