@@ -72,6 +72,11 @@ public class RuntimeArray {
         return elements.size();
     }
 
+    // Get the scalar value of the array
+    public Runtime scalar() {
+        return new Runtime(elements.size());
+    }
+
     // Slice the array
     public RuntimeArray slice(int start, int end) {
         RuntimeArray result = new RuntimeArray();
