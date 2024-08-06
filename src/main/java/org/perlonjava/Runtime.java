@@ -350,6 +350,11 @@ public class Runtime {
     return new Runtime();
   }
 
+  // Get the scalar value of the Scalar
+  public Runtime scalar() {
+      return this;
+  }
+
   public Runtime print() {
     System.out.print(this.toString());
     return new Runtime(1);
