@@ -17,6 +17,15 @@ public class RuntimeArray implements ContextProvider {
         this.elements = new ArrayList<>();
     }
 
+    public RuntimeArray(RuntimeList a) {
+        this.elements = a.elements;
+    }
+
+    public RuntimeArray(Runtime value) {
+        this.elements = new ArrayList<>();
+        this.elements.add(value);
+    }
+
     // Add a value to the end of the array
     public void push(Runtime value) {
         elements.add(value);
@@ -70,6 +79,11 @@ public class RuntimeArray implements ContextProvider {
     // Get the size of the array
     public int size() {
         return elements.size();
+    }
+
+    // Get the list value of the list
+    public RuntimeArray getArray() {
+        return this;
     }
 
     // Get the list value of the list

@@ -99,6 +99,11 @@ public class RuntimeHash implements ContextProvider {
         return hash;
     }
 
+    // Get the array value of the Scalar
+    public RuntimeArray getArray() {
+      return this.entryArray();
+    }
+
     // Get the list value of the hash
     public RuntimeList getList() {
         return new RuntimeList(this);

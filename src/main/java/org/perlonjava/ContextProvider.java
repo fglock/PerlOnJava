@@ -5,6 +5,13 @@
 public interface ContextProvider {
 
     /**
+     * Retrieves a RuntimeArray instance.
+     * 
+     * @return a RuntimeArray object.
+     */
+    RuntimeArray getArray();
+
+    /**
      * Retrieves a RuntimeList instance.
      * 
      * @return a RuntimeList object.

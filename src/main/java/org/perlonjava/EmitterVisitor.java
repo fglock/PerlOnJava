@@ -195,6 +195,8 @@ public class EmitterVisitor implements Visitor {
   private void handleArrowOperator(BinaryOperatorNode node) throws Exception {
     if (node.right instanceof ListNode) { // ->()
       ctx.logDebug("visit(BinaryOperatorNode) ->() ");
+      // Transform the value in the stack to RuntimeArray
+      ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "getArray", "()LRuntimeArray;", true);
       ctx.mv.visitFieldInsn(
           Opcodes.GETSTATIC,
           "ContextType",
@@ -204,7 +206,7 @@ public class EmitterVisitor implements Visitor {
           Opcodes.INVOKEVIRTUAL,
           "Runtime",
           "apply",
-          "(LRuntime;LContextType;)LRuntimeList;",
+          "(LRuntimeArray;LContextType;)LRuntimeList;",
           false); // generate an .apply() call
       if (ctx.contextType == ContextType.SCALAR) {
         // Transform the value in the stack to Runtime
@@ -535,6 +537,10 @@ public class EmitterVisitor implements Visitor {
       // Stack: [Runtime(Code)]
 
       mv.visitVarInsn(Opcodes.ALOAD, 1); // push @_ to the stack
+      // Transform the value in the stack to RuntimeArray
+      // XXX not needed
+      ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "getArray", "()LRuntimeArray;", true);
+
       mv.visitFieldInsn(
           Opcodes.GETSTATIC,
           "ContextType",
@@ -544,7 +550,7 @@ public class EmitterVisitor implements Visitor {
           Opcodes.INVOKEVIRTUAL,
           "Runtime",
           "apply",
-          "(LRuntime;LContextType;)LRuntimeList;",
+          "(LRuntimeArray;LContextType;)LRuntimeList;",
           false); // generate an .apply() call
 
       // 5. Clean up the stack according to context
@@ -615,7 +621,7 @@ public class EmitterVisitor implements Visitor {
      *  // Instantiate the class
      *  Object instance = constructor.newInstance();
      *  // Find the apply method
-     *  Method applyMethod = generatedClass.getMethod("apply", Runtime.class, ContextType.class);
+     *  Method applyMethod = generatedClass.getMethod("apply", RuntimeArray.class, ContextType.class);
      *  // construct a CODE variable
      *  Runtime.new(applyMethod);
      */
