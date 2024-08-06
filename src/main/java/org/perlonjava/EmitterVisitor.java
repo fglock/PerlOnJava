@@ -539,7 +539,7 @@ public class EmitterVisitor implements Visitor {
       mv.visitVarInsn(Opcodes.ALOAD, 1); // push @_ to the stack
       // Transform the value in the stack to RuntimeArray
       // XXX not needed
-      ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "getArray", "()LRuntimeArray;", true);
+      // ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "getArray", "()LRuntimeArray;", true);
 
       mv.visitFieldInsn(
           Opcodes.GETSTATIC,
