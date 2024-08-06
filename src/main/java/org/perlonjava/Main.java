@@ -167,7 +167,7 @@ public class Main {
             Method applyMethod = generatedClass.getMethod("apply", Runtime.class, ContextType.class);
 
             // Invoke the method
-            Runtime result = (Runtime) applyMethod.invoke(instance, new Runtime(), ContextType.SCALAR);
+            RuntimeList result = (RuntimeList) applyMethod.invoke(instance, new Runtime(), ContextType.SCALAR);
 
             // Print the result of the execution
             ctx.logDebug("Result of generatedMethod: " + result);

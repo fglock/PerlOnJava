@@ -151,6 +151,16 @@ public class Runtime {
     }
   }
 
+  // Get the list value of the Scalar
+  public RuntimeList getList() {
+    return new RuntimeList(this);
+  }
+
+  // Get the scalar value of the Scalar
+  public Runtime getScalar() {
+      return this;
+  }
+
   // Setters
   public Runtime set(Runtime value) {
     this.type = value.type;
@@ -202,10 +212,10 @@ public class Runtime {
   }
 
   // Method to apply (execute) a subroutine reference
-  public Runtime apply(Runtime a, ContextType callContext) throws Exception {
+  public RuntimeList apply(Runtime a, ContextType callContext) throws Exception {
     if (type == Type.CODE) {
       RuntimeCode code = (RuntimeCode) this.value;
-      return (Runtime) code.methodObject.invoke(code.codeObject, a, callContext);
+      return (RuntimeList) code.methodObject.invoke(code.codeObject, a, callContext);
     } else {
       throw new IllegalStateException("Variable does not contain a code reference");
     }
@@ -348,11 +358,6 @@ public class Runtime {
   // Methods that implement Perl operators
   public static Runtime undef() {
     return new Runtime();
-  }
-
-  // Get the scalar value of the Scalar
-  public Runtime scalar() {
-      return this;
   }
 
   public Runtime print() {

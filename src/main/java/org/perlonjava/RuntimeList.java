@@ -8,11 +8,20 @@ import java.util.List;
  *
  */
 public class RuntimeList {
-    private List<Runtime> elements;
+    public List<Runtime> elements;
 
     // Constructor
     public RuntimeList() {
         this.elements = new ArrayList<>();
+    }
+
+    public RuntimeList(Runtime value) {
+        this.elements = new ArrayList<>();
+        this.elements.add(value);
+    }
+
+    public RuntimeList(RuntimeList value) {
+        this.elements = value.elements;
     }
 
     // Get the size of the list
@@ -20,8 +29,13 @@ public class RuntimeList {
         return elements.size();
     }
 
-    // Get the scalar value of the array
-    public Runtime scalar() {
+    // Get the list value of the list
+    public RuntimeList getList() {
+        return this;
+    }
+
+    // Get the scalar value of the list
+    public Runtime getScalar() {
         if (elements.isEmpty()) {
             return new Runtime(); // Return undefined if empty
         }
