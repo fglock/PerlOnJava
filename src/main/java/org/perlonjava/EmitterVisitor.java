@@ -866,6 +866,7 @@ public class EmitterVisitor implements Visitor {
 
   @Override
   public void visit(ListNode node) throws Exception {
+    ctx.logDebug("visit(ListNode) in context " + ctx.contextType);
     MethodVisitor mv = ctx.mv;
 
     // Create a new instance of RuntimeList
@@ -877,23 +878,24 @@ public class EmitterVisitor implements Visitor {
 
     for (Node element : node.elements) {
         // Visit each element to generate code for it
-        element.accept(this);
-
-        // The stack now has the element
 
         // Duplicate the RuntimeList instance to keep it on the stack
-        mv.visitInsn(Opcodes.DUP_X1);
+        mv.visitInsn(Opcodes.DUP);
 
-        // Swap the top two values to position the element correctly
-        mv.visitInsn(Opcodes.SWAP);
+        // emit the list element
+        element.accept(this);
 
         // Call the add method to add the element to the RuntimeList
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", "add", "(Ljava/lang/Object;)V", false);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", "add", "(LRuntime;)V", false);
 
         // The stack now has the RuntimeList instance again
     }
 
     // At this point, the stack has the fully populated RuntimeList instance
+    if (ctx.contextType == ContextType.VOID) {
+      ctx.mv.visitInsn(Opcodes.POP);
+    }
+    ctx.logDebug("visit(ListNode) end");
   }
 
   @Override

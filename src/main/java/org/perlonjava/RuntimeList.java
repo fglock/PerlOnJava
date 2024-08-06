@@ -32,6 +32,11 @@ public class RuntimeList implements ContextProvider {
         this.elements = value.entryArray().elements;
     }
 
+    // Add an element to the list
+    public void add(Runtime value) {
+        this.elements.add(value);
+    }
+
     // Get the size of the list
     public int size() {
         return elements.size();
