@@ -415,9 +415,9 @@ public class EmitterVisitor implements Visitor {
               true, // is boxed
               ctx.errorUtil, // error message utility
               ctx.debugEnabled);
-      Runtime.evalContext.put(evalTag, evalCtx);
+      RuntimeCode.evalContext.put(evalTag, evalCtx);
 
-      // Here the compiled code will call Runtime.eval_string(code, evalTag) method.
+      // Here the compiled code will call RuntimeCode.eval_string(code, evalTag) method.
       // It will compile the string and return a new Class.
       //
       // XXX TODO - We need to catch any errors and set Perl error variable "$@"
@@ -436,7 +436,7 @@ public class EmitterVisitor implements Visitor {
 
       // Stack at this step: [Runtime(String)]
 
-      // 1. Call Runtime.eval_string(code, evalTag)
+      // 1. Call RuntimeCode.eval_string(code, evalTag)
 
       // Push the evalTag String to the stack
       // the compiled code will use this tag to retrieve the compiler environment
@@ -445,7 +445,7 @@ public class EmitterVisitor implements Visitor {
 
       mv.visitMethodInsn(
           Opcodes.INVOKESTATIC,
-          "Runtime",
+          "RuntimeCode",
           "eval_string",
           "(LRuntime;Ljava/lang/String;)Ljava/lang/Class;",
           false);
@@ -576,11 +576,11 @@ public class EmitterVisitor implements Visitor {
     String newClassNameDot = ctx.javaClassName.replace('/', '.');
     ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + ctx.javaClassName);
     ctx.logDebug("Generated class env:  " + newEnv);
-    Runtime.anonSubs.put(ctx.javaClassName, generatedClass); // cache the class
+    RuntimeCode.anonSubs.put(ctx.javaClassName, generatedClass); // cache the class
 
     /* The following ASM code is equivalento to:
      *  // get the class
-     *  Class<?> generatedClass = Runtime.anonSubs.get("java.Class.Name");
+     *  Class<?> generatedClass = RuntimeCode.anonSubs.get("java.Class.Name");
      *  // Find the constructor
      *  Constructor<?> constructor = generatedClass.getConstructor(Runtime.class, Runtime.class);
      *  // Instantiate the class
@@ -593,8 +593,8 @@ public class EmitterVisitor implements Visitor {
 
     int skipVariables = 3; // skip (this, @_, wantarray)
 
-    // 1. Get the class from Runtime.anonSubs
-    ctx.mv.visitFieldInsn(Opcodes.GETSTATIC, "Runtime", "anonSubs", "Ljava/util/HashMap;");
+    // 1. Get the class from RuntimeCode.anonSubs
+    ctx.mv.visitFieldInsn(Opcodes.GETSTATIC, "RuntimeCode", "anonSubs", "Ljava/util/HashMap;");
     ctx.mv.visitLdcInsn(ctx.javaClassName);
     ctx.mv.visitMethodInsn(
         Opcodes.INVOKEVIRTUAL,
