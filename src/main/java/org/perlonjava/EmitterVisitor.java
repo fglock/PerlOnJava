@@ -204,9 +204,13 @@ public class EmitterVisitor implements Visitor {
           Opcodes.INVOKEVIRTUAL,
           "Runtime",
           "apply",
-          "(LRuntime;LContextType;)LRuntime;",
+          "(LRuntime;LContextType;)LRuntimeList;",
           false); // generate an .apply() call
-      if (ctx.contextType == ContextType.VOID) {
+      if (ctx.contextType == ContextType.SCALAR) {
+        // Transform the value in the stack to Runtime
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", "getScalar", "()LRuntime;", false);
+      } else if (ctx.contextType == ContextType.VOID) {
+        // Remove the value from the stack
         ctx.mv.visitInsn(Opcodes.POP);
       }
     } else {
@@ -540,14 +544,20 @@ public class EmitterVisitor implements Visitor {
           Opcodes.INVOKEVIRTUAL,
           "Runtime",
           "apply",
-          "(LRuntime;LContextType;)LRuntime;",
+          "(LRuntime;LContextType;)LRuntimeList;",
           false); // generate an .apply() call
 
-      // 5. Clean up the stack if context is VOID
-      if (ctx.contextType == ContextType.VOID) {
-        mv.visitInsn(Opcodes.POP); // Remove the Runtime object from the stack
+      // 5. Clean up the stack according to context
+      if (ctx.contextType == ContextType.SCALAR) {
+        // Transform the value in the stack to Runtime
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", "getScalar", "()LRuntime;", false);
+      } else if (ctx.contextType == ContextType.VOID) {
+        // Remove the value from the stack
+        mv.visitInsn(Opcodes.POP);
       }
-      // If the context is not VOID, the stack should contain [Runtime]
+
+      // If the context is LIST or RUNTIME, the stack should contain [RuntimeList]
+      // If the context is SCALAR, the stack should contain [Runtime]
       // If the context is VOID, the stack should be empty
 
       return;
