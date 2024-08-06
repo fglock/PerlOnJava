@@ -1,5 +1,9 @@
 # Perl on JVM Feature Matrix
 
+## Compiler usability
+- [x] Perl-like error messages
+- [ ] Perl-like warnings
+
 ## Scalars
 - [x] `my` variable declaration
 - [x] variable assignment
@@ -18,12 +22,14 @@
 - [ ] Cached string/numeric conversions; dualvars
 
 ## Arrays and List
+- [x] Array and List infrastructure
 - [ ] Basic Array Operations
 - [ ] Array Slices
 - [ ] Array literals
 - [ ] Tied Arrays
 
 ## Hashes
+- [x] Hash infrastructure
 - [ ] Basic Hash Operations
 - [ ] Hash literals
 - [ ] Tied Hashes
@@ -48,13 +54,13 @@
 - [ ] eval block
 - [x] do block
 - [ ] do file
-- [ ] print statement (Simple print statement implemented)
+- [ ] print statement (Simple `print` and `say` statement implemented)
 - [x] short-circuit and, or
 - [x] low-precedence/high precedence operators: `not`, `or`, `and`
 
 ## Namespaces and global variables
-- [ ] Global variables
 - [x] Global variable infrastructure
+- [ ] Global variables
 - [x] @_ and $@ special variables
 - [ ] $_ special variable
 
