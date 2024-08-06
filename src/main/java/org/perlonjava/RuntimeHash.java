@@ -99,6 +99,12 @@ public class RuntimeHash {
         return hash;
     }
 
+
+    // Get the scalar value of the hash
+    public Runtime scalar() {
+        return new Runtime(1);  // XXX check this
+    }
+
     // Convert the hash to a string (for debugging purposes)
     @Override
     public String toString() {
