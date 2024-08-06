@@ -72,6 +72,15 @@ public class RuntimeList implements ContextProvider {
         return sb.toString();
     }
 
+    public Runtime say() {
+      StringBuilder sb = new StringBuilder();
+      for (int i = 0; i < elements.size(); i++) {
+          sb.append(elements.get(i).toString());
+      }
+      System.out.println(sb.toString());
+      return new Runtime(1);
+    }
+
     // Convert the list to a string (for debugging purposes)
     @Override
     public String toString() {

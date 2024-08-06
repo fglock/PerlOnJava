@@ -254,7 +254,7 @@ public class EmitterVisitor implements Visitor {
         handlePrintOperator(node);
         break;
       case "say":
-        handleUnaryBuiltin(node, "say");
+        handleSayOperator(node, "say");
         break;
       case "my":
         handleMyOperator(node);
@@ -286,6 +286,20 @@ public class EmitterVisitor implements Visitor {
         break;
       default:
         throw new UnsupportedOperationException("Unsupported operator: " + operator);
+    }
+  }
+
+  private void handleSayOperator(UnaryOperatorNode node, String operator) throws Exception {
+    node.operand.accept(this.with(ContextType.LIST));
+    if (node.operand instanceof ListNode) {
+      ctx.logDebug("SAY LIST " + operator);
+      ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", operator, "()LRuntime;", false);
+    } else {
+      ctx.logDebug("SAY SCALAR " + operator);
+      ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", operator, "()LRuntime;", false);
+    }
+    if (ctx.contextType == ContextType.VOID) {
+      ctx.mv.visitInsn(Opcodes.POP);
     }
   }
 
@@ -892,7 +906,10 @@ public class EmitterVisitor implements Visitor {
     }
 
     // At this point, the stack has the fully populated RuntimeList instance
-    if (ctx.contextType == ContextType.VOID) {
+    if (ctx.contextType == ContextType.SCALAR) {
+        // Transform the value in the stack to Runtime
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", "getScalar", "()LRuntime;", false);
+    } else if (ctx.contextType == ContextType.VOID) {
       ctx.mv.visitInsn(Opcodes.POP);
     }
     ctx.logDebug("visit(ListNode) end");

@@ -185,6 +185,10 @@ public class Runtime implements ContextProvider {
     return this;
   }
 
+  public Runtime set(RuntimeList value) {
+    return this.set(value.getScalar());
+  }
+
   @Override
   public String toString() {
     switch (type) {

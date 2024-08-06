@@ -47,7 +47,6 @@ public class PrintVisitor implements Visitor {
         appendIndent();
         sb.append("UnaryOperatorNode: ").append(node.operator).append("\n");
         if (node.operand != null) {
-            appendIndent();
             indentLevel++;
             node.operand.accept(this);
             indentLevel--;
