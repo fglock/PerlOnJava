@@ -87,7 +87,7 @@ public class ASMMethodCreator implements Opcodes {
         cw.visitMethod(
             Opcodes.ACC_PUBLIC,
             "apply",
-            "(LRuntime;LContextType;)LRuntime;",
+            "(LRuntime;LContextType;)LRuntimeList;",
             null,
             new String[] {"java/lang/Exception"});
 
@@ -180,6 +180,9 @@ public class ASMMethodCreator implements Opcodes {
       ctx.logDebug("Return the last value");
       mv.visitLabel(ctx.returnLabel); // "return" from other places arrive here
     }
+
+    // Transform the value in the stack to RuntimeList
+    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "getList", "()LRuntimeList;", false);
 
     mv.visitInsn(Opcodes.ARETURN); // returns an Object
     mv.visitMaxs(0, 0); // Automatically computed
