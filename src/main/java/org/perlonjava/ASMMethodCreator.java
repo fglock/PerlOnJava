@@ -87,7 +87,7 @@ public class ASMMethodCreator implements Opcodes {
         cw.visitMethod(
             Opcodes.ACC_PUBLIC,
             "apply",
-            "(LRuntime;LContextType;)LRuntimeList;",
+            "(LRuntimeArray;LContextType;)LRuntimeList;",
             null,
             new String[] {"java/lang/Exception"});
 
