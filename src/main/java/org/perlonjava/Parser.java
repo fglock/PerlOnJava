@@ -530,6 +530,11 @@ public class Parser {
                 return 3;
             case "print":
                 return 4;
+
+            case ",":
+            case "=>":
+                return 5;
+
             case "=":
                 return 6; // Lower precedence for assignment
             case "?":
@@ -586,7 +591,7 @@ public class Parser {
         List<Node> elements = new ArrayList<>();
         consume(TokenType.OPERATOR, "(");
         while (!peek().text.equals(")")) {
-            elements.add(parseExpression(0));
+            elements.add(parseExpression(getPrecedence(",") + 1));
             if (peek().text.equals(",")) {
                 consume();
             }
