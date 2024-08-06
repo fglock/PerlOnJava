@@ -9,8 +9,8 @@ import java.util.List;
  * <p>In Perl, an array is a dynamic list of scalar values. This class tries to mimic this behavior
  * using a list of Runtime objects, which can hold any type of Perl scalar value.
  */
-public class RuntimeArray {
-    private List<Runtime> elements;
+public class RuntimeArray implements ContextProvider {
+    public List<Runtime> elements;
 
     // Constructor
     public RuntimeArray() {
@@ -72,8 +72,13 @@ public class RuntimeArray {
         return elements.size();
     }
 
-    // Get the scalar value of the array
-    public Runtime scalar() {
+    // Get the list value of the list
+    public RuntimeList getList() {
+        return new RuntimeList(this);
+    }
+
+    // Get the scalar value of the list
+    public Runtime getScalar() {
         return new Runtime(elements.size());
     }
 

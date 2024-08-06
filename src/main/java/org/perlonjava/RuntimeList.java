@@ -7,7 +7,7 @@ import java.util.List;
  * The RuntimeList class simulates a Perl list.
  *
  */
-public class RuntimeList {
+public class RuntimeList implements ContextProvider {
     public List<Runtime> elements;
 
     // Constructor
@@ -22,6 +22,14 @@ public class RuntimeList {
 
     public RuntimeList(RuntimeList value) {
         this.elements = value.elements;
+    }
+
+    public RuntimeList(RuntimeArray value) {
+        this.elements = value.elements;
+    }
+
+    public RuntimeList(RuntimeHash value) {
+        this.elements = value.entryArray().elements;
     }
 
     // Get the size of the list
