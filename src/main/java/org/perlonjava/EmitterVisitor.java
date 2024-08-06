@@ -95,19 +95,24 @@ public class EmitterVisitor implements Visitor {
     ctx.logDebug("visit(BinaryOperatorNode) " + operator + " in context " + ctx.contextType);
     EmitterVisitor scalarVisitor =
         this.with(ContextType.SCALAR); // execute operands in scalar context
-    node.left.accept(scalarVisitor); // target - left parameter
 
-    switch (operator) { // handle operators that support short-circuit
+    switch (operator) { // handle operators that support short-circuit or other special cases
       case "||":
       case "or":
+        node.left.accept(scalarVisitor); // target - left parameter
         handleOrOperator(node);
         return;
       case "&&":
       case "and":
+        node.left.accept(scalarVisitor); // target - left parameter
         handleAndOperator(node);
+        return;
+      case "=":
+        handleSetOperator(node);
         return;
     }
 
+    node.left.accept(scalarVisitor); // target - left parameter
     node.right.accept(scalarVisitor); // right parameter
 
     switch (operator) {
@@ -131,9 +136,6 @@ public class EmitterVisitor implements Visitor {
         break;
       case ".":
         handleBinaryBuiltin("stringConcat");
-        break;
-      case "=":
-        handleBinaryBuiltin("set");
         break;
       case "->":
         handleArrowOperator(node);
@@ -356,6 +358,93 @@ public class EmitterVisitor implements Visitor {
       ctx.mv.visitInsn(Opcodes.POP);
     }
     // TODO print FILE 123
+  }
+
+  private void handleSetOperator(BinaryOperatorNode node) throws Exception {
+    ctx.logDebug("SET " + node);
+    if (node.left instanceof UnaryOperatorNode) { // $x @x %x = ...
+      UnaryOperatorNode leftNode = (UnaryOperatorNode) node.left;
+      String sigil = leftNode.operator;
+      ctx.logDebug("SET sigil " + sigil);
+
+      UnaryOperatorNode myNode = null;
+      if (sigil.equals("my")) { // my $a = 123
+        myNode = leftNode;  // my $a
+        leftNode = (UnaryOperatorNode) myNode.operand; // $a
+        ctx.logDebug("SET my.node " + myNode);
+        ctx.logDebug("SET left.node " + leftNode);
+        sigil = leftNode.operator;
+      }
+
+      // Execute the right side first
+      // Determine the assign type based on the left side sigil
+      switch (sigil) {
+        case "$":
+            ctx.logDebug("SET right side scalar");
+            node.right.accept(this.with(ContextType.SCALAR));   // emit the value 
+            break;
+        case "%":
+        case "@":
+            ctx.logDebug("SET right side list");
+            node.right.accept(this.with(ContextType.LIST));   // emit the value
+            break;
+        default:
+            throw new IllegalArgumentException("Unsupported sigil: " + sigil);
+      }
+
+      if (myNode != null) { // my $a = 123
+        myNode.accept(this.with(ContextType.VOID));   // execute the variable declaration
+      }
+
+      if (sigil.equals("$") || sigil.equals("@") || sigil.equals("%")) {
+        Node identifierNode = leftNode.operand;
+        if (identifierNode instanceof IdentifierNode) { // $a
+
+          // Determine the assign type based on the sigil
+          switch (sigil) {
+            case "$":
+                ctx.logDebug("SET scalar");
+                leftNode.accept(this.with(ContextType.SCALAR));   // emit the variable
+                ctx.mv.visitInsn(Opcodes.SWAP); // move the target first
+                ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "set", "(LRuntime;)LRuntime;", false);
+                break;
+            case "@":
+                ctx.logDebug("SET array");
+                leftNode.accept(this.with(ContextType.LIST));   // emit the variable
+                ctx.mv.visitInsn(Opcodes.SWAP); // move the target first
+                ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeArray", "set", "(LRuntimeList;)LRuntimeList;", false);
+                if (ctx.contextType == ContextType.SCALAR) {
+                  // Transform the value in the stack to Scalar
+                  ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", "getScalar", "()LRuntime;", false);
+                }
+                break;
+            case "%":
+                ctx.logDebug("SET hash");
+                leftNode.accept(this.with(ContextType.LIST));   // emit the variable
+                ctx.mv.visitInsn(Opcodes.SWAP); // move the target first
+                ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeHash", "set", "(LRuntimeList;)LRuntimeList;", false);
+                if (ctx.contextType == ContextType.SCALAR) {
+                  // Transform the value in the stack to Scalar
+                  ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", "getScalar", "()LRuntime;", false);
+                }
+                break;
+            default:
+                throw new IllegalArgumentException("Unsupported sigil: " + sigil);
+          }
+
+          if (ctx.contextType == ContextType.VOID) {
+            // Remove the value from the stack
+            ctx.mv.visitInsn(Opcodes.POP);
+          }
+
+          ctx.logDebug("SET end");
+          return;
+        }
+      }
+    }
+    // TODO ($a, $b) = ...
+    throw new PerlCompilerException(
+        node.tokenIndex, "Not implemented: " + node.operator, ctx.errorUtil);
   }
 
   private void handleMyOperator(UnaryOperatorNode node) throws Exception {
