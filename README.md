@@ -10,6 +10,14 @@ javac -cp ./asm-9.7.jar:. *.java
 
 ## Run
 
+Show instructions
+
+```sh
+java -cp ./asm-9.7.jar Main --help
+```
+
+Execute something
+
 ```sh
 java -cp ./asm-9.7.jar Main -e ' print 123 '
 ```
