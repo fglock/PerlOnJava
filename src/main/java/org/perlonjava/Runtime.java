@@ -13,7 +13,7 @@ import java.util.*;
  * to mimic this behavior by using an enum `Type` to track the type of the value stored in the
  * scalar.
  */
-public class Runtime {
+public class Runtime implements ContextProvider {
   // Enum to represent the type of value stored in the scalar
   private enum Type {
     INTEGER,
