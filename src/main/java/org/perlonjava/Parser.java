@@ -577,6 +577,8 @@ public class Parser {
             case "->":
                 return 19;
             case "$":
+            case "@":
+            case "%":
                 return 20; // Higher precedence for prefix operator
             default:
                 return 0;
