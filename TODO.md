@@ -29,8 +29,10 @@
 
 ## Cleanup
 - Cleanup the closure code to only add the lexical variables mentioned in the AST
+- Refactor anonymous subroutines to use Function instead of Method
 
 ## Runtime Format Error Messages and Warnings
+- catch and reformat errors like division by zero
 - add annotations to the bytecode (Line Numbers)
 ```java
 Label thisLabel = new Label();
@@ -38,13 +40,8 @@ ctx.mv.visitLabel(thisLabel);
 ctx.mv.visitLineNumber(10, thisLabel); // Associate line number 10 with thisLabel
 ```
 
-## Move the project
-- move files to src/main/java/org/...
+## Tests
 - create test/
-- move to new github project
-
-
-- catch and reformat errors like division by zero
 
 ## Test Different Perl Data Types
 - Array, hash, string, double, references
@@ -58,7 +55,6 @@ ctx.mv.visitLineNumber(10, thisLabel); // Associate line number 10 with thisLabe
 - Set up restoring the `local` value before `RETURN`
 - Set up exception handling
 
-## Tests
 
 ## Implement Thread-Safety
 - It may need locking when calling ASM
@@ -70,7 +66,7 @@ ctx.mv.visitLineNumber(10, thisLabel); // Associate line number 10 with thisLabe
 - Test `FOR`, `WHILE`
 
 ## `eval` String
-- Freeze the `ctx.symbolTable` at `eval` string
+- Optimize `ctx.symbolTable` at `eval` string
 
 ## `BEGIN` Block
 
