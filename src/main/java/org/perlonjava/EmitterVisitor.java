@@ -355,17 +355,36 @@ public class EmitterVisitor implements Visitor {
           }
           int varIndex = ctx.symbolTable.addVariable(var);
           // TODO optimization - SETVAR+MY can be combined
-          ctx.mv.visitTypeInsn(Opcodes.NEW, "Runtime");
+          String className;
+
+          // Determine the class name based on the sigil
+          switch (sigil) {
+            case "$":
+                className = "Runtime";
+                break;
+            case "@":
+                className = "RuntimeArray";
+                break;
+            case "%":
+                className = "RuntimeHash";
+                break;
+            default:
+                throw new IllegalArgumentException("Unsupported sigil: " + sigil);
+          }
+
+          // Create a new instance of the determined class
+          ctx.mv.visitTypeInsn(Opcodes.NEW, className);
           ctx.mv.visitInsn(Opcodes.DUP);
           ctx.mv.visitMethodInsn(
               Opcodes.INVOKESPECIAL,
-              "Runtime",
+              className,
               "<init>",
               "()V",
-              false); // Create a new instance of Runtime
+              false);
           if (ctx.contextType != ContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.DUP);
           }
+          // Store in a JVM local variable
           ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
           return;
         }
