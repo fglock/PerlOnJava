@@ -59,6 +59,10 @@ public class EmitterVisitor implements Visitor {
         ctx.mv.visitMethodInsn(
             Opcodes.INVOKESPECIAL, "Runtime", "<init>", "(D)V", false); // Call new Runtime(double)
       }
+      // if (ctx.contextType == ContextType.LIST) {
+      //   // Transform the value in the stack to List
+      //   ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "getList", "()LRuntimeList;", false);
+      // }
     } else {
       if (isInteger) {
         ctx.mv.visitLdcInsn(Integer.parseInt(node.value)); // emit native integer
@@ -386,7 +390,14 @@ public class EmitterVisitor implements Visitor {
         case "%":
         case "@":
             ctx.logDebug("SET right side list");
-            node.right.accept(this.with(ContextType.LIST));   // emit the value
+            Node nodeRight = node.right;
+            // make sure the right node is a ListNode
+            if (!(nodeRight instanceof ListNode)) {
+                List<Node> elements = new ArrayList<>();
+                elements.add(nodeRight);
+                nodeRight = new ListNode(elements, node.tokenIndex);
+            }
+            nodeRight.accept(this.with(ContextType.LIST));   // emit the value
             break;
         default:
             throw new IllegalArgumentException("Unsupported sigil: " + sigil);
