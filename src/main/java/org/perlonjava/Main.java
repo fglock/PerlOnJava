@@ -1,6 +1,9 @@
 import java.util.*;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 /**
  * The Main class serves as the entry point for the Perl-to-Java bytecode compiler and runtime
@@ -47,7 +50,10 @@ public class Main {
              * --tokenize: Sets the program to tokenize the input code. Cannot be combined with --parse or -c.
              * --parse: Sets the program to parse the input code. Cannot be combined with --tokenize or -c.
              * -c: Sets the program to compile the input code only. Cannot be combined with --tokenize or --parse.
-             * If an unrecognized argument is encountered, the program will print an error message and exit.
+             * -h, --help: Displays this help message.
+             * <filename>: Specifies a file containing the code to be processed. If an unrecognized argument is encountered,
+             *             the program will assume it is a filename and attempt to read the code from the file.
+             * If an unrecognized argument is encountered and it is not a valid file, the program will print an error message and exit.
              */
             for (int i = 0; i < args.length; i++) {
                 if (args[i].equals("-e") && i + 1 < args.length) {
@@ -74,9 +80,18 @@ public class Main {
                         System.exit(1);
                     }
                     compileOnly = true;
+                } else if (args[i].equals("-h") || args[i].equals("--help")) {
+                    printHelp();
+                    System.exit(0);
                 } else {
-                    System.err.println("Error: Unrecognized command-line parameter: " + args[i]);
-                    System.exit(1); // Exit with status code 1 to indicate an error
+                    // Assume the argument is a filename
+                    fileName = args[i];
+                    try {
+                        code = new String(Files.readAllBytes(Paths.get(fileName)));
+                    } catch (IOException e) {
+                        System.err.println("Can't open perl script: " + fileName);
+                        System.exit(1);
+                    }
                 }
             }
 
@@ -159,6 +174,18 @@ public class Main {
         } catch (Exception e) {
             e.printStackTrace(); // Print any exceptions that occur during the process
         }
+    }
+
+    private static void printHelp() {
+        System.out.println("Usage: java Main [options] [filename]");
+        System.out.println("Options:");
+        System.out.println("  -e <code>       Specifies the code to be processed, overriding the default code.");
+        System.out.println("  --debug         Enables debugging mode.");
+        System.out.println("  --tokenize      Sets the program to tokenize the input code. Cannot be combined with --parse or -c.");
+        System.out.println("  --parse         Sets the program to parse the input code. Cannot be combined with --tokenize or -c.");
+        System.out.println("  -c              Sets the program to compile the input code only. Cannot be combined with --tokenize or --parse.");
+        System.out.println("  -h, --help      Displays this help message.");
+        System.out.println("  <filename>      Specifies a file containing the code to be processed.");
     }
 }
 
