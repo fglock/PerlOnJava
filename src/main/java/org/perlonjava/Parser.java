@@ -233,7 +233,14 @@ public class Parser {
           switch (token.text) {
             case "(":
               // Handle parentheses to parse a nested expression or to construct a list
-              return parseList(")");
+              return new ListNode(parseList(")"), tokenIndex);
+            // case "{":
+            //   // XXX TODO disambiguate with Block
+            //   // Handle curly brackets to parse a nested expression
+            //   return new HashLiteralNode(parseList("}"), tokenIndex);
+            case "[":
+              // Handle square brackets to parse a nested expression
+              return new ArrayLiteralNode(parseList("]"), tokenIndex);
             case ".":
               // Handle fractional numbers
               return parseFractionalNumber();
@@ -479,9 +486,19 @@ public class Parser {
                 right = parseExpression(precedence);
                 return new BinaryOperatorNode(token.text, left, right, tokenIndex);
             case "->":
-                if (peek().text.equals("(")) {
+                String nextText = peek().text;
+                switch(nextText) {
+                  case "(":
                     consume();
-                    right = parseList(")");
+                    right = new ListNode(parseList(")"), tokenIndex);
+                    return new BinaryOperatorNode(token.text, left, right, tokenIndex);
+                  case "{":
+                    consume();
+                    right = new HashLiteralNode(parseList("}"), tokenIndex);
+                    return new BinaryOperatorNode(token.text, left, right, tokenIndex);
+                  case "[":
+                    consume();
+                    right = new ArrayLiteralNode(parseList("]"), tokenIndex);
                     return new BinaryOperatorNode(token.text, left, right, tokenIndex);
                 }
                 right = parseExpression(precedence);
@@ -615,7 +632,7 @@ public class Parser {
     }
 
     // Example of a method to parse a list
-    private Node parseList(String close) {
+    private List<Node> parseList(String close) {
         List<Node> elements = new ArrayList<>();
         // consume(TokenType.OPERATOR, "(");
         while (!peek().text.equals(close)) {
@@ -625,7 +642,7 @@ public class Parser {
             }
         }
         consume(TokenType.OPERATOR, close);
-        return new ListNode(elements, tokenIndex);
+        return elements;
     }
 
     public static void main(String[] args) throws Exception {
