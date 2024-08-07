@@ -114,6 +114,9 @@ public class EmitterVisitor implements Visitor {
       case "=":
         handleSetOperator(node);
         return;
+      case "->":
+        handleArrowOperator(node);
+        return;
     }
 
     node.left.accept(scalarVisitor); // target - left parameter
@@ -140,9 +143,6 @@ public class EmitterVisitor implements Visitor {
         break;
       case ".":
         handleBinaryBuiltin("stringConcat");
-        break;
-      case "->":
-        handleArrowOperator(node);
         break;
       default:
         throw new RuntimeException("Unexpected infix operator: " + operator);
@@ -199,8 +199,16 @@ public class EmitterVisitor implements Visitor {
 
   /** Handles the `->` operator. */
   private void handleArrowOperator(BinaryOperatorNode node) throws Exception {
+    ctx.logDebug("handleArrowOperator " + node + " in context " + ctx.contextType);
+    EmitterVisitor scalarVisitor =
+        this.with(ContextType.SCALAR); // execute operands in scalar context
+
     if (node.right instanceof ListNode) { // ->()
+
       ctx.logDebug("visit(BinaryOperatorNode) ->() ");
+      node.left.accept(scalarVisitor); // target - left parameter
+      node.right.accept(scalarVisitor); // right parameter
+
       // Transform the value in the stack to RuntimeArray
       ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "getArray", "()LRuntimeArray;", true);
       ctx.mv.visitFieldInsn(
@@ -222,6 +230,8 @@ public class EmitterVisitor implements Visitor {
         ctx.mv.visitInsn(Opcodes.POP);
       }
     } else if (node.right instanceof ArrayLiteralNode) { // ->[0]
+      ctx.logDebug("visit(BinaryOperatorNode) ->[] ");
+      node.left.accept(scalarVisitor); // target - left parameter
 
       // emit the [0] as a RuntimeList
       ListNode nodeRight = ((ArrayLiteralNode) node.right).asListNode();
@@ -230,9 +240,19 @@ public class EmitterVisitor implements Visitor {
       ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "Runtime", "arrayDerefGet", "(LRuntime;)LRuntime;", false);
 
     } else if (node.right instanceof HashLiteralNode) { // ->{x}
+      ctx.logDebug("visit(BinaryOperatorNode) ->{} ");
+      node.left.accept(scalarVisitor); // target - left parameter
 
       // emit the {0} as a RuntimeList
       ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
+
+      Node nodeZero = nodeRight.elements.get(0);
+      if (nodeRight.elements.size() == 1 && nodeZero instanceof IdentifierNode) {
+         // Convert IdentifierNode to StringNode:  {a} to {"a"}
+         nodeRight.elements.set(0, new StringNode(((IdentifierNode) nodeZero).name, ((IdentifierNode) nodeZero).tokenIndex));
+      }
+
+      ctx.logDebug("visit -> (HashLiteralNode) autoquote " + node.right);
       nodeRight.accept(this.with(ContextType.SCALAR));
 
       ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "Runtime", "hashDerefGet", "(LRuntime;)LRuntime;", false);
@@ -1132,13 +1152,6 @@ public class EmitterVisitor implements Visitor {
 
     // Create a RuntimeList
     ListNode listNode = new ListNode(node.elements, node.tokenIndex);
-
-    Node nodeZero = listNode.elements.get(0);
-    if (listNode.elements.size() == 1 && nodeZero instanceof IdentifierNode) {
-       // Convert IdentifierNode to StringNode:  {a} to {"a"}
-       listNode.elements.set(0, new StringNode(((IdentifierNode) nodeZero).name, ((IdentifierNode) nodeZero).tokenIndex));
-    }
-
     listNode.accept(this.with(ContextType.LIST));
 
     // call RuntimeHash.set(RuntimeList)
