@@ -9,8 +9,8 @@ import java.util.List;
  * <p>In Perl, an array is a dynamic list of scalar values. This class tries to mimic this behavior
  * using a list of Runtime objects, which can hold any type of Perl scalar value.
  */
-public class RuntimeArray implements ContextProvider {
-    public List<Runtime> elements;
+public class RuntimeArray extends RuntimeObject {
+    public List<RuntimeObject> elements;
 
     // Constructor
     public RuntimeArray() {
@@ -27,6 +27,10 @@ public class RuntimeArray implements ContextProvider {
     }
 
     // Add a value to the end of the array
+    public void push(RuntimeObject value) {
+        elements.add(value);
+    }
+
     public void push(Runtime value) {
         elements.add(value);
     }
@@ -41,7 +45,7 @@ public class RuntimeArray implements ContextProvider {
         if (elements.isEmpty()) {
             return new Runtime(); // Return undefined if empty
         }
-        return elements.remove(elements.size() - 1);
+        return (Runtime) elements.remove(elements.size() - 1);
     }
 
     // Remove and return the first value of the array
@@ -49,7 +53,7 @@ public class RuntimeArray implements ContextProvider {
         if (elements.isEmpty()) {
             return new Runtime(); // Return undefined if empty
         }
-        return elements.remove(0);
+        return (Runtime) elements.remove(0);
     }
 
     // Get a value at a specific index
@@ -60,11 +64,7 @@ public class RuntimeArray implements ContextProvider {
         if (index < 0 || index >= elements.size()) {
             return new Runtime(); // Return undefined if out of bounds
         }
-        return elements.get(index);
-    }
-
-    public void addToList(RuntimeList list) {
-        list.add(this.getList());
+        return (Runtime) elements.get(index);
     }
 
     // Set the whole array to a Scalar
@@ -74,7 +74,7 @@ public class RuntimeArray implements ContextProvider {
       return new RuntimeList(this);
     }
 
-    // Set the whole array to a list
+    // Replace the the whole array with the elements of a list
     public RuntimeList set(RuntimeList value) {
       this.elements.clear();
       int size = value.size();
@@ -167,7 +167,8 @@ public class RuntimeArray implements ContextProvider {
     }
 
     // Sort the array
-    public void sort(Comparator<Runtime> comparator) {
+    // XXX move to RuntimeList
+    public void sort(Comparator<RuntimeObject> comparator) {
         elements.sort(comparator);
     }
 
