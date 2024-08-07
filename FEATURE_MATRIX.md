@@ -29,6 +29,7 @@
 - [x] Array, Hash and List infrastructure
 - [x] List assignment like: `($a, undef, @b) = @c`
 - [x] `my LIST` like: `my ($a, @b)`
+- [x] Autoquote before `=>`
 - [ ] Basic Array Operations
 - [ ] Array Slices
 - [ ] Array literals
