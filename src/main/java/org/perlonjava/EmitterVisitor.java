@@ -1104,5 +1104,17 @@ public class EmitterVisitor implements Visitor {
     }
   }
 
+  @Override
+  public void visit(HashLiteralNode node) throws Exception {
+    throw new PerlCompilerException(
+        node.tokenIndex, "Not implemented: " + node, ctx.errorUtil);
+  }
+
+  @Override
+  public void visit(ArrayLiteralNode node) throws Exception {
+    throw new PerlCompilerException(
+        node.tokenIndex, "Not implemented: " + node, ctx.errorUtil);
+  }
+
   // Add other visit methods as needed
 }
