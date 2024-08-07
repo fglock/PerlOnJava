@@ -6,6 +6,7 @@
 
 ## Scalars
 - [x] `my` variable declaration
+- [x] `my LIST` like: `my ($a, @b)`
 - [x] variable assignment
 - [x] Basic types: integer, double, string, CODE, undef
 - [ ] Basic Operations (Some are implemented)
