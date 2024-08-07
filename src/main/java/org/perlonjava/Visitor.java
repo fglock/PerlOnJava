@@ -53,11 +53,13 @@ public interface Visitor {
     void visit(BlockNode node) throws Exception;
 
     /**
-     * Visit a ListNode.
+     * Visit a ListNode / HashLiteralNode / ArrayLiteralNode
      *
      * @param node the ListNode to visit
      */
     void visit(ListNode node) throws Exception;
+    void visit(HashLiteralNode node) throws Exception;
+    void visit(ArrayLiteralNode node) throws Exception;
 
     /**
      * Visit a NumberNode.
