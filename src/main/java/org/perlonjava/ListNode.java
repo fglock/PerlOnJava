@@ -12,7 +12,7 @@ public class ListNode extends AbstractNode {
     /**
      * The list of child nodes contained in this ListNode.
      */
-    List<Node> elements;
+    public List<Node> elements;
 
     /**
      * Constructs a new ListNode with the specified list of child nodes.
