@@ -237,7 +237,7 @@ public class EmitterVisitor implements Visitor {
       ListNode nodeRight = ((ArrayLiteralNode) node.right).asListNode();
       nodeRight.accept(this.with(ContextType.SCALAR));
 
-      ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "Runtime", "arrayDerefGet", "(LRuntime;)LRuntime;", false);
+      ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "arrayDerefGet", "(LRuntime;)LRuntime;", false);
 
     } else if (node.right instanceof HashLiteralNode) { // ->{x}
       ctx.logDebug("visit(BinaryOperatorNode) ->{} ");
@@ -255,7 +255,7 @@ public class EmitterVisitor implements Visitor {
       ctx.logDebug("visit -> (HashLiteralNode) autoquote " + node.right);
       nodeRight.accept(this.with(ContextType.SCALAR));
 
-      ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "Runtime", "hashDerefGet", "(LRuntime;)LRuntime;", false);
+      ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "hashDerefGet", "(LRuntime;)LRuntime;", false);
 
     } else  {
       throw new RuntimeException("Unexpected right operand for `->` operator: " + node.right);
