@@ -221,7 +221,23 @@ public class EmitterVisitor implements Visitor {
         // Remove the value from the stack
         ctx.mv.visitInsn(Opcodes.POP);
       }
-    } else {
+    } else if (node.right instanceof ArrayLiteralNode) { // ->[0]
+
+      // emit the [0] as a RuntimeList
+      ListNode nodeRight = ((ArrayLiteralNode) node.right).asListNode();
+      nodeRight.accept(this.with(ContextType.SCALAR));
+
+      ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "Runtime", "arrayDerefGet", "(LRuntime;)LRuntime;", false);
+
+    } else if (node.right instanceof HashLiteralNode) { // ->{x}
+
+      // emit the {0} as a RuntimeList
+      ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
+      nodeRight.accept(this.with(ContextType.SCALAR));
+
+      ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "Runtime", "hashDerefGet", "(LRuntime;)LRuntime;", false);
+
+    } else  {
       throw new RuntimeException("Unexpected right operand for `->` operator: " + node.right);
     }
   }
