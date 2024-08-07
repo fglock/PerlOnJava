@@ -26,6 +26,14 @@ public interface ContextProvider {
     Runtime getScalar();
 
     /**
+     * Add itself to a RuntimeArray.
+     * 
+     * @param array The RuntimeArray object
+     * @return void.
+     */
+    public void addToArray(RuntimeArray array);
+
+    /**
      * Add itself to a RuntimeList.
      * 
      * @param list The RuntimeList object

@@ -98,6 +98,11 @@ public class Runtime extends AbstractRuntimeObject {
     this.value = (long) (value ? 1 : 0);
   }
 
+  public Runtime(Runtime scalar) {
+    this.type = scalar.type;
+    this.value = scalar.value;
+  }
+
   // Getters
   public long getLong() {
     switch (type) {
@@ -164,6 +169,11 @@ public class Runtime extends AbstractRuntimeObject {
   // Get the scalar value of the Scalar
   public Runtime getScalar() {
       return this;
+  }
+
+  // Add itself to a RuntimeArray.
+  public void addToArray(RuntimeArray array) {
+    array.push(new Runtime(this));
   }
 
   // Setters
