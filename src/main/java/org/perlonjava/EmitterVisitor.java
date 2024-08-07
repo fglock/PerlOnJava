@@ -1126,7 +1126,7 @@ public class EmitterVisitor implements Visitor {
         element.accept(this);
 
         // Call the add method to add the element to the RuntimeHash
-        // This calls ContextProvider.addToHashLiteral() in order to allow (1, 2, $x, @x, %x)
+        // This calls ContextProvider.addToHash() in order to allow { 1 => 2, $x, @x, %x }
         mv.visitInsn(Opcodes.SWAP);
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "addToHash", "(LRuntimeHash;)V", true);
 
@@ -1165,7 +1165,7 @@ public class EmitterVisitor implements Visitor {
         element.accept(this);
 
         // Call the add method to add the element to the RuntimeArray
-        // This calls ContextProvider.addToArrayLiteral() in order to allow (1, 2, $x, @x, %x)
+        // This calls ContextProvider.addToArray() in order to allow [ 1, 2, $x, @x, %x ]
         mv.visitInsn(Opcodes.SWAP);
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "addToArray", "(LRuntimeArray;)V", true);
 
