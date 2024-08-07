@@ -1106,14 +1106,80 @@ public class EmitterVisitor implements Visitor {
 
   @Override
   public void visit(HashLiteralNode node) throws Exception {
-    throw new PerlCompilerException(
-        node.tokenIndex, "Not implemented: " + node, ctx.errorUtil);
+    ctx.logDebug("visit(HashLiteralNode) in context " + ctx.contextType);
+    MethodVisitor mv = ctx.mv;
+
+    // Create a new instance of RuntimeHash
+    mv.visitTypeInsn(Opcodes.NEW, "RuntimeHash");
+    mv.visitInsn(Opcodes.DUP);
+    mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "RuntimeHash", "<init>", "()V", false);
+
+    // The stack now has the new RuntimeHash instance
+
+    for (Node element : node.elements) {
+        // Visit each element to generate code for it
+
+        // Duplicate the RuntimeHash instance to keep it on the stack
+        mv.visitInsn(Opcodes.DUP);
+
+        // emit the list element
+        element.accept(this);
+
+        // Call the add method to add the element to the RuntimeHash
+        // This calls ContextProvider.addToHashLiteral() in order to allow (1, 2, $x, @x, %x)
+        mv.visitInsn(Opcodes.SWAP);
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "addToHash", "(LRuntimeHash;)V", true);
+
+        // The stack now has the RuntimeHash instance again
+    }
+
+    // At this point, the stack has the fully populated RuntimeHash instance
+    if (ctx.contextType == ContextType.SCALAR) {
+        // Transform the value in the stack to Runtime
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeHash", "getScalar", "()LRuntime;", false);
+    } else if (ctx.contextType == ContextType.VOID) {
+      ctx.mv.visitInsn(Opcodes.POP);
+    }
+    ctx.logDebug("visit(HashLiteralNode) end");
   }
 
   @Override
   public void visit(ArrayLiteralNode node) throws Exception {
-    throw new PerlCompilerException(
-        node.tokenIndex, "Not implemented: " + node, ctx.errorUtil);
+    ctx.logDebug("visit(ArrayLiteralNode) in context " + ctx.contextType);
+    MethodVisitor mv = ctx.mv;
+
+    // Create a new instance of RuntimeArray
+    mv.visitTypeInsn(Opcodes.NEW, "RuntimeArray");
+    mv.visitInsn(Opcodes.DUP);
+    mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "RuntimeArray", "<init>", "()V", false);
+
+    // The stack now has the new RuntimeArray instance
+
+    for (Node element : node.elements) {
+        // Visit each element to generate code for it
+
+        // Duplicate the RuntimeArray instance to keep it on the stack
+        mv.visitInsn(Opcodes.DUP);
+
+        // emit the list element
+        element.accept(this);
+
+        // Call the add method to add the element to the RuntimeArray
+        // This calls ContextProvider.addToArrayLiteral() in order to allow (1, 2, $x, @x, %x)
+        mv.visitInsn(Opcodes.SWAP);
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "addToArray", "(LRuntimeArray;)V", true);
+
+        // The stack now has the RuntimeArray instance again
+    }
+
+    // At this point, the stack has the fully populated RuntimeArray instance
+    if (ctx.contextType == ContextType.SCALAR) {
+        // Transform the value in the stack to Runtime
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeArray", "getScalar", "()LRuntime;", false);
+    } else if (ctx.contextType == ContextType.VOID) {
+      ctx.mv.visitInsn(Opcodes.POP);
+    }
+    ctx.logDebug("visit(ArrayLiteralNode) end");
   }
 
   // Add other visit methods as needed
