@@ -10,24 +10,14 @@ import java.util.*;
  * expressions, etc.)
  *
  * <p>Perl scalars are dynamically typed, meaning their type can change at runtime. This class tries
- * to mimic this behavior by using an enum `Type` to track the type of the value stored in the
+ * to mimic this behavior by using an enum `ScalarType` to track the type of the value stored in the
  * scalar.
  */
 public class Runtime extends AbstractRuntimeObject {
-  // Enum to represent the type of value stored in the scalar
-  private enum Type {
-    INTEGER,
-    DOUBLE,
-    STRING,
-    CODE,
-    UNDEF,
-    REFERENCE
-    // also BLESSED and special literals like filehandles, typeglobs, and regular expressions
-  }
 
   // Fields to store the type and value of the scalar variable
   // TODO add cache for integer/string values
-  public Type type;
+  public ScalarType type;
   public Object value;
 
   private static Map<String, Runtime> globalVariables = new HashMap<>();
@@ -70,31 +60,31 @@ public class Runtime extends AbstractRuntimeObject {
 
   // Constructors
   public Runtime() {
-    this.type = Type.UNDEF;
+    this.type = ScalarType.UNDEF;
   }
 
   public Runtime(long value) {
-    this.type = Type.INTEGER;
+    this.type = ScalarType.INTEGER;
     this.value = value;
   }
 
   public Runtime(int value) {
-    this.type = Type.INTEGER;
+    this.type = ScalarType.INTEGER;
     this.value = (long) value;
   }
 
   public Runtime(double value) {
-    this.type = Type.DOUBLE;
+    this.type = ScalarType.DOUBLE;
     this.value = value;
   }
 
   public Runtime(String value) {
-    this.type = Type.STRING;
+    this.type = ScalarType.STRING;
     this.value = value;
   }
 
   public Runtime(boolean value) {
-    this.type = Type.INTEGER;
+    this.type = ScalarType.INTEGER;
     this.value = (long) (value ? 1 : 0);
   }
 
@@ -184,13 +174,13 @@ public class Runtime extends AbstractRuntimeObject {
   }
 
   public Runtime set(long value) {
-    this.type = Type.INTEGER;
+    this.type = ScalarType.INTEGER;
     this.value = value;
     return this;
   }
 
   public Runtime set(String value) {
-    this.type = Type.STRING;
+    this.type = ScalarType.STRING;
     this.value = value;
     return this;
   }
@@ -208,12 +198,16 @@ public class Runtime extends AbstractRuntimeObject {
         return Double.toString((double) value);
       case STRING:
         return (String) value;
-      case REFERENCE:
-        return "REF(" + value.hashCode() + ")";
       case CODE:
         return "CODE(" + value.hashCode() + ")";
       case UNDEF:
         return "";
+      case REFERENCE:
+        return "REF(" + value.hashCode() + ")";
+      case ARRAYREFERENCE:
+        return "ARRAY(" + value.hashCode() + ")";
+      case HASHREFERENCE:
+        return "HASH(" + value.hashCode() + ")";
       default:
         return "Undefined";
     }
@@ -226,13 +220,13 @@ public class Runtime extends AbstractRuntimeObject {
     Method mm = clazz.getMethod("apply", RuntimeArray.class, ContextType.class);
     Runtime r = new Runtime();
     r.value = new RuntimeCode(mm, codeObject);
-    r.type = Type.CODE;
+    r.type = ScalarType.CODE;
     return r;
   }
 
   // Method to apply (execute) a subroutine reference
   public RuntimeList apply(RuntimeArray a, ContextType callContext) throws Exception {
-    if (type == Type.CODE) {
+    if (type == ScalarType.CODE) {
       RuntimeCode code = (RuntimeCode) this.value;
       return (RuntimeList) code.methodObject.invoke(code.codeObject, a, callContext);
     } else {
@@ -274,7 +268,7 @@ public class Runtime extends AbstractRuntimeObject {
 
     if (str.isEmpty()) {
         this.value = (long) 1;
-        this.type = Type.INTEGER;
+        this.type = ScalarType.INTEGER;
         return this;
     }
     char c = ((String) this.value).charAt(0);
@@ -377,7 +371,7 @@ public class Runtime extends AbstractRuntimeObject {
   // Methods that implement Perl operators
   public Runtime createReference() {
     Runtime result = new Runtime();
-    result.type = Type.REFERENCE;
+    result.type = ScalarType.REFERENCE;
     result.value = this;
     return result;
   }
@@ -413,13 +407,13 @@ public class Runtime extends AbstractRuntimeObject {
 
   public Runtime add(Runtime arg2) {
     Runtime arg1 = this;
-    if (arg1.type == Type.STRING) {
+    if (arg1.type == ScalarType.STRING) {
       arg1 = arg1.parseNumber();
     }
-    if (arg2.type == Type.STRING) {
+    if (arg2.type == ScalarType.STRING) {
       arg2 = arg2.parseNumber();
     }
-    if (arg1.type == Type.DOUBLE || arg2.type == Type.DOUBLE) {
+    if (arg1.type == ScalarType.DOUBLE || arg2.type == ScalarType.DOUBLE) {
       return new Runtime(arg1.getDouble() + arg2.getDouble());
     } else {
       return new Runtime(arg1.getLong() + arg2.getLong());
@@ -428,13 +422,13 @@ public class Runtime extends AbstractRuntimeObject {
 
   public Runtime subtract(Runtime arg2) {
     Runtime arg1 = this;
-    if (arg1.type == Type.STRING) {
+    if (arg1.type == ScalarType.STRING) {
       arg1 = arg1.parseNumber();
     }
-    if (arg2.type == Type.STRING) {
+    if (arg2.type == ScalarType.STRING) {
       arg2 = arg2.parseNumber();
     }
-    if (arg1.type == Type.DOUBLE || arg2.type == Type.DOUBLE) {
+    if (arg1.type == ScalarType.DOUBLE || arg2.type == ScalarType.DOUBLE) {
       return new Runtime(arg1.getDouble() - arg2.getDouble());
     } else {
       return new Runtime(arg1.getLong() - arg2.getLong());
@@ -443,13 +437,13 @@ public class Runtime extends AbstractRuntimeObject {
 
   public Runtime multiply(Runtime arg2) {
     Runtime arg1 = this;
-    if (arg1.type == Type.STRING) {
+    if (arg1.type == ScalarType.STRING) {
       arg1 = arg1.parseNumber();
     }
-    if (arg2.type == Type.STRING) {
+    if (arg2.type == ScalarType.STRING) {
       arg2 = arg2.parseNumber();
     }
-    if (arg1.type == Type.DOUBLE || arg2.type == Type.DOUBLE) {
+    if (arg1.type == ScalarType.DOUBLE || arg2.type == ScalarType.DOUBLE) {
       return new Runtime(arg1.getDouble() * arg2.getDouble());
     } else {
       return new Runtime(arg1.getLong() * arg2.getLong());
@@ -458,13 +452,13 @@ public class Runtime extends AbstractRuntimeObject {
 
   public Runtime divide(Runtime arg2) {
     Runtime arg1 = this;
-    if (arg1.type == Type.STRING) {
+    if (arg1.type == ScalarType.STRING) {
       arg1 = arg1.parseNumber();
     }
-    if (arg2.type == Type.STRING) {
+    if (arg2.type == ScalarType.STRING) {
       arg2 = arg2.parseNumber();
     }
-    if (arg1.type == Type.DOUBLE || arg2.type == Type.DOUBLE) {
+    if (arg1.type == ScalarType.DOUBLE || arg2.type == ScalarType.DOUBLE) {
       return new Runtime(arg1.getDouble() / arg2.getDouble());
     } else {
       return new Runtime(arg1.getLong() / arg2.getLong());
@@ -473,13 +467,13 @@ public class Runtime extends AbstractRuntimeObject {
 
   public Runtime lessEqualThan(Runtime arg2) {
     Runtime arg1 = this;
-    if (arg1.type == Type.STRING) {
+    if (arg1.type == ScalarType.STRING) {
       arg1 = arg1.parseNumber();
     }
-    if (arg2.type == Type.STRING) {
+    if (arg2.type == ScalarType.STRING) {
       arg2 = arg2.parseNumber();
     }
-    if (arg1.type == Type.DOUBLE || arg2.type == Type.DOUBLE) {
+    if (arg1.type == ScalarType.DOUBLE || arg2.type == ScalarType.DOUBLE) {
       return new Runtime(arg1.getDouble() <= arg2.getDouble());
     } else {
       return new Runtime(arg1.getLong() <= arg2.getLong());
@@ -488,13 +482,13 @@ public class Runtime extends AbstractRuntimeObject {
 
   public Runtime lessThan(Runtime arg2) {
     Runtime arg1 = this;
-    if (arg1.type == Type.STRING) {
+    if (arg1.type == ScalarType.STRING) {
       arg1 = arg1.parseNumber();
     }
-    if (arg2.type == Type.STRING) {
+    if (arg2.type == ScalarType.STRING) {
       arg2 = arg2.parseNumber();
     }
-    if (arg1.type == Type.DOUBLE || arg2.type == Type.DOUBLE) {
+    if (arg1.type == ScalarType.DOUBLE || arg2.type == ScalarType.DOUBLE) {
       return new Runtime(arg1.getDouble() < arg2.getDouble());
     } else {
       return new Runtime(arg1.getLong() < arg2.getLong());
@@ -512,7 +506,7 @@ public class Runtime extends AbstractRuntimeObject {
       case STRING:
         return this.stringIncrement();
     }
-    this.type = Type.INTEGER;
+    this.type = ScalarType.INTEGER;
     this.value = 1;
     return this;
   }
@@ -530,7 +524,7 @@ public class Runtime extends AbstractRuntimeObject {
         this.stringIncrement();
         break;
       default:
-        this.type = Type.INTEGER;
+        this.type = ScalarType.INTEGER;
         this.value = 1;
     }
     return old;
@@ -549,7 +543,7 @@ public class Runtime extends AbstractRuntimeObject {
         this.set(this.parseNumber());
         return this.preAutoDecrement();
     }
-    this.type = Type.INTEGER;
+    this.type = ScalarType.INTEGER;
     this.value = -1;
     return this;
   }
@@ -569,7 +563,7 @@ public class Runtime extends AbstractRuntimeObject {
         this.preAutoDecrement();
         break;
       default:
-        this.type = Type.INTEGER;
+        this.type = ScalarType.INTEGER;
         this.value = 1;
     }
     return old;

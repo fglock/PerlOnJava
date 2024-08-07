@@ -76,17 +76,17 @@ public class RuntimeArray extends AbstractRuntimeObject {
     }
 
     // Set the whole array to a Scalar
-    public RuntimeList set(Runtime value) {
+    public RuntimeArray set(Runtime value) {
       this.elements.clear();
       this.elements.add(value);
-      return new RuntimeList(this);
+      return this;
     }
 
     // Replace the the whole array with the elements of a list
-    public RuntimeList set(RuntimeList value) {
+    public RuntimeArray set(RuntimeList value) {
       this.elements.clear();
       value.addToArray(this);
-      return new RuntimeList(this);
+      return this;
     }
 
     // Set a value at a specific index
@@ -100,6 +100,14 @@ public class RuntimeArray extends AbstractRuntimeObject {
             }
         }
         elements.set(index, value);
+    }
+
+    // Create a reference to the Array
+    public Runtime createReference() {
+      Runtime result = new Runtime();
+      result.type = ScalarType.ARRAYREFERENCE;
+      result.value = this;
+      return result;
     }
 
     // Get the size of the array
