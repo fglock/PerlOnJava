@@ -290,6 +290,9 @@ public class EmitterVisitor implements Visitor {
       case "--":
         handleUnaryBuiltin(node, "preAutoDecrement");
         break;
+      case "\\":
+        handleUnaryBuiltin(node, "createReference");
+        break;
       default:
         throw new UnsupportedOperationException("Unsupported operator: " + operator);
     }
