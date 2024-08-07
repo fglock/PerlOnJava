@@ -18,6 +18,26 @@ public class RuntimeHash extends AbstractRuntimeObject {
         this.elements = new HashMap<>();
     }
 
+    // Add itself to a RuntimeArray.
+    public void addToArray(RuntimeArray array) {
+        for (Map.Entry<String, Runtime> entry : elements.entrySet()) {
+            array.push(new Runtime(entry.getKey()));
+            array.push(new Runtime(entry.getValue()));
+        }
+    }
+
+    // Replace the the whole hash with the elements of a list
+    public RuntimeList set(RuntimeList value) {
+      RuntimeArray arr = new RuntimeArray();  
+      value.addToArray(arr);
+      if (arr.size() % 2 != 0) {  // add an undef if the array size is odd
+        arr.push(new Runtime());
+      }
+      RuntimeHash hash = fromArray(arr);
+      this.elements = hash.elements;
+      return new RuntimeList(this);
+    }
+
     // Add a key-value pair to the hash
     public void put(String key, Runtime value) {
         elements.put(key, value);
