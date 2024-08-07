@@ -290,14 +290,20 @@ public class Parser {
               String text = token.text;
               int saveIndex = tokenIndex;
 
+              Token nextToken = peek(); // operator or identifier
               if (isSigil(text)
-                  && (peek().type == TokenType.OPERATOR || peek().type == TokenType.IDENTIFIER)) {
-                // Handle normal variables and special variables lile $@
+                  && (nextToken.type == TokenType.OPERATOR
+                      || nextToken.type == TokenType.IDENTIFIER
+                      || nextToken.type == TokenType.NUMBER)) {
+                // Handle normal variables and special variables like $@
 
-                Token nextToken = consume(); // operator or identifier
+                consume(); // operator or identifier
 
                 // handle the special case for $$a
-                if (peek().type == TokenType.OPERATOR || peek().type == TokenType.IDENTIFIER) {
+                if (nextToken.text.equals("$")
+                    && (peek().text.equals("$")
+                        || peek().type == TokenType.IDENTIFIER
+                        || peek().type == TokenType.NUMBER)) {
                   // wrong guess: this is not a special variable
                   tokenIndex = saveIndex; // backtrack
                 } else {
@@ -667,7 +673,7 @@ public class Parser {
         return 13;
       case "*":
       case "/":
-      // case "%":   XXX FIXME   % operator vs. %var
+      case "%":
       case "x":
         return 14;
       case "=~":
@@ -683,12 +689,8 @@ public class Parser {
         return 18;
       case "->":
         return 19;
-      case "$":
-      case "@":
-      case "%":
-        return 20; // Higher precedence for prefix operator
       default:
-        return 0;
+        return 20;
     }
   }
 
