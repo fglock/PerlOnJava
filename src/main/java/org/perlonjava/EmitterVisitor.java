@@ -377,7 +377,9 @@ public class EmitterVisitor implements Visitor {
       if (sigil.equals("my")) { // my $a = 123
         UnaryOperatorNode myNode = leftNode;  // my $a
         ctx.logDebug("SET my.node " + myNode);
-        sigil = ((UnaryOperatorNode) myNode.operand).operator;
+        if (myNode.operand instanceof UnaryOperatorNode) {
+          sigil = ((UnaryOperatorNode) myNode.operand).operator;
+        }
         ctx.logDebug("SET my.sigil " + sigil);
       }
       if (Parser.isSigil(sigil)) {
@@ -449,9 +451,34 @@ public class EmitterVisitor implements Visitor {
     // left hand side is not a plain variable, or a `my` followed by a plain variable
     // we assume the left side is a list, or a `my` followed by a list
 
-    // TODO ($a, $b) = ...
-    throw new PerlCompilerException(
-        node.tokenIndex, "Not implemented: " + node.operator, ctx.errorUtil);
+    // ($a, $b) = ...
+
+    ctx.logDebug("SET right side list");
+    Node nodeRight = node.right;
+    // make sure the right node is a ListNode
+    if (!(nodeRight instanceof ListNode)) {
+        List<Node> elements = new ArrayList<>();
+        elements.add(nodeRight);
+        nodeRight = new ListNode(elements, node.tokenIndex);
+    }
+    nodeRight.accept(this.with(ContextType.LIST));   // emit the value
+
+    ctx.logDebug("SET list");
+    node.left.accept(this.with(ContextType.LIST));   // emit the variable
+    ctx.mv.visitInsn(Opcodes.SWAP); // move the target first
+    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", "set", "(LRuntimeList;)LRuntimeList;", false);
+    if (ctx.contextType == ContextType.SCALAR) {
+      // Transform the value in the stack to Scalar
+      ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", "getScalar", "()LRuntime;", false);
+    }
+
+    if (ctx.contextType == ContextType.VOID) {
+      // Remove the value from the stack
+      ctx.mv.visitInsn(Opcodes.POP);
+    }
+
+    ctx.logDebug("SET end");
+    return;
   }
 
   private void handleMyOperator(UnaryOperatorNode node) throws Exception {
