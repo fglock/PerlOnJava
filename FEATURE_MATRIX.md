@@ -1,14 +1,15 @@
 # Perl on JVM Feature Matrix
 
 ## Compiler usability
-- [x] Perl-like error messages
+- [x] Perl-like compile-time error messages
+- [ ] Perl-like runtime error messages
 - [ ] Perl-like warnings
 
 ## Scalars
 - [x] `my` variable declaration
-- [x] `my LIST` like: `my ($a, @b)`
+- [ ] `our` variable declaration
+- [ ] `local` variable declaration
 - [x] variable assignment
-- [x] list assignment like: `($a, undef, @b) = @c`
 - [x] Basic types: integer, double, string, CODE, undef
 - [ ] Basic Operations (Some are implemented)
 - [x] Simple arithmetic
@@ -19,19 +20,19 @@
 - [x] Expand backslash-n and simple sequences
 - [x] String numification
 - [x] Autoincrement, Autodecrement; String increment
+- [ ] References
 - [ ] File handles
 - [ ] Tied Scalars
 - [ ] Cached string/numeric conversions; dualvars
 
-## Arrays and List
-- [x] Array and List infrastructure
+## Arrays, Hashes and Lists
+- [x] Array, Hash and List infrastructure
+- [x] List assignment like: `($a, undef, @b) = @c`
+- [x] `my LIST` like: `my ($a, @b)`
 - [ ] Basic Array Operations
 - [ ] Array Slices
 - [ ] Array literals
 - [ ] Tied Arrays
-
-## Hashes
-- [x] Hash infrastructure
 - [ ] Basic Hash Operations
 - [ ] Hash literals
 - [ ] Tied Hashes
