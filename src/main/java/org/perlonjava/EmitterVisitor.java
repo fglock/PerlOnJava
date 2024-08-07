@@ -463,8 +463,12 @@ public class EmitterVisitor implements Visitor {
         // process each item of the list; then returns the list
         ListNode listNode = (ListNode) node.operand;
         for (Node element : listNode.elements) {
-            UnaryOperatorNode myNode = new UnaryOperatorNode("my", element, listNode.tokenIndex);
-            myNode.accept(this.with(ContextType.VOID));
+            if (element instanceof UnaryOperatorNode && ((UnaryOperatorNode) element).operator.equals("undef")) {
+                // skip "undef"
+            } else {
+                UnaryOperatorNode myNode = new UnaryOperatorNode("my", element, listNode.tokenIndex);
+                myNode.accept(this.with(ContextType.VOID));
+            }
         }
         if (ctx.contextType != ContextType.VOID) {
             listNode.accept(this);
