@@ -152,7 +152,7 @@ public class Parser {
                 break;
             }
 
-            if (isRightAssociative(token)) {
+            if (isRightAssociative(token.text)) {
                 left = parseInfix(left, tokenPrecedence - 1);
             } else {
                 left = parseInfix(left, tokenPrecedence);
@@ -250,8 +250,7 @@ public class Parser {
                 String text = token.text;
                 int saveIndex = tokenIndex;
 
-                if ((text.equals("$") || text.equals("@") || text.equals("%")) 
-                    && (peek().type == TokenType.OPERATOR || peek().type == TokenType.IDENTIFIER)) 
+                if (isSigil(text)  && (peek().type == TokenType.OPERATOR || peek().type == TokenType.IDENTIFIER)) 
                 {
                     // Handle normal variables and special variables lile $@ 
 
@@ -435,7 +434,7 @@ public class Parser {
     private Node parseInfix(Node left, int precedence) {
         Token token = consume();
 
-        if (isTernaryOperator(token)) {
+        if (isTernaryOperator(token.text)) {
             Node middle = parseExpression(0);
             consume(TokenType.OPERATOR, ":");
             Node right = parseExpression(precedence);
@@ -585,9 +584,21 @@ public class Parser {
         }
     }
 
-    private boolean isRightAssociative(Token token) {
+    public static boolean isSigil(String s) {
+        switch (s) {
+            case "$":
+            case "@":
+            case "%":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+
+    private boolean isRightAssociative(String s) {
         // Define right associative operators
-        switch (token.text) {
+        switch (s) {
             case "=":
             case "-=":
             case "+=":
@@ -599,8 +610,8 @@ public class Parser {
         }
     }
 
-    private boolean isTernaryOperator(Token token) {
-        return token.text.equals("?");
+    private boolean isTernaryOperator(String s) {
+        return s.equals("?");
     }
 
     // Example of a method to parse a list

@@ -407,7 +407,7 @@ public class EmitterVisitor implements Visitor {
         myNode.accept(this.with(ContextType.VOID));   // execute the variable declaration
       }
 
-      if (sigil.equals("$") || sigil.equals("@") || sigil.equals("%")) {
+      if (Parser.isSigil(sigil)) {
         Node identifierNode = leftNode.operand;
         if (identifierNode instanceof IdentifierNode) { // $a
 
@@ -462,7 +462,7 @@ public class EmitterVisitor implements Visitor {
     Node sigilNode = node.operand;
     if (sigilNode instanceof UnaryOperatorNode) { // my + $ @ %
       String sigil = ((UnaryOperatorNode) sigilNode).operator;
-      if (sigil.equals("$") || sigil.equals("@") || sigil.equals("%")) {
+      if (Parser.isSigil(sigil)) {
         Node identifierNode = ((UnaryOperatorNode) sigilNode).operand;
         if (identifierNode instanceof IdentifierNode) { // my $a
           String var = sigil + ((IdentifierNode) identifierNode).name;
