@@ -1119,13 +1119,11 @@ public class EmitterVisitor implements Visitor {
     listNode.accept(this.with(ContextType.LIST));
 
     // call RuntimeHash.set(RuntimeList)
-    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeHash", "set", "(LRuntimeList;)LRuntimeList;", false);
+    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeHash", "set", "(LRuntimeList;)LRuntimeHash;", false);
 
-    // At this point, the stack has the fully populated RuntimeList instance
-    if (ctx.contextType == ContextType.SCALAR) {
-        // Transform the value in the stack to Runtime
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", "getScalar", "()LRuntime;", false);
-    } else if (ctx.contextType == ContextType.VOID) {
+    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeHash", "createReference", "()LRuntime;", false);
+
+    if (ctx.contextType == ContextType.VOID) {
       mv.visitInsn(Opcodes.POP);
     }
     ctx.logDebug("visit(HashLiteralNode) end");
@@ -1159,12 +1157,9 @@ public class EmitterVisitor implements Visitor {
 
         // The stack now has the RuntimeArray instance again
     }
+    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeArray", "createReference", "()LRuntime;", false);
 
-    // At this point, the stack has the fully populated RuntimeList instance
-    if (ctx.contextType == ContextType.SCALAR) {
-        // Transform the value in the stack to Runtime
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", "getScalar", "()LRuntime;", false);
-    } else if (ctx.contextType == ContextType.VOID) {
+    if (ctx.contextType == ContextType.VOID) {
       ctx.mv.visitInsn(Opcodes.POP);
     }
     ctx.logDebug("visit(ArrayLiteralNode) end");
