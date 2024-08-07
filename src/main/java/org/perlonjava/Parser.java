@@ -104,6 +104,13 @@ public class Parser {
         consume(TokenType.OPERATOR, "{");
         Node block = parseBlock();
         consume(TokenType.OPERATOR, "}");
+
+        // some characters are illegal after an anon sub
+        token = peek();
+        if (token.text.equals("(") || token.text.equals("{") || token.text.equals("[")) {
+            throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
+        }
+
         return new AnonSubNode(block, tokenIndex);
     }
 
