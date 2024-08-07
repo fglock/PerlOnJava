@@ -52,21 +52,28 @@
 - [x] context void, scalar, list
 - [x] if/else/elsif
 - [x] 3-argument for loop
-- [x] eval string with closure variables
-- [x] eval string sets $@ on error; returns undef
-- [ ] eval block
-- [x] do block
-- [ ] do file
-- [ ] print statement (Simple `print` and `say` statement implemented)
+- [x] `eval` string with closure variables
+- [x] `eval` string sets $@ on error; returns undef
+- [ ] `eval` block
+- [x] `do` block
+- [ ] `do` file
+- [ ] `print` statement (Simple `print` and `say` statement implemented)
 - [x] short-circuit and, or
 - [x] low-precedence/high precedence operators: `not`, `or`, `and`
 - [x] ternary operator
-- [ ] wantarray
-- [ ] BEGIN block
+- [ ] `wantarray`
+- [ ] `require` statement
+- [ ] `use` statement
+- [ ] `caller`
+- [ ] `die`
+- [ ] `BEGIN` block
+- [ ] `goto`
+- [ ] labels
+- [ ] search for labels in call stack
 
 ## Namespaces and global variables
 - [x] Global variable infrastructure
 - [ ] Global variables
-- [x] @_ and $@ special variables
-- [ ] $_ special variable
+- [x] `@_` and `$@` special variables
+- [ ] `$_` special variable
 

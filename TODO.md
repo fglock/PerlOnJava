@@ -23,8 +23,6 @@
 - Optimizations
 
 ## After the basics are implemented - next set of basic features:
-- Array and Hash
-- References
 - Blessed objects
 
 ## Cleanup
