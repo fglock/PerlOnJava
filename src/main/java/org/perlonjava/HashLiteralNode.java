@@ -20,6 +20,10 @@ public class HashLiteralNode extends AbstractNode {
         this.tokenIndex = tokenIndex;
     }
 
+    public ListNode asListNode() {
+      return new ListNode(elements, tokenIndex);
+    }
+
     /**
      * Accepts a visitor that performs some operation on this node.
      * This method is part of the Visitor design pattern, which allows
