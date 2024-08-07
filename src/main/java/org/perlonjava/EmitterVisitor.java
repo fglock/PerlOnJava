@@ -1132,6 +1132,13 @@ public class EmitterVisitor implements Visitor {
 
     // Create a RuntimeList
     ListNode listNode = new ListNode(node.elements, node.tokenIndex);
+
+    Node nodeZero = listNode.elements.get(0);
+    if (listNode.elements.size() == 1 && nodeZero instanceof IdentifierNode) {
+       // Convert IdentifierNode to StringNode:  {a} to {"a"}
+       listNode.elements.set(0, new StringNode(((IdentifierNode) nodeZero).name, ((IdentifierNode) nodeZero).tokenIndex));
+    }
+
     listNode.accept(this.with(ContextType.LIST));
 
     // call RuntimeHash.set(RuntimeList)
