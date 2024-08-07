@@ -131,7 +131,7 @@ public class RuntimeHash extends AbstractRuntimeObject {
 
     // Get the scalar value of the hash
     public Runtime getScalar() {
-        return new Runtime(1);  // XXX check this
+        return new Runtime(this.size());
     }
 
     // Convert the hash to a string (for debugging purposes)

@@ -81,7 +81,7 @@ public class RuntimeList implements ContextProvider {
             return new Runtime(); // Return undefined if empty
         }
         // XXX expand the last element
-        return (Runtime) elements.get(elements.size() - 1);
+        return elements.get(elements.size() - 1).getScalar();
     }
 
     // Join the list into a string
