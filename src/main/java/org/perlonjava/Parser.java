@@ -670,20 +670,41 @@ public class Parser {
         return s.equals("?");
     }
 
-    // Example of a method to parse a list
     private List<Node> parseList(String close) {
         List<Node> elements = new ArrayList<>();
-        // consume(TokenType.OPERATOR, "(");
+        boolean firstItem = true;
+    
         while (!peek().text.equals(close)) {
-            elements.add(parseExpression(getPrecedence(",") + 1));
-            if (peek().text.equals(",")) {
+            if (!firstItem) {
+                // Ensure at least one delimiter is present
+                if (!peek().text.equals(",") && !peek().text.equals("=>") && !peek().text.equals(close)) {
+                    throw new PerlCompilerException(tokenIndex, "Unexpected token: " + peek(), errorUtil);
+                }
+            }
+            // Consume all consecutive delimiters
+            while (peek().text.equals(",") || peek().text.equals("=>")) {
                 consume();
+            }
+            if (!peek().text.equals(close)) {
+    
+                Node expr = parseExpression(getPrecedence(",") + 1);
+    
+                // Check if the next token is '=>'
+                if (peek().text.equals("=>")) {
+                    if (expr instanceof IdentifierNode) {
+                        // Convert IdentifierNode to StringNode
+                        expr = new StringNode(((IdentifierNode) expr).name, ((IdentifierNode) expr).tokenIndex);
+                    }
+                }
+    
+                elements.add(expr);
+                firstItem = false;
             }
         }
         consume(TokenType.OPERATOR, close);
         return elements;
     }
-
+    
     public static void main(String[] args) throws Exception {
         String fileName = "example.pl";
         String code = "my $var = 42; 1 ? 2 : 3; print \"Hello, World!\\n\";";
