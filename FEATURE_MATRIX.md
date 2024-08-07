@@ -20,8 +20,9 @@
 - [x] Expand backslash-n and simple sequences
 - [x] String numification
 - [x] Autoincrement, Autodecrement; String increment
-- [ ] References
+- [x] References
 - [ ] File handles
+- [ ] Objects
 - [ ] Tied Scalars
 - [ ] Cached string/numeric conversions; dualvars
 
@@ -49,8 +50,6 @@
 
 ## Statements and special operators
 - [x] context void, scalar, list
-- [ ] wantarray
-- [ ] BEGIN block
 - [x] if/else/elsif
 - [x] 3-argument for loop
 - [x] eval string with closure variables
@@ -62,6 +61,8 @@
 - [x] short-circuit and, or
 - [x] low-precedence/high precedence operators: `not`, `or`, `and`
 - [x] ternary operator
+- [ ] wantarray
+- [ ] BEGIN block
 
 ## Namespaces and global variables
 - [x] Global variable infrastructure
