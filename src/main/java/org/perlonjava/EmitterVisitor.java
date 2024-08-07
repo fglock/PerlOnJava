@@ -366,7 +366,7 @@ public class EmitterVisitor implements Visitor {
 
   private void handleSetOperator(BinaryOperatorNode node) throws Exception {
     ctx.logDebug("SET " + node);
-    if (node.left instanceof UnaryOperatorNode) { // $x @x %x = ...
+    if (node.left instanceof UnaryOperatorNode) { // $x @x %x my
       UnaryOperatorNode leftNode = (UnaryOperatorNode) node.left;
       String sigil = leftNode.operator;
       ctx.logDebug("SET sigil " + sigil);
@@ -459,8 +459,19 @@ public class EmitterVisitor implements Visitor {
   }
 
   private void handleMyOperator(UnaryOperatorNode node) throws Exception {
-    Node sigilNode = node.operand;
-    if (sigilNode instanceof UnaryOperatorNode) { // my + $ @ %
+    if (node.operand instanceof ListNode) { // my ($a, $b)
+        // process each item of the list; then returns the list
+        ListNode listNode = (ListNode) node.operand;
+        for (Node element : listNode.elements) {
+            UnaryOperatorNode myNode = new UnaryOperatorNode("my", element, listNode.tokenIndex);
+            myNode.accept(this.with(ContextType.VOID));
+        }
+        if (ctx.contextType != ContextType.VOID) {
+            listNode.accept(this);
+        }
+        return;
+    } else if (node.operand instanceof UnaryOperatorNode) { // my + $ @ %
+      Node sigilNode = node.operand;
       String sigil = ((UnaryOperatorNode) sigilNode).operator;
       if (Parser.isSigil(sigil)) {
         Node identifierNode = ((UnaryOperatorNode) sigilNode).operand;
@@ -510,7 +521,6 @@ public class EmitterVisitor implements Visitor {
         }
       }
     }
-    // TODO my ($a, $b)
     throw new PerlCompilerException(
         node.tokenIndex, "Not implemented: " + node.operator, ctx.errorUtil);
   }
