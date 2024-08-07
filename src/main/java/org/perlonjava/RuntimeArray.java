@@ -9,8 +9,8 @@ import java.util.List;
  * <p>In Perl, an array is a dynamic list of scalar values. This class tries to mimic this behavior
  * using a list of Runtime objects, which can hold any type of Perl scalar value.
  */
-public class RuntimeArray extends RuntimeObject {
-    public List<RuntimeObject> elements;
+public class RuntimeArray extends AbstractRuntimeObject {
+    public List<AbstractRuntimeObject> elements;
 
     // Constructor
     public RuntimeArray() {
@@ -27,7 +27,7 @@ public class RuntimeArray extends RuntimeObject {
     }
 
     // Add a value to the end of the array
-    public void push(RuntimeObject value) {
+    public void push(AbstractRuntimeObject value) {
         elements.add(value);
     }
 
@@ -168,7 +168,7 @@ public class RuntimeArray extends RuntimeObject {
 
     // Sort the array
     // XXX move to RuntimeList
-    public void sort(Comparator<RuntimeObject> comparator) {
+    public void sort(Comparator<AbstractRuntimeObject> comparator) {
         elements.sort(comparator);
     }
 

@@ -8,7 +8,7 @@ import java.util.List;
  *
  */
 public class RuntimeList implements ContextProvider {
-    public List<RuntimeObject> elements;
+    public List<AbstractRuntimeObject> elements;
 
     // Constructor
     public RuntimeList() {
@@ -37,7 +37,7 @@ public class RuntimeList implements ContextProvider {
     }
 
     // Add an element to the list
-    public void add(RuntimeObject value) {
+    public void add(AbstractRuntimeObject value) {
       this.elements.add(value);
     }
 

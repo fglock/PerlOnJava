@@ -10,7 +10,7 @@ import java.util.Set;
  * class tries to mimic this behavior using a map of string keys to Runtime objects, which can hold
  * any type of Perl scalar value.
  */
-public class RuntimeHash extends RuntimeObject {
+public class RuntimeHash extends AbstractRuntimeObject {
     private Map<String, Runtime> elements;
 
     // Constructor
