@@ -31,12 +31,12 @@
 - [x] List assignment like: `($a, undef, @b) = @c`
 - [x] `my LIST` like: `my ($a, @b)`
 - [x] Autoquote before `=>`
-- [ ] Basic Array Operations
+- [ ] Basic Array Operations (Some are implemented)
 - [ ] Array Slices
-- [ ] Array literals
+- [x] Array literals
 - [ ] Tied Arrays
-- [ ] Basic Hash Operations
-- [ ] Hash literals
+- [ ] Basic Hash Operations (Some are implemented)
+- [x] Hash literals
 - [ ] Tied Hashes
 
 ## Subroutines
