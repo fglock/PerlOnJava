@@ -8,6 +8,7 @@
 - [x] `my` variable declaration
 - [x] `my LIST` like: `my ($a, @b)`
 - [x] variable assignment
+- [x] list assignment like: `($a, undef, @b) = @c`
 - [x] Basic types: integer, double, string, CODE, undef
 - [ ] Basic Operations (Some are implemented)
 - [x] Simple arithmetic

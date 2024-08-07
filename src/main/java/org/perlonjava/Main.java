@@ -40,6 +40,8 @@ public class Main {
                     + "say $a ;"
                     + "do { $a; if (1) { say 123 } elsif (3) { say 345 } else { say 456 } } ;"
                     + "print \"Finished; value is $a\\n\"; "
+                    + "my ($i, %j) = (1,2,3,4,5); "
+                    + "say(%j); "
                     + "return 5;";
 
             /*

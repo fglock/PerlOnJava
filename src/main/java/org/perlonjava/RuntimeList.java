@@ -32,11 +32,13 @@ public class RuntimeList implements ContextProvider {
         this.elements = value.entryArray().elements;
     }
 
+    // Add itself to a RuntimeList.
     public void addToList(RuntimeList list) {
       int size = this.size();
       for (int i = 0; i < size; i++) {
         list.add(this.elements.get(i));
       }
+      this.elements.clear();    // consume the list
     }
 
     // Add itself to a RuntimeArray.
@@ -45,6 +47,7 @@ public class RuntimeList implements ContextProvider {
       for (int i = 0; i < size; i++) {
         this.elements.get(i).addToArray(array);
       }
+      this.elements.clear();    // consume the list
     }
 
     // Add an element to the list
@@ -82,6 +85,27 @@ public class RuntimeList implements ContextProvider {
         }
         // XXX expand the last element
         return elements.get(elements.size() - 1).getScalar();
+    }
+
+    // Set the items in the list to the values in another list
+    public RuntimeList set(RuntimeList value) {
+        // flatten the right side
+        RuntimeArray arr = new RuntimeArray();  
+        value.addToArray(arr);
+        for (int i = 0; i < elements.size(); i++) {
+            AbstractRuntimeObject elem = this.elements.get(i);
+            if (elem instanceof Runtime) {
+                ((Runtime) elem).set(arr.shift());
+            } else if (elem instanceof RuntimeArray) {
+                ((RuntimeArray) elem).elements = arr.elements;
+                arr = new RuntimeArray();
+            } else if (elem instanceof RuntimeHash) {
+                RuntimeHash hash = RuntimeHash.fromArray(arr);
+                ((RuntimeHash) elem).elements = hash.elements;
+                arr = new RuntimeArray();
+            }
+        }
+        return new RuntimeList(value);
     }
 
     // Join the list into a string

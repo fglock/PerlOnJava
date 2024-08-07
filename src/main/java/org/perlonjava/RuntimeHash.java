@@ -11,7 +11,7 @@ import java.util.Set;
  * any type of Perl scalar value.
  */
 public class RuntimeHash extends AbstractRuntimeObject {
-    private Map<String, Runtime> elements;
+    public Map<String, Runtime> elements;
 
     // Constructor
     public RuntimeHash() {
@@ -135,8 +135,7 @@ public class RuntimeHash extends AbstractRuntimeObject {
     }
 
     // Convert the hash to a string (for debugging purposes)
-    @Override
-    public String toString() {
+    public String dump() {
         StringBuilder sb = new StringBuilder("{");
         boolean first = true;
         for (Map.Entry<String, Runtime> entry : elements.entrySet()) {
@@ -147,6 +146,16 @@ public class RuntimeHash extends AbstractRuntimeObject {
             sb.append(entry.getKey()).append(": ").append(entry.getValue().toString());
         }
         sb.append("}");
+        return sb.toString();
+    }
+
+    // Convert the hash to a string (for debugging purposes)
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, Runtime> entry : elements.entrySet()) {
+            sb.append(entry.getKey()).append(entry.getValue());
+        }
         return sb.toString();
     }
 }
