@@ -471,13 +471,6 @@ public class Parser {
     private Node parseInfix(Node left, int precedence) {
         Token token = consume();
 
-        if (isTernaryOperator(token.text)) {
-            Node middle = parseExpression(0);
-            consume(TokenType.OPERATOR, ":");
-            Node right = parseExpression(precedence);
-            return new TernaryOperatorNode(token.text, left, middle, right, tokenIndex);
-        }
-
         Node right;
         switch (token.text) {
             case "or":
@@ -515,6 +508,11 @@ public class Parser {
             case "...":
                 right = parseExpression(precedence);
                 return new BinaryOperatorNode(token.text, left, right, tokenIndex);
+            case "?":
+                Node middle = parseExpression(0);
+                consume(TokenType.OPERATOR, ":");
+                right = parseExpression(precedence);
+                return new TernaryOperatorNode(token.text, left, middle, right, tokenIndex);
             case "->":
                 String nextText = peek().text;
                 switch(nextText) {
@@ -664,10 +662,6 @@ public class Parser {
             default:
                 return false;
         }
-    }
-
-    private boolean isTernaryOperator(String s) {
-        return s.equals("?");
     }
 
     private List<Node> parseList(String close) {
