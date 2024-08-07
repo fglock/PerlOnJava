@@ -42,6 +42,7 @@ public class Main {
                     + "print \"Finished; value is $a\\n\"; "
                     + "my ($i, %j) = (1,2,3,4,5); "
                     + "say(%j); "
+                    + " my $a = {a => 'hash-value'} ; say $a->{a}; my $b = [4,5]; say $b->[1]; "
                     + "return 5;";
 
             /*

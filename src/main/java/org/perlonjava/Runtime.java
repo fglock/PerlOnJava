@@ -213,6 +213,14 @@ public class Runtime extends AbstractRuntimeObject {
     }
   }
 
+  public Runtime hashDerefGet(Runtime index) {
+    return ((RuntimeHash) value).get(index.toString());
+  }
+
+  public Runtime arrayDerefGet(Runtime index) {
+    return ((RuntimeArray) value).get((int) index.getLong());
+  }
+
   // Factory method to create a CODE object (anonymous subroutine)
   public static Runtime make_sub(Object codeObject) throws Exception {
     // finish setting up a CODE object
