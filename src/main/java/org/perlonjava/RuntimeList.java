@@ -33,7 +33,18 @@ public class RuntimeList implements ContextProvider {
     }
 
     public void addToList(RuntimeList list) {
-        list.add(this);
+      int size = this.size();
+      for (int i = 0; i < size; i++) {
+        list.add(this.elements.get(i));
+      }
+    }
+
+    // Add itself to a RuntimeArray.
+    public void addToArray(RuntimeArray array) {
+      int size = this.size();
+      for (int i = 0; i < size; i++) {
+        this.elements.get(i).addToArray(array);
+      }
     }
 
     // Add an element to the list

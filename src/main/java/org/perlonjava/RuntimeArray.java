@@ -26,6 +26,14 @@ public class RuntimeArray extends AbstractRuntimeObject {
         this.elements.add(value);
     }
 
+    // Add itself to a RuntimeArray.
+    public void addToArray(RuntimeArray array) {
+      int size = this.size();
+      for (int i = 0; i < size; i++) {
+          array.push(new Runtime((Runtime) this.elements.get(i)));
+      }
+    }
+
     // Add a value to the end of the array
     public void push(AbstractRuntimeObject value) {
         elements.add(value);
@@ -77,10 +85,7 @@ public class RuntimeArray extends AbstractRuntimeObject {
     // Replace the the whole array with the elements of a list
     public RuntimeList set(RuntimeList value) {
       this.elements.clear();
-      int size = value.size();
-      for (int i = 0; i < size; i++) {
-          this.elements.add(value.elements.get(i));
-      }
+      value.addToArray(this);
       return new RuntimeList(this);
     }
 
