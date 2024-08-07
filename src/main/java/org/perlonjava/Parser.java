@@ -233,7 +233,7 @@ public class Parser {
           switch (token.text) {
             case "(":
               // Handle parentheses to parse a nested expression or to construct a list
-              return parseList();
+              return parseList(")");
             case ".":
               // Handle fractional numbers
               return parseFractionalNumber();
@@ -481,7 +481,7 @@ public class Parser {
             case "->":
                 if (peek().text.equals("(")) {
                     consume();
-                    right = parseList();
+                    right = parseList(")");
                     return new BinaryOperatorNode(token.text, left, right, tokenIndex);
                 }
                 right = parseExpression(precedence);
@@ -615,16 +615,16 @@ public class Parser {
     }
 
     // Example of a method to parse a list
-    private Node parseList() {
+    private Node parseList(String close) {
         List<Node> elements = new ArrayList<>();
         // consume(TokenType.OPERATOR, "(");
-        while (!peek().text.equals(")")) {
+        while (!peek().text.equals(close)) {
             elements.add(parseExpression(getPrecedence(",") + 1));
             if (peek().text.equals(",")) {
                 consume();
             }
         }
-        consume(TokenType.OPERATOR, ")");
+        consume(TokenType.OPERATOR, close);
         return new ListNode(elements, tokenIndex);
     }
 

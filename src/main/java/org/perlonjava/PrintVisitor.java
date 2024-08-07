@@ -168,6 +168,28 @@ public class PrintVisitor implements Visitor {
         indentLevel--;
     }
 
+    @Override
+    public void visit(ArrayLiteralNode node) throws Exception {
+        appendIndent();
+        sb.append("ArrayLiteralNode:\n");
+        indentLevel++;
+        for (Node element : node.elements) {
+            element.accept(this);
+        }
+        indentLevel--;
+    }
+
+    @Override
+    public void visit(HashLiteralNode node) throws Exception {
+        appendIndent();
+        sb.append("HashLiteralNode:\n");
+        indentLevel++;
+        for (Node element : node.elements) {
+            element.accept(this);
+        }
+        indentLevel--;
+    }
+
     // Add other visit methods as needed
 }
 
