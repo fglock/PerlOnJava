@@ -57,7 +57,7 @@ public class Parser {
                     return parseForStatement();
             }
         }
-        if (token.type == TokenType.OPERATOR && token.text.equals("{")) { // bare-block
+        if (token.type == TokenType.OPERATOR && token.text.equals("{") && !isHashLiteral()) { // bare-block
             consume(TokenType.OPERATOR, "{");
             Node block = parseBlock();
             consume(TokenType.OPERATOR, "}");
@@ -72,6 +72,30 @@ public class Parser {
             consume();
         }
         return expression;
+    }
+
+    // disambiguate between Block or Hash literal
+    private boolean isHashLiteral() {
+        int index = tokenIndex + 1; // Start after the opening '{'
+        int braceCount = 1; // Track nested braces
+        while (braceCount > 0) {
+            Token token = tokens.get(index++);
+            if (token.type == TokenType.EOF) {
+                return false; // not a hash literal;
+            }
+            if (token.type == TokenType.OPERATOR) {
+                if (token.text.equals("{")) {
+                    braceCount++;
+                } else if (token.text.equals("}")) {
+                    braceCount--;
+                } else if (token.text.equals(",") || token.text.equals("=>")) {
+                    return true; // Likely a hash literal
+                } else if (token.text.equals(";")) {
+                    return false; // Likely a block
+                }
+            }
+        }
+        return false;
     }
 
     private Node parseAnonSub(Token token) {
@@ -234,10 +258,9 @@ public class Parser {
             case "(":
               // Handle parentheses to parse a nested expression or to construct a list
               return new ListNode(parseList(")"), tokenIndex);
-            // case "{":
-            //   // XXX TODO disambiguate with Block
-            //   // Handle curly brackets to parse a nested expression
-            //   return new HashLiteralNode(parseList("}"), tokenIndex);
+            case "{":
+              // Handle curly brackets to parse a nested expression
+              return new HashLiteralNode(parseList("}"), tokenIndex);
             case "[":
               // Handle square brackets to parse a nested expression
               return new ArrayLiteralNode(parseList("]"), tokenIndex);
@@ -503,6 +526,15 @@ public class Parser {
                 }
                 right = parseExpression(precedence);
                 return new BinaryOperatorNode(token.text, left, right, tokenIndex);
+            case "(":
+              right = new ListNode(parseList(")"), tokenIndex);
+              return new BinaryOperatorNode(token.text, left, right, tokenIndex);
+            case "{":
+              right = new HashLiteralNode(parseList("}"), tokenIndex);
+              return new BinaryOperatorNode(token.text, left, right, tokenIndex);
+            case "[":
+              right = new ArrayLiteralNode(parseList("]"), tokenIndex);
+              return new BinaryOperatorNode(token.text, left, right, tokenIndex);
             case "--":
             case "++":
                 return new PostfixOperatorNode(token.text, left, tokenIndex);
