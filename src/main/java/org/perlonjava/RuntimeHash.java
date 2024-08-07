@@ -10,7 +10,7 @@ import java.util.Set;
  * class tries to mimic this behavior using a map of string keys to Runtime objects, which can hold
  * any type of Perl scalar value.
  */
-public class RuntimeHash implements ContextProvider {
+public class RuntimeHash extends RuntimeObject {
     private Map<String, Runtime> elements;
 
     // Constructor
@@ -112,10 +112,6 @@ public class RuntimeHash implements ContextProvider {
     // Get the scalar value of the hash
     public Runtime getScalar() {
         return new Runtime(1);  // XXX check this
-    }
-
-    public void addToList(RuntimeList list) {
-        list.add(this.getList());
     }
 
     // Convert the hash to a string (for debugging purposes)

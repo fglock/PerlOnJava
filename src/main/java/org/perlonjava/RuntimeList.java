@@ -8,7 +8,7 @@ import java.util.List;
  *
  */
 public class RuntimeList implements ContextProvider {
-    public List<Runtime> elements;
+    public List<RuntimeObject> elements;
 
     // Constructor
     public RuntimeList() {
@@ -37,17 +37,11 @@ public class RuntimeList implements ContextProvider {
     }
 
     // Add an element to the list
-    public void add(Runtime value) {
-        this.elements.add(value);
+    public void add(RuntimeObject value) {
+      this.elements.add(value);
     }
 
-    public void add(RuntimeArray value) {
-      int size = value.size();
-      for (int i = 0; i < size; i++) {
-          this.elements.add(value.elements.get(i));
-      }
-    }
-
+    // When adding a List into a List they are merged
     public void add(RuntimeList value) {
       int size = value.size();
       for (int i = 0; i < size; i++) {
@@ -75,7 +69,8 @@ public class RuntimeList implements ContextProvider {
         if (elements.isEmpty()) {
             return new Runtime(); // Return undefined if empty
         }
-        return elements.get(elements.size() - 1);
+        // XXX expand the last element
+        return (Runtime) elements.get(elements.size() - 1);
     }
 
     // Join the list into a string
