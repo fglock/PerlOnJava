@@ -375,6 +375,13 @@ public class Runtime extends AbstractRuntimeObject {
   }
 
   // Methods that implement Perl operators
+  public Runtime createReference() {
+    Runtime result = new Runtime();
+    result.type = Type.REFERENCE;
+    result.value = this;
+    return result;
+  }
+
   public static Runtime undef() {
     return new Runtime();
   }
