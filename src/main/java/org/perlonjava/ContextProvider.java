@@ -41,5 +41,13 @@ public interface ContextProvider {
      * @return void.
      */
     void addToList(RuntimeList list);
+
+    /**
+     * Set itself to a RuntimeList.
+     * 
+     * @param list The RuntimeList object
+     * @return list
+     */
+    RuntimeList set(RuntimeList list);
 }
 
