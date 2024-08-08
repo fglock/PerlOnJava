@@ -21,6 +21,7 @@
 - `goto()`
 - Thread
 - Optimizations
+- implement subroutine using JVM Function instead of Method
 
 ## After the basics are implemented - next set of basic features:
 - Blessed objects
