@@ -9,6 +9,5 @@ public abstract class AbstractRuntimeObject implements ContextProvider {
   public void addToList(RuntimeList list) {
       list.add(this);
   }
-
 }
 

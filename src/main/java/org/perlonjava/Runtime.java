@@ -185,8 +185,8 @@ public class Runtime extends AbstractRuntimeObject {
     return this;
   }
 
-  public Runtime set(RuntimeList value) {
-    return this.set(value.getScalar());
+  public RuntimeList set(RuntimeList value) {
+    return new RuntimeList(this.set(value.getScalar()));
   }
 
   @Override

@@ -530,36 +530,30 @@ public class EmitterVisitor implements Visitor {
   private void handleSetOperator(BinaryOperatorNode node) throws Exception {
     ctx.logDebug("SET " + node);
 
-    // XXX TODO use node.left.getLvalueContext()
-    ctx.logDebug("SET Lvalue context: " + LValueVisitor.getContext(node) + " XXX");
+    if (node.left instanceof UnaryOperatorNode) { // $x @x %x my substr
 
-    if (node.left instanceof UnaryOperatorNode) { // $x @x %x my
+        // left hand side is a plain variable, or a `my` followed by a plain variable
 
-      // left hand side is a plain variable, or a `my` followed by a plain variable
+        // inspect the AST and get the L-value context: SCALAR or LIST
+        ContextType lvalueContext = LValueVisitor.getContext(node);
+        ctx.logDebug("SET Lvalue context: " + lvalueContext);
 
-      UnaryOperatorNode leftNode = (UnaryOperatorNode) node.left;
-      String sigil = leftNode.operator;
-      ctx.logDebug("SET sigil " + sigil);
-
-      if (sigil.equals("my")) { // my $a = 123
-        UnaryOperatorNode myNode = leftNode;  // my $a
-        ctx.logDebug("SET my.node " + myNode);
-        if (myNode.operand instanceof UnaryOperatorNode) {
-          sigil = ((UnaryOperatorNode) myNode.operand).operator;
-        }
-        ctx.logDebug("SET my.sigil " + sigil);
-      }
-      if (Parser.isSigil(sigil)) {
+        UnaryOperatorNode leftNode = (UnaryOperatorNode) node.left;
 
         // Execute the right side first
         // Determine the assign type based on the left side sigil
-        switch (sigil) {
-          case "$":
+        switch (lvalueContext) {
+          case ContextType.SCALAR:
               ctx.logDebug("SET right side scalar");
               node.right.accept(this.with(ContextType.SCALAR));   // emit the value 
+
+              ctx.logDebug("SET scalar");
+              leftNode.accept(this.with(ContextType.SCALAR));   // emit the variable
+              ctx.mv.visitInsn(Opcodes.SWAP); // move the target first
+              ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "set", "(LRuntime;)LRuntime;", false);
+
               break;
-          case "%":
-          case "@":
+          case ContextType.LIST:
               ctx.logDebug("SET right side list");
               Node nodeRight = node.right;
               // make sure the right node is a ListNode
@@ -569,41 +563,20 @@ public class EmitterVisitor implements Visitor {
                   nodeRight = new ListNode(elements, node.tokenIndex);
               }
               nodeRight.accept(this.with(ContextType.LIST));   // emit the value
-              break;
-          default:
-              throw new IllegalArgumentException("Unsupported sigil: " + sigil);
-        }
 
-        // Determine the assign type based on the sigil
-        switch (sigil) {
-          case "$":
-              ctx.logDebug("SET scalar");
-              leftNode.accept(this.with(ContextType.SCALAR));   // emit the variable
-              ctx.mv.visitInsn(Opcodes.SWAP); // move the target first
-              ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "set", "(LRuntime;)LRuntime;", false);
-              break;
-          case "@":
-              ctx.logDebug("SET array");
+              ctx.logDebug("SET array or hash to list");
               leftNode.accept(this.with(ContextType.LIST));   // emit the variable
               ctx.mv.visitInsn(Opcodes.SWAP); // move the target first
-              ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeArray", "set", "(LRuntimeList;)LRuntimeList;", false);
+              ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "set", "(LRuntimeList;)LRuntimeList;", true);
+
               if (ctx.contextType == ContextType.SCALAR) {
                 // Transform the value in the stack to Scalar
                 ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", "getScalar", "()LRuntime;", false);
               }
-              break;
-          case "%":
-              ctx.logDebug("SET hash");
-              leftNode.accept(this.with(ContextType.LIST));   // emit the variable
-              ctx.mv.visitInsn(Opcodes.SWAP); // move the target first
-              ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeHash", "set", "(LRuntimeList;)LRuntimeList;", false);
-              if (ctx.contextType == ContextType.SCALAR) {
-                // Transform the value in the stack to Scalar
-                ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", "getScalar", "()LRuntime;", false);
-              }
+            
               break;
           default:
-              throw new IllegalArgumentException("Unsupported sigil: " + sigil);
+              throw new IllegalArgumentException("Unsupported assignment context: " + lvalueContext);
         }
 
         if (ctx.contextType == ContextType.VOID) {
@@ -613,7 +586,6 @@ public class EmitterVisitor implements Visitor {
 
         ctx.logDebug("SET end");
         return;
-      }
     }
     // left hand side is not a plain variable, or a `my` followed by a plain variable
     // we assume the left side is a list, or a `my` followed by a list
