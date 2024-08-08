@@ -36,6 +36,21 @@ public class BinaryOperatorNode extends AbstractNode {
         this.tokenIndex = tokenIndex;
     }
 
+    @Override
+    public ContextType getLvalueContext() {
+        switch (operator) {
+            case "@":
+            case "%":
+                return ContextType.LIST;
+            case "$":
+            case "[":
+            case "{":
+                return ContextType.SCALAR;
+            default:
+                return ContextType.VOID;  // Not an L-value
+        }
+    }
+
     /**
      * Accepts a visitor that performs some operation on this node.
      * This method is part of the Visitor design pattern, which allows
