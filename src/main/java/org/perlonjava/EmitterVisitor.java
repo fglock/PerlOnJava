@@ -655,7 +655,7 @@ public class EmitterVisitor implements Visitor {
       // The string is evaluated outside of the try-catch block.
       node.operand.accept(this.with(ContextType.SCALAR));
 
-      int skipVariables = 3; // skip (this, @_, wantarray)
+      int skipVariables = ASMMethodCreator.skipVariables; // skip (this, @_, wantarray)
 
       MethodVisitor mv = ctx.mv;
 
@@ -691,9 +691,10 @@ public class EmitterVisitor implements Visitor {
         mv.visitIntInsn(Opcodes.BIPUSH, i); // Push the index
         // Stack: [Class, Class[], Class[], int]
 
-        // XXX select Array/Hash/Scalar depending on env value
+        // select Array/Hash/Scalar depending on env value
+        String descriptor = ASMMethodCreator.getVariableDescriptor(newEnv[i + skipVariables]);
 
-        mv.visitLdcInsn(Type.getType("LRuntime;")); // Push the Class object for Runtime
+        mv.visitLdcInsn(Type.getType(descriptor)); // Push the Class object for Runtime
         // Stack: [Class, Class[], Class[], int, Class]
 
         mv.visitInsn(Opcodes.AASTORE); // Store the Class object in the array
@@ -828,7 +829,7 @@ public class EmitterVisitor implements Visitor {
      *  Runtime.new(applyMethod);
      */
 
-    int skipVariables = 3; // skip (this, @_, wantarray)
+    int skipVariables = ASMMethodCreator.skipVariables; // skip (this, @_, wantarray)
 
     // 1. Get the class from RuntimeCode.anonSubs
     ctx.mv.visitFieldInsn(Opcodes.GETSTATIC, "RuntimeCode", "anonSubs", "Ljava/util/HashMap;");
@@ -852,9 +853,10 @@ public class EmitterVisitor implements Visitor {
       ctx.mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
       ctx.mv.visitIntInsn(Opcodes.BIPUSH, i); // Push the index
 
-      // XXX select Array/Hash/Scalar depending on env value
+      // select Array/Hash/Scalar depending on env value
+      String descriptor = ASMMethodCreator.getVariableDescriptor(newEnv[i + skipVariables]);
 
-      ctx.mv.visitLdcInsn(Type.getType("LRuntime;")); // Push the Class object for Runtime
+      ctx.mv.visitLdcInsn(Type.getType(descriptor)); // Push the Class object for Runtime
       ctx.mv.visitInsn(Opcodes.AASTORE); // Store the Class object in the array
     }
     ctx.mv.visitMethodInsn(
