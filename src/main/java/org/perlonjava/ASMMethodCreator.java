@@ -27,17 +27,49 @@ public class ASMMethodCreator implements Opcodes {
    * @return A descriptor string representing the type of the Perl variable.
    */
   public static String getVariableDescriptor(String varName) {
-      // Check if the variable name starts with '%', indicating a hash variable
-      if (varName.startsWith("%")) {
-          return "LRuntimeHash;";
-      } 
-      // Check if the variable name starts with '@', indicating an array variable
-      else if (varName.startsWith("@")) {
-          return "LRuntimeArray;";
-      } 
-      // For all other cases (e.g., scalar variables starting with '$'), return a generic descriptor
-      else {
-          return "LRuntime;";
+      // Ensure the variable name is not empty
+      if (varName == null || varName.isEmpty()) {
+          throw new IllegalArgumentException("Variable name cannot be null or empty");
+      }
+  
+      // Extract the first character of the variable name
+      char firstChar = varName.charAt(0);
+  
+      // Use a switch statement to determine the descriptor based on the first character
+      switch (firstChar) {
+          case '%':
+              return "LRuntimeHash;";
+          case '@':
+              return "LRuntimeArray;";
+          default:
+              return "LRuntime;";
+      }
+  }
+  
+  /**
+   * Generates a class name based on the prefix of a Perl variable name.
+   * 
+   * @param varName The Perl variable name, which typically starts with a special character
+   *                indicating its type (e.g., '%', '@', or '$').
+   * @return A class name string representing the type of the Perl variable.
+   */
+  public static String getVariableClassName(String varName) {
+      // Ensure the variable name is not empty
+      if (varName == null || varName.isEmpty()) {
+          throw new IllegalArgumentException("Variable name cannot be null or empty");
+      }
+  
+      // Extract the first character of the variable name
+      char firstChar = varName.charAt(0);
+  
+      // Use a switch statement to determine the class name based on the first character
+      switch (firstChar) {
+          case '%':
+              return "RuntimeHash";
+          case '@':
+              return "RuntimeArray";
+          default:
+              return "Runtime";
       }
   }
 
