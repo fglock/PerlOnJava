@@ -589,6 +589,10 @@ public class EmitterVisitor implements Visitor {
           }
           // Store in a JVM local variable
           ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+          if (ctx.contextType == ContextType.SCALAR && !sigil.equals("$")) {
+            // scalar context: transform the value in the stack to scalar
+            ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "getScalar", "()LRuntime;", true);
+          }
           return;
         }
       }
