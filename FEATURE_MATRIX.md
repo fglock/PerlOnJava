@@ -44,6 +44,7 @@
 - [x] return from inside a block
 - [x] assigning to a closure variable mutates the variable in the original context
 - [ ] `@_` contains aliases to the caller variables
+- [ ] Inline "constant" subroutines
 
 ## Regular Expressions
 - [ ] Basic Matching
