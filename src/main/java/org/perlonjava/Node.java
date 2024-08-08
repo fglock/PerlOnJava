@@ -33,5 +33,12 @@ public interface Node {
      * @param index the index to set
      */
     void setIndex(int index);
+
+    /**
+     * Is this Node assignable (Lvalue) and is it Scalar-like or List-like
+     *
+     * @return a ContextType.SCALAR, LIST, or VOID (not assignable)
+     */
+    public ContextType getLvalueContext();
 }
 

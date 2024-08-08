@@ -18,6 +18,10 @@ public abstract class AbstractNode implements Node {
         this.tokenIndex = tokenIndex;
     }
 
+    public ContextType getLvalueContext() {
+        return ContextType.VOID;    // not an Lvalue
+    }
+
     /**
      * Returns a string representation of the syntax tree.
      * The string representation includes the type and text of the syntax tree.
