@@ -529,88 +529,44 @@ public class EmitterVisitor implements Visitor {
 
   private void handleSetOperator(BinaryOperatorNode node) throws Exception {
     ctx.logDebug("SET " + node);
-
-    if (node.left instanceof UnaryOperatorNode) { // $x @x %x my substr
-
-        // left hand side is a plain variable, or a `my` followed by a plain variable
-
-        // inspect the AST and get the L-value context: SCALAR or LIST
-        ContextType lvalueContext = LValueVisitor.getContext(node);
-        ctx.logDebug("SET Lvalue context: " + lvalueContext);
-
-        // Execute the right side first
-        // Determine the assign type based on the left side sigil
-        switch (lvalueContext) {
-          case ContextType.SCALAR:
-              ctx.logDebug("SET right side scalar");
-              node.right.accept(this.with(ContextType.SCALAR));   // emit the value 
-              node.left.accept(this.with(ContextType.SCALAR));   // emit the variable
-              ctx.mv.visitInsn(Opcodes.SWAP); // move the target first
-              ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "set", "(LRuntime;)LRuntime;", false);
-              break;
-          case ContextType.LIST:
-              ctx.logDebug("SET right side list");
-              Node nodeRight = node.right;
-              // make sure the right node is a ListNode
-              if (!(nodeRight instanceof ListNode)) {
-                  List<Node> elements = new ArrayList<>();
-                  elements.add(nodeRight);
-                  nodeRight = new ListNode(elements, node.tokenIndex);
-              }
-              nodeRight.accept(this.with(ContextType.LIST));   // emit the value
-
-              ctx.logDebug("SET array or hash to list");
-              node.left.accept(this.with(ContextType.LIST));   // emit the variable
-              ctx.mv.visitInsn(Opcodes.SWAP); // move the target first
-              ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "set", "(LRuntimeList;)LRuntimeList;", true);
-
-              if (ctx.contextType == ContextType.SCALAR) {
-                // Transform the value in the stack to Scalar
-                ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", "getScalar", "()LRuntime;", false);
-              }
-            
-              break;
-          default:
-              throw new IllegalArgumentException("Unsupported assignment context: " + lvalueContext);
-        }
-
-        if (ctx.contextType == ContextType.VOID) {
-          // Remove the value from the stack
-          ctx.mv.visitInsn(Opcodes.POP);
-        }
-
-        ctx.logDebug("SET end");
-        return;
+    // Determine the assign type based on the left side.
+    // Inspect the AST and get the L-value context: SCALAR or LIST
+    ContextType lvalueContext = LValueVisitor.getContext(node);
+    ctx.logDebug("SET Lvalue context: " + lvalueContext);
+    // Execute the right side first: assignment is right-associative
+    switch (lvalueContext) {
+      case ContextType.SCALAR:
+          ctx.logDebug("SET right side scalar");
+          node.right.accept(this.with(ContextType.SCALAR));   // emit the value 
+          node.left.accept(this.with(ContextType.SCALAR));   // emit the variable
+          ctx.mv.visitInsn(Opcodes.SWAP); // move the target first
+          ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "set", "(LRuntime;)LRuntime;", false);
+          break;
+      case ContextType.LIST:
+          ctx.logDebug("SET right side list");
+          Node nodeRight = node.right;
+          // make sure the right node is a ListNode
+          if (!(nodeRight instanceof ListNode)) {
+              List<Node> elements = new ArrayList<>();
+              elements.add(nodeRight);
+              nodeRight = new ListNode(elements, node.tokenIndex);
+          }
+          nodeRight.accept(this.with(ContextType.LIST));   // emit the value
+          node.left.accept(this.with(ContextType.LIST));   // emit the variable
+          ctx.mv.visitInsn(Opcodes.SWAP); // move the target first
+          ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "set", "(LRuntimeList;)LRuntimeList;", true);
+          if (ctx.contextType == ContextType.SCALAR) {
+            // Transform the value in the stack to Scalar
+            ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", "getScalar", "()LRuntime;", false);
+          }
+          break;
+      default:
+          throw new IllegalArgumentException("Unsupported assignment context: " + lvalueContext);
     }
-    // left hand side is not a plain variable, or a `my` followed by a plain variable
-    // we assume the left side is a list, or a `my` followed by a list
-
-    // ($a, $b) = ...
-
-    ctx.logDebug("SET right side list");
-    Node nodeRight = node.right;
-    // make sure the right node is a ListNode
-    if (!(nodeRight instanceof ListNode)) {
-        List<Node> elements = new ArrayList<>();
-        elements.add(nodeRight);
-        nodeRight = new ListNode(elements, node.tokenIndex);
-    }
-    nodeRight.accept(this.with(ContextType.LIST));   // emit the value
-
-    ctx.logDebug("SET list");
-    node.left.accept(this.with(ContextType.LIST));   // emit the variable
-    ctx.mv.visitInsn(Opcodes.SWAP); // move the target first
-    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", "set", "(LRuntimeList;)LRuntimeList;", false);
-    if (ctx.contextType == ContextType.SCALAR) {
-      // Transform the value in the stack to Scalar
-      ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", "getScalar", "()LRuntime;", false);
-    }
-
     if (ctx.contextType == ContextType.VOID) {
       // Remove the value from the stack
       ctx.mv.visitInsn(Opcodes.POP);
     }
-
     ctx.logDebug("SET end");
     return;
   }
