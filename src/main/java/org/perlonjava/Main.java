@@ -35,7 +35,7 @@ public class Main {
                     + "say $a ;"
                     + " say ( sub { say @_ } ) ;"    // anon sub
                     + " ( sub { say 'HERE' } )->(88888) ;"    // anon sub
-            // XXX  + " ( sub { say @_ } )->(88888) ;"    // anon sub
+                    + " ( sub { say @_ } )->(88888) ;"    // anon sub
                     + "eval ' $a = $a + 1 '; "    // eval string
                     + "say $a ;"
                     + "do { $a; if (1) { say 123 } elsif (3) { say 345 } else { say 456 } } ;"

@@ -336,13 +336,9 @@ public class EmitterVisitor implements Visitor {
 
   private void handleSayOperator(UnaryOperatorNode node, String operator) throws Exception {
     node.operand.accept(this.with(ContextType.LIST));
-    if (node.operand instanceof ListNode) {
-      ctx.logDebug("SAY LIST " + operator);
-      ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", operator, "()LRuntime;", false);
-    } else {
-      ctx.logDebug("SAY SCALAR " + operator);
-      ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", operator, "()LRuntime;", false);
-    }
+    // Transform the value in the stack to List
+    ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "getList", "()LRuntimeList;", true);
+    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", operator, "()LRuntime;", false);
     if (ctx.contextType == ContextType.VOID) {
       ctx.mv.visitInsn(Opcodes.POP);
     }
