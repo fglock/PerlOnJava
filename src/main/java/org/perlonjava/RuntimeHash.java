@@ -45,11 +45,13 @@ public class RuntimeHash extends AbstractRuntimeObject {
 
     // Get a value by key
     public Runtime get(String key) {
+        // XXX TODO autovivification
         return elements.getOrDefault(key, new Runtime()); // Return undefined if key is not present
     }
 
     // Get a value by key
     public Runtime get(Runtime key) {
+        // XXX TODO autovivification
         return elements.getOrDefault(key, new Runtime()); // Return undefined if key is not present
     }
 

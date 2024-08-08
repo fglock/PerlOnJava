@@ -70,6 +70,7 @@ public class RuntimeArray extends AbstractRuntimeObject {
             index = elements.size() + index; // Handle negative indices
         }
         if (index < 0 || index >= elements.size()) {
+            // XXX TODO autovivification
             return new Runtime(); // Return undefined if out of bounds
         }
         return (Runtime) elements.get(index);
