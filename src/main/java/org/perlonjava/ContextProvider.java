@@ -13,6 +13,7 @@ public interface ContextProvider {
 
     /**
      * Retrieves a RuntimeList instance.
+     * This is always called at the end of a subroutine to transform the return value to RuntimeList
      * 
      * @return a RuntimeList object.
      */
