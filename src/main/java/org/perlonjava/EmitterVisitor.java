@@ -691,6 +691,8 @@ public class EmitterVisitor implements Visitor {
         mv.visitIntInsn(Opcodes.BIPUSH, i); // Push the index
         // Stack: [Class, Class[], Class[], int]
 
+        // XXX select Array/Hash/Scalar depending on env value
+
         mv.visitLdcInsn(Type.getType("LRuntime;")); // Push the Class object for Runtime
         // Stack: [Class, Class[], Class[], int, Class]
 
@@ -849,6 +851,9 @@ public class EmitterVisitor implements Visitor {
     for (int i = 0; i < newEnv.length - skipVariables; i++) {
       ctx.mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
       ctx.mv.visitIntInsn(Opcodes.BIPUSH, i); // Push the index
+
+      // XXX select Array/Hash/Scalar depending on env value
+
       ctx.mv.visitLdcInsn(Type.getType("LRuntime;")); // Push the Class object for Runtime
       ctx.mv.visitInsn(Opcodes.AASTORE); // Store the Class object in the array
     }
