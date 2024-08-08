@@ -314,8 +314,8 @@ public class EmitterVisitor implements Visitor {
     EmitterVisitor scalarVisitor =
         this.with(ContextType.SCALAR); // execute operands in scalar context
 
-    node.left.accept(scalarVisitor); // target - left parameter
-    node.right.accept(scalarVisitor); // right parameter
+    node.left.accept(scalarVisitor); // target - left parameter: Code ref
+    node.right.accept(this.with(ContextType.LIST)); // right parameter: parameter list
 
     // Transform the value in the stack to RuntimeArray
     ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "getArray", "()LRuntimeArray;", true);
