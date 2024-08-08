@@ -234,7 +234,7 @@ public class EmitterVisitor implements Visitor {
           ctx.logDebug("visit(BinaryOperatorNode) $var[] ");
           varNode.accept(this.with(ContextType.LIST)); // target - left parameter
 
-          // emit the [x] as a RuntimeList
+          // emit the [0] as a RuntimeList
           ListNode nodeRight = ((ArrayLiteralNode) node.right).asListNode();
           nodeRight.accept(scalarVisitor);
 
