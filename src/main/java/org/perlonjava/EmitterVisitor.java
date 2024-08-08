@@ -117,16 +117,15 @@ public class EmitterVisitor implements Visitor {
       case "->":
         handleArrowOperator(node);
         return;
-      // XXX TODO
-      // case "[":
-      //   handleArrayElementOperator(node);
-      //   return;
-      // case "{":
-      //   handleHashElementOperator(node);
-      //   return;
-      // case "(":
-      //   handleApplyOperator(node);
-      //   return;
+      case "[":
+        handleArrayElementOperator(node);
+        return;
+      case "{":
+        handleHashElementOperator(node);
+        return;
+      case "(":
+        handleApplyOperator(node);
+        return;
     }
 
     node.left.accept(scalarVisitor); // target - left parameter
@@ -207,6 +206,55 @@ public class EmitterVisitor implements Visitor {
     }
   }
 
+  /** Handles the postfix `[]` operator. */
+  private void handleArrayElementOperator(BinaryOperatorNode node) throws Exception {
+    ctx.logDebug("handleArrayElementOperator " + node + " in context " + ctx.contextType);
+    EmitterVisitor scalarVisitor =
+        this.with(ContextType.SCALAR); // execute operands in scalar context
+
+    throw new PerlCompilerException(node.tokenIndex, "Not implemented: " + node, ctx.errorUtil);
+  }
+
+  /** Handles the postfix `{}` node. */
+  private void handleHashElementOperator(BinaryOperatorNode node) throws Exception {
+    ctx.logDebug("handleHashElementOperator " + node + " in context " + ctx.contextType);
+    EmitterVisitor scalarVisitor =
+        this.with(ContextType.SCALAR); // execute operands in scalar context
+
+    throw new PerlCompilerException(node.tokenIndex, "Not implemented: " + node, ctx.errorUtil);
+  }
+
+  /** Handles the postfix `()` node. */
+  private void handleApplyOperator(BinaryOperatorNode node) throws Exception {
+    ctx.logDebug("handleApplyElementOperator " + node + " in context " + ctx.contextType);
+    EmitterVisitor scalarVisitor =
+        this.with(ContextType.SCALAR); // execute operands in scalar context
+
+    node.left.accept(scalarVisitor); // target - left parameter
+    node.right.accept(scalarVisitor); // right parameter
+
+    // Transform the value in the stack to RuntimeArray
+    ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "getArray", "()LRuntimeArray;", true);
+    ctx.mv.visitFieldInsn(
+        Opcodes.GETSTATIC,
+        "ContextType",
+        ctx.contextType.toString(),
+        "LContextType;"); // call context
+    ctx.mv.visitMethodInsn(
+        Opcodes.INVOKEVIRTUAL,
+        "Runtime",
+        "apply",
+        "(LRuntimeArray;LContextType;)LRuntimeList;",
+        false); // generate an .apply() call
+    if (ctx.contextType == ContextType.SCALAR) {
+      // Transform the value in the stack to Runtime
+      ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", "getScalar", "()LRuntime;", false);
+    } else if (ctx.contextType == ContextType.VOID) {
+      // Remove the value from the stack
+      ctx.mv.visitInsn(Opcodes.POP);
+    }
+  }
+
   /** Handles the `->` operator. */
   private void handleArrowOperator(BinaryOperatorNode node) throws Exception {
     ctx.logDebug("handleArrowOperator " + node + " in context " + ctx.contextType);
@@ -215,30 +263,10 @@ public class EmitterVisitor implements Visitor {
 
     if (node.right instanceof ListNode) { // ->()
 
-      ctx.logDebug("visit(BinaryOperatorNode) ->() ");
-      node.left.accept(scalarVisitor); // target - left parameter
-      node.right.accept(scalarVisitor); // right parameter
+      BinaryOperatorNode applyNode = new BinaryOperatorNode("(", node.left, node.right, node.tokenIndex);
+      applyNode.accept(this);
+      return;
 
-      // Transform the value in the stack to RuntimeArray
-      ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "getArray", "()LRuntimeArray;", true);
-      ctx.mv.visitFieldInsn(
-          Opcodes.GETSTATIC,
-          "ContextType",
-          ctx.contextType.toString(),
-          "LContextType;"); // call context
-      ctx.mv.visitMethodInsn(
-          Opcodes.INVOKEVIRTUAL,
-          "Runtime",
-          "apply",
-          "(LRuntimeArray;LContextType;)LRuntimeList;",
-          false); // generate an .apply() call
-      if (ctx.contextType == ContextType.SCALAR) {
-        // Transform the value in the stack to Runtime
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeList", "getScalar", "()LRuntime;", false);
-      } else if (ctx.contextType == ContextType.VOID) {
-        // Remove the value from the stack
-        ctx.mv.visitInsn(Opcodes.POP);
-      }
     } else if (node.right instanceof ArrayLiteralNode) { // ->[0]
       ctx.logDebug("visit(BinaryOperatorNode) ->[] ");
       node.left.accept(scalarVisitor); // target - left parameter

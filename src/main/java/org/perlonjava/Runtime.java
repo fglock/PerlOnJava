@@ -219,7 +219,7 @@ public class Runtime extends AbstractRuntimeObject {
         // hash autovivification
         type = ScalarType.HASHREFERENCE;
         value = new RuntimeHash();
-      case CODE:
+      case HASHREFERENCE:
         return ((RuntimeHash) value).get(index.toString());
       default:
         throw new IllegalStateException("Variable does not contain a hash reference");
@@ -232,7 +232,7 @@ public class Runtime extends AbstractRuntimeObject {
         // array autovivification
         type = ScalarType.ARRAYREFERENCE;
         value = new RuntimeArray();
-      case CODE:
+      case ARRAYREFERENCE:
         return ((RuntimeArray) value).get((int) index.getLong());
       default:
         throw new IllegalStateException("Variable does not contain an array reference");
