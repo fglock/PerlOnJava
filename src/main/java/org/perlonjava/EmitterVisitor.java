@@ -1247,10 +1247,7 @@ public class EmitterVisitor implements Visitor {
     ListNode listNode = new ListNode(node.elements, node.tokenIndex);
     listNode.accept(this.with(ContextType.LIST));
 
-    // call RuntimeHash.set(RuntimeList)
-    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeHash", "set", "(LRuntimeList;)LRuntimeHash;", false);
-
-    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeHash", "createReference", "()LRuntime;", false);
+    mv.visitMethodInsn(Opcodes.INVOKESTATIC, "RuntimeHash", "createHashRef", "(LRuntimeList;)LRuntime;", false);
 
     if (ctx.contextType == ContextType.VOID) {
       mv.visitInsn(Opcodes.POP);
