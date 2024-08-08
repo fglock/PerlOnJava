@@ -214,11 +214,29 @@ public class Runtime extends AbstractRuntimeObject {
   }
 
   public Runtime hashDerefGet(Runtime index) {
-    return ((RuntimeHash) value).get(index.toString());
+    switch (type) {
+      case UNDEF:
+        // hash autovivification
+        type = ScalarType.HASHREFERENCE;
+        value = new RuntimeHash();
+      case CODE:
+        return ((RuntimeHash) value).get(index.toString());
+      default:
+        throw new IllegalStateException("Variable does not contain a hash reference");
+    }
   }
 
   public Runtime arrayDerefGet(Runtime index) {
-    return ((RuntimeArray) value).get((int) index.getLong());
+    switch (type) {
+      case UNDEF:
+        // array autovivification
+        type = ScalarType.ARRAYREFERENCE;
+        value = new RuntimeArray();
+      case CODE:
+        return ((RuntimeArray) value).get((int) index.getLong());
+      default:
+        throw new IllegalStateException("Variable does not contain an array reference");
+    }
   }
 
   // Factory method to create a CODE object (anonymous subroutine)
