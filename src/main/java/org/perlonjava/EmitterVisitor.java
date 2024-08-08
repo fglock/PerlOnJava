@@ -356,15 +356,18 @@ public class EmitterVisitor implements Visitor {
   }
 
   private void handleVariableOperator(UnaryOperatorNode node, String operator) throws Exception {
+    if (ctx.contextType == ContextType.VOID) {
+      return;
+    }
     String sigil = operator;
     if (node.operand instanceof IdentifierNode) { // $a @a %a
       String var = sigil + ((IdentifierNode) node.operand).name;
       ctx.logDebug("GETVAR " + var);
       int varIndex = ctx.symbolTable.getVariableIndex(var);
       if (varIndex == -1) {
-
+        // not a declared `my` or `our` variable
         if (Runtime.existsGlobalVariable(var)) {
-          if (ctx.contextType != ContextType.VOID) {
+            // fetch a global variable
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
@@ -372,19 +375,22 @@ public class EmitterVisitor implements Visitor {
                 "getGlobalVariable",
                 "(Ljava/lang/String;)LRuntime;",
                 false);
-          }
-          return;
-        }
-
-        System.out.println(
+        } else {
+          // variable not found
+          System.out.println(
             "Warning: Global symbol \""
                 + var
                 + "\" requires explicit package name (did you forget to declare \"my "
                 + var
                 + "\"?)");
-      }
-      if (ctx.contextType != ContextType.VOID) {
+        }
+      } else {
+        // retrieve the `my` or `our` variable from local vars
         ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
+      }
+      if (ctx.contextType == ContextType.SCALAR && !sigil.equals("$")) {
+        // scalar context: transform the value in the stack to scalar
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "getScalar", "()LRuntime;", true);
       }
       ctx.logDebug("GETVAR end " + varIndex);
       return;
