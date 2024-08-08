@@ -78,7 +78,7 @@
 ## Namespaces and global variables
 - [x] Global variable infrastructure
 - [ ] Global variables
-- [x] `@_` and `$@` special variables
+- [x] `@_` and `$@` special variables; `$_[0]` parameter variable
 - [ ] `$_` special variable
 - [ ] `@_`, `$_` and regex variables like `$1` are thread-safe
 
