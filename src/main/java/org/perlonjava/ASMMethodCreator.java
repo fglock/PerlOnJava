@@ -17,6 +17,28 @@ public class ASMMethodCreator implements Opcodes {
   }
 
   /**
+   * Generates a descriptor string based on the prefix of a Perl variable name.
+   * 
+   * @param varName The Perl variable name, which typically starts with a special character
+   *                indicating its type (e.g., '%', '@', or '$').
+   * @return A descriptor string representing the type of the Perl variable.
+   */
+  public static String getVariableDescriptor(String varName) {
+      // Check if the variable name starts with '%', indicating a hash variable
+      if (varName.startsWith("%")) {
+          return "LRuntimeHash;";
+      } 
+      // Check if the variable name starts with '@', indicating an array variable
+      else if (varName.startsWith("@")) {
+          return "LRuntimeArray;";
+      } 
+      // For all other cases (e.g., scalar variables starting with '$'), return a generic descriptor
+      else {
+          return "LRuntime;";
+      }
+  }
+
+  /**
    * Creates a new class with a method based on the provided context, environment, and abstract
    * syntax tree (AST).
    *
@@ -50,31 +72,16 @@ public class ASMMethodCreator implements Opcodes {
 
     // Add instance fields to the class for closure variables
     for (String fieldName : env) {
-      if (fieldName.startsWith("%")) {
-        ctx.logDebug("Create instance field: hash  " + fieldName);
-        cw.visitField(Opcodes.ACC_PUBLIC, fieldName, "LRuntimeHash;", null, null).visitEnd();
-      } else if (fieldName.startsWith("@")) {
-        ctx.logDebug("Create instance field: array  " + fieldName);
-        cw.visitField(Opcodes.ACC_PUBLIC, fieldName, "LRuntimeArray;", null, null).visitEnd();
-      } else {
-        ctx.logDebug("Create instance field: scalar " + fieldName);
-        cw.visitField(Opcodes.ACC_PUBLIC, fieldName, "LRuntime;", null, null).visitEnd();
-      }
+      String descriptor = getVariableDescriptor(fieldName);
+      ctx.logDebug("Create instance field: " + descriptor);
+      cw.visitField(Opcodes.ACC_PUBLIC, fieldName, descriptor, null, null).visitEnd();
     }
 
     // Add a constructor with parameters for initializing the fields
     StringBuilder constructorDescriptor = new StringBuilder("(");
     for (int i = 3; i < env.length; i++) {
-      String fieldName = env[i];
-
-      if (fieldName.startsWith("%")) {
-        constructorDescriptor.append("LRuntimeHash;");
-      } else if (fieldName.startsWith("@")) {
-        constructorDescriptor.append("LRuntimeArray;");
-      } else {
-        constructorDescriptor.append("LRuntime;");
-      }
-
+      String descriptor = getVariableDescriptor(env[i]);
+      constructorDescriptor.append(descriptor);
     }
     constructorDescriptor.append(")V");
     ctx.logDebug("constructorDescriptor: " + constructorDescriptor.toString());
@@ -117,20 +124,10 @@ public class ASMMethodCreator implements Opcodes {
     // Skip indices 0 to 2 because they are reserved for special arguments (this, "@_" and call
     // context)
     for (int i = 3; i < env.length; i++) {
-      String fieldName = env[i];
+      String descriptor = getVariableDescriptor(env[i]);
       mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
-
-      if (fieldName.startsWith("%")) {
-        ctx.logDebug("Init closure variable: hash  " + fieldName);
-        mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassName, env[i], "LRuntimeHash;");
-      } else if (fieldName.startsWith("@")) {
-        ctx.logDebug("Init closure variable: array  " + fieldName);
-        mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassName, env[i], "LRuntimeArray;");
-      } else {
-        ctx.logDebug("Init closure variable: scalar " + fieldName);
-        mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassName, env[i], "LRuntime;");
-      }
-
+      ctx.logDebug("Init closure variable: " + descriptor);
+      mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassName, env[i], descriptor);
       mv.visitVarInsn(Opcodes.ASTORE, i);
     }
 
