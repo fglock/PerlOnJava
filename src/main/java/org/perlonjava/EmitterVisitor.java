@@ -554,22 +554,9 @@ public class EmitterVisitor implements Visitor {
           }
           int varIndex = ctx.symbolTable.addVariable(var);
           // TODO optimization - SETVAR+MY can be combined
-          String className;
 
           // Determine the class name based on the sigil
-          switch (sigil) {
-            case "$":
-                className = "Runtime";
-                break;
-            case "@":
-                className = "RuntimeArray";
-                break;
-            case "%":
-                className = "RuntimeHash";
-                break;
-            default:
-                throw new IllegalArgumentException("Unsupported sigil: " + sigil);
-          }
+          String className = ASMMethodCreator.getVariableClassName(sigil);
 
           // Create a new instance of the determined class
           ctx.mv.visitTypeInsn(Opcodes.NEW, className);
