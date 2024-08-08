@@ -53,8 +53,8 @@
 
 ## Statements and special operators
 - [x] context void, scalar, list
-- [x] if/else/elsif
-- [x] 3-argument for loop
+- [x] `if`/`else`/`elsif` and `unless`
+- [x] 3-argument `for` loop
 - [x] `eval` string with closure variables
 - [x] `eval` string sets $@ on error; returns undef
 - [ ] `eval` block

@@ -53,6 +53,7 @@ public class Parser {
     if (token.type == TokenType.IDENTIFIER) {
       switch (token.text) {
         case "if":
+        case "unless":
           return parseIfStatement();
         case "for":
           return parseForStatement();
@@ -151,7 +152,7 @@ public class Parser {
   }
 
   private Node parseIfStatement() {
-    consume(TokenType.IDENTIFIER); // "if", "elsif"
+    Token operator = consume(TokenType.IDENTIFIER); // "if", "unless", "elsif"
     consume(TokenType.OPERATOR, "(");
     Node condition = parseExpression(0);
     consume(TokenType.OPERATOR, ")");
@@ -168,7 +169,7 @@ public class Parser {
     } else if (token.text.equals("elsif")) {
       elseBranch = parseIfStatement();
     }
-    return new IfNode(condition, thenBranch, elseBranch, tokenIndex);
+    return new IfNode(operator.text, condition, thenBranch, elseBranch, tokenIndex);
   }
 
   private Node parseExpression(int precedence) {
