@@ -43,6 +43,7 @@
 - [x] Anonymous subroutines with closure variables
 - [x] return from inside a block
 - [x] assigning to a closure variable mutates the variable in the original context
+- [ ] `@_` contains aliases to the caller variables
 
 ## Regular Expressions
 - [ ] Basic Matching
@@ -61,13 +62,13 @@
 - [x] short-circuit and, or
 - [x] low-precedence/high precedence operators: `not`, `or`, `and`
 - [x] ternary operator
-- [ ] `wantarray`
-- [ ] `require` statement
-- [ ] `use` statement
-- [ ] `caller`
-- [ ] `die`
+- [ ] `wantarray` operator
+- [ ] `require` operator
+- [ ] `use` and `no` statements
+- [ ] `caller` operator
+- [ ] `die` operator
 - [ ] `BEGIN` block
-- [ ] `goto`
+- [ ] `goto` operator
 - [ ] labels
 - [ ] search for labels in call stack
 
@@ -76,4 +77,5 @@
 - [ ] Global variables
 - [x] `@_` and `$@` special variables
 - [ ] `$_` special variable
+- [ ] `@_`, `$_` and regex variables like `$1` are thread-safe
 
