@@ -81,7 +81,7 @@ public class ASMMethodCreator implements Opcodes {
    * @param env An array of environment variable names to be included as instance fields in the
    *     class.
    * @param ast The abstract syntax tree representing the method body.
-   * @param useTryCatch Flag to enable try-catch
+   * @param useTryCatch Flag to enable try-catch in the generated class. This is used in `eval` operator.
    * @return The generated class.
    * @throws Exception If an error occurs during class creation.
    */
@@ -91,15 +91,10 @@ public class ASMMethodCreator implements Opcodes {
     // stack size calculation
     ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
 
-    // Ensure the context type is not VOID
-    if (ctx.contextType == ContextType.VOID) {
-      ctx.contextType = ContextType.SCALAR;
-    }
+    // The context type is determined by the caller.
+    ctx.contextType = ContextType.RUNTIME;
 
-    // Create a "Java" class name with dots instead of slashes
-    String javaClassNameDot = ctx.javaClassName.replace('/', '.');
-
-    // Set the source file name for runtime error messages
+    // Set the source file name. This is used for runtime error messages
     cw.visitSource(ctx.fileName, null);
 
     // Define the class with version, access flags, name, signature, superclass, and interfaces
@@ -158,7 +153,7 @@ public class ASMMethodCreator implements Opcodes {
     mv.visitCode();
 
     // Initialize local variables with closure values from instance fields
-    // Skip indices 0 to 2 because they are reserved for special arguments (this, "@_" and call
+    // Skip some indices because they are reserved for special arguments (this, "@_" and call
     // context)
     for (int i = skipVariables; i < env.length; i++) {
       String descriptor = getVariableDescriptor(env[i]);
@@ -254,16 +249,19 @@ public class ASMMethodCreator implements Opcodes {
     cw.visitEnd();
     byte[] classData = cw.toByteArray(); // Generate the bytecode
 
-    // Custom class loader to load generated classes
+    // Custom class loader to load generated classes.
+    //
+    // Note: This class loader is not cached to allow for garbage collection of
+    // anonymous subroutines. This is particularly useful when creating a large
+    // number of anonymous subroutines, as it helps manage memory usage by 
+    // allowing unused classes to be collected by the garbage collector.
+    //
     CustomClassLoader loader = new CustomClassLoader();
+
+    // Create a "Java" class name with dots instead of slashes
+    String javaClassNameDot = ctx.javaClassName.replace('/', '.');
+
     // Define the class using the custom class loader
     return loader.defineClass(javaClassNameDot, classData);
   }
-
-  // // Custom class loader
-  // static class CustomClassLoader extends ClassLoader {
-  //     public Class<?> defineClass(String name, byte[] b) {
-  //         return defineClass(name, b, 0, b.length);
-  //     }
-  // }
 }
