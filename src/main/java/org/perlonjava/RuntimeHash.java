@@ -38,6 +38,19 @@ public class RuntimeHash extends AbstractRuntimeObject {
       return new RuntimeList(this);
     }
 
+    // Create hash reference with the elements of a list
+    public static Runtime createHashRef(RuntimeList value) {
+      RuntimeArray arr = new RuntimeArray();  
+      value.addToArray(arr);
+      if (arr.size() % 2 != 0) {  // add an undef if the array size is odd
+        arr.push(new Runtime());
+      }
+      Runtime result = new Runtime();
+      result.type = ScalarType.HASHREFERENCE;
+      result.value = fromArray(arr);
+      return result;
+    }
+
     // Add a key-value pair to the hash
     public void put(String key, Runtime value) {
         elements.put(key, value);
