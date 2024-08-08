@@ -76,6 +76,19 @@ public class RuntimeArray extends AbstractRuntimeObject {
         return (Runtime) elements.get(index);
     }
 
+    // Get a value at a specific index
+    public Runtime get(Runtime value) {
+        int index = (int) value.getLong();
+        if (index < 0) {
+            index = elements.size() + index; // Handle negative indices
+        }
+        if (index < 0 || index >= elements.size()) {
+            // XXX TODO autovivification
+            return new Runtime(); // Return undefined if out of bounds
+        }
+        return (Runtime) elements.get(index);
+    }
+
     // Set the whole array to a Scalar
     public RuntimeArray set(Runtime value) {
       this.elements.clear();
