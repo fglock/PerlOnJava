@@ -48,6 +48,11 @@ public class RuntimeHash extends AbstractRuntimeObject {
         return elements.getOrDefault(key, new Runtime()); // Return undefined if key is not present
     }
 
+    // Get a value by key
+    public Runtime get(Runtime key) {
+        return elements.getOrDefault(key, new Runtime()); // Return undefined if key is not present
+    }
+
     // Check if a key exists in the hash
     public boolean containsKey(String key) {
         return elements.containsKey(key);
