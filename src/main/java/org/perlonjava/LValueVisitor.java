@@ -11,7 +11,7 @@
 public class LValueVisitor implements Visitor {
     private ContextType context = ContextType.VOID;
 
-    public ContextType getContext(Node node) throws Exception {
+    public static ContextType getContext(Node node) throws Exception {
         LValueVisitor lvVisitor = new LValueVisitor();
         node.accept(lvVisitor);
         return lvVisitor.context;
@@ -30,6 +30,9 @@ public class LValueVisitor implements Visitor {
     @Override
     public void visit(BinaryOperatorNode node) throws Exception {
         switch (node.operator) {
+            case "=":   // $a = ...
+                node.left.accept(this);
+                break;
             case "[":   // $a[]
             case "{":   // $a{}
                 context = ContextType.SCALAR;
