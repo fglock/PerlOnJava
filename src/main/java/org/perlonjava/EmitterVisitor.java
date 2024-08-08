@@ -529,6 +529,10 @@ public class EmitterVisitor implements Visitor {
 
   private void handleSetOperator(BinaryOperatorNode node) throws Exception {
     ctx.logDebug("SET " + node);
+
+    // XXX TODO use node.left.getLvalueContext()
+    ctx.logDebug("SET Lvalue context: " + node.left.getLvalueContext() + " XXX");
+
     if (node.left instanceof UnaryOperatorNode) { // $x @x %x my
 
       // left hand side is a plain variable, or a `my` followed by a plain variable
