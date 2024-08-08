@@ -307,6 +307,14 @@ public class Parser {
                   // wrong guess: this is not a special variable
                   tokenIndex = saveIndex; // backtrack
                 } else {
+
+                  // some characters are illegal after a variable
+                  token = peek();
+                  if (peek().text.equals("(")) {
+                    throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
+                  }
+
+                  // create a Variable
                   return new UnaryOperatorNode(
                       text, new IdentifierNode(nextToken.text, tokenIndex), tokenIndex);
                 }
