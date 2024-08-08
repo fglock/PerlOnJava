@@ -68,6 +68,7 @@
 - [ ] `caller` operator
 - [ ] `die` operator
 - [ ] `BEGIN` block
+- [ ] `DESTROY` method keyword
 - [ ] `goto` operator
 - [ ] labels
 - [ ] search for labels in call stack
