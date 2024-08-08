@@ -269,10 +269,8 @@ public class EmitterVisitor implements Visitor {
     }
 
     // default: call `->{}`
-
-    // XXX TODO
-
-    throw new PerlCompilerException(node.tokenIndex, "Not implemented: " + node, ctx.errorUtil);
+    BinaryOperatorNode refNode = new BinaryOperatorNode( "->", node.left, node.right, node.tokenIndex);
+    refNode.accept(this);
   }
 
   /** Handles the postfix `()` node. */
