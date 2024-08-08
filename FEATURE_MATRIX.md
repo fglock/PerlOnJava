@@ -21,6 +21,7 @@
 - [x] String numification
 - [x] Autoincrement, Autodecrement; String increment
 - [x] References
+- [ ] Autovivification (Some are implemented)
 - [ ] File handles
 - [ ] Objects
 - [ ] Tied Scalars
