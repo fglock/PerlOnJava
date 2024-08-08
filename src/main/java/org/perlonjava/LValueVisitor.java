@@ -5,16 +5,16 @@
  *
  * Usage:
  *
- *   LValueVisitor lvVisitor = new LValueVisitor();
- *   node.accept(lvVisitor);
- *   return lvVisitor.getResult();
-
+ *   LValueVisitor.getContext(node);
+ *
  */
 public class LValueVisitor implements Visitor {
     private ContextType context = ContextType.VOID;
 
-    public ContextType getResult() {
-        return context;
+    public ContextType getContext(Node node) throws Exception {
+        LValueVisitor lvVisitor = new LValueVisitor();
+        node.accept(lvVisitor);
+        return lvVisitor.context;
     }
 
     @Override
@@ -30,13 +30,11 @@ public class LValueVisitor implements Visitor {
     @Override
     public void visit(BinaryOperatorNode node) throws Exception {
         switch (node.operator) {
-            case "@":
-            case "%":
-                context = ContextType.LIST;
+            case "[":   // $a[]
+            case "{":   // $a{}
+                context = ContextType.SCALAR;
                 break;
-            case "$":
-            case "[":
-            case "{":
+            case "->":  // $a->() $a->[] $a->()
                 context = ContextType.SCALAR;
                 break;
             default:
@@ -47,15 +45,15 @@ public class LValueVisitor implements Visitor {
     @Override
     public void visit(UnaryOperatorNode node) throws Exception {
         switch (node.operator) {
-            case "my":
-                // 'my' depends on the operand's context, can be SCALAR or LIST
+            case "my":  // 'my' depends on the operand's context, can be SCALAR or LIST
                 node.operand.accept(this);
                 break;
-            case "@":
-            case "%":
+            case "@":   // @a
+            case "%":   // %a
                 context = ContextType.LIST;
                 break;
-            case "$":
+            case "$":   // $a $$a
+            case "substr":
                 context = ContextType.SCALAR;
                 break;
             default:
@@ -101,7 +99,7 @@ public class LValueVisitor implements Visitor {
 
     @Override
     public void visit(ListNode node) throws Exception {
-        context = ContextType.LIST;
+        context = ContextType.LIST; // ($a, $b)
     }
 
     @Override
