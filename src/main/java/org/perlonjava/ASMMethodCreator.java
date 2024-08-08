@@ -8,6 +8,9 @@ import org.objectweb.asm.*;
  */
 public class ASMMethodCreator implements Opcodes {
 
+  // Number of local variables to skip when processing a closure (this, @_, wantarray)
+  public static int skipVariables = 3;
+
   // Counter for generating unique class names
   static int classCounter = 0;
 
@@ -79,7 +82,7 @@ public class ASMMethodCreator implements Opcodes {
 
     // Add a constructor with parameters for initializing the fields
     StringBuilder constructorDescriptor = new StringBuilder("(");
-    for (int i = 3; i < env.length; i++) {
+    for (int i = skipVariables; i < env.length; i++) {
       String descriptor = getVariableDescriptor(env[i]);
       constructorDescriptor.append(descriptor);
     }
@@ -95,7 +98,7 @@ public class ASMMethodCreator implements Opcodes {
         "<init>",
         "()V",
         false); // Call the superclass constructor
-    for (int i = 3; i < env.length; i++) {
+    for (int i = skipVariables; i < env.length; i++) {
       ctx.mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
       ctx.mv.visitVarInsn(Opcodes.ALOAD, i - 2); // Load the constructor argument
       ctx.mv.visitFieldInsn(
@@ -123,7 +126,7 @@ public class ASMMethodCreator implements Opcodes {
     // Initialize local variables with closure values from instance fields
     // Skip indices 0 to 2 because they are reserved for special arguments (this, "@_" and call
     // context)
-    for (int i = 3; i < env.length; i++) {
+    for (int i = skipVariables; i < env.length; i++) {
       String descriptor = getVariableDescriptor(env[i]);
       mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
       ctx.logDebug("Init closure variable: " + descriptor);
