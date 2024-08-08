@@ -538,20 +538,15 @@ public class EmitterVisitor implements Visitor {
         ContextType lvalueContext = LValueVisitor.getContext(node);
         ctx.logDebug("SET Lvalue context: " + lvalueContext);
 
-        UnaryOperatorNode leftNode = (UnaryOperatorNode) node.left;
-
         // Execute the right side first
         // Determine the assign type based on the left side sigil
         switch (lvalueContext) {
           case ContextType.SCALAR:
               ctx.logDebug("SET right side scalar");
               node.right.accept(this.with(ContextType.SCALAR));   // emit the value 
-
-              ctx.logDebug("SET scalar");
-              leftNode.accept(this.with(ContextType.SCALAR));   // emit the variable
+              node.left.accept(this.with(ContextType.SCALAR));   // emit the variable
               ctx.mv.visitInsn(Opcodes.SWAP); // move the target first
               ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "set", "(LRuntime;)LRuntime;", false);
-
               break;
           case ContextType.LIST:
               ctx.logDebug("SET right side list");
@@ -565,7 +560,7 @@ public class EmitterVisitor implements Visitor {
               nodeRight.accept(this.with(ContextType.LIST));   // emit the value
 
               ctx.logDebug("SET array or hash to list");
-              leftNode.accept(this.with(ContextType.LIST));   // emit the variable
+              node.left.accept(this.with(ContextType.LIST));   // emit the variable
               ctx.mv.visitInsn(Opcodes.SWAP); // move the target first
               ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "set", "(LRuntimeList;)LRuntimeList;", true);
 
