@@ -97,10 +97,10 @@ public class RuntimeArray extends AbstractRuntimeObject {
     }
 
     // Replace the the whole array with the elements of a list
-    public RuntimeArray set(RuntimeList value) {
+    public RuntimeList set(RuntimeList value) {
       this.elements.clear();
       value.addToArray(this);
-      return this;
+      return new RuntimeList(this);
     }
 
     // Set a value at a specific index

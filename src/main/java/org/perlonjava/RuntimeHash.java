@@ -27,7 +27,7 @@ public class RuntimeHash extends AbstractRuntimeObject {
     }
 
     // Replace the the whole hash with the elements of a list
-    public RuntimeHash set(RuntimeList value) {
+    public RuntimeList set(RuntimeList value) {
       RuntimeArray arr = new RuntimeArray();  
       value.addToArray(arr);
       if (arr.size() % 2 != 0) {  // add an undef if the array size is odd
@@ -35,7 +35,7 @@ public class RuntimeHash extends AbstractRuntimeObject {
       }
       RuntimeHash hash = fromArray(arr);
       this.elements = hash.elements;
-      return this;
+      return new RuntimeList(this);
     }
 
     // Add a key-value pair to the hash
