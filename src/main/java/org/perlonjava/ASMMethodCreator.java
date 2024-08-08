@@ -50,8 +50,16 @@ public class ASMMethodCreator implements Opcodes {
 
     // Add instance fields to the class for closure variables
     for (String fieldName : env) {
-      ctx.logDebug("Create instance field: " + fieldName);
-      cw.visitField(Opcodes.ACC_PUBLIC, fieldName, "LRuntime;", null, null).visitEnd();
+      if (fieldName.startsWith("%")) {
+        ctx.logDebug("Create instance field: hash  " + fieldName);
+        cw.visitField(Opcodes.ACC_PUBLIC, fieldName, "LRuntimeHash;", null, null).visitEnd();
+      } else if (fieldName.startsWith("@")) {
+        ctx.logDebug("Create instance field: array  " + fieldName);
+        cw.visitField(Opcodes.ACC_PUBLIC, fieldName, "LRuntimeArray;", null, null).visitEnd();
+      } else {
+        ctx.logDebug("Create instance field: scalar " + fieldName);
+        cw.visitField(Opcodes.ACC_PUBLIC, fieldName, "LRuntime;", null, null).visitEnd();
+      }
     }
 
     // Add a constructor with parameters for initializing the fields
@@ -100,9 +108,20 @@ public class ASMMethodCreator implements Opcodes {
     // Skip indices 0 to 2 because they are reserved for special arguments (this, "@_" and call
     // context)
     for (int i = 3; i < env.length; i++) {
-      ctx.logDebug("Init closure variable: " + env[i]);
+      String fieldName = env[i];
       mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
-      mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassName, env[i], "LRuntime;");
+
+      if (fieldName.startsWith("%")) {
+        ctx.logDebug("Init closure variable: hash  " + fieldName);
+        mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassName, env[i], "LRuntimeHash;");
+      } else if (fieldName.startsWith("@")) {
+        ctx.logDebug("Init closure variable: array  " + fieldName);
+        mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassName, env[i], "LRuntimeArray;");
+      } else {
+        ctx.logDebug("Init closure variable: scalar " + fieldName);
+        mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassName, env[i], "LRuntime;");
+      }
+
       mv.visitVarInsn(Opcodes.ASTORE, i);
     }
 
