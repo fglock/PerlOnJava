@@ -8,6 +8,11 @@
  */
 public class IfNode extends AbstractNode {
     /**
+     * The operator "if", "unless", "elsif"
+     */
+    public String operator = "";
+
+    /**
      * The condition operand of the if statement.
      */
     public final Node condition;
@@ -26,11 +31,13 @@ public class IfNode extends AbstractNode {
     /**
      * Constructs a new IfNode with the specified operator and operands.
      *
+     * @param operator "if", "unless", "elsif"
      * @param condition the condition operand of the if statement
      * @param thenBranch the true block of the if statement
      * @param elseBranch the false block of the if statement
      */
-    public IfNode(Node condition, Node thenBranch, Node elseBranch, int tokenIndex) {
+    public IfNode(String operator, Node condition, Node thenBranch, Node elseBranch, int tokenIndex) {
+        this.operator = operator;
         this.condition = condition;
         this.thenBranch = thenBranch;
         this.elseBranch = elseBranch;

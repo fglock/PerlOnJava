@@ -1005,7 +1005,7 @@ public class EmitterVisitor implements Visitor {
 
   @Override
   public void visit(IfNode node) throws Exception {
-    ctx.logDebug("IF start");
+    ctx.logDebug("IF start: " + node.operator);
 
     // Enter a new scope in the symbol table
     ctx.symbolTable.enterScope();
@@ -1021,7 +1021,7 @@ public class EmitterVisitor implements Visitor {
     ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "getBoolean", "()Z", false);
 
     // Jump to the else label if the condition is false
-    ctx.mv.visitJumpInsn(Opcodes.IFEQ, elseLabel);
+    ctx.mv.visitJumpInsn(node.operator.equals("unless") ? Opcodes.IFNE : Opcodes.IFEQ, elseLabel);
 
     // Visit the then branch
     node.thenBranch.accept(this);
