@@ -267,13 +267,13 @@ public class Parser {
         switch (token.text) {
           case "(":
             // Handle parentheses to parse a nested expression or to construct a list
-            return new ListNode(parseList(")"), tokenIndex);
+            return new ListNode(parseList(")", 0), tokenIndex);
           case "{":
             // Handle curly brackets to parse a nested expression
-            return new HashLiteralNode(parseList("}"), tokenIndex);
+            return new HashLiteralNode(parseList("}", 1), tokenIndex);
           case "[":
             // Handle square brackets to parse a nested expression
-            return new ArrayLiteralNode(parseList("]"), tokenIndex);
+            return new ArrayLiteralNode(parseList("]", 1), tokenIndex);
           case ".":
             // Handle fractional numbers
             return parseFractionalNumber();
@@ -541,27 +541,27 @@ public class Parser {
         switch (nextText) {
           case "(":
             consume();
-            right = new ListNode(parseList(")"), tokenIndex);
+            right = new ListNode(parseList(")", 0), tokenIndex);
             return new BinaryOperatorNode(token.text, left, right, tokenIndex);
           case "{":
             consume();
-            right = new HashLiteralNode(parseList("}"), tokenIndex);
+            right = new HashLiteralNode(parseList("}", 1), tokenIndex);
             return new BinaryOperatorNode(token.text, left, right, tokenIndex);
           case "[":
             consume();
-            right = new ArrayLiteralNode(parseList("]"), tokenIndex);
+            right = new ArrayLiteralNode(parseList("]", 1), tokenIndex);
             return new BinaryOperatorNode(token.text, left, right, tokenIndex);
         }
         right = parseExpression(precedence);
         return new BinaryOperatorNode(token.text, left, right, tokenIndex);
       case "(":
-        right = new ListNode(parseList(")"), tokenIndex);
+        right = new ListNode(parseList(")", 0), tokenIndex);
         return new BinaryOperatorNode(token.text, left, right, tokenIndex);
       case "{":
-        right = new HashLiteralNode(parseList("}"), tokenIndex);
+        right = new HashLiteralNode(parseList("}", 1), tokenIndex);
         return new BinaryOperatorNode(token.text, left, right, tokenIndex);
       case "[":
-        right = new ArrayLiteralNode(parseList("]"), tokenIndex);
+        right = new ArrayLiteralNode(parseList("]", 1), tokenIndex);
         return new BinaryOperatorNode(token.text, left, right, tokenIndex);
       case "--":
       case "++":
@@ -727,7 +727,7 @@ public class Parser {
     }
   }
 
-  private List<Node> parseList(String close) {
+  private List<Node> parseList(String close, int minItems) {
     List<Node> elements = new ArrayList<>();
     boolean firstItem = true;
 
@@ -759,6 +759,11 @@ public class Parser {
       }
     }
     consume(TokenType.OPERATOR, close);
+
+    if (elements.size() < minItems) {
+      throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
+    }
+
     return elements;
   }
 
