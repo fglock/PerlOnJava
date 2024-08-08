@@ -65,7 +65,16 @@ public class ASMMethodCreator implements Opcodes {
     // Add a constructor with parameters for initializing the fields
     StringBuilder constructorDescriptor = new StringBuilder("(");
     for (int i = 3; i < env.length; i++) {
-      constructorDescriptor.append("LRuntime;");
+      String fieldName = env[i];
+
+      if (fieldName.startsWith("%")) {
+        constructorDescriptor.append("LRuntimeHash;");
+      } else if (fieldName.startsWith("@")) {
+        constructorDescriptor.append("LRuntimeArray;");
+      } else {
+        constructorDescriptor.append("LRuntime;");
+      }
+
     }
     constructorDescriptor.append(")V");
     ctx.logDebug("constructorDescriptor: " + constructorDescriptor.toString());
