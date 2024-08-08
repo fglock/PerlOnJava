@@ -99,10 +99,12 @@ public class ASMMethodCreator implements Opcodes {
         "()V",
         false); // Call the superclass constructor
     for (int i = skipVariables; i < env.length; i++) {
+      String descriptor = getVariableDescriptor(env[i]);
+
       ctx.mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
       ctx.mv.visitVarInsn(Opcodes.ALOAD, i - 2); // Load the constructor argument
       ctx.mv.visitFieldInsn(
-          Opcodes.PUTFIELD, ctx.javaClassName, env[i], "LRuntime;"); // Set the instance field
+          Opcodes.PUTFIELD, ctx.javaClassName, env[i], descriptor); // Set the instance field
     }
     ctx.mv.visitInsn(Opcodes.RETURN); // Return void
     ctx.mv.visitMaxs(0, 0); // Automatically computed
