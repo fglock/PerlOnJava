@@ -531,7 +531,7 @@ public class EmitterVisitor implements Visitor {
     ctx.logDebug("SET " + node);
 
     // XXX TODO use node.left.getLvalueContext()
-    ctx.logDebug("SET Lvalue context: " + node.left.getLvalueContext() + " XXX");
+    // ctx.logDebug("SET Lvalue context: " + node.left.getLvalueContext() + " XXX");
 
     if (node.left instanceof UnaryOperatorNode) { // $x @x %x my
 
