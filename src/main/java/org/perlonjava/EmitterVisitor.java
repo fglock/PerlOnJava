@@ -117,6 +117,16 @@ public class EmitterVisitor implements Visitor {
       case "->":
         handleArrowOperator(node);
         return;
+      // XXX TODO
+      // case "[":
+      //   handleArrayElementOperator(node);
+      //   return;
+      // case "{":
+      //   handleHashElementOperator(node);
+      //   return;
+      // case "(":
+      //   handleApplyOperator(node);
+      //   return;
     }
 
     node.left.accept(scalarVisitor); // target - left parameter
