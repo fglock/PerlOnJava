@@ -212,6 +212,9 @@ public class EmitterVisitor implements Visitor {
     EmitterVisitor scalarVisitor =
         this.with(ContextType.SCALAR); // execute operands in scalar context
 
+    // XXX TODO
+    // See: handleHashElementOperator impl
+
     throw new PerlCompilerException(node.tokenIndex, "Not implemented: " + node, ctx.errorUtil);
   }
 
@@ -220,6 +223,54 @@ public class EmitterVisitor implements Visitor {
     ctx.logDebug("handleHashElementOperator " + node + " in context " + ctx.contextType);
     EmitterVisitor scalarVisitor =
         this.with(ContextType.SCALAR); // execute operands in scalar context
+
+    // check if node.left is a `$` variable - it means we have a RuntimeHash instead of Runtime
+
+    /*
+      BinaryOperatorNode: {
+        UnaryOperatorNode: $
+          IdentifierNode: a
+        ArrayLiteralNode:
+          NumberNode: 10
+    */
+
+    if (node.left instanceof UnaryOperatorNode) { // $ @ %
+      UnaryOperatorNode sigilNode = (UnaryOperatorNode) node.left;
+      String sigil = sigilNode.operator;
+      if (sigil.equals("$")) {
+        if (sigilNode.operand instanceof IdentifierNode) { // my $a
+          IdentifierNode identifierNode = (IdentifierNode) sigilNode.operand;
+          // Rewrite the variable node from `$` to `%`
+          UnaryOperatorNode varNode = new UnaryOperatorNode( "%", identifierNode, sigilNode.tokenIndex);
+
+          ctx.logDebug("visit(BinaryOperatorNode) $var{} ");
+          varNode.accept(this.with(ContextType.LIST)); // target - left parameter
+
+          // emit the {x} as a RuntimeList
+          ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
+
+          Node nodeZero = nodeRight.elements.get(0);
+          if (nodeRight.elements.size() == 1 && nodeZero instanceof IdentifierNode) {
+             // Convert IdentifierNode to StringNode:  {a} to {"a"}
+             nodeRight.elements.set(0, new StringNode(((IdentifierNode) nodeZero).name, ((IdentifierNode) nodeZero).tokenIndex));
+          }
+
+          ctx.logDebug("visit(BinaryOperatorNode) $var{}  autoquote " + node.right);
+          nodeRight.accept(scalarVisitor);
+
+          ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "RuntimeHash", "get", "(LRuntime;)LRuntime;", false);
+
+          if (ctx.contextType == ContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
+          }
+          return;
+        }
+      }
+    }
+
+    // default: call `->{}`
+
+    // XXX TODO
 
     throw new PerlCompilerException(node.tokenIndex, "Not implemented: " + node, ctx.errorUtil);
   }
