@@ -535,14 +535,14 @@ public class EmitterVisitor implements Visitor {
     ctx.logDebug("SET Lvalue context: " + lvalueContext);
     // Execute the right side first: assignment is right-associative
     switch (lvalueContext) {
-      case ContextType.SCALAR:
+      case SCALAR:
           ctx.logDebug("SET right side scalar");
           node.right.accept(this.with(ContextType.SCALAR));   // emit the value 
           node.left.accept(this.with(ContextType.SCALAR));   // emit the variable
           ctx.mv.visitInsn(Opcodes.SWAP); // move the target first
           ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "set", "(LRuntime;)LRuntime;", false);
           break;
-      case ContextType.LIST:
+      case LIST:
           ctx.logDebug("SET right side list");
           Node nodeRight = node.right;
           // make sure the right node is a ListNode
