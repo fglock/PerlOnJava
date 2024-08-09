@@ -4,6 +4,7 @@
 - [x] Perl-like compile-time error messages
 - [ ] Perl-like runtime error messages
 - [ ] Perl-like warnings
+- [x] Comments
 
 ## Scalars
 - [x] `my` variable declaration
@@ -55,6 +56,8 @@
 - [x] context void, scalar, list
 - [x] `if`/`else`/`elsif` and `unless`
 - [x] 3-argument `for` loop
+- [ ] `foreach` loop
+- [ ] Statement modifiers
 - [x] `eval` string with closure variables
 - [x] `eval` string sets $@ on error; returns undef
 - [ ] `eval` block
