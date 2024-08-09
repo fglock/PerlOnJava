@@ -5,7 +5,7 @@ public class Parser {
   private final ErrorMessageUtil errorUtil;
   private int tokenIndex = 0;
   private static final Set<String> TERMINATORS =
-      new HashSet<>(Arrays.asList(":", ";", ")", "}", "]"));
+      new HashSet<>(Arrays.asList(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when"));
   private static final Set<String> UNARY_OP =
       new HashSet<>(
           Arrays.asList(
@@ -69,6 +69,10 @@ public class Parser {
     }
     Node expression = parseExpression(0);
     token = peek();
+    if (token.type == TokenType.IDENTIFIER) {
+        // statement modifier: if, for ...
+        throw new PerlCompilerException(tokenIndex, "Not implemented: " + token, errorUtil);
+    }
     if (token.type != TokenType.EOF && !token.text.equals("}") && !token.text.equals(";")) {
       throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, errorUtil);
     }
@@ -571,27 +575,35 @@ public class Parser {
     throw new PerlCompilerException(tokenIndex, "Unexpected infix operator: " + token, errorUtil);
   }
 
+  private void skipWhitespace() {
+      while (tokenIndex < tokens.size()) {
+          Token token = tokens.get(tokenIndex);
+          if (token.type == TokenType.WHITESPACE || token.type == TokenType.NEWLINE) {
+              tokenIndex++;
+          } else if (token.type == TokenType.OPERATOR && token.text.equals("#")) {
+              // Skip the comment until the end of the line
+              while (tokenIndex < tokens.size() && tokens.get(tokenIndex).type != TokenType.NEWLINE) {
+                  tokenIndex++;
+              }
+          } else {
+              break;
+          }
+      }
+  }
+
   private Token peek() {
-    while (tokenIndex < tokens.size()
-        && (tokens.get(tokenIndex).type == TokenType.WHITESPACE
-            || tokens.get(tokenIndex).type == TokenType.NEWLINE)) {
-      tokenIndex++;
-    }
+    skipWhitespace();
     if (tokenIndex >= tokens.size()) {
-      return new Token(TokenType.EOF, "");
+        return new Token(TokenType.EOF, "");
     }
     return tokens.get(tokenIndex);
   }
 
   private Token consume() {
-    while (tokenIndex < tokens.size()
-        && (tokens.get(tokenIndex).type == TokenType.WHITESPACE
-            || tokens.get(tokenIndex).type == TokenType.NEWLINE)) {
-      tokenIndex++;
+    skipWhitespace();
+    if (tokenIndex >= tokens.size()) {
+        return new Token(TokenType.EOF, "");
     }
-    // if (tokenIndex >= tokens.size()) {
-    //   return new Token(TokenType.EOF, "");
-    // }
     return tokens.get(tokenIndex++);
   }
 
