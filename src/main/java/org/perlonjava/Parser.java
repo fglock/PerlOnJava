@@ -265,6 +265,12 @@ public class Parser {
             // Handle 'not' keyword as a unary operator with an operand
             operand = parseExpression(getPrecedence(token.text) + 1);
             return new UnaryOperatorNode("not", operand, tokenIndex);
+          case "abs":
+          case "log":
+          case "rand":
+            // XXX TODO default to `$_`
+            operand = parseExpression(getPrecedence("print") + 1);
+            return new UnaryOperatorNode(token.text, operand, tokenIndex);
           case "print":
             // Handle 'print' keyword as a unary operator with an operand
             operand = parseExpression(getPrecedence("print") + 1);
