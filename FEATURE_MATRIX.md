@@ -2,6 +2,7 @@
 
 ## Compiler usability
 - [x] Perl-like compile-time error messages
+- [x] Perl line numbers in bytecode
 - [ ] Perl-like runtime error messages
 - [ ] Perl-like warnings
 - [x] Comments
