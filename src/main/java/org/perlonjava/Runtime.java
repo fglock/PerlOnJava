@@ -1,5 +1,6 @@
 import java.lang.reflect.Method;
 import java.util.*;
+import java.lang.Math;
 
 /**
  * The Runtime class simulates Perl scalar variables.
@@ -595,4 +596,23 @@ public class Runtime extends AbstractRuntimeObject {
     return old;
   }
 
+  public Runtime log() {
+    return new Runtime(Math.log(this.getDouble()));
+  }
+
+  public Runtime abs() {
+    Runtime arg1 = this;
+    if (arg1.type == ScalarType.STRING) {
+      arg1 = arg1.parseNumber();
+    }
+    if (arg1.type == ScalarType.DOUBLE) {
+      return new Runtime(Math.abs(arg1.getDouble()));
+    } else {
+      return new Runtime(Math.abs(arg1.getLong()));
+    }
+  }
+
+  public Runtime rand() {
+    return new Runtime(Math.random() * this.getDouble());
+  }
 }

@@ -439,6 +439,9 @@ public class EmitterVisitor implements Visitor {
       case "not":
         handleUnaryBuiltin(node, "not");
         break;
+      case "abs":
+      case "log":
+      case "rand":
       case "undef":
         handleUnaryBuiltin(node, operator);
         break;
