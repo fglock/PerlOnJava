@@ -1116,6 +1116,14 @@ public class EmitterVisitor implements Visitor {
     List<Node> list = node.elements;
     for (int i = 0; i < list.size(); i++) {
       Node element = list.get(i);
+
+      // Annotate the bytecode with Perl source code line numbers
+      int lineNumber = ctx.errorUtil.getLineNumber(element.getIndex());
+      Label thisLabel = new Label();
+      ctx.mv.visitLabel(thisLabel);
+      ctx.mv.visitLineNumber(lineNumber, thisLabel); // Associate line number with thisLabel
+
+      // Emit the statement with current context
       if (i == list.size() - 1) {
         // Special case for the last element
         ctx.logDebug("Last element: " + element);
