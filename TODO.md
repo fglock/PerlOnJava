@@ -78,3 +78,6 @@ String code = scanner.nextLine();
 scanner.close();
 ```
 
+## Support for Java scripting (JSR-223)
+See `src5/lib/Perlito5/Java/JavaxScript.pm`
+
