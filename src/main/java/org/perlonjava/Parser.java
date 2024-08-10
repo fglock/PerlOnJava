@@ -59,6 +59,9 @@ public class Parser {
         case "for":
         case "foreach":
           return parseForStatement();
+        case "while":
+        case "until":
+          return parseWhileStatement();
       }
     }
     if (token.type == TokenType.OPERATOR
@@ -123,6 +126,25 @@ public class Parser {
 
     return new AnonSubNode(block, tokenIndex);
   }
+
+  private Node parseWhileStatement() {
+    Token operator = consume(TokenType.IDENTIFIER); // "while" "until"
+
+    consume(TokenType.OPERATOR, "(");
+    Node condition = parseExpression(0);
+    consume(TokenType.OPERATOR, ")");
+
+    // Parse the body of the loop
+    consume(TokenType.OPERATOR, "{");
+    Node body = parseBlock();
+    consume(TokenType.OPERATOR, "}");
+
+    if (operator.text.equals("until")) {
+        condition = new UnaryOperatorNode("not", condition, condition.getIndex());
+    }
+    return new For3Node(null, condition, null, body, tokenIndex);
+  }
+
 
   private Node parseForStatement() {
     consume(TokenType.IDENTIFIER); // "for" "foreach"
