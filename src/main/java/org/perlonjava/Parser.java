@@ -4,6 +4,7 @@ public class Parser {
   private final List<Token> tokens;
   private final ErrorMessageUtil errorUtil;
   private int tokenIndex = 0;
+  private boolean parsingForLoopVariable = false;
   private static final Set<String> TERMINATORS =
       new HashSet<>(Arrays.asList(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when"));
   private static final Set<String> UNARY_OP =
@@ -56,6 +57,7 @@ public class Parser {
         case "unless":
           return parseIfStatement();
         case "for":
+        case "foreach":
           return parseForStatement();
       }
     }
@@ -123,13 +125,39 @@ public class Parser {
   }
 
   private Node parseForStatement() {
-    consume(TokenType.IDENTIFIER); // "for"
+    consume(TokenType.IDENTIFIER); // "for" "foreach"
+
+    Node varNode = null;
+    Token token = peek(); // "my" "$" "("
+    if (token.text.equals("my") || token.text.equals("$")) {
+        parsingForLoopVariable = true;
+        varNode = parsePrimary();
+        parsingForLoopVariable = false;
+    }
+
     consume(TokenType.OPERATOR, "(");
 
     // Parse the initialization part
     Node initialization = null;
     if (!peek().text.equals(";")) {
       initialization = parseExpression(0);
+
+      token = peek();
+      if (token.text.equals(")")) {
+        // 1-argument for
+        consume();
+
+        // Parse the body of the loop
+        consume(TokenType.OPERATOR, "{");
+        Node body = parseBlock();
+        consume(TokenType.OPERATOR, "}");
+
+        return new For1Node(varNode, initialization, body, tokenIndex);
+      }
+    }
+    // 3-argument for
+    if (varNode != null) {
+      throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
     }
     consume(TokenType.OPERATOR, ";");
 
@@ -152,7 +180,7 @@ public class Parser {
     Node body = parseBlock();
     consume(TokenType.OPERATOR, "}");
 
-    return new ForNode(initialization, condition, increment, body, tokenIndex);
+    return new For3Node(initialization, condition, increment, body, tokenIndex);
   }
 
   private Node parseIfStatement() {
@@ -315,7 +343,8 @@ public class Parser {
 
                   // some characters are illegal after a variable
                   token = peek();
-                  if (peek().text.equals("(")) {
+                  if (peek().text.equals("(") && !parsingForLoopVariable) {
+                    // not parsing "for my $v (..."
                     throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
                   }
 

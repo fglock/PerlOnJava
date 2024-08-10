@@ -1,12 +1,12 @@
 /**
- * The ForNode class represents a node in the abstract syntax tree (AST) that holds a "for" loop statement.
+ * The For3Node class represents a node in the abstract syntax tree (AST) that holds a "for" loop statement.
  * The parts of the statement are: "initialization", "condition", "increment", and "body".
  * This class implements the Node interface, allowing it to be visited by a Visitor.
  *
- * <p>The ForNode class is used to encapsulate "for" loops in the AST, providing
+ * <p>The For3Node class is used to encapsulate "for" loops in the AST, providing
  * a way to store and manipulate "for" loops and their parts within the tree structure.</p>
  */
-public class ForNode extends AbstractNode {
+public class For3Node extends AbstractNode {
     /**
      * The initialization part of the for loop.
      */
@@ -28,7 +28,7 @@ public class ForNode extends AbstractNode {
     public final Node body;
 
     /**
-     * Constructs a new ForNode with the specified parts of the for loop.
+     * Constructs a new For3Node with the specified parts of the for loop.
      *
      * @param initialization the initialization part of the for loop
      * @param condition the condition part of the for loop
@@ -36,7 +36,7 @@ public class ForNode extends AbstractNode {
      * @param body the body of the for loop
      * @param tokenIndex the index of the token in the source code
      */
-    public ForNode(Node initialization, Node condition, Node increment, Node body, int tokenIndex) {
+    public For3Node(Node initialization, Node condition, Node increment, Node body, int tokenIndex) {
         this.initialization = initialization;
         this.condition = condition;
         this.increment = increment;
