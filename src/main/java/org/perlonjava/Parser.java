@@ -268,9 +268,30 @@ public class Parser {
           case "abs":
           case "log":
           case "rand":
-            // XXX TODO default to `$_`
-            operand = parseExpression(getPrecedence("print") + 1);
-            return new UnaryOperatorNode(token.text, operand, tokenIndex);
+            String text = token.text;
+            token = peek();
+            boolean hasParen = false;
+            if (token.text.equals("(")) {
+                consume();
+                token = peek();
+                hasParen = true;
+            }
+            if (token.type == TokenType.EOF || TERMINATORS.contains(token.text) || token.text.equals(",")) {
+              if (text.equals("rand")) {
+                // create "1"
+                operand = new NumberNode("1", tokenIndex);
+              } else {
+                // create `$_` variable
+                operand = new UnaryOperatorNode(
+                      "$", new IdentifierNode("_", tokenIndex), tokenIndex);
+              }
+            } else {
+              operand = parseExpression(getPrecedence(",") + 1);
+            }
+            if (hasParen) {
+              consume(TokenType.OPERATOR, ")");
+            }
+            return new UnaryOperatorNode(text, operand, tokenIndex);
           case "print":
             // Handle 'print' keyword as a unary operator with an operand
             operand = parseExpression(getPrecedence("print") + 1);
