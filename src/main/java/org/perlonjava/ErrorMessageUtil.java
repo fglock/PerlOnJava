@@ -57,22 +57,23 @@ public class ErrorMessageUtil {
      * @param index the index of the token
      * @return the line number
      */
-    private int getLineNumber(int index) {
+    public int getLineNumber(int index) {
         // Start from the last processed index and line number
-        int line = lastLineNumber;
+
+        if (index <= tokenIndex) {
+            return lastLineNumber;
+        }
 
         // Count newlines from the last processed index to the current index
         for (int i = tokenIndex + 1; i <= index; i++) {
             if (tokens.get(i).type == TokenType.NEWLINE) {
-                line++;
+                lastLineNumber++;
             }
         }
 
         // Update the cache with the current index and line number
         tokenIndex = index;
-        lastLineNumber = line;
-
-        return line;
+        return lastLineNumber;
     }
 
     /**

@@ -28,22 +28,22 @@ public class Main {
             String fileName = "test.pl";
             String code =
                     ""
-                    + "my $a = 15 ;"
-                    + "my $x = $a ;"
-                    + "say $x ;"
-                    + "$a = 12 ;"
-                    + "say $a ;"
-                    + " say ( sub { say @_ } ) ;"    // anon sub
-                    + " ( sub { say 'HERE' } )->(88888) ;"    // anon sub
-                    + " ( sub { say @_ } )->(88888) ;"    // anon sub
+                    + "my $a = 15 ; \n"
+                    + "my $x = $a ; \n"
+                    + "say $x ; \n"
+                    + "$a = 12 ; \n"
+                    + "say $a ; \n"
+                    + " say ( sub { say @_ } ) ; \n"    // anon sub
+                    + " ( sub { say 'HERE' } )->(88888) ; \n"    // anon sub
+                    + " ( sub { say @_ } )->(88888) ; \n"    // anon sub
                     + "eval ' $a = $a + 1 '; "    // eval string
-                    + "say $a ;"
-                    + "do { $a; if (1) { say 123 } elsif (3) { say 345 } else { say 456 } } ;"
+                    + "say $a ; \n"
+                    + "do { $a; if (1) { say 123 } elsif (3) { say 345 } else { say 456 } } ; \n"
                     + "print \"Finished; value is $a\\n\"; "
                     + "my ($i, %j) = (1,2,3,4,5); "
                     + "say(%j); "
                     + "$a = {a => 'hash-value'} ; say $a->{a}; my $b = [4,5]; say $b->[1]; "
-                    + "return 5;";
+                    + "return 5; \n";
 
             /*
              * Parse command-line arguments
