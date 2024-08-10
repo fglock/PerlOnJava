@@ -940,8 +940,15 @@ public class EmitterVisitor implements Visitor {
   }
 
   @Override
-  public void visit(ForNode node) throws Exception {
-    ctx.logDebug("FOR start");
+  public void visit(For1Node node) throws Exception {
+    ctx.logDebug("FOR1 start");
+    throw new PerlCompilerException(
+      node.tokenIndex, "Not implemented: 1-argument for loop", ctx.errorUtil);
+  }
+
+  @Override
+  public void visit(For3Node node) throws Exception {
+    ctx.logDebug("FOR3 start");
 
     EmitterVisitor voidVisitor = this.with(ContextType.VOID); // some parts have context VOID
 

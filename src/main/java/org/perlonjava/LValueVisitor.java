@@ -65,7 +65,12 @@ public class LValueVisitor implements Visitor {
     }
 
     @Override
-    public void visit(ForNode node) throws Exception {
+    public void visit(For1Node node) throws Exception {
+        context = ContextType.VOID;
+    }
+
+    @Override
+    public void visit(For3Node node) throws Exception {
         context = ContextType.VOID;
     }
 
