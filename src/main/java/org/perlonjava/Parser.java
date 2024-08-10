@@ -7,6 +7,8 @@ public class Parser {
   private boolean parsingForLoopVariable = false;
   private static final Set<String> TERMINATORS =
       new HashSet<>(Arrays.asList(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when"));
+  private static final Set<String> LISTTERMINATORS =
+      new HashSet<>(Arrays.asList(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when", "not", "and", "or"));
   private static final Set<String> UNARY_OP =
       new HashSet<>(
           Arrays.asList(
@@ -276,7 +278,7 @@ public class Parser {
                 token = peek();
                 hasParen = true;
             }
-            if (token.type == TokenType.EOF || TERMINATORS.contains(token.text) || token.text.equals(",")) {
+            if (token.type == TokenType.EOF || LISTTERMINATORS.contains(token.text) || token.text.equals(",")) {
               if (text.equals("rand")) {
                 // create "1"
                 operand = new NumberNode("1", tokenIndex);
