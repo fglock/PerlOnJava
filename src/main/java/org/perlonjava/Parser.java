@@ -294,13 +294,10 @@ public class Parser {
             Node separator = ((ListNode) operand).elements.remove(0);
             return new BinaryOperatorNode("join", separator, operand, tokenIndex);
           case "print":
-            // Handle 'print' keyword as a unary operator with an operand
-            operand = parseZeroOrMoreList(0);
-            return new UnaryOperatorNode("print", operand, tokenIndex);
           case "say":
-            // Handle 'say' keyword as a unary operator with an operand
+            // Handle 'say' keyword as a unary operator with a RuntimeList operand
             operand = parseZeroOrMoreList(0);
-            return new UnaryOperatorNode("say", operand, tokenIndex);
+            return new UnaryOperatorNode(token.text, operand, tokenIndex);
           case "my":
             // Handle 'my' keyword as a unary operator with an operand
             operand = parsePrimary();
