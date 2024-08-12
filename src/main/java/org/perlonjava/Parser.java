@@ -480,7 +480,7 @@ public class Parser {
           }
           if (isArray) {
             operand = new BinaryOperatorNode("join",
-                new StringNode(" ", tokenIndex),        // XXX replace with $"
+                new UnaryOperatorNode("$", new IdentifierNode("\"", tokenIndex), tokenIndex),        // join with $"
                 operand, tokenIndex);
           }
           parts.add(operand);
