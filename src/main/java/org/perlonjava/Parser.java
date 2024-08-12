@@ -625,10 +625,10 @@ public class Parser {
         token = peek();
         if (token.type == TokenType.EOF || LISTTERMINATORS.contains(token.text) || token.text.equals(",") || token.text.equals("=>")) {
             // "postfix" comma
-            return left;
+            return ListNode.makeList(left);
         }
         right = parseExpression(precedence);
-        return ListNode.add(left, right);
+        return ListNode.makeList(left, right);
       case "?":
         Node middle = parseExpression(0);
         consume(TokenType.OPERATOR, ":");
@@ -834,43 +834,26 @@ public class Parser {
   }
 
   private List<Node> parseList(String close, int minItems) {
-    List<Node> elements = new ArrayList<>();
     boolean firstItem = true;
+    ListNode expr;
 
-    while (!peek().text.equals(close)) {
-      if (!firstItem) {
-        // Ensure at least one delimiter is present
-        if (!peek().text.equals(",") && !peek().text.equals("=>") && !peek().text.equals(close)) {
-          throw new PerlCompilerException(tokenIndex, "Unexpected token: " + peek(), errorUtil);
-        }
-        // Consume all consecutive delimiters
-        while (peek().text.equals(",") || peek().text.equals("=>")) {
-          consume();
-        }
-      }
-      if (!peek().text.equals(close)) {
-
-        Node expr = parseExpression(getPrecedence(",") + 1);
-
-        // Check if the next token is '=>'
-        if (peek().text.equals("=>")) {
-          if (expr instanceof IdentifierNode) {
-            // Convert IdentifierNode to StringNode
-            expr = new StringNode(((IdentifierNode) expr).name, ((IdentifierNode) expr).tokenIndex);
-          }
-        }
-
-        elements.add(expr);
-        firstItem = false;
-      }
+    Token token = peek();
+    if (token.text.equals(close)) {
+      // empty list
+      consume();
+      List<Node> list = new ArrayList<>();
+      expr = new ListNode(list, tokenIndex);
     }
-    consume(TokenType.OPERATOR, close);
+    else {
+      expr = ListNode.makeList(parseExpression(0));
+      consume(TokenType.OPERATOR, close);
+    }
 
-    if (elements.size() < minItems) {
+    if (expr.elements.size() < minItems) {
       throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
     }
 
-    return elements;
+    return expr.elements;
   }
 
   public static void main(String[] args) throws Exception {
