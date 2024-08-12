@@ -556,6 +556,10 @@ public class Runtime extends AbstractRuntimeObject {
     return new Runtime(Math.log(this.getDouble()));
   }
 
+  public Runtime pow(Runtime arg) {
+    return new Runtime(Math.pow(this.getDouble(), arg.getDouble()));
+  }
+
   public Runtime abs() {
     Runtime arg1 = this;
     if (arg1.type == ScalarType.STRING) {
