@@ -830,10 +830,10 @@ public class Parser {
         if (!peek().text.equals(",") && !peek().text.equals("=>") && !peek().text.equals(close)) {
           throw new PerlCompilerException(tokenIndex, "Unexpected token: " + peek(), errorUtil);
         }
-      }
-      // Consume all consecutive delimiters
-      while (peek().text.equals(",") || peek().text.equals("=>")) {
-        consume();
+        // Consume all consecutive delimiters
+        while (peek().text.equals(",") || peek().text.equals("=>")) {
+          consume();
+        }
       }
       if (!peek().text.equals(close)) {
 
