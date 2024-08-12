@@ -124,18 +124,6 @@ public class RuntimeList implements ContextProvider {
 
     // Operators
 
-    // Join the list into a string
-    public String join(String delimiter) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < elements.size(); i++) {
-            if (i > 0) {
-                sb.append(delimiter);
-            }
-            sb.append(elements.get(i).toString());
-        }
-        return sb.toString();
-    }
-
     public Runtime say() {
       StringBuilder sb = new StringBuilder();
       for (int i = 0; i < elements.size(); i++) {
