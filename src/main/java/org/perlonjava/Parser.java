@@ -272,13 +272,19 @@ public class Parser {
           case "rand":
             String text = token.text;
             token = peek();
-            boolean hasParen = false;
             if (token.text.equals("(")) {
+                // argument in parenthesis
                 consume();
-                token = peek();
-                hasParen = true;
+                operand = new ListNode(parseList(")", 0), tokenIndex);
+            } else if (token.type == TokenType.EOF || LISTTERMINATORS.contains(token.text) || token.text.equals(",")) {
+                // no argument
+                operand = new ListNode(tokenIndex);
             }
-            if (token.type == TokenType.EOF || LISTTERMINATORS.contains(token.text) || token.text.equals(",")) {
+            else {
+                // argument without parenthesis
+                operand = ListNode.makeList(parseExpression(getPrecedence(",") + 1));
+            }
+            if (((ListNode) operand).elements.isEmpty()) {
               if (text.equals("rand")) {
                 // create "1"
                 operand = new NumberNode("1", tokenIndex);
@@ -287,11 +293,6 @@ public class Parser {
                 operand = new UnaryOperatorNode(
                       "$", new IdentifierNode("_", tokenIndex), tokenIndex);
               }
-            } else {
-              operand = parseExpression(getPrecedence(",") + 1);
-            }
-            if (hasParen) {
-              consume(TokenType.OPERATOR, ")");
             }
             return new UnaryOperatorNode(text, operand, tokenIndex);
           case "print":
