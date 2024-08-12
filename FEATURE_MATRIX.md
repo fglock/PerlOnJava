@@ -25,7 +25,6 @@
 - [ ] Cached string/numeric conversions; dualvars
 
 ## Operators
-- [ ] Basic Operations (Some are implemented)
 - [x] Simple arithmetic
 - [ ] Numeric Comparison operators (Some are implemented)
 - [x] String concat
