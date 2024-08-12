@@ -290,17 +290,16 @@ public class Parser {
             return new UnaryOperatorNode(text, operand, tokenIndex);
           case "join":
             // Handle 'join' keyword as a Binary operator
-            // XXX handle parenthesis
-            Node separator = parseExpression(getPrecedence(",") + 1);
-            operand = parseExpression(getPrecedence("print") + 1);
+            operand = parseZeroOrMoreList(1);
+            Node separator = ((ListNode) operand).elements.remove(0);
             return new BinaryOperatorNode("join", separator, operand, tokenIndex);
           case "print":
             // Handle 'print' keyword as a unary operator with an operand
-            operand = parseExpression(getPrecedence("print") + 1);
+            operand = parseZeroOrMoreList(0);
             return new UnaryOperatorNode("print", operand, tokenIndex);
           case "say":
             // Handle 'say' keyword as a unary operator with an operand
-            operand = parseExpression(getPrecedence("print") + 1);
+            operand = parseZeroOrMoreList(0);
             return new UnaryOperatorNode("say", operand, tokenIndex);
           case "my":
             // Handle 'my' keyword as a unary operator with an operand
@@ -845,29 +844,59 @@ public class Parser {
 
   // Comma is allowed after the argument:   rand, rand 10,
   private ListNode parseZeroOrOneList() {
-    ListNode operand;
+    ListNode expr;
     Token token = peek();
     if (token.text.equals("(")) {
         // argument in parenthesis, can be 0 or 1 argument:    rand(), rand(10)
         // Commas are allowed after the single argument:       rand(10,)
         consume();
-        operand = new ListNode(parseList(")", 0), tokenIndex);
-        if (operand.elements.size() > 1) {
+        expr = new ListNode(parseList(")", 0), tokenIndex);
+        if (expr.elements.size() > 1) {
           throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
         }
     } else if (token.type == TokenType.EOF || LISTTERMINATORS.contains(token.text) || token.text.equals(",")) {
         // no argument
-        operand = new ListNode(tokenIndex);
+        expr = new ListNode(tokenIndex);
     }
     else {
         // argument without parenthesis
-        operand = ListNode.makeList(parseExpression(getPrecedence(",") + 1));
+        expr = ListNode.makeList(parseExpression(getPrecedence(",") + 1));
     }
-    return operand;
+    return expr;
+  }
+
+  private ListNode parseZeroOrMoreList(int minItems) {
+    Token token = peek();
+    if (token.text.equals("(")) {
+        // arguments in parenthesis, can be 0 or more arguments:    print(), print(10)
+        // Commas are allowed after the arguments:       print(10,)
+        consume();
+        return new ListNode(parseList(")", 0), tokenIndex);
+    }
+
+    ListNode expr = new ListNode(tokenIndex);
+    while (token.type != TokenType.EOF) {
+        // argument without parenthesis
+        expr.elements.add(parseExpression(getPrecedence(",") + 1));
+        token = peek();
+        if (token.text.equals(",") || token.text.equals("=>")) {
+            while (token.text.equals(",") || token.text.equals("=>")) {
+                consume();
+                token = peek();
+            }
+        } else {
+            return expr;
+        }
+    }
+
+    if (expr.elements.size() < minItems) {
+      throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
+    }
+
+    return expr;
   }
 
   private List<Node> parseList(String close, int minItems) {
-    boolean firstItem = true;
     ListNode expr;
 
     Token token = peek();

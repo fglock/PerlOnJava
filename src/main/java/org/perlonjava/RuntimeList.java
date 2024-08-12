@@ -124,6 +124,15 @@ public class RuntimeList implements ContextProvider {
 
     // Operators
 
+    public Runtime print() {
+      StringBuilder sb = new StringBuilder();
+      for (int i = 0; i < elements.size(); i++) {
+          sb.append(elements.get(i).toString());
+      }
+      System.out.print(sb.toString());
+      return new Runtime(1);
+    }
+
     public Runtime say() {
       StringBuilder sb = new StringBuilder();
       for (int i = 0; i < elements.size(); i++) {
