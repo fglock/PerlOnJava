@@ -276,19 +276,7 @@ public class Parser {
           case "log":
           case "rand":
             String text = token.text;
-            token = peek();
-            if (token.text.equals("(")) {
-                // argument in parenthesis
-                consume();
-                operand = new ListNode(parseList(")", 0), tokenIndex);
-            } else if (token.type == TokenType.EOF || LISTTERMINATORS.contains(token.text) || token.text.equals(",")) {
-                // no argument
-                operand = new ListNode(tokenIndex);
-            }
-            else {
-                // argument without parenthesis
-                operand = ListNode.makeList(parseExpression(getPrecedence(",") + 1));
-            }
+            operand = parseZeroOrOneList();
             if (((ListNode) operand).elements.isEmpty()) {
               if (text.equals("rand")) {
                 // create "1"
@@ -851,6 +839,31 @@ public class Parser {
       default:
         return false;
     }
+  }
+
+  // List parsers
+
+  // Comma is allowed after the argument:   rand, rand 10,
+  private ListNode parseZeroOrOneList() {
+    ListNode operand;
+    Token token = peek();
+    if (token.text.equals("(")) {
+        // argument in parenthesis, can be 0 or 1 argument:    rand(), rand(10)
+        // Commas are allowed after the single argument:       rand(10,)
+        consume();
+        operand = new ListNode(parseList(")", 0), tokenIndex);
+        if (operand.elements.size() > 1) {
+          throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
+        }
+    } else if (token.type == TokenType.EOF || LISTTERMINATORS.contains(token.text) || token.text.equals(",")) {
+        // no argument
+        operand = new ListNode(tokenIndex);
+    }
+    else {
+        // argument without parenthesis
+        operand = ListNode.makeList(parseExpression(getPrecedence(",") + 1));
+    }
+    return operand;
   }
 
   private List<Node> parseList(String close, int minItems) {
