@@ -24,6 +24,18 @@ public class ListNode extends AbstractNode {
         this.tokenIndex = tokenIndex;
     }
 
+    public static ListNode add(Node left, Node right) {
+        List<Node> list = new ArrayList<>();
+        list.add(left);
+        list.add(right);
+        return new ListNode(list, left.getIndex());
+    }
+
+    public static ListNode add(ListNode left, Node right) {
+        left.elements.add(right);
+        return left;
+    }
+
     /**
      * Accepts a visitor that performs some operation on this node.
      * This method is part of the Visitor design pattern, which allows
