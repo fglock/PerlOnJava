@@ -865,7 +865,7 @@ public class EmitterVisitor implements Visitor {
     ctx.logDebug("Generated class env:  " + newEnv);
     RuntimeCode.anonSubs.put(subCtx.javaClassName, generatedClass); // cache the class
 
-    /* The following ASM code is equivalento to:
+    /* The following ASM code is equivalent to:
      *  // get the class
      *  Class<?> generatedClass = RuntimeCode.anonSubs.get("java.Class.Name");
      *  // Find the constructor
