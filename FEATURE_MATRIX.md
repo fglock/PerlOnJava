@@ -28,8 +28,14 @@
 - [ ] Basic Operations (Some are implemented)
 - [x] Simple arithmetic
 - [ ] Numeric Comparison operators (Some are implemented)
+- [x] String concat
+- [ ] `substr`
 - [ ] String Comparison operators
 - [x] Autoincrement, Autodecrement; String increment
+- [x] `join`
+- [ ] `split`
+- [ ] `grep`, `map`, `sort`
+- [ ] Regex
 
 ## Arrays, Hashes and Lists
 - [x] Array, Hash and List infrastructure
