@@ -500,7 +500,7 @@ public class EmitterVisitor implements Visitor {
       int varIndex = ctx.symbolTable.getVariableIndex(var);
       if (varIndex == -1) {
         // not a declared `my` or `our` variable
-        if (Namespace.existsGlobalVariable(var)) {
+        if (sigil.equals("$") && Namespace.existsGlobalVariable(var)) {
             // fetch a global variable
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
@@ -508,6 +508,24 @@ public class EmitterVisitor implements Visitor {
                 "Namespace",
                 "getGlobalVariable",
                 "(Ljava/lang/String;)LRuntime;",
+                false);
+        } else if (sigil.equals("@") && Namespace.existsGlobalArray(var)) {
+            // fetch a global variable
+            ctx.mv.visitLdcInsn(var);
+            ctx.mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "Namespace",
+                "getGlobalArray",
+                "(Ljava/lang/String;)LRuntimeArray;",
+                false);
+        } else if (sigil.equals("%") && Namespace.existsGlobalHash(var)) {
+            // fetch a global variable
+            ctx.mv.visitLdcInsn(var);
+            ctx.mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "Namespace",
+                "getGlobalHash",
+                "(Ljava/lang/String;)LRuntimeHash;",
                 false);
         } else {
           // variable not found
