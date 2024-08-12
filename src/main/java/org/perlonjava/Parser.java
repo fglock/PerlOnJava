@@ -616,6 +616,21 @@ public class Parser {
       case "...":
         right = parseExpression(precedence);
         return new BinaryOperatorNode(token.text, left, right, tokenIndex);
+      case ",":
+      case "=>":
+
+        if (token.text.equals("=>") && left instanceof IdentifierNode) {
+            // Autoquote - Convert IdentifierNode to StringNode
+            left = new StringNode(((IdentifierNode) left).name, ((IdentifierNode) left).tokenIndex);
+        }
+        token = peek();
+        if (token.type == TokenType.EOF || LISTTERMINATORS.contains(token.text) || token.text.equals(",") || token.text.equals("=>")) {
+            // "postfix" comma
+            return left;
+        }
+
+        right = parseExpression(precedence);
+        return new BinaryOperatorNode(token.text, left, right, tokenIndex);
       case "?":
         Node middle = parseExpression(0);
         consume(TokenType.OPERATOR, ":");
