@@ -82,6 +82,7 @@
 - [x] Global variable infrastructure
 - [ ] Global variables
 - [x] `@_` and `$@` special variables; `$_[0]` parameter variable
+- [x] `$"` special variable
 - [ ] `$_` special variable
 - [ ] `@_`, `$_` and regex variables like `$1` are thread-safe
 
