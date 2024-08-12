@@ -259,6 +259,11 @@ public class Parser {
 
     switch (token.type) {
       case IDENTIFIER:
+        Token nextToken = peek();
+        if (nextToken.text.equals("=>")) {
+            // Autoquote
+            return new StringNode(token.text, tokenIndex);
+        }
         switch (token.text) {
           case "undef":
             // Handle 'undef' keyword as a unary operator with no operand
@@ -381,7 +386,7 @@ public class Parser {
               String text = token.text;
               int saveIndex = tokenIndex;
 
-              Token nextToken = peek(); // operator or identifier
+              nextToken = peek(); // operator or identifier
               if (isSigil(text)
                   && (nextToken.type == TokenType.OPERATOR
                       || nextToken.type == TokenType.IDENTIFIER
