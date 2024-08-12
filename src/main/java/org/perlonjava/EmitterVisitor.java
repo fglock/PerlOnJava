@@ -500,12 +500,12 @@ public class EmitterVisitor implements Visitor {
       int varIndex = ctx.symbolTable.getVariableIndex(var);
       if (varIndex == -1) {
         // not a declared `my` or `our` variable
-        if (Runtime.existsGlobalVariable(var)) {
+        if (Namespace.existsGlobalVariable(var)) {
             // fetch a global variable
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
-                "Runtime",
+                "Namespace",
                 "getGlobalVariable",
                 "(Ljava/lang/String;)LRuntime;",
                 false);
