@@ -429,10 +429,8 @@ public class EmitterVisitor implements Visitor {
         handleVariableOperator(node, operator);
         break;
       case "print":
-        handlePrintOperator(node);
-        break;
       case "say":
-        handleSayOperator(node, "say");
+        handleSayOperator(node, operator);
         break;
       case "my":
         handleMyOperator(node);
@@ -474,6 +472,7 @@ public class EmitterVisitor implements Visitor {
   }
 
   private void handleSayOperator(UnaryOperatorNode node, String operator) throws Exception {
+    // TODO print FILE 123
     node.operand.accept(this.with(ContextType.LIST));
     // Transform the value in the stack to List
     ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "getList", "()LRuntimeList;", true);
@@ -533,15 +532,6 @@ public class EmitterVisitor implements Visitor {
     // TODO special variables $1 $`
     // TODO ${a} ${[ 123 ]}
     throw new PerlCompilerException(node.tokenIndex, "Not implemented: " + operator, ctx.errorUtil);
-  }
-
-  private void handlePrintOperator(UnaryOperatorNode node) throws Exception {
-    node.operand.accept(this.with(ContextType.SCALAR));
-    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", "print", "()LRuntime;", false);
-    if (ctx.contextType == ContextType.VOID) {
-      ctx.mv.visitInsn(Opcodes.POP);
-    }
-    // TODO print FILE 123
   }
 
   private void handleSetOperator(BinaryOperatorNode node) throws Exception {
