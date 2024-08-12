@@ -126,6 +126,9 @@ public class EmitterVisitor implements Visitor {
       case "(":
         handleApplyOperator(node);
         return;
+      case "join":
+        handleJoinOperator(operator, node);
+        return;
     }
 
     node.left.accept(scalarVisitor); // target - left parameter
@@ -155,6 +158,17 @@ public class EmitterVisitor implements Visitor {
         break;
       default:
         throw new RuntimeException("Unexpected infix operator: " + operator);
+    }
+  }
+
+  private void handleJoinOperator(String operator, BinaryOperatorNode node) throws Exception {
+    node.left.accept(this.with(ContextType.SCALAR));
+    node.right.accept(this.with(ContextType.LIST));
+    // Transform the value in the stack to List
+    ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "getList", "()LRuntimeList;", true);
+    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "Runtime", operator, "(LRuntimeList;)LRuntime;", false);
+    if (ctx.contextType == ContextType.VOID) {
+      ctx.mv.visitInsn(Opcodes.POP);
     }
   }
 

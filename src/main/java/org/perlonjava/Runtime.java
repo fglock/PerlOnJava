@@ -615,4 +615,18 @@ public class Runtime extends AbstractRuntimeObject {
   public Runtime rand() {
     return new Runtime(Math.random() * this.getDouble());
   }
+
+  public Runtime join(RuntimeList list) {
+    String delimiter = this.toString();
+    // Join the list into a string
+    StringBuilder sb = new StringBuilder();
+    int size = list.elements.size();
+    for (int i = 0; i < size; i++) {
+        if (i > 0) {
+            sb.append(delimiter);
+        }
+        sb.append(list.elements.get(i).toString());
+    }
+    return new Runtime(sb.toString());
+  }
 }

@@ -295,6 +295,12 @@ public class Parser {
               }
             }
             return new UnaryOperatorNode(text, operand, tokenIndex);
+          case "join":
+            // Handle 'join' keyword as a Binary operator
+            // XXX handle parenthesis
+            Node separator = parseExpression(getPrecedence(",") + 1);
+            operand = parseExpression(getPrecedence("print") + 1);
+            return new BinaryOperatorNode("join", separator, operand, tokenIndex);
           case "print":
             // Handle 'print' keyword as a unary operator with an operand
             operand = parseExpression(getPrecedence("print") + 1);
@@ -451,25 +457,33 @@ public class Parser {
               str.append(text);
               break;
           }
-        } else if (text.equals("$")) {
+        } else if (text.equals("$") || text.equals("@")) {
+          boolean isArray = text.equals("@");
+          Node operand;
           if (str.length() > 0) {
             parts.add(new StringNode(str.toString(), tokenIndex)); // string so far
             str = new StringBuilder(); // continue
           }
           Token nextToken = peek();
           if (nextToken.type == TokenType.IDENTIFIER) {
-            parts.add(
+            operand =
                 new UnaryOperatorNode(
-                    "$", new IdentifierNode(consume().text, tokenIndex), tokenIndex));
+                    text, new IdentifierNode(consume().text, tokenIndex), tokenIndex);
           } else if (nextToken.type == TokenType.OPERATOR && nextToken.text.equals("{")) {
             consume(); // consume '{'
             String varName = consume(TokenType.IDENTIFIER).text;
             consume(TokenType.OPERATOR, "}"); // consume '}'
-            parts.add(
-                new UnaryOperatorNode("$", new IdentifierNode(varName, tokenIndex), tokenIndex));
+            operand =
+                new UnaryOperatorNode(text, new IdentifierNode(varName, tokenIndex), tokenIndex);
           } else {
-            throw new RuntimeException("Final $ should be \\$ or $name");
+            throw new RuntimeException("Final "+text+" should be \\"+text+" or "+text+"name");
           }
+          if (isArray) {
+            operand = new BinaryOperatorNode("join",
+                new StringNode(" ", tokenIndex),        // XXX replace with $"
+                operand, tokenIndex);
+          }
+          parts.add(operand);
         } else {
           str.append(text);
         }

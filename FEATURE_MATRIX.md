@@ -13,8 +13,8 @@
 - [ ] `local` variable declaration
 - [x] variable assignment
 - [x] Basic types: integer, double, string, CODE, undef
-- [ ] String Interpolation (Incomplete)
-- [x] Interpolate simple scalars
+- [x] String Interpolation Array and Scalar
+- [ ] String Interpolation escapes (Incomplete)
 - [x] Expand backslash-n and simple sequences
 - [x] String numification
 - [x] References
