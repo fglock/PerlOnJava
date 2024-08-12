@@ -108,6 +108,22 @@ public class RuntimeList implements ContextProvider {
         return new RuntimeList(value);
     }
 
+    // Convert the list to a string (for debugging purposes)
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < elements.size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            sb.append(elements.get(i).toString());
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+
+    // Operators
+
     // Join the list into a string
     public String join(String delimiter) {
         StringBuilder sb = new StringBuilder();
@@ -127,19 +143,5 @@ public class RuntimeList implements ContextProvider {
       }
       System.out.println(sb.toString());
       return new Runtime(1);
-    }
-
-    // Convert the list to a string (for debugging purposes)
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < elements.size(); i++) {
-            if (i > 0) {
-                sb.append(", ");
-            }
-            sb.append(elements.get(i).toString());
-        }
-        sb.append("]");
-        return sb.toString();
     }
 }

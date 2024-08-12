@@ -24,6 +24,11 @@ public class ListNode extends AbstractNode {
         this.tokenIndex = tokenIndex;
     }
 
+    ListNode(int tokenIndex) {
+        this.elements = new ArrayList<>();
+        this.tokenIndex = tokenIndex;
+    }
+
     public static ListNode makeList(Node left) {
         if (left instanceof ListNode) {
             return (ListNode) left;
