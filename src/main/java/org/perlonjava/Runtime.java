@@ -21,43 +21,9 @@ public class Runtime extends AbstractRuntimeObject {
   public ScalarType type;
   public Object value;
 
-  private static Map<String, Runtime> globalVariables = new HashMap<>();
-
   // this is not safe, because the values are mutable - need to create an immutable version
   // public static zero = new Runtime(0);
   // public static one = new Runtime(1);
-
-  // Static methods
-  public static Runtime setGlobalVariable(String key, Runtime value) {
-      Runtime var = globalVariables.get(key);
-      if (var == null) {
-        var = new Runtime();
-        globalVariables.put(key, var);
-      }
-      return var.set(value);
-  }
-
-  public static Runtime setGlobalVariable(String key, String value) {
-      Runtime var = globalVariables.get(key);
-      if (var == null) {
-        var = new Runtime();
-        globalVariables.put(key, var);
-      }
-      return var.set(value);
-  }
-
-  public static Runtime getGlobalVariable(String key) {
-      Runtime var = globalVariables.get(key);
-      if (var == null) {
-        var = new Runtime();
-        globalVariables.put(key, var);
-      }
-      return var;
-  }
-
-  public static boolean existsGlobalVariable(String key) {
-      return globalVariables.containsKey(key);
-  }
 
   // Constructors
   public Runtime() {
