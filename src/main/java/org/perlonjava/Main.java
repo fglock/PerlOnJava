@@ -118,9 +118,7 @@ public class Main {
             ctx.symbolTable.addVariable("@_"); // Argument list is local variable 1
             ctx.symbolTable.addVariable("wantarray"); // Call context is local variable 2
 
-            Namespace.getGlobalVariable("$@");    // initialize $@ to "undef"
-            Namespace.getGlobalVariable("$_");    // initialize $_ to "undef"
-            Namespace.getGlobalVariable("$\"").set(" ");    // initialize $_ to " "
+            Namespace.initializeGlobals();
 
             ctx.logDebug("parse code: " + code);
             ctx.logDebug("  call context " + ctx.contextType);
