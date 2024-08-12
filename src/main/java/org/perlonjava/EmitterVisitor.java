@@ -264,6 +264,15 @@ public class EmitterVisitor implements Visitor {
         }
       }
     }
+    if (node.left instanceof ListNode) { // ("a","b","c")[2]
+        // transform to:  ["a","b","c"]->2]
+        ListNode list = (ListNode) node.left;
+        BinaryOperatorNode refNode = new BinaryOperatorNode( "->", 
+            new ArrayLiteralNode(list.elements, list.getIndex()),
+            node.right, node.tokenIndex);
+        refNode.accept(this);
+        return;
+    }
 
     // default: call `->[]`
     BinaryOperatorNode refNode = new BinaryOperatorNode( "->", node.left, node.right, node.tokenIndex);
@@ -1273,7 +1282,7 @@ public class EmitterVisitor implements Visitor {
         mv.visitInsn(Opcodes.DUP);
 
         // emit the list element
-        element.accept(this);
+        element.accept(this.with(ContextType.LIST));
 
         // Call the add method to add the element to the RuntimeArray
         // This calls ContextProvider.addToArray() in order to allow [ 1, 2, $x, @x, %x ]

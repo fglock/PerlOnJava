@@ -41,6 +41,7 @@
 - [x] List assignment like: `($a, undef, @b) = @c`
 - [x] `my LIST` like: `my ($a, @b)`
 - [x] Autoquote before `=>`
+- [x] Select an element from a list: `("a","b", %x)[2]`
 - [ ] Basic Array Operations (Some are implemented)
 - [ ] Array Slices
 - [x] Array literals
