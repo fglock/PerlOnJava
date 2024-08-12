@@ -860,10 +860,10 @@ public class EmitterVisitor implements Visitor {
         ASMMethodCreator.createClassWithMethod(
             subCtx, newEnv, node.block, false // no try-catch
             );
-    String newClassNameDot = ctx.javaClassName.replace('/', '.');
-    ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + ctx.javaClassName);
+    String newClassNameDot = subCtx.javaClassName.replace('/', '.');
+    ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + subCtx.javaClassName);
     ctx.logDebug("Generated class env:  " + newEnv);
-    RuntimeCode.anonSubs.put(ctx.javaClassName, generatedClass); // cache the class
+    RuntimeCode.anonSubs.put(subCtx.javaClassName, generatedClass); // cache the class
 
     /* The following ASM code is equivalento to:
      *  // get the class
@@ -882,7 +882,7 @@ public class EmitterVisitor implements Visitor {
 
     // 1. Get the class from RuntimeCode.anonSubs
     ctx.mv.visitFieldInsn(Opcodes.GETSTATIC, "RuntimeCode", "anonSubs", "Ljava/util/HashMap;");
-    ctx.mv.visitLdcInsn(ctx.javaClassName);
+    ctx.mv.visitLdcInsn(subCtx.javaClassName);
     ctx.mv.visitMethodInsn(
         Opcodes.INVOKEVIRTUAL,
         "java/util/HashMap",
