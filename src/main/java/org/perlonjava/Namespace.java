@@ -60,6 +60,10 @@ public class Namespace {
       return var;
   }
 
+  public static boolean existsGlobalArray(String key) {
+      return globalArrays.containsKey(key);
+  }
+
   public static RuntimeHash getGlobalHash(String key) {
       RuntimeHash var = globalHashes.get(key);
       if (var == null) {
@@ -67,6 +71,10 @@ public class Namespace {
         globalHashes.put(key, var);
       }
       return var;
+  }
+
+  public static boolean existsGlobalHash(String key) {
+      return globalHashes.containsKey(key);
   }
 }
 
