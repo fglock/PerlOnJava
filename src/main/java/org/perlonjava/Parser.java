@@ -289,7 +289,7 @@ public class Parser {
             }
             return new UnaryOperatorNode(text, operand, tokenIndex);
           case "join":
-            // Handle 'join' keyword as a Binary operator
+            // Handle 'join' keyword as a Binary operator with a RuntimeList operand
             operand = parseZeroOrMoreList(1);
             Node separator = ((ListNode) operand).elements.remove(0);
             return new BinaryOperatorNode("join", separator, operand, tokenIndex);
@@ -303,7 +303,8 @@ public class Parser {
             operand = parsePrimary();
             return new UnaryOperatorNode("my", operand, tokenIndex);
           case "return":
-            // Handle 'return' keyword as a unary operator with an operand
+            // Handle 'return' keyword as a unary operator with an operand;
+            // Parenthensis are ignored.
             operand = parseExpression(getPrecedence("print") + 1);
             return new UnaryOperatorNode("return", operand, tokenIndex);
           case "eval":
@@ -839,12 +840,16 @@ public class Parser {
 
   // List parsers
 
+  // List parser for predeclared function calls with One optional argument,
+  // accepts a list with Parentheses or without.
+  //
   // Comma is allowed after the argument:   rand, rand 10,
+  //
   private ListNode parseZeroOrOneList() {
     ListNode expr;
     Token token = peek();
     if (token.text.equals("(")) {
-        // argument in parenthesis, can be 0 or 1 argument:    rand(), rand(10)
+        // argument in parentheses, can be 0 or 1 argument:    rand(), rand(10)
         // Commas are allowed after the single argument:       rand(10,)
         consume();
         expr = new ListNode(parseList(")", 0), tokenIndex);
@@ -856,16 +861,20 @@ public class Parser {
         expr = new ListNode(tokenIndex);
     }
     else {
-        // argument without parenthesis
+        // argument without parentheses
         expr = ListNode.makeList(parseExpression(getPrecedence(",") + 1));
     }
     return expr;
   }
 
+  // List parser for predeclared function calls, accepts a list with Parentheses or without
+  //
+  // The Minimum number of arguments can be set.
+  //
   private ListNode parseZeroOrMoreList(int minItems) {
     Token token = peek();
     if (token.text.equals("(")) {
-        // arguments in parenthesis, can be 0 or more arguments:    print(), print(10)
+        // arguments in parentheses, can be 0 or more arguments:    print(), print(10)
         // Commas are allowed after the arguments:       print(10,)
         consume();
         return new ListNode(parseList(")", 0), tokenIndex);
@@ -873,7 +882,7 @@ public class Parser {
 
     ListNode expr = new ListNode(tokenIndex);
     while (token.type != TokenType.EOF) {
-        // argument without parenthesis
+        // argument without parentheses
         expr.elements.add(parseExpression(getPrecedence(",") + 1));
         token = peek();
         if (token.text.equals(",") || token.text.equals("=>")) {
@@ -893,6 +902,17 @@ public class Parser {
     return expr;
   }
 
+  // Generic List parser for Parentheses, Hash literal, Array literal,
+  // function arguments, get Array element, get Hash element.
+  //
+  // The Minimum number of arguments can be set.
+  //
+  // Example usage:
+  //
+  //    new ListNode(parseList(")", 0), tokenIndex);
+  //    new HashLiteralNode(parseList("}", 1), tokenIndex);
+  //    new ArrayLiteralNode(parseList("]", 1), tokenIndex);
+  //
   private List<Node> parseList(String close, int minItems) {
     ListNode expr;
 
