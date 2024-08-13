@@ -888,7 +888,7 @@ public class EmitterVisitor implements Visitor {
                         ctx.debugEnabled);
         Class<?> generatedClass =
                 ASMMethodCreator.createClassWithMethod(
-                        subCtx, newEnv, node.block, false // no try-catch
+                        subCtx, newEnv, node.block, node.useTryCatch
                 );
         String newClassNameDot = subCtx.javaClassName.replace('/', '.');
         ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + subCtx.javaClassName);

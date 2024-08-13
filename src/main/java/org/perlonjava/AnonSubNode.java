@@ -15,12 +15,18 @@ public class AnonSubNode extends AbstractNode {
     public final Node block;
 
     /**
+     * useTryCatch if we are compiling an eval block
+     */
+    public final boolean useTryCatch;
+
+    /**
      * Constructs a new AnonSubNode with the specified parts.
      *
      * @param block the block of the subroutine
      */
-    public AnonSubNode(Node block, int tokenIndex) {
+    public AnonSubNode(Node block, boolean useTryCatch, int tokenIndex) {
         this.block = block;
+        this.useTryCatch = useTryCatch;
         this.tokenIndex = tokenIndex;
     }
 
