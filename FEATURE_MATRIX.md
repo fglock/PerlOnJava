@@ -72,7 +72,9 @@
 - [x] 3-argument `for` loop
 - [x] `foreach` loop
 - [x] `while` and `until` loop
-- [ ] Statement modifiers
+- [x] `if` `unless` Statement modifiers
+- [ ] `while` `until` Statement modifiers
+- [ ] `for` `foreach` Statement modifiers
 - [x] `eval` string with closure variables
 - [x] `eval` string sets $@ on error; returns undef
 - [x] `eval` block
