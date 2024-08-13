@@ -48,20 +48,21 @@ public class EmitterVisitor implements Visitor {
             return;
         }
         MethodVisitor mv = ctx.mv;
-        boolean isInteger = !node.value.contains(".");
+        String value = node.value.replace("_", "");
+        boolean isInteger = !value.contains(".");
         if (ctx.isBoxed) { // expect a RuntimeScalar object
             if (isInteger) {
                 ctx.logDebug("visit(NumberNode) emit boxed integer");
                 mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/RuntimeScalar");
                 mv.visitInsn(Opcodes.DUP);
                 mv.visitLdcInsn(
-                        Integer.valueOf(node.value)); // Push the integer argument onto the stack
+                        Integer.valueOf(value)); // Push the integer argument onto the stack
                 mv.visitMethodInsn(
                         Opcodes.INVOKESPECIAL, "org/perlonjava/RuntimeScalar", "<init>", "(I)V", false); // Call new RuntimeScalar(int)
             } else {
                 mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/RuntimeScalar");
                 mv.visitInsn(Opcodes.DUP);
-                mv.visitLdcInsn(Double.valueOf(node.value)); // Push the double argument onto the stack
+                mv.visitLdcInsn(Double.valueOf(value)); // Push the double argument onto the stack
                 mv.visitMethodInsn(
                         Opcodes.INVOKESPECIAL, "org/perlonjava/RuntimeScalar", "<init>", "(D)V", false); // Call new RuntimeScalar(double)
             }
@@ -71,9 +72,9 @@ public class EmitterVisitor implements Visitor {
             // }
         } else {
             if (isInteger) {
-                mv.visitLdcInsn(Integer.parseInt(node.value)); // emit native integer
+                mv.visitLdcInsn(Integer.parseInt(value)); // emit native integer
             } else {
-                mv.visitLdcInsn(Double.parseDouble(node.value)); // emit native double
+                mv.visitLdcInsn(Double.parseDouble(value)); // emit native double
             }
         }
     }

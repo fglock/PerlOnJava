@@ -585,20 +585,19 @@ public class Parser {
 
   private void checkNumberExponent(StringBuilder number) {
     // Check for exponent part
-    if (tokens.get(tokenIndex).text.startsWith("e")
-        || tokens.get(tokenIndex).text.startsWith("E")) {
-      String exponentPart = consume().text; // consume 'e' or 'E' and possibly more 'E10'
-      number.append(exponentPart.charAt(0)); // append 'e' or 'E'
+    String exponentPart = peek().text;
+    if (exponentPart.startsWith("e")
+        || exponentPart.startsWith("E")) {
+      consume(); // consume 'e' or 'E' and possibly more 'E10'
 
-      int index = 1;
       // Check if the rest of the token contains digits (e.g., "E10")
-      while (index < exponentPart.length()) {
-        if (!Character.isDigit(exponentPart.charAt(index))) {
+      int index = 1;
+      for (; index < exponentPart.length(); index++) {
+        if (!Character.isDigit(exponentPart.charAt(index)) && exponentPart.charAt(index) != '_') {
           throw new PerlCompilerException(tokenIndex, "Malformed number", errorUtil);
         }
-        number.append(exponentPart.charAt(index));
-        index++;
       }
+      number.append(exponentPart);
 
       // If the exponent part was not fully consumed, check for separate tokens
       if (index == 1) {
