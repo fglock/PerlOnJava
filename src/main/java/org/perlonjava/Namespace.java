@@ -3,12 +3,12 @@ package org.perlonjava;
 import java.util.*;
 
 /**
- * The Runtime class simulates Perl namespaces.
+ * The RuntimeScalar class simulates Perl namespaces.
  *
  */
 public class Namespace {
 
-  private static final Map<String, Runtime> globalVariables = new HashMap<>();
+  private static final Map<String, RuntimeScalar> globalVariables = new HashMap<>();
   private static final Map<String, RuntimeArray> globalArrays = new HashMap<>();
   private static final Map<String, RuntimeHash> globalHashes = new HashMap<>();
 
@@ -22,28 +22,28 @@ public class Namespace {
       getGlobalHash("%INC");
   }
 
-  public static Runtime setGlobalVariable(String key, Runtime value) {
-      Runtime var = globalVariables.get(key);
+  public static RuntimeScalar setGlobalVariable(String key, RuntimeScalar value) {
+      RuntimeScalar var = globalVariables.get(key);
       if (var == null) {
-        var = new Runtime();
+        var = new RuntimeScalar();
         globalVariables.put(key, var);
       }
       return var.set(value);
   }
 
-  public static Runtime setGlobalVariable(String key, String value) {
-      Runtime var = globalVariables.get(key);
+  public static RuntimeScalar setGlobalVariable(String key, String value) {
+      RuntimeScalar var = globalVariables.get(key);
       if (var == null) {
-        var = new Runtime();
+        var = new RuntimeScalar();
         globalVariables.put(key, var);
       }
       return var.set(value);
   }
 
-  public static Runtime getGlobalVariable(String key) {
-      Runtime var = globalVariables.get(key);
+  public static RuntimeScalar getGlobalVariable(String key) {
+      RuntimeScalar var = globalVariables.get(key);
       if (var == null) {
-        var = new Runtime();
+        var = new RuntimeScalar();
         globalVariables.put(key, var);
       }
       return var;

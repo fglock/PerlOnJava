@@ -22,11 +22,11 @@ public interface ContextProvider {
     RuntimeList getList();
 
     /**
-     * Retrieves a Runtime instance.
+     * Retrieves a RuntimeScalar instance.
      * 
-     * @return a Runtime object.
+     * @return a RuntimeScalar object.
      */
-    Runtime getScalar();
+    RuntimeScalar getScalar();
 
     /**
      * Add itself to a RuntimeArray.

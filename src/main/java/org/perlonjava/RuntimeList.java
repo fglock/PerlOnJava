@@ -15,7 +15,7 @@ public class RuntimeList implements ContextProvider {
         this.elements = new ArrayList<>();
     }
 
-    public RuntimeList(Runtime value) {
+    public RuntimeList(RuntimeScalar value) {
         this.elements = new ArrayList<>();
         this.elements.add(value);
     }
@@ -79,9 +79,9 @@ public class RuntimeList implements ContextProvider {
     }
 
     // Get the scalar value of the list
-    public Runtime getScalar() {
+    public RuntimeScalar getScalar() {
         if (elements.isEmpty()) {
-            return new Runtime(); // Return undefined if empty
+            return new RuntimeScalar(); // Return undefined if empty
         }
         // XXX expand the last element
         return elements.get(elements.size() - 1).getScalar();
@@ -93,8 +93,8 @@ public class RuntimeList implements ContextProvider {
         RuntimeArray arr = new RuntimeArray();  
         value.addToArray(arr);
         for (AbstractRuntimeObject elem : elements) {
-            if (elem instanceof Runtime) {
-                ((Runtime) elem).set(arr.shift());
+            if (elem instanceof RuntimeScalar) {
+                ((RuntimeScalar) elem).set(arr.shift());
             } else if (elem instanceof RuntimeArray) {
                 ((RuntimeArray) elem).elements = arr.elements;
                 arr = new RuntimeArray();
@@ -123,21 +123,21 @@ public class RuntimeList implements ContextProvider {
 
     // Operators
 
-    public Runtime print() {
+    public RuntimeScalar print() {
       StringBuilder sb = new StringBuilder();
         for (AbstractRuntimeObject element : elements) {
             sb.append(element.toString());
         }
       System.out.print(sb);
-      return new Runtime(1);
+      return new RuntimeScalar(1);
     }
 
-    public Runtime say() {
+    public RuntimeScalar say() {
       StringBuilder sb = new StringBuilder();
         for (AbstractRuntimeObject element : elements) {
             sb.append(element.toString());
         }
       System.out.println(sb);
-      return new Runtime(1);
+      return new RuntimeScalar(1);
     }
 }

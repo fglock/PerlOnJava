@@ -44,7 +44,7 @@ public class ASMMethodCreator implements Opcodes {
           case '@':
               return "Lorg/perlonjava/RuntimeArray;";
           default:
-              return "Lorg/perlonjava/Runtime;";
+              return "Lorg/perlonjava/RuntimeScalar;";
       }
   }
   
@@ -71,7 +71,7 @@ public class ASMMethodCreator implements Opcodes {
           case '@':
               return "org/perlonjava/RuntimeArray";
           default:
-              return "org/perlonjava/Runtime";
+              return "org/perlonjava/RuntimeScalar";
       }
   }
 
@@ -214,15 +214,15 @@ public class ASMMethodCreator implements Opcodes {
       // Convert the exception to a string
       mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/ErrorMessageUtil", "stringifyException", "(Ljava/lang/Exception;)Ljava/lang/String;", false);
 
-      // Set the global error variable "$@" using Runtime.setGlobalVariable(key, value)
+      // Set the global error variable "$@" using RuntimeScalar.setGlobalVariable(key, value)
       mv.visitLdcInsn("$@");
       mv.visitInsn(Opcodes.SWAP);
-      mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/Runtime", "setGlobalVariable", "(Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/Runtime;", false);
-      mv.visitInsn(Opcodes.POP);    // throw away the Runtime result
+      mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/RuntimeScalar", "setGlobalVariable", "(Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/RuntimeScalar;", false);
+      mv.visitInsn(Opcodes.POP);    // throw away the RuntimeScalar result
 
       // Restore the stack state to match the end of the try block if needed
       // Return "undef"
-      mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/Runtime", "undef", "()Lorg/perlonjava/Runtime;", false);
+      mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/RuntimeScalar", "undef", "()Lorg/perlonjava/RuntimeScalar;", false);
 
       // End of the catch block
       mv.visitLabel(endCatch);

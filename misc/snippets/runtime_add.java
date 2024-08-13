@@ -74,7 +74,7 @@ public class Runtime {
         return new Runtime(Type.INTEGER, val1 + val2);
     }
 
-    // Helper method to convert Runtime to double
+    // Helper method to convert RuntimeScalar to double
     private double toDouble(Runtime var) {
         switch (var.type) {
             case INTEGER:
@@ -94,7 +94,7 @@ public class Runtime {
         }
     }
 
-    // Helper method to convert Runtime to long
+    // Helper method to convert RuntimeScalar to long
     private long toLong(Runtime var) {
         switch (var.type) {
             case INTEGER:

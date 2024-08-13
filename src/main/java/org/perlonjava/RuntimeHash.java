@@ -7,11 +7,11 @@ import java.util.Map;
  * The RuntimeHash class simulates Perl hashes.
  *
  * <p>In Perl, a hash is an associative array, meaning it is a collection of key-value pairs. This
- * class tries to mimic this behavior using a map of string keys to Runtime objects, which can hold
+ * class tries to mimic this behavior using a map of string keys to RuntimeScalar objects, which can hold
  * any type of Perl scalar value.
  */
 public class RuntimeHash extends AbstractRuntimeObject {
-    public Map<String, Runtime> elements;
+    public Map<String, RuntimeScalar> elements;
 
     // Constructor
     public RuntimeHash() {
@@ -20,9 +20,9 @@ public class RuntimeHash extends AbstractRuntimeObject {
 
     // Add itself to a RuntimeArray.
     public void addToArray(RuntimeArray array) {
-        for (Map.Entry<String, Runtime> entry : elements.entrySet()) {
-            array.push(new Runtime(entry.getKey()));
-            array.push(new Runtime(entry.getValue()));
+        for (Map.Entry<String, RuntimeScalar> entry : elements.entrySet()) {
+            array.push(new RuntimeScalar(entry.getKey()));
+            array.push(new RuntimeScalar(entry.getValue()));
         }
     }
 
@@ -31,7 +31,7 @@ public class RuntimeHash extends AbstractRuntimeObject {
       RuntimeArray arr = new RuntimeArray();  
       value.addToArray(arr);
       if (arr.size() % 2 != 0) {  // add an undef if the array size is odd
-        arr.push(new Runtime());
+        arr.push(new RuntimeScalar());
       }
       RuntimeHash hash = fromArray(arr);
       this.elements = hash.elements;
@@ -39,33 +39,33 @@ public class RuntimeHash extends AbstractRuntimeObject {
     }
 
     // Create hash reference with the elements of a list
-    public static Runtime createHashRef(RuntimeList value) {
+    public static RuntimeScalar createHashRef(RuntimeList value) {
       RuntimeArray arr = new RuntimeArray();  
       value.addToArray(arr);
       if (arr.size() % 2 != 0) {  // add an undef if the array size is odd
-        arr.push(new Runtime());
+        arr.push(new RuntimeScalar());
       }
-      Runtime result = new Runtime();
+      RuntimeScalar result = new RuntimeScalar();
       result.type = ScalarType.HASHREFERENCE;
       result.value = fromArray(arr);
       return result;
     }
 
     // Add a key-value pair to the hash
-    public void put(String key, Runtime value) {
+    public void put(String key, RuntimeScalar value) {
         elements.put(key, value);
     }
 
     // Get a value by key
-    public Runtime get(String key) {
+    public RuntimeScalar get(String key) {
         // XXX TODO autovivification
-        return elements.getOrDefault(key, new Runtime()); // Return undefined if key is not present
+        return elements.getOrDefault(key, new RuntimeScalar()); // Return undefined if key is not present
     }
 
     // Get a value by key
-    public Runtime get(Runtime key) {
+    public RuntimeScalar get(RuntimeScalar key) {
         // XXX TODO autovivification
-        return elements.getOrDefault(key, new Runtime()); // Return undefined if key is not present
+        return elements.getOrDefault(key, new RuntimeScalar()); // Return undefined if key is not present
     }
 
     // Check if a key exists in the hash
@@ -79,8 +79,8 @@ public class RuntimeHash extends AbstractRuntimeObject {
     }
 
     // Create a reference to the Hash
-    public Runtime createReference() {
-      Runtime result = new Runtime();
+    public RuntimeScalar createReference() {
+      RuntimeScalar result = new RuntimeScalar();
       result.type = ScalarType.HASHREFERENCE;
       result.value = this;
       return result;
@@ -100,7 +100,7 @@ public class RuntimeHash extends AbstractRuntimeObject {
     public RuntimeArray keys() {
         RuntimeArray array = new RuntimeArray();
         for (String key : elements.keySet()) {
-            array.push(new Runtime(key));
+            array.push(new RuntimeScalar(key));
         }
         return array;
     }
@@ -108,7 +108,7 @@ public class RuntimeHash extends AbstractRuntimeObject {
     // Get all values in the hash as a RuntimeArray
     public RuntimeArray values() {
         RuntimeArray array = new RuntimeArray();
-        for (Runtime value : elements.values()) {
+        for (RuntimeScalar value : elements.values()) {
             array.push(value);
         }
         return array;
@@ -127,8 +127,8 @@ public class RuntimeHash extends AbstractRuntimeObject {
     // Get a list of key-value pairs as a RuntimeArray
     public RuntimeArray entryArray() {
         RuntimeArray array = new RuntimeArray();
-        for (Map.Entry<String, Runtime> entry : elements.entrySet()) {
-            array.push(new Runtime(entry.getKey()));
+        for (Map.Entry<String, RuntimeScalar> entry : elements.entrySet()) {
+            array.push(new RuntimeScalar(entry.getKey()));
             array.push(entry.getValue());
         }
         return array;
@@ -140,7 +140,7 @@ public class RuntimeHash extends AbstractRuntimeObject {
         for (int i = 0; i < array.size(); i += 2) {
             if (i + 1 < array.size()) {
                 String key = array.get(i).toString();
-                Runtime value = array.get(i + 1);
+                RuntimeScalar value = array.get(i + 1);
                 hash.put(key, value);
             }
         }
@@ -158,15 +158,15 @@ public class RuntimeHash extends AbstractRuntimeObject {
     }
 
     // Get the scalar value of the hash
-    public Runtime getScalar() {
-        return new Runtime(this.size());
+    public RuntimeScalar getScalar() {
+        return new RuntimeScalar(this.size());
     }
 
     // Convert the hash to a string (for debugging purposes)
     public String dump() {
         StringBuilder sb = new StringBuilder("{");
         boolean first = true;
-        for (Map.Entry<String, Runtime> entry : elements.entrySet()) {
+        for (Map.Entry<String, RuntimeScalar> entry : elements.entrySet()) {
             if (!first) {
                 sb.append(", ");
             }
@@ -181,7 +181,7 @@ public class RuntimeHash extends AbstractRuntimeObject {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        for (Map.Entry<String, Runtime> entry : elements.entrySet()) {
+        for (Map.Entry<String, RuntimeScalar> entry : elements.entrySet()) {
             sb.append(entry.getKey()).append(entry.getValue());
         }
         return sb.toString();
