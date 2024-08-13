@@ -510,7 +510,7 @@ public class Parser {
             operand =
                 new UnaryOperatorNode(text, new IdentifierNode(varName, tokenIndex), tokenIndex);
           } else {
-            throw new RuntimeException("Final "+text+" should be \\"+text+" or "+text+"name");
+            throw new PerlCompilerException(tokenIndex, "Final "+text+" should be \\"+text+" or "+text+"name", errorUtil);
           }
           if (isArray) {
             operand = new BinaryOperatorNode("join",
