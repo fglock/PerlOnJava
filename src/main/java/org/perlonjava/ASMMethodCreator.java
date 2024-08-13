@@ -116,7 +116,7 @@ public class ASMMethodCreator implements Opcodes {
       constructorDescriptor.append(descriptor);
     }
     constructorDescriptor.append(")V");
-    ctx.logDebug("constructorDescriptor: " + constructorDescriptor.toString());
+    ctx.logDebug("constructorDescriptor: " + constructorDescriptor);
     ctx.mv =
         cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", constructorDescriptor.toString(), null, null);
     ctx.mv.visitCode();

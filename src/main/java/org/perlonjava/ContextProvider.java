@@ -32,15 +32,13 @@ public interface ContextProvider {
      * Add itself to a RuntimeArray.
      * 
      * @param array The RuntimeArray object
-     * @return void.
      */
-    public void addToArray(RuntimeArray array);
+    void addToArray(RuntimeArray array);
 
     /**
      * Add itself to a RuntimeList.
      * 
      * @param list The RuntimeList object
-     * @return void.
      */
     void addToList(RuntimeList list);
 

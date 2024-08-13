@@ -3,7 +3,6 @@ package org.perlonjava;
 import java.util.Stack;
 import java.util.Map;
 import java.util.Set;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.TreeMap;
 
@@ -12,7 +11,7 @@ import java.util.TreeMap;
  */
 class ScopedSymbolTable {
     // A stack to manage nested scopes of symbol tables
-    private Stack<SymbolTable> stack = new Stack<>();
+    private final Stack<SymbolTable> stack = new Stack<>();
     
     /**
      * Constructs a ScopedSymbolTable.

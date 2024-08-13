@@ -12,7 +12,7 @@ public class IfNode extends AbstractNode {
     /**
      * The operator "if", "unless", "elsif"
      */
-    public String operator = "";
+    public String operator;
 
     /**
      * The condition operand of the if statement.

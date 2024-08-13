@@ -2,11 +2,11 @@ package org.perlonjava;
 
 /**
  * Is this Node assignable (Lvalue) and is it Scalar-like or List-like
- *
+ * <p>
  * getResult() returns a ContextType.SCALAR, LIST, or VOID (not assignable)
- *
+ * <p>
  * Usage:
- *
+ * <p>
  *   LValueVisitor.getContext(node);
  *
  */
