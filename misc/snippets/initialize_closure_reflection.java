@@ -1,5 +1,5 @@
 
-// Call Runtime.eval_string() method to evaluate a string and get an array of variable names (newEnv)
+// Call RuntimeScalar.eval_string() method to evaluate a string and get an array of variable names (newEnv)
 ctx.mv.visitMethodInsn(
     Opcodes.INVOKESTATIC, 
     "Runtime", 
