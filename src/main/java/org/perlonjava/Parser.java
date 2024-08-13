@@ -80,6 +80,18 @@ public class Parser {
     token = peek();
     if (token.type == TokenType.IDENTIFIER) {
         // statement modifier: if, for ...
+        switch (token.text) {
+          case "if":
+            consume();
+            return new BinaryOperatorNode("&&", parseExpression(0), expression, tokenIndex);
+          case "unless":
+            consume();
+            return new BinaryOperatorNode("||", parseExpression(0), expression, tokenIndex);
+          case "for":
+          case "foreach":
+          case "while":
+          case "until":
+        }
         throw new PerlCompilerException(tokenIndex, "Not implemented: " + token, errorUtil);
     }
     if (token.type != TokenType.EOF && !token.text.equals("}") && !token.text.equals(";")) {
