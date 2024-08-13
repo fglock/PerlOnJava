@@ -132,7 +132,7 @@ public class Parser {
       throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
     }
 
-    return new AnonSubNode(block, tokenIndex);
+    return new AnonSubNode(block, false, tokenIndex);
   }
 
   private Node parseWhileStatement() {
@@ -319,8 +319,19 @@ public class Parser {
             if (token.type == TokenType.OPERATOR && token.text.equals("{")) {
               // If the next token is '{', parse a block
               consume(TokenType.OPERATOR, "{");
-              operand = parseBlock();
+              Node block = parseBlock();
               consume(TokenType.OPERATOR, "}");
+              // transform:  eval { 123 }
+              // into:  sub { 123 }->()
+              //
+              //   BinaryOperatorNode: ->
+              //     AnonSubNode:
+              //       BlockNode:
+              //         NumberNode: 123
+              //     ListNode:
+              return new BinaryOperatorNode("->",
+                new AnonSubNode(block, true, tokenIndex),
+                new ListNode(tokenIndex), tokenIndex);
             } else {
               // Otherwise, parse a primary expression
               operand = parsePrimary();
