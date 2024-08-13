@@ -8,9 +8,9 @@ import java.util.*;
  */
 public class Namespace {
 
-  private static Map<String, Runtime> globalVariables = new HashMap<>();
-  private static Map<String, RuntimeArray> globalArrays = new HashMap<>();
-  private static Map<String, RuntimeHash> globalHashes = new HashMap<>();
+  private static final Map<String, Runtime> globalVariables = new HashMap<>();
+  private static final Map<String, RuntimeArray> globalArrays = new HashMap<>();
+  private static final Map<String, RuntimeHash> globalHashes = new HashMap<>();
 
   // Static methods
 

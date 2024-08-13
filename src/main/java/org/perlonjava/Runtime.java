@@ -1,7 +1,6 @@
 package org.perlonjava;
 
 import java.lang.reflect.Method;
-import java.util.*;
 import java.lang.Math;
 
 /**
@@ -73,8 +72,6 @@ public class Runtime extends AbstractRuntimeObject {
         return this.parseNumber().getLong();
       case CODE:
         return value.hashCode(); // Use hashCode as the ID
-      case UNDEF:
-        return 0;
       default:
         return 0;
     }
@@ -90,9 +87,7 @@ public class Runtime extends AbstractRuntimeObject {
         return this.parseNumber().getDouble();
       case CODE:
         return value.hashCode(); // Use hashCode as the ID
-      case UNDEF:
-        return 0.0;
-      default:
+        default:
         return 0.0;
     }
   }
@@ -105,10 +100,8 @@ public class Runtime extends AbstractRuntimeObject {
         return (double) value != 0.0;
       case STRING:
         String s = (String) value;
-        return !s.equals("") && !s.equals("0");
-      case CODE:
-        return true;
-      case UNDEF:
+        return !s.isEmpty() && !s.equals("0");
+        case UNDEF:
         return false;
       default:
         return true;
@@ -231,7 +224,7 @@ public class Runtime extends AbstractRuntimeObject {
 
 
   // Helper method to autoincrement a String variable
-    private static final String _string_increment(String s) {
+    private static String _string_increment(String s) {
         if (s.length() < 2) {
             final int c = s.codePointAt(0);
             if ((c >= '0' && c <= '8') || (c >= 'A' && c <= 'Y') || (c >= 'a' && c <= 'y')) {
@@ -248,13 +241,13 @@ public class Runtime extends AbstractRuntimeObject {
             }
             return "1";
         }
-        String c = _string_increment(s.substring(s.length()-1, s.length()));
+        String c = _string_increment(s.substring(s.length()-1));
         if (c.length() == 1) {
             // AAAC => AAAD
             return s.substring(0, s.length()-1) + c;
         }
         // AAAZ => AABA
-        return _string_increment(s.substring(0, s.length()-1)) + c.substring(c.length()-1, c.length());
+        return _string_increment(s.substring(0, s.length()-1)) + c.substring(c.length()-1);
     }
 
   // Helper method to autoincrement a String variable
@@ -376,7 +369,7 @@ public class Runtime extends AbstractRuntimeObject {
   }
 
   public Runtime stringConcat(Runtime b) {
-    return new Runtime(this.toString() + b.toString());
+    return new Runtime(this + b.toString());
   }
 
   public Runtime unaryMinus() {

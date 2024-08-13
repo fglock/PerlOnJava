@@ -4,7 +4,7 @@ import java.util.*;
 
 /**
  * The ArrayLiteralNode class represents a node in the abstract syntax tree (AST) that holds
- * a list of other nodesm surrounded by `[` `]`.
+ * a list of other nodes surrounded by `[` `]`.
  */
 public class ArrayLiteralNode extends AbstractNode {
     /**

@@ -119,7 +119,7 @@ public class Parser {
     return false;
   }
 
-  private Node parseAnonSub(Token token) {
+  private Node parseAnonSub() {
     // token == "sub"
     // TODO - optional name, subroutine prototype
     consume(TokenType.OPERATOR, "{");
@@ -127,7 +127,7 @@ public class Parser {
     consume(TokenType.OPERATOR, "}");
 
     // some characters are illegal after an anon sub
-    token = peek();
+    Token token = peek();
     if (token.text.equals("(") || token.text.equals("{") || token.text.equals("[")) {
       throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
     }
@@ -338,7 +338,7 @@ public class Parser {
             break;
           case "sub":
             // Handle 'sub' keyword to parse an anonymous subroutine
-            return parseAnonSub(token);
+            return parseAnonSub();
           default:
             // Handle any other identifier as a simple identifier node
             return new IdentifierNode(token.text, tokenIndex);
@@ -396,8 +396,7 @@ public class Parser {
                 } else {
 
                   // some characters are illegal after a variable
-                  token = peek();
-                  if (peek().text.equals("(") && !parsingForLoopVariable) {
+                    if (peek().text.equals("(") && !parsingForLoopVariable) {
                     // not parsing "for my $v (..."
                     throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
                   }
@@ -494,7 +493,7 @@ public class Parser {
     consume(TokenType.OPERATOR, "\""); // Consume the closing double quote
 
     // Join the parts
-    if (parts.size() == 0) {
+    if (parts.isEmpty()) {
       return new StringNode("", tokenIndex);
     } else if (parts.size() == 1) {
       Node result = parts.get(0);

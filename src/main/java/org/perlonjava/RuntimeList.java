@@ -1,8 +1,6 @@
 package org.perlonjava;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -94,8 +92,7 @@ public class RuntimeList implements ContextProvider {
         // flatten the right side
         RuntimeArray arr = new RuntimeArray();  
         value.addToArray(arr);
-        for (int i = 0; i < elements.size(); i++) {
-            AbstractRuntimeObject elem = this.elements.get(i);
+        for (AbstractRuntimeObject elem : elements) {
             if (elem instanceof Runtime) {
                 ((Runtime) elem).set(arr.shift());
             } else if (elem instanceof RuntimeArray) {
@@ -128,19 +125,19 @@ public class RuntimeList implements ContextProvider {
 
     public Runtime print() {
       StringBuilder sb = new StringBuilder();
-      for (int i = 0; i < elements.size(); i++) {
-          sb.append(elements.get(i).toString());
-      }
-      System.out.print(sb.toString());
+        for (AbstractRuntimeObject element : elements) {
+            sb.append(element.toString());
+        }
+      System.out.print(sb);
       return new Runtime(1);
     }
 
     public Runtime say() {
       StringBuilder sb = new StringBuilder();
-      for (int i = 0; i < elements.size(); i++) {
-          sb.append(elements.get(i).toString());
-      }
-      System.out.println(sb.toString());
+        for (AbstractRuntimeObject element : elements) {
+            sb.append(element.toString());
+        }
+      System.out.println(sb);
       return new Runtime(1);
     }
 }
