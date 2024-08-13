@@ -1,3 +1,5 @@
+package org.perlonjava;
+
 /**
  * ContextProvider interface defines methods for obtaining different types of runtime data.
  * Classes implementing this interface should provide implementations for these methods.

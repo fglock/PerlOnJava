@@ -1,3 +1,5 @@
+package org.perlonjava;
+
 /**
  * The IfNode class represents a node in the abstract syntax tree (AST) that holds an "if" statement.
  * The parts of the statement are: "condition", "thenBranch" and "elseBranch".

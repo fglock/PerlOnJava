@@ -1,3 +1,5 @@
+package org.perlonjava;
+
 /**
  * The AnonSubNode class represents a node in the abstract syntax tree (AST) that holds an anonymous sub.
  * The parts of the node are: "block".

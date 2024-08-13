@@ -1,3 +1,5 @@
+package org.perlonjava;
+
 /**
  * The Visitor interface defines a set of methods for visiting different types of nodes
  * in an abstract syntax tree (AST). This interface is part of the Visitor design pattern,

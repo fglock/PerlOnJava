@@ -1,3 +1,5 @@
+package org.perlonjava;
+
 import java.util.*;
 import org.objectweb.asm.*;
 
@@ -16,7 +18,7 @@ public class ASMMethodCreator implements Opcodes {
 
   // Generate a unique internal class name
   public static String generateClassName() {
-    return "org/perlito/anon" + classCounter++;
+    return "org/perlonjava/anon" + classCounter++;
   }
 
   /**
@@ -38,11 +40,11 @@ public class ASMMethodCreator implements Opcodes {
       // Use a switch statement to determine the descriptor based on the first character
       switch (firstChar) {
           case '%':
-              return "LRuntimeHash;";
+              return "Lorg/perlonjava/RuntimeHash;";
           case '@':
-              return "LRuntimeArray;";
+              return "Lorg/perlonjava/RuntimeArray;";
           default:
-              return "LRuntime;";
+              return "Lorg/perlonjava/Runtime;";
       }
   }
   
@@ -65,11 +67,11 @@ public class ASMMethodCreator implements Opcodes {
       // Use a switch statement to determine the class name based on the first character
       switch (firstChar) {
           case '%':
-              return "RuntimeHash";
+              return "org/perlonjava/RuntimeHash";
           case '@':
-              return "RuntimeArray";
+              return "org/perlonjava/RuntimeArray";
           default:
-              return "Runtime";
+              return "org/perlonjava/Runtime";
       }
   }
 
@@ -143,7 +145,7 @@ public class ASMMethodCreator implements Opcodes {
         cw.visitMethod(
             Opcodes.ACC_PUBLIC,
             "apply",
-            "(LRuntimeArray;LContextType;)LRuntimeList;",
+            "(Lorg/perlonjava/RuntimeArray;Lorg/perlonjava/ContextType;)Lorg/perlonjava/RuntimeList;",
             null,
             new String[] {"java/lang/Exception"});
 
@@ -210,17 +212,17 @@ public class ASMMethodCreator implements Opcodes {
       //      Opcodes.INVOKEVIRTUAL, "java/lang/Exception", "printStackTrace", "()V", false);
 
       // Convert the exception to a string
-      mv.visitMethodInsn(Opcodes.INVOKESTATIC, "ErrorMessageUtil", "stringifyException", "(Ljava/lang/Exception;)Ljava/lang/String;", false);
+      mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/ErrorMessageUtil", "stringifyException", "(Ljava/lang/Exception;)Ljava/lang/String;", false);
 
       // Set the global error variable "$@" using Runtime.setGlobalVariable(key, value)
       mv.visitLdcInsn("$@");
       mv.visitInsn(Opcodes.SWAP);
-      mv.visitMethodInsn(Opcodes.INVOKESTATIC, "Runtime", "setGlobalVariable", "(Ljava/lang/String;Ljava/lang/String;)LRuntime;", false);
+      mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/Runtime", "setGlobalVariable", "(Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/Runtime;", false);
       mv.visitInsn(Opcodes.POP);    // throw away the Runtime result
 
       // Restore the stack state to match the end of the try block if needed
       // Return "undef"
-      mv.visitMethodInsn(Opcodes.INVOKESTATIC, "Runtime", "undef", "()LRuntime;", false);
+      mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/Runtime", "undef", "()Lorg/perlonjava/Runtime;", false);
 
       // End of the catch block
       mv.visitLabel(endCatch);
@@ -239,7 +241,7 @@ public class ASMMethodCreator implements Opcodes {
     }
 
     // Transform the value in the stack to RuntimeList
-    mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "ContextProvider", "getList", "()LRuntimeList;", true);
+    mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/ContextProvider", "getList", "()Lorg/perlonjava/RuntimeList;", true);
 
     mv.visitInsn(Opcodes.ARETURN); // returns an Object
     mv.visitMaxs(0, 0); // Automatically computed
@@ -256,7 +258,7 @@ public class ASMMethodCreator implements Opcodes {
     // number of anonymous subroutines, as it helps manage memory usage by 
     // allowing unused classes to be collected by the garbage collector.
     //
-    CustomClassLoader loader = new CustomClassLoader();
+    CustomClassLoader loader = new CustomClassLoader(ASMMethodCreator.class.getClassLoader());
 
     // Create a "Java" class name with dots instead of slashes
     String javaClassNameDot = ctx.javaClassName.replace('/', '.');

@@ -1,3 +1,5 @@
+package org.perlonjava;
+
 /**
  * The Node interface represents an abstract syntax tree (AST) node.
  * An AST is a tree representation of the abstract syntactic structure

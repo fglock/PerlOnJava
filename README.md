@@ -4,8 +4,10 @@ This is a Perl compiler under development. It compiles Perl into Java bytecode a
 
 ## Compile
 
+Note: change `asm-9.7.jar` location accordingly
+
 ```sh
-javac -cp ./asm-9.7.jar:. *.java
+javac -cp ./asm-9.7.jar -d . src/main/java/org/perlonjava/*.java
 ```
 
 ## Run
@@ -13,13 +15,13 @@ javac -cp ./asm-9.7.jar:. *.java
 Show instructions
 
 ```sh
-java -cp ./asm-9.7.jar Main --help
+java -cp ./asm-9.7.jar:. org.perlonjava.Main --help
 ```
 
 Execute something
 
 ```sh
-java -cp ./asm-9.7.jar Main -e ' print 123 '
+java -cp ./asm-9.7.jar:. org.perlonjava.Main -e ' print 123 '
 ```
 
 ## Debugging Tools
@@ -27,29 +29,29 @@ java -cp ./asm-9.7.jar Main -e ' print 123 '
 Run emitting debug information
 
 ```sh
-java -cp ./asm-9.7.jar Main --debug -e ' print 123 '
+java -cp ./asm-9.7.jar:. org.perlonjava.Main --debug -e ' print 123 '
 ```
 
 Compile only; can be combined with --debug
 
 ```sh
-java -cp ./asm-9.7.jar Main -c -e ' print 123 '
+java -cp ./asm-9.7.jar:. org.perlonjava.Main -c -e ' print 123 '
 ```
 
 ```sh
-java -cp ./asm-9.7.jar Main --debug -c -e ' print 123 '
+java -cp ./asm-9.7.jar:. org.perlonjava.Main --debug -c -e ' print 123 '
 ```
 
 Run the Lexer only
 
 ```sh
-java -cp ./asm-9.7.jar Main --tokenize -e ' print 123 '
+java -cp ./asm-9.7.jar:. org.perlonjava.Main --tokenize -e ' print 123 '
 ```
 
 Run the Parser only
 
 ```sh
-java -cp ./asm-9.7.jar Main --parse -e ' print 123 '
+java -cp ./asm-9.7.jar:. org.perlonjava.Main --parse -e ' print 123 '
 ```
 
 ## Modules

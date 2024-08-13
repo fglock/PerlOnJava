@@ -1,3 +1,5 @@
+package org.perlonjava;
+
 /**
  * The CustomClassLoader class extends the ClassLoader and provides a method
  * to define a class from a byte array. This can be useful for dynamically
@@ -8,6 +10,10 @@
  * using a byte array that contains the class data.</p>
  */
 public class CustomClassLoader extends ClassLoader {
+
+    public CustomClassLoader(ClassLoader parent) {
+        super(parent);
+    }
 
     /**
      * Defines a class using the given name and byte array containing the class data.
