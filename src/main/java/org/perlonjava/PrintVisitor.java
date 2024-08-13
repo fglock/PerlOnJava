@@ -1,3 +1,5 @@
+package org.perlonjava;
+
 /*
  *
  * Usage:

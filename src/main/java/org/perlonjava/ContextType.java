@@ -1,3 +1,5 @@
+package org.perlonjava;
+
 /**
  * The ContextType enum defines the various types of contexts that can be encountered
  * in the Perl programming language. Perl has a unique context system that determines

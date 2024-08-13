@@ -1,3 +1,5 @@
+package org.perlonjava;
+
 /**
  * The BinaryOperatorNode class represents a node in the abstract syntax tree (AST) that holds
  * a binary operator and its two operands. This class implements the Node interface, allowing it to be

@@ -1,3 +1,5 @@
+package org.perlonjava;
+
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import java.util.*;

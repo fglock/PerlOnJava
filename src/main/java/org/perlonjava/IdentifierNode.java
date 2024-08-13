@@ -1,3 +1,5 @@
+package org.perlonjava;
+
 /**
  * The IdentifierNode class represents a node in the abstract syntax tree (AST) that holds
  * an identifier name. This class implements the Node interface, allowing it to be visited

@@ -1,3 +1,5 @@
+package org.perlonjava;
+
 /**
  * The Token class represents a lexical token in a programming language or text.
  * A token is a basic unit of meaningful data, such as a keyword, identifier, operator,
