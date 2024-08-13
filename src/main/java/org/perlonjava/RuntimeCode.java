@@ -49,7 +49,7 @@ public class RuntimeCode {
     } catch (Exception e) {
       // compilation error in eval-string
 
-      // Set the global error variable "$@" using RuntimeScalar.setGlobalVariable(key, value)
+      // Set the global error variable "$@" using Namespace.setGlobalVariable(key, value)
       Namespace.setGlobalVariable("$@", e.toString());
 
       ast = new UnaryOperatorNode("undef", null, 1); // return an "undef" ast
