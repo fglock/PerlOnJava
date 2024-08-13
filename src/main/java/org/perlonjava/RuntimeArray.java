@@ -9,7 +9,7 @@ import java.util.List;
  * The RuntimeArray class simulates Perl arrays.
  *
  * <p>In Perl, an array is a dynamic list of scalar values. This class tries to mimic this behavior
- * using a list of Runtime objects, which can hold any type of Perl scalar value.
+ * using a list of RuntimeScalar objects, which can hold any type of Perl scalar value.
  */
 public class RuntimeArray extends AbstractRuntimeObject {
     public List<AbstractRuntimeObject> elements;
@@ -23,7 +23,7 @@ public class RuntimeArray extends AbstractRuntimeObject {
         this.elements = a.elements;
     }
 
-    public RuntimeArray(Runtime value) {
+    public RuntimeArray(RuntimeScalar value) {
         this.elements = new ArrayList<>();
         this.elements.add(value);
     }
@@ -32,7 +32,7 @@ public class RuntimeArray extends AbstractRuntimeObject {
     public void addToArray(RuntimeArray array) {
       int size = this.size();
       for (int i = 0; i < size; i++) {
-          array.push(new Runtime((Runtime) this.elements.get(i)));
+          array.push(new RuntimeScalar((RuntimeScalar) this.elements.get(i)));
       }
     }
 
@@ -41,58 +41,58 @@ public class RuntimeArray extends AbstractRuntimeObject {
         elements.add(value);
     }
 
-    public void push(Runtime value) {
+    public void push(RuntimeScalar value) {
         elements.add(value);
     }
 
     // Add a value to the beginning of the array
-    public void unshift(Runtime value) {
+    public void unshift(RuntimeScalar value) {
         elements.add(0, value);
     }
 
     // Remove and return the last value of the array
-    public Runtime pop() {
+    public RuntimeScalar pop() {
         if (elements.isEmpty()) {
-            return new Runtime(); // Return undefined if empty
+            return new RuntimeScalar(); // Return undefined if empty
         }
-        return (Runtime) elements.remove(elements.size() - 1);
+        return (RuntimeScalar) elements.remove(elements.size() - 1);
     }
 
     // Remove and return the first value of the array
-    public Runtime shift() {
+    public RuntimeScalar shift() {
         if (elements.isEmpty()) {
-            return new Runtime(); // Return undefined if empty
+            return new RuntimeScalar(); // Return undefined if empty
         }
-        return (Runtime) elements.remove(0);
+        return (RuntimeScalar) elements.remove(0);
     }
 
     // Get a value at a specific index
-    public Runtime get(int index) {
+    public RuntimeScalar get(int index) {
         if (index < 0) {
             index = elements.size() + index; // Handle negative indices
         }
         if (index < 0 || index >= elements.size()) {
             // XXX TODO autovivification
-            return new Runtime(); // Return undefined if out of bounds
+            return new RuntimeScalar(); // Return undefined if out of bounds
         }
-        return (Runtime) elements.get(index);
+        return (RuntimeScalar) elements.get(index);
     }
 
     // Get a value at a specific index
-    public Runtime get(Runtime value) {
+    public RuntimeScalar get(RuntimeScalar value) {
         int index = (int) value.getLong();
         if (index < 0) {
             index = elements.size() + index; // Handle negative indices
         }
         if (index < 0 || index >= elements.size()) {
             // XXX TODO autovivification
-            return new Runtime(); // Return undefined if out of bounds
+            return new RuntimeScalar(); // Return undefined if out of bounds
         }
-        return (Runtime) elements.get(index);
+        return (RuntimeScalar) elements.get(index);
     }
 
     // Set the whole array to a Scalar
-    public RuntimeArray set(Runtime value) {
+    public RuntimeArray set(RuntimeScalar value) {
       this.elements.clear();
       this.elements.add(value);
       return this;
@@ -106,21 +106,21 @@ public class RuntimeArray extends AbstractRuntimeObject {
     }
 
     // Set a value at a specific index
-    public void set(int index, Runtime value) {
+    public void set(int index, RuntimeScalar value) {
         if (index < 0) {
             index = elements.size() + index; // Handle negative indices
         }
         if (index < 0 || index >= elements.size()) {
             for (int i = elements.size(); i <= index; i++) {
-                elements.add(new Runtime()); // Fill with undefined values if necessary
+                elements.add(new RuntimeScalar()); // Fill with undefined values if necessary
             }
         }
         elements.set(index, value);
     }
 
     // Create a reference to the Array
-    public Runtime createReference() {
-      Runtime result = new Runtime();
+    public RuntimeScalar createReference() {
+      RuntimeScalar result = new RuntimeScalar();
       result.type = ScalarType.ARRAYREFERENCE;
       result.value = this;
       return result;
@@ -142,8 +142,8 @@ public class RuntimeArray extends AbstractRuntimeObject {
     }
 
     // Get the scalar value of the list
-    public Runtime getScalar() {
-        return new Runtime(elements.size());
+    public RuntimeScalar getScalar() {
+        return new RuntimeScalar(elements.size());
     }
 
     // Slice the array
@@ -156,7 +156,7 @@ public class RuntimeArray extends AbstractRuntimeObject {
     }
 
     // Splice the array
-    public RuntimeArray splice(int offset, int length, Runtime... list) {
+    public RuntimeArray splice(int offset, int length, RuntimeScalar... list) {
         RuntimeArray removedElements = new RuntimeArray();
 
         // Handle negative offset
@@ -184,7 +184,7 @@ public class RuntimeArray extends AbstractRuntimeObject {
 
     // Overloaded splice methods
     public RuntimeArray splice(int offset, int length) {
-        return splice(offset, length, new Runtime[0]);
+        return splice(offset, length, new RuntimeScalar[0]);
     }
 
     public RuntimeArray splice(int offset) {

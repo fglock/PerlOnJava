@@ -20,7 +20,7 @@ public class RuntimeCode {
   }
 
   // Method to compile the text of eval string into an anonymous subroutine
-  public static Class<?> eval_string(Runtime code, String evalTag) throws Exception {
+  public static Class<?> eval_string(RuntimeScalar code, String evalTag) throws Exception {
 
     // retrieve the eval context that was saved at program compile-time
     EmitterContext evalCtx = RuntimeCode.evalContext.get(evalTag);
@@ -49,7 +49,7 @@ public class RuntimeCode {
     } catch (Exception e) {
       // compilation error in eval-string
 
-      // Set the global error variable "$@" using Runtime.setGlobalVariable(key, value)
+      // Set the global error variable "$@" using RuntimeScalar.setGlobalVariable(key, value)
       Namespace.setGlobalVariable("$@", e.toString());
 
       ast = new UnaryOperatorNode("undef", null, 1); // return an "undef" ast
