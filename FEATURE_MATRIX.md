@@ -17,6 +17,7 @@
 - [ ] String Interpolation escapes (Incomplete)
 - [x] Expand backslash-n and simple sequences
 - [x] String numification
+- [x] Numbers with underscores: `1_000`
 - [x] References
 - [ ] Autovivification (Some are implemented)
 - [ ] File handles
