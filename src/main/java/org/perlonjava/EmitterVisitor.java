@@ -688,11 +688,7 @@ public class EmitterVisitor implements Visitor {
     }
 
     private void handleEvalOperator(UnaryOperatorNode node) throws Exception {
-        if (node.operand instanceof BlockNode) { // eval block
-            // TODO eval block
-            throw new PerlCompilerException(
-                    node.tokenIndex, "Not implemented: eval block", ctx.errorUtil);
-        } else { // eval string
+        // eval string
 
             // TODO - this can be cached and reused at runtime for performance
             // retrieve the closure variable list into "newEnv" array
@@ -849,7 +845,6 @@ public class EmitterVisitor implements Visitor {
             // If the context is SCALAR, the stack should contain [RuntimeScalar]
             // If the context is VOID, the stack should be empty
 
-        }
     }
 
     @Override
