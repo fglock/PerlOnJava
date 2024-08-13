@@ -849,11 +849,11 @@ public class EmitterVisitor implements Visitor {
 
     @Override
     public void visit(AnonSubNode node) throws Exception {
-
         ctx.logDebug("SUB start");
         if (ctx.contextType == ContextType.VOID) {
             return;
         }
+        MethodVisitor mv = ctx.mv;
 
         // XXX TODO - if the sub has an empty block, we return an empty list
         // XXX TODO - when calling a sub with no arguments, we use an empty list argument
@@ -906,34 +906,34 @@ public class EmitterVisitor implements Visitor {
         int skipVariables = ASMMethodCreator.skipVariables; // skip (this, @_, wantarray)
 
         // 1. Get the class from RuntimeCode.anonSubs
-        ctx.mv.visitFieldInsn(Opcodes.GETSTATIC, "org/perlonjava/RuntimeCode", "anonSubs", "Ljava/util/HashMap;");
-        ctx.mv.visitLdcInsn(subCtx.javaClassName);
-        ctx.mv.visitMethodInsn(
+        mv.visitFieldInsn(Opcodes.GETSTATIC, "org/perlonjava/RuntimeCode", "anonSubs", "Ljava/util/HashMap;");
+        mv.visitLdcInsn(subCtx.javaClassName);
+        mv.visitMethodInsn(
                 Opcodes.INVOKEVIRTUAL,
                 "java/util/HashMap",
                 "get",
                 "(Ljava/lang/Object;)Ljava/lang/Object;",
                 false);
-        ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Class");
+        mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Class");
 
         // Stack after this step: [Class]
 
         // 2. Find the constructor (RuntimeScalar, RuntimeScalar, ...)
-        ctx.mv.visitInsn(Opcodes.DUP);
-        ctx.mv.visitIntInsn(
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitIntInsn(
                 Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
-        ctx.mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class"); // Create a new array of Class
+        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class"); // Create a new array of Class
         for (int i = 0; i < newEnv.length - skipVariables; i++) {
-            ctx.mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
-            ctx.mv.visitIntInsn(Opcodes.BIPUSH, i); // Push the index
+            mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
+            mv.visitIntInsn(Opcodes.BIPUSH, i); // Push the index
 
             // select Array/Hash/Scalar depending on env value
             String descriptor = ASMMethodCreator.getVariableDescriptor(newEnv[i + skipVariables]);
 
-            ctx.mv.visitLdcInsn(Type.getType(descriptor)); // Push the Class object for RuntimeScalar
-            ctx.mv.visitInsn(Opcodes.AASTORE); // Store the Class object in the array
+            mv.visitLdcInsn(Type.getType(descriptor)); // Push the Class object for RuntimeScalar
+            mv.visitInsn(Opcodes.AASTORE); // Store the Class object in the array
         }
-        ctx.mv.visitMethodInsn(
+        mv.visitMethodInsn(
                 Opcodes.INVOKEVIRTUAL,
                 "java/lang/Class",
                 "getConstructor",
@@ -943,36 +943,36 @@ public class EmitterVisitor implements Visitor {
         // Stack after this step: [Class, Constructor]
 
         // 3. Instantiate the class
-        ctx.mv.visitIntInsn(
+        mv.visitIntInsn(
                 Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
-        ctx.mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object"); // Create a new array of Object
+        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object"); // Create a new array of Object
         for (int i = skipVariables; i < newEnv.length; i++) {
-            ctx.mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
-            ctx.mv.visitIntInsn(Opcodes.BIPUSH, i - skipVariables); // Push the index
-            ctx.mv.visitVarInsn(Opcodes.ALOAD, i); // Load the constructor argument
-            ctx.mv.visitInsn(Opcodes.AASTORE); // Store the argument in the array
+            mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
+            mv.visitIntInsn(Opcodes.BIPUSH, i - skipVariables); // Push the index
+            mv.visitVarInsn(Opcodes.ALOAD, i); // Load the constructor argument
+            mv.visitInsn(Opcodes.AASTORE); // Store the argument in the array
         }
-        ctx.mv.visitMethodInsn(
+        mv.visitMethodInsn(
                 Opcodes.INVOKEVIRTUAL,
                 "java/lang/reflect/Constructor",
                 "newInstance",
                 "([Ljava/lang/Object;)Ljava/lang/Object;",
                 false);
-        ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Object");
+        mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Object");
 
         // Stack after this step: [Class, Constructor, Object]
 
         // 4. Create a CODE variable using RuntimeScalar.make_sub
-        ctx.mv.visitMethodInsn(
+        mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC, "org/perlonjava/RuntimeScalar", "make_sub", "(Ljava/lang/Object;)Lorg/perlonjava/RuntimeScalar;", false);
 
         // Stack after this step: [Class, Constructor, RuntimeScalar]
-        ctx.mv.visitInsn(Opcodes.SWAP); // move the RuntimeScalar object up
-        ctx.mv.visitInsn(Opcodes.POP); // Remove the Constructor
+        mv.visitInsn(Opcodes.SWAP); // move the RuntimeScalar object up
+        mv.visitInsn(Opcodes.POP); // Remove the Constructor
 
         // 5. Clean up the stack if context is VOID
         if (ctx.contextType == ContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP); // Remove the RuntimeScalar object from the stack
+            mv.visitInsn(Opcodes.POP); // Remove the RuntimeScalar object from the stack
         }
 
         // If the context is not VOID, the stack should contain [RuntimeScalar] (the CODE variable)
@@ -991,6 +991,7 @@ public class EmitterVisitor implements Visitor {
     @Override
     public void visit(For3Node node) throws Exception {
         ctx.logDebug("FOR3 start");
+        MethodVisitor mv = ctx.mv;
 
         EmitterVisitor voidVisitor = this.with(ContextType.VOID); // some parts have context VOID
 
@@ -1008,10 +1009,10 @@ public class EmitterVisitor implements Visitor {
         }
 
         // Jump to the condition check
-        ctx.mv.visitJumpInsn(Opcodes.GOTO, conditionLabel);
+        mv.visitJumpInsn(Opcodes.GOTO, conditionLabel);
 
         // Visit the start label
-        ctx.mv.visitLabel(startLabel);
+        mv.visitLabel(startLabel);
 
         // Visit the loop body
         node.body.accept(voidVisitor);
@@ -1022,31 +1023,31 @@ public class EmitterVisitor implements Visitor {
         }
 
         // Visit the condition label
-        ctx.mv.visitLabel(conditionLabel);
+        mv.visitLabel(conditionLabel);
 
         // Visit the condition node in scalar context
         if (node.condition != null) {
             node.condition.accept(this.with(ContextType.SCALAR));
 
             // Convert the result to a boolean
-            ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", "getBoolean", "()Z", false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", "getBoolean", "()Z", false);
 
             // Jump to the end label if the condition is false
-            ctx.mv.visitJumpInsn(Opcodes.IFEQ, endLabel);
+            mv.visitJumpInsn(Opcodes.IFEQ, endLabel);
         }
 
         // Jump to the start label to continue the loop
-        ctx.mv.visitJumpInsn(Opcodes.GOTO, startLabel);
+        mv.visitJumpInsn(Opcodes.GOTO, startLabel);
 
         // Visit the end label
-        ctx.mv.visitLabel(endLabel);
+        mv.visitLabel(endLabel);
 
         // Exit the scope in the symbol table
         ctx.symbolTable.exitScope();
 
         // If the context is not VOID, push "undef" to the stack
         if (ctx.contextType != ContextType.VOID) {
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/RuntimeScalar", "undef", "()Lorg/perlonjava/RuntimeScalar;", false);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/RuntimeScalar", "undef", "()Lorg/perlonjava/RuntimeScalar;", false);
         }
 
         ctx.logDebug("FOR end");
@@ -1231,18 +1232,19 @@ public class EmitterVisitor implements Visitor {
         if (ctx.contextType == ContextType.VOID) {
             return;
         }
+        MethodVisitor mv = ctx.mv;
         if (ctx.isBoxed) { // expect a RuntimeScalar object
-            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/RuntimeScalar");
-            ctx.mv.visitInsn(Opcodes.DUP);
-            ctx.mv.visitLdcInsn(node.value); // emit string
-            ctx.mv.visitMethodInsn(
+            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/RuntimeScalar");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitLdcInsn(node.value); // emit string
+            mv.visitMethodInsn(
                     Opcodes.INVOKESPECIAL,
                     "org/perlonjava/RuntimeScalar",
                     "<init>",
                     "(Ljava/lang/String;)V",
                     false); // Call new RuntimeScalar(String)
         } else {
-            ctx.mv.visitLdcInsn(node.value); // emit string
+            mv.visitLdcInsn(node.value); // emit string
         }
     }
 
