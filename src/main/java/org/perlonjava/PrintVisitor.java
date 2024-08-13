@@ -154,6 +154,8 @@ public class PrintVisitor implements Visitor {
         appendIndent();
         sb.append("AnonSubNode:\n");
         indentLevel++;
+        appendIndent();
+        sb.append(node.useTryCatch ? "useTryCatch\n" : "no useTryCatch\n");
         node.block.accept(this);
         indentLevel--;
     }
