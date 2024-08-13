@@ -118,7 +118,7 @@ public class Lexer {
 
   public Token consumeNumber() {
     int start = position;
-    while (position < length && Character.isDigit(input[position])) {
+    while (position < length && (Character.isDigit(input[position]) || input[position] == '_')) {
       position++;
     }
     return new Token(TokenType.NUMBER, new String(input, start, position - start));
