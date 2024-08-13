@@ -234,29 +234,45 @@ public class Parser {
     return new IfNode(operator.text, condition, thenBranch, elseBranch, tokenIndex);
   }
 
+  /**
+   * Parses an expression based on operator precedence.
+   * 
+   * @param precedence The precedence level of the current expression.
+   * @return The root node of the parsed expression.
+   */
   private Node parseExpression(int precedence) {
-    Node left = parsePrimary();
-
-    while (true) {
-      Token token = peek();
-      if (token.type == TokenType.EOF || TERMINATORS.contains(token.text)) {
-        break;
+      // First, parse the primary expression (like a number or a variable).
+      Node left = parsePrimary();
+  
+      // Continuously process tokens until we reach the end of the expression.
+      while (true) {
+          // Peek at the next token to determine what to do next.
+          Token token = peek();
+  
+          // Check if we have reached the end of the input (EOF) or a terminator (like `;`).
+          if (token.type == TokenType.EOF || TERMINATORS.contains(token.text)) {
+              break; // Exit the loop if we're done parsing.
+          }
+  
+          // Get the precedence of the current token.
+          int tokenPrecedence = getPrecedence(token.text);
+  
+          // If the token's precedence is less than the precedence of the current expression, stop parsing.
+          if (tokenPrecedence < precedence) {
+              break;
+          }
+  
+          // If the operator is right associative (like exponentiation), parse it with lower precedence.
+          if (isRightAssociative(token.text)) {
+              left = parseInfix(left, tokenPrecedence - 1); // Parse the right side with lower precedence.
+          } else {
+              // Otherwise, parse it normally with the same precedence.
+              left = parseInfix(left, tokenPrecedence);
+          }
       }
-
-      int tokenPrecedence = getPrecedence(token.text);
-
-      if (tokenPrecedence < precedence) {
-        break;
-      }
-
-      if (isRightAssociative(token.text)) {
-        left = parseInfix(left, tokenPrecedence - 1);
-      } else {
-        left = parseInfix(left, tokenPrecedence);
-      }
-    }
-
-    return left;
+  
+      // Return the root node of the constructed expression tree.
+      return left;
   }
 
   private Node parsePrimary() {
