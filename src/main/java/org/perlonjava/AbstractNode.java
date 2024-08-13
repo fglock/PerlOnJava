@@ -1,3 +1,5 @@
+package org.perlonjava;
+
 /**
  * Abstract base class for AST nodes that includes an tokenIndex pointing
  * back to the token list. This tokenIndex is used for providing better

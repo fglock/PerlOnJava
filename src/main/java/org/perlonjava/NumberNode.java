@@ -1,3 +1,5 @@
+package org.perlonjava;
+
 /**
  * The NumberNode class represents a node in the abstract syntax tree (AST) that holds
  * a numeric value. This class implements the Node interface, allowing it to be visited

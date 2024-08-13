@@ -1,3 +1,5 @@
+package org.perlonjava;
+
 /**
  * The TernaryOperatorNode class represents a node in the abstract syntax tree (AST) that holds
  * a ternary operator and its three operands: a condition, a true expression, and a false expression.

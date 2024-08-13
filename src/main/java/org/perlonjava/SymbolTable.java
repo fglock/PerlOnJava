@@ -1,3 +1,5 @@
+package org.perlonjava;
+
 import java.util.Map;
 import java.util.HashMap;
 

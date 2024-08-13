@@ -1,3 +1,5 @@
+package org.perlonjava;
+
 
 /**
  * The AbstractRuntimeObject class is a base class for scalar, hash, and array variables.

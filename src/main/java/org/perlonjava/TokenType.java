@@ -1,3 +1,5 @@
+package org.perlonjava;
+
 /**
  * The TokenType enum defines the various types of tokens that can be encountered
  * during the lexical analysis phase of parsing a programming language or text.
