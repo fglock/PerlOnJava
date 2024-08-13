@@ -74,7 +74,7 @@
 - [ ] Statement modifiers
 - [x] `eval` string with closure variables
 - [x] `eval` string sets $@ on error; returns undef
-- [ ] `eval` block
+- [x] `eval` block
 - [x] `do` block
 - [ ] `do` file
 - [ ] `print` statement (Simple `print` and `say` statement implemented)
