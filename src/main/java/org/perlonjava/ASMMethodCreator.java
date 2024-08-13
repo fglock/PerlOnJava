@@ -1,6 +1,5 @@
 package org.perlonjava;
 
-import java.util.*;
 import org.objectweb.asm.*;
 
 /**

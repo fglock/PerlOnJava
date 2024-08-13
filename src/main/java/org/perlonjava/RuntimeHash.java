@@ -26,7 +26,7 @@ public class RuntimeHash extends AbstractRuntimeObject {
         }
     }
 
-    // Replace the the whole hash with the elements of a list
+    // Replace the whole hash with the elements of a list
     public RuntimeList set(RuntimeList value) {
       RuntimeArray arr = new RuntimeArray();  
       value.addToArray(arr);
