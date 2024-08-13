@@ -558,12 +558,13 @@ public class EmitterVisitor implements Visitor {
                             false);
                 } else {
                     // variable not found
-                    System.out.println(
+                    System.err.println(
+                            ctx.errorUtil.errorMessage(node.getIndex(),
                             "Warning: Global symbol \""
                                     + var
                                     + "\" requires explicit package name (did you forget to declare \"my "
                                     + var
-                                    + "\"?)");
+                                    + "\"?)"));
                 }
             } else {
                 // retrieve the `my` or `our` variable from local vars
@@ -649,10 +650,11 @@ public class EmitterVisitor implements Visitor {
                     String var = sigil + ((IdentifierNode) identifierNode).name;
                     ctx.logDebug("MY " + var);
                     if (ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
-                        System.out.println(
+                        System.err.println(
+                            ctx.errorUtil.errorMessage(node.getIndex(),
                                 "Warning: \"my\" variable "
                                         + var
-                                        + " masks earlier declaration in same ctx.symbolTable");
+                                        + " masks earlier declaration in same ctx.symbolTable"));
                     }
                     int varIndex = ctx.symbolTable.addVariable(var);
                     // TODO optimization - SETVAR+MY can be combined
