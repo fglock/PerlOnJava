@@ -10,9 +10,9 @@ public class RuntimeCode {
 
   // Temporary storage for anonymous subroutines and eval string compiler context
   public static HashMap<String, Class<?>> anonSubs =
-      new HashMap<String, Class<?>>(); // temp storage for make_sub()
+          new HashMap<>(); // temp storage for make_sub()
   public static HashMap<String, EmitterContext> evalContext =
-      new HashMap<String, EmitterContext>(); // storage for eval string compiler context
+          new HashMap<>(); // storage for eval string compiler context
 
   public RuntimeCode(Method methodObject, Object codeObject) {
     this.methodObject = methodObject;

@@ -7,8 +7,8 @@ import java.util.List;
  * Utility class for generating error messages with context from a list of tokens.
  */
 public class ErrorMessageUtil {
-    private String fileName;
-    private List<Token> tokens;
+    private final String fileName;
+    private final List<Token> tokens;
     private int tokenIndex;
     private int lastLineNumber;
 
@@ -105,7 +105,7 @@ public class ErrorMessageUtil {
                     escaped.append(c);
             }
         }
-        return "\"" + escaped.toString() + "\"";
+        return "\"" + escaped + "\"";
     }
 
     /**
@@ -119,7 +119,7 @@ public class ErrorMessageUtil {
             StackTraceElement element = stackTrace[0];
             String fileName = element.getFileName();
             int lineNumber = element.getLineNumber();
-            return String.format("Exception: %s at %s:%d\n", e.toString(), fileName, lineNumber);
+            return String.format("Exception: %s at %s:%d\n", e, fileName, lineNumber);
         } else {
             return e.toString();
         }

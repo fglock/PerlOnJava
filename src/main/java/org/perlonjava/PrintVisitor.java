@@ -139,7 +139,7 @@ public class PrintVisitor implements Visitor {
     @Override
     public void visit(IfNode node) throws Exception {
         appendIndent();
-        sb.append("IfNode: " + node.operator + "\n");
+        sb.append("IfNode: ").append(node.operator).append("\n");
         indentLevel++;
         node.condition.accept(this);
         node.thenBranch.accept(this);

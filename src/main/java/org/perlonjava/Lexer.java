@@ -6,32 +6,32 @@ import java.util.List;
 /**
  * The Lexer class is responsible for converting a sequence of characters (input string)
  * into a sequence of tokens. This process is known as lexical analysis or tokenization.
- * 
+ * <p>
  * In the context of programming languages, a lexer (or lexical analyzer) is the first
  * phase of a compiler or interpreter. It reads the input source code and breaks it down
  * into meaningful elements called tokens. Each token represents a basic building block
  * of the language, such as keywords, operators, identifiers, literals, and punctuation.
- * 
+ * <p>
  * The Lexer class in this example is designed to handle a subset of Perl-like syntax,
  * including identifiers, operators, and string literals. It uses a character array to
  * process the input string and identifies operators using a boolean array.
- * 
+ * <p>
  * The main responsibilities of the Lexer class include:
  * - Reading and processing the input string.
  * - Identifying and categorizing different types of tokens.
  * - Handling special characters and operators.
  * - Providing a list of tokens that can be used by subsequent phases of a compiler or interpreter.
- *
+ * <p>
  *
  * NOTE:
  * The Lexer is optimized for speed rather than accuracy.
- * 
+ * <p>
  * This can lead to issues in cases such as:
- * 
+ * <p>
  *    qq<=>   // An equal-sign string is parsed as `qq` and `<=>`
- * 
+ * <p>
  *    10E10   // A floating-point number is parsed as `10` and `E10`
- * 
+ * <p>
  * The Parser is aware of these issues and implements workarounds to handle them.
  */
 public class Lexer {
@@ -48,7 +48,7 @@ public class Lexer {
   public int length;
   
   // Array to mark operator characters
-  public static boolean isOperator[];
+  public static boolean[] isOperator;
           
   // Static block to initialize the isOperator array
   static {
