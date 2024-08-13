@@ -101,15 +101,19 @@ public class Parser {
         return false; // not a hash literal;
       }
       if (token.type == TokenType.OPERATOR) {
-        if (token.text.equals("{")) {
-          braceCount++;
-        } else if (token.text.equals("}")) {
-          braceCount--;
-        } else if (token.text.equals(",") || token.text.equals("=>")) {
-          return true; // Likely a hash literal
-        } else if (token.text.equals(";")) {
-          return false; // Likely a block
-        }
+          switch (token.text) {
+              case "{":
+                  braceCount++;
+                  break;
+              case "}":
+                  braceCount--;
+                  break;
+              case ",":
+              case "=>":
+                  return true; // Likely a hash literal
+              case ";":
+                  return false; // Likely a block
+          }
       }
     }
     return false;
