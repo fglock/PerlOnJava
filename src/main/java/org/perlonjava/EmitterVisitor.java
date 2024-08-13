@@ -47,32 +47,33 @@ public class EmitterVisitor implements Visitor {
         if (ctx.contextType == ContextType.VOID) {
             return;
         }
+        MethodVisitor mv = ctx.mv;
         boolean isInteger = !node.value.contains(".");
         if (ctx.isBoxed) { // expect a RuntimeScalar object
             if (isInteger) {
                 ctx.logDebug("visit(NumberNode) emit boxed integer");
-                ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/RuntimeScalar");
-                ctx.mv.visitInsn(Opcodes.DUP);
-                ctx.mv.visitLdcInsn(
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/RuntimeScalar");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitLdcInsn(
                         Integer.valueOf(node.value)); // Push the integer argument onto the stack
-                ctx.mv.visitMethodInsn(
+                mv.visitMethodInsn(
                         Opcodes.INVOKESPECIAL, "org/perlonjava/RuntimeScalar", "<init>", "(I)V", false); // Call new RuntimeScalar(int)
             } else {
-                ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/RuntimeScalar");
-                ctx.mv.visitInsn(Opcodes.DUP);
-                ctx.mv.visitLdcInsn(Double.valueOf(node.value)); // Push the double argument onto the stack
-                ctx.mv.visitMethodInsn(
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/RuntimeScalar");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitLdcInsn(Double.valueOf(node.value)); // Push the double argument onto the stack
+                mv.visitMethodInsn(
                         Opcodes.INVOKESPECIAL, "org/perlonjava/RuntimeScalar", "<init>", "(D)V", false); // Call new RuntimeScalar(double)
             }
             // if (ctx.contextType == ContextType.LIST) {
             //   // Transform the value in the stack to List
-            //   ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", "getList", "()Lorg/perlonjava/RuntimeList;", false);
+            //   mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", "getList", "()Lorg/perlonjava/RuntimeList;", false);
             // }
         } else {
             if (isInteger) {
-                ctx.mv.visitLdcInsn(Integer.parseInt(node.value)); // emit native integer
+                mv.visitLdcInsn(Integer.parseInt(node.value)); // emit native integer
             } else {
-                ctx.mv.visitLdcInsn(Double.parseDouble(node.value)); // emit native double
+                mv.visitLdcInsn(Double.parseDouble(node.value)); // emit native double
             }
         }
     }
@@ -181,50 +182,52 @@ public class EmitterVisitor implements Visitor {
     }
 
     private void handleAndOperator(BinaryOperatorNode node) throws Exception {
+        MethodVisitor mv = ctx.mv;
         Label endLabel = new Label(); // Label for the end of the operation
 
         // the left parameter is in the stack
-        ctx.mv.visitInsn(Opcodes.DUP);
+        mv.visitInsn(Opcodes.DUP);
         // stack is [left, left]
 
         // Convert the result to a boolean
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", "getBoolean", "()Z", false);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", "getBoolean", "()Z", false);
         // stack is [left, boolean]
 
         // If the left operand boolean value is false, return left operand
-        ctx.mv.visitJumpInsn(Opcodes.IFEQ, endLabel);
+        mv.visitJumpInsn(Opcodes.IFEQ, endLabel);
 
-        ctx.mv.visitInsn(Opcodes.POP); // remove left operand
+        mv.visitInsn(Opcodes.POP); // remove left operand
         node.right.accept(this.with(ContextType.SCALAR)); // right operand in scalar context
         // stack is [right]
 
-        ctx.mv.visitLabel(endLabel);
+        mv.visitLabel(endLabel);
         if (ctx.contextType == ContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
+            mv.visitInsn(Opcodes.POP);
         }
     }
 
     private void handleOrOperator(BinaryOperatorNode node) throws Exception {
+        MethodVisitor mv = ctx.mv;
         Label endLabel = new Label(); // Label for the end of the operation
 
         // the left parameter is in the stack
-        ctx.mv.visitInsn(Opcodes.DUP);
+        mv.visitInsn(Opcodes.DUP);
         // stack is [left, left]
 
         // Convert the result to a boolean
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", "getBoolean", "()Z", false);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", "getBoolean", "()Z", false);
         // stack is [left, boolean]
 
         // If the left operand boolean value is true, return left operand
-        ctx.mv.visitJumpInsn(Opcodes.IFNE, endLabel);
+        mv.visitJumpInsn(Opcodes.IFNE, endLabel);
 
-        ctx.mv.visitInsn(Opcodes.POP); // remove left operand
+        mv.visitInsn(Opcodes.POP); // remove left operand
         node.right.accept(this.with(ContextType.SCALAR)); // right operand in scalar context
         // stack is [right]
 
-        ctx.mv.visitLabel(endLabel);
+        mv.visitLabel(endLabel);
         if (ctx.contextType == ContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
+            mv.visitInsn(Opcodes.POP);
         }
     }
 
@@ -579,6 +582,7 @@ public class EmitterVisitor implements Visitor {
 
     private void handleSetOperator(BinaryOperatorNode node) throws Exception {
         ctx.logDebug("SET " + node);
+        MethodVisitor mv = ctx.mv;
         // Determine the assign type based on the left side.
         // Inspect the AST and get the L-value context: SCALAR or LIST
         ContextType lvalueContext = LValueVisitor.getContext(node);
@@ -589,8 +593,8 @@ public class EmitterVisitor implements Visitor {
                 ctx.logDebug("SET right side scalar");
                 node.right.accept(this.with(ContextType.SCALAR));   // emit the value
                 node.left.accept(this.with(ContextType.SCALAR));   // emit the variable
-                ctx.mv.visitInsn(Opcodes.SWAP); // move the target first
-                ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", "set", "(Lorg/perlonjava/RuntimeScalar;)Lorg/perlonjava/RuntimeScalar;", false);
+                mv.visitInsn(Opcodes.SWAP); // move the target first
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", "set", "(Lorg/perlonjava/RuntimeScalar;)Lorg/perlonjava/RuntimeScalar;", false);
                 break;
             case LIST:
                 ctx.logDebug("SET right side list");
@@ -603,11 +607,11 @@ public class EmitterVisitor implements Visitor {
                 }
                 nodeRight.accept(this.with(ContextType.LIST));   // emit the value
                 node.left.accept(this.with(ContextType.LIST));   // emit the variable
-                ctx.mv.visitInsn(Opcodes.SWAP); // move the target first
-                ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/ContextProvider", "set", "(Lorg/perlonjava/RuntimeList;)Lorg/perlonjava/RuntimeList;", true);
+                mv.visitInsn(Opcodes.SWAP); // move the target first
+                mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/ContextProvider", "set", "(Lorg/perlonjava/RuntimeList;)Lorg/perlonjava/RuntimeList;", true);
                 if (ctx.contextType == ContextType.SCALAR) {
                     // Transform the value in the stack to Scalar
-                    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeList", "getScalar", "()Lorg/perlonjava/RuntimeScalar;", false);
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeList", "getScalar", "()Lorg/perlonjava/RuntimeScalar;", false);
                 }
                 break;
             default:
@@ -615,7 +619,7 @@ public class EmitterVisitor implements Visitor {
         }
         if (ctx.contextType == ContextType.VOID) {
             // Remove the value from the stack
-            ctx.mv.visitInsn(Opcodes.POP);
+            mv.visitInsn(Opcodes.POP);
         }
         ctx.logDebug("SET end");
     }
@@ -818,7 +822,7 @@ public class EmitterVisitor implements Visitor {
             mv.visitVarInsn(Opcodes.ALOAD, 1); // push @_ to the stack
             // Transform the value in the stack to RuntimeArray
             // XXX not needed
-            // ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/ContextProvider", "getArray", "()Lorg/perlonjava/RuntimeArray;", true);
+            // mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/ContextProvider", "getArray", "()Lorg/perlonjava/RuntimeArray;", true);
 
             mv.visitFieldInsn(
                     Opcodes.GETSTATIC,
