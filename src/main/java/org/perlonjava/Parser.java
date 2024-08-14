@@ -89,6 +89,13 @@ public class Parser {
             return new BinaryOperatorNode("||", parseExpression(0), expression, tokenIndex);
           case "for":
           case "foreach":
+            consume();
+            return new For1Node(
+                false, 
+                new UnaryOperatorNode("$", new IdentifierNode("_", tokenIndex), tokenIndex),  // $_
+                parseExpression(0), 
+                expression, 
+                tokenIndex);
           case "while":
           case "until":
         }
