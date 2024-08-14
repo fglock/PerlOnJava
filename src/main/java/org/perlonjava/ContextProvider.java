@@ -49,5 +49,19 @@ public interface ContextProvider {
      * @return list
      */
     RuntimeList set(RuntimeList list);
+
+    /**
+     * Retrives the result of keys() as a RuntimeArray instance.
+     * 
+     * @return a RuntimeList object.
+     */
+    RuntimeArray keys();
+
+    /**
+     * Retrives the result of values() as a RuntimeArray instance.
+     * 
+     * @return a RuntimeArray object.
+     */
+    RuntimeArray values();
 }
 
