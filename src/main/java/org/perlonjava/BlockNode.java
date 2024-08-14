@@ -24,7 +24,9 @@ public class BlockNode extends AbstractNode {
     /**
      * Constructs a new BlockNode with the specified list of child nodes.
      *
+     * @param useNewScope this loop creates a new variable scope
      * @param elements the list of child nodes to be stored in this BlockNode
+     * @param tokenIndex the index of the token in the source code
      */
     BlockNode(boolean useNewScope, List<Node> elements, int tokenIndex) {
         this.useNewScope = useNewScope;
