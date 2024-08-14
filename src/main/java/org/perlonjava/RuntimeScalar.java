@@ -16,7 +16,7 @@ import java.util.Iterator;
  * to mimic this behavior by using an enum `ScalarType` to track the type of the value stored in the
  * scalar.
  */
-public class RuntimeScalar extends AbstractRuntimeObject {
+public class RuntimeScalar extends AbstractRuntimeObject implements RuntimeScalarReference {
 
   // Fields to store the type and value of the scalar variable
   // TODO add cache for integer/string values
@@ -71,10 +71,10 @@ public class RuntimeScalar extends AbstractRuntimeObject {
         return (long) ((double) value);
       case STRING:
         return this.parseNumber().getLong();
-      case CODE:
-        return value.hashCode(); // Use hashCode as the ID
-      default:
+      case UNDEF:
         return 0;
+      default:
+        return ((RuntimeScalarReference)value).getLongRef();
     }
   }
 
@@ -86,10 +86,10 @@ public class RuntimeScalar extends AbstractRuntimeObject {
         return (double) this.value;
       case STRING:
         return this.parseNumber().getDouble();
-      case CODE:
-        return value.hashCode(); // Use hashCode as the ID
-        default:
+      case UNDEF:
         return 0.0;
+      default:
+        return ((RuntimeScalarReference)value).getDoubleRef();
     }
   }
 
@@ -102,10 +102,10 @@ public class RuntimeScalar extends AbstractRuntimeObject {
       case STRING:
         String s = (String) value;
         return !s.isEmpty() && !s.equals("0");
-        case UNDEF:
+      case UNDEF:
         return false;
       default:
-        return true;
+        return ((RuntimeScalarReference)value).getBooleanRef();
     }
   }
 
@@ -161,19 +161,27 @@ public class RuntimeScalar extends AbstractRuntimeObject {
         return Double.toString((double) value);
       case STRING:
         return (String) value;
-      case CODE:
-        return "CODE(" + value.hashCode() + ")";
       case UNDEF:
         return "";
-      case REFERENCE:
-        return "REF(" + value.hashCode() + ")";
-      case ARRAYREFERENCE:
-        return "ARRAY(" + value.hashCode() + ")";
-      case HASHREFERENCE:
-        return "HASH(" + value.hashCode() + ")";
       default:
-        return "Undefined";
+        return ((RuntimeScalarReference)value).toStringRef();
     }
+  }
+
+  public String toStringRef() {
+    return "REF(" + value.hashCode() + ")";
+  }
+
+  public long getLongRef() {
+    return value.hashCode();
+  }
+
+  public double getDoubleRef() {
+    return value.hashCode();
+  }
+
+  public boolean getBooleanRef() {
+    return true;
   }
 
   public RuntimeScalar hashDerefGet(RuntimeScalar index) {
