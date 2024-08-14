@@ -1008,9 +1008,54 @@ public class EmitterVisitor implements Visitor {
     @Override
     public void visit(For1Node node) throws Exception {
         ctx.logDebug("FOR1 start");
-        throw new PerlCompilerException(
-                node.tokenIndex, "Not implemented: 1-argument for loop", ctx.errorUtil);
+        
+        // For1Node fields:
+        //  variable
+        //  list
+        //  body
+        
+        // Create labels for the loop
+        Label loopStart = new Label();
+        Label loopEnd = new Label();
+        
+        // Emit the list and create an Iterator<Runtime>
+        node.list.accept(this.with(ContextType.LIST));
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/ContextProvider", "iterator", "()Ljava/util/Iterator;", true);
+        
+        // Start of the loop
+        ctx.mv.visitLabel(loopStart);
+        
+        // Check if the iterator has more elements
+        ctx.mv.visitInsn(Opcodes.DUP); // Duplicate the iterator on the stack to use it for hasNext and next
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "hasNext", "()Z", true);
+        ctx.mv.visitJumpInsn(Opcodes.IFEQ, loopEnd);
+        
+        // Retrieve the next element from the iterator
+        ctx.mv.visitInsn(Opcodes.DUP);
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
+        ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/RuntimeScalar"); // Cast the object to the appropriate type
+        
+        // Assign it to the loop variable
+        node.variable.accept(this.with(ContextType.SCALAR));
+        ctx.mv.visitInsn(Opcodes.SWAP); // move the target first
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", "set", "(Lorg/perlonjava/RuntimeScalar;)Lorg/perlonjava/RuntimeScalar;", false);
+        ctx.mv.visitInsn(Opcodes.POP);  // we don't need the variable in the stack
+        
+        // Visit the body of the loop
+        node.body.accept(this.with(ContextType.VOID));
+        
+        // Jump back to the start of the loop
+        ctx.mv.visitJumpInsn(Opcodes.GOTO, loopStart);
+        
+        // End of the loop
+        ctx.mv.visitLabel(loopEnd);
+        
+        // Pop the iterator from the stack
+        ctx.mv.visitInsn(Opcodes.POP);
+        
+        ctx.logDebug("FOR1 end");
     }
+ 
 
     @Override
     public void visit(For3Node node) throws Exception {
