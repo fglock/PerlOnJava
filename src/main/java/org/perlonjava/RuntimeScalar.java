@@ -240,14 +240,19 @@ public class RuntimeScalar extends AbstractRuntimeObject implements RuntimeScala
 
   // Method to apply (execute) a subroutine reference
   public RuntimeList apply(RuntimeArray a, ContextType callContext) throws Exception {
+    // Check if the type of this RuntimeScalar is CODE
     if (type == ScalarType.CODE) {
-      RuntimeCode code = (RuntimeCode) this.value;
-      return (RuntimeList) code.methodObject.invoke(code.codeObject, a, callContext);
+        // Cast the value to RuntimeCode to access the method and the code object
+        RuntimeCode code = (RuntimeCode) this.value;
+
+        // Invoke the method associated with the code object, passing the RuntimeArray and ContextType as arguments
+        // This executes the subroutine and returns the result, which is expected to be a RuntimeList
+        return (RuntimeList) code.methodObject.invoke(code.codeObject, a, callContext);
     } else {
-      throw new IllegalStateException("Variable does not contain a code reference");
+        // If the type is not CODE, throw an exception indicating an invalid state
+        throw new IllegalStateException("Variable does not contain a code reference");
     }
   }
-
 
   // Helper method to autoincrement a String variable
   private static String _string_increment(String s) {
