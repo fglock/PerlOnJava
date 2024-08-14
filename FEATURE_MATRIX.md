@@ -9,7 +9,7 @@
 
 ## Scalars
 - [x] `my` variable declaration
-- [ ] `our` variable declaration
+- [x] `our` variable declaration
 - [ ] `local` variable declaration
 - [x] variable assignment
 - [x] Basic types: integer, double, string, CODE, undef
@@ -35,7 +35,6 @@
 - [x] `join`
 - [ ] `split`
 - [ ] `grep`, `map`, `sort`
-- [ ] Regex
 
 ## Arrays, Hashes and Lists
 - [x] Array, Hash and List infrastructure
