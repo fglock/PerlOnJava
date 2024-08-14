@@ -1008,6 +1008,7 @@ public class EmitterVisitor implements Visitor {
     @Override
     public void visit(For1Node node) throws Exception {
         ctx.logDebug("FOR1 start");
+        MethodVisitor mv = ctx.mv;
         
         // For1Node fields:
         //  variable
@@ -1020,38 +1021,43 @@ public class EmitterVisitor implements Visitor {
         
         // Emit the list and create an Iterator<Runtime>
         node.list.accept(this.with(ContextType.LIST));
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/ContextProvider", "iterator", "()Ljava/util/Iterator;", true);
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/ContextProvider", "iterator", "()Ljava/util/Iterator;", true);
         
         // Start of the loop
-        ctx.mv.visitLabel(loopStart);
+        mv.visitLabel(loopStart);
         
         // Check if the iterator has more elements
-        ctx.mv.visitInsn(Opcodes.DUP); // Duplicate the iterator on the stack to use it for hasNext and next
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "hasNext", "()Z", true);
-        ctx.mv.visitJumpInsn(Opcodes.IFEQ, loopEnd);
+        mv.visitInsn(Opcodes.DUP); // Duplicate the iterator on the stack to use it for hasNext and next
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "hasNext", "()Z", true);
+        mv.visitJumpInsn(Opcodes.IFEQ, loopEnd);
         
         // Retrieve the next element from the iterator
-        ctx.mv.visitInsn(Opcodes.DUP);
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
-        ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/RuntimeScalar"); // Cast the object to the appropriate type
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
+        mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/RuntimeScalar"); // Cast the object to the appropriate type
         
         // Assign it to the loop variable
         node.variable.accept(this.with(ContextType.SCALAR));
-        ctx.mv.visitInsn(Opcodes.SWAP); // move the target first
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", "set", "(Lorg/perlonjava/RuntimeScalar;)Lorg/perlonjava/RuntimeScalar;", false);
-        ctx.mv.visitInsn(Opcodes.POP);  // we don't need the variable in the stack
+        mv.visitInsn(Opcodes.SWAP); // move the target first
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", "set", "(Lorg/perlonjava/RuntimeScalar;)Lorg/perlonjava/RuntimeScalar;", false);
+        mv.visitInsn(Opcodes.POP);  // we don't need the variable in the stack
         
         // Visit the body of the loop
         node.body.accept(this.with(ContextType.VOID));
         
         // Jump back to the start of the loop
-        ctx.mv.visitJumpInsn(Opcodes.GOTO, loopStart);
+        mv.visitJumpInsn(Opcodes.GOTO, loopStart);
         
         // End of the loop
-        ctx.mv.visitLabel(loopEnd);
+        mv.visitLabel(loopEnd);
         
         // Pop the iterator from the stack
-        ctx.mv.visitInsn(Opcodes.POP);
+        mv.visitInsn(Opcodes.POP);
+
+        // If the context is not VOID, push "undef" to the stack
+        if (ctx.contextType != ContextType.VOID) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/RuntimeScalar", "undef", "()Lorg/perlonjava/RuntimeScalar;", false);
+        }
         
         ctx.logDebug("FOR1 end");
     }
