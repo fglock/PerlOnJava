@@ -1010,7 +1010,9 @@ public class EmitterVisitor implements Visitor {
         ctx.logDebug("FOR1 start");
 
         // Enter a new scope in the symbol table
-        ctx.symbolTable.enterScope();
+        if (node.useNewScope) {
+            ctx.symbolTable.enterScope();
+        }
 
         MethodVisitor mv = ctx.mv;
         
@@ -1064,7 +1066,9 @@ public class EmitterVisitor implements Visitor {
         }
         
         // Exit the scope in the symbol table
-        ctx.symbolTable.exitScope();
+        if (node.useNewScope) {
+            ctx.symbolTable.exitScope();
+        }
 
         ctx.logDebug("FOR1 end");
     }
