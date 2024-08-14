@@ -310,7 +310,7 @@ public class Parser {
           case "log":
           case "rand":
             String text = token.text;
-            operand = parseZeroOrOneList();
+            operand = parseZeroOrOneList(0);
             if (((ListNode) operand).elements.isEmpty()) {
               if (text.equals("rand")) {
                 // create "1"
@@ -334,6 +334,8 @@ public class Parser {
             return new UnaryOperatorNode(token.text, operand, tokenIndex);
           case "values":
           case "keys":
+            operand = parseZeroOrOneList(1);
+            return new UnaryOperatorNode(token.text, ((ListNode) operand).elements.get(0), tokenIndex);
           case "my":
             // Handle 'my' keyword as a unary operator with an operand
             operand = parsePrimary();
@@ -890,7 +892,7 @@ public class Parser {
   //
   // Comma is allowed after the argument:   rand, rand 10,
   //
-  private ListNode parseZeroOrOneList() {
+  private ListNode parseZeroOrOneList(int minItems) {
     ListNode expr;
     Token token = peek();
     if (token.text.equals("(")) {
@@ -908,6 +910,9 @@ public class Parser {
     else {
         // argument without parentheses
         expr = ListNode.makeList(parseExpression(getPrecedence(",") + 1));
+    }
+    if (expr.elements.size() < minItems) {
+      throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
     }
     return expr;
   }
@@ -943,7 +948,6 @@ public class Parser {
     if (expr.elements.size() < minItems) {
       throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
     }
-
     return expr;
   }
 
