@@ -60,6 +60,9 @@ public class PrintVisitor implements Visitor {
         appendIndent();
         sb.append("For1Node:\n");
         indentLevel++;
+
+        appendIndent();
+        sb.append(node.useNewScope ? "useNewScope\n" : "no useNewScope\n");
         
         // Visit the variable part
         if (node.variable != null) {
