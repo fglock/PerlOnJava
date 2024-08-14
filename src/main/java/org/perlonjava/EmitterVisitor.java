@@ -1008,6 +1008,10 @@ public class EmitterVisitor implements Visitor {
     @Override
     public void visit(For1Node node) throws Exception {
         ctx.logDebug("FOR1 start");
+
+        // Enter a new scope in the symbol table
+        ctx.symbolTable.enterScope();
+
         MethodVisitor mv = ctx.mv;
         
         // For1Node fields:
@@ -1059,6 +1063,9 @@ public class EmitterVisitor implements Visitor {
             mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/RuntimeScalar", "undef", "()Lorg/perlonjava/RuntimeScalar;", false);
         }
         
+        // Exit the scope in the symbol table
+        ctx.symbolTable.exitScope();
+
         ctx.logDebug("FOR1 end");
     }
  
