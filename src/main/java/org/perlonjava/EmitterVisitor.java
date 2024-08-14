@@ -1082,7 +1082,9 @@ public class EmitterVisitor implements Visitor {
         EmitterVisitor voidVisitor = this.with(ContextType.VOID); // some parts have context VOID
 
         // Enter a new scope in the symbol table
-        ctx.symbolTable.enterScope();
+        if (node.useNewScope) {
+            ctx.symbolTable.enterScope();
+        }
 
         // Create labels for the start of the loop, the condition check, and the end of the loop
         Label startLabel = new Label();
@@ -1129,7 +1131,9 @@ public class EmitterVisitor implements Visitor {
         mv.visitLabel(endLabel);
 
         // Exit the scope in the symbol table
-        ctx.symbolTable.exitScope();
+        if (node.useNewScope) {
+            ctx.symbolTable.exitScope();
+        }
 
         // If the context is not VOID, push "undef" to the stack
         if (ctx.contextType != ContextType.VOID) {

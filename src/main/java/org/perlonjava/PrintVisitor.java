@@ -100,6 +100,9 @@ public class PrintVisitor implements Visitor {
         sb.append("For3Node:\n");
         indentLevel++;
         
+        appendIndent();
+        sb.append(node.useNewScope ? "useNewScope\n" : "no useNewScope\n");
+
         // Visit the initialization part
         if (node.initialization != null) {
             appendIndent();
