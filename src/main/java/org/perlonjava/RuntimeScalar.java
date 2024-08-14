@@ -584,4 +584,14 @@ public class RuntimeScalar extends AbstractRuntimeObject {
     }
     return new RuntimeScalar(sb.toString());
   }
+
+  // keys() operator
+  public RuntimeArray keys() {
+      throw new IllegalStateException("Type of arg 1 to values must be hash or array");
+  }
+
+  // values() operator
+  public RuntimeArray values() {
+      throw new IllegalStateException("Type of arg 1 to values must be hash or array");
+  }
 }

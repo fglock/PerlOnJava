@@ -457,6 +457,10 @@ public class EmitterVisitor implements Visitor {
             case "%":
                 handleVariableOperator(node, operator);
                 break;
+            case "keys":
+            case "values":
+                handleKeysOperator(node, operator);
+                break;
             case "print":
             case "say":
                 handleSayOperator(node, operator);
@@ -500,11 +504,24 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
+    private void handleKeysOperator(UnaryOperatorNode node, String operator) throws Exception {
+        node.operand.accept(this.with(ContextType.LIST));
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/ContextProvider", operator, "()Lorg/perlonjava/RuntimeArray;", true);
+        if (ctx.contextType == ContextType.LIST) {
+            ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/ContextProvider", "getList", "()Lorg/perlonjava/RuntimeList;", true);
+        } else if (ctx.contextType == ContextType.SCALAR) {
+            ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/ContextProvider", "getScalar", "()Lorg/perlonjava/RuntimeScalar;", true);
+        } else if (ctx.contextType == ContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
+    }
+
     private void handleSayOperator(UnaryOperatorNode node, String operator) throws Exception {
         // TODO print FILE 123
         node.operand.accept(this.with(ContextType.LIST));
         // Transform the value in the stack to List
         ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/ContextProvider", "getList", "()Lorg/perlonjava/RuntimeList;", true);
+        // Call the operator, return Scalar
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeList", operator, "()Lorg/perlonjava/RuntimeScalar;", false);
         if (ctx.contextType == ContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.POP);

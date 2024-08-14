@@ -43,6 +43,7 @@
 - [x] `my LIST` like: `my ($a, @b)`
 - [x] Autoquote before `=>`
 - [x] Select an element from a list: `("a","b", %x)[2]`
+- [x] `keys`, `values` operators
 - [ ] Array dereference: `@$x`
 - [ ] Hash dereference: `%$x`
 - [ ] Basic Array Operations (Some are implemented)

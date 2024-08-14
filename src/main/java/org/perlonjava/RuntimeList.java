@@ -78,6 +78,16 @@ public class RuntimeList implements ContextProvider {
         return this;
     }
 
+    // keys() operator
+    public RuntimeArray keys() {
+        throw new IllegalStateException("Type of arg 1 to values must be hash or array");
+    }
+
+    // values() operator
+    public RuntimeArray values() {
+        throw new IllegalStateException("Type of arg 1 to values must be hash or array");
+    }
+
     // Get the scalar value of the list
     public RuntimeScalar getScalar() {
         if (elements.isEmpty()) {
@@ -105,6 +115,15 @@ public class RuntimeList implements ContextProvider {
             }
         }
         return new RuntimeList(value);
+    }
+
+    // Method to generate a list of RuntimeScalar objects
+    public static RuntimeList generateList(int start, int end) {
+        RuntimeList list = new RuntimeList();
+        for (int i = start; i <= end; i++) {
+            list.add(new RuntimeScalar(i));
+        }
+        return list;
     }
 
     // Convert the list to a string (for debugging purposes)

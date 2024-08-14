@@ -332,10 +332,12 @@ public class Parser {
             // Handle 'say' keyword as a unary operator with a RuntimeList operand
             operand = parseZeroOrMoreList(0);
             return new UnaryOperatorNode(token.text, operand, tokenIndex);
+          case "values":
+          case "keys":
           case "my":
             // Handle 'my' keyword as a unary operator with an operand
             operand = parsePrimary();
-            return new UnaryOperatorNode("my", operand, tokenIndex);
+            return new UnaryOperatorNode(token.text, operand, tokenIndex);
           case "return":
             // Handle 'return' keyword as a unary operator with an operand;
             // Parenthensis are ignored.

@@ -218,6 +218,16 @@ public class RuntimeArray extends AbstractRuntimeObject {
         return sb.toString();
     }
 
+    // keys() operator
+    public RuntimeArray keys() {
+        return RuntimeList.generateList(0, this.size() - 1).getArray();
+    }
+
+    // values() operator
+    public RuntimeArray values() {
+        return this;
+    }
+
     // Convert the array to a string (for debugging purposes)
     @Override
     public String toString() {

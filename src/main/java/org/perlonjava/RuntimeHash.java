@@ -96,24 +96,6 @@ public class RuntimeHash extends AbstractRuntimeObject {
         elements.clear();
     }
 
-    // Get all keys in the hash as a RuntimeArray
-    public RuntimeArray keys() {
-        RuntimeArray array = new RuntimeArray();
-        for (String key : elements.keySet()) {
-            array.push(new RuntimeScalar(key));
-        }
-        return array;
-    }
-
-    // Get all values in the hash as a RuntimeArray
-    public RuntimeArray values() {
-        RuntimeArray array = new RuntimeArray();
-        for (RuntimeScalar value : elements.values()) {
-            array.push(value);
-        }
-        return array;
-    }
-
     // Merge another RuntimeHash into this one
     public void merge(RuntimeHash other) {
         elements.putAll(other.elements);
@@ -160,6 +142,24 @@ public class RuntimeHash extends AbstractRuntimeObject {
     // Get the scalar value of the hash
     public RuntimeScalar getScalar() {
         return new RuntimeScalar(this.size());
+    }
+
+    // keys() operator
+    public RuntimeArray keys() {
+            RuntimeArray list = new RuntimeArray();
+            for (String key : elements.keySet()) {
+                list.push(new RuntimeScalar(key));
+            }
+            return list;
+    }
+
+    // values() operator
+    public RuntimeArray values() {
+            RuntimeArray list = new RuntimeArray();
+            for (RuntimeScalar value : elements.values()) {
+                list.push(new RuntimeScalar(value));
+            }
+            return list;
     }
 
     // Convert the hash to a string (for debugging purposes)
