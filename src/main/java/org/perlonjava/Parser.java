@@ -198,7 +198,7 @@ public class Parser {
             varNode = new UnaryOperatorNode(
                       "$", new IdentifierNode("_", tokenIndex), tokenIndex);  // $_
         }
-        return new For1Node(varNode, initialization, body, tokenIndex);
+        return new For1Node(true, varNode, initialization, body, tokenIndex);
       }
     }
     // 3-argument for
