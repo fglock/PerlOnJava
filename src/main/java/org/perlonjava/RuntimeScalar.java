@@ -23,9 +23,9 @@ public class RuntimeScalar extends AbstractRuntimeObject implements RuntimeScala
   public ScalarType type;
   public Object value;
 
-  // this is not safe, because the values are mutable - need to create an immutable version
-  // public static zero = new RuntimeScalar(0);
-  // public static one = new RuntimeScalar(1);
+  // Note: possible optimization, but this is not safe, because the values are mutable - need to create an immutable version
+  //    public static zero = new RuntimeScalar(0);
+  //    public static one = new RuntimeScalar(1);
 
   // Constructors
   public RuntimeScalar() {
@@ -211,13 +211,30 @@ public class RuntimeScalar extends AbstractRuntimeObject implements RuntimeScala
   }
 
   // Factory method to create a CODE object (anonymous subroutine)
+  // 
+  // This is called right after a new Class is compiled.
+  //
+  // codeObject is an instance of the new Class, with the closure variables in place.
+  //
   public static RuntimeScalar make_sub(Object codeObject) throws Exception {
-    // finish setting up a CODE object
+    // Retrieve the class of the provided code object
     Class<?> clazz = codeObject.getClass();
+
+    // Get the 'apply' method from the class.
+    // This method takes RuntimeArray and ContextType as parameters.
     Method mm = clazz.getMethod("apply", RuntimeArray.class, ContextType.class);
+
+    // Create a new RuntimeScalar instance to hold the CODE object
     RuntimeScalar r = new RuntimeScalar();
+
+    // Wrap the method and the code object in a RuntimeCode instance
+    // This allows us to store both the method and the object it belongs to
     r.value = new RuntimeCode(mm, codeObject);
+
+    // Set the type of the RuntimeScalar to CODE to indicate it holds a code reference
     r.type = ScalarType.CODE;
+
+    // Return the fully constructed RuntimeScalar object
     return r;
   }
 
