@@ -12,7 +12,7 @@ import java.util.Iterator;
  * <p>In Perl, an array is a dynamic list of scalar values. This class tries to mimic this behavior
  * using a list of RuntimeScalar objects, which can hold any type of Perl scalar value.
  */
-public class RuntimeArray extends AbstractRuntimeObject {
+public class RuntimeArray extends AbstractRuntimeObject implements RuntimeScalarReference {
     public List<AbstractRuntimeObject> elements;
 
     // Constructor
@@ -258,6 +258,22 @@ public class RuntimeArray extends AbstractRuntimeObject {
             }
             elements.remove(--currentIndex);
         }
+    }
+
+    public String toStringRef() {
+      return "ARRAY(" + this.hashCode() + ")";
+    }
+
+    public long getLongRef() {
+      return this.hashCode();
+    }
+
+    public double getDoubleRef() {
+      return this.hashCode();
+    }
+
+    public boolean getBooleanRef() {
+      return true;
     }
 
     // Convert the array to a string (for debugging purposes)
