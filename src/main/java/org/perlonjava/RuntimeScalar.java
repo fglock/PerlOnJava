@@ -420,6 +420,8 @@ public class RuntimeScalar extends AbstractRuntimeObject implements RuntimeScala
   }
 
   // Methods that implement Perl operators
+
+  // Return a reference to this
   public RuntimeScalar createReference() {
     RuntimeScalar result = new RuntimeScalar();
     result.type = ScalarType.REFERENCE;
