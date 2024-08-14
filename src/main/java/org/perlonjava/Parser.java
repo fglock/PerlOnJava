@@ -353,6 +353,7 @@ public class Parser {
           case "keys":
             operand = parseZeroOrOneList(1);
             return new UnaryOperatorNode(token.text, ((ListNode) operand).elements.get(0), tokenIndex);
+          case "our":
           case "my":
             // Handle 'my' keyword as a unary operator with an operand
             operand = parsePrimary();

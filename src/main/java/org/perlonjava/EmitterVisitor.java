@@ -465,8 +465,9 @@ public class EmitterVisitor implements Visitor {
             case "say":
                 handleSayOperator(node, operator);
                 break;
+            case "our":
             case "my":
-                handleMyOperator(node);
+                handleMyOperator(node, operator);
                 break;
             case "return":
                 handleReturnOperator(node);
@@ -535,6 +536,46 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
+    private void fetchGlobalVariable(boolean createIfNotExists, String sigil, String var, int tokenIndex) {
+        if (sigil.equals("$") && (createIfNotExists || Namespace.existsGlobalVariable(var))) {
+            // fetch a global variable
+            ctx.mv.visitLdcInsn(var);
+            ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/Namespace",
+                    "getGlobalVariable",
+                    "(Ljava/lang/String;)Lorg/perlonjava/RuntimeScalar;",
+                    false);
+        } else if (sigil.equals("@") && (createIfNotExists || Namespace.existsGlobalArray(var))) {
+            // fetch a global variable
+            ctx.mv.visitLdcInsn(var);
+            ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/Namespace",
+                    "getGlobalArray",
+                    "(Ljava/lang/String;)Lorg/perlonjava/RuntimeArray;",
+                    false);
+        } else if (sigil.equals("%") && (createIfNotExists || Namespace.existsGlobalHash(var))) {
+            // fetch a global variable
+            ctx.mv.visitLdcInsn(var);
+            ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/Namespace",
+                    "getGlobalHash",
+                    "(Ljava/lang/String;)Lorg/perlonjava/RuntimeHash;",
+                    false);
+        } else {
+            // variable not found
+            System.err.println(
+                    ctx.errorUtil.errorMessage(tokenIndex,
+                    "Warning: Global symbol \""
+                            + var
+                            + "\" requires explicit package name (did you forget to declare \"my "
+                            + var
+                            + "\"?)"));
+        }
+    }
+
     private void handleVariableOperator(UnaryOperatorNode node, String operator) throws Exception {
         if (ctx.contextType == ContextType.VOID) {
             return;
@@ -546,43 +587,8 @@ public class EmitterVisitor implements Visitor {
             int varIndex = ctx.symbolTable.getVariableIndex(var);
             if (varIndex == -1) {
                 // not a declared `my` or `our` variable
-                if (sigil.equals("$") && Namespace.existsGlobalVariable(var)) {
-                    // fetch a global variable
-                    ctx.mv.visitLdcInsn(var);
-                    ctx.mv.visitMethodInsn(
-                            Opcodes.INVOKESTATIC,
-                            "org/perlonjava/Namespace",
-                            "getGlobalVariable",
-                            "(Ljava/lang/String;)Lorg/perlonjava/RuntimeScalar;",
-                            false);
-                } else if (sigil.equals("@") && Namespace.existsGlobalArray(var)) {
-                    // fetch a global variable
-                    ctx.mv.visitLdcInsn(var);
-                    ctx.mv.visitMethodInsn(
-                            Opcodes.INVOKESTATIC,
-                            "org/perlonjava/Namespace",
-                            "getGlobalArray",
-                            "(Ljava/lang/String;)Lorg/perlonjava/RuntimeArray;",
-                            false);
-                } else if (sigil.equals("%") && Namespace.existsGlobalHash(var)) {
-                    // fetch a global variable
-                    ctx.mv.visitLdcInsn(var);
-                    ctx.mv.visitMethodInsn(
-                            Opcodes.INVOKESTATIC,
-                            "org/perlonjava/Namespace",
-                            "getGlobalHash",
-                            "(Ljava/lang/String;)Lorg/perlonjava/RuntimeHash;",
-                            false);
-                } else {
-                    // variable not found
-                    System.err.println(
-                            ctx.errorUtil.errorMessage(node.getIndex(),
-                            "Warning: Global symbol \""
-                                    + var
-                                    + "\" requires explicit package name (did you forget to declare \"my "
-                                    + var
-                                    + "\"?)"));
-                }
+                // Create and fetch a global variable
+                fetchGlobalVariable(false, sigil, var, node.getIndex());
             } else {
                 // retrieve the `my` or `our` variable from local vars
                 ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
@@ -643,33 +649,33 @@ public class EmitterVisitor implements Visitor {
         ctx.logDebug("SET end");
     }
 
-    private void handleMyOperator(UnaryOperatorNode node) throws Exception {
-        if (node.operand instanceof ListNode) { // my ($a, $b)
+    private void handleMyOperator(UnaryOperatorNode node, String operator) throws Exception {
+        if (node.operand instanceof ListNode) { // my ($a, $b)  our ($a, $b)
             // process each item of the list; then returns the list
             ListNode listNode = (ListNode) node.operand;
             for (Node element : listNode.elements) {
                 if (element instanceof UnaryOperatorNode && "undef".equals(((UnaryOperatorNode) element).operator)) {
                     continue; // skip "undef"
                 }
-                UnaryOperatorNode myNode = new UnaryOperatorNode("my", element, listNode.tokenIndex);
+                UnaryOperatorNode myNode = new UnaryOperatorNode(operator, element, listNode.tokenIndex);
                 myNode.accept(this.with(ContextType.VOID));
             }
             if (ctx.contextType != ContextType.VOID) {
                 listNode.accept(this);
             }
             return;
-        } else if (node.operand instanceof UnaryOperatorNode) { // my + $ @ %
+        } else if (node.operand instanceof UnaryOperatorNode) { //  [my our] followed by [$ @ %]
             Node sigilNode = node.operand;
             String sigil = ((UnaryOperatorNode) sigilNode).operator;
             if (Parser.isSigil(sigil)) {
                 Node identifierNode = ((UnaryOperatorNode) sigilNode).operand;
                 if (identifierNode instanceof IdentifierNode) { // my $a
                     String var = sigil + ((IdentifierNode) identifierNode).name;
-                    ctx.logDebug("MY " + var);
+                    ctx.logDebug("MY " + operator + " " + var);
                     if (ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
                         System.err.println(
                             ctx.errorUtil.errorMessage(node.getIndex(),
-                                "Warning: \"my\" variable "
+                                "Warning: \"" + operator + "\" variable "
                                         + var
                                         + " masks earlier declaration in same ctx.symbolTable"));
                     }
@@ -679,15 +685,22 @@ public class EmitterVisitor implements Visitor {
                     // Determine the class name based on the sigil
                     String className = ASMMethodCreator.getVariableClassName(sigil);
 
-                    // Create a new instance of the determined class
-                    ctx.mv.visitTypeInsn(Opcodes.NEW, className);
-                    ctx.mv.visitInsn(Opcodes.DUP);
-                    ctx.mv.visitMethodInsn(
-                            Opcodes.INVOKESPECIAL,
-                            className,
-                            "<init>",
-                            "()V",
-                            false);
+                    if (operator.equals("my")) {
+                        // "my":
+                        // Create a new instance of the determined class
+                        ctx.mv.visitTypeInsn(Opcodes.NEW, className);
+                        ctx.mv.visitInsn(Opcodes.DUP);
+                        ctx.mv.visitMethodInsn(
+                                Opcodes.INVOKESPECIAL,
+                                className,
+                                "<init>",
+                                "()V",
+                                false);
+                    } else {
+                        // "our":
+                        // Create and fetch a global variable
+                        fetchGlobalVariable(true, sigil, var, node.getIndex());
+                    }
                     if (ctx.contextType != ContextType.VOID) {
                         ctx.mv.visitInsn(Opcodes.DUP);
                     }
