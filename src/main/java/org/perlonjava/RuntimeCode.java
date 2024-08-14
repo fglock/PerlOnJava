@@ -3,7 +3,7 @@ package org.perlonjava;
 import java.lang.reflect.Method;
 import java.util.*;
 
-public class RuntimeCode {
+public class RuntimeCode implements RuntimeScalarReference {
 
   public Method methodObject;
   public Object codeObject; // apply() needs this
@@ -65,5 +65,19 @@ public class RuntimeCode {
     return generatedClass;
   }
 
+  public String toStringRef() {
+    return "CODE(" + this.hashCode() + ")";
+  }
 
+  public long getLongRef() {
+    return this.hashCode();
+  }
+
+  public double getDoubleRef() {
+    return this.hashCode();
+  }
+
+  public boolean getBooleanRef() {
+    return true;
+  }
 }
