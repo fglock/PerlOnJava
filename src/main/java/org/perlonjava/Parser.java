@@ -175,6 +175,9 @@ public class Parser {
         parsingForLoopVariable = true;
         varNode = parsePrimary();
         parsingForLoopVariable = false;
+    } else {
+        varNode = new UnaryOperatorNode(
+                      "$", new IdentifierNode("_", tokenIndex), tokenIndex);  // $_
     }
 
     consume(TokenType.OPERATOR, "(");
