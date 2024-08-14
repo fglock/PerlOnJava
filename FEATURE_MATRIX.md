@@ -60,11 +60,11 @@
 - [x] assigning to a closure variable mutates the variable in the original context
 - [ ] `@_` contains aliases to the caller variables
 - [ ] Named subroutines
-- [ ] Inline "constant" subroutines
+- [ ] Inline "constant" subroutines optimization
 
 ## Regular Expressions
 - [ ] Basic Matching
-- [ ] Advanced Features
+- [ ] Advanced Regex Features
 
 ## Statements and special operators
 - [x] context void, scalar, list
@@ -90,6 +90,7 @@
 - [ ] `DESTROY` method keyword
 - [ ] labels
 - [ ] search for labels in call stack
+- [ ] Here-docs
 
 ## Namespaces and global variables
 - [x] Global variable infrastructure
