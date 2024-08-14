@@ -71,7 +71,7 @@
 - [x] context void, scalar, list
 - [x] `if`/`else`/`elsif` and `unless`
 - [x] 3-argument `for` loop
-- [ ] `foreach` loop
+- [x] `foreach` loop
 - [x] `while` and `until` loop
 - [x] `if` `unless` Statement modifiers
 - [ ] `while` `until` Statement modifiers
