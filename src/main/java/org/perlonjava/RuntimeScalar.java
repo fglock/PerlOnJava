@@ -233,57 +233,89 @@ public class RuntimeScalar extends AbstractRuntimeObject implements RuntimeScala
 
 
   // Helper method to autoincrement a String variable
-    private static String _string_increment(String s) {
-        if (s.length() < 2) {
-            final int c = s.codePointAt(0);
-            if ((c >= '0' && c <= '8') || (c >= 'A' && c <= 'Y') || (c >= 'a' && c <= 'y')) {
-                return "" + (char)(c + 1);
-            }
-            if (c == '9') {
-                return "10";
-            }
-            if (c == 'Z') {
-                return "AA";
-            }
-            if (c == 'z') {
-                return "aa";
-            }
-            return "1";
+  private static String _string_increment(String s) {
+    // Check if the string length is less than 2
+    if (s.length() < 2) {
+        // Get the Unicode code point of the first character
+        final int c = s.codePointAt(0);
+
+        // Check if the character is a digit from '0' to '8'
+        if ((c >= '0' && c <= '8') || (c >= 'A' && c <= 'Y') || (c >= 'a' && c <= 'y')) {
+            // If so, increment the character and return it as a new String
+            return "" + (char)(c + 1);
         }
-        String c = _string_increment(s.substring(s.length()-1));
-        if (c.length() == 1) {
-            // AAAC => AAAD
-            return s.substring(0, s.length()-1) + c;
+
+        // Special case: if the character is '9', return "10"
+        if (c == '9') {
+            return "10";
         }
-        // AAAZ => AABA
-        return _string_increment(s.substring(0, s.length()-1)) + c.substring(c.length()-1);
+
+        // Special case: if the character is 'Z', return "AA"
+        if (c == 'Z') {
+            return "AA";
+        }
+
+        // Special case: if the character is 'z', return "aa"
+        if (c == 'z') {
+            return "aa";
+        }
+
+        // For any other character, return "1" as the incremented value
+        return "1";
     }
+
+    // Recursive case: increment the last character of the string
+    String c = _string_increment(s.substring(s.length()-1));
+
+    // Check if the result of the increment is a single character
+    if (c.length() == 1) {
+        // If the result is a single character, replace the last character of the original string
+        // Example: If input is "AAAC", incrementing last character gives "AAAD"
+        return s.substring(0, s.length()-1) + c;
+    }
+
+    // If the result of incrementing the last character causes a carry (e.g., "AAAZ" becomes "AABA")
+    // Increment the rest of the string (all characters except the last one)
+    // and concatenate it with the last character of the incremented value
+    return _string_increment(s.substring(0, s.length()-1)) + c.substring(c.length()-1);
+  }
 
   // Helper method to autoincrement a String variable
   private RuntimeScalar stringIncrement() {
+    // Retrieve the current value as a String
     String str = (String) this.value;
 
+    // Check if the string is empty
     if (str.isEmpty()) {
+        // If empty, set the value to 1 (as a Long) and update type to INTEGER
         this.value = (long) 1;
-        this.type = ScalarType.INTEGER;
-        return this;
+        this.type = ScalarType.INTEGER; // ScalarType is an enum that holds different scalar types
+        return this; // Return the current instance
     }
-    char c = ((String) this.value).charAt(0);
+
+    // Get the first character of the string
+    char c = str.charAt(0);
+
+    // Check if the first character is a letter (either uppercase or lowercase)
     if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
-        // Handle non-numeric increment
-        String s = (String) this.value;
-        int length = s.length();
-        c = s.charAt(length - 1);
+        // Handle non-numeric increment for alphabetical characters
+        int length = str.length(); // Get the length of the string
+        c = str.charAt(length - 1); // Get the last character of the string
+
+        // Check if the last character is a valid character for incrementing
         if ((c >= '0' && c <= '8') || (c >= 'A' && c <= 'Y') || (c >= 'a' && c <= 'y')) {
-            this.value = s.substring(0, length-1) + (char)(c + 1);
+            // If valid, increment the last character and update the value
+            this.value = str.substring(0, length - 1) + (char)(c + 1);
         } else {
-            this.value = _string_increment(s);
+            // If not valid (like '9', 'Z', or 'z'), use a helper function to handle incrementing
+            this.value = _string_increment(str);
         }
-        return this;
+        return this; // Return the current instance after increment
     }
-    // Handle numeric increment
-    this.set(this.parseNumber());
-    return this.preAutoIncrement();
+
+    // Handle numeric increment: parse the number and increment it
+    this.set(this.parseNumber()); // parseNumber parses the current string to a number
+    return this.preAutoIncrement(); // preAutoIncrement handles the actual incrementing logic
   }
 
   // Helper method to convert String to Integer or Double
