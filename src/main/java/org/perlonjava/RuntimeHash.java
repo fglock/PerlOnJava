@@ -186,14 +186,8 @@ public class RuntimeHash extends AbstractRuntimeObject {
 
         @Override
         public RuntimeScalar next() {
-            if (!hasNext()) {
-                throw new IllegalStateException("No such element in iterator.next()");
-            }
-
             if (returnKey) {
-                if (currentEntry == null || !returnKey) {
-                    currentEntry = entryIterator.next();
-                }
+                currentEntry = entryIterator.next();
                 returnKey = false;
                 return new RuntimeScalar(currentEntry.getKey());
             } else {
