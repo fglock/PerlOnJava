@@ -81,3 +81,22 @@ scanner.close();
 ## Support for Java scripting (JSR-223)
 See `src5/lib/Perlito5/Java/JavaxScript.pm`
 
+## `foreach` implementation
+
+```
+my @list = (1, 2, 3, 4, 5);
+foreach my $var (@list) {
+    print "$var\n";
+}
+```
+
+Using 3-Argument for
+
+```
+my @list = (1, 2, 3, 4, 5);
+for (my $i = 0; $i < @list; $i++) {
+    my $var = $list[$i];
+    print "$var\n";
+}
+```
+
