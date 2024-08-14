@@ -97,6 +97,6 @@
 - [ ] Namespaces
 - [x] `@_` and `$@` special variables; `$_[0]` parameter variable
 - [x] `$"` special variable
-- [ ] `$_` special variable
-- [ ] `@_`, `$_` and regex variables like `$1` are thread-safe
+- [x] `$_` special variable
+- [ ] Thread-safe `@_`, `$_` and regex variables like `$1`
 
