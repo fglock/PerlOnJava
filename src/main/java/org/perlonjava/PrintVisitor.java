@@ -191,6 +191,7 @@ public class PrintVisitor implements Visitor {
         appendIndent();
         sb.append("BlockNode:\n");
         indentLevel++;
+        sb.append(node.useNewScope ? "useNewScope\n" : "no useNewScope\n");
         for (Node element : node.elements) {
             element.accept(this);
         }

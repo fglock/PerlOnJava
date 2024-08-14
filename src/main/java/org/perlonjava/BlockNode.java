@@ -12,6 +12,11 @@ import java.util.*;
  */
 public class BlockNode extends AbstractNode {
     /**
+     * This block creates a new variable scope
+     */
+    boolean useNewScope;
+
+    /**
      * The list of child nodes contained in this BlockNode.
      */
     List<Node> elements;
@@ -21,7 +26,8 @@ public class BlockNode extends AbstractNode {
      *
      * @param elements the list of child nodes to be stored in this BlockNode
      */
-    BlockNode(List<Node> elements, int tokenIndex) {
+    BlockNode(boolean useNewScope, List<Node> elements, int tokenIndex) {
+        this.useNewScope = useNewScope;
         this.elements = elements;
         this.tokenIndex = tokenIndex;
     }

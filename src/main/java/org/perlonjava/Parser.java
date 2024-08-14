@@ -49,7 +49,7 @@ public class Parser {
       }
       token = peek();
     }
-    return new BlockNode(statements, tokenIndex);
+    return new BlockNode(true, statements, tokenIndex);
   }
 
   public Node parseStatement() {

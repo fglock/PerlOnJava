@@ -1242,7 +1242,9 @@ public class EmitterVisitor implements Visitor {
     @Override
     public void visit(BlockNode node) throws Exception {
         ctx.logDebug("generateCodeBlock start");
-        ctx.symbolTable.enterScope();
+        if (node.useNewScope) {
+            ctx.symbolTable.enterScope();
+        }
         EmitterVisitor voidVisitor =
                 this.with(ContextType.VOID); // statements in the middle of the block have context VOID
         List<Node> list = node.elements;
@@ -1266,7 +1268,9 @@ public class EmitterVisitor implements Visitor {
                 element.accept(voidVisitor);
             }
         }
-        ctx.symbolTable.exitScope();
+        if (node.useNewScope) {
+            ctx.symbolTable.exitScope();
+        }
         ctx.logDebug("generateCodeBlock end");
     }
 
