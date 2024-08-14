@@ -2,6 +2,7 @@ package org.perlonjava;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Iterator;
 
 /**
  * The RuntimeHash class simulates Perl hashes.
@@ -160,6 +161,51 @@ public class RuntimeHash extends AbstractRuntimeObject {
                 list.push(new RuntimeScalar(value));
             }
             return list;
+    }
+
+    // Method to return an iterator
+    public Iterator<RuntimeScalar> iterator() {
+        return new RuntimeHashIterator();
+    }
+
+    // Inner class implementing the Iterator interface
+    private class RuntimeHashIterator implements Iterator<RuntimeScalar> {
+        private Iterator<Map.Entry<String, RuntimeScalar>> entryIterator;
+        private Map.Entry<String, RuntimeScalar> currentEntry;
+        private boolean returnKey;
+
+        public RuntimeHashIterator() {
+            this.entryIterator = elements.entrySet().iterator();
+            this.returnKey = true;
+        }
+
+        @Override
+        public boolean hasNext() {
+            return (currentEntry != null && !returnKey) || entryIterator.hasNext();
+        }
+
+        @Override
+        public RuntimeScalar next() {
+            if (!hasNext()) {
+                throw new IllegalStateException("No such element in iterator.next()");
+            }
+
+            if (returnKey) {
+                if (currentEntry == null || !returnKey) {
+                    currentEntry = entryIterator.next();
+                }
+                returnKey = false;
+                return new RuntimeScalar(currentEntry.getKey());
+            } else {
+                returnKey = true;
+                return currentEntry.getValue();
+            }
+        }
+
+        @Override
+        public void remove() {
+            throw new UnsupportedOperationException("Remove not supported");
+        }
     }
 
     // Convert the hash to a string (for debugging purposes)

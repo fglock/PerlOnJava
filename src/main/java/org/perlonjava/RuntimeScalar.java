@@ -2,6 +2,7 @@ package org.perlonjava;
 
 import java.lang.reflect.Method;
 import java.lang.Math;
+import java.util.Iterator;
 
 /**
  * The RuntimeScalar class simulates Perl scalar variables.
@@ -593,5 +594,10 @@ public class RuntimeScalar extends AbstractRuntimeObject {
   // values() operator
   public RuntimeArray values() {
       throw new IllegalStateException("Type of arg 1 to values must be hash or array");
+  }
+
+  // Method to return an iterator
+  public Iterator<RuntimeScalar> iterator() {
+      return this.getArray().iterator();
   }
 }
