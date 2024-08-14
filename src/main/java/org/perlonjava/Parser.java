@@ -175,9 +175,6 @@ public class Parser {
         parsingForLoopVariable = true;
         varNode = parsePrimary();
         parsingForLoopVariable = false;
-    } else {
-        varNode = new UnaryOperatorNode(
-                      "$", new IdentifierNode("_", tokenIndex), tokenIndex);  // $_
     }
 
     consume(TokenType.OPERATOR, "(");
@@ -197,6 +194,10 @@ public class Parser {
         Node body = parseBlock();
         consume(TokenType.OPERATOR, "}");
 
+        if (varNode == null) {
+            varNode = new UnaryOperatorNode(
+                      "$", new IdentifierNode("_", tokenIndex), tokenIndex);  // $_
+        }
         return new For1Node(varNode, initialization, body, tokenIndex);
       }
     }
