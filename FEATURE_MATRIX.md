@@ -70,7 +70,7 @@
 - [x] context void, scalar, list
 - [x] `if`/`else`/`elsif` and `unless`
 - [x] 3-argument `for` loop
-- [x] `foreach` loop
+- [ ] `foreach` loop
 - [x] `while` and `until` loop
 - [x] `if` `unless` Statement modifiers
 - [ ] `while` `until` Statement modifiers
@@ -93,7 +93,7 @@
 
 ## Namespaces and global variables
 - [x] Global variable infrastructure
-- [ ] Global variables
+- [ ] Namespaces
 - [x] `@_` and `$@` special variables; `$_[0]` parameter variable
 - [x] `$"` special variable
 - [ ] `$_` special variable
