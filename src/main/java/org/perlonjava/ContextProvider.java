@@ -1,5 +1,7 @@
 package org.perlonjava;
 
+import java.util.Iterator;
+
 /**
  * ContextProvider interface defines methods for obtaining different types of runtime data.
  * Classes implementing this interface should provide implementations for these methods.
@@ -63,5 +65,12 @@ public interface ContextProvider {
      * @return a RuntimeArray object.
      */
     RuntimeArray values();
+
+    /**
+     * Method to return an iterator.
+     *
+     * @return a Iterator<Runtime>
+     */
+    public Iterator<RuntimeScalar> iterator();
 }
 

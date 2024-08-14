@@ -2,6 +2,7 @@ package org.perlonjava;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Iterator;
 
 /**
  * The RuntimeList class simulates a Perl list.
@@ -138,6 +139,11 @@ public class RuntimeList implements ContextProvider {
         }
         sb.append("]");
         return sb.toString();
+    }
+
+    // Method to return an iterator
+    public Iterator<RuntimeScalar> iterator() {
+        return this.getArray().iterator();
     }
 
     // Operators

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Iterator;
 
 /**
  * The RuntimeArray class simulates Perl arrays.
@@ -226,6 +227,37 @@ public class RuntimeArray extends AbstractRuntimeObject {
     // values() operator
     public RuntimeArray values() {
         return this;
+    }
+
+    // Method to return an iterator
+    public Iterator<RuntimeScalar> iterator() {
+        return new RuntimeListIterator();
+    }
+
+    // Inner class implementing the Iterator interface
+    private class RuntimeListIterator implements Iterator<RuntimeScalar> {
+        private int currentIndex = 0;
+
+        @Override
+        public boolean hasNext() {
+            return currentIndex < elements.size();
+        }
+
+        @Override
+        public RuntimeScalar next() {
+            if (!hasNext()) {
+                throw new IllegalStateException("No such element in iterator.next()");
+            }
+            return (RuntimeScalar) elements.get(currentIndex++);
+        }
+
+        @Override
+        public void remove() {
+            if (currentIndex <= 0) {
+                throw new IllegalStateException("next() has not been called yet");
+            }
+            elements.remove(--currentIndex);
+        }
     }
 
     // Convert the array to a string (for debugging purposes)
