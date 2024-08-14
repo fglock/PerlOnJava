@@ -10,6 +10,11 @@ package org.perlonjava;
  */
 public class For3Node extends AbstractNode {
     /**
+     * This loop creates a new variable scope
+     */
+    boolean useNewScope;
+
+    /**
      * The initialization part of the for loop.
      */
     public final Node initialization;
@@ -32,13 +37,15 @@ public class For3Node extends AbstractNode {
     /**
      * Constructs a new For3Node with the specified parts of the for loop.
      *
+     * @param variable the variable part of the for loop
      * @param initialization the initialization part of the for loop
      * @param condition the condition part of the for loop
      * @param increment the increment part of the for loop
      * @param body the body of the for loop
      * @param tokenIndex the index of the token in the source code
      */
-    public For3Node(Node initialization, Node condition, Node increment, Node body, int tokenIndex) {
+    public For3Node(boolean useNewScope, Node initialization, Node condition, Node increment, Node body, int tokenIndex) {
+        this.useNewScope = useNewScope;
         this.initialization = initialization;
         this.condition = condition;
         this.increment = increment;

@@ -98,6 +98,12 @@ public class Parser {
                 tokenIndex);
           case "while":
           case "until":
+            consume();
+            Node condition = parseExpression(0);
+            if (token.text.equals("until")) {
+                condition = new UnaryOperatorNode("not", condition, condition.getIndex());
+            }
+            return new For3Node(false, null, condition, null, expression, tokenIndex);
         }
         throw new PerlCompilerException(tokenIndex, "Not implemented: " + token, errorUtil);
     }
@@ -169,7 +175,7 @@ public class Parser {
     if (operator.text.equals("until")) {
         condition = new UnaryOperatorNode("not", condition, condition.getIndex());
     }
-    return new For3Node(null, condition, null, body, tokenIndex);
+    return new For3Node(true, null, condition, null, body, tokenIndex);
   }
 
 
@@ -233,7 +239,7 @@ public class Parser {
     Node body = parseBlock();
     consume(TokenType.OPERATOR, "}");
 
-    return new For3Node(initialization, condition, increment, body, tokenIndex);
+    return new For3Node(true, initialization, condition, increment, body, tokenIndex);
   }
 
   private Node parseIfStatement() {
