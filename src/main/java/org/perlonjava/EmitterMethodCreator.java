@@ -4,11 +4,11 @@ import org.objectweb.asm.*;
 import org.perlonjava.node.Node;
 
 /**
- * ASMMethodCreator is a utility class that uses the ASM library to dynamically generate Java
+ * EmitterMethodCreator is a utility class that uses the ASM library to dynamically generate Java
  * classes with specific methods. It is designed to create classes with methods that can be used for
  * runtime evaluation of expressions or statements in a simulated Perl environment.
  */
-public class ASMMethodCreator implements Opcodes {
+public class EmitterMethodCreator implements Opcodes {
 
   // Number of local variables to skip when processing a closure (this, @_, wantarray)
   public static int skipVariables = 3;
@@ -260,7 +260,7 @@ public class ASMMethodCreator implements Opcodes {
     // number of anonymous subroutines, as it helps manage memory usage by 
     // allowing unused classes to be collected by the garbage collector.
     //
-    CustomClassLoader loader = new CustomClassLoader(ASMMethodCreator.class.getClassLoader());
+    CustomClassLoader loader = new CustomClassLoader(EmitterMethodCreator.class.getClassLoader());
 
     // Create a "Java" class name with dots instead of slashes
     String javaClassNameDot = ctx.javaClassName.replace('/', '.');

@@ -106,7 +106,7 @@ public class Main {
             // Create the compiler context
             EmitterContext ctx = new EmitterContext(
                     fileName, // Source filename
-                    ASMMethodCreator.generateClassName(), // internal java class name
+                    EmitterMethodCreator.generateClassName(), // internal java class name
                     new ScopedSymbolTable(), // Top-level symbol table
                     null, // Return label
                     null, // Method visitor
@@ -154,7 +154,7 @@ public class Main {
             ctx.logDebug("createClassWithMethod");
             // Create a new instance of ErrorMessageUtil, resetting the line counter
             ctx.errorUtil = new ErrorMessageUtil(ctx.fileName, tokens);
-            Class<?> generatedClass = ASMMethodCreator.createClassWithMethod(
+            Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
                     ctx,
                     new String[] {}, // Closure variables
                     ast,

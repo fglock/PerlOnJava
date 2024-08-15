@@ -684,7 +684,7 @@ public class EmitterVisitor implements Visitor {
                     // TODO optimization - SETVAR+MY can be combined
 
                     // Determine the class name based on the sigil
-                    String className = ASMMethodCreator.getVariableClassName(sigil);
+                    String className = EmitterMethodCreator.getVariableClassName(sigil);
 
                     if (operator.equals("my")) {
                         // "my":
@@ -741,12 +741,12 @@ public class EmitterVisitor implements Visitor {
             }
 
             // save the eval context in a HashMap in RuntimeScalar class
-            String evalTag = "eval" + ASMMethodCreator.classCounter++;
+            String evalTag = "eval" + EmitterMethodCreator.classCounter++;
             // create the eval context
             EmitterContext evalCtx =
                     new EmitterContext(
                             "(eval)", // filename
-                            ASMMethodCreator.generateClassName(), // internal java class name
+                            EmitterMethodCreator.generateClassName(), // internal java class name
                             ctx.symbolTable.clone(), // clone the symbolTable
                             null, // return label
                             null, // method visitor
@@ -769,7 +769,7 @@ public class EmitterVisitor implements Visitor {
             // The string is evaluated outside of the try-catch block.
             node.operand.accept(this.with(ContextType.SCALAR));
 
-            int skipVariables = ASMMethodCreator.skipVariables; // skip (this, @_, wantarray)
+            int skipVariables = EmitterMethodCreator.skipVariables; // skip (this, @_, wantarray)
 
             MethodVisitor mv = ctx.mv;
 
@@ -806,7 +806,7 @@ public class EmitterVisitor implements Visitor {
                 // Stack: [Class, Class[], Class[], int]
 
                 // select Array/Hash/Scalar depending on env value
-                String descriptor = ASMMethodCreator.getVariableDescriptor(newEnv[i + skipVariables]);
+                String descriptor = EmitterMethodCreator.getVariableDescriptor(newEnv[i + skipVariables]);
 
                 mv.visitLdcInsn(Type.getType(descriptor)); // Push the Class object for RuntimeScalar
                 // Stack: [Class, Class[], Class[], int, Class]
@@ -911,7 +911,7 @@ public class EmitterVisitor implements Visitor {
         EmitterContext subCtx =
                 new EmitterContext(
                         ctx.fileName, // same source filename
-                        ASMMethodCreator.generateClassName(), // internal java class name
+                        EmitterMethodCreator.generateClassName(), // internal java class name
                         ctx.symbolTable, // closure symbolTable
                         null, // return label
                         null, // method visitor
@@ -920,7 +920,7 @@ public class EmitterVisitor implements Visitor {
                         ctx.errorUtil, // error message utility
                         ctx.debugEnabled);
         Class<?> generatedClass =
-                ASMMethodCreator.createClassWithMethod(
+                EmitterMethodCreator.createClassWithMethod(
                         subCtx, newEnv, node.block, node.useTryCatch
                 );
         String newClassNameDot = subCtx.javaClassName.replace('/', '.');
@@ -941,7 +941,7 @@ public class EmitterVisitor implements Visitor {
          *  RuntimeScalar.new(applyMethod);
          */
 
-        int skipVariables = ASMMethodCreator.skipVariables; // skip (this, @_, wantarray)
+        int skipVariables = EmitterMethodCreator.skipVariables; // skip (this, @_, wantarray)
 
         // 1. Get the class from RuntimeCode.anonSubs
         mv.visitFieldInsn(Opcodes.GETSTATIC, "org/perlonjava/RuntimeCode", "anonSubs", "Ljava/util/HashMap;");
@@ -966,7 +966,7 @@ public class EmitterVisitor implements Visitor {
             mv.visitIntInsn(Opcodes.BIPUSH, i); // Push the index
 
             // select Array/Hash/Scalar depending on env value
-            String descriptor = ASMMethodCreator.getVariableDescriptor(newEnv[i + skipVariables]);
+            String descriptor = EmitterMethodCreator.getVariableDescriptor(newEnv[i + skipVariables]);
 
             mv.visitLdcInsn(Type.getType(descriptor)); // Push the Class object for RuntimeScalar
             mv.visitInsn(Opcodes.AASTORE); // Store the Class object in the array
