@@ -123,6 +123,16 @@ If you prefer to compile the project manually using `javac`, follow these steps:
       Perl5>
       ```
 
+    - `jrunscript` accepts Perl compiler debugging options, but only if a filename is provided:
+
+      ```
+      jrunscript -cp target/perlonjava-1.0-SNAPSHOT.jar -l perl test.pl --tokenize
+      ```
+
+      ```
+      jrunscript -cp target/perlonjava-1.0-SNAPSHOT.jar -l perl test.pl --parse
+      ```
+
 ### Running with Main Class
 
 1. **Show Instructions**:
