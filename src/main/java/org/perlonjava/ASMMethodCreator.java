@@ -243,7 +243,7 @@ public class ASMMethodCreator implements Opcodes {
     }
 
     // Transform the value in the stack to RuntimeList
-    mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/ContextProvider", "getList", "()Lorg/perlonjava/RuntimeList;", true);
+    mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/RuntimeDataProvider", "getList", "()Lorg/perlonjava/RuntimeList;", true);
 
     mv.visitInsn(Opcodes.ARETURN); // returns an Object
     mv.visitMaxs(0, 0); // Automatically computed
