@@ -1,132 +1,155 @@
 # Perl Compiler Under Development
 
-This is a Perl compiler under development. It compiles Perl into Java bytecode and runs it.
+    This is a Perl compiler under development. It compiles Perl into Java bytecode and runs it.
+
+## Table of Contents
+
+    1. [Introduction](#introduction)
+    2. [Compile and Package](#compile-and-package)
+        - [Using Maven](#using-maven)
+        - [Using javac (Manual Compilation)](#using-javac-manual-compilation)
+    3. [Running the Script Engine](#running-the-script-engine)
+        - [Using jrunscript](#using-jrunscript)
+        - [Running with Main Class](#running-with-main-class)
+    4. [Debugging Tools](#debugging-tools)
+    5. [Modules](#modules)
+
+## Introduction
+
+    This project aims to develop a Perl compiler that translates Perl code into Java bytecode and executes it.
+    The compiler is still under development and is intended to provide a way to run Perl scripts on the Java
+    Virtual Machine (JVM). The project leverages the ASM library to generate Java bytecode dynamically.
+
+    The primary goals of this project are:
+    - To provide a seamless way to run Perl scripts on the JVM.
+    - To explore the integration of Perl and Java, allowing for interoperability between the two languages.
+    - To offer a platform for experimenting with compiler design and bytecode generation.
+
+    The project is structured into several modules, including a lexer, parser, and bytecode generator. Each
+    module plays a crucial role in the compilation process, from tokenizing the Perl script to generating the
+    corresponding Java bytecode.
 
 ## Compile and Package
 
 ### Using Maven
 
-1. **Ensure you have Maven installed**:
-    - You can download and install Maven from [Maven's official website](https://maven.apache.org/).
+    1. **Ensure you have Maven installed**:
+        - You can download and install Maven from [Maven's official website](https://maven.apache.org/).
 
-2. **Add the ASM dependency and Maven Shade Plugin**:
-    - Ensure your `pom.xml` includes the ASM dependency and the Maven Shade Plugin as shown below:
+    2. **Add the ASM dependency and Maven Shade Plugin**:
+        - Ensure your `pom.xml` includes the ASM dependency and the Maven Shade Plugin as shown below:
 
-    ```xml
-    <project xmlns="http://maven.apache.org/POM/4.0.0"
-             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-             xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-        <modelVersion>4.0.0</modelVersion>
+        ```xml
+        <project xmlns="http://maven.apache.org/POM/4.0.0"
+                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+            <modelVersion>4.0.0</modelVersion>
 
-        <groupId>org.perlonjava</groupId>
-        <artifactId>perlonjava</artifactId>
-        <version>1.0-SNAPSHOT</version>
+            <groupId>org.perlonjava</groupId>
+            <artifactId>perlonjava</artifactId>
+            <version>1.0-SNAPSHOT</version>
 
-        <dependencies>
-            <dependency>
-                <groupId>org.ow2.asm</groupId>
-                <artifactId>asm</artifactId>
-                <version>9.2</version>
-            </dependency>
-            <!-- Other dependencies -->
-        </dependencies>
+            <dependencies>
+                <dependency>
+                    <groupId>org.ow2.asm</groupId>
+                    <artifactId>asm</artifactId>
+                    <version>9.2</version>
+                </dependency>
+                <!-- Other dependencies -->
+            </dependencies>
 
-        <build>
-            <plugins>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-shade-plugin</artifactId>
-                    <version>3.2.4</version>
-                    <executions>
-                        <execution>
-                            <phase>package</phase>
-                            <goals>
-                                <goal>shade</goal>
-                            </goals>
-                        </execution>
-                    </executions>
-                </plugin>
-            </plugins>
-        </build>
-    </project>
-    ```
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-shade-plugin</artifactId>
+                        <version>3.2.4</version>
+                        <executions>
+                            <execution>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>shade</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </project>
+        ```
 
-3. **Compile and Package the Project**:
-    - Run the following Maven command to compile and package the project into a shaded JAR:
-      ```sh
-      mvn clean package
-      ```
+    3. **Compile and Package the Project**:
+        - Run the following Maven command to compile and package the project into a shaded JAR:
+          ```sh
+          mvn clean package
+          ```
 
-4. **Locate the Shaded JAR**:
-    - After the build process completes, the shaded JAR file will be located in the `target` directory, typically named `perlonjava-1.0-SNAPSHOT.jar`.
+    4. **Locate the Shaded JAR**:
+        - After the build process completes, the shaded JAR file will be located in the `target` directory, typically named `perlonjava-1.0-SNAPSHOT-shaded.jar`.
 
 ### Using javac (Manual Compilation)
 
-If you prefer to compile the project manually using `javac`, follow these steps:
+    If you prefer to compile the project manually using `javac`, follow these steps:
 
-1. **Download ASM Library**:
-    - Ensure you have the ASM library (e.g., `asm-9.7.jar`) downloaded and available.
+    1. **Download ASM Library**:
+        - Ensure you have the ASM library (e.g., `asm-9.7.jar`) downloaded and available.
 
-2. **Compile the Java Files**:
-    - Use the following command to compile the Java files, updating the path to `asm-9.7.jar` as necessary:
-      ```sh
-      javac -cp ./asm-9.7.jar -d . src/main/java/org/perlonjava/*.java src/main/java/org/perlonjava/node/*.java
-      ```
+    2. **Compile the Java Files**:
+        - Use the following command to compile the Java files, updating the path to `asm-9.7.jar` as necessary:
+          ```sh
+          javac -cp ./asm-9.7.jar -d . src/main/java/org/perlonjava/*.java src/main/java/org/perlonjava/node/*.java
+          ```
 
-### Running the Script Engine
+## Running the Script Engine
 
-1. **Using jrunscript**:
-    - After compiling and packaging, you can run the Perl script engine using `jrunscript`:
-      ```sh
-      jrunscript -cp target/perlonjava-1.0-SNAPSHOT.jar -l perl
-      ```
+### Using jrunscript
 
-2. **Example Usage**:
-    - Once `jrunscript` is running, you can execute Perl scripts directly in the interactive shell.
+    1. **Run the Perl Script Engine**:
+        - After compiling and packaging, you can run the Perl script engine using `jrunscript`:
+          ```sh
+          jrunscript -cp target/perlonjava-1.0-SNAPSHOT-shaded.jar -l perl
+          ```
 
-## Running with Main class
+    2. **Example Usage**:
+        - Once `jrunscript` is running, you can execute Perl scripts directly in the interactive shell.
 
-Show instructions
+### Running with Main Class
 
-```sh
-java -cp ./asm-9.7.jar:. org.perlonjava.Main --help
-```
+    1. **Show Instructions**:
+        ```sh
+        java -cp ./asm-9.7.jar:. org.perlonjava.Main --help
+        ```
 
-Execute something
-
-```sh
-java -cp ./asm-9.7.jar:. org.perlonjava.Main -e ' print 123 '
-```
+    2. **Execute Something**:
+        ```sh
+        java -cp ./asm-9.7.jar:. org.perlonjava.Main -e ' print 123 '
+        ```
 
 ## Debugging Tools
 
-Run emitting debug information
+    1. **Run Emitting Debug Information**:
+        ```sh
+        java -cp ./asm-9.7.jar:. org.perlonjava.Main --debug -e ' print 123 '
+        ```
 
-```sh
-java -cp ./asm-9.7.jar:. org.perlonjava.Main --debug -e ' print 123 '
-```
+    2. **Compile Only; Can Be Combined with --debug**:
+        ```sh
+        java -cp ./asm-9.7.jar:. org.perlonjava.Main -c -e ' print 123 '
+        ```
 
-Compile only; can be combined with --debug
+        ```sh
+        java -cp ./asm-9.7.jar:. org.perlonjava.Main --debug -c -e ' print 123 '
+        ```
 
-```sh
-java -cp ./asm-9.7.jar:. org.perlonjava.Main -c -e ' print 123 '
-```
+    3. **Run the Lexer Only**:
+        ```sh
+        java -cp ./asm-9.7.jar:. org.perlonjava.Main --tokenize -e ' print 123 '
+        ```
 
-```sh
-java -cp ./asm-9.7.jar:. org.perlonjava.Main --debug -c -e ' print 123 '
-```
-
-Run the Lexer only
-
-```sh
-java -cp ./asm-9.7.jar:. org.perlonjava.Main --tokenize -e ' print 123 '
-```
-
-Run the Parser only
-
-```sh
-java -cp ./asm-9.7.jar:. org.perlonjava.Main --parse -e ' print 123 '
-```
+    4. **Run the Parser Only**:
+        ```sh
+        java -cp ./asm-9.7.jar:. org.perlonjava.Main --parse -e ' print 123 '
+        ```
 
 ## Modules
 
