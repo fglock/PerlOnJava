@@ -3,10 +3,10 @@ package org.perlonjava;
 import java.util.Iterator;
 
 /**
- * ContextProvider interface defines methods for obtaining different types of runtime data.
+ * RuntimeDataProvider interface defines methods for obtaining different types of runtime data.
  * Classes implementing this interface should provide implementations for these methods.
  */
-public interface ContextProvider {
+public interface RuntimeDataProvider {
 
     /**
      * Retrieves a RuntimeArray instance.

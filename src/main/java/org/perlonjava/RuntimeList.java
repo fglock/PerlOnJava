@@ -8,7 +8,7 @@ import java.util.Iterator;
  * The RuntimeList class simulates a Perl list.
  *
  */
-public class RuntimeList implements ContextProvider {
+public class RuntimeList implements RuntimeDataProvider {
     public List<AbstractRuntimeObject> elements;
 
     // Constructor
