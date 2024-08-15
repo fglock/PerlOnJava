@@ -12,12 +12,12 @@ public class PostfixOperatorNode extends AbstractNode {
     /**
      * The postfix operator represented by this node.
      */
-    String operator;
+    public final String operator;
 
     /**
      * The operand on which the postfix operator is applied.
      */
-    Node operand;
+    public final Node operand;
 
     /**
      * Constructs a new PostfixOperatorNode with the specified operator and operand.

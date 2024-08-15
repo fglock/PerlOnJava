@@ -12,7 +12,7 @@ public class StringNode extends AbstractNode {
     /**
      * The string value represented by this node.
      */
-    String value;
+    public final String value;
 
     /**
      * Constructs a new StringNode with the specified string value.
