@@ -16,7 +16,7 @@ import java.util.Iterator;
  * to mimic this behavior by using an enum `ScalarType` to track the type of the value stored in the
  * scalar.
  */
-public class RuntimeScalar extends AbstractRuntimeObject implements RuntimeScalarReference {
+public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarReference {
 
   // Fields to store the type and value of the scalar variable
   // TODO add cache for integer/string values

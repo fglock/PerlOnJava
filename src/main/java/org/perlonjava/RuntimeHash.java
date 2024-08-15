@@ -11,7 +11,7 @@ import java.util.Iterator;
  * class tries to mimic this behavior using a map of string keys to RuntimeScalar objects, which can hold
  * any type of Perl scalar value.
  */
-public class RuntimeHash extends AbstractRuntimeObject implements RuntimeScalarReference {
+public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarReference {
     public Map<String, RuntimeScalar> elements;
 
     // Constructor
