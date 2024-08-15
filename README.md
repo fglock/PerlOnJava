@@ -45,19 +45,6 @@ corresponding Java bytecode.
 4. **Locate the Shaded JAR**:
     - After the build process completes, the shaded JAR file will be located in the `target` directory, typically named `perlonjava-1.0-SNAPSHOT.jar`.
 
-### Using javac (Manual Compilation)
-
-If you prefer to compile the project manually using `javac`, follow these steps:
-
-1. **Download ASM Library**:
-    - Ensure you have the ASM library (e.g., `asm-9.7.jar`) downloaded and available.
-
-2. **Compile the Java Files**:
-    - Use the following command to compile the Java files, updating the path to `asm-9.7.jar` as necessary:
-      ```sh
-      javac -cp ./asm-9.7.jar -d target/classes/ src/main/java/org/perlonjava/*.java src/main/java/org/perlonjava/node/*.java
-      ```
-
 ## Running the Script Engine
 
 ### Using jrunscript
@@ -95,38 +82,38 @@ If you prefer to compile the project manually using `javac`, follow these steps:
 
 1. **Show Instructions**:
     ```sh
-    java -cp ./asm-9.7.jar:target/classes org.perlonjava.Main --help
+    java -jar target/perlonjava-1.0-SNAPSHOT.jar --help
     ```
 
 2. **Execute Something**:
     ```sh
-    java -cp ./asm-9.7.jar:target/classes org.perlonjava.Main -e ' print 123 '
+    java -jar target/perlonjava-1.0-SNAPSHOT.jar -e ' print 123 '
     ```
 
 ## Debugging Tools
 
 1. **Run Emitting Debug Information**:
     ```sh
-    java -cp ./asm-9.7.jar:target/classes org.perlonjava.Main --debug -e ' print 123 '
+    java -jar target/perlonjava-1.0-SNAPSHOT.jar --debug -e ' print 123 '
     ```
 
 2. **Compile Only; Can Be Combined with --debug**:
     ```sh
-    java -cp ./asm-9.7.jar:target/classes org.perlonjava.Main -c -e ' print 123 '
+    java -jar target/perlonjava-1.0-SNAPSHOT.jar -c -e ' print 123 '
     ```
 
     ```sh
-    java -cp ./asm-9.7.jar:target/classes org.perlonjava.Main --debug -c -e ' print 123 '
+    java -jar target/perlonjava-1.0-SNAPSHOT.jar --debug -c -e ' print 123 '
     ```
 
 3. **Run the Lexer Only**:
     ```sh
-    java -cp ./asm-9.7.jar:target/classes org.perlonjava.Main --tokenize -e ' print 123 '
+    java -jar target/perlonjava-1.0-SNAPSHOT.jar --tokenize -e ' print 123 '
     ```
 
 4. **Run the Parser Only**:
     ```sh
-    java -cp ./asm-9.7.jar:target/classes org.perlonjava.Main --parse -e ' print 123 '
+    java -jar target/perlonjava-1.0-SNAPSHOT.jar --parse -e ' print 123 '
     ```
 
 ## Modules
