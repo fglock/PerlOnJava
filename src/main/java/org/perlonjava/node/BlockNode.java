@@ -1,4 +1,6 @@
-package org.perlonjava;
+package org.perlonjava.node;
+
+import org.perlonjava.Visitor;
 
 import java.util.*;
 
@@ -23,7 +25,7 @@ public class BlockNode extends AbstractNode {
      * @param elements the list of child nodes to be stored in this BlockNode
      * @param tokenIndex the index of the token in the source code
      */
-    BlockNode(List<Node> elements, int tokenIndex) {
+    public BlockNode(List<Node> elements, int tokenIndex) {
         this.elements = elements;
         this.tokenIndex = tokenIndex;
     }

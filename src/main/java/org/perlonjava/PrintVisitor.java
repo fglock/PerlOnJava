@@ -1,5 +1,7 @@
 package org.perlonjava;
 
+import org.perlonjava.node.*;
+
 /*
  *
  * Usage:

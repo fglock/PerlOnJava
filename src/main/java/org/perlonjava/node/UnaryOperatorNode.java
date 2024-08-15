@@ -1,4 +1,6 @@
-package org.perlonjava;
+package org.perlonjava.node;
+
+import org.perlonjava.Visitor;
 
 /**
  * The UnaryOperatorNode class represents a node in the abstract syntax tree (AST) that holds

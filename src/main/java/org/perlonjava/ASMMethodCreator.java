@@ -1,6 +1,7 @@
 package org.perlonjava;
 
 import org.objectweb.asm.*;
+import org.perlonjava.node.Node;
 
 /**
  * ASMMethodCreator is a utility class that uses the ASM library to dynamically generate Java

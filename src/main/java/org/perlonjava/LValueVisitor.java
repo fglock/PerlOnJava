@@ -1,5 +1,7 @@
 package org.perlonjava;
 
+import org.perlonjava.node.*;
+
 /**
  * Is this Node assignable (Lvalue) and is it Scalar-like or List-like
  * <p>
