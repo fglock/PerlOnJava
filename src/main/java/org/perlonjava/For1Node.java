@@ -12,7 +12,7 @@ public class For1Node extends AbstractNode {
     /**
      * This loop creates a new variable scope
      */
-    boolean useNewScope;
+    public final boolean useNewScope;
 
     /**
      * The list part of the for loop.
