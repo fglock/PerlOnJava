@@ -60,7 +60,7 @@ public class RuntimeCode implements RuntimeScalarReference {
 
     evalCtx.errorUtil = new ErrorMessageUtil(evalCtx.fileName, tokens);
     Class<?> generatedClass =
-        ASMMethodCreator.createClassWithMethod(
+        EmitterMethodCreator.createClassWithMethod(
             evalCtx, newEnv, // Closure variables
             ast,
             true  // use try-catch
