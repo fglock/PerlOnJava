@@ -6,6 +6,21 @@ import java.io.Reader;
 import java.io.StringWriter;
 import java.lang.invoke.*;
 
+/**
+ * The PerlScriptEngine class is a custom implementation of the AbstractScriptEngine.
+ * It allows the execution of Perl scripts within the Java environment using the Java Scripting API (JSR 223).
+ *
+ * This class provides the necessary methods to evaluate Perl scripts, manage script contexts, and integrate
+ * with the scripting engine framework.
+ *
+ * Key functionalities include:
+ * - Evaluating Perl scripts from strings or readers.
+ * - Managing script contexts to handle variable bindings and input/output streams.
+ * - Providing a factory method to obtain the associated ScriptEngineFactory.
+ *
+ * By extending AbstractScriptEngine, PerlScriptEngine inherits basic script engine functionalities and focuses on
+ * implementing the specifics of Perl script execution.
+ */
 public class PerlScriptEngine extends AbstractScriptEngine {
 
     private final ScriptEngineFactory factory;

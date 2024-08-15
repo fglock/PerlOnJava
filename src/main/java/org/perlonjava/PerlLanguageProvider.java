@@ -11,8 +11,29 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.List;
 
+/**
+ * The PerlLanguageProvider class is responsible for executing Perl code within the Java environment.
+ * It provides methods to execute, tokenize, compile, and parse Perl code.
+ *
+ * This class uses Java's MethodHandles and reflection to dynamically invoke methods and constructors.
+ * It also integrates with the runtime classes such as RuntimeArray, RuntimeContextType, and RuntimeList
+ * to manage the execution context and results.
+ *
+ * Key functionalities include:
+ * - Executing Perl code and returning the result.
+ * - Enabling debugging, tokenization, compilation, and parsing modes.
+ * - Handling errors and providing meaningful error messages.
+ *
+ * Why is this class needed?
+ *
+ * The PerlLanguageProvider class abstracts the complexity of executing Perl code within a Java environment.
+ * Directly invoking Perl code execution involves intricate setup and handling of various runtime contexts,
+ * error management, and integration with Java's MethodHandles and reflection APIs. By encapsulating these
+ * details within a single class, we provide a simpler and more manageable interface for executing Perl code.
+ */
 public class PerlLanguageProvider {
 
+    // Lookup object for performing method handle operations
     private static final MethodHandles.Lookup lookup = MethodHandles.lookup();
 
     /**

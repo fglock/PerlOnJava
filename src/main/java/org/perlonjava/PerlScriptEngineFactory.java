@@ -5,6 +5,18 @@ import javax.script.ScriptEngineFactory;
 import java.util.Arrays;
 import java.util.List;
 
+/**
+ * The PerlScriptEngineFactory class is an implementation of the ScriptEngineFactory interface.
+ * It is responsible for creating instances of the PerlScriptEngine and providing metadata about the engine.
+ *
+ * This class provides the necessary methods to:
+ * - Create new instances of the PerlScriptEngine.
+ * - Provide information about the scripting engine, such as its name, version, and supported MIME types.
+ * - List the names and extensions associated with the Perl scripting language.
+ *
+ * By implementing ScriptEngineFactory, this class allows the PerlScriptEngine to be discovered and used
+ * by the Java Scripting API (JSR 223) framework.
+ */
 public class PerlScriptEngineFactory implements ScriptEngineFactory {
 
     @Override
