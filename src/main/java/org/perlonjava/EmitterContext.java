@@ -26,8 +26,8 @@ public class EmitterContext {
   /** The MethodVisitor instance used to visit the method instructions. */
   public MethodVisitor mv;
   
-  /** The type of the current context, defined by the ContextType enum - VOID, SCALAR, etc */
-  public ContextType contextType;
+  /** The type of the current context, defined by the RuntimeContextType enum - VOID, SCALAR, etc */
+  public RuntimeContextType contextType;
   
   /** Indicates whether the current context is for a boxed object (true) or a native object (false). */
   public boolean isBoxed;
@@ -36,7 +36,7 @@ public class EmitterContext {
   public ErrorMessageUtil errorUtil;
 
   /** Cache for contexts with different ContextTypes */
-  private final Map<ContextType, EmitterContext> contextCache = new EnumMap<>(ContextType.class);
+  private final Map<RuntimeContextType, EmitterContext> contextCache = new EnumMap<>(RuntimeContextType.class);
 
   /** Flag to enable or disable debugging */
   public boolean debugEnabled;
@@ -49,7 +49,7 @@ public class EmitterContext {
    * @param symbolTable the symbol table used for scoping symbols within the context
    * @param returnLabel the label to which the method should return
    * @param mv the MethodVisitor instance used to visit the method instructions
-   * @param contextType the type of the context, defined by the ContextType enum
+   * @param contextType the type of the context, defined by the RuntimeContextType enum
    * @param isBoxed indicates whether the context is for a boxed object (true) or a native object (false)
    * @param errorUtil formats error messages with source code context
    * @param debugEnabled enables or disables printing debug messages with ctx.logDebug(message)
@@ -60,7 +60,7 @@ public class EmitterContext {
       ScopedSymbolTable symbolTable,
       Label returnLabel,
       MethodVisitor mv,
-      ContextType contextType,
+      RuntimeContextType contextType,
       boolean isBoxed,
       ErrorMessageUtil errorUtil,
       boolean debugEnabled) {
@@ -84,7 +84,7 @@ public class EmitterContext {
    * @param contextType the new context type
    * @return a new EmitterContext with the updated context type
    */
-  public EmitterContext with(ContextType contextType) {
+  public EmitterContext with(RuntimeContextType contextType) {
     // Check if the context is already cached
     if (contextCache.containsKey(contextType)) {
       return contextCache.get(contextType);

@@ -1,26 +1,26 @@
 package org.perlonjava;
 
 /**
- * The Token class represents a lexical token in a programming language or text.
+ * The LexerToken class represents a lexical token in a programming language or text.
  * A token is a basic unit of meaningful data, such as a keyword, identifier, operator,
  * or literal, that is produced by a lexical analyzer (lexer) during the process of
  * lexical analysis.
  *
  * <p>This class encapsulates the type and text of a token. The type is represented
- * by an instance of the TokenType enum, which categorizes the token (e.g., keyword,
+ * by an instance of the LexerTokenType enum, which categorizes the token (e.g., keyword,
  * identifier, operator). The text is the actual string of characters that make up
  * the token.</p>
  *
- * <p>The Token class is immutable, meaning that once an instance is created, its
+ * <p>The LexerToken class is immutable, meaning that once an instance is created, its
  * type and text cannot be changed. This immutability ensures that tokens remain
  * consistent and thread-safe.</p>
  */
-public class Token {
+public class LexerToken {
   /**
-   * The type of the token, represented by an instance of the TokenType enum.
+   * The type of the token, represented by an instance of the LexerTokenType enum.
    * This field categorizes the token (e.g., keyword, identifier, operator).
    */
-  public final TokenType type;
+  public final LexerTokenType type;
 
   /**
    * The text of the token, represented as a string.
@@ -29,12 +29,12 @@ public class Token {
   public final String text;
 
   /**
-   * Constructs a new Token with the specified type and text.
+   * Constructs a new LexerToken with the specified type and text.
    *
-   * @param type the type of the token, represented by an instance of the TokenType enum
+   * @param type the type of the token, represented by an instance of the LexerTokenType enum
    * @param text the text of the token, represented as a string
    */
-  public Token(TokenType type, String text) {
+  public LexerToken(LexerTokenType type, String text) {
     this.type = type;
     this.text = text;
   }
@@ -47,7 +47,7 @@ public class Token {
    */
   @Override
   public String toString() {
-    return "Token{" + "type=" + type + ", text='" + text + '\'' + '}';
+    return "LexerToken{" + "type=" + type + ", text='" + text + '\'' + '}';
   }
 }
 

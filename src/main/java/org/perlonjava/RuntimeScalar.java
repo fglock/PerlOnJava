@@ -13,14 +13,14 @@ import java.util.Iterator;
  * expressions, etc.)
  *
  * <p>Perl scalars are dynamically typed, meaning their type can change at runtime. This class tries
- * to mimic this behavior by using an enum `ScalarType` to track the type of the value stored in the
+ * to mimic this behavior by using an enum `RuntimeScalarType` to track the type of the value stored in the
  * scalar.
  */
 public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarReference {
 
   // Fields to store the type and value of the scalar variable
   // TODO add cache for integer/string values
-  public ScalarType type;
+  public RuntimeScalarType type;
   public Object value;
 
   // Note: possible optimization, but this is not safe, because the values are mutable - need to create an immutable version
@@ -29,31 +29,31 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
   // Constructors
   public RuntimeScalar() {
-    this.type = ScalarType.UNDEF;
+    this.type = RuntimeScalarType.UNDEF;
   }
 
   public RuntimeScalar(long value) {
-    this.type = ScalarType.INTEGER;
+    this.type = RuntimeScalarType.INTEGER;
     this.value = value;
   }
 
   public RuntimeScalar(int value) {
-    this.type = ScalarType.INTEGER;
+    this.type = RuntimeScalarType.INTEGER;
     this.value = (long) value;
   }
 
   public RuntimeScalar(double value) {
-    this.type = ScalarType.DOUBLE;
+    this.type = RuntimeScalarType.DOUBLE;
     this.value = value;
   }
 
   public RuntimeScalar(String value) {
-    this.type = ScalarType.STRING;
+    this.type = RuntimeScalarType.STRING;
     this.value = value;
   }
 
   public RuntimeScalar(boolean value) {
-    this.type = ScalarType.INTEGER;
+    this.type = RuntimeScalarType.INTEGER;
     this.value = (long) (value ? 1 : 0);
   }
 
@@ -137,13 +137,13 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
   }
 
   public RuntimeScalar set(long value) {
-    this.type = ScalarType.INTEGER;
+    this.type = RuntimeScalarType.INTEGER;
     this.value = value;
     return this;
   }
 
   public RuntimeScalar set(String value) {
-    this.type = ScalarType.STRING;
+    this.type = RuntimeScalarType.STRING;
     this.value = value;
     return this;
   }
@@ -188,7 +188,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     switch (type) {
       case UNDEF:
         // hash autovivification
-        type = ScalarType.HASHREFERENCE;
+        type = RuntimeScalarType.HASHREFERENCE;
         value = new RuntimeHash();
       case HASHREFERENCE:
         return ((RuntimeHash) value).get(index.toString());
@@ -201,7 +201,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     switch (type) {
       case UNDEF:
         // array autovivification
-        type = ScalarType.ARRAYREFERENCE;
+        type = RuntimeScalarType.ARRAYREFERENCE;
         value = new RuntimeArray();
       case ARRAYREFERENCE:
         return ((RuntimeArray) value).get((int) index.getLong());
@@ -221,8 +221,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     Class<?> clazz = codeObject.getClass();
 
     // Get the 'apply' method from the class.
-    // This method takes RuntimeArray and ContextType as parameters.
-    Method mm = clazz.getMethod("apply", RuntimeArray.class, ContextType.class);
+    // This method takes RuntimeArray and RuntimeContextType as parameters.
+    Method mm = clazz.getMethod("apply", RuntimeArray.class, RuntimeContextType.class);
 
     // Create a new RuntimeScalar instance to hold the CODE object
     RuntimeScalar r = new RuntimeScalar();
@@ -232,20 +232,20 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     r.value = new RuntimeCode(mm, codeObject);
 
     // Set the type of the RuntimeScalar to CODE to indicate it holds a code reference
-    r.type = ScalarType.CODE;
+    r.type = RuntimeScalarType.CODE;
 
     // Return the fully constructed RuntimeScalar object
     return r;
   }
 
   // Method to apply (execute) a subroutine reference
-  public RuntimeList apply(RuntimeArray a, ContextType callContext) throws Exception {
+  public RuntimeList apply(RuntimeArray a, RuntimeContextType callContext) throws Exception {
     // Check if the type of this RuntimeScalar is CODE
-    if (type == ScalarType.CODE) {
+    if (type == RuntimeScalarType.CODE) {
         // Cast the value to RuntimeCode to access the method and the code object
         RuntimeCode code = (RuntimeCode) this.value;
 
-        // Invoke the method associated with the code object, passing the RuntimeArray and ContextType as arguments
+        // Invoke the method associated with the code object, passing the RuntimeArray and RuntimeContextType as arguments
         // This executes the subroutine and returns the result, which is expected to be a RuntimeList
         return (RuntimeList) code.methodObject.invoke(code.codeObject, a, callContext);
     } else {
@@ -311,7 +311,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     if (str.isEmpty()) {
         // If empty, set the value to 1 (as a Long) and update type to INTEGER
         this.value = (long) 1;
-        this.type = ScalarType.INTEGER; // ScalarType is an enum that holds different scalar types
+        this.type = RuntimeScalarType.INTEGER; // RuntimeScalarType is an enum that holds different scalar types
         return this; // Return the current instance
     }
 
@@ -424,7 +424,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
   // Return a reference to this
   public RuntimeScalar createReference() {
     RuntimeScalar result = new RuntimeScalar();
-    result.type = ScalarType.REFERENCE;
+    result.type = RuntimeScalarType.REFERENCE;
     result.value = this;
     return result;
   }
@@ -450,13 +450,13 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
   public RuntimeScalar add(RuntimeScalar arg2) {
     RuntimeScalar arg1 = this;
-    if (arg1.type == ScalarType.STRING) {
+    if (arg1.type == RuntimeScalarType.STRING) {
       arg1 = arg1.parseNumber();
     }
-    if (arg2.type == ScalarType.STRING) {
+    if (arg2.type == RuntimeScalarType.STRING) {
       arg2 = arg2.parseNumber();
     }
-    if (arg1.type == ScalarType.DOUBLE || arg2.type == ScalarType.DOUBLE) {
+    if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
       return new RuntimeScalar(arg1.getDouble() + arg2.getDouble());
     } else {
       return new RuntimeScalar(arg1.getLong() + arg2.getLong());
@@ -465,13 +465,13 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
   public RuntimeScalar subtract(RuntimeScalar arg2) {
     RuntimeScalar arg1 = this;
-    if (arg1.type == ScalarType.STRING) {
+    if (arg1.type == RuntimeScalarType.STRING) {
       arg1 = arg1.parseNumber();
     }
-    if (arg2.type == ScalarType.STRING) {
+    if (arg2.type == RuntimeScalarType.STRING) {
       arg2 = arg2.parseNumber();
     }
-    if (arg1.type == ScalarType.DOUBLE || arg2.type == ScalarType.DOUBLE) {
+    if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
       return new RuntimeScalar(arg1.getDouble() - arg2.getDouble());
     } else {
       return new RuntimeScalar(arg1.getLong() - arg2.getLong());
@@ -480,13 +480,13 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
   public RuntimeScalar multiply(RuntimeScalar arg2) {
     RuntimeScalar arg1 = this;
-    if (arg1.type == ScalarType.STRING) {
+    if (arg1.type == RuntimeScalarType.STRING) {
       arg1 = arg1.parseNumber();
     }
-    if (arg2.type == ScalarType.STRING) {
+    if (arg2.type == RuntimeScalarType.STRING) {
       arg2 = arg2.parseNumber();
     }
-    if (arg1.type == ScalarType.DOUBLE || arg2.type == ScalarType.DOUBLE) {
+    if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
       return new RuntimeScalar(arg1.getDouble() * arg2.getDouble());
     } else {
       return new RuntimeScalar(arg1.getLong() * arg2.getLong());
@@ -495,13 +495,13 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
   public RuntimeScalar divide(RuntimeScalar arg2) {
     RuntimeScalar arg1 = this;
-    if (arg1.type == ScalarType.STRING) {
+    if (arg1.type == RuntimeScalarType.STRING) {
       arg1 = arg1.parseNumber();
     }
-    if (arg2.type == ScalarType.STRING) {
+    if (arg2.type == RuntimeScalarType.STRING) {
       arg2 = arg2.parseNumber();
     }
-    if (arg1.type == ScalarType.DOUBLE || arg2.type == ScalarType.DOUBLE) {
+    if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
       return new RuntimeScalar(arg1.getDouble() / arg2.getDouble());
     } else {
       return new RuntimeScalar(arg1.getLong() / arg2.getLong());
@@ -510,13 +510,13 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
   public RuntimeScalar lessEqualThan(RuntimeScalar arg2) {
     RuntimeScalar arg1 = this;
-    if (arg1.type == ScalarType.STRING) {
+    if (arg1.type == RuntimeScalarType.STRING) {
       arg1 = arg1.parseNumber();
     }
-    if (arg2.type == ScalarType.STRING) {
+    if (arg2.type == RuntimeScalarType.STRING) {
       arg2 = arg2.parseNumber();
     }
-    if (arg1.type == ScalarType.DOUBLE || arg2.type == ScalarType.DOUBLE) {
+    if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
       return new RuntimeScalar(arg1.getDouble() <= arg2.getDouble());
     } else {
       return new RuntimeScalar(arg1.getLong() <= arg2.getLong());
@@ -525,13 +525,13 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
   public RuntimeScalar lessThan(RuntimeScalar arg2) {
     RuntimeScalar arg1 = this;
-    if (arg1.type == ScalarType.STRING) {
+    if (arg1.type == RuntimeScalarType.STRING) {
       arg1 = arg1.parseNumber();
     }
-    if (arg2.type == ScalarType.STRING) {
+    if (arg2.type == RuntimeScalarType.STRING) {
       arg2 = arg2.parseNumber();
     }
-    if (arg1.type == ScalarType.DOUBLE || arg2.type == ScalarType.DOUBLE) {
+    if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
       return new RuntimeScalar(arg1.getDouble() < arg2.getDouble());
     } else {
       return new RuntimeScalar(arg1.getLong() < arg2.getLong());
@@ -549,7 +549,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
       case STRING:
         return this.stringIncrement();
     }
-    this.type = ScalarType.INTEGER;
+    this.type = RuntimeScalarType.INTEGER;
     this.value = 1;
     return this;
   }
@@ -567,7 +567,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         this.stringIncrement();
         break;
       default:
-        this.type = ScalarType.INTEGER;
+        this.type = RuntimeScalarType.INTEGER;
         this.value = 1;
     }
     return old;
@@ -586,7 +586,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         this.set(this.parseNumber());
         return this.preAutoDecrement();
     }
-    this.type = ScalarType.INTEGER;
+    this.type = RuntimeScalarType.INTEGER;
     this.value = -1;
     return this;
   }
@@ -606,7 +606,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         this.preAutoDecrement();
         break;
       default:
-        this.type = ScalarType.INTEGER;
+        this.type = RuntimeScalarType.INTEGER;
         this.value = 1;
     }
     return old;
@@ -622,10 +622,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
   public RuntimeScalar abs() {
     RuntimeScalar arg1 = this;
-    if (arg1.type == ScalarType.STRING) {
+    if (arg1.type == RuntimeScalarType.STRING) {
       arg1 = arg1.parseNumber();
     }
-    if (arg1.type == ScalarType.DOUBLE) {
+    if (arg1.type == RuntimeScalarType.DOUBLE) {
       return new RuntimeScalar(Math.abs(arg1.getDouble()));
     } else {
       return new RuntimeScalar(Math.abs(arg1.getLong()));

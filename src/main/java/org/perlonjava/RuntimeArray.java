@@ -122,7 +122,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     // Create a reference to the Array
     public RuntimeScalar createReference() {
       RuntimeScalar result = new RuntimeScalar();
-      result.type = ScalarType.ARRAYREFERENCE;
+      result.type = RuntimeScalarType.ARRAYREFERENCE;
       result.value = this;
       return result;
     }
