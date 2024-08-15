@@ -9,7 +9,7 @@ import java.util.Iterator;
  *
  */
 public class RuntimeList implements RuntimeDataProvider {
-    public List<AbstractRuntimeObject> elements;
+    public List<RuntimeBaseEntity> elements;
 
     // Constructor
     public RuntimeList() {
@@ -52,7 +52,7 @@ public class RuntimeList implements RuntimeDataProvider {
     }
 
     // Add an element to the list
-    public void add(AbstractRuntimeObject value) {
+    public void add(RuntimeBaseEntity value) {
       this.elements.add(value);
     }
 
@@ -103,7 +103,7 @@ public class RuntimeList implements RuntimeDataProvider {
         // flatten the right side
         RuntimeArray arr = new RuntimeArray();  
         value.addToArray(arr);
-        for (AbstractRuntimeObject elem : elements) {
+        for (RuntimeBaseEntity elem : elements) {
             if (elem instanceof RuntimeScalar) {
                 ((RuntimeScalar) elem).set(arr.shift());
             } else if (elem instanceof RuntimeArray) {
@@ -150,7 +150,7 @@ public class RuntimeList implements RuntimeDataProvider {
 
     public RuntimeScalar print() {
       StringBuilder sb = new StringBuilder();
-        for (AbstractRuntimeObject element : elements) {
+        for (RuntimeBaseEntity element : elements) {
             sb.append(element.toString());
         }
       System.out.print(sb);
@@ -159,7 +159,7 @@ public class RuntimeList implements RuntimeDataProvider {
 
     public RuntimeScalar say() {
       StringBuilder sb = new StringBuilder();
-        for (AbstractRuntimeObject element : elements) {
+        for (RuntimeBaseEntity element : elements) {
             sb.append(element.toString());
         }
       System.out.println(sb);
