@@ -3,6 +3,7 @@ package org.perlonjava;
 import java.util.*;
 
 import org.objectweb.asm.*;
+import org.perlonjava.node.*;
 
 public class EmitterVisitor implements Visitor {
     private final EmitterContext ctx;

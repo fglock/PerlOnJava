@@ -1,5 +1,8 @@
 package org.perlonjava;
 
+import org.perlonjava.node.Node;
+import org.perlonjava.node.UnaryOperatorNode;
+
 import java.lang.reflect.Method;
 import java.util.*;
 

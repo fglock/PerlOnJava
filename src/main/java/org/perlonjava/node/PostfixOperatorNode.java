@@ -1,4 +1,6 @@
-package org.perlonjava;
+package org.perlonjava.node;
+
+import org.perlonjava.Visitor;
 
 /**
  * The PostfixOperatorNode class represents a node in the abstract syntax tree (AST) that holds
@@ -25,7 +27,7 @@ public class PostfixOperatorNode extends AbstractNode {
      * @param operator the postfix operator to be stored in this node
      * @param operand the operand on which the postfix operator is applied
      */
-    PostfixOperatorNode(String operator, Node operand, int tokenIndex) {
+    public PostfixOperatorNode(String operator, Node operand, int tokenIndex) {
         this.operator = operator;
         this.operand = operand;
         this.tokenIndex = tokenIndex;
