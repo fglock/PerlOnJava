@@ -84,3 +84,125 @@ java -cp ./asm-9.7.jar:. org.perlonjava.Main --parse -e ' print 123 '
 - The main method generates the bytecode for the program body.
 - The generated method is loaded into a variable as a code reference and executed.
 
+
+## PerlScriptEngine
+
+`PerlScriptEngine` is a Java class that allows you to execute Perl scripts using the Java Scripting API (JSR 223).
+
+### Features
+
+- Execute Perl scripts from Java.
+- Supports script execution with various configurations.
+- Handles script execution errors gracefully.
+
+### Installation
+
+To use `PerlScriptEngine`, include the necessary dependencies in your project. For example, if you are using Maven, add the following to your `pom.xml`:
+
+```xml
+<dependency>
+    <groupId>org.perlonjava</groupId>
+    <artifactId>perl-script-engine</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+### Usage
+
+#### Basic Usage
+
+Here is an example of how to use `PerlScriptEngine` to execute a simple Perl script:
+
+```java
+import javax.script.ScriptEngine;
+import javax.script.ScriptEngineManager;
+import javax.script.ScriptException;
+
+public class Main {
+    public static void main(String[] args) {
+        ScriptEngineManager manager = new ScriptEngineManager();
+        ScriptEngine engine = manager.getEngineByName("perl");
+
+        String script = "print 'Hello, Perl from Java!';";
+
+        try {
+            engine.eval(script);
+        } catch (ScriptException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+#### Using ScriptContext
+
+You can also pass a `ScriptContext` to the `eval` method to configure the script execution:
+
+```java
+import javax.script.ScriptEngine;
+import javax.script.ScriptEngineManager;
+import javax.script.ScriptContext;
+import javax.script.SimpleScriptContext;
+import javax.script.ScriptException;
+
+public class Main {
+    public static void main(String[] args) {
+        ScriptEngineManager manager = new ScriptEngineManager();
+        ScriptEngine engine = manager.getEngineByName("perl");
+
+        String script = "print 'Hello, Perl with context!';";
+
+        ScriptContext context = new SimpleScriptContext();
+        context.setAttribute("fileName", "example.pl", ScriptContext.ENGINE_SCOPE);
+        context.setAttribute("debugEnabled", true, ScriptContext.ENGINE_SCOPE);
+
+        try {
+            engine.eval(script, context);
+        } catch (ScriptException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+#### Reading Script from a Reader
+
+You can also read the script from a `Reader`:
+
+```java
+import javax.script.ScriptEngine;
+import javax.script.ScriptEngineManager;
+import javax.script.ScriptContext;
+import javax.script.SimpleScriptContext;
+import javax.script.ScriptException;
+import java.io.StringReader;
+
+public class Main {
+    public static void main(String[] args) {
+        ScriptEngineManager manager = new ScriptEngineManager();
+        ScriptEngine engine = manager.getEngineByName("perl");
+
+        String script = "print 'Hello, Perl from Reader!';";
+        StringReader reader = new StringReader(script);
+
+        ScriptContext context = new SimpleScriptContext();
+        context.setAttribute("fileName", "example.pl", ScriptContext.ENGINE_SCOPE);
+        context.setAttribute("debugEnabled", true, ScriptContext.ENGINE_SCOPE);
+
+        try {
+            engine.eval(reader, context);
+        } catch (ScriptException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+### Error Handling
+
+`PerlScriptEngine` handles errors gracefully by wrapping exceptions in `ScriptException` and providing meaningful error messages.
+
+## License
+
+This project is licensed under the Perl License - see the [LICENSE](LICENSE) file for details.
+
