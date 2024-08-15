@@ -14,7 +14,7 @@ public class BlockNode extends AbstractNode {
     /**
      * The list of child nodes contained in this BlockNode.
      */
-    List<Node> elements;
+    public final List<Node> elements;
 
     /**
      * Constructs a new BlockNode with the specified list of child nodes.
