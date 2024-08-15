@@ -94,7 +94,7 @@ public class EmitterMethodCreator implements Opcodes {
     ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
 
     // The context type is determined by the caller.
-    ctx.contextType = ContextType.RUNTIME;
+    ctx.contextType = RuntimeContextType.RUNTIME;
 
     // Set the source file name. This is used for runtime error messages
     cw.visitSource(ctx.fileName, null);
@@ -145,7 +145,7 @@ public class EmitterMethodCreator implements Opcodes {
         cw.visitMethod(
             Opcodes.ACC_PUBLIC,
             "apply",
-            "(Lorg/perlonjava/RuntimeArray;Lorg/perlonjava/ContextType;)Lorg/perlonjava/RuntimeList;",
+            "(Lorg/perlonjava/RuntimeArray;Lorg/perlonjava/RuntimeContextType;)Lorg/perlonjava/RuntimeList;",
             null,
             new String[] {"java/lang/Exception"});
 

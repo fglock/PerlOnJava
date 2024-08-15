@@ -5,7 +5,7 @@ import org.perlonjava.node.*;
 /**
  * Is this Node assignable (Lvalue) and is it Scalar-like or List-like
  * <p>
- * getResult() returns a ContextType.SCALAR, LIST, or VOID (not assignable)
+ * getResult() returns a RuntimeContextType.SCALAR, LIST, or VOID (not assignable)
  * <p>
  * Usage:
  * <p>
@@ -13,9 +13,9 @@ import org.perlonjava.node.*;
  *
  */
 public class LValueVisitor implements Visitor {
-    private ContextType context = ContextType.VOID;
+    private RuntimeContextType context = RuntimeContextType.VOID;
 
-    public static ContextType getContext(Node node) throws Exception {
+    public static RuntimeContextType getContext(Node node) throws Exception {
         LValueVisitor lvVisitor = new LValueVisitor();
         node.accept(lvVisitor);
         return lvVisitor.context;
@@ -23,12 +23,12 @@ public class LValueVisitor implements Visitor {
 
     @Override
     public void visit(NumberNode node) throws Exception {
-        context = ContextType.VOID;
+        context = RuntimeContextType.VOID;
     }
 
     @Override
     public void visit(IdentifierNode node) throws Exception {
-        context = ContextType.VOID;
+        context = RuntimeContextType.VOID;
     }
 
     @Override
@@ -39,13 +39,13 @@ public class LValueVisitor implements Visitor {
                 break;
             case "[":   // $a[]
             case "{":   // $a{}
-                context = ContextType.SCALAR;
+                context = RuntimeContextType.SCALAR;
                 break;
             case "->":  // $a->() $a->[] $a->()
-                context = ContextType.SCALAR;
+                context = RuntimeContextType.SCALAR;
                 break;
             default:
-                context = ContextType.VOID;  // Not an L-value
+                context = RuntimeContextType.VOID;  // Not an L-value
         }
     }
 
@@ -57,71 +57,71 @@ public class LValueVisitor implements Visitor {
                 break;
             case "@":   // @a
             case "%":   // %a
-                context = ContextType.LIST;
+                context = RuntimeContextType.LIST;
                 break;
             case "$":   // $a $$a
             case "substr":
-                context = ContextType.SCALAR;
+                context = RuntimeContextType.SCALAR;
                 break;
             default:
-                context = ContextType.VOID;  // Not an L-value
+                context = RuntimeContextType.VOID;  // Not an L-value
         }
     }
 
     @Override
     public void visit(For1Node node) throws Exception {
-        context = ContextType.VOID;
+        context = RuntimeContextType.VOID;
     }
 
     @Override
     public void visit(For3Node node) throws Exception {
-        context = ContextType.VOID;
+        context = RuntimeContextType.VOID;
     }
 
     @Override
     public void visit(IfNode node) throws Exception {
-        context = ContextType.VOID;
+        context = RuntimeContextType.VOID;
     }
 
     @Override
     public void visit(AnonSubNode node) throws Exception {
-        context = ContextType.VOID;
+        context = RuntimeContextType.VOID;
     }
 
     @Override
     public void visit(TernaryOperatorNode node) throws Exception {
         // XXX FIXME
-        context = ContextType.VOID;
+        context = RuntimeContextType.VOID;
     }
 
     @Override
     public void visit(PostfixOperatorNode node) throws Exception {
-        context = ContextType.VOID;
+        context = RuntimeContextType.VOID;
     }
 
     @Override
     public void visit(StringNode node) throws Exception {
-        context = ContextType.VOID;
+        context = RuntimeContextType.VOID;
     }
 
     @Override
     public void visit(BlockNode node) throws Exception {
-        context = ContextType.VOID;
+        context = RuntimeContextType.VOID;
     }
 
     @Override
     public void visit(ListNode node) throws Exception {
-        context = ContextType.LIST; // ($a, $b)
+        context = RuntimeContextType.LIST; // ($a, $b)
     }
 
     @Override
     public void visit(ArrayLiteralNode node) throws Exception {
-        context = ContextType.VOID;
+        context = RuntimeContextType.VOID;
     }
 
     @Override
     public void visit(HashLiteralNode node) throws Exception {
-        context = ContextType.VOID;
+        context = RuntimeContextType.VOID;
     }
 
     // Add other visit methods as needed

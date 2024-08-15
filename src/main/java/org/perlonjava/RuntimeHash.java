@@ -47,7 +47,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         arr.push(new RuntimeScalar());
       }
       RuntimeScalar result = new RuntimeScalar();
-      result.type = ScalarType.HASHREFERENCE;
+      result.type = RuntimeScalarType.HASHREFERENCE;
       result.value = fromArray(arr);
       return result;
     }
@@ -82,7 +82,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
     // Create a reference to the Hash
     public RuntimeScalar createReference() {
       RuntimeScalar result = new RuntimeScalar();
-      result.type = ScalarType.HASHREFERENCE;
+      result.type = RuntimeScalarType.HASHREFERENCE;
       result.value = this;
       return result;
     }

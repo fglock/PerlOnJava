@@ -67,20 +67,20 @@ public class Lexer {
   } 
     
   // Method to tokenize the input string into a list of tokens
-  public List<Token> tokenize() {
-    List<Token> tokens = new ArrayList<>();
-    Token token;
+  public List<LexerToken> tokenize() {
+    List<LexerToken> tokens = new ArrayList<>();
+    LexerToken token;
 
     while ((token = nextToken()) != null) {
       tokens.add(token);
     }
-    tokens.add(new Token(TokenType.EOF, EOF));
-    tokens.add(new Token(TokenType.EOF, EOF));
+    tokens.add(new LexerToken(LexerTokenType.EOF, EOF));
+    tokens.add(new LexerToken(LexerTokenType.EOF, EOF));
 
     return tokens;
   }
 
-  public Token nextToken() {
+  public LexerToken nextToken() {
     if (position >= length) {
       return null;
     }
@@ -90,7 +90,7 @@ public class Lexer {
     if (Character.isWhitespace(current)) {
       if (current == '\n') {
         position++;
-        return new Token(TokenType.NEWLINE, "\n");
+        return new LexerToken(LexerTokenType.NEWLINE, "\n");
       } else {
         return consumeWhitespace();
       }
@@ -102,38 +102,38 @@ public class Lexer {
       return consumeOperator();
     } else {
       position++;
-      return new Token(TokenType.STRING, String.valueOf(current));
+      return new LexerToken(LexerTokenType.STRING, String.valueOf(current));
     }
   }
 
-  public Token consumeWhitespace() {
+  public LexerToken consumeWhitespace() {
     int start = position;
     while (position < length
         && Character.isWhitespace(input[position])
         && input[position] != '\n') {
       position++;
     }
-    return new Token(TokenType.WHITESPACE, new String(input, start, position - start));
+    return new LexerToken(LexerTokenType.WHITESPACE, new String(input, start, position - start));
   }
 
-  public Token consumeNumber() {
+  public LexerToken consumeNumber() {
     int start = position;
     while (position < length && (Character.isDigit(input[position]) || input[position] == '_')) {
       position++;
     }
-    return new Token(TokenType.NUMBER, new String(input, start, position - start));
+    return new LexerToken(LexerTokenType.NUMBER, new String(input, start, position - start));
   }
 
-  public Token consumeIdentifier() {
+  public LexerToken consumeIdentifier() {
     int start = position;
     while (position < length
         && (Character.isLetterOrDigit(input[position]) || input[position] == '_')) {
       position++;
     }
-    return new Token(TokenType.IDENTIFIER, new String(input, start, position - start));
+    return new LexerToken(LexerTokenType.IDENTIFIER, new String(input, start, position - start));
   }
 
-  public Token consumeOperator() {
+  public LexerToken consumeOperator() {
     int start = position;
     char current = input[position];
     if (position < length && (current < 128 && isOperator[current])) {
@@ -141,23 +141,23 @@ public class Lexer {
         case '!':
           if (position + 2 <= input.length && input[position + 1] == '=') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "!=");
+            return new LexerToken(LexerTokenType.OPERATOR, "!=");
           }
           if (position + 2 <= input.length && input[position + 1] == '~') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "!~");
+            return new LexerToken(LexerTokenType.OPERATOR, "!~");
           }
           break;
         case '$':
           if (position + 2 <= input.length && input[position + 1] == '#') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "$#");
+            return new LexerToken(LexerTokenType.OPERATOR, "$#");
           }
           break;
         case '%':
           if (position + 2 <= input.length && input[position + 1] == '=') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "%=");
+            return new LexerToken(LexerTokenType.OPERATOR, "%=");
           }
           break;
         case '&':
@@ -165,21 +165,21 @@ public class Lexer {
               && input[position + 1] == '&'
               && input[position + 2] == '=') {
             position += 3;
-            return new Token(TokenType.OPERATOR, "&&=");
+            return new LexerToken(LexerTokenType.OPERATOR, "&&=");
           }
           if (position + 3 <= input.length
               && input[position + 1] == '.'
               && input[position + 2] == '=') {
             position += 3;
-            return new Token(TokenType.OPERATOR, "&.=");
+            return new LexerToken(LexerTokenType.OPERATOR, "&.=");
           }
           if (position + 2 <= input.length && input[position + 1] == '&') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "&&");
+            return new LexerToken(LexerTokenType.OPERATOR, "&&");
           }
           if (position + 2 <= input.length && input[position + 1] == '=') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "&=");
+            return new LexerToken(LexerTokenType.OPERATOR, "&=");
           }
           break;
         case '*':
@@ -187,39 +187,39 @@ public class Lexer {
               && input[position + 1] == '*'
               && input[position + 2] == '=') {
             position += 3;
-            return new Token(TokenType.OPERATOR, "**=");
+            return new LexerToken(LexerTokenType.OPERATOR, "**=");
           }
           if (position + 2 <= input.length && input[position + 1] == '*') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "**");
+            return new LexerToken(LexerTokenType.OPERATOR, "**");
           }
           if (position + 2 <= input.length && input[position + 1] == '=') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "*=");
+            return new LexerToken(LexerTokenType.OPERATOR, "*=");
           }
           break;
         case '+':
           if (position + 2 <= input.length && input[position + 1] == '+') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "++");
+            return new LexerToken(LexerTokenType.OPERATOR, "++");
           }
           if (position + 2 <= input.length && input[position + 1] == '=') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "+=");
+            return new LexerToken(LexerTokenType.OPERATOR, "+=");
           }
           break;
         case '-':
           if (position + 2 <= input.length && input[position + 1] == '-') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "--");
+            return new LexerToken(LexerTokenType.OPERATOR, "--");
           }
           if (position + 2 <= input.length && input[position + 1] == '=') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "-=");
+            return new LexerToken(LexerTokenType.OPERATOR, "-=");
           }
           if (position + 2 <= input.length && input[position + 1] == '>') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "->");
+            return new LexerToken(LexerTokenType.OPERATOR, "->");
           }
           break;
         case '.':
@@ -227,15 +227,15 @@ public class Lexer {
               && input[position + 1] == '.'
               && input[position + 2] == '.') {
             position += 3;
-            return new Token(TokenType.OPERATOR, "...");
+            return new LexerToken(LexerTokenType.OPERATOR, "...");
           }
           if (position + 2 <= input.length && input[position + 1] == '.') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "..");
+            return new LexerToken(LexerTokenType.OPERATOR, "..");
           }
           if (position + 2 <= input.length && input[position + 1] == '=') {
             position += 2;
-            return new Token(TokenType.OPERATOR, ".=");
+            return new LexerToken(LexerTokenType.OPERATOR, ".=");
           }
           break;
         case '/':
@@ -243,21 +243,21 @@ public class Lexer {
               && input[position + 1] == '/'
               && input[position + 2] == '=') {
             position += 3;
-            return new Token(TokenType.OPERATOR, "//=");
+            return new LexerToken(LexerTokenType.OPERATOR, "//=");
           }
           if (position + 2 <= input.length && input[position + 1] == '/') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "//");
+            return new LexerToken(LexerTokenType.OPERATOR, "//");
           }
           if (position + 2 <= input.length && input[position + 1] == '=') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "/=");
+            return new LexerToken(LexerTokenType.OPERATOR, "/=");
           }
           break;
         case ':':
           if (position + 2 <= input.length && input[position + 1] == ':') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "::");
+            return new LexerToken(LexerTokenType.OPERATOR, "::");
           }
           break;
         case '<':
@@ -265,35 +265,35 @@ public class Lexer {
               && input[position + 1] == '<'
               && input[position + 2] == '=') {
             position += 3;
-            return new Token(TokenType.OPERATOR, "<<=");
+            return new LexerToken(LexerTokenType.OPERATOR, "<<=");
           }
           if (position + 3 <= input.length
               && input[position + 1] == '='
               && input[position + 2] == '>') {
             position += 3;
-            return new Token(TokenType.OPERATOR, "<=>");
+            return new LexerToken(LexerTokenType.OPERATOR, "<=>");
           }
           if (position + 2 <= input.length && input[position + 1] == '<') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "<<");
+            return new LexerToken(LexerTokenType.OPERATOR, "<<");
           }
           if (position + 2 <= input.length && input[position + 1] == '=') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "<=");
+            return new LexerToken(LexerTokenType.OPERATOR, "<=");
           }
           break;
         case '=':
           if (position + 2 <= input.length && input[position + 1] == '=') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "==");
+            return new LexerToken(LexerTokenType.OPERATOR, "==");
           }
           if (position + 2 <= input.length && input[position + 1] == '>') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "=>");
+            return new LexerToken(LexerTokenType.OPERATOR, "=>");
           }
           if (position + 2 <= input.length && input[position + 1] == '~') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "=~");
+            return new LexerToken(LexerTokenType.OPERATOR, "=~");
           }
           break;
         case '>':
@@ -301,15 +301,15 @@ public class Lexer {
               && input[position + 1] == '>'
               && input[position + 2] == '=') {
             position += 3;
-            return new Token(TokenType.OPERATOR, ">>=");
+            return new LexerToken(LexerTokenType.OPERATOR, ">>=");
           }
           if (position + 2 <= input.length && input[position + 1] == '=') {
             position += 2;
-            return new Token(TokenType.OPERATOR, ">=");
+            return new LexerToken(LexerTokenType.OPERATOR, ">=");
           }
           if (position + 2 <= input.length && input[position + 1] == '>') {
             position += 2;
-            return new Token(TokenType.OPERATOR, ">>");
+            return new LexerToken(LexerTokenType.OPERATOR, ">>");
           }
           break;
         case '^':
@@ -317,21 +317,21 @@ public class Lexer {
               && input[position + 1] == '.'
               && input[position + 2] == '=') {
             position += 3;
-            return new Token(TokenType.OPERATOR, "^.=");
+            return new LexerToken(LexerTokenType.OPERATOR, "^.=");
           }
           if (position + 2 <= input.length && input[position + 1] == '=') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "^=");
+            return new LexerToken(LexerTokenType.OPERATOR, "^=");
           }
           if (position + 2 <= input.length && input[position + 1] == '^') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "^^");
+            return new LexerToken(LexerTokenType.OPERATOR, "^^");
           }
           break;
         case 'x':
           if (position + 2 <= input.length && input[position + 1] == '=') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "x=");
+            return new LexerToken(LexerTokenType.OPERATOR, "x=");
           }
           break;
         case '|':
@@ -339,34 +339,34 @@ public class Lexer {
               && input[position + 1] == '.'
               && input[position + 2] == '=') {
             position += 3;
-            return new Token(TokenType.OPERATOR, "|.=");
+            return new LexerToken(LexerTokenType.OPERATOR, "|.=");
           }
           if (position + 3 <= input.length
               && input[position + 1] == '|'
               && input[position + 2] == '=') {
             position += 3;
-            return new Token(TokenType.OPERATOR, "||=");
+            return new LexerToken(LexerTokenType.OPERATOR, "||=");
           }
           if (position + 2 <= input.length && input[position + 1] == '=') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "|=");
+            return new LexerToken(LexerTokenType.OPERATOR, "|=");
           }
           if (position + 2 <= input.length && input[position + 1] == '|') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "||");
+            return new LexerToken(LexerTokenType.OPERATOR, "||");
           }
           break;
         case '~':
           if (position + 2 <= input.length && input[position + 1] == '~') {
             position += 2;
-            return new Token(TokenType.OPERATOR, "~~");
+            return new LexerToken(LexerTokenType.OPERATOR, "~~");
           }
           break;
       }
     }
 
     position++;
-    return new Token(TokenType.OPERATOR, new String(input, start, 1));
+    return new LexerToken(LexerTokenType.OPERATOR, new String(input, start, 1));
   }
 
   // Main method for testing the Lexer
@@ -383,10 +383,10 @@ public class Lexer {
     Lexer lexer = new Lexer(code); 
     
     // Tokenizing the input code
-    List<Token> tokens = lexer.tokenize();
+    List<LexerToken> tokens = lexer.tokenize();
     
     // Printing the tokens
-    for (Token token : tokens) {
+    for (LexerToken token : tokens) {
       System.out.println(token);
     }
   } 

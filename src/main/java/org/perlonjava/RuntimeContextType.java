@@ -1,7 +1,7 @@
 package org.perlonjava;
 
 /**
- * The ContextType enum defines the various types of contexts that can be encountered
+ * The RuntimeContextType enum defines the various types of contexts that can be encountered
  * in the Perl programming language. Perl has a unique context system that determines
  * how expressions are evaluated and what kind of values are expected or returned.
  *
@@ -9,7 +9,7 @@ package org.perlonjava;
  * allowing for more organized and efficient handling of various scenarios within
  * a Perl interpreter or compiler.</p>
  */
-public enum ContextType {
+public enum RuntimeContextType {
     /**
      * Represents a void context in Perl, where no value is expected or returned.
      * This is typically used for functions or operations that do not produce a result.

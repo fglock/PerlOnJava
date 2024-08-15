@@ -40,9 +40,9 @@ public class RuntimeCode implements RuntimeScalarReference {
 
     Node ast;
 
-    // Process the string source code to create the Token list
+    // Process the string source code to create the LexerToken list
     Lexer lexer = new Lexer(code.toString());
-    List<Token> tokens = lexer.tokenize(); // Tokenize the Perl code
+    List<LexerToken> tokens = lexer.tokenize(); // Tokenize the Perl code
     try {
       // Create the AST
       // Create an instance of ErrorMessageUtil with the file name and token list
