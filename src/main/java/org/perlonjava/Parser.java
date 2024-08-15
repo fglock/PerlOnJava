@@ -1,5 +1,7 @@
 package org.perlonjava;
 
+import org.perlonjava.node.*;
+
 import java.util.*;
 
 public class Parser {

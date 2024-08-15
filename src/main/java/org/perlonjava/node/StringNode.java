@@ -1,4 +1,6 @@
-package org.perlonjava;
+package org.perlonjava.node;
+
+import org.perlonjava.Visitor;
 
 /**
  * The StringNode class represents a node in the abstract syntax tree (AST) that holds
@@ -19,7 +21,7 @@ public class StringNode extends AbstractNode {
      *
      * @param value the string value to be stored in this node
      */
-    StringNode(String value, int tokenIndex) {
+    public StringNode(String value, int tokenIndex) {
         this.value = value;
         this.tokenIndex = tokenIndex;
     }

@@ -7,7 +7,7 @@ This is a Perl compiler under development. It compiles Perl into Java bytecode a
 Note: change `asm-9.7.jar` location accordingly
 
 ```sh
-javac -cp ./asm-9.7.jar -d . src/main/java/org/perlonjava/*.java
+javac -cp ./asm-9.7.jar -d . src/main/java/org/perlonjava/*.java src/main/java/org/perlonjava/node/*.java
 ```
 
 ## Run

@@ -1,23 +1,25 @@
-package org.perlonjava;
+package org.perlonjava.node;
+
+import org.perlonjava.Visitor;
 
 import java.util.*;
 
 /**
- * The HashLiteralNode class represents a node in the abstract syntax tree (AST) that holds
- * a list of other nodes surrounded by `{` `}`.
+ * The ArrayLiteralNode class represents a node in the abstract syntax tree (AST) that holds
+ * a list of other nodes surrounded by `[` `]`.
  */
-public class HashLiteralNode extends AbstractNode {
+public class ArrayLiteralNode extends AbstractNode {
     /**
      * The list of child nodes contained in this Node
      */
     public final List<Node> elements;
 
     /**
-     * Constructs a new HashLiteralNode with the specified list of child nodes.
+     * Constructs a new ArrayLiteralNode with the specified list of child nodes.
      *
-     * @param elements the list of child nodes to be stored in this HashLiteralNode
+     * @param elements the list of child nodes to be stored in this ArrayLiteralNode
      */
-    HashLiteralNode(List<Node> elements, int tokenIndex) {
+    public ArrayLiteralNode(List<Node> elements, int tokenIndex) {
         this.elements = elements;
         this.tokenIndex = tokenIndex;
     }

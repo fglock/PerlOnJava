@@ -1,4 +1,6 @@
-package org.perlonjava;
+package org.perlonjava.node;
+
+import org.perlonjava.Visitor;
 
 import java.util.*;
 
@@ -21,12 +23,12 @@ public class ListNode extends AbstractNode {
      *
      * @param elements the list of child nodes to be stored in this ListNode
      */
-    ListNode(List<Node> elements, int tokenIndex) {
+    public ListNode(List<Node> elements, int tokenIndex) {
         this.elements = elements;
         this.tokenIndex = tokenIndex;
     }
 
-    ListNode(int tokenIndex) {
+    public ListNode(int tokenIndex) {
         this.elements = new ArrayList<>();
         this.tokenIndex = tokenIndex;
     }
