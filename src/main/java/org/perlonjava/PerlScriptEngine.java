@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.Reader;
 import java.io.StringWriter;
 import java.lang.invoke.*;
+import java.util.*;
 
 /**
  * The PerlScriptEngine class is a custom implementation of the AbstractScriptEngine.
@@ -32,21 +33,55 @@ public class PerlScriptEngine extends AbstractScriptEngine {
 
     @Override
     public Object eval(String script, ScriptContext context) throws ScriptException {
+
+        // // debug
+        // System.out.println("ScriptContext attributes:");
+        // for (int scope : new int[]{ScriptContext.GLOBAL_SCOPE, ScriptContext.ENGINE_SCOPE}) {
+        //     for (Map.Entry<String, Object> entry : context.getBindings(scope).entrySet()) {
+        //         System.out.print("Scope: " + (scope == ScriptContext.GLOBAL_SCOPE ? "GLOBAL" : "ENGINE") + ", Key: " + entry.getKey() + ", Value: ");
+        //         Object value = entry.getValue();
+        //         if (value instanceof Object[]) {
+        //             System.out.println(Arrays.toString((Object[]) value));
+        //         } else {
+        //             System.out.println(value);
+        //         }
+        //     }
+        // }
+
         // Extract necessary parameters from the context or set defaults
-        String fileName = (String) context.getAttribute("fileName");
-        boolean debugEnabled = Boolean.TRUE.equals(context.getAttribute("debugEnabled"));
-        boolean tokenizeOnly = Boolean.TRUE.equals(context.getAttribute("tokenizeOnly"));
-        boolean compileOnly = Boolean.TRUE.equals(context.getAttribute("compileOnly"));
-        boolean parseOnly = Boolean.TRUE.equals(context.getAttribute("parseOnly"));
+        String[] args = (String[]) context.getAttribute("javax.script.argv");
+
+        String filename = (String) context.getAttribute("javax.script.filename");
+
+        // Handle the case where args might be null
+        if (args == null) {
+            args = new String[0]; // Provide a default empty array
+        }
+
+        // Add filename to the args array if filename is not null
+        String[] newArgs;
+        if (filename != null) {
+            newArgs = new String[args.length + 1];
+            newArgs[0] = filename;
+            System.arraycopy(args, 0, newArgs, 1, args.length);
+        } else {
+            newArgs = args; // No need to modify args if filename is null
+        }
+
+        ArgumentParser.ParsedArguments parsedArgs = ArgumentParser.parseArguments(newArgs);
+
+        if (parsedArgs.code == null) {
+            parsedArgs.code = script;
+        }
 
         try {
             RuntimeList result = PerlLanguageProvider.executePerlCode(
-                script, 
-                fileName != null ? fileName : "<unknown>", 
-                debugEnabled, 
-                tokenizeOnly, 
-                compileOnly, 
-                parseOnly
+                parsedArgs.code,
+                filename != null ? filename : "<unknown>",
+                parsedArgs.debugEnabled,
+                parsedArgs.tokenizeOnly,
+                parsedArgs.compileOnly,
+                parsedArgs.parseOnly
             );
             return result != null ? result.toString() : null;
         } catch (Throwable t) {
@@ -55,7 +90,7 @@ public class PerlScriptEngine extends AbstractScriptEngine {
             throw scriptException;
         }
     }
-
+    
     @Override
     public Object eval(Reader reader, ScriptContext context) throws ScriptException {
         StringWriter writer = new StringWriter();

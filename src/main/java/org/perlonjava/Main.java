@@ -26,109 +26,26 @@ public class Main {
      * @param args Command-line arguments.
      */
     public static void main(String[] args) {
-            boolean debugEnabled = false; // Default to debugging off
-            boolean tokenizeOnly = false;
-            boolean parseOnly = false;
-            boolean compileOnly = false;
+        ArgumentParser.ParsedArguments parsedArgs = ArgumentParser.parseArguments(args);
 
-            // Default Perl code to be compiled and executed
-            String fileName = "test.pl";
-            String code =
-                    ""
-                    + "my $a = 15 ; \n"
-                    + "my $x = $a ; \n"
-                    + "say $x ; \n"
-                    + "$a = 12 ; \n"
-                    + "say $a ; \n"
-                    + " say ( sub { say @_ } ) ; \n"    // anon sub
-                    + " ( sub { say 'HERE' } )->(88888) ; \n"    // anon sub
-                    + " ( sub { say \"<@_>\" } )->(88,89,90) ; \n"    // anon sub
-                    + "eval ' $a = $a + 1 '; "    // eval string
-                    + "say $a ; \n"
-                    + "do { $a; if (1) { say 123 } elsif (3) { say 345 } else { say 456 } } ; \n"
-                    + "print \"Finished; value is $a\\n\"; "
-                    + "my ($i, %j) = (1,2,3,4,5); "
-                    + "say(%j); "
-                    + "$a = {a => 'hash-value'} ; say $a->{a}; my $b = [4,5]; say $b->[1]; "
-                    + "return 5; \n";
+        if (parsedArgs.code == null) {
+            System.err.println("No code provided. Use -e <code> or specify a filename.");
+            System.exit(1);
+        }
 
-            /*
-             * Parse command-line arguments
-             * This loop processes each command-line argument to configure the program's behavior.
-             * Supported arguments:
-             * -e <code>: Specifies the code to be processed, overriding the default code.
-             * --debug: Enables debugging mode.
-             * --tokenize: Sets the program to tokenize the input code. Cannot be combined with --parse or -c.
-             * --parse: Sets the program to parse the input code. Cannot be combined with --tokenize or -c.
-             * -c: Sets the program to compile the input code only. Cannot be combined with --tokenize or --parse.
-             * -h, --help: Displays this help message.
-             * <filename>: Specifies a file containing the code to be processed. If an unrecognized argument is encountered,
-             *             the program will assume it is a filename and attempt to read the code from the file.
-             * If an unrecognized argument is encountered and it is not a valid file, the program will print an error message and exit.
-             */
-            for (int i = 0; i < args.length; i++) {
-                if (args[i].equals("-e") && i + 1 < args.length) {
-                    code = args[i + 1]; // Read the code from the command line parameter
-                    fileName = "-e";
-                    i++; // Skip the next argument as it is the code
-                } else if (args[i].equals("--debug")) {
-                    debugEnabled = true; // Enable debugging
-                } else if (args[i].equals("--tokenize")) {
-                    if (parseOnly || compileOnly) {
-                        System.err.println("Error: --tokenize cannot be combined with --parse or -c");
-                        System.exit(1);
-                    }
-                    tokenizeOnly = true;
-                } else if (args[i].equals("--parse")) {
-                    if (tokenizeOnly || compileOnly) {
-                        System.err.println("Error: --parse cannot be combined with --tokenize or -c");
-                        System.exit(1);
-                    }
-                    parseOnly = true;
-                } else if (args[i].equals("-c")) {
-                    if (tokenizeOnly || parseOnly) {
-                        System.err.println("Error: -c cannot be combined with --tokenize or --parse");
-                        System.exit(1);
-                    }
-                    compileOnly = true;
-                } else if (args[i].equals("-h") || args[i].equals("--help")) {
-                    printHelp();
-                    System.exit(0);
-                } else {
-                    // Assume the argument is a filename
-                    fileName = args[i];
-                    try {
-                        code = new String(Files.readAllBytes(Paths.get(fileName)));
-                    } catch (IOException e) {
-                        System.err.println("Can't open perl script: " + fileName);
-                        System.exit(1);
-                    }
-                }
-            }
-
-            if (code == null) {
-                System.err.println("No code provided. Use -e <code> or specify a filename.");
-                System.exit(1);
-            }
-
-            try {
-                PerlLanguageProvider.executePerlCode(code, fileName, debugEnabled, tokenizeOnly, compileOnly, parseOnly);
-            } catch (Throwable t) {
-                t.printStackTrace();
-                System.exit(1);
-            }
-    }
-
-    private static void printHelp() {
-        System.out.println("Usage: java Main [options] [filename]");
-        System.out.println("Options:");
-        System.out.println("  -e <code>       Specifies the code to be processed, overriding the default code.");
-        System.out.println("  --debug         Enables debugging mode.");
-        System.out.println("  --tokenize      Sets the program to tokenize the input code. Cannot be combined with --parse or -c.");
-        System.out.println("  --parse         Sets the program to parse the input code. Cannot be combined with --tokenize or -c.");
-        System.out.println("  -c              Sets the program to compile the input code only. Cannot be combined with --tokenize or --parse.");
-        System.out.println("  -h, --help      Displays this help message.");
-        System.out.println("  <filename>      Specifies a file containing the code to be processed.");
+        try {
+            PerlLanguageProvider.executePerlCode(
+                parsedArgs.code,
+                parsedArgs.fileName,
+                parsedArgs.debugEnabled,
+                parsedArgs.tokenizeOnly,
+                parsedArgs.compileOnly,
+                parsedArgs.parseOnly
+            );
+        } catch (Throwable t) {
+            t.printStackTrace();
+            System.exit(1);
+        }
     }
 }
 
