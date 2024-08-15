@@ -311,5 +311,5 @@ public class Main {
 
 ## License
 
-This project is licensed under the Perl License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Perl License - see the [LICENSE](LICENSE.md) file for details.
 
