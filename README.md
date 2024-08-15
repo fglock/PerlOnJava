@@ -49,14 +49,9 @@ corresponding Java bytecode.
 
 ### Using jrunscript
 
-1. **Run the Perl Script Engine**:
-    - After compiling and packaging, you can run the Perl script engine using `jrunscript`:
-      ```sh
-      jrunscript -cp target/perlonjava-1.0-SNAPSHOT.jar -l perl
-      ```
+    - After compiling and packaging, you can run the Perl script engine using `jrunscript` interactive shell.
 
-2. **Example Usage**:
-    - Once `jrunscript` is running, you can execute Perl scripts directly in the interactive shell. Note that the CLI creates a new context every time, so it doesn't keep lexical variables from one line to the next.
+    - Note that `jrunscript` creates a new scope every time, so it doesn't keep lexical variables from one line to the next.
 
       ```sh
       $ jrunscript -cp target/perlonjava-1.0-SNAPSHOT.jar -l perl 
@@ -66,16 +61,6 @@ corresponding Java bytecode.
       6
       []
       Perl5>
-      ```
-
-    - `jrunscript` accepts Perl compiler debugging options, but only if a filename is provided:
-
-      ```
-      jrunscript -cp target/perlonjava-1.0-SNAPSHOT.jar -l perl test.pl --tokenize
-      ```
-
-      ```
-      jrunscript -cp target/perlonjava-1.0-SNAPSHOT.jar -l perl test.pl --parse
       ```
 
 ### Running with Main Class
