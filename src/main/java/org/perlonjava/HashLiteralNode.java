@@ -10,7 +10,7 @@ public class HashLiteralNode extends AbstractNode {
     /**
      * The list of child nodes contained in this Node
      */
-    List<Node> elements;
+    public final List<Node> elements;
 
     /**
      * Constructs a new HashLiteralNode with the specified list of child nodes.
