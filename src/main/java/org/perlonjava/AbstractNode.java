@@ -8,7 +8,7 @@ package org.perlonjava;
  * It also provides deep toString() formatting using PrintVisitor
  */
 public abstract class AbstractNode implements Node {
-    int tokenIndex;
+    public int tokenIndex;
 
     @Override
     public int getIndex() {
