@@ -111,7 +111,17 @@ If you prefer to compile the project manually using `javac`, follow these steps:
       ```
 
 2. **Example Usage**:
-    - Once `jrunscript` is running, you can execute Perl scripts directly in the interactive shell.
+    - Once `jrunscript` is running, you can execute Perl scripts directly in the interactive shell. Note that the CLI creates a new context every time, so it doesn't keep lexical variables from one line to the next.
+
+      ```sh
+      $ jrunscript -cp target/perlonjava-1.0-SNAPSHOT.jar -l perl 
+      Perl5> my $sub = sub { say $_[0] }; $sub->($_) for 4,5,6;
+      4
+      5
+      6
+      []
+      Perl5>
+      ```
 
 ### Running with Main Class
 
