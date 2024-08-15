@@ -1,7 +1,7 @@
 package org.perlonjava;
 
 /**
- * The TokenType enum defines the various types of tokens that can be encountered
+ * The LexerTokenType enum defines the various types of tokens that can be encountered
  * during the lexical analysis phase of parsing a programming language or text.
  * Each token type represents a specific category of lexical units that the lexer
  * can identify and classify.
@@ -10,7 +10,7 @@ package org.perlonjava;
  * allowing for more organized and efficient handling of lexical analysis within
  * a lexer or parser.</p>
  */
-public enum TokenType {
+public enum LexerTokenType {
     /**
      * Represents whitespace characters, such as spaces, tabs, and other
      * non-visible characters that separate tokens but do not affect the

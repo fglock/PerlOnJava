@@ -8,7 +8,7 @@ import java.util.List;
  */
 public class ErrorMessageUtil {
     private final String fileName;
-    private final List<Token> tokens;
+    private final List<LexerToken> tokens;
     private int tokenIndex;
     private int lastLineNumber;
 
@@ -18,7 +18,7 @@ public class ErrorMessageUtil {
      * @param fileName the name of the file
      * @param tokens the list of tokens
      */
-    public ErrorMessageUtil(String fileName, List<Token> tokens) {
+    public ErrorMessageUtil(String fileName, List<LexerToken> tokens) {
         this.fileName = fileName;
         this.tokens = tokens;
         this.tokenIndex = -1;
@@ -39,8 +39,8 @@ public class ErrorMessageUtil {
         // Retrieve the string context around the error by collecting tokens near the specified index
         List<String> near = new ArrayList<>();
         for (int i = Math.max(0, index - 4); i <= Math.min(tokens.size() - 1, index + 2); i++) {
-            Token tok = tokens.get(i);
-            if (tok != null && tok.type != TokenType.EOF) {
+            LexerToken tok = tokens.get(i);
+            if (tok != null && tok.type != LexerTokenType.EOF) {
                 near.add(tok.text);
             }
         }
@@ -68,7 +68,7 @@ public class ErrorMessageUtil {
 
         // Count newlines from the last processed index to the current index
         for (int i = tokenIndex + 1; i <= index; i++) {
-            if (tokens.get(i).type == TokenType.NEWLINE) {
+            if (tokens.get(i).type == LexerTokenType.NEWLINE) {
                 lastLineNumber++;
             }
         }
@@ -127,13 +127,13 @@ public class ErrorMessageUtil {
 
     public static void main(String[] args) {
         // Example usage
-        List<Token> tokens = new ArrayList<>();
-        tokens.add(new Token(TokenType.IDENTIFIER, "my"));
-        tokens.add(new Token(TokenType.IDENTIFIER, "$var"));
-        tokens.add(new Token(TokenType.NEWLINE, "\n"));
-        tokens.add(new Token(TokenType.OPERATOR, "="));
-        tokens.add(new Token(TokenType.IDENTIFIER, "42"));
-        tokens.add(new Token(TokenType.IDENTIFIER, ";"));
+        List<LexerToken> tokens = new ArrayList<>();
+        tokens.add(new LexerToken(LexerTokenType.IDENTIFIER, "my"));
+        tokens.add(new LexerToken(LexerTokenType.IDENTIFIER, "$var"));
+        tokens.add(new LexerToken(LexerTokenType.NEWLINE, "\n"));
+        tokens.add(new LexerToken(LexerTokenType.OPERATOR, "="));
+        tokens.add(new LexerToken(LexerTokenType.IDENTIFIER, "42"));
+        tokens.add(new LexerToken(LexerTokenType.IDENTIFIER, ";"));
 
         // Create an instance of ErrorMessageUtil with the file name and token list
         ErrorMessageUtil errorMessageUtil = new ErrorMessageUtil("example_file.txt", tokens);

@@ -1,7 +1,7 @@
 package org.perlonjava;
 
 // Enum to represent the type of value stored in the scalar
-public enum ScalarType {
+public enum RuntimeScalarType {
   INTEGER,
   DOUBLE,
   STRING,

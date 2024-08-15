@@ -110,7 +110,7 @@ public class Main {
                     new ScopedSymbolTable(), // Top-level symbol table
                     null, // Return label
                     null, // Method visitor
-                    ContextType.VOID, // Call context
+                    RuntimeContextType.VOID, // Call context
                     true, // Is boxed
                     null,  // errorUtil
                     debugEnabled   // debugEnabled flag
@@ -127,12 +127,12 @@ public class Main {
             ctx.logDebug("parse code: " + code);
             ctx.logDebug("  call context " + ctx.contextType);
 
-            // Create the Token list
+            // Create the LexerToken list
             Lexer lexer = new Lexer(code);
-            List<Token> tokens = lexer.tokenize(); // Tokenize the Perl code
+            List<LexerToken> tokens = lexer.tokenize(); // Tokenize the Perl code
             if (tokenizeOnly) {
                 // Printing the tokens
-                for (Token token : tokens) {
+                for (LexerToken token : tokens) {
                   System.out.println(token);
                 }
                 System.exit(0); // success
@@ -171,10 +171,10 @@ public class Main {
             Object instance = constructor.newInstance();
 
             // Find the apply method
-            Method applyMethod = generatedClass.getMethod("apply", RuntimeArray.class, ContextType.class);
+            Method applyMethod = generatedClass.getMethod("apply", RuntimeArray.class, RuntimeContextType.class);
 
             // Invoke the method
-            RuntimeList result = (RuntimeList) applyMethod.invoke(instance, new RuntimeArray(), ContextType.SCALAR);
+            RuntimeList result = (RuntimeList) applyMethod.invoke(instance, new RuntimeArray(), RuntimeContextType.SCALAR);
 
             // Print the result of the execution
             ctx.logDebug("Result of generatedMethod: " + result);
