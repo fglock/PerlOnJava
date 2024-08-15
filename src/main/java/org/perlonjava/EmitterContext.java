@@ -11,6 +11,12 @@ import java.util.*;
  */
 public class EmitterContext {
   
+  /** Debugging options. */
+  public boolean debugEnabled;  //  Flag to enable or disable debugging
+  public boolean tokenizeOnly;
+  public boolean compileOnly;
+  public boolean parseOnly;
+
   /** The name of the file being processed. */
   public String fileName;
   
@@ -38,9 +44,6 @@ public class EmitterContext {
   /** Cache for contexts with different ContextTypes */
   private final Map<RuntimeContextType, EmitterContext> contextCache = new EnumMap<>(RuntimeContextType.class);
 
-  /** Flag to enable or disable debugging */
-  public boolean debugEnabled;
-
   /**
    * Constructs a new EmitterContext with the specified parameters.
    *
@@ -53,6 +56,8 @@ public class EmitterContext {
    * @param isBoxed indicates whether the context is for a boxed object (true) or a native object (false)
    * @param errorUtil formats error messages with source code context
    * @param debugEnabled enables or disables printing debug messages with ctx.logDebug(message)
+   * @param tokenizeOnly stop after the tokenizing step
+   * @param compileOnly stop after the compilation step
    */
   public EmitterContext(
       String fileName,
@@ -63,7 +68,10 @@ public class EmitterContext {
       RuntimeContextType contextType,
       boolean isBoxed,
       ErrorMessageUtil errorUtil,
-      boolean debugEnabled) {
+      boolean debugEnabled,
+      boolean tokenizeOnly,
+      boolean compileOnly,
+      boolean parseOnly) {
     this.fileName = fileName;
     this.javaClassName = javaClassName;
     this.symbolTable = symbolTable;
@@ -73,6 +81,9 @@ public class EmitterContext {
     this.isBoxed = isBoxed;
     this.errorUtil = errorUtil;
     this.debugEnabled = debugEnabled;
+    this.tokenizeOnly = tokenizeOnly;
+    this.compileOnly = compileOnly;
+    this.parseOnly = parseOnly;
   }
 
   /**
@@ -90,7 +101,7 @@ public class EmitterContext {
       return contextCache.get(contextType);
     }
     // Create a new context and cache it
-    EmitterContext newContext = new EmitterContext(this.fileName, this.javaClassName, this.symbolTable, this.returnLabel, this.mv, contextType, this.isBoxed, errorUtil, debugEnabled);
+    EmitterContext newContext = new EmitterContext(this.fileName, this.javaClassName, this.symbolTable, this.returnLabel, this.mv, contextType, this.isBoxed, errorUtil, debugEnabled, tokenizeOnly, compileOnly, parseOnly);
     contextCache.put(contextType, newContext);
     return newContext;
   }

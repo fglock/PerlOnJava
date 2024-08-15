@@ -9,6 +9,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
+import javax.script.ScriptEngine;
+import javax.script.ScriptEngineManager;
+import javax.script.ScriptException;
+
 /**
  * The Main class serves as the entry point for the Perl-to-Java bytecode compiler and runtime
  * evaluator. It parses Perl code, generates corresponding Java bytecode using ASM, and executes the
@@ -22,7 +26,6 @@ public class Main {
      * @param args Command-line arguments.
      */
     public static void main(String[] args) {
-        try {
             boolean debugEnabled = false; // Default to debugging off
             boolean tokenizeOnly = false;
             boolean parseOnly = false;
@@ -103,84 +106,17 @@ public class Main {
                 }
             }
 
-            // Create the compiler context
-            EmitterContext ctx = new EmitterContext(
-                    fileName, // Source filename
-                    EmitterMethodCreator.generateClassName(), // internal java class name
-                    new ScopedSymbolTable(), // Top-level symbol table
-                    null, // Return label
-                    null, // Method visitor
-                    RuntimeContextType.VOID, // Call context
-                    true, // Is boxed
-                    null,  // errorUtil
-                    debugEnabled   // debugEnabled flag
-            );
-
-            // Enter a new scope in the symbol table and add special Perl variables
-            ctx.symbolTable.enterScope();
-            ctx.symbolTable.addVariable("this"); // anon sub instance is local variable 0
-            ctx.symbolTable.addVariable("@_"); // Argument list is local variable 1
-            ctx.symbolTable.addVariable("wantarray"); // Call context is local variable 2
-
-            Namespace.initializeGlobals();
-
-            ctx.logDebug("parse code: " + code);
-            ctx.logDebug("  call context " + ctx.contextType);
-
-            // Create the LexerToken list
-            Lexer lexer = new Lexer(code);
-            List<LexerToken> tokens = lexer.tokenize(); // Tokenize the Perl code
-            if (tokenizeOnly) {
-                // Printing the tokens
-                for (LexerToken token : tokens) {
-                  System.out.println(token);
-                }
-                System.exit(0); // success
+            if (code == null) {
+                System.err.println("No code provided. Use -e <code> or specify a filename.");
+                System.exit(1);
             }
 
-            // Create the AST
-            // Create an instance of ErrorMessageUtil with the file name and token list
-            ErrorMessageUtil errorUtil = new ErrorMessageUtil(ctx.fileName, tokens);
-            Parser parser = new Parser(errorUtil, tokens); // Parse the tokens
-            Node ast = parser.parse(); // Generate the abstract syntax tree (AST)
-            if (parseOnly) {
-                // Printing the ast
-                System.out.println(ast);
-                System.exit(0); // success
+            try {
+                PerlLanguageProvider.executePerlCode(code, fileName, debugEnabled, tokenizeOnly, compileOnly, parseOnly);
+            } catch (Throwable t) {
+                t.printStackTrace();
+                System.exit(1);
             }
-            ctx.logDebug("-- AST:\n" + ast + "--\n");
-
-            // Create the Java class from the AST
-            ctx.logDebug("createClassWithMethod");
-            // Create a new instance of ErrorMessageUtil, resetting the line counter
-            ctx.errorUtil = new ErrorMessageUtil(ctx.fileName, tokens);
-            Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
-                    ctx,
-                    new String[] {}, // Closure variables
-                    ast,
-                    false   // no try-catch
-            );
-            if (compileOnly) {
-                System.exit(0); // success
-            }
-
-            // Find the constructor
-            Constructor<?> constructor = generatedClass.getConstructor();
-
-            // Instantiate the class
-            Object instance = constructor.newInstance();
-
-            // Find the apply method
-            Method applyMethod = generatedClass.getMethod("apply", RuntimeArray.class, RuntimeContextType.class);
-
-            // Invoke the method
-            RuntimeList result = (RuntimeList) applyMethod.invoke(instance, new RuntimeArray(), RuntimeContextType.SCALAR);
-
-            // Print the result of the execution
-            ctx.logDebug("Result of generatedMethod: " + result);
-        } catch (Exception e) {
-            e.printStackTrace(); // Print any exceptions that occur during the process
-        }
     }
 
     private static void printHelp() {

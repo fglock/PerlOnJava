@@ -753,7 +753,10 @@ public class EmitterVisitor implements Visitor {
                             ctx.contextType, // call context
                             true, // is boxed
                             ctx.errorUtil, // error message utility
-                            ctx.debugEnabled);
+                            ctx.debugEnabled,
+                            ctx.tokenizeOnly,
+                            ctx.compileOnly,
+                            ctx.parseOnly);
             RuntimeCode.evalContext.put(evalTag, evalCtx);
 
             // Here the compiled code will call RuntimeCode.eval_string(code, evalTag) method.
@@ -918,7 +921,10 @@ public class EmitterVisitor implements Visitor {
                         RuntimeContextType.RUNTIME, // call context
                         true, // is boxed
                         ctx.errorUtil, // error message utility
-                        ctx.debugEnabled);
+                        ctx.debugEnabled,
+                        ctx.tokenizeOnly,
+                        ctx.compileOnly,
+                        ctx.parseOnly);
         Class<?> generatedClass =
                 EmitterMethodCreator.createClassWithMethod(
                         subCtx, newEnv, node.block, node.useTryCatch
