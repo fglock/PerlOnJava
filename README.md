@@ -2,15 +2,89 @@
 
 This is a Perl compiler under development. It compiles Perl into Java bytecode and runs it.
 
-## Compile
+## Compile and Package
 
-Note: change `asm-9.7.jar` location accordingly
+### Using Maven
 
-```sh
-javac -cp ./asm-9.7.jar -d . src/main/java/org/perlonjava/*.java src/main/java/org/perlonjava/node/*.java
-```
+1. **Ensure you have Maven installed**:
+    - You can download and install Maven from [Maven's official website](https://maven.apache.org/).
 
-## Run
+2. **Add the ASM dependency and Maven Shade Plugin**:
+    - Ensure your `pom.xml` includes the ASM dependency and the Maven Shade Plugin as shown below:
+
+    ```xml
+    <project xmlns="http://maven.apache.org/POM/4.0.0"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+        <modelVersion>4.0.0</modelVersion>
+
+        <groupId>org.perlonjava</groupId>
+        <artifactId>perlonjava</artifactId>
+        <version>1.0-SNAPSHOT</version>
+
+        <dependencies>
+            <dependency>
+                <groupId>org.ow2.asm</groupId>
+                <artifactId>asm</artifactId>
+                <version>9.2</version>
+            </dependency>
+            <!-- Other dependencies -->
+        </dependencies>
+
+        <build>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-shade-plugin</artifactId>
+                    <version>3.2.4</version>
+                    <executions>
+                        <execution>
+                            <phase>package</phase>
+                            <goals>
+                                <goal>shade</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+            </plugins>
+        </build>
+    </project>
+    ```
+
+3. **Compile and Package the Project**:
+    - Run the following Maven command to compile and package the project into a shaded JAR:
+      ```sh
+      mvn clean package
+      ```
+
+4. **Locate the Shaded JAR**:
+    - After the build process completes, the shaded JAR file will be located in the `target` directory, typically named `perlonjava-1.0-SNAPSHOT.jar`.
+
+### Using javac (Manual Compilation)
+
+If you prefer to compile the project manually using `javac`, follow these steps:
+
+1. **Download ASM Library**:
+    - Ensure you have the ASM library (e.g., `asm-9.7.jar`) downloaded and available.
+
+2. **Compile the Java Files**:
+    - Use the following command to compile the Java files, updating the path to `asm-9.7.jar` as necessary:
+      ```sh
+      javac -cp ./asm-9.7.jar -d . src/main/java/org/perlonjava/*.java src/main/java/org/perlonjava/node/*.java
+      ```
+
+### Running the Script Engine
+
+1. **Using jrunscript**:
+    - After compiling and packaging, you can run the Perl script engine using `jrunscript`:
+      ```sh
+      jrunscript -cp target/perlonjava-1.0-SNAPSHOT.jar -l perl
+      ```
+
+2. **Example Usage**:
+    - Once `jrunscript` is running, you can execute Perl scripts directly in the interactive shell.
+
+## Running with Main class
 
 Show instructions
 
