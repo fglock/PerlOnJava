@@ -1,7 +1,6 @@
-package org.perlonjava;
+package org.perlonjava.node;
 
-import org.perlonjava.node.AbstractNode;
-import org.perlonjava.node.Node;
+import org.perlonjava.Visitor;
 
 /**
  * The IfNode class represents a node in the abstract syntax tree (AST) that holds an "if" statement.
