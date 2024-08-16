@@ -746,7 +746,7 @@ public class EmitterVisitor implements Visitor {
             EmitterContext evalCtx =
                     new EmitterContext(
                             "(eval)", // filename
-                            EmitterMethodCreator.generateClassName(), // internal java class name
+                            null, // internal java class name will be created at runtime
                             ctx.symbolTable.clone(), // clone the symbolTable
                             null, // return label
                             null, // method visitor
