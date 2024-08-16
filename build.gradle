@@ -1,0 +1,34 @@
+plugins {
+    id 'java'
+    id 'com.github.johnrengelman.shadow' version '7.1.2' // For shading
+}
+
+group = 'org.perlonjava'
+version = '1.0-SNAPSHOT'
+
+sourceCompatibility = '1.8'
+targetCompatibility = '1.8'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation 'junit:junit:3.8.1'
+    implementation 'org.ow2.asm:asm:9.7'
+}
+
+shadowJar {
+    archiveClassifier.set('')
+    destinationDirectory = file("$buildDir/../target")
+    manifest {
+        attributes 'Main-Class': 'org.perlonjava.Main'
+    }
+    exclude 'module-info.class'
+    exclude 'META-INF/MANIFEST.MF'
+}
+
+tasks.build {
+    dependsOn shadowJar
+}
+
