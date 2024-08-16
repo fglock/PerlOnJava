@@ -1,13 +1,13 @@
 plugins {
     id 'java'
-    id 'com.github.johnrengelman.shadow' version '7.1.2' // For shading
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
 
 group = 'org.perlonjava'
 version = '1.0-SNAPSHOT'
 
-sourceCompatibility = '1.8'
-targetCompatibility = '1.8'
+sourceCompatibility = '11'
+targetCompatibility = '11'
 
 repositories {
     mavenCentral()
@@ -16,6 +16,10 @@ repositories {
 dependencies {
     testImplementation 'junit:junit:3.8.1'
     implementation 'org.ow2.asm:asm:9.7'
+}
+
+tasks.withType(JavaCompile) {
+    options.compilerArgs << '-Xlint:-options'
 }
 
 shadowJar {
