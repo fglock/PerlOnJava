@@ -120,9 +120,10 @@ public class EmitterMethodCreator implements Opcodes {
     ctx.logDebug("constructorDescriptor: " + constructorDescriptor);
     ctx.mv =
         cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", constructorDescriptor.toString(), null, null);
-    ctx.mv.visitCode();
-    ctx.mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
-    ctx.mv.visitMethodInsn(
+    MethodVisitor mv = ctx.mv;
+    mv.visitCode();
+    mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
+    mv.visitMethodInsn(
         Opcodes.INVOKESPECIAL,
         "java/lang/Object",
         "<init>",
@@ -131,14 +132,14 @@ public class EmitterMethodCreator implements Opcodes {
     for (int i = skipVariables; i < env.length; i++) {
       String descriptor = getVariableDescriptor(env[i]);
 
-      ctx.mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
-      ctx.mv.visitVarInsn(Opcodes.ALOAD, i - 2); // Load the constructor argument
-      ctx.mv.visitFieldInsn(
+      mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
+      mv.visitVarInsn(Opcodes.ALOAD, i - 2); // Load the constructor argument
+      mv.visitFieldInsn(
           Opcodes.PUTFIELD, ctx.javaClassName, env[i], descriptor); // Set the instance field
     }
-    ctx.mv.visitInsn(Opcodes.RETURN); // Return void
-    ctx.mv.visitMaxs(0, 0); // Automatically computed
-    ctx.mv.visitEnd();
+    mv.visitInsn(Opcodes.RETURN); // Return void
+    mv.visitMaxs(0, 0); // Automatically computed
+    mv.visitEnd();
 
     // Create the public "apply" method for the generated class
     ctx.logDebug("Create the method");
@@ -149,8 +150,7 @@ public class EmitterMethodCreator implements Opcodes {
             "(Lorg/perlonjava/RuntimeArray;Lorg/perlonjava/RuntimeContextType;)Lorg/perlonjava/RuntimeList;",
             null,
             new String[] {"java/lang/Exception"});
-
-    MethodVisitor mv = ctx.mv;
+    mv = ctx.mv;
 
     // Generate the subroutine block
     mv.visitCode();
