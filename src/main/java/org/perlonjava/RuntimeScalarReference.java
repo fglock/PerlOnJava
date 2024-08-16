@@ -18,11 +18,11 @@ public interface RuntimeScalarReference {
      *
      * @return The long representation of the scalar reference. In general, this is the hash value of the object.
      */
-    long getLongRef();
+    int getIntRef();
 
     /**
      * Retrieves the double value of the scalar reference.
-     * Similar to getLongRef, this method converts the scalar value to a double.
+     * Similar to getIntRef, this method converts the scalar value to a double.
      *
      * @return The double representation of the scalar reference.
      */

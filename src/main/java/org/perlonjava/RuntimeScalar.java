@@ -33,13 +33,18 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
   }
 
   public RuntimeScalar(long value) {
-    this.type = RuntimeScalarType.INTEGER;
-    this.value = value;
+    if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
+        this.type = RuntimeScalarType.DOUBLE;
+        this.value = (double) value;
+    } else {
+        this.type = RuntimeScalarType.INTEGER;
+        this.value = (int) value;
+    }
   }
 
   public RuntimeScalar(int value) {
     this.type = RuntimeScalarType.INTEGER;
-    this.value = (long) value;
+    this.value = value;
   }
 
   public RuntimeScalar(double value) {
@@ -54,7 +59,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
   public RuntimeScalar(boolean value) {
     this.type = RuntimeScalarType.INTEGER;
-    this.value = (long) (value ? 1 : 0);
+    this.value = (int) (value ? 1 : 0);
   }
 
   public RuntimeScalar(RuntimeScalar scalar) {
@@ -63,25 +68,25 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
   }
 
   // Getters
-  public long getLong() {
+  public int getInt() {
     switch (type) {
       case INTEGER:
-        return (long) value;
+        return (int) value;
       case DOUBLE:
-        return (long) ((double) value);
+        return (int) ((double) value);
       case STRING:
-        return this.parseNumber().getLong();
+        return this.parseNumber().getInt();
       case UNDEF:
         return 0;
       default:
-        return ((RuntimeScalarReference)value).getLongRef();
+        return ((RuntimeScalarReference)value).getIntRef();
     }
   }
 
   private double getDouble() {
     switch (this.type) {
       case INTEGER:
-        return (long) this.value;
+        return (int) this.value;
       case DOUBLE:
         return (double) this.value;
       case STRING:
@@ -96,7 +101,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
   public boolean getBoolean() {
     switch (type) {
       case INTEGER:
-        return (long) value != 0;
+        return (int) value != 0;
       case DOUBLE:
         return (double) value != 0.0;
       case STRING:
@@ -136,9 +141,20 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     return this;
   }
 
-  public RuntimeScalar set(long value) {
+  public RuntimeScalar set(int value) {
     this.type = RuntimeScalarType.INTEGER;
-    this.value = value;
+    this.value = (int) value;
+    return this;
+  }
+
+  public RuntimeScalar set(long value) {
+    if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
+        this.type = RuntimeScalarType.DOUBLE;
+        this.value = (double) value;
+    } else {
+        this.type = RuntimeScalarType.INTEGER;
+        this.value = (int) value;
+    }
     return this;
   }
 
@@ -156,7 +172,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
   public String toString() {
     switch (type) {
       case INTEGER:
-        return Long.toString((long) value);
+        return Integer.toString((int) value);
       case DOUBLE:
         return Double.toString((double) value);
       case STRING:
@@ -172,7 +188,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     return "REF(" + value.hashCode() + ")";
   }
 
-  public long getLongRef() {
+  public int getIntRef() {
     return value.hashCode();
   }
 
@@ -204,7 +220,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         type = RuntimeScalarType.ARRAYREFERENCE;
         value = new RuntimeArray();
       case ARRAYREFERENCE:
-        return ((RuntimeArray) value).get((int) index.getLong());
+        return ((RuntimeArray) value).get((int) index.getInt());
       default:
         throw new IllegalStateException("Variable does not contain an array reference");
     }
@@ -309,8 +325,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Check if the string is empty
     if (str.isEmpty()) {
-        // If empty, set the value to 1 (as a Long) and update type to INTEGER
-        this.value = (long) 1;
+        // If empty, set the value to 1 and update type to INTEGER
+        this.value = (int) 1;
         this.type = RuntimeScalarType.INTEGER; // RuntimeScalarType is an enum that holds different scalar types
         return this; // Return the current instance
     }
@@ -405,12 +421,12 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
       // Convert the accumulated numeric part to a string
       String numberStr = number.toString();
 
-      // Determine if the number should be parsed as a double or long
+      // Determine if the number should be parsed as a double or int
       if (hasDecimal || hasExponent) {
         double parsedValue = Double.parseDouble(numberStr);
         return new RuntimeScalar(parsedValue);
       } else {
-        long parsedValue = Long.parseLong(numberStr);
+        int parsedValue = Integer.parseInt(numberStr);
         return new RuntimeScalar(parsedValue);
       }
     } catch (NumberFormatException e) {
@@ -459,7 +475,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
       return new RuntimeScalar(arg1.getDouble() + arg2.getDouble());
     } else {
-      return new RuntimeScalar(arg1.getLong() + arg2.getLong());
+      return new RuntimeScalar(arg1.getInt() + arg2.getInt());
     }
   }
 
@@ -474,7 +490,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
       return new RuntimeScalar(arg1.getDouble() - arg2.getDouble());
     } else {
-      return new RuntimeScalar(arg1.getLong() - arg2.getLong());
+      return new RuntimeScalar(arg1.getInt() - arg2.getInt());
     }
   }
 
@@ -489,7 +505,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
       return new RuntimeScalar(arg1.getDouble() * arg2.getDouble());
     } else {
-      return new RuntimeScalar(arg1.getLong() * arg2.getLong());
+      return new RuntimeScalar(arg1.getInt() * arg2.getInt());
     }
   }
 
@@ -504,7 +520,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
       return new RuntimeScalar(arg1.getDouble() / arg2.getDouble());
     } else {
-      return new RuntimeScalar(arg1.getLong() / arg2.getLong());
+      return new RuntimeScalar(arg1.getInt() / arg2.getInt());
     }
   }
 
@@ -519,7 +535,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
       return new RuntimeScalar(arg1.getDouble() <= arg2.getDouble());
     } else {
-      return new RuntimeScalar(arg1.getLong() <= arg2.getLong());
+      return new RuntimeScalar(arg1.getInt() <= arg2.getInt());
     }
   }
 
@@ -534,14 +550,14 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
       return new RuntimeScalar(arg1.getDouble() < arg2.getDouble());
     } else {
-      return new RuntimeScalar(arg1.getLong() < arg2.getLong());
+      return new RuntimeScalar(arg1.getInt() < arg2.getInt());
     }
   }
 
   public RuntimeScalar preAutoIncrement() {
     switch (type) {
       case INTEGER:
-        this.value = (long) this.value + 1;
+        this.value = (int) this.value + 1;
         return this;
       case DOUBLE:
         this.value = (double) this.value + 1;
@@ -558,7 +574,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     RuntimeScalar old = new RuntimeScalar().set(this);
     switch (type) {
       case INTEGER:
-        this.value = (long) this.value + 1;
+        this.value = (int) this.value + 1;
         break;
       case DOUBLE:
         this.value = (double) this.value + 1;
@@ -576,7 +592,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
   public RuntimeScalar preAutoDecrement() {
     switch (type) {
       case INTEGER:
-        this.value = (long) this.value - 1;
+        this.value = (int) this.value - 1;
         return this;
       case DOUBLE:
         this.value = (double) this.value - 1;
@@ -595,7 +611,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     RuntimeScalar old = new RuntimeScalar().set(this);
     switch (type) {
       case INTEGER:
-        this.value = (long) this.value - 1;
+        this.value = (int) this.value - 1;
         break;
       case DOUBLE:
         this.value = (double) this.value - 1;
@@ -628,7 +644,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     if (arg1.type == RuntimeScalarType.DOUBLE) {
       return new RuntimeScalar(Math.abs(arg1.getDouble()));
     } else {
-      return new RuntimeScalar(Math.abs(arg1.getLong()));
+      return new RuntimeScalar(Math.abs(arg1.getInt()));
     }
   }
 
