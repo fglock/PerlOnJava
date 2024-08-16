@@ -6,8 +6,6 @@ This is a Perl compiler under development. It compiles Perl into Java bytecode a
 
 1. [Introduction](#introduction)
 2. [Compile and Package](#compile-and-package)
-    - [Using Maven](#using-maven)
-    - [Using javac (Manual Compilation)](#using-javac-manual-compilation)
 3. [Running the Script Engine](#running-the-script-engine)
     - [Using jrunscript](#using-jrunscript)
     - [Running with Main Class](#running-with-main-class)
@@ -29,9 +27,7 @@ The project is structured into several modules, including a lexer, parser, and b
 module plays a crucial role in the compilation process, from tokenizing the Perl script to generating the
 corresponding Java bytecode.
 
-## Compile and Package
-
-### Using Maven
+## Compile and Package with Maven
 
 1. **Ensure you have Maven installed**:
     - You can download and install Maven from [Maven's official website](https://maven.apache.org/).
@@ -42,28 +38,10 @@ corresponding Java bytecode.
       mvn clean package
       ```
 
-4. **Locate the Shaded JAR**:
+3. **Locate the Shaded JAR**:
     - After the build process completes, the shaded JAR file will be located in the `target` directory, typically named `perlonjava-1.0-SNAPSHOT.jar`.
 
-## Running the Script Engine
-
-### Using jrunscript
-
-    - After compiling and packaging, you can run the Perl script engine using `jrunscript` interactive shell.
-
-    - Note that `jrunscript` creates a new scope every time, so it doesn't keep lexical variables from one line to the next.
-
-      ```sh
-      $ jrunscript -cp target/perlonjava-1.0-SNAPSHOT.jar -l perl 
-      Perl5> my $sub = sub { say $_[0] }; $sub->($_) for 4,5,6;
-      4
-      5
-      6
-      []
-      Perl5>
-      ```
-
-### Running with Main Class
+## Running the jar file
 
 1. **Show Instructions**:
     ```sh
@@ -136,13 +114,24 @@ corresponding Java bytecode.
 
 `PerlScriptEngine` is a Java class that allows you to execute Perl scripts using the Java Scripting API (JSR 223).
 
-### Features
+### Using jrunscript
 
-- Execute Perl scripts from Java.
-- Supports script execution with various configurations.
-- Handles script execution errors gracefully.
+- jrunscript implements a generic interactive shell using Java Scripting API.
 
-### Installation
+- Note that `jrunscript` creates a new scope every time, so it doesn't keep lexical variables from one line to the next.
+
+  ```sh
+  $ jrunscript -cp target/perlonjava-1.0-SNAPSHOT.jar -l perl 
+  Perl5> my $sub = sub { say $_[0] }; $sub->($_) for 4,5,6;
+  4
+  5
+  6
+  []
+  Perl5>
+  ```
+
+
+### PerlScriptEngine installation
 
 To use `PerlScriptEngine`, include the necessary dependencies in your project. For example, if you are using Maven, add the following to your `pom.xml`:
 
@@ -154,9 +143,7 @@ To use `PerlScriptEngine`, include the necessary dependencies in your project. F
 </dependency>
 ```
 
-### Usage
-
-#### Basic Usage
+### PerlScriptEngine usage
 
 Here is an example of how to use `PerlScriptEngine` to execute a simple Perl script:
 
@@ -180,74 +167,6 @@ public class Main {
     }
 }
 ```
-
-#### Using ScriptContext
-
-You can also pass a `ScriptContext` to the `eval` method to configure the script execution:
-
-```java
-import javax.script.ScriptEngine;
-import javax.script.ScriptEngineManager;
-import javax.script.ScriptContext;
-import javax.script.SimpleScriptContext;
-import javax.script.ScriptException;
-
-public class Main {
-    public static void main(String[] args) {
-        ScriptEngineManager manager = new ScriptEngineManager();
-        ScriptEngine engine = manager.getEngineByName("perl");
-
-        String script = "print 'Hello, Perl with context!';";
-
-        ScriptContext context = new SimpleScriptContext();
-        context.setAttribute("fileName", "example.pl", ScriptContext.ENGINE_SCOPE);
-        context.setAttribute("debugEnabled", true, ScriptContext.ENGINE_SCOPE);
-
-        try {
-            engine.eval(script, context);
-        } catch (ScriptException e) {
-            e.printStackTrace();
-        }
-    }
-}
-```
-
-#### Reading Script from a Reader
-
-You can also read the script from a `Reader`:
-
-```java
-import javax.script.ScriptEngine;
-import javax.script.ScriptEngineManager;
-import javax.script.ScriptContext;
-import javax.script.SimpleScriptContext;
-import javax.script.ScriptException;
-import java.io.StringReader;
-
-public class Main {
-    public static void main(String[] args) {
-        ScriptEngineManager manager = new ScriptEngineManager();
-        ScriptEngine engine = manager.getEngineByName("perl");
-
-        String script = "print 'Hello, Perl from Reader!';";
-        StringReader reader = new StringReader(script);
-
-        ScriptContext context = new SimpleScriptContext();
-        context.setAttribute("fileName", "example.pl", ScriptContext.ENGINE_SCOPE);
-        context.setAttribute("debugEnabled", true, ScriptContext.ENGINE_SCOPE);
-
-        try {
-            engine.eval(reader, context);
-        } catch (ScriptException e) {
-            e.printStackTrace();
-        }
-    }
-}
-```
-
-### Error Handling
-
-`PerlScriptEngine` handles errors gracefully by wrapping exceptions in `ScriptException` and providing meaningful error messages.
 
 ## License
 
