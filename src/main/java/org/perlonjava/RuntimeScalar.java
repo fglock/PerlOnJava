@@ -505,7 +505,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
       return new RuntimeScalar(arg1.getDouble() * arg2.getDouble());
     } else {
-      return new RuntimeScalar(arg1.getInt() * arg2.getInt());
+      return new RuntimeScalar((long) arg1.getInt() * (long) arg2.getInt());
     }
   }
 
