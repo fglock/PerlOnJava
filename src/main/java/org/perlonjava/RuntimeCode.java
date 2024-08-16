@@ -27,6 +27,7 @@ public class RuntimeCode implements RuntimeScalarReference {
 
     // retrieve the eval context that was saved at program compile-time
     EmitterContext evalCtx = RuntimeCode.evalContext.get(evalTag);
+    evalCtx.javaClassName = EmitterMethodCreator.generateClassName(); // internal java class name
 
     // TODO - this can be cached for performance
     // retrieve closure variable list

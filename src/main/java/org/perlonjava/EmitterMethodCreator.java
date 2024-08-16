@@ -101,6 +101,7 @@ public class EmitterMethodCreator implements Opcodes {
 
     // Define the class with version, access flags, name, signature, superclass, and interfaces
     cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, ctx.javaClassName, null, "java/lang/Object", null);
+    ctx.logDebug("Create class: " + ctx.javaClassName);
 
     // Add instance fields to the class for closure variables
     for (String fieldName : env) {
