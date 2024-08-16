@@ -5,12 +5,12 @@ This is a Perl compiler under development. It compiles Perl into Java bytecode a
 ## Table of Contents
 
 1. [Introduction](#introduction)
-2. [Compile and Package](#compile-and-package)
-3. [Running the Script Engine](#running-the-script-engine)
-    - [Using jrunscript](#using-jrunscript)
-    - [Running with Main Class](#running-with-main-class)
+2. [Compile and Package with Maven](#compile-and-package-with-maven)
+3. [Running the jar file](#running-the-jar-file)
 4. [Debugging Tools](#debugging-tools)
 5. [Modules](#modules)
+6. [Using Java Scripting API](#using-java-scripting-api)
+7. [License](#license)
 
 ## Introduction
 
@@ -93,7 +93,7 @@ corresponding Java bytecode.
 ### EmitterVisitor and EmitterContext
 - **EmitterVisitor**: Used to generate the bytecode for the operations within the method.
 - It traverses the AST and generates the corresponding ASM bytecode.
-- **EmitterContext**: Holds the current state of the Symbol Table and calling context (void, scalar, etc).
+- **EmitterContext**: Holds the current state of the Symbol Table and calling context (void, scalar, list).
 - **PrinterVisitor**: Provides pretty-print stringification for the AST.
 
 ### AST Nodes: *Node
@@ -109,10 +109,11 @@ corresponding Java bytecode.
 - The main method generates the bytecode for the program body.
 - The generated method is loaded into a variable as a code reference and executed.
 
+### PerlScriptEngine
 
-## PerlScriptEngine
+- `PerlScriptEngine` is a Java class that allows you to execute Perl scripts using the Java Scripting API (JSR 223).
 
-`PerlScriptEngine` is a Java class that allows you to execute Perl scripts using the Java Scripting API (JSR 223).
+## Using Java Scripting API
 
 ### Using jrunscript
 
@@ -129,7 +130,6 @@ corresponding Java bytecode.
   []
   Perl5>
   ```
-
 
 ### PerlScriptEngine installation
 
