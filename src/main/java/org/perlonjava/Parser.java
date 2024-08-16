@@ -491,7 +491,7 @@ public class Parser {
     StringBuilder str = new StringBuilder();
     List<Node> parts = new ArrayList<>();
     LexerToken token = tokens.get(tokenIndex);
-    while (!token.text.equals("\"")) {
+    while (token.type != LexerTokenType.EOF && !token.text.equals("\"")) {
       tokenIndex++;
       String text = token.text;
       if (token.type == LexerTokenType.OPERATOR) {
