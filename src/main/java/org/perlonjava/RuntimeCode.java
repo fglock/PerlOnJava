@@ -72,7 +72,7 @@ public class RuntimeCode implements RuntimeScalarReference {
     return "CODE(" + this.hashCode() + ")";
   }
 
-  public long getLongRef() {
+  public int getIntRef() {
     return this.hashCode();
   }
 

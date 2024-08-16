@@ -221,7 +221,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
       return "HASH(" + this.hashCode() + ")";
     }
 
-    public long getLongRef() {
+    public int getIntRef() {
       return this.hashCode();
     }
 

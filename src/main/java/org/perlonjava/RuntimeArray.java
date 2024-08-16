@@ -81,7 +81,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
 
     // Get a value at a specific index
     public RuntimeScalar get(RuntimeScalar value) {
-        int index = (int) value.getLong();
+        int index = (int) value.getInt();
         if (index < 0) {
             index = elements.size() + index; // Handle negative indices
         }
@@ -264,7 +264,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
       return "ARRAY(" + this.hashCode() + ")";
     }
 
-    public long getLongRef() {
+    public int getIntRef() {
       return this.hashCode();
     }
 
