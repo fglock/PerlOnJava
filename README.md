@@ -5,7 +5,7 @@ This is a Perl compiler under development. It compiles Perl into Java bytecode a
 ## Table of Contents
 
 1. [Introduction](#introduction)
-2. [Compile and Package with Maven](#compile-and-package-with-maven)
+2. [Build](#build)
 3. [Running the jar file](#running-the-jar-file)
 4. [Debugging Tools](#debugging-tools)
 5. [Modules](#modules)
@@ -27,7 +27,10 @@ The project is structured into several modules, including a lexer, parser, and b
 module plays a crucial role in the compilation process, from tokenizing the Perl script to generating the
 corresponding Java bytecode.
 
-## Compile and Package with Maven
+## Build
+
+
+### Compile and Package with Maven
 
 1. **Ensure you have Maven installed**:
     - You can download and install Maven from [Maven's official website](https://maven.apache.org/).
@@ -38,8 +41,56 @@ corresponding Java bytecode.
       mvn clean package
       ```
 
-3. **Locate the Shaded JAR**:
-    - After the build process completes, the shaded JAR file will be located in the `target` directory, typically named `perlonjava-1.0-SNAPSHOT.jar`.
+3. **Run the JAR**:
+    - After packaging, you can run the JAR file with:
+      ```sh
+      java -jar target/perlonjava-1.0-SNAPSHOT.jar
+      ```
+
+### Compile and Package with Gradle
+
+1. **Ensure you have Gradle installed**:
+    - You can download and install Gradle from [Gradle's official website](https://gradle.org/).
+
+2. **Compile and Package the Project**:
+    - Run the following Gradle command to compile and package the project into a shaded JAR:
+      ```sh
+      gradle clean build
+      ```
+
+3. **Run the JAR**:
+    - After packaging, you can run the JAR file with:
+      ```sh
+      java -jar target/perlonjava-1.0-SNAPSHOT.jar
+      ```
+
+### Project Structure
+
+```
+my-project/
+├── src/
+│   └── main/
+│       └── java/
+│           └── org/
+│               └── perlonjava/
+│                   └── Main.java
+├── build.gradle
+├── pom.xml
+└── settings.gradle
+```
+
+### Dependencies
+
+- **JUnit**: For testing.
+- **ASM**: For bytecode manipulation.
+
+### Notes
+
+- The project uses the `maven-shade-plugin` for Maven to create a shaded JAR.
+- The project uses the `com.github.johnrengelman.shadow` plugin for Gradle to create a shaded JAR.
+- Both Maven and Gradle configurations are set to use Java 1.8.
+
+
 
 ## Running the jar file
 
