@@ -158,12 +158,44 @@ public class EmitterVisitor implements Visitor {
             case "**":
                 handleBinaryBuiltin("pow");
                 break;
+
             case "<":
                 handleBinaryBuiltin("lessThan");
                 break;
             case "<=":
-                handleBinaryBuiltin("lessEqualThan");
+                handleBinaryBuiltin("lessThanOrEqual");
                 break;
+            case ">":
+                handleBinaryBuiltin("greaterThan");
+                break;
+            case ">=":
+                handleBinaryBuiltin("greaterThanOrEqual");
+                break;
+            case "==":
+                handleBinaryBuiltin("equalTo");
+                break;
+            case "!=":
+                handleBinaryBuiltin("notEqualTo");
+                break;
+            case "eq":
+                handleBinaryBuiltin("eq");
+                break;
+            case "ne":
+                handleBinaryBuiltin("ne");
+                break;
+            case "lt":
+                handleBinaryBuiltin("lt");
+                break;
+            case "le":
+                handleBinaryBuiltin("le");
+                break;
+            case "gt":
+                handleBinaryBuiltin("gt");
+                break;
+            case "ge":
+                handleBinaryBuiltin("ge");
+                break;
+
             case ".":
                 handleBinaryBuiltin("stringConcat");
                 break;
