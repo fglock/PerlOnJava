@@ -234,5 +234,5 @@ public class Main {
 This project is licensed under the Perl License - see the [LICENSE](LICENSE.md) file for details.
 
 
-![Java CI](https://github.com/fglock/PerlOnJava/workflows/Java%20CI/badge.svg)
+![Java CI with Maven](https://github.com/fglock/PerlOnJava/workflows/Java%20CI%20with%20Maven/badge.svg)
 
