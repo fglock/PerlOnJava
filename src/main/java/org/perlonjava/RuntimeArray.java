@@ -276,6 +276,11 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
       return true;
     }
 
+    public RuntimeArray undefine() {
+        this.elements.clear();
+        return this;
+    }
+
     // Convert the array to a string (for debugging purposes)
     @Override
     public String toString() {

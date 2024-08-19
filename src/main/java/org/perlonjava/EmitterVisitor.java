@@ -495,6 +495,10 @@ public class EmitterVisitor implements Visitor {
             // Unary operator with optional arguments, called without arguments
             // example: undef()
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/RuntimeScalar", operator, "()Lorg/perlonjava/RuntimeScalar;", false);
+        } else if (operator.equals("undef")) {
+            operator = "undefine";
+            node.operand.accept(this.with(RuntimeContextType.RUNTIME));
+            ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeList", operator, "()Lorg/perlonjava/RuntimeList;", false);
         } else {
             node.operand.accept(this.with(RuntimeContextType.SCALAR));
             ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", operator, "()Lorg/perlonjava/RuntimeScalar;", false);
