@@ -1,10 +1,7 @@
 # TODO
 
 ## Easy Wins
-- Loops
-- `$_`
-- Ternary operator
-- eval block
+- all done
 
 ## Harder to Implement
 - `BEGIN` block
@@ -39,12 +36,8 @@ ctx.mv.visitLabel(thisLabel);
 ctx.mv.visitLineNumber(10, thisLabel); // Associate line number 10 with thisLabel
 ```
 
-## Tests
-- create test/
-
 ## Test Different Perl Data Types
-- Array, hash, string, double, references
-- Experiment with Perlito runtime
+- Experiment with `Perlito` runtime
 
 ## Global Variables and Namespaces
 - Named subroutine declaration
@@ -52,8 +45,6 @@ ctx.mv.visitLineNumber(10, thisLabel); // Associate line number 10 with thisLabe
 
 ## Local Variables
 - Set up restoring the `local` value before `RETURN`
-- Set up exception handling
-
 
 ## Implement Thread-Safety
 - It may need locking when calling ASM
@@ -65,7 +56,7 @@ ctx.mv.visitLineNumber(10, thisLabel); // Associate line number 10 with thisLabe
 - Test `FOR`, `WHILE`
 
 ## `eval` String
-- Optimize `ctx.symbolTable` at `eval` string
+- Optimize `ctx.symbolTable` at `eval` string if needed
 
 ## `BEGIN` Block
 
@@ -78,25 +69,4 @@ String code = scanner.nextLine();
 scanner.close();
 ```
 
-## Support for Java scripting (JSR-223)
-See `src5/lib/Perlito5/Java/JavaxScript.pm`
-
-## `foreach` implementation
-
-```
-my @list = (1, 2, 3, 4, 5);
-foreach my $var (@list) {
-    print "$var\n";
-}
-```
-
-Using 3-Argument for
-
-```
-my @list = (1, 2, 3, 4, 5);
-for (my $i = 0; $i < @list; $i++) {
-    my $var = $list[$i];
-    print "$var\n";
-}
-```
 
