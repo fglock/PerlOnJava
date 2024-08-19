@@ -524,6 +524,15 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
     }
 
+    public RuntimeScalar modulus(RuntimeScalar arg2) {
+        int divisor = arg2.getInt();
+        int result = this.getInt() % divisor;
+        if (result != 0.0 && ((divisor > 0.0 && result < 0.0) || (divisor < 0.0 && result > 0.0))) {
+            result += divisor;
+        }
+        return new RuntimeScalar(result);
+    }
+
     public RuntimeScalar lessThan(RuntimeScalar arg2) {
         RuntimeScalar arg1 = this;
         if (arg1.type == RuntimeScalarType.STRING) {
