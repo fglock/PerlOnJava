@@ -27,10 +27,11 @@
 
 ## Operators
 - [x] Simple arithmetic
-- [ ] Numeric Comparison operators (Some are implemented)
+- [x] Numeric Comparison operators
 - [x] String concat
 - [ ] `substr`
-- [ ] String Comparison operators
+- [x] String Comparison operators
+- [x] Bitwise operators
 - [x] Autoincrement, Autodecrement; String increment
 - [x] `join`
 - [ ] `split`
