@@ -22,7 +22,14 @@ public class RuntimeCode implements RuntimeScalarReference {
     this.codeObject = codeObject;
   }
 
-  // Method to compile the text of eval string into an anonymous subroutine
+  // Method to compile the text of eval string into a Class that
+  // represents an anonymous subroutine.
+  //
+  // After the Class returns to the caller, an instance of the Class
+  // will be populated with closure variables, and then
+  // makeCodeObject() will be called to transform the Class instance
+  // into a Perl CODE object
+  //
   public static Class<?> evalStringHelper(RuntimeScalar code, String evalTag) throws Exception {
 
     // retrieve the eval context that was saved at program compile-time
