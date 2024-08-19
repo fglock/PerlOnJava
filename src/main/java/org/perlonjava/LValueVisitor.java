@@ -95,11 +95,6 @@ public class LValueVisitor implements Visitor {
     }
 
     @Override
-    public void visit(PostfixOperatorNode node) throws Exception {
-        context = RuntimeContextType.VOID;
-    }
-
-    @Override
     public void visit(StringNode node) throws Exception {
         context = RuntimeContextType.VOID;
     }

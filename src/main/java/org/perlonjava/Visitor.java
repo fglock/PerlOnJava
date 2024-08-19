@@ -73,13 +73,6 @@ public interface Visitor {
     void visit(NumberNode node) throws Exception;
 
     /**
-     * Visit a PostfixOperatorNode.
-     *
-     * @param node the PostfixOperatorNode to visit
-     */
-    void visit(PostfixOperatorNode node) throws Exception;
-
-    /**
      * Visit a StringNode.
      *
      * @param node the StringNode to visit

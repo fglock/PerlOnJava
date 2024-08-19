@@ -558,6 +558,12 @@ public class EmitterVisitor implements Visitor {
             case "--":
                 handleUnaryBuiltin(node, "preAutoDecrement");
                 break;
+            case "++postfix":
+                handleUnaryBuiltin(node, "postAutoIncrement");
+                break;
+            case "--postfix":
+                handleUnaryBuiltin(node, "postAutoDecrement");
+                break;
             case "\\":
                 handleUnaryBuiltin(node, "createReference");
                 break;
@@ -1304,27 +1310,6 @@ public class EmitterVisitor implements Visitor {
         ctx.mv.visitLabel(endLabel);
 
         ctx.logDebug("TERNARY_OP end");
-    }
-
-    @Override
-    public void visit(PostfixOperatorNode node) throws Exception {
-        node.operand.accept(this);
-        // Emit code for postfix operator
-        String operator = node.operator;
-        ctx.logDebug("visit(PostfixOperatorNode) " + operator + " in context " + ctx.contextType);
-        switch (operator) {
-            case "++":
-            case "--":
-                String runtimeMethod = (operator.equals("++") ? "postAutoIncrement" : "postAutoDecrement");
-                node.operand.accept(this.with(RuntimeContextType.SCALAR));
-                ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", runtimeMethod, "()Lorg/perlonjava/RuntimeScalar;", false);
-                if (ctx.contextType == RuntimeContextType.VOID) {
-                    ctx.mv.visitInsn(Opcodes.POP);
-                }
-                return;
-        }
-        throw new PerlCompilerException(
-                node.tokenIndex, "Not implemented: postfix operator " + node.operator, ctx.errorUtil);
     }
 
     @Override
