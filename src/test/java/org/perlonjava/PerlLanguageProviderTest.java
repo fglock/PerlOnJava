@@ -37,7 +37,7 @@ public class PerlLanguageProviderTest {
 
     @Test
     public void testExecutePerlCodeWithError() {
-        String code = "print 'Hello, World!';"; // Modify this to cause an error in Perl code
+        String code = "print 'Hello, World!' 123;"; // There is an error in Perl code
         String fileName = "test_error.pl";
         boolean debugEnabled = false;
         boolean tokenizeOnly = false;
