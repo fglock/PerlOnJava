@@ -148,6 +148,20 @@ public class RuntimeList implements RuntimeDataProvider {
 
     // Operators
 
+    // undefine the elements of the list
+    public RuntimeList undefine() {
+        for (RuntimeBaseEntity elem : elements) {
+            if (elem instanceof RuntimeScalar) {
+                ((RuntimeScalar) elem).undefine();
+            } else if (elem instanceof RuntimeArray) {
+                ((RuntimeArray) elem).undefine();
+            } else if (elem instanceof RuntimeHash) {
+                ((RuntimeHash) elem).undefine();
+            }
+        }
+        return this;
+    }
+
     public RuntimeScalar print() {
       StringBuilder sb = new StringBuilder();
         for (RuntimeBaseEntity element : elements) {

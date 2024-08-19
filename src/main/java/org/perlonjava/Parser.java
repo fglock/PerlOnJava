@@ -319,9 +319,6 @@ public class Parser {
                     return new StringNode(token.text, tokenIndex);
                 }
                 switch (token.text) {
-                    case "undef":
-                        // Handle 'undef' keyword as a unary operator with no operand
-                        return new UnaryOperatorNode("undef", null, tokenIndex);
                     case "not":
                         // Handle 'not' keyword as a unary operator with an operand
                         operand = parseExpression(getPrecedence(token.text) + 1);
@@ -329,16 +326,22 @@ public class Parser {
                     case "abs":
                     case "log":
                     case "rand":
+                    case "undef":
                         String text = token.text;
                         operand = parseZeroOrOneList(0);
                         if (((ListNode) operand).elements.isEmpty()) {
-                            if (text.equals("rand")) {
-                                // create "1"
-                                operand = new NumberNode("1", tokenIndex);
-                            } else {
-                                // create `$_` variable
-                                operand = new UnaryOperatorNode(
+                            switch (text) {
+                                case "undef":
+                                    break;  // leave it empty
+                                case "rand":
+                                    // create "1"
+                                    operand = new NumberNode("1", tokenIndex);
+                                    break;
+                                default:
+                                    // create `$_` variable
+                                    operand = new UnaryOperatorNode(
                                         "$", new IdentifierNode("_", tokenIndex), tokenIndex);
+                                    break;
                             }
                         }
                         return new UnaryOperatorNode(text, operand, tokenIndex);
