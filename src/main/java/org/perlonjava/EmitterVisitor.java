@@ -199,6 +199,22 @@ public class EmitterVisitor implements Visitor {
             case ".":
                 handleBinaryBuiltin("stringConcat");
                 break;
+
+            case "&":
+                handleBinaryBuiltin("bitwiseAnd");
+                break;
+            case "|":
+                handleBinaryBuiltin("bitwiseOr");
+                break;
+            case "^":
+                handleBinaryBuiltin("bitwiseXor");
+                break;
+            case "<<":
+                handleBinaryBuiltin("shiftLeft");
+                break;
+            case ">>":
+                handleBinaryBuiltin("shiftRight");
+                break;
             default:
                 throw new RuntimeException("Unexpected infix operator: " + operator);
         }
@@ -514,6 +530,9 @@ public class EmitterVisitor implements Visitor {
             case "+":
                 handleUnaryPlusOperator(node);
                 break;
+            case "~":
+                handleUnaryBuiltin(node, "bitwiseNot");
+                break;
             case "!":
             case "not":
                 handleUnaryBuiltin(node, "not");
@@ -601,11 +620,11 @@ public class EmitterVisitor implements Visitor {
             // variable not found
             System.err.println(
                     ctx.errorUtil.errorMessage(tokenIndex,
-                    "Warning: Global symbol \""
-                            + var
-                            + "\" requires explicit package name (did you forget to declare \"my "
-                            + var
-                            + "\"?)"));
+                            "Warning: Global symbol \""
+                                    + var
+                                    + "\" requires explicit package name (did you forget to declare \"my "
+                                    + var
+                                    + "\"?)"));
         }
     }
 
@@ -707,10 +726,10 @@ public class EmitterVisitor implements Visitor {
                     ctx.logDebug("MY " + operator + " " + var);
                     if (ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
                         System.err.println(
-                            ctx.errorUtil.errorMessage(node.getIndex(),
-                                "Warning: \"" + operator + "\" variable "
-                                        + var
-                                        + " masks earlier declaration in same ctx.symbolTable"));
+                                ctx.errorUtil.errorMessage(node.getIndex(),
+                                        "Warning: \"" + operator + "\" variable "
+                                                + var
+                                                + " masks earlier declaration in same ctx.symbolTable"));
                     }
                     int varIndex = ctx.symbolTable.addVariable(var);
                     // TODO optimization - SETVAR+MY can be combined
@@ -760,163 +779,163 @@ public class EmitterVisitor implements Visitor {
     private void handleEvalOperator(UnaryOperatorNode node) throws Exception {
         // eval string
 
-            // TODO - this can be cached and reused at runtime for performance
-            // retrieve the closure variable list into "newEnv" array
-            // we save all variables, because we don't yet what code we are going to compile.
-            Map<Integer, String> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
-            String[] newEnv = new String[visibleVariables.size()];
-            ctx.logDebug("(eval) ctx.symbolTable.getAllVisibleVariables");
-            for (Integer index : visibleVariables.keySet()) {
-                String variableName = visibleVariables.get(index);
-                ctx.logDebug("  " + index + " " + variableName);
-                newEnv[index] = variableName;
-            }
+        // TODO - this can be cached and reused at runtime for performance
+        // retrieve the closure variable list into "newEnv" array
+        // we save all variables, because we don't yet what code we are going to compile.
+        Map<Integer, String> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
+        String[] newEnv = new String[visibleVariables.size()];
+        ctx.logDebug("(eval) ctx.symbolTable.getAllVisibleVariables");
+        for (Integer index : visibleVariables.keySet()) {
+            String variableName = visibleVariables.get(index);
+            ctx.logDebug("  " + index + " " + variableName);
+            newEnv[index] = variableName;
+        }
 
-            // save the eval context in a HashMap in RuntimeScalar class
-            String evalTag = "eval" + EmitterMethodCreator.classCounter++;
-            // create the eval context
-            EmitterContext evalCtx =
-                    new EmitterContext(
-                            "(eval)", // filename
-                            null, // internal java class name will be created at runtime
-                            ctx.symbolTable.clone(), // clone the symbolTable
-                            null, // return label
-                            null, // method visitor
-                            ctx.contextType, // call context
-                            true, // is boxed
-                            ctx.errorUtil, // error message utility
-                            ctx.debugEnabled,
-                            ctx.tokenizeOnly,
-                            ctx.compileOnly,
-                            ctx.parseOnly);
-            RuntimeCode.evalContext.put(evalTag, evalCtx);
+        // save the eval context in a HashMap in RuntimeScalar class
+        String evalTag = "eval" + EmitterMethodCreator.classCounter++;
+        // create the eval context
+        EmitterContext evalCtx =
+                new EmitterContext(
+                        "(eval)", // filename
+                        null, // internal java class name will be created at runtime
+                        ctx.symbolTable.clone(), // clone the symbolTable
+                        null, // return label
+                        null, // method visitor
+                        ctx.contextType, // call context
+                        true, // is boxed
+                        ctx.errorUtil, // error message utility
+                        ctx.debugEnabled,
+                        ctx.tokenizeOnly,
+                        ctx.compileOnly,
+                        ctx.parseOnly);
+        RuntimeCode.evalContext.put(evalTag, evalCtx);
 
-            // Here the compiled code will call RuntimeCode.eval_string(code, evalTag) method.
-            // It will compile the string and return a new Class.
-            //
-            // XXX TODO - We need to catch any errors and set Perl error variable "$@"
-            //
-            // The generated method closure variables are going to be initialized in the next step.
-            // Then we can call the method.
+        // Here the compiled code will call RuntimeCode.eval_string(code, evalTag) method.
+        // It will compile the string and return a new Class.
+        //
+        // XXX TODO - We need to catch any errors and set Perl error variable "$@"
+        //
+        // The generated method closure variables are going to be initialized in the next step.
+        // Then we can call the method.
 
-            // Retrieve the eval argument and push to the stack
-            // This is the code string that we will compile into a class.
-            // The string is evaluated outside of the try-catch block.
-            node.operand.accept(this.with(RuntimeContextType.SCALAR));
+        // Retrieve the eval argument and push to the stack
+        // This is the code string that we will compile into a class.
+        // The string is evaluated outside of the try-catch block.
+        node.operand.accept(this.with(RuntimeContextType.SCALAR));
 
-            int skipVariables = EmitterMethodCreator.skipVariables; // skip (this, @_, wantarray)
+        int skipVariables = EmitterMethodCreator.skipVariables; // skip (this, @_, wantarray)
 
-            MethodVisitor mv = ctx.mv;
+        MethodVisitor mv = ctx.mv;
 
-            // Stack at this step: [RuntimeScalar(String)]
+        // Stack at this step: [RuntimeScalar(String)]
 
-            // 1. Call RuntimeCode.eval_string(code, evalTag)
+        // 1. Call RuntimeCode.eval_string(code, evalTag)
 
-            // Push the evalTag String to the stack
-            // the compiled code will use this tag to retrieve the compiler environment
-            mv.visitLdcInsn(evalTag);
-            // Stack: [RuntimeScalar(String), String]
+        // Push the evalTag String to the stack
+        // the compiled code will use this tag to retrieve the compiler environment
+        mv.visitLdcInsn(evalTag);
+        // Stack: [RuntimeScalar(String), String]
 
-            mv.visitMethodInsn(
-                    Opcodes.INVOKESTATIC,
-                    "org/perlonjava/RuntimeCode",
-                    "eval_string",
-                    "(Lorg/perlonjava/RuntimeScalar;Ljava/lang/String;)Ljava/lang/Class;",
-                    false);
+        mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/RuntimeCode",
+                "eval_string",
+                "(Lorg/perlonjava/RuntimeScalar;Ljava/lang/String;)Ljava/lang/Class;",
+                false);
 
-            // Stack after this step: [Class]
+        // Stack after this step: [Class]
 
-            // 2. Find the constructor (RuntimeScalar, RuntimeScalar, ...)
-            mv.visitIntInsn(
-                    Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
-            // Stack: [Class, int]
-            mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class"); // Create a new array of Class
+        // 2. Find the constructor (RuntimeScalar, RuntimeScalar, ...)
+        mv.visitIntInsn(
+                Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
+        // Stack: [Class, int]
+        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class"); // Create a new array of Class
+        // Stack: [Class, Class[]]
+
+        for (int i = 0; i < newEnv.length - skipVariables; i++) {
+            mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
+            // Stack: [Class, Class[], Class[]]
+
+            mv.visitIntInsn(Opcodes.BIPUSH, i); // Push the index
+            // Stack: [Class, Class[], Class[], int]
+
+            // select Array/Hash/Scalar depending on env value
+            String descriptor = EmitterMethodCreator.getVariableDescriptor(newEnv[i + skipVariables]);
+
+            mv.visitLdcInsn(Type.getType(descriptor)); // Push the Class object for RuntimeScalar
+            // Stack: [Class, Class[], Class[], int, Class]
+
+            mv.visitInsn(Opcodes.AASTORE); // Store the Class object in the array
             // Stack: [Class, Class[]]
+        }
+        mv.visitMethodInsn(
+                Opcodes.INVOKEVIRTUAL,
+                "java/lang/Class",
+                "getConstructor",
+                "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;",
+                false);
+        // Stack: [Constructor]
 
-            for (int i = 0; i < newEnv.length - skipVariables; i++) {
-                mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
-                // Stack: [Class, Class[], Class[]]
-
-                mv.visitIntInsn(Opcodes.BIPUSH, i); // Push the index
-                // Stack: [Class, Class[], Class[], int]
-
-                // select Array/Hash/Scalar depending on env value
-                String descriptor = EmitterMethodCreator.getVariableDescriptor(newEnv[i + skipVariables]);
-
-                mv.visitLdcInsn(Type.getType(descriptor)); // Push the Class object for RuntimeScalar
-                // Stack: [Class, Class[], Class[], int, Class]
-
-                mv.visitInsn(Opcodes.AASTORE); // Store the Class object in the array
-                // Stack: [Class, Class[]]
-            }
-            mv.visitMethodInsn(
-                    Opcodes.INVOKEVIRTUAL,
-                    "java/lang/Class",
-                    "getConstructor",
-                    "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;",
-                    false);
-            // Stack: [Constructor]
-
-            // 3. Instantiate the class
-            mv.visitIntInsn(
-                    Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
-            // Stack: [Constructor, int]
-            mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object"); // Create a new array of Object
+        // 3. Instantiate the class
+        mv.visitIntInsn(
+                Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
+        // Stack: [Constructor, int]
+        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object"); // Create a new array of Object
+        // Stack: [Constructor, Object[]]
+        for (int i = skipVariables; i < newEnv.length; i++) {
+            mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
+            // Stack: [Constructor, Object[], Object[]]
+            mv.visitIntInsn(Opcodes.BIPUSH, i - skipVariables); // Push the index
+            // Stack: [Constructor, Object[], Object[], int]
+            mv.visitVarInsn(Opcodes.ALOAD, i); // Load the constructor argument
+            // Stack: [Constructor, Object[], Object[], int, arg]
+            mv.visitInsn(Opcodes.AASTORE); // Store the argument in the array
             // Stack: [Constructor, Object[]]
-            for (int i = skipVariables; i < newEnv.length; i++) {
-                mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
-                // Stack: [Constructor, Object[], Object[]]
-                mv.visitIntInsn(Opcodes.BIPUSH, i - skipVariables); // Push the index
-                // Stack: [Constructor, Object[], Object[], int]
-                mv.visitVarInsn(Opcodes.ALOAD, i); // Load the constructor argument
-                // Stack: [Constructor, Object[], Object[], int, arg]
-                mv.visitInsn(Opcodes.AASTORE); // Store the argument in the array
-                // Stack: [Constructor, Object[]]
-            }
-            mv.visitMethodInsn(
-                    Opcodes.INVOKEVIRTUAL,
-                    "java/lang/reflect/Constructor",
-                    "newInstance",
-                    "([Ljava/lang/Object;)Ljava/lang/Object;",
-                    false);
-            mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Object");
+        }
+        mv.visitMethodInsn(
+                Opcodes.INVOKEVIRTUAL,
+                "java/lang/reflect/Constructor",
+                "newInstance",
+                "([Ljava/lang/Object;)Ljava/lang/Object;",
+                false);
+        mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Object");
 
-            // Stack after this step: [initialized class Instance]
+        // Stack after this step: [initialized class Instance]
 
-            // 4. Create a CODE variable using RuntimeScalar.make_sub
-            mv.visitMethodInsn(
-                    Opcodes.INVOKESTATIC, "org/perlonjava/RuntimeScalar", "make_sub", "(Ljava/lang/Object;)Lorg/perlonjava/RuntimeScalar;", false);
-            // Stack: [RuntimeScalar(Code)]
+        // 4. Create a CODE variable using RuntimeScalar.make_sub
+        mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC, "org/perlonjava/RuntimeScalar", "make_sub", "(Ljava/lang/Object;)Lorg/perlonjava/RuntimeScalar;", false);
+        // Stack: [RuntimeScalar(Code)]
 
-            mv.visitVarInsn(Opcodes.ALOAD, 1); // push @_ to the stack
-            // Transform the value in the stack to RuntimeArray
-            // XXX not needed
-            // mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/RuntimeDataProvider", "getArray", "()Lorg/perlonjava/RuntimeArray;", true);
+        mv.visitVarInsn(Opcodes.ALOAD, 1); // push @_ to the stack
+        // Transform the value in the stack to RuntimeArray
+        // XXX not needed
+        // mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/RuntimeDataProvider", "getArray", "()Lorg/perlonjava/RuntimeArray;", true);
 
-            mv.visitFieldInsn(
-                    Opcodes.GETSTATIC,
-                    "org/perlonjava/RuntimeContextType",
-                    ctx.contextType.toString(),
-                    "Lorg/perlonjava/RuntimeContextType;"); // call context
-            mv.visitMethodInsn(
-                    Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/RuntimeScalar",
-                    "apply",
-                    "(Lorg/perlonjava/RuntimeArray;Lorg/perlonjava/RuntimeContextType;)Lorg/perlonjava/RuntimeList;",
-                    false); // generate an .apply() call
+        mv.visitFieldInsn(
+                Opcodes.GETSTATIC,
+                "org/perlonjava/RuntimeContextType",
+                ctx.contextType.toString(),
+                "Lorg/perlonjava/RuntimeContextType;"); // call context
+        mv.visitMethodInsn(
+                Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/RuntimeScalar",
+                "apply",
+                "(Lorg/perlonjava/RuntimeArray;Lorg/perlonjava/RuntimeContextType;)Lorg/perlonjava/RuntimeList;",
+                false); // generate an .apply() call
 
-            // 5. Clean up the stack according to context
-            if (ctx.contextType == RuntimeContextType.SCALAR) {
-                // Transform the value in the stack to RuntimeScalar
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeList", "getScalar", "()Lorg/perlonjava/RuntimeScalar;", false);
-            } else if (ctx.contextType == RuntimeContextType.VOID) {
-                // Remove the value from the stack
-                mv.visitInsn(Opcodes.POP);
-            }
+        // 5. Clean up the stack according to context
+        if (ctx.contextType == RuntimeContextType.SCALAR) {
+            // Transform the value in the stack to RuntimeScalar
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeList", "getScalar", "()Lorg/perlonjava/RuntimeScalar;", false);
+        } else if (ctx.contextType == RuntimeContextType.VOID) {
+            // Remove the value from the stack
+            mv.visitInsn(Opcodes.POP);
+        }
 
-            // If the context is LIST or RUNTIME, the stack should contain [RuntimeList]
-            // If the context is SCALAR, the stack should contain [RuntimeScalar]
-            // If the context is VOID, the stack should be empty
+        // If the context is LIST or RUNTIME, the stack should contain [RuntimeList]
+        // If the context is SCALAR, the stack should contain [RuntimeScalar]
+        // If the context is VOID, the stack should be empty
 
     }
 
@@ -1067,48 +1086,48 @@ public class EmitterVisitor implements Visitor {
         }
 
         MethodVisitor mv = ctx.mv;
-        
+
         // For1Node fields:
         //  variable
         //  list
         //  body
-        
+
         // Create labels for the loop
         Label loopStart = new Label();
         Label loopEnd = new Label();
-        
+
         // Emit the list and create an Iterator<Runtime>
         node.list.accept(this.with(RuntimeContextType.LIST));
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/RuntimeDataProvider", "iterator", "()Ljava/util/Iterator;", true);
-        
+
         // Start of the loop
         mv.visitLabel(loopStart);
-        
+
         // Check if the iterator has more elements
         mv.visitInsn(Opcodes.DUP); // Duplicate the iterator on the stack to use it for hasNext and next
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "hasNext", "()Z", true);
         mv.visitJumpInsn(Opcodes.IFEQ, loopEnd);
-        
+
         // Retrieve the next element from the iterator
         mv.visitInsn(Opcodes.DUP);
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
         mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/RuntimeScalar"); // Cast the object to the appropriate type
-        
+
         // Assign it to the loop variable
         node.variable.accept(this.with(RuntimeContextType.SCALAR));
         mv.visitInsn(Opcodes.SWAP); // move the target first
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", "set", "(Lorg/perlonjava/RuntimeScalar;)Lorg/perlonjava/RuntimeScalar;", false);
         mv.visitInsn(Opcodes.POP);  // we don't need the variable in the stack
-        
+
         // Visit the body of the loop
         node.body.accept(this.with(RuntimeContextType.VOID));
-        
+
         // Jump back to the start of the loop
         mv.visitJumpInsn(Opcodes.GOTO, loopStart);
-        
+
         // End of the loop
         mv.visitLabel(loopEnd);
-        
+
         // Pop the iterator from the stack
         mv.visitInsn(Opcodes.POP);
 
@@ -1116,7 +1135,7 @@ public class EmitterVisitor implements Visitor {
         if (ctx.contextType != RuntimeContextType.VOID) {
             mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/RuntimeScalar", "undef", "()Lorg/perlonjava/RuntimeScalar;", false);
         }
-        
+
         // Exit the scope in the symbol table
         if (node.useNewScope) {
             ctx.symbolTable.exitScope();
@@ -1124,7 +1143,7 @@ public class EmitterVisitor implements Visitor {
 
         ctx.logDebug("FOR1 end");
     }
- 
+
 
     @Override
     public void visit(For3Node node) throws Exception {
