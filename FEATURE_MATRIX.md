@@ -26,7 +26,7 @@
 - [ ] Cached string/numeric conversions; dualvars
 
 ## Operators
-- [x] Simple arithmetic
+- [x] Simple arithmetic, `%`, `**`
 - [x] Numeric Comparison operators
 - [x] String concat
 - [ ] `substr`
