@@ -449,6 +449,11 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar();
     }
 
+    public RuntimeScalar undefine() {
+        this.type = RuntimeScalarType.UNDEF;
+        return this;
+    }
+
     public RuntimeScalar stringConcat(RuntimeScalar b) {
         return new RuntimeScalar(this + b.toString());
     }

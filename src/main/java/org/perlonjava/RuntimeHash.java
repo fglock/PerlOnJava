@@ -233,6 +233,11 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
       return true;
     }
 
+    public RuntimeHash undefine() {
+        this.elements.clear();
+        return this;
+    }
+
     // Convert the hash to a string (for debugging purposes)
     @Override
     public String toString() {
