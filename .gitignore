@@ -1,7 +1,8 @@
 *.class
+*.jar
 *.swp
 dependency-reduced-pom.xml
 asm-9.7.jar
 google-java-format-1.22.0-all-deps.jar
 cody_history.xml
-
+target/
