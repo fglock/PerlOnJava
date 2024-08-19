@@ -741,7 +741,7 @@ public class Parser {
                 return new BinaryOperatorNode(token.text, left, right, tokenIndex);
             case "--":
             case "++":
-                return new PostfixOperatorNode(token.text, left, tokenIndex);
+                return new UnaryOperatorNode(token.text + "postfix", left, tokenIndex);
         }
         throw new PerlCompilerException(tokenIndex, "Unexpected infix operator: " + token, errorUtil);
     }

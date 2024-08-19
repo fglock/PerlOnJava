@@ -180,15 +180,6 @@ public class PrintVisitor implements Visitor {
     }
 
     @Override
-    public void visit(PostfixOperatorNode node) throws Exception {
-        appendIndent();
-        sb.append("PostfixOperatorNode: ").append(node.operator).append("\n");
-        indentLevel++;
-        node.operand.accept(this);
-        indentLevel--;
-    }
-
-    @Override
     public void visit(StringNode node) throws Exception {
         appendIndent();
         sb.append("StringNode: '").append(node.value).append("'\n");
