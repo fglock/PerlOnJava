@@ -5,6 +5,7 @@ This is a Perl compiler under development. It compiles Perl into Java bytecode a
 ## Table of Contents
 
 1. [Introduction](#introduction)
+1. [Features](#features)
 2. [Build](#build)
 3. [Running the jar file](#running-the-jar-file)
 4. [Debugging Tools](#debugging-tools)
@@ -26,6 +27,10 @@ The primary goals of this project are:
 The project is structured into several modules, including a lexer, parser, and bytecode generator. Each
 module plays a crucial role in the compilation process, from tokenizing the Perl script to generating the
 corresponding Java bytecode.
+
+## Features
+
+For an up-to-date list of current features, please refer to the [FEATURE_MATRIX](FEATURE_MATRIX.md) file for detailed information.
 
 ## Build
 
