@@ -524,35 +524,119 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
   }
 
-  public RuntimeScalar lessEqualThan(RuntimeScalar arg2) {
-    RuntimeScalar arg1 = this;
-    if (arg1.type == RuntimeScalarType.STRING) {
-      arg1 = arg1.parseNumber();
+    public RuntimeScalar lessThan(RuntimeScalar arg2) {
+        RuntimeScalar arg1 = this;
+        if (arg1.type == RuntimeScalarType.STRING) {
+            arg1 = arg1.parseNumber();
+        }
+        if (arg2.type == RuntimeScalarType.STRING) {
+            arg2 = arg2.parseNumber();
+        }
+        if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
+            return new RuntimeScalar(arg1.getDouble() < arg2.getDouble());
+        } else {
+            return new RuntimeScalar(arg1.getInt() < arg2.getInt());
+        }
     }
-    if (arg2.type == RuntimeScalarType.STRING) {
-      arg2 = arg2.parseNumber();
-    }
-    if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
-      return new RuntimeScalar(arg1.getDouble() <= arg2.getDouble());
-    } else {
-      return new RuntimeScalar(arg1.getInt() <= arg2.getInt());
-    }
-  }
 
-  public RuntimeScalar lessThan(RuntimeScalar arg2) {
-    RuntimeScalar arg1 = this;
-    if (arg1.type == RuntimeScalarType.STRING) {
-      arg1 = arg1.parseNumber();
+    public RuntimeScalar lessThanOrEqual(RuntimeScalar arg2) {
+        RuntimeScalar arg1 = this;
+        if (arg1.type == RuntimeScalarType.STRING) {
+            arg1 = arg1.parseNumber();
+        }
+        if (arg2.type == RuntimeScalarType.STRING) {
+            arg2 = arg2.parseNumber();
+        }
+        if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
+            return new RuntimeScalar(arg1.getDouble() <= arg2.getDouble());
+        } else {
+            return new RuntimeScalar(arg1.getInt() <= arg2.getInt());
+        }
     }
-    if (arg2.type == RuntimeScalarType.STRING) {
-      arg2 = arg2.parseNumber();
+
+    public RuntimeScalar greaterThan(RuntimeScalar arg2) {
+        RuntimeScalar arg1 = this;
+        if (arg1.type == RuntimeScalarType.STRING) {
+            arg1 = arg1.parseNumber();
+        }
+        if (arg2.type == RuntimeScalarType.STRING) {
+            arg2 = arg2.parseNumber();
+        }
+        if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
+            return new RuntimeScalar(arg1.getDouble() > arg2.getDouble());
+        } else {
+            return new RuntimeScalar(arg1.getInt() > arg2.getInt());
+        }
     }
-    if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
-      return new RuntimeScalar(arg1.getDouble() < arg2.getDouble());
-    } else {
-      return new RuntimeScalar(arg1.getInt() < arg2.getInt());
+
+    public RuntimeScalar greaterThanOrEqual(RuntimeScalar arg2) {
+        RuntimeScalar arg1 = this;
+        if (arg1.type == RuntimeScalarType.STRING) {
+            arg1 = arg1.parseNumber();
+        }
+        if (arg2.type == RuntimeScalarType.STRING) {
+            arg2 = arg2.parseNumber();
+        }
+        if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
+            return new RuntimeScalar(arg1.getDouble() >= arg2.getDouble());
+        } else {
+            return new RuntimeScalar(arg1.getInt() >= arg2.getInt());
+        }
     }
-  }
+
+    public RuntimeScalar equalTo(RuntimeScalar arg2) {
+        RuntimeScalar arg1 = this;
+        if (arg1.type == RuntimeScalarType.STRING) {
+            arg1 = arg1.parseNumber();
+        }
+        if (arg2.type == RuntimeScalarType.STRING) {
+            arg2 = arg2.parseNumber();
+        }
+        if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
+            return new RuntimeScalar(arg1.getDouble() == arg2.getDouble());
+        } else {
+            return new RuntimeScalar(arg1.getInt() == arg2.getInt());
+        }
+    }
+
+    public RuntimeScalar notEqualTo(RuntimeScalar arg2) {
+        RuntimeScalar arg1 = this;
+        if (arg1.type == RuntimeScalarType.STRING) {
+            arg1 = arg1.parseNumber();
+        }
+        if (arg2.type == RuntimeScalarType.STRING) {
+            arg2 = arg2.parseNumber();
+        }
+        if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
+            return new RuntimeScalar(arg1.getDouble() != arg2.getDouble());
+        } else {
+            return new RuntimeScalar(arg1.getInt() != arg2.getInt());
+        }
+    }
+
+    public RuntimeScalar eq(RuntimeScalar arg2) {
+        return new RuntimeScalar(this.toString().equals(arg2.toString()));
+    }
+
+    public RuntimeScalar ne(RuntimeScalar arg2) {
+        return new RuntimeScalar(!this.toString().equals(arg2.toString()));
+    }
+
+    public RuntimeScalar lt(RuntimeScalar arg2) {
+        return new RuntimeScalar(this.toString().compareTo(arg2.toString()) < 0);
+    }
+
+    public RuntimeScalar le(RuntimeScalar arg2) {
+        return new RuntimeScalar(this.toString().compareTo(arg2.toString()) <= 0);
+    }
+
+    public RuntimeScalar gt(RuntimeScalar arg2) {
+        return new RuntimeScalar(this.toString().compareTo(arg2.toString()) > 0);
+    }
+
+    public RuntimeScalar ge(RuntimeScalar arg2) {
+        return new RuntimeScalar(this.toString().compareTo(arg2.toString()) >= 0);
+    }
 
   public RuntimeScalar preAutoIncrement() {
     switch (type) {
