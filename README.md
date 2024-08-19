@@ -72,13 +72,18 @@ For an up-to-date list of current features, please refer to the [FEATURE_MATRIX]
 ### Project Structure
 
 ```
-my-project/
+/
 ├── src/
-│   └── main/
+│   ├── main/
+│   │   └── java/
+│   │       └── org/
+│   │           └── perlonjava/
+│   │               └── Main.java
+│   └── test/
 │       └── java/
 │           └── org/
 │               └── perlonjava/
-│                   └── Main.java
+│                   └── PerlLanguageProviderTest.java
 ├── build.gradle
 ├── pom.xml
 └── settings.gradle
