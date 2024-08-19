@@ -13,7 +13,7 @@ public class RuntimeCode implements RuntimeScalarReference {
 
   // Temporary storage for anonymous subroutines and eval string compiler context
   public static HashMap<String, Class<?>> anonSubs =
-          new HashMap<>(); // temp storage for make_sub()
+          new HashMap<>(); // temp storage for makeCodeObject()
   public static HashMap<String, EmitterContext> evalContext =
           new HashMap<>(); // storage for eval string compiler context
 
@@ -23,7 +23,7 @@ public class RuntimeCode implements RuntimeScalarReference {
   }
 
   // Method to compile the text of eval string into an anonymous subroutine
-  public static Class<?> eval_string(RuntimeScalar code, String evalTag) throws Exception {
+  public static Class<?> evalStringHelper(RuntimeScalar code, String evalTag) throws Exception {
 
     // retrieve the eval context that was saved at program compile-time
     EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
@@ -81,6 +81,34 @@ public class RuntimeCode implements RuntimeScalarReference {
             true  // use try-catch
     );
     return generatedClass;
+  }
+
+  // Factory method to create a CODE object (anonymous subroutine)
+  //
+  // This is called right after a new Class is compiled.
+  //
+  // codeObject is an instance of the new Class, with the closure variables in place.
+  //
+  public static RuntimeScalar makeCodeObject(Object codeObject) throws Exception {
+      // Retrieve the class of the provided code object
+      Class<?> clazz = codeObject.getClass();
+
+      // Get the 'apply' method from the class.
+      // This method takes RuntimeArray and RuntimeContextType as parameters.
+      Method mm = clazz.getMethod("apply", RuntimeArray.class, RuntimeContextType.class);
+
+      // Create a new RuntimeScalar instance to hold the CODE object
+      RuntimeScalar r = new RuntimeScalar();
+
+      // Wrap the method and the code object in a RuntimeCode instance
+      // This allows us to store both the method and the object it belongs to
+      r.value = new RuntimeCode(mm, codeObject);
+
+      // Set the type of the RuntimeScalar to CODE to indicate it holds a code reference
+      r.type = RuntimeScalarType.CODE;
+
+      // Return the fully constructed RuntimeScalar object
+      return r;
   }
 
   public String toStringRef() {

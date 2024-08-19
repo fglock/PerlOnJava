@@ -1,6 +1,5 @@
 package org.perlonjava;
 
-import java.lang.reflect.Method;
 import java.lang.Math;
 import java.util.Iterator;
 
@@ -224,34 +223,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             default:
                 throw new IllegalStateException("Variable does not contain an array reference");
         }
-    }
-
-    // Factory method to create a CODE object (anonymous subroutine)
-    //
-    // This is called right after a new Class is compiled.
-    //
-    // codeObject is an instance of the new Class, with the closure variables in place.
-    //
-    public static RuntimeScalar make_sub(Object codeObject) throws Exception {
-        // Retrieve the class of the provided code object
-        Class<?> clazz = codeObject.getClass();
-
-        // Get the 'apply' method from the class.
-        // This method takes RuntimeArray and RuntimeContextType as parameters.
-        Method mm = clazz.getMethod("apply", RuntimeArray.class, RuntimeContextType.class);
-
-        // Create a new RuntimeScalar instance to hold the CODE object
-        RuntimeScalar r = new RuntimeScalar();
-
-        // Wrap the method and the code object in a RuntimeCode instance
-        // This allows us to store both the method and the object it belongs to
-        r.value = new RuntimeCode(mm, codeObject);
-
-        // Set the type of the RuntimeScalar to CODE to indicate it holds a code reference
-        r.type = RuntimeScalarType.CODE;
-
-        // Return the fully constructed RuntimeScalar object
-        return r;
     }
 
     // Method to apply (execute) a subroutine reference
