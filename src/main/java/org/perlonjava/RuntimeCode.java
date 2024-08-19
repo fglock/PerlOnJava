@@ -26,8 +26,22 @@ public class RuntimeCode implements RuntimeScalarReference {
   public static Class<?> eval_string(RuntimeScalar code, String evalTag) throws Exception {
 
     // retrieve the eval context that was saved at program compile-time
-    EmitterContext evalCtx = RuntimeCode.evalContext.get(evalTag);
-    evalCtx.javaClassName = EmitterMethodCreator.generateClassName(); // internal java class name
+    EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
+
+    EmitterContext evalCtx =
+            new EmitterContext(
+                    "(eval)", // filename
+                    EmitterMethodCreator.generateClassName(), // internal java class name
+                    ctx.symbolTable.clone(), // clone the symbolTable
+                    null, // return label
+                    null, // method visitor
+                    ctx.contextType, // call context
+                    true, // is boxed
+                    ctx.errorUtil, // error message utility
+                    ctx.debugEnabled,
+                    ctx.tokenizeOnly,
+                    ctx.compileOnly,
+                    ctx.parseOnly);
 
     // TODO - this can be cached for performance
     // retrieve closure variable list
