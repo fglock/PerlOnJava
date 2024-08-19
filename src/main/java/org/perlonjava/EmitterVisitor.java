@@ -829,7 +829,7 @@ public class EmitterVisitor implements Visitor {
                         ctx.parseOnly);
         RuntimeCode.evalContext.put(evalTag, evalCtx);
 
-        // Here the compiled code will call RuntimeCode.eval_string(code, evalTag) method.
+        // Here the compiled code will call RuntimeCode.evalStringHelper(code, evalTag) method.
         // It will compile the string and return a new Class.
         //
         // XXX TODO - We need to catch any errors and set Perl error variable "$@"
@@ -848,7 +848,7 @@ public class EmitterVisitor implements Visitor {
 
         // Stack at this step: [RuntimeScalar(String)]
 
-        // 1. Call RuntimeCode.eval_string(code, evalTag)
+        // 1. Call RuntimeCode.evalStringHelper(code, evalTag)
 
         // Push the evalTag String to the stack
         // the compiled code will use this tag to retrieve the compiler environment
@@ -858,7 +858,7 @@ public class EmitterVisitor implements Visitor {
         mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/RuntimeCode",
-                "eval_string",
+                "evalStringHelper",
                 "(Lorg/perlonjava/RuntimeScalar;Ljava/lang/String;)Ljava/lang/Class;",
                 false);
 
@@ -921,9 +921,9 @@ public class EmitterVisitor implements Visitor {
 
         // Stack after this step: [initialized class Instance]
 
-        // 4. Create a CODE variable using RuntimeScalar.make_sub
+        // 4. Create a CODE variable using RuntimeCode.makeCodeObject
         mv.visitMethodInsn(
-                Opcodes.INVOKESTATIC, "org/perlonjava/RuntimeScalar", "make_sub", "(Ljava/lang/Object;)Lorg/perlonjava/RuntimeScalar;", false);
+                Opcodes.INVOKESTATIC, "org/perlonjava/RuntimeCode", "makeCodeObject", "(Ljava/lang/Object;)Lorg/perlonjava/RuntimeScalar;", false);
         // Stack: [RuntimeScalar(Code)]
 
         mv.visitVarInsn(Opcodes.ALOAD, 1); // push @_ to the stack
@@ -1076,9 +1076,9 @@ public class EmitterVisitor implements Visitor {
 
         // Stack after this step: [Class, Constructor, Object]
 
-        // 4. Create a CODE variable using RuntimeScalar.make_sub
+        // 4. Create a CODE variable using RuntimeCode.makeCodeObject
         mv.visitMethodInsn(
-                Opcodes.INVOKESTATIC, "org/perlonjava/RuntimeScalar", "make_sub", "(Ljava/lang/Object;)Lorg/perlonjava/RuntimeScalar;", false);
+                Opcodes.INVOKESTATIC, "org/perlonjava/RuntimeCode", "makeCodeObject", "(Ljava/lang/Object;)Lorg/perlonjava/RuntimeScalar;", false);
 
         // Stack after this step: [Class, Constructor, RuntimeScalar]
         mv.visitInsn(Opcodes.SWAP); // move the RuntimeScalar object up
