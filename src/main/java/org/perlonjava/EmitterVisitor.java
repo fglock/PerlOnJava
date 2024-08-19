@@ -155,6 +155,9 @@ public class EmitterVisitor implements Visitor {
             case "/":
                 handleBinaryBuiltin("divide");
                 break;
+            case "%":
+                handleBinaryBuiltin("modulus");
+                break;
             case "**":
                 handleBinaryBuiltin("pow");
                 break;
