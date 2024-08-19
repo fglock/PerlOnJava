@@ -515,6 +515,28 @@ public class Parser {
                         case "t":
                             str.append("\t");
                             break;
+                        case "r":
+                            str.append("\r");
+                            break;
+                        case "f":
+                            str.append("\f");
+                            break;
+                        case "b":
+                            str.append("\b");
+                            break;
+                        case "x":
+                            // Handle \x{...} for Unicode
+                            StringBuilder unicodeSeq = new StringBuilder();
+                            if (consume().text.equals("{")) {
+                                while (!peek().text.equals("}")) {
+                                    unicodeSeq.append(consume().text);
+                                }
+                                consume(); // Consume the closing }
+                                str.append((char) Integer.parseInt(unicodeSeq.toString(), 16));
+                            } else {
+                                throw new PerlCompilerException(tokenIndex, "Expected '{' after \\x", errorUtil);
+                            }
+                            break;
                         default:
                             str.append(text);
                             break;
