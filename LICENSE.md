@@ -1,4 +1,4 @@
-Perlito is released under the [Artistic License 2.0][1].
+PerlOnJava is released under the [Artistic License 2.0][1].
 
 [1]: http://www.perlfoundation.org/artistic_license_2_0
 
