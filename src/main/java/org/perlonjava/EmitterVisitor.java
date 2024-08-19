@@ -180,6 +180,9 @@ public class EmitterVisitor implements Visitor {
             case "!=":
                 handleBinaryBuiltin("notEqualTo");
                 break;
+            case "<=>":
+                handleBinaryBuiltin("spaceship");
+                break;
             case "eq":
                 handleBinaryBuiltin("eq");
                 break;
@@ -197,6 +200,9 @@ public class EmitterVisitor implements Visitor {
                 break;
             case "ge":
                 handleBinaryBuiltin("ge");
+                break;
+            case "cmp":
+                handleBinaryBuiltin("cmp");
                 break;
 
             case ".":
