@@ -1,6 +1,7 @@
 package org.perlonjava;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * The RuntimeScalar class simulates Perl namespaces.
@@ -12,6 +13,8 @@ public class Namespace {
     private static final Map<String, RuntimeHash> globalHashes = new HashMap<>();
 
     // Static methods
+    // Cache to store previously normalized variables for faster lookup
+    private static final Map<String, String> cache = new HashMap<>();
 
     public static void initializeGlobals() {
         getGlobalVariable("$@");    // initialize $@ to "undef"
@@ -20,9 +23,6 @@ public class Namespace {
         getGlobalArray("@INC");
         getGlobalHash("%INC");
     }
-
-    // Cache to store previously normalized variables for faster lookup
-    private static final Map<String, String> cache = new HashMap<>();
 
     public static String normalizeVariableName(String variable, String defaultPackage) {
 
