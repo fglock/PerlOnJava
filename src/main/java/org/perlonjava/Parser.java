@@ -530,6 +530,16 @@ public class Parser {
             case "\"":
             case "qq":
                 return StringParser.parseDoubleQuotedString(rawStr.buffers.get(0), errorUtil, rawStr.index);
+            case "qw":
+                // Use a regular expression to split the string.
+                // " +" matches one or more ASCII space characters
+                String[] words = rawStr.buffers.get(0).trim().split(" +");
+                ListNode list = new ListNode(rawStr.index);
+                int size = words.length;
+                for (int i = 0; i < size; i++) {
+                    list.elements.add(new StringNode(words[i], rawStr.index));
+                }
+                return list;
         }
 
         ListNode list = new ListNode(rawStr.index);
