@@ -73,10 +73,9 @@ public class StringParser {
                             if (parenLevel == 0) {
                                 if (redo && !isPair) {
                                     redo = false;
-                                    state = START;  // Restart FSM for another string
+                                    state = STRING;  // Restart FSM for another string
                                     buffers.add(buffer.toString());
                                     buffer = new StringBuilder();
-                                    tokPos--;
                                     break;  // Exit the loop to restart FSM
                                 } else {
                                     state = END_TOKEN;  // End parsing
