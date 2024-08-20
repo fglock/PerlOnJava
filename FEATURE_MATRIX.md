@@ -86,6 +86,7 @@
 - [x] short-circuit and, or
 - [x] low-precedence/high precedence operators: `not`, `or`, `and`
 - [x] ternary operator
+- [ ] compound assignment operators (most are implemented)
 - [ ] `require` operator
 - [ ] `use` and `no` statements
 - [ ] `BEGIN` block
