@@ -47,6 +47,7 @@ public class StringParser {
         boolean isPair = false;  // Flag to indicate if the delimiters are a pair
         StringBuilder buffer = new StringBuilder();  // Buffer to hold the parsed string
         StringBuilder remain = new StringBuilder();  // Buffer to hold the remaining string
+        ArrayList<String> buffers = new ArrayList<>();
 
         while (state != END_TOKEN) {
             if (tokens.get(tokPos).type == LexerTokenType.EOF) {
@@ -73,6 +74,9 @@ public class StringParser {
                                 if (redo && !isPair) {
                                     redo = false;
                                     state = START;  // Restart FSM for another string
+                                    buffers.add(buffer.toString());
+                                    buffer = new StringBuilder();
+                                    tokPos--;
                                     break;  // Exit the loop to restart FSM
                                 } else {
                                     state = END_TOKEN;  // End parsing
@@ -101,13 +105,51 @@ public class StringParser {
             }
             tokPos++;  // Move to the next token
         }
-
+        buffers.add(buffer.toString());
         if (remain.length() > 0) {
             tokPos--;
             tokens.get(tokPos).text = remain.toString();  // Put the remaining string back in the tokens list
         }
+        return new ParsedString(index, tokPos, buffers, startDelim, endDelim);
+    }
 
-        return new ParsedString(index, tokPos, buffer.toString(), startDelim, endDelim);
+    public static StringParser.ParsedString parseRawStrings(List<LexerToken> tokens, int tokenIndex, int stringCount) {
+        if (stringCount <= 0) {
+            throw new IllegalArgumentException("need string_count");
+        }
+
+        int pos = tokenIndex;
+        boolean redo = (stringCount == 3);
+        StringParser.ParsedString ast = parseRawStringWithDelimiter(tokens, pos, redo); // use redo flag to extract 2 strings
+        if (stringCount == 1) {
+            return ast;
+        }
+        pos = ast.next;
+
+        if (stringCount == 3) { // fetch the second of 3 strings: s{aaa}{SECOND}ig
+            char delim = ast.startDelim; // / or {
+            if (QUOTE_PAIR.containsKey(delim)) {
+                pos = Parser.skipWhitespace(pos, tokens);
+                StringParser.ParsedString ast2 = parseRawStringWithDelimiter(tokens, pos, false);
+                ast.buffers.add(ast2.buffers.get(0));
+                ast.next = ast2.next;
+                pos = ast.next;
+            }
+        }
+
+        // fetch the last string: s/aaa/bbb/LAST
+        String modifier = "";
+        if (tokens.get(pos).type == LexerTokenType.IDENTIFIER) {
+            modifier = tokens.get(pos).text;
+            ast.next = pos + 1;
+        }
+        ArrayList<String> buffers = ast.buffers;
+        if (buffers == null) {
+            buffers = new ArrayList<>();
+            ast.buffers = buffers;
+        }
+        buffers.add(modifier);
+        return ast;
     }
 
     static Node parseDoubleQuotedString(String input, ErrorMessageUtil errorUtil, int tokenIndex) {
@@ -271,16 +313,16 @@ public class StringParser {
      * Class to represent the parsed string and its position in the tokens list.
      */
     public static class ParsedString {
-        public final int index;  // Starting index of the parsed string
-        public final int next;  // Next index in the tokens list
-        public final String buffer;  // Parsed string
-        public final char startDelim;
-        public final char endDelim;
+        public int index;  // Starting index of the parsed string
+        public int next;  // Next index in the tokens list
+        public ArrayList<String> buffers;  // Parsed string
+        public char startDelim;
+        public char endDelim;
 
-        public ParsedString(int index, int next, String buffer, char startDelim, char endDelim) {
+        public ParsedString(int index, int next, ArrayList<String> buffers, char startDelim, char endDelim) {
             this.index = index;
             this.next = next;
-            this.buffer = buffer;
+            this.buffers = buffers;
             this.startDelim = startDelim;
             this.endDelim = endDelim;
         }
