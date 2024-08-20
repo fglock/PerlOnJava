@@ -104,7 +104,7 @@ public class StringParser {
             tokens.get(tokPos).text = remain.toString();  // Put the remaining string back in the tokens list
         }
 
-        return new ParsedString(index, tokPos, buffer.toString());
+        return new ParsedString(index, tokPos, buffer.toString(), startDelim, endDelim);
     }
 
     /**
@@ -114,11 +114,15 @@ public class StringParser {
         public final int index;  // Starting index of the parsed string
         public final int next;  // Next index in the tokens list
         public final String buffer;  // Parsed string
+        public final char startDelim;
+        public final char endDelim;
 
-        public ParsedString(int index, int next, String buffer) {
+        public ParsedString(int index, int next, String buffer, char startDelim, char endDelim) {
             this.index = index;
             this.next = next;
             this.buffer = buffer;
+            this.startDelim = startDelim;
+            this.endDelim = endDelim;
         }
     }
 }

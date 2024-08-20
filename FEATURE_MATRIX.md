@@ -31,6 +31,7 @@
 - [x] String concat
 - [ ] `substr`
 - [x] String Comparison operators
+- [x] `q`
 - [x] Bitwise operators
 - [x] Autoincrement, Autodecrement; String increment
 - [x] `join`
