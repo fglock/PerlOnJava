@@ -5,13 +5,15 @@ This is a Perl compiler under development. It compiles Perl into Java bytecode a
 ## Table of Contents
 
 1. [Introduction](#introduction)
-1. [Features](#features)
+2. [Features](#features)
 2. [Build](#build)
 3. [Running the jar file](#running-the-jar-file)
 4. [Debugging Tools](#debugging-tools)
 5. [Modules](#modules)
 6. [Using Java Scripting API](#using-java-scripting-api)
-7. [License](#license)
+7. [Milestones](#milestones)
+8. [Benchmarks](#benchmarks)
+9. [License](#license)
 
 ## Introduction
 
@@ -228,6 +230,35 @@ public class Main {
     }
 }
 ```
+
+## Milestones
+
+### Completed Milestones
+- **v1.0.0**: Initial proof of concept for the parser and execution engine.
+- **v1.1.0**: Established architecture and added key features. The system now supports benchmarks and tests.
+   - JSR 223 integration
+   - Support for closures
+   - Eval-string functionality
+   - Enhanced statements, data types, and call context
+
+### Upcoming Milestones
+- **v1.2.0**: Planned release date: 2024-10-01
+   - Addition of 20 new operators
+   - Various bug fixes and performance improvements
+
+## Benchmarks
+
+### Performance Benchmarks
+
+The following benchmarks provide an order of magnitude comparison with Perl:
+
+- **v1.0.0**:
+   - Lexer and Parser: Processes 50k lines per second; direct comparison with Perl is not applicable.
+
+- **v1.1.0**:
+   - Numeric operations: 2x faster than Perl
+   - String operations: Comparable to Perl
+   - Eval-string: 10x slower than Perl
 
 ## License
 
