@@ -28,11 +28,11 @@ public class Namespace {
     }
 
     public static void initializeGlobals() {
-        getGlobalVariable("$@");    // initialize $@ to "undef"
-        getGlobalVariable("$_");    // initialize $_ to "undef"
-        getGlobalVariable("$\"").set(" ");    // initialize $_ to " "
-        getGlobalArray("@INC");
-        getGlobalHash("%INC");
+        getGlobalVariable("$main::@");    // initialize $@ to "undef"
+        getGlobalVariable("$main::_");    // initialize $_ to "undef"
+        getGlobalVariable("$main::\"").set(" ");    // initialize $_ to " "
+        getGlobalArray("@main::INC");
+        getGlobalHash("%main::INC");
     }
 
     public static String normalizeVariableName(String variable, String defaultPackage) {

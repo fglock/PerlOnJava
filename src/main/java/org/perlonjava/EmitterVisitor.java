@@ -607,7 +607,10 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void fetchGlobalVariable(boolean createIfNotExists, String sigil, String var, int tokenIndex) {
+    private void fetchGlobalVariable(boolean createIfNotExists, String sigil, String varName, int tokenIndex) {
+
+        String var = Namespace.normalizeVariableName(varName, "main"); // XXX TODO set package
+
         if (sigil.equals("$") && (createIfNotExists || Namespace.existsGlobalVariable(var))) {
             // fetch a global variable
             ctx.mv.visitLdcInsn(var);
@@ -640,9 +643,9 @@ public class EmitterVisitor implements Visitor {
             System.err.println(
                     ctx.errorUtil.errorMessage(tokenIndex,
                             "Warning: Global symbol \""
-                                    + var
+                                    + varName
                                     + "\" requires explicit package name (did you forget to declare \"my "
-                                    + var
+                                    + varName
                                     + "\"?)"));
         }
     }
