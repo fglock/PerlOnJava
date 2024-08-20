@@ -406,6 +406,10 @@ public class Parser {
                     case "sub":
                         // Handle 'sub' keyword to parse an anonymous subroutine
                         return parseAnonSub();
+                    case "q":
+                    case "qq":
+                        // Handle special-quoted strings
+                        return parseRawString();
                     default:
                         // Handle any other identifier as a simple identifier node
                         return new IdentifierNode(token.text, tokenIndex);
@@ -489,6 +493,13 @@ public class Parser {
         }
         // Throw an exception if no valid case was found
         throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, errorUtil);
+    }
+
+    private Node parseRawString() {
+        // WIP - handle special quotes
+        RawStringParser.ParsedString rawStr = RawStringParser.parseRawStringWithDelimiter(tokens, tokenIndex, false);
+        tokenIndex = rawStr.next;
+        return new StringNode(rawStr.buffer, rawStr.index);
     }
 
     private Node parseDoubleQuotedString() {
