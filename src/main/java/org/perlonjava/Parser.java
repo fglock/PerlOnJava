@@ -408,8 +408,10 @@ public class Parser {
                         return parseAnonSub();
                     case "q":
                     case "qq":
+                    case "qx":
+                    case "qw":
                         // Handle special-quoted strings
-                        return parseRawString();
+                        return parseRawString(token.text);
                     default:
                         // Handle any other identifier as a simple identifier node
                         return new IdentifierNode(token.text, tokenIndex);
@@ -495,11 +497,11 @@ public class Parser {
         throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, errorUtil);
     }
 
-    private Node parseRawString() {
-        // WIP - handle special quotes
+    private Node parseRawString(String operator) {
+        // WIP - handle special quotes for operators: q qq qx qw
         StringParser.ParsedString rawStr = StringParser.parseRawStringWithDelimiter(tokens, tokenIndex, false);
         tokenIndex = rawStr.next;
-        return new StringNode(rawStr.buffer, rawStr.index);
+        return new UnaryOperatorNode(operator, new StringNode(rawStr.buffer, rawStr.index), rawStr.index);
     }
 
     private Node parseDoubleQuotedString() {
