@@ -1,3 +1,5 @@
+package org.perlonjava;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -19,7 +21,7 @@ public class RawStringParser {
         QUOTE_PAIR.put('[', ']');
     }
 
-    public static ParsedString parseRawStringWithDelimiter(List<Token> tokens, int index, boolean redo) {
+    public static ParsedString parseRawStringWithDelimiter(List<LexerToken> tokens, int index, boolean redo) {
         int tokPos = index;
         char startDelim = 0;
         char endDelim = 0;
@@ -28,14 +30,13 @@ public class RawStringParser {
         boolean isPair = false;
         StringBuilder buffer = new StringBuilder();
         StringBuilder remain = new StringBuilder();
-        List<String> buffers = new ArrayList<>();
 
         while (state != END_TOKEN) {
-            if (tokens.get(tokPos).getType() == END_TOKEN) {
+            if (tokens.get(tokPos).type == LexerTokenType.EOF) {
                 throw new IllegalStateException("Can't find string terminator " + endDelim + " anywhere before EOF");
             }
 
-            for (char ch : tokens.get(tokPos).getText().toCharArray()) {
+            for (char ch : tokens.get(tokPos).text.toCharArray()) {
                 switch (state) {
                     case START:
                         startDelim = ch;
@@ -53,8 +54,6 @@ public class RawStringParser {
                         } else if (ch == endDelim) {
                             if (parenLevel == 0) {
                                 if (redo && !isPair) {
-                                    buffers.add(buffer.toString());
-                                    buffer = new StringBuilder();
                                     redo = false;
                                     state = START;    // start again; one more string to fetch
                                     break;  // go back to FSM start
@@ -85,54 +84,24 @@ public class RawStringParser {
             }
             tokPos++;
         }
-        buffers.add(buffer.toString());
 
         if (remain.length() > 0) {
-            tokens.get(tokPos - 1).setText(remain.toString());  // put the remaining string back in the tokens list
+            tokPos--;
+            tokens.get(tokPos).text = remain.toString();  // put the remaining string back in the tokens list
         }
 
-        return new ParsedString("RAW_STRING", index, tokPos, buffers, startDelim, endDelim);
+        return new ParsedString(index, tokPos, buffer.toString());
     }
 
     public static class ParsedString {
-        private final String type;
-        private final int index;
-        private final int next;
-        private final List<String> buffers;
-        private final char startDelim;
-        private final char endDelim;
+        public final int index;
+        public final int next;
+        public final String buffer;
 
-        public ParsedString(String type, int index, int next, List<String> buffers, char startDelim, char endDelim) {
-            this.type = type;
+        public ParsedString(int index, int next, String buffer) {
             this.index = index;
             this.next = next;
-            this.buffers = buffers;
-            this.startDelim = startDelim;
-            this.endDelim = endDelim;
-        }
-
-        // Getters here...
-    }
-
-    public static class Token {
-        private final int type;
-        private String text;
-
-        public Token(int type, String text) {
-            this.type = type;
-            this.text = text;
-        }
-
-        public int getType() {
-            return type;
-        }
-
-        public String getText() {
-            return text;
-        }
-
-        public void setText(String text) {
-            this.text = text;
+            this.buffer = buffer;
         }
     }
 }

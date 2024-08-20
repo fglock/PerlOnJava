@@ -26,7 +26,7 @@ public class LexerToken {
    * The text of the token, represented as a string.
    * This field contains the actual string of characters that make up the token.
    */
-  public final String text;
+  public String text;
 
   /**
    * Constructs a new LexerToken with the specified type and text.
