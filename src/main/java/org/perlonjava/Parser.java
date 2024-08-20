@@ -509,8 +509,6 @@ public class Parser {
             rawStr = StringParser.parseRawStrings(tokens, tokenIndex, 1);
         }
 
-        System.out.println(rawStr.buffers);
-
         tokenIndex = rawStr.next;
 
         switch (operator) {
