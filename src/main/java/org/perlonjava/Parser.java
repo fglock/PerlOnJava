@@ -411,6 +411,7 @@ public class Parser {
                     case "qx":
                     case "qw":
                     case "s":
+                    case "m":
                         // Handle special-quoted strings
                         return parseRawString(token.text);
                     default:
@@ -440,6 +441,8 @@ public class Parser {
                         return parseFractionalNumber();
                     case "'":
                     case "\"":
+                    case "/":
+                    case "//":
                         // Handle single and double-quoted strings
                         return parseRawString(token.text);
                     default:
@@ -497,14 +500,16 @@ public class Parser {
     }
 
     private Node parseRawString(String operator) {
-        // WIP - handle special quotes for operators: q qq qx qw
-        if (operator.equals("'") || operator.equals("\"")) {
+        // handle special quotes for operators: q qq qx qw // s/// m//
+        if (operator.equals("'") || operator.equals("\"") || operator.equals("/") || operator.equals("//")) {
             tokenIndex--;   // will re-parse the quote
         }
 
         StringParser.ParsedString rawStr;
         if (operator.equals("s")) {
             rawStr = StringParser.parseRawStrings(tokens, tokenIndex, 3);
+        } else if (operator.equals("m") || operator.equals("/") || operator.equals("//")) {
+            rawStr = StringParser.parseRawStrings(tokens, tokenIndex, 2);
         } else {
             rawStr = StringParser.parseRawStrings(tokens, tokenIndex, 1);
         }
