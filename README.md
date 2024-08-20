@@ -32,7 +32,19 @@ corresponding Java bytecode.
 
 ## Features
 
-For an up-to-date list of current features, please refer to the [FEATURE_MATRIX](FEATURE_MATRIX.md) file for detailed information.
+This compiler currently supports several key Perl features:
+
+- **Closures**: Supports anonymous functions and lexical variable closures, allowing for encapsulation of code.
+- **Eval-string**: Executes Perl code dynamically, supporting basic expressions and statements.
+- **Statements, Data Types, and Call Context**: Handles common Perl statements (e.g., `if`, `foreach`), data types (e.g., scalars, arrays, hashes), and maintains Perl’s context sensitivity (e.g., scalar vs list context).
+
+Additionally, it supports the Java Scripting API (JSR 223), enabling Perl scripts to be executed within Java applications using the `ScriptEngine` interface. Note that while this provides integration with Java, there may be limitations compared to native Perl execution.
+
+However, some areas present challenges:
+
+- **CPAN Modules and XS Code**: Compiling CPAN modules and XS (C-extensions) is challenging due to dependencies on native code and system libraries. Support for these features is limited and require additional development.
+
+For the most up-to-date information on features and limitations, please refer to the [FEATURE_MATRIX](FEATURE_MATRIX.md) file.
 
 ## Build
 
