@@ -29,12 +29,6 @@
 
 ## Runtime Format Error Messages and Warnings
 - catch and reformat errors like division by zero
-- add annotations to the bytecode (Line Numbers)
-```java
-Label thisLabel = new Label();
-ctx.mv.visitLabel(thisLabel);
-ctx.mv.visitLineNumber(10, thisLabel); // Associate line number 10 with thisLabel
-```
 
 ## Test Different Perl Data Types
 - Experiment with `Perlito` runtime
@@ -52,8 +46,7 @@ ctx.mv.visitLineNumber(10, thisLabel); // Associate line number 10 with thisLabe
 ## Create Multiple Classes
 - Ensure GC works for these classes
 
-## `goto`, Macros - Control Structures
-- Test `FOR`, `WHILE`
+## `goto`, labels
 
 ## `eval` String
 - Optimize `ctx.symbolTable` at `eval` string if needed
