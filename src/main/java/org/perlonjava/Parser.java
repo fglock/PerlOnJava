@@ -410,6 +410,8 @@ public class Parser {
                     case "qq":
                     case "qx":
                     case "qw":
+                    case "tr":
+                    case "y":
                     case "s":
                     case "m":
                         // Handle special-quoted strings
@@ -504,16 +506,21 @@ public class Parser {
         if (operator.equals("'") || operator.equals("\"") || operator.equals("/") || operator.equals("//")) {
             tokenIndex--;   // will re-parse the quote
         }
-
         StringParser.ParsedString rawStr;
-        if (operator.equals("s")) {
-            rawStr = StringParser.parseRawStrings(tokens, tokenIndex, 3);
-        } else if (operator.equals("m") || operator.equals("/") || operator.equals("//")) {
-            rawStr = StringParser.parseRawStrings(tokens, tokenIndex, 2);
-        } else {
-            rawStr = StringParser.parseRawStrings(tokens, tokenIndex, 1);
+        int stringParts = 1;
+        switch (operator) {
+            case "s":
+            case "tr":
+            case "y":
+                stringParts = 3;    // s{str}{str}modifier
+                break;
+            case "m":
+            case "/":
+            case "//":
+                stringParts = 2;    // m{str}modifier
+                break;
         }
-
+        rawStr = StringParser.parseRawStrings(tokens, tokenIndex, stringParts);
         tokenIndex = rawStr.next;
 
         switch (operator) {
