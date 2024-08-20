@@ -439,7 +439,7 @@ public class Parser {
                         return parseFractionalNumber();
                     case "'":
                         // Handle single-quoted strings
-                        return parseSingleQuotedString();
+                        return parseRawString(token.text);
                     case "\"":
                         // Handle double-quoted strings
                         return parseDoubleQuotedString();
@@ -499,8 +499,18 @@ public class Parser {
 
     private Node parseRawString(String operator) {
         // WIP - handle special quotes for operators: q qq qx qw
+        if (operator.equals("'") || operator.equals("\"")) {
+            tokenIndex--;   // will re-parse the quote
+        }
         StringParser.ParsedString rawStr = StringParser.parseRawStringWithDelimiter(tokens, tokenIndex, false);
         tokenIndex = rawStr.next;
+
+        switch (operator) {
+            case "'":
+            case "q":
+                return parseSingleQuotedString(rawStr.buffer, rawStr.startDelim, rawStr.endDelim, rawStr.index);
+        }
+
         return new UnaryOperatorNode(operator, new StringNode(rawStr.buffer, rawStr.index), rawStr.index);
     }
 
@@ -613,23 +623,32 @@ public class Parser {
         }
     }
 
-    private Node parseSingleQuotedString() {
-        StringBuilder str = new StringBuilder();
-        while (!peek().text.equals("'")) {
-            String text = consume().text;
-            if (text.equals("\\")) {
-                // Handle escaped characters
-                text = consume().text;
-                if (text.equals("\\") || text.equals("'")) {
-                    str.append(text);
-                } else {
-                    str.append("\\").append(text);
+    private Node parseSingleQuotedString(String input, char startDelim, char endDelim, int tokenIndex) {
+        StringBuilder str = new StringBuilder();  // Buffer to hold the parsed string
+        char[] chars = input.toCharArray();  // Convert the input string to a character array
+        int length = chars.length;  // Length of the character array
+        int index = 0;  // Current position in the character array
+
+        // Loop through the character array until the end
+        while (index < length) {
+            char ch = chars[index];  // Get the current character
+            if (ch == '\\') {
+                index++;  // Move to the next character
+                if (index < length) {
+                    char nextChar = chars[index];  // Get the next character
+                    if (nextChar == '\\' || nextChar == startDelim || nextChar == endDelim) {
+                        str.append(nextChar);  // Append the escaped character
+                    } else {
+                        str.append('\\').append(nextChar);  // Append the backslash and the next character
+                    }
                 }
             } else {
-                str.append(text);
+                str.append(ch);  // Append the current character
             }
+            index++;  // Move to the next character
         }
-        consume(LexerTokenType.OPERATOR, "'"); // Consume the closing single quote
+        
+        // Return a new StringNode with the parsed string and the token index
         return new StringNode(str.toString(), tokenIndex);
     }
 
