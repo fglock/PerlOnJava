@@ -2,6 +2,8 @@ package org.perlonjava;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
 
 /**
  * The RuntimeScalar class simulates Perl namespaces.
@@ -12,9 +14,18 @@ public class Namespace {
     private static final Map<String, RuntimeArray> globalArrays = new HashMap<>();
     private static final Map<String, RuntimeHash> globalHashes = new HashMap<>();
 
-    // Static methods
     // Cache to store previously normalized variables for faster lookup
     private static final Map<String, String> cache = new HashMap<>();
+
+    private static final Set<String> SPECIAL_VARIABLES = new HashSet<>();
+
+    static {
+        // Populate with Perl's special variables
+        SPECIAL_VARIABLES.add("ARGV");
+        SPECIAL_VARIABLES.add("ENV");
+        SPECIAL_VARIABLES.add("INC");
+        SPECIAL_VARIABLES.add("SIG");
+    }
 
     public static void initializeGlobals() {
         getGlobalVariable("$@");    // initialize $@ to "undef"
@@ -36,14 +47,17 @@ public class Namespace {
 
         char sigil = variable.charAt(0);
         String name = variable.substring(1);
-        if (!Character.isLetter(name.charAt(0))) {
+        if (!Character.isLetter(name.charAt(0)) || SPECIAL_VARIABLES.contains(name)) {
             defaultPackage = "main";    // special variables are always in main
+            if (name.length() == 2 && name.charAt(0) == '^' && name.charAt(1) >= 'A' && name.charAt(1) <= 'Z' ) {
+                // For $^A to $^Z, convert the second character to the corresponding ASCII control character.
+                // For example, $^A should become ${chr(1)}
+                char controlChar = (char) (name.charAt(1) - 64);
+                name = String.valueOf(controlChar);
+            }
         }
 
-        // Use StringBuilder for efficient string operations
         StringBuilder normalized = new StringBuilder(variable.length() + defaultPackage.length() + 2);
-
-        // Special case handling
         if (name.startsWith("::")) {
             // $::x
             normalized.append(sigil).append(defaultPackage).append(name);
