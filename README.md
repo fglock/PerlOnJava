@@ -92,7 +92,11 @@ For the most up-to-date information on features and limitations, please refer to
 │   │   └── java/
 │   │       └── org/
 │   │           └── perlonjava/
-│   │               └── Main.java
+│   │               ├── Main.java
+│   │               ├── other Java classes
+│   │               └── node/
+│   │                   ├── Node.java
+│   │                   └── other AST node classes
 │   └── test/
 │       └── java/
 │           └── org/
@@ -100,7 +104,9 @@ For the most up-to-date information on features and limitations, please refer to
 │                   └── PerlLanguageProviderTest.java
 ├── build.gradle
 ├── pom.xml
-└── settings.gradle
+├── settings.gradle
+└── misc/
+    └── project notes
 ```
 
 ### Dependencies
