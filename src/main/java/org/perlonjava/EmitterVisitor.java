@@ -8,6 +8,23 @@ import org.perlonjava.node.*;
 public class EmitterVisitor implements Visitor {
     private final EmitterContext ctx;
 
+    private static final Map<String, String> operatorHandlers = new HashMap<>();
+
+    static {
+        operatorHandlers.put("+",  "add");
+        operatorHandlers.put("-",  "subtract");
+        operatorHandlers.put("*",  "multiply");
+        operatorHandlers.put("/",  "divide");
+        operatorHandlers.put("%",  "modulus");
+        operatorHandlers.put("**", "pow");
+        operatorHandlers.put(".",  "stringConcat");
+        operatorHandlers.put("&",  "bitwiseAnd");
+        operatorHandlers.put("|",  "bitwiseOr");
+        operatorHandlers.put("^",  "bitwiseXor");
+        operatorHandlers.put("<<", "shiftLeft");
+        operatorHandlers.put(">>", "shiftRight"); 
+    }
+
     /**
      * Cache for EmitterVisitor instances with different ContextTypes
      */
@@ -136,6 +153,40 @@ public class EmitterVisitor implements Visitor {
                 return;
             case "join":
                 handleJoinOperator(operator, node);
+                return;
+            case "**=":
+            case "+=":
+            case "*=":
+            case "&=":
+            case "&.=":
+            case "<<=":
+            case "&&=":
+            case "-=":
+            case "/=":
+            case "|=":
+            case "|.=":
+            case ">>=":
+            case "||=":
+            case ".=":
+            case "%=":
+            case "^=":
+            case "^.=":
+            case "//=":
+            case "x=":
+            case "=~":
+            case "!~":
+                // compound assignment operators like `+=`
+                node.left.accept(scalarVisitor); // target - left parameter
+                ctx.mv.visitInsn(Opcodes.DUP);
+                node.right.accept(scalarVisitor); // right parameter
+                // stack: [left, left, right]
+                // perform the operation
+                String newOp = operator.substring(0, operator.length() - 1);
+                String methodStr = operatorHandlers.get(newOp);
+                ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", methodStr, "(Lorg/perlonjava/RuntimeScalar;)Lorg/perlonjava/RuntimeScalar;", false);
+                // assign to the Lvalue
+                ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", "set", "(Lorg/perlonjava/RuntimeScalar;)Lorg/perlonjava/RuntimeScalar;", false);
                 return;
         }
 
