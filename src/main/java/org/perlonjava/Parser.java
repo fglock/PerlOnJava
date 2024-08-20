@@ -410,6 +410,7 @@ public class Parser {
                     case "qq":
                     case "qx":
                     case "qw":
+                    case "s":
                         // Handle special-quoted strings
                         return parseRawString(token.text);
                     default:
@@ -500,19 +501,33 @@ public class Parser {
         if (operator.equals("'") || operator.equals("\"")) {
             tokenIndex--;   // will re-parse the quote
         }
-        StringParser.ParsedString rawStr = StringParser.parseRawStringWithDelimiter(tokens, tokenIndex, false);
+
+        StringParser.ParsedString rawStr;
+        if (operator.equals("s")) {
+            rawStr = StringParser.parseRawStrings(tokens, tokenIndex, 3);
+        } else {
+            rawStr = StringParser.parseRawStrings(tokens, tokenIndex, 1);
+        }
+
+        System.out.println(rawStr.buffers);
+
         tokenIndex = rawStr.next;
 
         switch (operator) {
             case "'":
             case "q":
-                return StringParser.parseSingleQuotedString(rawStr.buffer, rawStr.startDelim, rawStr.endDelim, rawStr.index);
+                return StringParser.parseSingleQuotedString(rawStr.buffers.get(0), rawStr.startDelim, rawStr.endDelim, rawStr.index);
             case "\"":
             case "qq":
-                return StringParser.parseDoubleQuotedString(rawStr.buffer, errorUtil, rawStr.index);
+                return StringParser.parseDoubleQuotedString(rawStr.buffers.get(0), errorUtil, rawStr.index);
         }
 
-        return new UnaryOperatorNode(operator, new StringNode(rawStr.buffer, rawStr.index), rawStr.index);
+        ListNode list = new ListNode(rawStr.index);
+        int size = rawStr.buffers.size();
+        for (int i = 0; i < size; i++) {
+            list.elements.add(new StringNode(rawStr.buffers.get(i), rawStr.index));
+        }
+        return new UnaryOperatorNode(operator, list, rawStr.index);
     }
 
     private Node parseNumber(LexerToken token) {
@@ -666,7 +681,7 @@ public class Parser {
         throw new PerlCompilerException(tokenIndex, "Unexpected infix operator: " + token, errorUtil);
     }
 
-    private void skipWhitespace() {
+    public static int skipWhitespace(int tokenIndex, List<LexerToken> tokens) {
         while (tokenIndex < tokens.size()) {
             LexerToken token = tokens.get(tokenIndex);
             if (token.type == LexerTokenType.WHITESPACE || token.type == LexerTokenType.NEWLINE) {
@@ -680,10 +695,11 @@ public class Parser {
                 break;
             }
         }
+        return tokenIndex;
     }
 
     private LexerToken peek() {
-        skipWhitespace();
+        tokenIndex = skipWhitespace(tokenIndex, tokens);
         if (tokenIndex >= tokens.size()) {
             return new LexerToken(LexerTokenType.EOF, "");
         }
@@ -691,7 +707,7 @@ public class Parser {
     }
 
     private LexerToken consume() {
-        skipWhitespace();
+        tokenIndex = skipWhitespace(tokenIndex, tokens);
         if (tokenIndex >= tokens.size()) {
             return new LexerToken(LexerTokenType.EOF, "");
         }
