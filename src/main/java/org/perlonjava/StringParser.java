@@ -1,5 +1,8 @@
 package org.perlonjava;
 
+import org.perlonjava.node.*;
+
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -105,6 +108,163 @@ public class StringParser {
         }
 
         return new ParsedString(index, tokPos, buffer.toString(), startDelim, endDelim);
+    }
+
+    static Node parseDoubleQuotedString(String input, ErrorMessageUtil errorUtil, int tokenIndex) {
+        StringBuilder str = new StringBuilder();  // Buffer to hold the parsed string
+        List<Node> parts = new ArrayList<>();  // List to hold parts of the parsed string
+        char[] chars = input.toCharArray();  // Convert the input string to a character array
+        int length = chars.length;  // Length of the character array
+        int index = 0;  // Current position in the character array
+
+        // Loop through the character array until the end
+        while (index < length) {
+            char ch = chars[index];  // Get the current character
+            if (ch == '\\') {
+                index++;  // Move to the next character
+                if (index < length) {
+                    char nextChar = chars[index];  // Get the next character
+                    switch (nextChar) {
+                        case '\\':
+                        case '"':
+                            str.append(nextChar);  // Append the escaped character
+                            break;
+                        case 'n':
+                            str.append('\n');  // Append newline
+                            break;
+                        case 't':
+                            str.append('\t');  // Append tab
+                            break;
+                        case 'r':
+                            str.append('\r');  // Append carriage return
+                            break;
+                        case 'f':
+                            str.append('\f');  // Append form feed
+                            break;
+                        case 'b':
+                            str.append('\b');  // Append backspace
+                            break;
+                        case 'x':
+                            // Handle \x{...} for Unicode
+                            StringBuilder unicodeSeq = new StringBuilder();
+                            index++;  // Move to the next character
+                            if (index < length && chars[index] == '{') {
+                                index++;  // Move to the next character
+                                while (index < length && chars[index] != '}') {
+                                    unicodeSeq.append(chars[index]);
+                                    index++;
+                                }
+                                if (index < length && chars[index] == '}') {
+                                    str.append((char) Integer.parseInt(unicodeSeq.toString(), 16));
+                                } else {
+                                    throw new PerlCompilerException(tokenIndex, "Expected '}' after \\x{", errorUtil);
+                                }
+                            } else {
+                                throw new PerlCompilerException(tokenIndex, "Expected '{' after \\x", errorUtil);
+                            }
+                            break;
+                        default:
+                            str.append('\\').append(nextChar);  // Append the backslash and the next character
+                            break;
+                    }
+                }
+            } else if (ch == '$' || ch == '@') {
+                boolean isArray = ch == '@';
+                Node operand;
+                if (str.length() > 0) {
+                    parts.add(new StringNode(str.toString(), tokenIndex));  // Add the string so far to parts
+                    str = new StringBuilder();  // Reset the buffer
+                }
+                index++;  // Move to the next character
+                if (index < length && (chars[index] == '_' || chars[index] == '@' || Character.isDigit(chars[index]))) {
+                    // Handle special variables like $@, $1, etc.
+                    StringBuilder specialVar = new StringBuilder();
+                    specialVar.append(chars[index]);
+                    index++;  // Move past the special variable character
+                    operand = new UnaryOperatorNode(String.valueOf(ch), new IdentifierNode(specialVar.toString(), tokenIndex), tokenIndex);
+                } else if (index < length && Character.isJavaIdentifierStart(chars[index])) {
+                    StringBuilder identifier = new StringBuilder();
+                    while (index < length && Character.isJavaIdentifierPart(chars[index])) {
+                        identifier.append(chars[index]);
+                        index++;
+                    }
+                    operand = new UnaryOperatorNode(String.valueOf(ch), new IdentifierNode(identifier.toString(), tokenIndex), tokenIndex);
+                } else if (index < length && chars[index] == '{') {
+                    index++;  // Move to the next character
+                    StringBuilder varName = new StringBuilder();
+                    while (index < length && Character.isJavaIdentifierPart(chars[index])) {
+                        varName.append(chars[index]);
+                        index++;
+                    }
+                    if (index < length && chars[index] == '}') {
+                        index++;  // Consume the closing '}'
+                        operand = new UnaryOperatorNode(String.valueOf(ch), new IdentifierNode(varName.toString(), tokenIndex), tokenIndex);
+                    } else {
+                        throw new PerlCompilerException(tokenIndex, "Expected '}' after variable name", errorUtil);
+                    }
+                } else {
+                    throw new PerlCompilerException(tokenIndex, "Invalid variable name after " + ch, errorUtil);
+                }
+                if (isArray) {
+                    operand = new BinaryOperatorNode("join", new UnaryOperatorNode("$", new IdentifierNode("\"", tokenIndex), tokenIndex), operand, tokenIndex);
+                }
+                parts.add(operand);
+            } else {
+                str.append(ch);  // Append the current character
+                index++;  // Move to the next character
+            }
+        }
+
+        if (str.length() > 0) {
+            parts.add(new StringNode(str.toString(), tokenIndex));  // Add the remaining string to parts
+        }
+
+        // Join the parts
+        if (parts.isEmpty()) {
+            return new StringNode("", tokenIndex);
+        } else if (parts.size() == 1) {
+            Node result = parts.get(0);
+            if (result instanceof StringNode) {
+                return parts.get(0);
+            }
+            // stringify using:  "" . $a
+            return new BinaryOperatorNode(".", new StringNode("", tokenIndex), parts.get(0), tokenIndex);
+        } else {
+            Node result = parts.get(0);
+            for (int i = 1; i < parts.size(); i++) {
+                result = new BinaryOperatorNode(".", result, parts.get(i), tokenIndex);
+            }
+            return result;
+        }
+    }
+
+    static Node parseSingleQuotedString(String input, char startDelim, char endDelim, int tokenIndex) {
+        StringBuilder str = new StringBuilder();  // Buffer to hold the parsed string
+        char[] chars = input.toCharArray();  // Convert the input string to a character array
+        int length = chars.length;  // Length of the character array
+        int index = 0;  // Current position in the character array
+
+        // Loop through the character array until the end
+        while (index < length) {
+            char ch = chars[index];  // Get the current character
+            if (ch == '\\') {
+                index++;  // Move to the next character
+                if (index < length) {
+                    char nextChar = chars[index];  // Get the next character
+                    if (nextChar == '\\' || nextChar == startDelim || nextChar == endDelim) {
+                        str.append(nextChar);  // Append the escaped character
+                    } else {
+                        str.append('\\').append(nextChar);  // Append the backslash and the next character
+                    }
+                }
+            } else {
+                str.append(ch);  // Append the current character
+            }
+            index++;  // Move to the next character
+        }
+
+        // Return a new StringNode with the parsed string and the token index
+        return new StringNode(str.toString(), tokenIndex);
     }
 
     /**
