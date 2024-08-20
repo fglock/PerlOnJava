@@ -645,6 +645,25 @@ public class Parser {
             case "%":
             case ".":
             case "=":
+            case "**=":
+            case "+=":
+            case "*=":
+            case "&=":
+            case "&.=":
+            case "<<=":
+            case "&&=":
+            case "-=":
+            case "/=":
+            case "|=":
+            case "|.=":
+            case ">>=":
+            case "||=":
+            case ".=":
+            case "%=":
+            case "^=":
+            case "^.=":
+            case "//=":
+            case "x=":
             case "=~":
             case "!~":
             case "x":
