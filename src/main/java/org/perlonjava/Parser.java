@@ -497,7 +497,7 @@ public class Parser {
 
     private Node parseRawString() {
         // WIP - handle special quotes
-        RawStringParser.ParsedString rawStr = RawStringParser.parseRawStringWithDelimiter(tokens, tokenIndex, false);
+        StringParser.ParsedString rawStr = StringParser.parseRawStringWithDelimiter(tokens, tokenIndex, false);
         tokenIndex = rawStr.next;
         return new StringNode(rawStr.buffer, rawStr.index);
     }
