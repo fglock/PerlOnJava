@@ -218,7 +218,7 @@ public class EmitterMethodCreator implements Opcodes {
       mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/ErrorMessageUtil", "stringifyException", "(Ljava/lang/Exception;)Ljava/lang/String;", false);
 
       // Set the global error variable "$@" using Namespace.setGlobalVariable(key, value)
-      mv.visitLdcInsn("$@");
+      mv.visitLdcInsn("$main::@");
       mv.visitInsn(Opcodes.SWAP);
       mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/Namespace", "setGlobalVariable", "(Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/RuntimeScalar;", false);
       mv.visitInsn(Opcodes.POP);    // throw away the RuntimeScalar result

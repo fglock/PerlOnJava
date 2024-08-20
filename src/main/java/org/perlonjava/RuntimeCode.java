@@ -75,7 +75,7 @@ public class RuntimeCode implements RuntimeScalarReference {
       // compilation error in eval-string
 
       // Set the global error variable "$@" using Namespace.setGlobalVariable(key, value)
-      Namespace.setGlobalVariable("$@", e.toString());
+      Namespace.setGlobalVariable("$main::@", e.toString());
 
       ast = new UnaryOperatorNode("undef", null, 1); // return an "undef" ast
     }
