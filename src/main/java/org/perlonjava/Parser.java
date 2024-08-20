@@ -52,6 +52,9 @@ public class Parser {
             }
             token = peek();
         }
+        if (statements.isEmpty()) {
+            statements.add(new ListNode(tokenIndex));
+        }
         return new BlockNode(statements, tokenIndex);
     }
 
