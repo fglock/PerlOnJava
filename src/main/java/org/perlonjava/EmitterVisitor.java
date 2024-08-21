@@ -505,6 +505,11 @@ public class EmitterVisitor implements Visitor {
             case "package":
                 String name = ((IdentifierNode) node.operand).name;
                 ctx.symbolTable.setCurrentPackage(name);
+                if (ctx.contextType != RuntimeContextType.VOID) {
+                    // if context is not void, return an empty list
+                    ListNode listNode = new ListNode(node.tokenIndex);
+                    listNode.accept(this);
+                }
                 return;
             case "__PACKAGE__":
                 new StringNode(ctx.symbolTable.getCurrentPackage(), node.tokenIndex).accept(this);
