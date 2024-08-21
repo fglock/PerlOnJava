@@ -1,10 +1,6 @@
 package org.perlonjava;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Iterator;
+import java.util.*;
 
 /**
  * The RuntimeArray class simulates Perl arrays.
@@ -31,10 +27,10 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
 
     // Add itself to a RuntimeArray.
     public void addToArray(RuntimeArray array) {
-      int size = this.size();
-      for (int i = 0; i < size; i++) {
-          array.push(new RuntimeScalar((RuntimeScalar) this.elements.get(i)));
-      }
+        int size = this.size();
+        for (int i = 0; i < size; i++) {
+            array.push(new RuntimeScalar((RuntimeScalar) this.elements.get(i)));
+        }
     }
 
     // Add a value to the end of the array
@@ -81,7 +77,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
 
     // Get a value at a specific index
     public RuntimeScalar get(RuntimeScalar value) {
-        int index = (int) value.getInt();
+        int index = value.getInt();
         if (index < 0) {
             index = elements.size() + index; // Handle negative indices
         }
@@ -94,16 +90,16 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
 
     // Set the whole array to a Scalar
     public RuntimeArray set(RuntimeScalar value) {
-      this.elements.clear();
-      this.elements.add(value);
-      return this;
+        this.elements.clear();
+        this.elements.add(value);
+        return this;
     }
 
     // Replace the the whole array with the elements of a list
     public RuntimeList set(RuntimeList value) {
-      this.elements.clear();
-      value.addToArray(this);
-      return new RuntimeList(this);
+        this.elements.clear();
+        value.addToArray(this);
+        return new RuntimeList(this);
     }
 
     // Set a value at a specific index
@@ -121,10 +117,10 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
 
     // Create a reference to the Array
     public RuntimeScalar createReference() {
-      RuntimeScalar result = new RuntimeScalar();
-      result.type = RuntimeScalarType.ARRAYREFERENCE;
-      result.value = this;
-      return result;
+        RuntimeScalar result = new RuntimeScalar();
+        result.type = RuntimeScalarType.ARRAYREFERENCE;
+        result.value = this;
+        return result;
     }
 
     // Get the size of the array
@@ -234,6 +230,41 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         return new RuntimeListIterator();
     }
 
+    public String toStringRef() {
+        return "ARRAY(" + this.hashCode() + ")";
+    }
+
+    public int getIntRef() {
+        return this.hashCode();
+    }
+
+    public double getDoubleRef() {
+        return this.hashCode();
+    }
+
+    public boolean getBooleanRef() {
+        return true;
+    }
+
+    public RuntimeArray undefine() {
+        this.elements.clear();
+        return this;
+    }
+
+    // Convert the array to a string (for debugging purposes)
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < elements.size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            sb.append(elements.get(i).toString());
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+
     // Inner class implementing the Iterator interface
     private class RuntimeListIterator implements Iterator<RuntimeScalar> {
         private int currentIndex = 0;
@@ -258,40 +289,5 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
             }
             elements.remove(--currentIndex);
         }
-    }
-
-    public String toStringRef() {
-      return "ARRAY(" + this.hashCode() + ")";
-    }
-
-    public int getIntRef() {
-      return this.hashCode();
-    }
-
-    public double getDoubleRef() {
-      return this.hashCode();
-    }
-
-    public boolean getBooleanRef() {
-      return true;
-    }
-
-    public RuntimeArray undefine() {
-        this.elements.clear();
-        return this;
-    }
-
-    // Convert the array to a string (for debugging purposes)
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < elements.size(); i++) {
-            if (i > 0) {
-                sb.append(", ");
-            }
-            sb.append(elements.get(i).toString());
-        }
-        sb.append("]");
-        return sb.toString();
     }
 }

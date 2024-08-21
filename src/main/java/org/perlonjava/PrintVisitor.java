@@ -65,7 +65,7 @@ public class PrintVisitor implements Visitor {
 
         appendIndent();
         sb.append(node.useNewScope ? "useNewScope\n" : "no useNewScope\n");
-        
+
         // Visit the variable part
         if (node.variable != null) {
             appendIndent();
@@ -74,7 +74,7 @@ public class PrintVisitor implements Visitor {
             node.variable.accept(this);
             indentLevel--;
         }
-        
+
         // Visit the list part
         if (node.list != null) {
             appendIndent();
@@ -83,7 +83,7 @@ public class PrintVisitor implements Visitor {
             node.list.accept(this);
             indentLevel--;
         }
-        
+
         // Visit the body of the loop
         if (node.body != null) {
             appendIndent();
@@ -92,7 +92,7 @@ public class PrintVisitor implements Visitor {
             node.body.accept(this);
             indentLevel--;
         }
-        
+
         indentLevel--;
     }
 
@@ -101,7 +101,7 @@ public class PrintVisitor implements Visitor {
         appendIndent();
         sb.append("For3Node:\n");
         indentLevel++;
-        
+
         appendIndent();
         sb.append(node.useNewScope ? "useNewScope\n" : "no useNewScope\n");
 
@@ -113,7 +113,7 @@ public class PrintVisitor implements Visitor {
             node.initialization.accept(this);
             indentLevel--;
         }
-        
+
         // Visit the condition part
         if (node.condition != null) {
             appendIndent();
@@ -122,7 +122,7 @@ public class PrintVisitor implements Visitor {
             node.condition.accept(this);
             indentLevel--;
         }
-        
+
         // Visit the increment part
         if (node.increment != null) {
             appendIndent();
@@ -131,7 +131,7 @@ public class PrintVisitor implements Visitor {
             node.increment.accept(this);
             indentLevel--;
         }
-        
+
         // Visit the body of the loop
         if (node.body != null) {
             appendIndent();
@@ -140,7 +140,7 @@ public class PrintVisitor implements Visitor {
             node.body.accept(this);
             indentLevel--;
         }
-        
+
         indentLevel--;
     }
 
@@ -152,7 +152,7 @@ public class PrintVisitor implements Visitor {
         node.condition.accept(this);
         node.thenBranch.accept(this);
         if (node.elseBranch != null) {
-          node.elseBranch.accept(this);
+            node.elseBranch.accept(this);
         }
         indentLevel--;
     }

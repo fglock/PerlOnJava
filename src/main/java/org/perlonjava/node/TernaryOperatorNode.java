@@ -6,9 +6,6 @@ import org.perlonjava.Visitor;
  * The TernaryOperatorNode class represents a node in the abstract syntax tree (AST) that holds
  * a ternary operator and its three operands: a condition, a true expression, and a false expression.
  * This class implements the Node interface, allowing it to be visited by a Visitor.
- *
- * <p>The TernaryOperatorNode class is used to encapsulate ternary operations in the AST, providing
- * a way to store and manipulate ternary operators and their operands within the tree structure.</p>
  */
 public class TernaryOperatorNode extends AbstractNode {
     /**
@@ -34,9 +31,9 @@ public class TernaryOperatorNode extends AbstractNode {
     /**
      * Constructs a new TernaryOperatorNode with the specified operator and operands.
      *
-     * @param operator the ternary operator to be stored in this node
+     * @param operator  the ternary operator to be stored in this node
      * @param condition the condition operand of the ternary operator
-     * @param trueExpr the true expression operand of the ternary operator
+     * @param trueExpr  the true expression operand of the ternary operator
      * @param falseExpr the false expression operand of the ternary operator
      */
     public TernaryOperatorNode(String operator, Node condition, Node trueExpr, Node falseExpr, int tokenIndex) {

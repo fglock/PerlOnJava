@@ -2,15 +2,13 @@ package org.perlonjava.node;
 
 import org.perlonjava.Visitor;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The ListNode class represents a node in the abstract syntax tree (AST) that holds
  * a list of other nodes. This class implements the Node interface, allowing it to be
  * visited by a Visitor.
- *
- * <p>The ListNode class is used to encapsulate a list of child nodes in the AST,
- * providing a way to represent and manipulate collections of nodes within the tree structure.</p>
  */
 public class ListNode extends AbstractNode {
     /**
@@ -47,7 +45,7 @@ public class ListNode extends AbstractNode {
         ListNode rightList = ListNode.makeList(right);
         int size = rightList.elements.size();
         for (int i = 0; i < size; i++) {
-          leftList.elements.add(rightList.elements.get(i));
+            leftList.elements.add(rightList.elements.get(i));
         }
         return leftList;
     }

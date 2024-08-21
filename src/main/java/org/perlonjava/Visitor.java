@@ -62,7 +62,9 @@ public interface Visitor {
      * @param node the ListNode to visit
      */
     void visit(ListNode node) throws Exception;
+
     void visit(HashLiteralNode node) throws Exception;
+
     void visit(ArrayLiteralNode node) throws Exception;
 
     /**
@@ -85,6 +87,7 @@ public interface Visitor {
      * @param node the ForNode to visit
      */
     void visit(For1Node node) throws Exception;
+
     void visit(For3Node node) throws Exception;
 
     /**

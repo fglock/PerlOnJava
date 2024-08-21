@@ -6,9 +6,6 @@ import org.perlonjava.Visitor;
  * The StringNode class represents a node in the abstract syntax tree (AST) that holds
  * a string value. This class implements the Node interface, allowing it to be visited
  * by a Visitor.
- *
- * <p>The StringNode class is used to encapsulate string literals in the AST, providing
- * a way to store and manipulate string values within the tree structure.</p>
  */
 public class StringNode extends AbstractNode {
     /**

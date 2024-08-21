@@ -6,9 +6,6 @@ import org.perlonjava.Visitor;
  * The AnonSubNode class represents a node in the abstract syntax tree (AST) that holds an anonymous sub.
  * The parts of the node are: "block".
  * This class implements the Node interface, allowing it to be visited by a Visitor.
- *
- * <p>The AnonSubNode class is used to encapsulate "sub" in the AST, providing
- * a way to store and manipulate "sub" and their parts within the tree structure.</p>
  */
 public class AnonSubNode extends AbstractNode {
     /**

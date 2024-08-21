@@ -5,10 +5,6 @@ import org.perlonjava.node.*;
 import java.util.*;
 
 public class Parser {
-    private final List<LexerToken> tokens;
-    private final ErrorMessageUtil errorUtil;
-    private int tokenIndex = 0;
-    private boolean parsingForLoopVariable = false;
     private static final Set<String> TERMINATORS =
             new HashSet<>(Arrays.asList(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when"));
     private static final Set<String> LISTTERMINATORS =
@@ -30,10 +26,57 @@ public class Parser {
                             "&",
                             "$#" // sigils
                     ));
+    private final List<LexerToken> tokens;
+    private final ErrorMessageUtil errorUtil;
+    private int tokenIndex = 0;
+    private boolean parsingForLoopVariable = false;
 
     public Parser(ErrorMessageUtil errorUtil, List<LexerToken> tokens) {
         this.errorUtil = errorUtil;
         this.tokens = tokens;
+    }
+
+    public static int skipWhitespace(int tokenIndex, List<LexerToken> tokens) {
+        while (tokenIndex < tokens.size()) {
+            LexerToken token = tokens.get(tokenIndex);
+            if (token.type == LexerTokenType.WHITESPACE || token.type == LexerTokenType.NEWLINE) {
+                tokenIndex++;
+            } else if (token.type == LexerTokenType.OPERATOR && token.text.equals("#")) {
+                // Skip the comment until the end of the line
+                while (tokenIndex < tokens.size() && tokens.get(tokenIndex).type != LexerTokenType.NEWLINE) {
+                    tokenIndex++;
+                }
+            } else {
+                break;
+            }
+        }
+        return tokenIndex;
+    }
+
+    public static boolean isSigil(String s) {
+        switch (s) {
+            case "$":
+            case "@":
+            case "%":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        String fileName = "example.pl";
+        String code = "my $var = 42; 1 ? 2 : 3; print \"Hello, World!\\n\";";
+        if (args.length >= 2 && args[0].equals("-e")) {
+            code = args[1]; // Read the code from the command line parameter
+            fileName = "-e";
+        }
+        Lexer lexer = new Lexer(code);
+        List<LexerToken> tokens = lexer.tokenize();
+        ErrorMessageUtil errorMessageUtil = new ErrorMessageUtil(fileName, tokens);
+        Parser parser = new Parser(errorMessageUtil, tokens);
+        Node ast = parser.parse();
+        System.out.println(ast);
     }
 
     public Node parse() {
@@ -187,7 +230,6 @@ public class Parser {
         }
         return new For3Node(true, null, condition, null, body, tokenIndex);
     }
-
 
     private Node parseForStatement() {
         consume(LexerTokenType.IDENTIFIER); // "for" "foreach"
@@ -350,7 +392,7 @@ public class Parser {
                                 default:
                                     // create `$_` variable
                                     operand = new OperatorNode(
-                                        "$", new IdentifierNode("_", tokenIndex), tokenIndex);
+                                            "$", new IdentifierNode("_", tokenIndex), tokenIndex);
                                     break;
                             }
                         }
@@ -730,23 +772,6 @@ public class Parser {
         throw new PerlCompilerException(tokenIndex, "Unexpected infix operator: " + token, errorUtil);
     }
 
-    public static int skipWhitespace(int tokenIndex, List<LexerToken> tokens) {
-        while (tokenIndex < tokens.size()) {
-            LexerToken token = tokens.get(tokenIndex);
-            if (token.type == LexerTokenType.WHITESPACE || token.type == LexerTokenType.NEWLINE) {
-                tokenIndex++;
-            } else if (token.type == LexerTokenType.OPERATOR && token.text.equals("#")) {
-                // Skip the comment until the end of the line
-                while (tokenIndex < tokens.size() && tokens.get(tokenIndex).type != LexerTokenType.NEWLINE) {
-                    tokenIndex++;
-                }
-            } else {
-                break;
-            }
-        }
-        return tokenIndex;
-    }
-
     private LexerToken peek() {
         tokenIndex = skipWhitespace(tokenIndex, tokens);
         if (tokenIndex >= tokens.size()) {
@@ -882,16 +907,7 @@ public class Parser {
         }
     }
 
-    public static boolean isSigil(String s) {
-        switch (s) {
-            case "$":
-            case "@":
-            case "%":
-                return true;
-            default:
-                return false;
-        }
-    }
+    // List parsers
 
     private boolean isRightAssociative(String s) {
         // Define right associative operators
@@ -906,8 +922,6 @@ public class Parser {
                 return false;
         }
     }
-
-    // List parsers
 
     // List parser for predeclared function calls with One optional argument,
     // accepts a list with Parentheses or without.
@@ -1002,20 +1016,5 @@ public class Parser {
         }
 
         return expr.elements;
-    }
-
-    public static void main(String[] args) throws Exception {
-        String fileName = "example.pl";
-        String code = "my $var = 42; 1 ? 2 : 3; print \"Hello, World!\\n\";";
-        if (args.length >= 2 && args[0].equals("-e")) {
-            code = args[1]; // Read the code from the command line parameter
-            fileName = "-e";
-        }
-        Lexer lexer = new Lexer(code);
-        List<LexerToken> tokens = lexer.tokenize();
-        ErrorMessageUtil errorMessageUtil = new ErrorMessageUtil(fileName, tokens);
-        Parser parser = new Parser(errorMessageUtil, tokens);
-        Node ast = parser.parse();
-        System.out.println(ast);
     }
 }
