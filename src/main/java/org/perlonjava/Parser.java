@@ -538,7 +538,6 @@ public class Parser {
      */
     private String parseComplexIdentifier() {
         tokenIndex = skipWhitespace(tokenIndex, tokens);
-        int saveIndex = tokenIndex;     // in case we need to backtrack
 
         boolean isFirstToken = true;
         StringBuilder variableName = new StringBuilder();
