@@ -88,6 +88,7 @@
 - [x] ternary operator
 - [ ] compound assignment operators (most are implemented)
 - [ ] `package` declaration (partially implemented)
+- [ ] `version` objects
 - [x] `__PACKAGE__`
 - [ ] `require` operator
 - [ ] `use` and `no` statements
