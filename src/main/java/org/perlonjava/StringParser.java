@@ -165,6 +165,7 @@ public class StringParser {
                 index++;  // Move to the next character
                 if (index < length) {
                     char nextChar = chars[index];  // Get the next character
+                    index++;  // Move to the next character
                     switch (nextChar) {
                         case '\\':
                         case '"':
@@ -188,7 +189,6 @@ public class StringParser {
                         case 'x':
                             // Handle \x{...} for Unicode
                             StringBuilder unicodeSeq = new StringBuilder();
-                            index++;  // Move to the next character
                             if (index < length && chars[index] == '{') {
                                 index++;  // Move to the next character
                                 while (index < length && chars[index] != '}') {
@@ -197,6 +197,7 @@ public class StringParser {
                                 }
                                 if (index < length && chars[index] == '}') {
                                     str.append((char) Integer.parseInt(unicodeSeq.toString(), 16));
+                                    index++;  // Move to the next character
                                 } else {
                                     throw new PerlCompilerException(tokenIndex, "Expected '}' after \\x{", errorUtil);
                                 }
