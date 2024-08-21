@@ -32,7 +32,7 @@ public class Namespace {
     public static void initializeGlobals() {
         getGlobalVariable("$main::@");    // initialize $@ to "undef"
         getGlobalVariable("$main::_");    // initialize $_ to "undef"
-        getGlobalVariable("$main::\"").set(" ");    // initialize $_ to " "
+        getGlobalVariable("$main::\"").set(" ");    // initialize $" to " "
         getGlobalArray("@main::INC");
         getGlobalHash("%main::INC");
     }
