@@ -18,26 +18,7 @@ public class ArgumentParser {
 
     public static ParsedArguments parseArguments(String[] args) {
         ParsedArguments parsedArgs = new ParsedArguments();
-        String defaultCode = 
-                ""
-                + "my $a = 15 ; \n"
-                + "my $x = $a ; \n"
-                + "say $x ; \n"
-                + "$a = 12 ; \n"
-                + "say $a ; \n"
-                + " say ( sub { say @_ } ) ; \n"    // anon sub
-                + " ( sub { say 'HERE' } )->(88888) ; \n"    // anon sub
-                + " ( sub { say \"<@_>\" } )->(88,89,90) ; \n"    // anon sub
-                + "eval ' $a = $a + 1 '; "    // eval string
-                + "say $a ; \n"
-                + "do { $a; if (1) { say 123 } elsif (3) { say 345 } else { say 456 } } ; \n"
-                + "print \"Finished; value is $a\\n\"; "
-                + "my ($i, %j) = (1,2,3,4,5); "
-                + "say(%j); "
-                + "$a = {a => 'hash-value'} ; say $a->{a}; my $b = [4,5]; say $b->[1]; "
-                + "return 5; \n";
-
-        parsedArgs.code = defaultCode;
+        parsedArgs.code = null;
 
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {

@@ -226,14 +226,14 @@ public class StringParser {
                     StringBuilder specialVar = new StringBuilder();
                     specialVar.append(chars[index]);
                     index++;  // Move past the special variable character
-                    operand = new UnaryOperatorNode(String.valueOf(ch), new IdentifierNode(specialVar.toString(), tokenIndex), tokenIndex);
+                    operand = new OperatorNode(String.valueOf(ch), new IdentifierNode(specialVar.toString(), tokenIndex), tokenIndex);
                 } else if (index < length && Character.isJavaIdentifierStart(chars[index])) {
                     StringBuilder identifier = new StringBuilder();
                     while (index < length && Character.isJavaIdentifierPart(chars[index])) {
                         identifier.append(chars[index]);
                         index++;
                     }
-                    operand = new UnaryOperatorNode(String.valueOf(ch), new IdentifierNode(identifier.toString(), tokenIndex), tokenIndex);
+                    operand = new OperatorNode(String.valueOf(ch), new IdentifierNode(identifier.toString(), tokenIndex), tokenIndex);
                 } else if (index < length && chars[index] == '{') {
                     index++;  // Move to the next character
                     StringBuilder varName = new StringBuilder();
@@ -243,7 +243,7 @@ public class StringParser {
                     }
                     if (index < length && chars[index] == '}') {
                         index++;  // Consume the closing '}'
-                        operand = new UnaryOperatorNode(String.valueOf(ch), new IdentifierNode(varName.toString(), tokenIndex), tokenIndex);
+                        operand = new OperatorNode(String.valueOf(ch), new IdentifierNode(varName.toString(), tokenIndex), tokenIndex);
                     } else {
                         throw new PerlCompilerException(tokenIndex, "Expected '}' after variable name", errorUtil);
                     }
@@ -251,7 +251,7 @@ public class StringParser {
                     throw new PerlCompilerException(tokenIndex, "Invalid variable name after " + ch, errorUtil);
                 }
                 if (isArray) {
-                    operand = new BinaryOperatorNode("join", new UnaryOperatorNode("$", new IdentifierNode("\"", tokenIndex), tokenIndex), operand, tokenIndex);
+                    operand = new BinaryOperatorNode("join", new OperatorNode("$", new IdentifierNode("\"", tokenIndex), tokenIndex), operand, tokenIndex);
                 }
                 parts.add(operand);
             } else {

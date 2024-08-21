@@ -1,7 +1,7 @@
 package org.perlonjava;
 
 import org.perlonjava.node.Node;
-import org.perlonjava.node.UnaryOperatorNode;
+import org.perlonjava.node.OperatorNode;
 
 import java.lang.reflect.Method;
 import java.util.*;
@@ -77,7 +77,7 @@ public class RuntimeCode implements RuntimeScalarReference {
       // Set the global error variable "$@" using Namespace.setGlobalVariable(key, value)
       Namespace.setGlobalVariable("$main::@", e.toString());
 
-      ast = new UnaryOperatorNode("undef", null, 1); // return an "undef" ast
+      ast = new OperatorNode("undef", null, 1); // return an "undef" ast
     }
 
     evalCtx.errorUtil = new ErrorMessageUtil(evalCtx.fileName, tokens);

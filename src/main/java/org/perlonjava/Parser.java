@@ -75,7 +75,7 @@ public class Parser {
                 case "package":
                     consume();
                     Node operand = parseZeroOrOneList(1);
-                    return new UnaryOperatorNode(token.text, ((ListNode) operand).elements.get(0), tokenIndex);
+                    return new OperatorNode(token.text, ((ListNode) operand).elements.get(0), tokenIndex);
             }
         }
         if (token.type == LexerTokenType.OPERATOR
@@ -102,7 +102,7 @@ public class Parser {
                     consume();
                     return new For1Node(
                             false,
-                            new UnaryOperatorNode("$", new IdentifierNode("_", tokenIndex), tokenIndex),  // $_
+                            new OperatorNode("$", new IdentifierNode("_", tokenIndex), tokenIndex),  // $_
                             parseExpression(0),
                             expression,
                             tokenIndex);
@@ -111,7 +111,7 @@ public class Parser {
                     consume();
                     Node condition = parseExpression(0);
                     if (token.text.equals("until")) {
-                        condition = new UnaryOperatorNode("not", condition, condition.getIndex());
+                        condition = new OperatorNode("not", condition, condition.getIndex());
                     }
                     return new For3Node(false, null, condition, null, expression, tokenIndex);
             }
@@ -183,7 +183,7 @@ public class Parser {
         consume(LexerTokenType.OPERATOR, "}");
 
         if (operator.text.equals("until")) {
-            condition = new UnaryOperatorNode("not", condition, condition.getIndex());
+            condition = new OperatorNode("not", condition, condition.getIndex());
         }
         return new For3Node(true, null, condition, null, body, tokenIndex);
     }
@@ -218,7 +218,7 @@ public class Parser {
                 consume(LexerTokenType.OPERATOR, "}");
 
                 if (varNode == null) {
-                    varNode = new UnaryOperatorNode(
+                    varNode = new OperatorNode(
                             "$", new IdentifierNode("_", tokenIndex), tokenIndex);  // $_
                 }
                 return new For1Node(true, varNode, initialization, body, tokenIndex);
@@ -328,11 +328,11 @@ public class Parser {
                 switch (token.text) {
                     case "__PACKAGE__":
                         // this takes no parameters
-                        return new UnaryOperatorNode(token.text, null, tokenIndex);
+                        return new OperatorNode(token.text, null, tokenIndex);
                     case "not":
                         // Handle 'not' keyword as a unary operator with an operand
                         operand = parseExpression(getPrecedence(token.text) + 1);
-                        return new UnaryOperatorNode("not", operand, tokenIndex);
+                        return new OperatorNode("not", operand, tokenIndex);
                     case "abs":
                     case "log":
                     case "rand":
@@ -349,12 +349,12 @@ public class Parser {
                                     break;
                                 default:
                                     // create `$_` variable
-                                    operand = new UnaryOperatorNode(
+                                    operand = new OperatorNode(
                                         "$", new IdentifierNode("_", tokenIndex), tokenIndex);
                                     break;
                             }
                         }
-                        return new UnaryOperatorNode(text, operand, tokenIndex);
+                        return new OperatorNode(text, operand, tokenIndex);
                     case "join":
                         // Handle 'join' keyword as a Binary operator with a RuntimeList operand
                         operand = parseZeroOrMoreList(1);
@@ -364,21 +364,21 @@ public class Parser {
                     case "say":
                         // Handle 'say' keyword as a unary operator with a RuntimeList operand
                         operand = parseZeroOrMoreList(0);
-                        return new UnaryOperatorNode(token.text, operand, tokenIndex);
+                        return new OperatorNode(token.text, operand, tokenIndex);
                     case "values":
                     case "keys":
                         operand = parseZeroOrOneList(1);
-                        return new UnaryOperatorNode(token.text, ((ListNode) operand).elements.get(0), tokenIndex);
+                        return new OperatorNode(token.text, ((ListNode) operand).elements.get(0), tokenIndex);
                     case "our":
                     case "my":
                         // Handle 'my' keyword as a unary operator with an operand
                         operand = parsePrimary();
-                        return new UnaryOperatorNode(token.text, operand, tokenIndex);
+                        return new OperatorNode(token.text, operand, tokenIndex);
                     case "return":
                         // Handle 'return' keyword as a unary operator with an operand;
                         // Parenthensis are ignored.
                         operand = parseExpression(getPrecedence("print") + 1);
-                        return new UnaryOperatorNode("return", operand, tokenIndex);
+                        return new OperatorNode("return", operand, tokenIndex);
                     case "eval":
                         // Handle 'eval' keyword which can be followed by a block or an expression
                         token = peek();
@@ -402,7 +402,7 @@ public class Parser {
                             // Otherwise, parse a primary expression
                             operand = parsePrimary();
                         }
-                        return new UnaryOperatorNode("eval", operand, tokenIndex);
+                        return new OperatorNode("eval", operand, tokenIndex);
                     case "do":
                         // Handle 'do' keyword which can be followed by a block
                         token = peek();
@@ -489,13 +489,13 @@ public class Parser {
                                     }
 
                                     // create a Variable
-                                    return new UnaryOperatorNode(
+                                    return new OperatorNode(
                                             text, new IdentifierNode(nextToken.text, tokenIndex), tokenIndex);
                                 }
                             }
 
                             operand = parseExpression(getPrecedence(text) + 1);
-                            return new UnaryOperatorNode(text, operand, tokenIndex);
+                            return new OperatorNode(text, operand, tokenIndex);
                         }
                         break;
                 }
@@ -557,7 +557,7 @@ public class Parser {
         for (int i = 0; i < size; i++) {
             list.elements.add(new StringNode(rawStr.buffers.get(i), rawStr.index));
         }
-        return new UnaryOperatorNode(operator, list, rawStr.index);
+        return new OperatorNode(operator, list, rawStr.index);
     }
 
     private Node parseNumber(LexerToken token) {
@@ -725,7 +725,7 @@ public class Parser {
                 return new BinaryOperatorNode(token.text, left, right, tokenIndex);
             case "--":
             case "++":
-                return new UnaryOperatorNode(token.text + "postfix", left, tokenIndex);
+                return new OperatorNode(token.text + "postfix", left, tokenIndex);
         }
         throw new PerlCompilerException(tokenIndex, "Unexpected infix operator: " + token, errorUtil);
     }

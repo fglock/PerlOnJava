@@ -102,11 +102,11 @@ public interface Visitor {
     void visit(TernaryOperatorNode node) throws Exception;
 
     /**
-     * Visit a UnaryOperatorNode.
+     * Visit a OperatorNode.
      *
-     * @param node the UnaryOperatorNode to visit
+     * @param node the OperatorNode to visit
      */
-    void visit(UnaryOperatorNode node) throws Exception;
+    void visit(OperatorNode node) throws Exception;
 
     /**
      * Visit a AnonSubNode.
