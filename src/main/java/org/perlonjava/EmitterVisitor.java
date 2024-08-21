@@ -604,7 +604,7 @@ public class EmitterVisitor implements Visitor {
 
     private void fetchGlobalVariable(boolean createIfNotExists, String sigil, String varName, int tokenIndex) {
 
-        String var = Namespace.normalizeVariableName(varName, "main"); // XXX TODO set package
+        String var = Namespace.normalizeVariableName(varName, ctx.symbolTable.getCurrentPackage());
 
         if (sigil.equals("$") && (createIfNotExists || Namespace.existsGlobalVariable(var))) {
             // fetch a global variable
