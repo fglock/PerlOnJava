@@ -8,10 +8,13 @@ import java.util.List;
 import java.util.Map;
 
 /*
- * Perl has a complex quoting mechanism for strings, which we can't fully implement in the Lexer.
+ * StringParser is used to parse domain-specific languages within Perl, such as Regex and string interpolation.
+ *
+ * Perl has a complex quoting mechanism for strings, which cannot be fully implemented in the Lexer
+ * due to insufficient context.
  * This module reprocesses the tokens according to the current context to extract the quoted string.
+ * The string is then passed on to the respective domain-specific compilers.
  */
-
 public class StringParser {
 
     // States for the finite state machine (FSM)
