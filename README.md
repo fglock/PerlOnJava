@@ -166,6 +166,9 @@ For the most up-to-date information on features and limitations, please refer to
 - **Lexer**: Used to split the code into symbols like space, identifier, operator.
 - **Parser**: Picks up the symbols and organizes them into an Abstract Syntax Tree (AST) of objects like block, subroutine.
 
+### StringParser
+- StringParser is used to parse domain-specific languages within Perl, such as Regex and string interpolation.
+
 ### ClassWriter
 - **ClassWriter**: Used to generate the bytecode for the class.
 - The user code is translated into a method.
