@@ -290,20 +290,20 @@ public class EmitterVisitor implements Visitor {
 
     /*
       BinaryOperatorNode: [
-        UnaryOperatorNode: $
+        OperatorNode: $
           IdentifierNode: a
         ArrayLiteralNode:
           NumberNode: 10
     */
 
-        if (node.left instanceof UnaryOperatorNode) { // $ @ %
-            UnaryOperatorNode sigilNode = (UnaryOperatorNode) node.left;
+        if (node.left instanceof OperatorNode) { // $ @ %
+            OperatorNode sigilNode = (OperatorNode) node.left;
             String sigil = sigilNode.operator;
             if (sigil.equals("$")) {
                 if (sigilNode.operand instanceof IdentifierNode) { // $a
                     IdentifierNode identifierNode = (IdentifierNode) sigilNode.operand;
                     // Rewrite the variable node from `$` to `@`
-                    UnaryOperatorNode varNode = new UnaryOperatorNode("@", identifierNode, sigilNode.tokenIndex);
+                    OperatorNode varNode = new OperatorNode("@", identifierNode, sigilNode.tokenIndex);
 
                     ctx.logDebug("visit(BinaryOperatorNode) $var[] ");
                     varNode.accept(this.with(RuntimeContextType.LIST)); // target - left parameter
@@ -348,20 +348,20 @@ public class EmitterVisitor implements Visitor {
 
     /*
       BinaryOperatorNode: {
-        UnaryOperatorNode: $
+        OperatorNode: $
           IdentifierNode: a
         ArrayLiteralNode:
           NumberNode: 10
     */
 
-        if (node.left instanceof UnaryOperatorNode) { // $ @ %
-            UnaryOperatorNode sigilNode = (UnaryOperatorNode) node.left;
+        if (node.left instanceof OperatorNode) { // $ @ %
+            OperatorNode sigilNode = (OperatorNode) node.left;
             String sigil = sigilNode.operator;
             if (sigil.equals("$")) {
                 if (sigilNode.operand instanceof IdentifierNode) { // $a
                     IdentifierNode identifierNode = (IdentifierNode) sigilNode.operand;
                     // Rewrite the variable node from `$` to `%`
-                    UnaryOperatorNode varNode = new UnaryOperatorNode("%", identifierNode, sigilNode.tokenIndex);
+                    OperatorNode varNode = new OperatorNode("%", identifierNode, sigilNode.tokenIndex);
 
                     ctx.logDebug("visit(BinaryOperatorNode) $var{} ");
                     varNode.accept(this.with(RuntimeContextType.LIST)); // target - left parameter
@@ -478,7 +478,7 @@ public class EmitterVisitor implements Visitor {
      *
      * @param operator The name of the built-in method to call.
      */
-    private void handleUnaryBuiltin(UnaryOperatorNode node, String operator) throws Exception {
+    private void handleUnaryBuiltin(OperatorNode node, String operator) throws Exception {
         if (node.operand == null) {
             // Unary operator with optional arguments, called without arguments
             // example: undef()
@@ -497,9 +497,9 @@ public class EmitterVisitor implements Visitor {
     }
 
     @Override
-    public void visit(UnaryOperatorNode node) throws Exception {
+    public void visit(OperatorNode node) throws Exception {
         String operator = node.operator;
-        ctx.logDebug("visit(UnaryOperatorNode) " + operator + " in context " + ctx.contextType);
+        ctx.logDebug("visit(OperatorNode) " + operator + " in context " + ctx.contextType);
 
         switch (operator) {
             case "package":
@@ -576,7 +576,7 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleKeysOperator(UnaryOperatorNode node, String operator) throws Exception {
+    private void handleKeysOperator(OperatorNode node, String operator) throws Exception {
         node.operand.accept(this.with(RuntimeContextType.LIST));
         ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/RuntimeDataProvider", operator, "()Lorg/perlonjava/RuntimeArray;", true);
         if (ctx.contextType == RuntimeContextType.LIST) {
@@ -588,7 +588,7 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleSayOperator(UnaryOperatorNode node, String operator) throws Exception {
+    private void handleSayOperator(OperatorNode node, String operator) throws Exception {
         // TODO print FILE 123
         node.operand.accept(this.with(RuntimeContextType.LIST));
         // Transform the value in the stack to List
@@ -600,7 +600,7 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleUnaryPlusOperator(UnaryOperatorNode node) throws Exception {
+    private void handleUnaryPlusOperator(OperatorNode node) throws Exception {
         node.operand.accept(this.with(RuntimeContextType.SCALAR));
         if (ctx.contextType == RuntimeContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.POP);
@@ -650,7 +650,7 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleVariableOperator(UnaryOperatorNode node, String operator) throws Exception {
+    private void handleVariableOperator(OperatorNode node, String operator) throws Exception {
         if (ctx.contextType == RuntimeContextType.VOID) {
             return;
         }
@@ -723,26 +723,26 @@ public class EmitterVisitor implements Visitor {
         ctx.logDebug("SET end");
     }
 
-    private void handleMyOperator(UnaryOperatorNode node, String operator) throws Exception {
+    private void handleMyOperator(OperatorNode node, String operator) throws Exception {
         if (node.operand instanceof ListNode) { // my ($a, $b)  our ($a, $b)
             // process each item of the list; then returns the list
             ListNode listNode = (ListNode) node.operand;
             for (Node element : listNode.elements) {
-                if (element instanceof UnaryOperatorNode && "undef".equals(((UnaryOperatorNode) element).operator)) {
+                if (element instanceof OperatorNode && "undef".equals(((OperatorNode) element).operator)) {
                     continue; // skip "undef"
                 }
-                UnaryOperatorNode myNode = new UnaryOperatorNode(operator, element, listNode.tokenIndex);
+                OperatorNode myNode = new OperatorNode(operator, element, listNode.tokenIndex);
                 myNode.accept(this.with(RuntimeContextType.VOID));
             }
             if (ctx.contextType != RuntimeContextType.VOID) {
                 listNode.accept(this);
             }
             return;
-        } else if (node.operand instanceof UnaryOperatorNode) { //  [my our] followed by [$ @ %]
+        } else if (node.operand instanceof OperatorNode) { //  [my our] followed by [$ @ %]
             Node sigilNode = node.operand;
-            String sigil = ((UnaryOperatorNode) sigilNode).operator;
+            String sigil = ((OperatorNode) sigilNode).operator;
             if (Parser.isSigil(sigil)) {
-                Node identifierNode = ((UnaryOperatorNode) sigilNode).operand;
+                Node identifierNode = ((OperatorNode) sigilNode).operand;
                 if (identifierNode instanceof IdentifierNode) { // my $a
                     String var = sigil + ((IdentifierNode) identifierNode).name;
                     ctx.logDebug("MY " + operator + " " + var);
@@ -792,13 +792,13 @@ public class EmitterVisitor implements Visitor {
                 node.tokenIndex, "Not implemented: " + node.operator, ctx.errorUtil);
     }
 
-    private void handleReturnOperator(UnaryOperatorNode node) throws Exception {
+    private void handleReturnOperator(OperatorNode node) throws Exception {
         node.operand.accept(this.with(RuntimeContextType.RUNTIME));
         ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.returnLabel);
         // TODO return (1,2), 3
     }
 
-    private void handleEvalOperator(UnaryOperatorNode node) throws Exception {
+    private void handleEvalOperator(OperatorNode node) throws Exception {
         // eval string
 
         // TODO - this can be cached and reused at runtime for performance
