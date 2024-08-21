@@ -506,6 +506,9 @@ public class EmitterVisitor implements Visitor {
                 String name = ((IdentifierNode) node.operand).name;
                 ctx.symbolTable.setCurrentPackage(name);
                 return;
+            case "__PACKAGE__":
+                new StringNode(ctx.symbolTable.getCurrentPackage(), node.tokenIndex).accept(this);
+                return;
             case "$":
             case "@":
             case "%":

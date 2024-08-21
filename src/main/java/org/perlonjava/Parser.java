@@ -326,6 +326,9 @@ public class Parser {
                     return new StringNode(token.text, tokenIndex);
                 }
                 switch (token.text) {
+                    case "__PACKAGE__":
+                        // this takes no parameters
+                        return new UnaryOperatorNode(token.text, null, tokenIndex);
                     case "not":
                         // Handle 'not' keyword as a unary operator with an operand
                         operand = parseExpression(getPrecedence(token.text) + 1);
