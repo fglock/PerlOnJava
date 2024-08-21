@@ -3,13 +3,13 @@ package org.perlonjava;
 import java.util.*;
 
 /**
- * A scoped symbol table that supports nested scopes for variable declarations.
+ * A scoped symbol table that supports nested scopes for variable and package declarations.
  */
 class ScopedSymbolTable {
     // A stack to manage nested scopes of symbol tables.
     // SymbolTable is an inner class.
     private final Stack<SymbolTable> stack = new Stack<>();
-    
+    private final Stack<String> packageStack = new Stack<>();
     /**
      * Constructs a ScopedSymbolTable.
      */
@@ -21,13 +21,16 @@ class ScopedSymbolTable {
      */
     public void enterScope() {
         int lastIndex = 0;
+        String packageName = "main";
         // If there are existing scopes, get the last index from the current scope
         if (!stack.isEmpty()) {
             lastIndex = stack.peek().index;
+            packageName = packageStack.peek();
         }
         // Push a new SymbolTable onto the stack and set its index
         stack.push(new SymbolTable());
         stack.peek().index = lastIndex;
+        packageStack.push(packageName);
     }
 
     /**
@@ -35,6 +38,7 @@ class ScopedSymbolTable {
      */
     public void exitScope() {
         stack.pop();
+        packageStack.pop();
     }
 
     /**
@@ -114,6 +118,27 @@ class ScopedSymbolTable {
     }
 
     /**
+     * Gets the current package scope.
+     *
+     * @return The name of the current package, or null if no package is in scope.
+     */
+    public String getCurrentPackage() {
+        return packageStack.isEmpty() ? "main" : packageStack.peek();
+    }
+
+    /**
+     * Sets the current package scope.
+     *
+     * @param packageName The name of the package to set as the current scope.
+     */
+    public void setCurrentPackage(String packageName) {
+        if (!packageStack.isEmpty()) {
+            packageStack.pop();
+        }
+        packageStack.push(packageName);
+    }
+
+    /**
      * clones the symbol table to be used at runtime - this is used by eval-string
      */
     public ScopedSymbolTable clone() {
@@ -123,6 +148,7 @@ class ScopedSymbolTable {
         for (Integer index : visibleVariables.keySet()) {
             st.addVariable(visibleVariables.get(index));
         }
+        st.setCurrentPackage(this.getCurrentPackage());
         return st;
     }
 
