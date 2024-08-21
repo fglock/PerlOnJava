@@ -502,40 +502,20 @@ public class Parser {
                     default:
                         // Handle unary operators
                         if (UNARY_OP.contains(token.text)) {
-
                             String text = token.text;
-                            int saveIndex = tokenIndex;
-
-                            nextToken = peek(); // operator or identifier
-                            if (isSigil(text)
-                                    && (nextToken.type == LexerTokenType.OPERATOR
-                                    || nextToken.type == LexerTokenType.IDENTIFIER
-                                    || nextToken.type == LexerTokenType.NUMBER)) {
-                                // Handle normal variables and special variables like $@
-
-                                consume(); // operator or identifier
-
-                                // handle the special case for $$a
-                                if (nextToken.text.equals("$")
-                                        && (peek().text.equals("$")
-                                        || peek().type == LexerTokenType.IDENTIFIER
-                                        || peek().type == LexerTokenType.NUMBER)) {
-                                    // wrong guess: this is not a special variable
-                                    tokenIndex = saveIndex; // backtrack
-                                } else {
-
+                            if (isSigil(text)) {
+                                String varName = parseComplexIdentifier();
+                                if (varName != null) {
                                     // some characters are illegal after a variable
                                     if (peek().text.equals("(") && !parsingForLoopVariable) {
                                         // not parsing "for my $v (..."
                                         throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
                                     }
-
                                     // create a Variable
                                     return new OperatorNode(
-                                            text, new IdentifierNode(nextToken.text, tokenIndex), tokenIndex);
+                                            text, new IdentifierNode(varName, tokenIndex), tokenIndex);
                                 }
                             }
-
                             operand = parseExpression(getPrecedence(text) + 1);
                             return new OperatorNode(text, operand, tokenIndex);
                         }
@@ -551,6 +531,50 @@ public class Parser {
         }
         // Throw an exception if no valid case was found
         throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, errorUtil);
+    }
+
+    /*
+     * returns null if there is no valid identifier
+     */
+    private String parseComplexIdentifier() {
+        boolean isFirstToken = true;
+        int saveIndex = tokenIndex;     // in case we need to backtrack
+        LexerToken token = consume(); // skip whitespace; then consume the initial token
+        LexerToken nextToken = tokens.get(tokenIndex);  // peek next token without skipping whitespace
+        StringBuilder variableName = new StringBuilder(token.text);
+
+        while (true) {
+            if (token.type == LexerTokenType.OPERATOR || token.type == LexerTokenType.NUMBER || token.type == LexerTokenType.STRING) {
+                if (token.text.equals("$") && (nextToken.text.equals("$")
+                        || nextToken.type == LexerTokenType.IDENTIFIER
+                        || nextToken.type == LexerTokenType.NUMBER)) {
+                    // `@$` `$$` can't be followed by `$` or name or number
+                    tokenIndex = saveIndex; // backtrack
+                    return null;
+                }
+                if (token.text.equals("^") && nextToken.type == LexerTokenType.IDENTIFIER && Character.isUpperCase(nextToken.text.charAt(0))) {
+                    // `$^` can be followed by an optional uppercase identifier: `$^A`
+                    variableName.append(nextToken.text);
+                    tokenIndex++;
+                    return variableName.toString();
+                }
+                if (isFirstToken && token.type == LexerTokenType.NUMBER) {
+                    // $1 can't be followed by `::`
+                    return variableName.toString();
+                }
+                if (!token.text.equals("::") && !(token.type == LexerTokenType.NUMBER)) {
+                    // `::` or number can continue the loop
+                    // XXX STRING token type needs more work (Unicode, control characters)
+                    return variableName.toString();
+                }
+            } else if (nextToken.type == LexerTokenType.WHITESPACE || nextToken.type == LexerTokenType.EOF || nextToken.type == LexerTokenType.NEWLINE) {
+                return variableName.toString();
+            }
+            variableName.append(nextToken.text);
+            isFirstToken = false;
+            token = nextToken;
+            nextToken = tokens.get(++tokenIndex);  // consume next token without skipping whitespace
+        }
     }
 
     private Node parseRawString(String operator) {
