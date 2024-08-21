@@ -2,15 +2,12 @@ package org.perlonjava.node;
 
 import org.perlonjava.Visitor;
 
-import java.util.*;
+import java.util.List;
 
 /**
  * The BlockNode class represents a node in the abstract syntax tree (AST) that holds
  * a list of other nodes. This class implements the Node interface, allowing it to be
  * visited by a Visitor.
- *
- * <p>The BlockNode class is used to encapsulate a list of child nodes in the AST,
- * providing a way to represent and manipulate collections of nodes within the tree structure.</p>
  */
 public class BlockNode extends AbstractNode {
     /**
@@ -21,8 +18,7 @@ public class BlockNode extends AbstractNode {
     /**
      * Constructs a new BlockNode with the specified list of child nodes.
      *
-     * @param useNewScope this loop creates a new variable scope
-     * @param elements the list of child nodes to be stored in this BlockNode
+     * @param elements   the list of child nodes to be stored in this BlockNode
      * @param tokenIndex the index of the token in the source code
      */
     public BlockNode(List<Node> elements, int tokenIndex) {

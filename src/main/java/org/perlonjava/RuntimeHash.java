@@ -1,8 +1,8 @@
 package org.perlonjava;
 
 import java.util.HashMap;
-import java.util.Map;
 import java.util.Iterator;
+import java.util.Map;
 
 /**
  * The RuntimeHash class simulates Perl hashes.
@@ -19,6 +19,32 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         this.elements = new HashMap<>();
     }
 
+    // Create hash reference with the elements of a list
+    public static RuntimeScalar createHashRef(RuntimeList value) {
+        RuntimeArray arr = new RuntimeArray();
+        value.addToArray(arr);
+        if (arr.size() % 2 != 0) {  // add an undef if the array size is odd
+            arr.push(new RuntimeScalar());
+        }
+        RuntimeScalar result = new RuntimeScalar();
+        result.type = RuntimeScalarType.HASHREFERENCE;
+        result.value = fromArray(arr);
+        return result;
+    }
+
+    // Convert a RuntimeArray to a RuntimeHash
+    public static RuntimeHash fromArray(RuntimeArray array) {
+        RuntimeHash hash = new RuntimeHash();
+        for (int i = 0; i < array.size(); i += 2) {
+            if (i + 1 < array.size()) {
+                String key = array.get(i).toString();
+                RuntimeScalar value = array.get(i + 1);
+                hash.put(key, value);
+            }
+        }
+        return hash;
+    }
+
     // Add itself to a RuntimeArray.
     public void addToArray(RuntimeArray array) {
         for (Map.Entry<String, RuntimeScalar> entry : elements.entrySet()) {
@@ -29,27 +55,14 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
 
     // Replace the whole hash with the elements of a list
     public RuntimeList set(RuntimeList value) {
-      RuntimeArray arr = new RuntimeArray();  
-      value.addToArray(arr);
-      if (arr.size() % 2 != 0) {  // add an undef if the array size is odd
-        arr.push(new RuntimeScalar());
-      }
-      RuntimeHash hash = fromArray(arr);
-      this.elements = hash.elements;
-      return new RuntimeList(this);
-    }
-
-    // Create hash reference with the elements of a list
-    public static RuntimeScalar createHashRef(RuntimeList value) {
-      RuntimeArray arr = new RuntimeArray();  
-      value.addToArray(arr);
-      if (arr.size() % 2 != 0) {  // add an undef if the array size is odd
-        arr.push(new RuntimeScalar());
-      }
-      RuntimeScalar result = new RuntimeScalar();
-      result.type = RuntimeScalarType.HASHREFERENCE;
-      result.value = fromArray(arr);
-      return result;
+        RuntimeArray arr = new RuntimeArray();
+        value.addToArray(arr);
+        if (arr.size() % 2 != 0) {  // add an undef if the array size is odd
+            arr.push(new RuntimeScalar());
+        }
+        RuntimeHash hash = fromArray(arr);
+        this.elements = hash.elements;
+        return new RuntimeList(this);
     }
 
     // Add a key-value pair to the hash
@@ -81,10 +94,10 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
 
     // Create a reference to the Hash
     public RuntimeScalar createReference() {
-      RuntimeScalar result = new RuntimeScalar();
-      result.type = RuntimeScalarType.HASHREFERENCE;
-      result.value = this;
-      return result;
+        RuntimeScalar result = new RuntimeScalar();
+        result.type = RuntimeScalarType.HASHREFERENCE;
+        result.value = this;
+        return result;
     }
 
     // Get the size of the hash
@@ -117,22 +130,9 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         return array;
     }
 
-    // Convert a RuntimeArray to a RuntimeHash
-    public static RuntimeHash fromArray(RuntimeArray array) {
-        RuntimeHash hash = new RuntimeHash();
-        for (int i = 0; i < array.size(); i += 2) {
-            if (i + 1 < array.size()) {
-                String key = array.get(i).toString();
-                RuntimeScalar value = array.get(i + 1);
-                hash.put(key, value);
-            }
-        }
-        return hash;
-    }
-
     // Get the array value of the Scalar
     public RuntimeArray getArray() {
-      return this.entryArray();
+        return this.entryArray();
     }
 
     // Get the list value of the hash
@@ -147,20 +147,20 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
 
     // keys() operator
     public RuntimeArray keys() {
-            RuntimeArray list = new RuntimeArray();
-            for (String key : elements.keySet()) {
-                list.push(new RuntimeScalar(key));
-            }
-            return list;
+        RuntimeArray list = new RuntimeArray();
+        for (String key : elements.keySet()) {
+            list.push(new RuntimeScalar(key));
+        }
+        return list;
     }
 
     // values() operator
     public RuntimeArray values() {
-            RuntimeArray list = new RuntimeArray();
-            for (RuntimeScalar value : elements.values()) {
-                list.push(new RuntimeScalar(value));
-            }
-            return list;
+        RuntimeArray list = new RuntimeArray();
+        for (RuntimeScalar value : elements.values()) {
+            list.push(new RuntimeScalar(value));
+        }
+        return list;
     }
 
     // Method to return an iterator
@@ -168,9 +168,55 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         return new RuntimeHashIterator();
     }
 
+    // Convert the hash to a string (for debugging purposes)
+    public String dump() {
+        StringBuilder sb = new StringBuilder("{");
+        boolean first = true;
+        for (Map.Entry<String, RuntimeScalar> entry : elements.entrySet()) {
+            if (!first) {
+                sb.append(", ");
+            }
+            first = false;
+            sb.append(entry.getKey()).append(": ").append(entry.getValue().toString());
+        }
+        sb.append("}");
+        return sb.toString();
+    }
+
+    public String toStringRef() {
+        return "HASH(" + this.hashCode() + ")";
+    }
+
+    public int getIntRef() {
+        return this.hashCode();
+    }
+
+    public double getDoubleRef() {
+        return this.hashCode();
+    }
+
+    public boolean getBooleanRef() {
+        return true;
+    }
+
+    public RuntimeHash undefine() {
+        this.elements.clear();
+        return this;
+    }
+
+    // Convert the hash to a string (for debugging purposes)
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, RuntimeScalar> entry : elements.entrySet()) {
+            sb.append(entry.getKey()).append(entry.getValue());
+        }
+        return sb.toString();
+    }
+
     // Inner class implementing the Iterator interface
     private class RuntimeHashIterator implements Iterator<RuntimeScalar> {
-        private Iterator<Map.Entry<String, RuntimeScalar>> entryIterator;
+        private final Iterator<Map.Entry<String, RuntimeScalar>> entryIterator;
         private Map.Entry<String, RuntimeScalar> currentEntry;
         private boolean returnKey;
 
@@ -200,51 +246,5 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         public void remove() {
             throw new UnsupportedOperationException("Remove not supported");
         }
-    }
-
-    // Convert the hash to a string (for debugging purposes)
-    public String dump() {
-        StringBuilder sb = new StringBuilder("{");
-        boolean first = true;
-        for (Map.Entry<String, RuntimeScalar> entry : elements.entrySet()) {
-            if (!first) {
-                sb.append(", ");
-            }
-            first = false;
-            sb.append(entry.getKey()).append(": ").append(entry.getValue().toString());
-        }
-        sb.append("}");
-        return sb.toString();
-    }
-
-    public String toStringRef() {
-      return "HASH(" + this.hashCode() + ")";
-    }
-
-    public int getIntRef() {
-      return this.hashCode();
-    }
-
-    public double getDoubleRef() {
-      return this.hashCode();
-    }
-
-    public boolean getBooleanRef() {
-      return true;
-    }
-
-    public RuntimeHash undefine() {
-        this.elements.clear();
-        return this;
-    }
-
-    // Convert the hash to a string (for debugging purposes)
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder();
-        for (Map.Entry<String, RuntimeScalar> entry : elements.entrySet()) {
-            sb.append(entry.getKey()).append(entry.getValue());
-        }
-        return sb.toString();
     }
 }

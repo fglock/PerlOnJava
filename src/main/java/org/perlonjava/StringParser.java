@@ -37,8 +37,8 @@ public class StringParser {
      * Parses a raw string with delimiters from a list of tokens.
      *
      * @param tokens List of lexer tokens.
-     * @param index Starting index in the tokens list.
-     * @param redo Flag to indicate if the parsing should be redone; example:  s/.../.../
+     * @param index  Starting index in the tokens list.
+     * @param redo   Flag to indicate if the parsing should be redone; example:  s/.../.../
      * @return ParsedString object containing the parsed string and updated token index.
      */
     public static ParsedString parseRawStringWithDelimiter(List<LexerToken> tokens, int index, boolean redo) {
@@ -223,10 +223,9 @@ public class StringParser {
                 index++;  // Move to the next character
                 if (index < length && (chars[index] == '_' || chars[index] == '@' || Character.isDigit(chars[index]))) {
                     // Handle special variables like $@, $1, etc.
-                    StringBuilder specialVar = new StringBuilder();
-                    specialVar.append(chars[index]);
+                    String specialVar = String.valueOf(chars[index]);
                     index++;  // Move past the special variable character
-                    operand = new OperatorNode(String.valueOf(ch), new IdentifierNode(specialVar.toString(), tokenIndex), tokenIndex);
+                    operand = new OperatorNode(String.valueOf(ch), new IdentifierNode(specialVar, tokenIndex), tokenIndex);
                 } else if (index < length && Character.isJavaIdentifierStart(chars[index])) {
                     StringBuilder identifier = new StringBuilder();
                     while (index < length && Character.isJavaIdentifierPart(chars[index])) {

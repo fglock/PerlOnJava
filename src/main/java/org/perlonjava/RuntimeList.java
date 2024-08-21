@@ -1,12 +1,11 @@
 package org.perlonjava;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Iterator;
+import java.util.List;
 
 /**
  * The RuntimeList class simulates a Perl list.
- *
  */
 public class RuntimeList implements RuntimeDataProvider {
     public List<RuntimeBaseEntity> elements;
@@ -33,35 +32,44 @@ public class RuntimeList implements RuntimeDataProvider {
         this.elements = value.entryArray().elements;
     }
 
+    // Method to generate a list of RuntimeScalar objects
+    public static RuntimeList generateList(int start, int end) {
+        RuntimeList list = new RuntimeList();
+        for (int i = start; i <= end; i++) {
+            list.add(new RuntimeScalar(i));
+        }
+        return list;
+    }
+
     // Add itself to a RuntimeList.
     public void addToList(RuntimeList list) {
-      int size = this.size();
-      for (int i = 0; i < size; i++) {
-        list.add(this.elements.get(i));
-      }
-      this.elements.clear();    // consume the list
+        int size = this.size();
+        for (int i = 0; i < size; i++) {
+            list.add(this.elements.get(i));
+        }
+        this.elements.clear();    // consume the list
     }
 
     // Add itself to a RuntimeArray.
     public void addToArray(RuntimeArray array) {
-      int size = this.size();
-      for (int i = 0; i < size; i++) {
-        this.elements.get(i).addToArray(array);
-      }
-      this.elements.clear();    // consume the list
+        int size = this.size();
+        for (int i = 0; i < size; i++) {
+            this.elements.get(i).addToArray(array);
+        }
+        this.elements.clear();    // consume the list
     }
 
     // Add an element to the list
     public void add(RuntimeBaseEntity value) {
-      this.elements.add(value);
+        this.elements.add(value);
     }
 
     // When adding a List into a List they are merged
     public void add(RuntimeList value) {
-      int size = value.size();
-      for (int i = 0; i < size; i++) {
-          this.elements.add(value.elements.get(i));
-      }
+        int size = value.size();
+        for (int i = 0; i < size; i++) {
+            this.elements.add(value.elements.get(i));
+        }
     }
 
     // Get the size of the list
@@ -71,7 +79,7 @@ public class RuntimeList implements RuntimeDataProvider {
 
     // Get the array value of the List
     public RuntimeArray getArray() {
-      return new RuntimeArray(this);
+        return new RuntimeArray(this);
     }
 
     // Get the list value of the list
@@ -101,7 +109,7 @@ public class RuntimeList implements RuntimeDataProvider {
     // Set the items in the list to the values in another list
     public RuntimeList set(RuntimeList value) {
         // flatten the right side
-        RuntimeArray arr = new RuntimeArray();  
+        RuntimeArray arr = new RuntimeArray();
         value.addToArray(arr);
         for (RuntimeBaseEntity elem : elements) {
             if (elem instanceof RuntimeScalar) {
@@ -116,15 +124,6 @@ public class RuntimeList implements RuntimeDataProvider {
             }
         }
         return new RuntimeList(value);
-    }
-
-    // Method to generate a list of RuntimeScalar objects
-    public static RuntimeList generateList(int start, int end) {
-        RuntimeList list = new RuntimeList();
-        for (int i = start; i <= end; i++) {
-            list.add(new RuntimeScalar(i));
-        }
-        return list;
     }
 
     // Convert the list to a string (for debugging purposes)
@@ -163,20 +162,20 @@ public class RuntimeList implements RuntimeDataProvider {
     }
 
     public RuntimeScalar print() {
-      StringBuilder sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder();
         for (RuntimeBaseEntity element : elements) {
             sb.append(element.toString());
         }
-      System.out.print(sb);
-      return new RuntimeScalar(1);
+        System.out.print(sb);
+        return new RuntimeScalar(1);
     }
 
     public RuntimeScalar say() {
-      StringBuilder sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder();
         for (RuntimeBaseEntity element : elements) {
             sb.append(element.toString());
         }
-      System.out.println(sb);
-      return new RuntimeScalar(1);
+        System.out.println(sb);
+        return new RuntimeScalar(1);
     }
 }

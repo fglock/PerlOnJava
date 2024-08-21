@@ -6,9 +6,6 @@ import org.perlonjava.Visitor;
  * The BinaryOperatorNode class represents a node in the abstract syntax tree (AST) that holds
  * a binary operator and its two operands. This class implements the Node interface, allowing it to be
  * visited by a Visitor.
- *
- * <p>The BinaryOperatorNode class is used to encapsulate binary operations in the AST, providing
- * a way to store and manipulate binary operators and their operands within the tree structure.</p>
  */
 public class BinaryOperatorNode extends AbstractNode {
     /**
@@ -30,8 +27,8 @@ public class BinaryOperatorNode extends AbstractNode {
      * Constructs a new BinaryOperatorNode with the specified operator and operands.
      *
      * @param operator the binary operator to be stored in this node
-     * @param left the left operand of the binary operator
-     * @param right the right operand of the binary operator
+     * @param left     the left operand of the binary operator
+     * @param right    the right operand of the binary operator
      */
     public BinaryOperatorNode(String operator, Node left, Node right, int tokenIndex) {
         this.operator = operator;

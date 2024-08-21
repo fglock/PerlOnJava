@@ -6,9 +6,6 @@ import org.perlonjava.Visitor;
  * The IfNode class represents a node in the abstract syntax tree (AST) that holds an "if" statement.
  * The parts of the statement are: "condition", "thenBranch" and "elseBranch".
  * This class implements the Node interface, allowing it to be visited by a Visitor.
- *
- * <p>The IfNode class is used to encapsulate "if" in the AST, providing
- * a way to store and manipulate "if" and their parts within the tree structure.</p>
  */
 public class IfNode extends AbstractNode {
     /**
@@ -35,8 +32,8 @@ public class IfNode extends AbstractNode {
     /**
      * Constructs a new IfNode with the specified operator and operands.
      *
-     * @param operator "if", "unless", "elsif"
-     * @param condition the condition operand of the if statement
+     * @param operator   "if", "unless", "elsif"
+     * @param condition  the condition operand of the if statement
      * @param thenBranch the true block of the if statement
      * @param elseBranch the false block of the if statement
      */

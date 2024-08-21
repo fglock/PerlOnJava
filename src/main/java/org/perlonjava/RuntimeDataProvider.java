@@ -10,7 +10,7 @@ public interface RuntimeDataProvider {
 
     /**
      * Retrieves a RuntimeArray instance.
-     * 
+     *
      * @return a RuntimeArray object.
      */
     RuntimeArray getArray();
@@ -18,35 +18,35 @@ public interface RuntimeDataProvider {
     /**
      * Retrieves a RuntimeList instance.
      * This is always called at the end of a subroutine to transform the return value to RuntimeList
-     * 
+     *
      * @return a RuntimeList object.
      */
     RuntimeList getList();
 
     /**
      * Retrieves a RuntimeScalar instance.
-     * 
+     *
      * @return a RuntimeScalar object.
      */
     RuntimeScalar getScalar();
 
     /**
      * Add itself to a RuntimeArray.
-     * 
+     *
      * @param array The RuntimeArray object
      */
     void addToArray(RuntimeArray array);
 
     /**
      * Add itself to a RuntimeList.
-     * 
+     *
      * @param list The RuntimeList object
      */
     void addToList(RuntimeList list);
 
     /**
      * Set itself to a RuntimeList.
-     * 
+     *
      * @param list The RuntimeList object
      * @return list
      */
@@ -54,14 +54,14 @@ public interface RuntimeDataProvider {
 
     /**
      * Retrives the result of keys() as a RuntimeArray instance.
-     * 
+     *
      * @return a RuntimeList object.
      */
     RuntimeArray keys();
 
     /**
      * Retrives the result of values() as a RuntimeArray instance.
-     * 
+     *
      * @return a RuntimeArray object.
      */
     RuntimeArray values();
@@ -71,6 +71,6 @@ public interface RuntimeDataProvider {
      *
      * @return a Iterator<Runtime>
      */
-    public Iterator<RuntimeScalar> iterator();
+    Iterator<RuntimeScalar> iterator();
 }
 

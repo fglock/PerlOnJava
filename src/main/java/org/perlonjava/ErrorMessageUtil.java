@@ -16,66 +16,13 @@ public class ErrorMessageUtil {
      * Constructs an ErrorMessageUtil with the specified file name and list of tokens.
      *
      * @param fileName the name of the file
-     * @param tokens the list of tokens
+     * @param tokens   the list of tokens
      */
     public ErrorMessageUtil(String fileName, List<LexerToken> tokens) {
         this.fileName = fileName;
         this.tokens = tokens;
         this.tokenIndex = -1;
         this.lastLineNumber = 1;
-    }
-
-    /**
-     * Generates an error message with context from the token list.
-     *
-     * @param index the index of the token where the error occurred
-     * @param message the error message
-     * @return the formatted error message with context
-     */
-    public String errorMessage(int index, String message) {
-        // Retrieve the line number by counting newlines up to the specified index
-        int line = getLineNumber(index);
-
-        // Retrieve the string context around the error by collecting tokens near the specified index
-        List<String> near = new ArrayList<>();
-        for (int i = Math.max(0, index - 4); i <= Math.min(tokens.size() - 1, index + 2); i++) {
-            LexerToken tok = tokens.get(i);
-            if (tok != null && tok.type != LexerTokenType.EOF) {
-                near.add(tok.text);
-            }
-        }
-
-        // Join the collected tokens into a single string
-        String nearString = String.join("", near);
-
-        // Return the formatted error message with the file name, line number, and context
-        return message + " at " + fileName + " line " + line + ", near " + errorMessageQuote(nearString) + "\n";
-    }
-
-    /**
-     * Retrieves the line number by counting newlines up to the specified index.
-     * Uses a simple cache to avoid recalculating line numbers for previously processed indexes.
-     *
-     * @param index the index of the token
-     * @return the line number
-     */
-    public int getLineNumber(int index) {
-        // Start from the last processed index and line number
-
-        if (index <= tokenIndex) {
-            return lastLineNumber;
-        }
-
-        // Count newlines from the last processed index to the current index
-        for (int i = tokenIndex + 1; i <= index; i++) {
-            if (tokens.get(i).type == LexerTokenType.NEWLINE) {
-                lastLineNumber++;
-            }
-        }
-
-        // Update the cache with the current index and line number
-        tokenIndex = index;
-        return lastLineNumber;
     }
 
     /**
@@ -141,6 +88,59 @@ public class ErrorMessageUtil {
         // Generate an error message for a specific token index
         String message = errorMessageUtil.errorMessage(4, "Syntax error");
         System.out.println(message);
+    }
+
+    /**
+     * Generates an error message with context from the token list.
+     *
+     * @param index   the index of the token where the error occurred
+     * @param message the error message
+     * @return the formatted error message with context
+     */
+    public String errorMessage(int index, String message) {
+        // Retrieve the line number by counting newlines up to the specified index
+        int line = getLineNumber(index);
+
+        // Retrieve the string context around the error by collecting tokens near the specified index
+        List<String> near = new ArrayList<>();
+        for (int i = Math.max(0, index - 4); i <= Math.min(tokens.size() - 1, index + 2); i++) {
+            LexerToken tok = tokens.get(i);
+            if (tok != null && tok.type != LexerTokenType.EOF) {
+                near.add(tok.text);
+            }
+        }
+
+        // Join the collected tokens into a single string
+        String nearString = String.join("", near);
+
+        // Return the formatted error message with the file name, line number, and context
+        return message + " at " + fileName + " line " + line + ", near " + errorMessageQuote(nearString) + "\n";
+    }
+
+    /**
+     * Retrieves the line number by counting newlines up to the specified index.
+     * Uses a simple cache to avoid recalculating line numbers for previously processed indexes.
+     *
+     * @param index the index of the token
+     * @return the line number
+     */
+    public int getLineNumber(int index) {
+        // Start from the last processed index and line number
+
+        if (index <= tokenIndex) {
+            return lastLineNumber;
+        }
+
+        // Count newlines from the last processed index to the current index
+        for (int i = tokenIndex + 1; i <= index; i++) {
+            if (tokens.get(i).type == LexerTokenType.NEWLINE) {
+                lastLineNumber++;
+            }
+        }
+
+        // Update the cache with the current index and line number
+        tokenIndex = index;
+        return lastLineNumber;
     }
 }
 

@@ -13,8 +13,8 @@ public class PerlCompilerException extends RuntimeException {
     /**
      * Constructs a new PerlCompilerException using the error message utility
      *
-     * @param tokenIndex the index of the token where the error occurred
-     * @param message the detail message
+     * @param tokenIndex       the index of the token where the error occurred
+     * @param message          the detail message
      * @param errorMessageUtil the utility for formatting error messages
      */
     public PerlCompilerException(int tokenIndex, String message, ErrorMessageUtil errorMessageUtil) {

@@ -1,9 +1,9 @@
 package org.perlonjava;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.HashSet;
 
 /**
  * The RuntimeScalar class simulates Perl namespaces.
@@ -51,7 +51,7 @@ public class Namespace {
         String name = variable.substring(1);
         if (!Character.isLetter(name.charAt(0)) || SPECIAL_VARIABLES.contains(name)) {
             defaultPackage = "main";    // special variables are always in main
-            if (name.length() == 2 && name.charAt(0) == '^' && name.charAt(1) >= 'A' && name.charAt(1) <= 'Z' ) {
+            if (name.length() == 2 && name.charAt(0) == '^' && name.charAt(1) >= 'A' && name.charAt(1) <= 'Z') {
                 // For $^A to $^Z, convert the second character to the corresponding ASCII control character.
                 // For example, $^A should become ${chr(1)}
                 char controlChar = (char) (name.charAt(1) - 64);

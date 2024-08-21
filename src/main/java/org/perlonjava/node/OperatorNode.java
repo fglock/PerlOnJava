@@ -6,7 +6,6 @@ import org.perlonjava.Visitor;
  * The OperatorNode class represents a node in the abstract syntax tree (AST) that holds
  * a unary or list operator and its operand. This class implements the Node interface, allowing it to be
  * visited by a Visitor.
- *
  */
 public class OperatorNode extends AbstractNode {
     /**
@@ -23,7 +22,7 @@ public class OperatorNode extends AbstractNode {
      * Constructs a new OperatorNode with the specified operator and operand.
      *
      * @param operator the unary operator to be stored in this node
-     * @param operand the operand on which the unary operator is applied; operand can be a single node or a ListNode
+     * @param operand  the operand on which the unary operator is applied; operand can be a single node or a ListNode
      */
     public OperatorNode(String operator, Node operand, int tokenIndex) {
         this.operator = operator;

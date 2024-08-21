@@ -9,8 +9,7 @@ import org.perlonjava.node.*;
  * <p>
  * Usage:
  * <p>
- *   LValueVisitor.getContext(node);
- *
+ * LValueVisitor.getContext(node);
  */
 public class LValueVisitor implements Visitor {
     private RuntimeContextType context = RuntimeContextType.VOID;
@@ -118,7 +117,5 @@ public class LValueVisitor implements Visitor {
     public void visit(HashLiteralNode node) throws Exception {
         context = RuntimeContextType.VOID;
     }
-
-    // Add other visit methods as needed
 }
 
