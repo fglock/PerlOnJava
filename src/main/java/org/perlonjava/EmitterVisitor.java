@@ -11,18 +11,42 @@ public class EmitterVisitor implements Visitor {
     private static final Map<String, String> operatorHandlers = new HashMap<>();
 
     static {
+        operatorHandlers.put("**", "pow");
         operatorHandlers.put("+",  "add");
         operatorHandlers.put("-",  "subtract");
         operatorHandlers.put("*",  "multiply");
         operatorHandlers.put("/",  "divide");
         operatorHandlers.put("%",  "modulus");
-        operatorHandlers.put("**", "pow");
         operatorHandlers.put(".",  "stringConcat");
         operatorHandlers.put("&",  "bitwiseAnd");
         operatorHandlers.put("|",  "bitwiseOr");
         operatorHandlers.put("^",  "bitwiseXor");
         operatorHandlers.put("<<", "shiftLeft");
         operatorHandlers.put(">>", "shiftRight"); 
+        operatorHandlers.put("x",  "repeat");
+        operatorHandlers.put("&.", "bitwiseStringAnd");
+        operatorHandlers.put("&&", "logicalAnd");
+        operatorHandlers.put("|",  "bitwiseOr");
+        operatorHandlers.put("|.", "bitwiseStringOr");
+        operatorHandlers.put("||", "logicalOr");
+        operatorHandlers.put("^.", "bitwiseStringXor");
+        operatorHandlers.put("//", "logicalDefinedOr");
+        operatorHandlers.put("<", "lessThan");
+        operatorHandlers.put("<=", "lessThanOrEqual");
+        operatorHandlers.put(">", "greaterThan");
+        operatorHandlers.put(">=", "greaterThanOrEqual");
+        operatorHandlers.put("==", "equalTo");
+        operatorHandlers.put("!=", "notEqualTo");
+        operatorHandlers.put("<=>", "spaceship");
+        operatorHandlers.put("eq", "eq");
+        operatorHandlers.put("ne", "ne");
+        operatorHandlers.put("lt", "lt");
+        operatorHandlers.put("le", "le");
+        operatorHandlers.put("gt", "gt");
+        operatorHandlers.put("ge", "ge");
+        operatorHandlers.put("cmp", "cmp");
+        operatorHandlers.put("=~", "bindMatch");
+        operatorHandlers.put("!~", "bindNotMatch");
     }
 
     /**
@@ -104,20 +128,6 @@ public class EmitterVisitor implements Visitor {
                 node.tokenIndex, "Not implemented: bare word " + node.name, ctx.errorUtil);
     }
 
-    /**
-     * Emits a call to a binary built-in method on the RuntimeScalar class. It assumes that the parameter to
-     * the call is already in the stack.
-     *
-     * @param operator The name of the built-in method to call.
-     */
-    private void handleBinaryBuiltin(String operator) {
-        ctx.mv.visitMethodInsn(
-                Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", operator, "(Lorg/perlonjava/RuntimeScalar;)Lorg/perlonjava/RuntimeScalar;", false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
     @Override
     public void visit(BinaryOperatorNode node) throws Exception {
         String operator = node.operator;
@@ -173,111 +183,38 @@ public class EmitterVisitor implements Visitor {
             case "^.=":
             case "//=":
             case "x=":
-            case "=~":
-            case "!~":
-                // compound assignment operators like `+=`
-                node.left.accept(scalarVisitor); // target - left parameter
-                ctx.mv.visitInsn(Opcodes.DUP);
-                node.right.accept(scalarVisitor); // right parameter
-                // stack: [left, left, right]
-                // perform the operation
                 String newOp = operator.substring(0, operator.length() - 1);
                 String methodStr = operatorHandlers.get(newOp);
-                ctx.mv.visitMethodInsn(
-                    Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", methodStr, "(Lorg/perlonjava/RuntimeScalar;)Lorg/perlonjava/RuntimeScalar;", false);
-                // assign to the Lvalue
-                ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", "set", "(Lorg/perlonjava/RuntimeScalar;)Lorg/perlonjava/RuntimeScalar;", false);
-                return;
+                if (methodStr != null) {
+                    // compound assignment operators like `+=`
+                    // XXX TODO - special lazy evaluation case for: `&&=` `||=`
+                    node.left.accept(scalarVisitor); // target - left parameter
+                    ctx.mv.visitInsn(Opcodes.DUP);
+                    node.right.accept(scalarVisitor); // right parameter
+                    // stack: [left, left, right]
+                    // perform the operation
+                    ctx.mv.visitMethodInsn(
+                        Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", methodStr, "(Lorg/perlonjava/RuntimeScalar;)Lorg/perlonjava/RuntimeScalar;", false);
+                    // assign to the Lvalue
+                    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", "set", "(Lorg/perlonjava/RuntimeScalar;)Lorg/perlonjava/RuntimeScalar;", false);
+                    return;
+                }
         }
 
-        node.left.accept(scalarVisitor); // target - left parameter
-        node.right.accept(scalarVisitor); // right parameter
-
-        switch (operator) {
-            case "+":
-                handleBinaryBuiltin("add"); // TODO optimize use: ctx.mv.visitInsn(IADD)
-                break;
-            case "-":
-                handleBinaryBuiltin("subtract");
-                break;
-            case "*":
-                handleBinaryBuiltin("multiply");
-                break;
-            case "/":
-                handleBinaryBuiltin("divide");
-                break;
-            case "%":
-                handleBinaryBuiltin("modulus");
-                break;
-            case "**":
-                handleBinaryBuiltin("pow");
-                break;
-
-            case "<":
-                handleBinaryBuiltin("lessThan");
-                break;
-            case "<=":
-                handleBinaryBuiltin("lessThanOrEqual");
-                break;
-            case ">":
-                handleBinaryBuiltin("greaterThan");
-                break;
-            case ">=":
-                handleBinaryBuiltin("greaterThanOrEqual");
-                break;
-            case "==":
-                handleBinaryBuiltin("equalTo");
-                break;
-            case "!=":
-                handleBinaryBuiltin("notEqualTo");
-                break;
-            case "<=>":
-                handleBinaryBuiltin("spaceship");
-                break;
-            case "eq":
-                handleBinaryBuiltin("eq");
-                break;
-            case "ne":
-                handleBinaryBuiltin("ne");
-                break;
-            case "lt":
-                handleBinaryBuiltin("lt");
-                break;
-            case "le":
-                handleBinaryBuiltin("le");
-                break;
-            case "gt":
-                handleBinaryBuiltin("gt");
-                break;
-            case "ge":
-                handleBinaryBuiltin("ge");
-                break;
-            case "cmp":
-                handleBinaryBuiltin("cmp");
-                break;
-
-            case ".":
-                handleBinaryBuiltin("stringConcat");
-                break;
-
-            case "&":
-                handleBinaryBuiltin("bitwiseAnd");
-                break;
-            case "|":
-                handleBinaryBuiltin("bitwiseOr");
-                break;
-            case "^":
-                handleBinaryBuiltin("bitwiseXor");
-                break;
-            case "<<":
-                handleBinaryBuiltin("shiftLeft");
-                break;
-            case ">>":
-                handleBinaryBuiltin("shiftRight");
-                break;
-            default:
-                throw new RuntimeException("Unexpected infix operator: " + operator);
+        String methodStr = operatorHandlers.get(operator);
+        if (methodStr != null) {
+            node.left.accept(scalarVisitor); // target - left parameter
+            node.right.accept(scalarVisitor); // right parameter
+            // stack: [left, right]
+            // perform the operation
+            ctx.mv.visitMethodInsn(
+                Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", methodStr, "(Lorg/perlonjava/RuntimeScalar;)Lorg/perlonjava/RuntimeScalar;", false);
+            if (ctx.contextType == RuntimeContextType.VOID) {
+                ctx.mv.visitInsn(Opcodes.POP);
+            }
+            return;
         }
+        throw new RuntimeException("Unexpected infix operator: " + operator);
     }
 
     private void handleJoinOperator(String operator, BinaryOperatorNode node) throws Exception {
