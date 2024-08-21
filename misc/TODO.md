@@ -62,4 +62,22 @@ String code = scanner.nextLine();
 scanner.close();
 ```
 
+## Implement __SUB__
 
+```
+// Step 1: Load 'this' onto the stack.
+mv.visitVarInsn(Opcodes.ALOAD, 0); // 'this' is always at index 0 in an instance method.
+
+// Step 2: Load the first argument 'a' (RuntimeArray) onto the stack.
+mv.visitVarInsn(Opcodes.ALOAD, indexOfA); // Replace indexOfA with the actual index of 'a'.
+
+// Step 3: Load the second argument 'callContext' (RuntimeContextType) onto the stack.
+mv.visitVarInsn(Opcodes.ALOAD, indexOfCallContext); // Replace indexOfCallContext with the actual index of 'callContext'.
+
+// Step 4: Invoke the 'apply' method.
+mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                   "org/perlonjava/RuntimeScalar",
+                   "apply", 
+                   "(Lorg/perlonjava/RuntimeArray;Lorg/perlonjava/RuntimeContextType;)Lorg/perlonjava/RuntimeList;", 
+                   false);
+```

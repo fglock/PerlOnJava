@@ -466,7 +466,7 @@ public class Parser {
                     case "y":
                     case "s":
                     case "m":
-                        // Handle special-quoted strings
+                        // Handle special-quoted domain-specific arguments
                         return parseRawString(token.text);
                     default:
                         // Handle any other identifier as a simple identifier node
@@ -907,14 +907,29 @@ public class Parser {
         }
     }
 
-    // List parsers
-
     private boolean isRightAssociative(String s) {
         // Define right associative operators
         switch (s) {
             case "=":
-            case "-=":
+            case "**=":
             case "+=":
+            case "*=":
+            case "&=":
+            case "&.=":
+            case "<<=":
+            case "&&=":
+            case "-=":
+            case "/=":
+            case "|=":
+            case "|.=":
+            case ">>=":
+            case "||=":
+            case ".=":
+            case "%=":
+            case "^=":
+            case "^.=":
+            case "//=":
+            case "x=":
             case "**":
             case "?":
                 return true;
@@ -922,6 +937,8 @@ public class Parser {
                 return false;
         }
     }
+
+    // List parsers
 
     // List parser for predeclared function calls with One optional argument,
     // accepts a list with Parentheses or without.
