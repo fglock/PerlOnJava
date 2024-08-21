@@ -72,6 +72,10 @@ public class Parser {
                 case "while":
                 case "until":
                     return parseWhileStatement();
+                case "package":
+                    consume();
+                    Node operand = parseZeroOrOneList(1);
+                    return new UnaryOperatorNode(token.text, ((ListNode) operand).elements.get(0), tokenIndex);
             }
         }
         if (token.type == LexerTokenType.OPERATOR

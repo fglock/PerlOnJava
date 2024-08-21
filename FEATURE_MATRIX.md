@@ -87,6 +87,7 @@
 - [x] low-precedence/high precedence operators: `not`, `or`, `and`
 - [x] ternary operator
 - [ ] compound assignment operators (most are implemented)
+- [ ] `package` (partially implemented)
 - [ ] `require` operator
 - [ ] `use` and `no` statements
 - [ ] `BEGIN` block
