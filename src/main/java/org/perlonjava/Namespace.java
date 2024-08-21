@@ -25,6 +25,8 @@ public class Namespace {
         SPECIAL_VARIABLES.add("ENV");
         SPECIAL_VARIABLES.add("INC");
         SPECIAL_VARIABLES.add("SIG");
+        SPECIAL_VARIABLES.add("STDOUT");
+        SPECIAL_VARIABLES.add("STDERR");
     }
 
     public static void initializeGlobals() {

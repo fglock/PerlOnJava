@@ -502,6 +502,10 @@ public class EmitterVisitor implements Visitor {
         ctx.logDebug("visit(UnaryOperatorNode) " + operator + " in context " + ctx.contextType);
 
         switch (operator) {
+            case "package":
+                String name = ((IdentifierNode) node.operand).name;
+                ctx.symbolTable.setCurrentPackage(name);
+                return;
             case "$":
             case "@":
             case "%":
