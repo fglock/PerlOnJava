@@ -1,32 +1,33 @@
 package org.perlonjava;
 
-import java.util.*;
-
-import org.objectweb.asm.*;
+import org.objectweb.asm.Label;
+import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.Type;
 import org.perlonjava.node.*;
 
-public class EmitterVisitor implements Visitor {
-    private final EmitterContext ctx;
+import java.util.*;
 
+public class EmitterVisitor implements Visitor {
     private static final Map<String, String> operatorHandlers = new HashMap<>();
 
     static {
         operatorHandlers.put("**", "pow");
-        operatorHandlers.put("+",  "add");
-        operatorHandlers.put("-",  "subtract");
-        operatorHandlers.put("*",  "multiply");
-        operatorHandlers.put("/",  "divide");
-        operatorHandlers.put("%",  "modulus");
-        operatorHandlers.put(".",  "stringConcat");
-        operatorHandlers.put("&",  "bitwiseAnd");
-        operatorHandlers.put("|",  "bitwiseOr");
-        operatorHandlers.put("^",  "bitwiseXor");
+        operatorHandlers.put("+", "add");
+        operatorHandlers.put("-", "subtract");
+        operatorHandlers.put("*", "multiply");
+        operatorHandlers.put("/", "divide");
+        operatorHandlers.put("%", "modulus");
+        operatorHandlers.put(".", "stringConcat");
+        operatorHandlers.put("&", "bitwiseAnd");
+        operatorHandlers.put("|", "bitwiseOr");
+        operatorHandlers.put("^", "bitwiseXor");
         operatorHandlers.put("<<", "shiftLeft");
-        operatorHandlers.put(">>", "shiftRight"); 
-        operatorHandlers.put("x",  "repeat");
+        operatorHandlers.put(">>", "shiftRight");
+        operatorHandlers.put("x", "repeat");
         operatorHandlers.put("&.", "bitwiseStringAnd");
         operatorHandlers.put("&&", "logicalAnd");
-        operatorHandlers.put("|",  "bitwiseOr");
+        operatorHandlers.put("|", "bitwiseOr");
         operatorHandlers.put("|.", "bitwiseStringOr");
         operatorHandlers.put("||", "logicalOr");
         operatorHandlers.put("^.", "bitwiseStringXor");
@@ -49,6 +50,7 @@ public class EmitterVisitor implements Visitor {
         operatorHandlers.put("!~", "bindNotMatch");
     }
 
+    private final EmitterContext ctx;
     /**
      * Cache for EmitterVisitor instances with different ContextTypes
      */
@@ -194,7 +196,7 @@ public class EmitterVisitor implements Visitor {
                     // stack: [left, left, right]
                     // perform the operation
                     ctx.mv.visitMethodInsn(
-                        Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", methodStr, "(Lorg/perlonjava/RuntimeScalar;)Lorg/perlonjava/RuntimeScalar;", false);
+                            Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", methodStr, "(Lorg/perlonjava/RuntimeScalar;)Lorg/perlonjava/RuntimeScalar;", false);
                     // assign to the Lvalue
                     ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", "set", "(Lorg/perlonjava/RuntimeScalar;)Lorg/perlonjava/RuntimeScalar;", false);
                     return;
@@ -208,7 +210,7 @@ public class EmitterVisitor implements Visitor {
             // stack: [left, right]
             // perform the operation
             ctx.mv.visitMethodInsn(
-                Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", methodStr, "(Lorg/perlonjava/RuntimeScalar;)Lorg/perlonjava/RuntimeScalar;", false);
+                    Opcodes.INVOKEVIRTUAL, "org/perlonjava/RuntimeScalar", methodStr, "(Lorg/perlonjava/RuntimeScalar;)Lorg/perlonjava/RuntimeScalar;", false);
             if (ctx.contextType == RuntimeContextType.VOID) {
                 ctx.mv.visitInsn(Opcodes.POP);
             }
@@ -438,7 +440,6 @@ public class EmitterVisitor implements Visitor {
 
             BinaryOperatorNode applyNode = new BinaryOperatorNode("(", node.left, node.right, node.tokenIndex);
             applyNode.accept(this);
-            return;
 
         } else if (node.right instanceof ArrayLiteralNode) { // ->[0]
             ctx.logDebug("visit(BinaryOperatorNode) ->[] ");

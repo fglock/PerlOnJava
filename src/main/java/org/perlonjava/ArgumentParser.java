@@ -3,19 +3,8 @@ package org.perlonjava;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.HashMap;
-import java.util.Map;
 
 public class ArgumentParser {
-    public static class ParsedArguments {
-        public boolean debugEnabled = false;
-        public boolean tokenizeOnly = false;
-        public boolean parseOnly = false;
-        public boolean compileOnly = false;
-        public String code = null;
-        public String fileName = null;
-    }
-
     public static ParsedArguments parseArguments(String[] args) {
         ParsedArguments parsedArgs = new ParsedArguments();
         parsedArgs.code = null;
@@ -85,6 +74,15 @@ public class ArgumentParser {
         System.out.println("  --parse         Parses the input code.");
         System.out.println("  -c              Compiles the input code only.");
         System.out.println("  -h, --help      Displays this help message.");
+    }
+
+    public static class ParsedArguments {
+        public boolean debugEnabled = false;
+        public boolean tokenizeOnly = false;
+        public boolean parseOnly = false;
+        public boolean compileOnly = false;
+        public String code = null;
+        public String fileName = null;
     }
 }
 

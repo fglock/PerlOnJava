@@ -6,9 +6,6 @@ import org.perlonjava.Visitor;
  * The For3Node class represents a node in the abstract syntax tree (AST) that holds a "for" loop statement.
  * The parts of the statement are: "initialization", "condition", "increment", and "body".
  * This class implements the Node interface, allowing it to be visited by a Visitor.
- *
- * <p>The For3Node class is used to encapsulate "for" loops in the AST, providing
- * a way to store and manipulate "for" loops and their parts within the tree structure.</p>
  */
 public class For3Node extends AbstractNode {
     /**
@@ -39,12 +36,12 @@ public class For3Node extends AbstractNode {
     /**
      * Constructs a new For3Node with the specified parts of the for loop.
      *
-     * @param variable the variable part of the for loop
+     * @param variable       the variable part of the for loop
      * @param initialization the initialization part of the for loop
-     * @param condition the condition part of the for loop
-     * @param increment the increment part of the for loop
-     * @param body the body of the for loop
-     * @param tokenIndex the index of the token in the source code
+     * @param condition      the condition part of the for loop
+     * @param increment      the increment part of the for loop
+     * @param body           the body of the for loop
+     * @param tokenIndex     the index of the token in the source code
      */
     public For3Node(boolean useNewScope, Node initialization, Node condition, Node increment, Node body, int tokenIndex) {
         this.useNewScope = useNewScope;

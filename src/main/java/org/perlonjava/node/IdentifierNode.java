@@ -6,9 +6,6 @@ import org.perlonjava.Visitor;
  * The IdentifierNode class represents a node in the abstract syntax tree (AST) that holds
  * an identifier name. This class implements the Node interface, allowing it to be visited
  * by a Visitor.
- *
- * <p>The IdentifierNode class is used to encapsulate identifiers in the AST, providing
- * a way to store and manipulate identifier names within the tree structure.</p>
  */
 public class IdentifierNode extends AbstractNode {
     /**

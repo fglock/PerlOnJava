@@ -1,6 +1,5 @@
 package org.perlonjava;
 
-import java.lang.Math;
 import java.util.Iterator;
 
 /**
@@ -58,12 +57,64 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar(boolean value) {
         this.type = RuntimeScalarType.INTEGER;
-        this.value = (int) (value ? 1 : 0);
+        this.value = value ? 1 : 0;
     }
 
     public RuntimeScalar(RuntimeScalar scalar) {
         this.type = scalar.type;
         this.value = scalar.value;
+    }
+
+    // Helper method to autoincrement a String variable
+    private static String _string_increment(String s) {
+        // Check if the string length is less than 2
+        if (s.length() < 2) {
+            // Get the Unicode code point of the first character
+            final int c = s.codePointAt(0);
+
+            // Check if the character is a digit from '0' to '8'
+            if ((c >= '0' && c <= '8') || (c >= 'A' && c <= 'Y') || (c >= 'a' && c <= 'y')) {
+                // If so, increment the character and return it as a new String
+                return "" + (char) (c + 1);
+            }
+
+            // Special case: if the character is '9', return "10"
+            if (c == '9') {
+                return "10";
+            }
+
+            // Special case: if the character is 'Z', return "AA"
+            if (c == 'Z') {
+                return "AA";
+            }
+
+            // Special case: if the character is 'z', return "aa"
+            if (c == 'z') {
+                return "aa";
+            }
+
+            // For any other character, return "1" as the incremented value
+            return "1";
+        }
+
+        // Recursive case: increment the last character of the string
+        String c = _string_increment(s.substring(s.length() - 1));
+
+        // Check if the result of the increment is a single character
+        if (c.length() == 1) {
+            // If the result is a single character, replace the last character of the original string
+            // Example: If input is "AAAC", incrementing last character gives "AAAD"
+            return s.substring(0, s.length() - 1) + c;
+        }
+
+        // If the result of incrementing the last character causes a carry (e.g., "AAAZ" becomes "AABA")
+        // Increment the rest of the string (all characters except the last one)
+        // and concatenate it with the last character of the incremented value
+        return _string_increment(s.substring(0, s.length() - 1)) + c.substring(c.length() - 1);
+    }
+
+    public static RuntimeScalar undef() {
+        return new RuntimeScalar();
     }
 
     // Getters
@@ -142,7 +193,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar set(int value) {
         this.type = RuntimeScalarType.INTEGER;
-        this.value = (int) value;
+        this.value = value;
         return this;
     }
 
@@ -219,7 +270,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 type = RuntimeScalarType.ARRAYREFERENCE;
                 value = new RuntimeArray();
             case ARRAYREFERENCE:
-                return ((RuntimeArray) value).get((int) index.getInt());
+                return ((RuntimeArray) value).get(index.getInt());
             default:
                 throw new IllegalStateException("Variable does not contain an array reference");
         }
@@ -242,54 +293,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     // Helper method to autoincrement a String variable
-    private static String _string_increment(String s) {
-        // Check if the string length is less than 2
-        if (s.length() < 2) {
-            // Get the Unicode code point of the first character
-            final int c = s.codePointAt(0);
-
-            // Check if the character is a digit from '0' to '8'
-            if ((c >= '0' && c <= '8') || (c >= 'A' && c <= 'Y') || (c >= 'a' && c <= 'y')) {
-                // If so, increment the character and return it as a new String
-                return "" + (char) (c + 1);
-            }
-
-            // Special case: if the character is '9', return "10"
-            if (c == '9') {
-                return "10";
-            }
-
-            // Special case: if the character is 'Z', return "AA"
-            if (c == 'Z') {
-                return "AA";
-            }
-
-            // Special case: if the character is 'z', return "aa"
-            if (c == 'z') {
-                return "aa";
-            }
-
-            // For any other character, return "1" as the incremented value
-            return "1";
-        }
-
-        // Recursive case: increment the last character of the string
-        String c = _string_increment(s.substring(s.length() - 1));
-
-        // Check if the result of the increment is a single character
-        if (c.length() == 1) {
-            // If the result is a single character, replace the last character of the original string
-            // Example: If input is "AAAC", incrementing last character gives "AAAD"
-            return s.substring(0, s.length() - 1) + c;
-        }
-
-        // If the result of incrementing the last character causes a carry (e.g., "AAAZ" becomes "AABA")
-        // Increment the rest of the string (all characters except the last one)
-        // and concatenate it with the last character of the incremented value
-        return _string_increment(s.substring(0, s.length() - 1)) + c.substring(c.length() - 1);
-    }
-
-    // Helper method to autoincrement a String variable
     private RuntimeScalar stringIncrement() {
         // Retrieve the current value as a String
         String str = (String) this.value;
@@ -297,7 +300,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         // Check if the string is empty
         if (str.isEmpty()) {
             // If empty, set the value to 1 and update type to INTEGER
-            this.value = (int) 1;
+            this.value = 1;
             this.type = RuntimeScalarType.INTEGER; // RuntimeScalarType is an enum that holds different scalar types
             return this; // Return the current instance
         }
@@ -326,6 +329,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         this.set(this.parseNumber()); // parseNumber parses the current string to a number
         return this.preAutoIncrement(); // preAutoIncrement handles the actual incrementing logic
     }
+
+    // Methods that implement Perl operators
 
     // Helper method to convert String to Integer or Double
     private RuntimeScalar parseNumber() {
@@ -406,18 +411,12 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
     }
 
-    // Methods that implement Perl operators
-
     // Return a reference to this
     public RuntimeScalar createReference() {
         RuntimeScalar result = new RuntimeScalar();
         result.type = RuntimeScalarType.REFERENCE;
         result.value = this;
         return result;
-    }
-
-    public static RuntimeScalar undef() {
-        return new RuntimeScalar();
     }
 
     public RuntimeScalar undefine() {

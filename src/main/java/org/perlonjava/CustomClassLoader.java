@@ -21,7 +21,7 @@ public class CustomClassLoader extends ClassLoader {
      * class, specifying the byte array and its length.
      *
      * @param name the expected binary name of the class
-     * @param b the byte array containing the class data
+     * @param b    the byte array containing the class data
      * @return the resulting Class object that was created from the byte array
      * @throws ClassFormatError if the data in the byte array does not represent a valid class
      */

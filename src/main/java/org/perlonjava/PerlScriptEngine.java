@@ -1,31 +1,29 @@
 package org.perlonjava;
 
 import javax.script.*;
-import java.io.IOException;
 import java.io.Reader;
 import java.io.StringWriter;
-import java.lang.invoke.*;
-import java.util.*;
+import java.lang.invoke.MethodHandles;
 
 /**
  * The PerlScriptEngine class is a custom implementation of the AbstractScriptEngine.
  * It allows the execution of Perl scripts within the Java environment using the Java Scripting API (JSR 223).
- *
+ * <p>
  * This class provides the necessary methods to evaluate Perl scripts, manage script contexts, and integrate
  * with the scripting engine framework.
- *
+ * <p>
  * Key functionalities include:
  * - Evaluating Perl scripts from strings or readers.
  * - Managing script contexts to handle variable bindings and input/output streams.
  * - Providing a factory method to obtain the associated ScriptEngineFactory.
- *
+ * <p>
  * By extending AbstractScriptEngine, PerlScriptEngine inherits basic script engine functionalities and focuses on
  * implementing the specifics of Perl script execution.
  */
 public class PerlScriptEngine extends AbstractScriptEngine {
 
-    private final ScriptEngineFactory factory;
     private static final MethodHandles.Lookup lookup = MethodHandles.lookup();
+    private final ScriptEngineFactory factory;
 
     public PerlScriptEngine(ScriptEngineFactory factory) {
         this.factory = factory;
@@ -35,12 +33,12 @@ public class PerlScriptEngine extends AbstractScriptEngine {
     public Object eval(String script, ScriptContext context) throws ScriptException {
         try {
             RuntimeList result = PerlLanguageProvider.executePerlCode(
-                script,
-                "<STDIN>",
-                false,
-                false,
-                false,
-                false
+                    script,
+                    "<STDIN>",
+                    false,
+                    false,
+                    false,
+                    false
             );
             return result != null ? result.toString() : null;
         } catch (Throwable t) {
@@ -49,7 +47,7 @@ public class PerlScriptEngine extends AbstractScriptEngine {
             throw scriptException;
         }
     }
-    
+
     @Override
     public Object eval(Reader reader, ScriptContext context) throws ScriptException {
         StringWriter writer = new StringWriter();

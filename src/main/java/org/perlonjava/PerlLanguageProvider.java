@@ -1,10 +1,6 @@
 package org.perlonjava;
 
 import org.perlonjava.node.Node;
-import org.perlonjava.RuntimeArray;
-import org.perlonjava.RuntimeContextType;
-import org.perlonjava.RuntimeList;
-import org.perlonjava.ErrorMessageUtil;
 
 import java.lang.invoke.*;
 import java.lang.reflect.Constructor;
@@ -14,18 +10,18 @@ import java.util.List;
 /**
  * The PerlLanguageProvider class is responsible for executing Perl code within the Java environment.
  * It provides methods to execute, tokenize, compile, and parse Perl code.
- *
+ * <p>
  * This class uses Java's MethodHandles and reflection to dynamically invoke methods and constructors.
  * It also integrates with the runtime classes such as RuntimeArray, RuntimeContextType, and RuntimeList
  * to manage the execution context and results.
- *
+ * <p>
  * Key functionalities include:
  * - Executing Perl code and returning the result.
  * - Enabling debugging, tokenization, compilation, and parsing modes.
  * - Handling errors and providing meaningful error messages.
- *
+ * <p>
  * Why is this class needed?
- *
+ * <p>
  * The PerlLanguageProvider class abstracts the complexity of executing Perl code within a Java environment.
  * Directly invoking Perl code execution involves intricate setup and handling of various runtime contexts,
  * error management, and integration with Java's MethodHandles and reflection APIs. By encapsulating these
@@ -39,12 +35,12 @@ public class PerlLanguageProvider {
     /**
      * Executes the given Perl code and returns the result.
      *
-     * @param code The Perl code to execute.
-     * @param fileName The source filename.
+     * @param code         The Perl code to execute.
+     * @param fileName     The source filename.
      * @param debugEnabled Flag to enable debugging.
      * @param tokenizeOnly Flag to enable tokenization only.
-     * @param compileOnly Flag to enable compilation only.
-     * @param parseOnly Flag to enable parsing only.
+     * @param compileOnly  Flag to enable compilation only.
+     * @param parseOnly    Flag to enable parsing only.
      * @return The result of the Perl code execution.
      * @throws Throwable If an error occurs during execution.
      */
@@ -82,7 +78,7 @@ public class PerlLanguageProvider {
         if (ctx.tokenizeOnly) {
             // Printing the tokens
             for (LexerToken token : tokens) {
-              System.out.println(token);
+                System.out.println(token);
             }
             return null; // success
         }
@@ -105,7 +101,7 @@ public class PerlLanguageProvider {
         ctx.errorUtil = new ErrorMessageUtil(ctx.fileName, tokens);
         Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
                 ctx,
-                new String[] {}, // Closure variables
+                new String[]{}, // Closure variables
                 ast,
                 false   // no try-catch
         );
