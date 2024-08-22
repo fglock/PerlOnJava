@@ -613,6 +613,7 @@ public class EmitterVisitor implements Visitor {
     private void fetchGlobalVariable(boolean createIfNotExists, String sigil, String varName, int tokenIndex) {
 
         String var = Namespace.normalizeVariableName(varName, ctx.symbolTable.getCurrentPackage());
+        ctx.logDebug("GETVAR lookup global " + sigil + varName + " normalized to " + var + " createIfNotExists:" + createIfNotExists);
 
         if (sigil.equals("$") && (createIfNotExists || Namespace.existsGlobalVariable(var))) {
             // fetch a global variable
@@ -646,9 +647,9 @@ public class EmitterVisitor implements Visitor {
             System.err.println(
                     ctx.errorUtil.errorMessage(tokenIndex,
                             "Warning: Global symbol \""
-                                    + varName
+                                    + sigil + varName
                                     + "\" requires explicit package name (did you forget to declare \"my "
-                                    + varName
+                                    + sigil + varName
                                     + "\"?)"));
         }
     }
@@ -659,13 +660,14 @@ public class EmitterVisitor implements Visitor {
         }
         String sigil = operator;
         if (node.operand instanceof IdentifierNode) { // $a @a %a
-            String var = sigil + ((IdentifierNode) node.operand).name;
-            ctx.logDebug("GETVAR " + var);
-            int varIndex = ctx.symbolTable.getVariableIndex(var);
+            String name = ((IdentifierNode) node.operand).name;
+            ctx.logDebug("GETVAR " + sigil + name);
+            int varIndex = ctx.symbolTable.getVariableIndex(sigil + name);
             if (varIndex == -1) {
                 // not a declared `my` or `our` variable
                 // Create and fetch a global variable
-                fetchGlobalVariable(false, sigil, var, node.getIndex());
+                boolean createIfNotExists = name.contains("::");
+                fetchGlobalVariable(createIfNotExists, sigil, name, node.getIndex());
             } else {
                 // retrieve the `my` or `our` variable from local vars
                 ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
@@ -747,8 +749,9 @@ public class EmitterVisitor implements Visitor {
             if (Parser.isSigil(sigil)) {
                 Node identifierNode = ((OperatorNode) sigilNode).operand;
                 if (identifierNode instanceof IdentifierNode) { // my $a
-                    String var = sigil + ((IdentifierNode) identifierNode).name;
-                    ctx.logDebug("MY " + operator + " " + var);
+                    String name = ((IdentifierNode) identifierNode).name;
+                    String var = sigil + name;
+                    ctx.logDebug("MY " + operator + " " + sigil + name);
                     if (ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
                         System.err.println(
                                 ctx.errorUtil.errorMessage(node.getIndex(),
@@ -776,7 +779,7 @@ public class EmitterVisitor implements Visitor {
                     } else {
                         // "our":
                         // Create and fetch a global variable
-                        fetchGlobalVariable(true, sigil, var, node.getIndex());
+                        fetchGlobalVariable(true, sigil, name, node.getIndex());
                     }
                     if (ctx.contextType != RuntimeContextType.VOID) {
                         ctx.mv.visitInsn(Opcodes.DUP);
