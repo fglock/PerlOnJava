@@ -1,6 +1,6 @@
 package org.perlonjava.astnode;
 
-import org.perlonjava.Visitor;
+import org.perlonjava.codegen.Visitor;
 
 /**
  * The Node interface represents an abstract syntax tree (AST) node.

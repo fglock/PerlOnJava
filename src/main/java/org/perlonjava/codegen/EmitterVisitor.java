@@ -1,9 +1,11 @@
-package org.perlonjava;
+package org.perlonjava.codegen;
 
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
+import org.perlonjava.runtime.Namespace;
+import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.astnode.*;
 import org.perlonjava.parser.Parser;
 import org.perlonjava.runtime.RuntimeCode;
