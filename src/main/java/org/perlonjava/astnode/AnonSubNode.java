@@ -14,7 +14,7 @@ public class AnonSubNode extends AbstractNode {
     public final String name;
 
     // Optional prototype
-    public final Node prototype;
+    public final String prototype;
 
     // Optional attributes
     public final List<String> attributes;
@@ -34,7 +34,7 @@ public class AnonSubNode extends AbstractNode {
      *
      * @param block the block of the subroutine
      */
-    public AnonSubNode(String name, Node prototype, List<String> attributes, Node block, boolean useTryCatch, int tokenIndex) {
+    public AnonSubNode(String name, String prototype, List<String> attributes, Node block, boolean useTryCatch, int tokenIndex) {
         this.name = name;
         this.prototype = prototype;
         this.attributes = attributes;
