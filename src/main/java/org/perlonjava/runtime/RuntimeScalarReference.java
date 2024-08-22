@@ -1,4 +1,4 @@
-package org.perlonjava;
+package org.perlonjava.runtime;
 
 // This interface defines the behavior for scalar references in the runtime.
 // Any class that implements this interface must provide implementations for the specified methods.

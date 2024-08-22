@@ -5,6 +5,7 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.node.Node;
+import org.perlonjava.runtime.RuntimeContextType;
 
 /**
  * EmitterMethodCreator is a utility class that uses the ASM library to dynamically generate Java
@@ -43,11 +44,11 @@ public class EmitterMethodCreator implements Opcodes {
         // Use a switch statement to determine the descriptor based on the first character
         switch (firstChar) {
             case '%':
-                return "Lorg/perlonjava/RuntimeHash;";
+                return "Lorg/perlonjava/runtime/RuntimeHash;";
             case '@':
-                return "Lorg/perlonjava/RuntimeArray;";
+                return "Lorg/perlonjava/runtime/RuntimeArray;";
             default:
-                return "Lorg/perlonjava/RuntimeScalar;";
+                return "Lorg/perlonjava/runtime/RuntimeScalar;";
         }
     }
 
@@ -70,11 +71,11 @@ public class EmitterMethodCreator implements Opcodes {
         // Use a switch statement to determine the class name based on the first character
         switch (firstChar) {
             case '%':
-                return "org/perlonjava/RuntimeHash";
+                return "org/perlonjava/runtime/RuntimeHash";
             case '@':
-                return "org/perlonjava/RuntimeArray";
+                return "org/perlonjava/runtime/RuntimeArray";
             default:
-                return "org/perlonjava/RuntimeScalar";
+                return "org/perlonjava/runtime/RuntimeScalar";
         }
     }
 
@@ -150,7 +151,7 @@ public class EmitterMethodCreator implements Opcodes {
                 cw.visitMethod(
                         Opcodes.ACC_PUBLIC,
                         "apply",
-                        "(Lorg/perlonjava/RuntimeArray;Lorg/perlonjava/RuntimeContextType;)Lorg/perlonjava/RuntimeList;",
+                        "(Lorg/perlonjava/runtime/RuntimeArray;Lorg/perlonjava/runtime/RuntimeContextType;)Lorg/perlonjava/runtime/RuntimeList;",
                         null,
                         new String[]{"java/lang/Exception"});
         mv = ctx.mv;
@@ -223,12 +224,12 @@ public class EmitterMethodCreator implements Opcodes {
             // Set the global error variable "$@" using Namespace.setGlobalVariable(key, value)
             mv.visitLdcInsn("$main::@");
             mv.visitInsn(Opcodes.SWAP);
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/Namespace", "setGlobalVariable", "(Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/RuntimeScalar;", false);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/Namespace", "setGlobalVariable", "(Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
             mv.visitInsn(Opcodes.POP);    // throw away the RuntimeScalar result
 
             // Restore the stack state to match the end of the try block if needed
             // Return "undef"
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/RuntimeScalar", "undef", "()Lorg/perlonjava/RuntimeScalar;", false);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", "undef", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
             // End of the catch block
             mv.visitLabel(endCatch);
@@ -247,7 +248,7 @@ public class EmitterMethodCreator implements Opcodes {
         }
 
         // Transform the value in the stack to RuntimeList
-        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/RuntimeDataProvider", "getList", "()Lorg/perlonjava/RuntimeList;", true);
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getList", "()Lorg/perlonjava/runtime/RuntimeList;", true);
 
         mv.visitInsn(Opcodes.ARETURN); // returns an Object
         mv.visitMaxs(0, 0); // Automatically computed

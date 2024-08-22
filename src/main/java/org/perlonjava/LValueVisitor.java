@@ -1,6 +1,7 @@
 package org.perlonjava;
 
 import org.perlonjava.node.*;
+import org.perlonjava.runtime.RuntimeContextType;
 
 /**
  * Is this Node assignable (Lvalue) and is it Scalar-like or List-like

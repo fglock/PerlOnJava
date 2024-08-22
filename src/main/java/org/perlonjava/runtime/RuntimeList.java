@@ -1,4 +1,4 @@
-package org.perlonjava;
+package org.perlonjava.runtime;
 
 import java.util.ArrayList;
 import java.util.Iterator;

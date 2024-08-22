@@ -1,5 +1,6 @@
-package org.perlonjava;
+package org.perlonjava.runtime;
 
+import org.perlonjava.*;
 import org.perlonjava.node.Node;
 import org.perlonjava.node.OperatorNode;
 
