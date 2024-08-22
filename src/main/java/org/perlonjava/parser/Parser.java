@@ -549,6 +549,24 @@ public class Parser {
     private String parseComplexIdentifier() {
         tokenIndex = skipWhitespace(tokenIndex, tokens);
 
+        boolean insideBraces = false;
+        if (tokens.get(tokenIndex).text.equals("{")) {
+            insideBraces = true;
+            tokenIndex++;
+        }
+
+        String identifier = parseComplexIdentifierInner();
+
+        if (identifier != null && insideBraces) {
+            consume(LexerTokenType.OPERATOR, "}");
+        }
+
+        return identifier;
+    }
+
+    private String parseComplexIdentifierInner() {
+        tokenIndex = skipWhitespace(tokenIndex, tokens);
+
         boolean isFirstToken = true;
         StringBuilder variableName = new StringBuilder();
 
