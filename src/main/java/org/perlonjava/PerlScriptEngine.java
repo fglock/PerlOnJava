@@ -1,5 +1,7 @@
 package org.perlonjava;
 
+import org.perlonjava.runtime.RuntimeList;
+
 import javax.script.*;
 import java.io.Reader;
 import java.io.StringWriter;

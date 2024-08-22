@@ -1,4 +1,4 @@
-package org.perlonjava;
+package org.perlonjava.runtime;
 
 // Enum to represent the type of value stored in the scalar
 public enum RuntimeScalarType {

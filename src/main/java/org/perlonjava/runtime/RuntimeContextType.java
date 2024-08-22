@@ -1,4 +1,4 @@
-package org.perlonjava;
+package org.perlonjava.runtime;
 
 /**
  * The RuntimeContextType enum defines the various types of contexts that can be encountered

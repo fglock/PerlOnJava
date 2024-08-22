@@ -5,7 +5,7 @@ import java.util.*;
 /**
  * A scoped symbol table that supports nested scopes for variable and package declarations.
  */
-class ScopedSymbolTable {
+public class ScopedSymbolTable {
     // A stack to manage nested scopes of symbol tables.
     // SymbolTable is an inner class.
     private final Stack<SymbolTable> stack = new Stack<>();
