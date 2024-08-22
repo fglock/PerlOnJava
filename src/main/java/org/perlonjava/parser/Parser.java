@@ -208,39 +208,62 @@ public class Parser {
     }
 
     private Node parseAnonSub(boolean wantName) {
-        // token == "sub"
-        // TODO - optional name, subroutine prototype
+        // This method is responsible for parsing an anonymous subroutine (a subroutine without a name)
+        // or a named subroutine based on the 'wantName' flag.
 
+        // Initialize the subroutine name to null. This will store the name of the subroutine if 'wantName' is true.
         String subName = null;
+
+        // If the 'wantName' flag is true and the next token is an identifier, we parse the subroutine name.
         if (wantName && peek().type == LexerTokenType.IDENTIFIER) {
-            subName = parseComplexIdentifier();  // maybe null
+            // 'parseComplexIdentifier' is called to handle cases where the subroutine name might be complex
+            // (e.g., namespaced, fully qualified names). It may return null if no valid name is found.
+            subName = parseComplexIdentifier();
         }
 
-        // Optional prototype
+        // Initialize the prototype node to null. This will store the prototype of the subroutine if it exists.
         Node prototype = null;
+
+        // Check if the next token is an opening parenthesis '(' indicating a prototype.
         if (peek().text.equals("(")) {
-            prototype = parseRawString("q");    // parse like q() operator
+            // If a prototype exists, we parse it using 'parseRawString' method which handles it like the 'q()' operator.
+            // This means it will take everything inside the parentheses as a literal string.
+            prototype = parseRawString("q");
         }
 
-        // Optional attributes
+        // Initialize a list to store any attributes the subroutine might have.
         List<String> attributes = new ArrayList<>();
+
+        // While there are attributes (denoted by a colon ':'), we keep parsing them.
         while (peek().text.equals(":")) {
+            // Consume the colon operator.
             consume(LexerTokenType.OPERATOR, ":");
+            // Consume the attribute name (an identifier) and add it to the attributes list.
             attributes.add(consume(LexerTokenType.IDENTIFIER).text);
         }
 
+        // After parsing name, prototype, and attributes, we expect an opening curly brace '{' to denote the start of the subroutine block.
         consume(LexerTokenType.OPERATOR, "{");
+
+        // Parse the block of the subroutine, which contains the actual code.
         Node block = parseBlock();
+
+        // After the block, we expect a closing curly brace '}' to denote the end of the subroutine.
         consume(LexerTokenType.OPERATOR, "}");
 
-        // some characters are illegal after an anon sub
+        // Now we check if the next token is one of the illegal characters that cannot follow a subroutine.
+        // These are '(', '{', and '['. If any of these follow, we throw a syntax error.
         LexerToken token = peek();
         if (token.text.equals("(") || token.text.equals("{") || token.text.equals("[")) {
+            // Throw an exception indicating a syntax error.
             throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
         }
 
+        // Finally, we return a new 'AnonSubNode' object with the parsed data: the name, prototype, attributes, block,
+        // `useTryCatch` flag, and token position.
         return new AnonSubNode(subName, prototype, attributes, block, false, tokenIndex);
     }
+
 
     private Node parseWhileStatement() {
         LexerToken operator = consume(LexerTokenType.IDENTIFIER); // "while" "until"
