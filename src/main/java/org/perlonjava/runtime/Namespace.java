@@ -128,6 +128,7 @@ public class Namespace {
         RuntimeScalar var = globalCodeRefs.get(key);
         if (var == null) {
             var = new RuntimeScalar();
+            var.type = RuntimeScalarType.GLOB;  // value is null
             globalCodeRefs.put(key, var);
         }
         return var;
