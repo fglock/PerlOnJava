@@ -1,4 +1,4 @@
-package org.perlonjava.node;
+package org.perlonjava.astnode;
 
 import org.perlonjava.PrintVisitor;
 

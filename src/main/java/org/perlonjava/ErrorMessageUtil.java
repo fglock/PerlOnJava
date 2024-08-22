@@ -1,5 +1,8 @@
 package org.perlonjava;
 
+import org.perlonjava.lexer.LexerToken;
+import org.perlonjava.lexer.LexerTokenType;
+
 import java.util.ArrayList;
 import java.util.List;
 
