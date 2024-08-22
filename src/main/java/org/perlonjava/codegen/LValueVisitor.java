@@ -60,6 +60,7 @@ public class LValueVisitor implements Visitor {
                 context = RuntimeContextType.LIST;
                 break;
             case "$":   // $a $$a
+            case "*":  // typeglob
             case "substr":
                 context = RuntimeContextType.SCALAR;
                 break;
