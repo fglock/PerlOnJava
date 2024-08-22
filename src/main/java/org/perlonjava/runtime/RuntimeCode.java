@@ -1,8 +1,14 @@
 package org.perlonjava.runtime;
 
-import org.perlonjava.*;
-import org.perlonjava.node.Node;
-import org.perlonjava.node.OperatorNode;
+import org.perlonjava.EmitterContext;
+import org.perlonjava.EmitterMethodCreator;
+import org.perlonjava.ErrorMessageUtil;
+import org.perlonjava.Namespace;
+import org.perlonjava.astnode.Node;
+import org.perlonjava.astnode.OperatorNode;
+import org.perlonjava.lexer.Lexer;
+import org.perlonjava.lexer.LexerToken;
+import org.perlonjava.parser.Parser;
 
 import java.lang.reflect.Method;
 import java.util.HashMap;

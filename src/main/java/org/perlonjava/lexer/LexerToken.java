@@ -1,4 +1,4 @@
-package org.perlonjava;
+package org.perlonjava.lexer;
 
 /**
  * The LexerToken class represents a lexical token in a programming language or text.
