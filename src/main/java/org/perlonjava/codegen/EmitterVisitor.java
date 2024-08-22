@@ -524,6 +524,7 @@ public class EmitterVisitor implements Visitor {
             case "@":
             case "%":
             case "*":
+            case "&":
                 handleVariableOperator(node, operator);
                 break;
             case "keys":
@@ -680,6 +681,19 @@ public class EmitterVisitor implements Visitor {
                         "<init>",
                         "(Ljava/lang/String;)V",
                         false); // Call new RuntimeGlob(String)
+                return;
+            }
+
+            if (sigil.equals("&")) {
+                // Code
+                String fullName = Namespace.normalizeVariableName(name, ctx.symbolTable.getCurrentPackage());
+                mv.visitLdcInsn(fullName); // emit string
+                ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/Namespace",
+                    "getGlobalCodeRef",
+                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
                 return;
             }
 
