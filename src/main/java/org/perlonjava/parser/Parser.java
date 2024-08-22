@@ -125,6 +125,10 @@ public class Parser {
                     consume();
                     Node operand = parseZeroOrOneList(1);
                     return new OperatorNode(token.text, ((ListNode) operand).elements.get(0), tokenIndex);
+                case "sub":
+                    consume();
+                    return parseAnonSub(true);
+
             }
         }
         if (token.type == LexerTokenType.OPERATOR
@@ -208,7 +212,7 @@ public class Parser {
         // TODO - optional name, subroutine prototype
 
         String subName = null;
-        if (wantName) {
+        if (wantName && peek().type == LexerTokenType.IDENTIFIER) {
             subName = parseComplexIdentifier();  // maybe null
         }
 
@@ -465,7 +469,7 @@ public class Parser {
                             return new BinaryOperatorNode("->",
 
 
-                            new AnonSubNode(null, null, null, block, true, tokenIndex),
+                                    new AnonSubNode(null, null, null, block, true, tokenIndex),
                                     new ListNode(tokenIndex), tokenIndex);
                         } else {
                             // Otherwise, parse a primary expression
