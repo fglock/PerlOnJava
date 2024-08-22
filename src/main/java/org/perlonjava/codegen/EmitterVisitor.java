@@ -701,7 +701,13 @@ public class EmitterVisitor implements Visitor {
                 node.right.accept(this.with(RuntimeContextType.SCALAR));   // emit the value
                 node.left.accept(this.with(RuntimeContextType.SCALAR));   // emit the variable
                 mv.visitInsn(Opcodes.SWAP); // move the target first
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                if (node.left instanceof OperatorNode && ((OperatorNode) node.left).operator.equals("*")) {
+                    // left side is typeglob
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeGlob", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                } else {
+                    // left side is plain scalar
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                }
                 break;
             case LIST:
                 ctx.logDebug("SET right side list");
