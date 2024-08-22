@@ -4,10 +4,10 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
-import org.perlonjava.runtime.Namespace;
-import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.astnode.*;
 import org.perlonjava.parser.Parser;
+import org.perlonjava.runtime.Namespace;
+import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeCode;
 import org.perlonjava.runtime.RuntimeContextType;
 
@@ -689,11 +689,11 @@ public class EmitterVisitor implements Visitor {
                 String fullName = Namespace.normalizeVariableName(name, ctx.symbolTable.getCurrentPackage());
                 mv.visitLdcInsn(fullName); // emit string
                 ctx.mv.visitMethodInsn(
-                    Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/Namespace",
-                    "getGlobalCodeRef",
-                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                    false);
+                        Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/Namespace",
+                        "getGlobalCodeRef",
+                        "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                        false);
                 return;
             }
 
