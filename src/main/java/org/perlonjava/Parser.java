@@ -533,8 +533,10 @@ public class Parser {
         throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, errorUtil);
     }
 
-    /*
-     * returns null if there is no valid identifier
+    /**
+     * Parses a complex Perl identifier from the list of tokens, excluding the sigil.
+     *
+     * @return The parsed identifier as a String, or null if there is no valid identifier.
      */
     private String parseComplexIdentifier() {
         tokenIndex = skipWhitespace(tokenIndex, tokens);
