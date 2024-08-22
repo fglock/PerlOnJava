@@ -162,6 +162,22 @@ public class PrintVisitor implements Visitor {
         appendIndent();
         sb.append("AnonSubNode:\n");
         indentLevel++;
+
+        appendIndent();
+        sb.append("name: " + (node.name == null ? "<anon>\n" : node.name + "\n"));
+
+        if (node.prototype != null) {
+            node.prototype.accept(this);
+        }
+
+        if (node.attributes != null) {
+            // List<String> attributes
+            for (String element : node.attributes) {
+                appendIndent();
+                sb.append(":" + element + "\n");
+            }
+        }
+
         appendIndent();
         sb.append(node.useTryCatch ? "useTryCatch\n" : "no useTryCatch\n");
         node.block.accept(this);
