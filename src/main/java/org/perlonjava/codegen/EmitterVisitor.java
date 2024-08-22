@@ -623,7 +623,7 @@ public class EmitterVisitor implements Visitor {
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
-                    "org/perlonjava/Namespace",
+                    "org/perlonjava/runtime/Namespace",
                     "getGlobalVariable",
                     "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
                     false);
@@ -632,7 +632,7 @@ public class EmitterVisitor implements Visitor {
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
-                    "org/perlonjava/Namespace",
+                    "org/perlonjava/runtime/Namespace",
                     "getGlobalArray",
                     "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeArray;",
                     false);
@@ -641,7 +641,7 @@ public class EmitterVisitor implements Visitor {
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
-                    "org/perlonjava/Namespace",
+                    "org/perlonjava/runtime/Namespace",
                     "getGlobalHash",
                     "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeHash;",
                     false);
