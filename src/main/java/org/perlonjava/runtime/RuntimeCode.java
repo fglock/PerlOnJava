@@ -1,9 +1,9 @@
 package org.perlonjava.runtime;
 
-import org.perlonjava.codegen.EmitterContext;
-import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.astnode.OperatorNode;
+import org.perlonjava.codegen.EmitterContext;
+import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.parser.Parser;
@@ -112,6 +112,13 @@ public class RuntimeCode implements RuntimeScalarReference {
 
         // Return the fully constructed RuntimeScalar object
         return r;
+    }
+
+    // Method to apply (execute) a subroutine reference
+    public RuntimeList apply(RuntimeArray a, RuntimeContextType callContext) throws Exception {
+        // Invoke the method associated with the code object, passing the RuntimeArray and RuntimeContextType as arguments
+        // This executes the subroutine and returns the result, which is expected to be a RuntimeList
+        return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
     }
 
     public String toStringRef() {
