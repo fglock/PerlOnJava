@@ -13,7 +13,7 @@ public class Namespace {
     private static final Map<String, RuntimeScalar> globalVariables = new HashMap<>();
     private static final Map<String, RuntimeArray> globalArrays = new HashMap<>();
     private static final Map<String, RuntimeHash> globalHashes = new HashMap<>();
-    private static final Map<String, RuntimeCode> globalCodeRefs = new HashMap<>();
+    private static final Map<String, RuntimeScalar> globalCodeRefs = new HashMap<>();
 
     // Cache to store previously normalized variables for faster lookup
     private static final Map<String, String> cache = new HashMap<>();
@@ -124,18 +124,13 @@ public class Namespace {
         return globalHashes.containsKey(key);
     }
 
-    public static RuntimeCode getGlobalCodeRef(String key) {
-        RuntimeCode var = globalCodeRefs.get(key);
+    public static RuntimeScalar getGlobalCodeRef(String key) {
+        RuntimeScalar var = globalCodeRefs.get(key);
         if (var == null) {
-            var = null; // RuntimeCode is not an Lvalue
+            var = new RuntimeScalar();
             globalCodeRefs.put(key, var);
         }
         return var;
-    }
-
-    public static RuntimeCode putGlobalCodeRef(String key, RuntimeCode value) {
-        globalCodeRefs.put(key, value);
-        return value;
     }
 
     public static boolean existsGlobalCodeRef(String key) {

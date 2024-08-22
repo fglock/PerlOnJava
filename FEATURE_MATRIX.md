@@ -91,6 +91,7 @@
 - [ ] `version` objects
 - [x] `__PACKAGE__`
 - [x] typeglob operations like: `*x = sub {}`
+- [x] code references like:  `&subr`
 - [ ] `require` operator
 - [ ] `use` and `no` statements
 - [ ] `BEGIN` block
