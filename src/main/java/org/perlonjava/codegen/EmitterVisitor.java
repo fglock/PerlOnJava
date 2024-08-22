@@ -523,6 +523,7 @@ public class EmitterVisitor implements Visitor {
             case "$":
             case "@":
             case "%":
+            case "*":
                 handleVariableOperator(node, operator);
                 break;
             case "keys":
@@ -661,10 +662,27 @@ public class EmitterVisitor implements Visitor {
         if (ctx.contextType == RuntimeContextType.VOID) {
             return;
         }
+        MethodVisitor mv = ctx.mv;
         String sigil = operator;
         if (node.operand instanceof IdentifierNode) { // $a @a %a
             String name = ((IdentifierNode) node.operand).name;
             ctx.logDebug("GETVAR " + sigil + name);
+
+            if (sigil.equals("*")) {
+                // typeglob
+                String fullName = Namespace.normalizeVariableName(name, ctx.symbolTable.getCurrentPackage());
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeGlob");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitLdcInsn(fullName); // emit string
+                mv.visitMethodInsn(
+                        Opcodes.INVOKESPECIAL,
+                        "org/perlonjava/runtime/RuntimeGlob",
+                        "<init>",
+                        "(Ljava/lang/String;)V",
+                        false); // Call new RuntimeGlob(String)
+                return;
+            }
+
             int varIndex = ctx.symbolTable.getVariableIndex(sigil + name);
             if (varIndex == -1) {
                 // not a declared `my` or `our` variable
@@ -673,11 +691,11 @@ public class EmitterVisitor implements Visitor {
                 fetchGlobalVariable(createIfNotExists, sigil, name, node.getIndex());
             } else {
                 // retrieve the `my` or `our` variable from local vars
-                ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
+                mv.visitVarInsn(Opcodes.ALOAD, varIndex);
             }
             if (ctx.contextType == RuntimeContextType.SCALAR && !sigil.equals("$")) {
                 // scalar context: transform the value in the stack to scalar
-                ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getScalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+                mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getScalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
             }
             ctx.logDebug("GETVAR end " + varIndex);
             return;
@@ -701,13 +719,16 @@ public class EmitterVisitor implements Visitor {
                 node.right.accept(this.with(RuntimeContextType.SCALAR));   // emit the value
                 node.left.accept(this.with(RuntimeContextType.SCALAR));   // emit the variable
                 mv.visitInsn(Opcodes.SWAP); // move the target first
+
+                String leftDescriptor = "org/perlonjava/runtime/RuntimeScalar";
                 if (node.left instanceof OperatorNode && ((OperatorNode) node.left).operator.equals("*")) {
-                    // left side is typeglob
-                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeGlob", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-                } else {
-                    // left side is plain scalar
-                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                    leftDescriptor = "org/perlonjava/runtime/RuntimeGlob";
                 }
+                String rightDescriptor = "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;";
+                if (node.right instanceof OperatorNode && ((OperatorNode) node.right).operator.equals("*")) {
+                    rightDescriptor = "(Lorg/perlonjava/runtime/RuntimeGlob;)Lorg/perlonjava/runtime/RuntimeScalar;";
+                }
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, leftDescriptor, "set", rightDescriptor, false);
                 break;
             case LIST:
                 ctx.logDebug("SET right side list");

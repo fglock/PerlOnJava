@@ -1,10 +1,12 @@
 package org.perlonjava.runtime;
 
+import java.util.Iterator;
+
 /**
  * Represents a runtime typeglob in Perl. Typeglobs are special symbols that can represent
  * all types of Perl variables (scalars, arrays, hashes, subroutines, filehandles) with the same name.
  */
-public class RuntimeGlob implements RuntimeScalarReference {
+public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarReference {
 
     public String globName;
 
@@ -63,6 +65,48 @@ public class RuntimeGlob implements RuntimeScalarReference {
      */
     public boolean getBooleanRef() {
         return true;
+    }
+
+    // Get the scalar value of the Scalar
+    public RuntimeScalar getScalar() {
+        RuntimeScalar ret = new RuntimeScalar();
+        ret.type = RuntimeScalarType.GLOB;
+        ret.value = this;
+        return ret;
+    }
+
+    // Get the array value of the typeglob
+    public RuntimeArray getArray() {
+        return new RuntimeArray(this.getScalar());
+    }
+
+    // Get the list value of the Scalar
+    public RuntimeList getList() {
+        return new RuntimeList(this.getScalar());
+    }
+
+    // Add itself to a RuntimeArray.
+    public void addToArray(RuntimeArray array) {
+        array.push(this.getScalar());
+    }
+
+    public RuntimeList set(RuntimeList value) {
+        return new RuntimeList(this.set(value.getScalar()));
+    }
+
+    // keys() operator
+    public RuntimeArray keys() {
+        throw new IllegalStateException("Type of arg 1 to values must be hash or array");
+    }
+
+    // values() operator
+    public RuntimeArray values() {
+        throw new IllegalStateException("Type of arg 1 to values must be hash or array");
+    }
+
+    // Method to return an iterator
+    public Iterator<RuntimeScalar> iterator() {
+        return this.getArray().iterator();
     }
 }
 
