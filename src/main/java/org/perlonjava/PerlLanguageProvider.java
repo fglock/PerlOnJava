@@ -1,6 +1,9 @@
 package org.perlonjava;
 
 import org.perlonjava.node.Node;
+import org.perlonjava.runtime.RuntimeArray;
+import org.perlonjava.runtime.RuntimeContextType;
+import org.perlonjava.runtime.RuntimeList;
 
 import java.lang.invoke.*;
 import java.lang.reflect.Constructor;

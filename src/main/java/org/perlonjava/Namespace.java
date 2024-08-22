@@ -1,5 +1,9 @@
 package org.perlonjava;
 
+import org.perlonjava.runtime.RuntimeArray;
+import org.perlonjava.runtime.RuntimeHash;
+import org.perlonjava.runtime.RuntimeScalar;
+
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;

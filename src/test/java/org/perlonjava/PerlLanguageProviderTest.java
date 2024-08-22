@@ -1,6 +1,7 @@
 package org.perlonjava;
 
 import org.junit.jupiter.api.Test;
+import org.perlonjava.runtime.RuntimeList;
 
 import static org.junit.jupiter.api.Assertions.*;
 

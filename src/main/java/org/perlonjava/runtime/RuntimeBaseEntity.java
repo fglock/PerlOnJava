@@ -1,4 +1,4 @@
-package org.perlonjava;
+package org.perlonjava.runtime;
 
 /**
  * The RuntimeBaseEntity class is a base class for scalar, hash, and array variables.
