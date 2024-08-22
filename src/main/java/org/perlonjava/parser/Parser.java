@@ -248,8 +248,9 @@ public class Parser {
 
         if (subName != null) {
             // register the named subroutine
-            RuntimeCode codeRef = new RuntimeCode(subName);
-            Namespace.getGlobalCodeRef(subName).set(new RuntimeScalar(codeRef));
+            String fullName = Namespace.normalizeVariableName(subName, ctx.symbolTable.getCurrentPackage());
+            RuntimeCode codeRef = new RuntimeCode(prototype);
+            Namespace.getGlobalCodeRef(fullName).set(new RuntimeScalar(codeRef));
         }
 
         // Finally, we return a new 'AnonSubNode' object with the parsed data: the name, prototype, attributes, block,
