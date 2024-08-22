@@ -51,11 +51,19 @@ public class PerlLanguageProvider {
      * @throws Throwable If an error occurs during execution.
      */
     public static RuntimeList executePerlCode(String code, String fileName, boolean debugEnabled, boolean tokenizeOnly, boolean compileOnly, boolean parseOnly) throws Throwable {
+
+        ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
+        // Enter a new scope in the symbol table and add special Perl variables
+        globalSymbolTable.enterScope();
+        globalSymbolTable.addVariable("this"); // anon sub instance is local variable 0
+        globalSymbolTable.addVariable("@_"); // Argument list is local variable 1
+        globalSymbolTable.addVariable("wantarray"); // Call context is local variable 2
+
         // Create the compiler context
         EmitterContext ctx = new EmitterContext(
                 fileName, // Source filename
                 EmitterMethodCreator.generateClassName(), // internal java class name
-                new ScopedSymbolTable(), // Top-level symbol table
+                globalSymbolTable.clone(), // Top-level symbol table
                 null, // Return label
                 null, // Method visitor
                 RuntimeContextType.VOID, // Call context
@@ -67,11 +75,6 @@ public class PerlLanguageProvider {
                 parseOnly
         );
 
-        // Enter a new scope in the symbol table and add special Perl variables
-        ctx.symbolTable.enterScope();
-        ctx.symbolTable.addVariable("this"); // anon sub instance is local variable 0
-        ctx.symbolTable.addVariable("@_"); // Argument list is local variable 1
-        ctx.symbolTable.addVariable("wantarray"); // Call context is local variable 2
 
         Namespace.initializeGlobals();
 
@@ -92,7 +95,7 @@ public class PerlLanguageProvider {
         // Create the AST
         // Create an instance of ErrorMessageUtil with the file name and token list
         ErrorMessageUtil errorUtil = new ErrorMessageUtil(ctx.fileName, tokens);
-        Parser parser = new Parser(errorUtil, tokens); // Parse the tokens
+        Parser parser = new Parser(ctx, tokens); // Parse the tokens
         Node ast = parser.parse(); // Generate the abstract syntax tree (AST)
         if (ctx.parseOnly) {
             // Printing the ast
@@ -105,6 +108,7 @@ public class PerlLanguageProvider {
         ctx.logDebug("createClassWithMethod");
         // Create a new instance of ErrorMessageUtil, resetting the line counter
         ctx.errorUtil = new ErrorMessageUtil(ctx.fileName, tokens);
+        ctx.symbolTable = globalSymbolTable.clone(); // reset the symboltable
         Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
                 ctx,
                 new String[]{}, // Closure variables
