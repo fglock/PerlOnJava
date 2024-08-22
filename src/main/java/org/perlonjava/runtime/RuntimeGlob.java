@@ -6,11 +6,23 @@ package org.perlonjava.runtime;
  */
 public class RuntimeGlob implements RuntimeScalarReference {
 
+    public String globName;
+
     /**
-     * Default constructor for RuntimeGlob.
-     * Initializes a new instance of the RuntimeGlob class.
+     * Constructor for RuntimeGlob.
+     * Initializes a new instance of the RuntimeGlob class with the specified glob name.
+     *
+     * @param globName The name of the typeglob.
      */
-    public RuntimeGlob() {
+    public RuntimeGlob(String globName) {
+        this.globName = globName;
+    }
+
+    // Setters
+    public RuntimeScalar set(RuntimeScalar value) {
+        // XXX TODO
+        throw new IllegalStateException("typeglob assignment not implemented");
+        // return value;
     }
 
     /**
