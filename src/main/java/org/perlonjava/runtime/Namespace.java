@@ -133,6 +133,11 @@ public class Namespace {
         return var;
     }
 
+    public static RuntimeCode putGlobalCodeRef(String key, RuntimeCode value) {
+        globalCodeRefs.put(key, value);
+        return value;
+    }
+
     public static boolean existsGlobalCodeRef(String key) {
         return globalCodeRefs.containsKey(key);
     }

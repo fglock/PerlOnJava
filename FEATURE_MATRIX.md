@@ -90,6 +90,7 @@
 - [ ] `package` declaration (partially implemented)
 - [ ] `version` objects
 - [x] `__PACKAGE__`
+- [x] typeglob operations like: `*x = sub {}`
 - [ ] `require` operator
 - [ ] `use` and `no` statements
 - [ ] `BEGIN` block
