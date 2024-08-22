@@ -210,13 +210,13 @@ public class Parser {
         }
 
         // Initialize the prototype node to null. This will store the prototype of the subroutine if it exists.
-        Node prototype = null;
+        String prototype = null;
 
         // Check if the next token is an opening parenthesis '(' indicating a prototype.
         if (peek().text.equals("(")) {
             // If a prototype exists, we parse it using 'parseRawString' method which handles it like the 'q()' operator.
             // This means it will take everything inside the parentheses as a literal string.
-            prototype = parseRawString("q");
+            prototype = ((StringNode) parseRawString("q")).value;
         }
 
         // Initialize a list to store any attributes the subroutine might have.
