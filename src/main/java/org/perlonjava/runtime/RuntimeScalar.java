@@ -241,7 +241,14 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public String toStringRef() {
-        return "REF(" + value.hashCode() + ")";
+        switch (type) {
+            case UNDEF:
+                return "REF(0x14500834042)";
+            case CODE:
+                return ((RuntimeCode) value).toStringRef();
+            default:
+                return "REF(" + value.hashCode() + ")";
+        }
     }
 
     public int getIntRef() {
