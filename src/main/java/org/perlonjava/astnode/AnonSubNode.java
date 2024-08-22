@@ -1,6 +1,6 @@
 package org.perlonjava.astnode;
 
-import org.perlonjava.Visitor;
+import org.perlonjava.codegen.Visitor;
 
 /**
  * The AnonSubNode class represents a node in the abstract syntax tree (AST) that holds an anonymous sub.

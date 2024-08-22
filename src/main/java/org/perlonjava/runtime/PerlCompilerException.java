@@ -1,4 +1,4 @@
-package org.perlonjava;
+package org.perlonjava.runtime;
 
 /**
  * PerlCompilerException is a custom exception class used in the Perl compiler.

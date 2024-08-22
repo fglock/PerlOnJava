@@ -1,7 +1,7 @@
 package org.perlonjava.parser;
 
-import org.perlonjava.ErrorMessageUtil;
-import org.perlonjava.PerlCompilerException;
+import org.perlonjava.runtime.ErrorMessageUtil;
+import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.astnode.*;
 import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;

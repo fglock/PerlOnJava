@@ -1,4 +1,4 @@
-package org.perlonjava;
+package org.perlonjava.codegen;
 
 /**
  * The CustomClassLoader class extends the ClassLoader and provides a method
