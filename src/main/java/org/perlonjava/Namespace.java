@@ -1,6 +1,7 @@
 package org.perlonjava;
 
 import org.perlonjava.runtime.RuntimeArray;
+import org.perlonjava.runtime.RuntimeCode;
 import org.perlonjava.runtime.RuntimeHash;
 import org.perlonjava.runtime.RuntimeScalar;
 
@@ -17,6 +18,7 @@ public class Namespace {
     private static final Map<String, RuntimeScalar> globalVariables = new HashMap<>();
     private static final Map<String, RuntimeArray> globalArrays = new HashMap<>();
     private static final Map<String, RuntimeHash> globalHashes = new HashMap<>();
+    private static final Map<String, RuntimeCode> globalCodeRefs = new HashMap<>();
 
     // Cache to store previously normalized variables for faster lookup
     private static final Map<String, String> cache = new HashMap<>();
@@ -31,16 +33,24 @@ public class Namespace {
         SPECIAL_VARIABLES.add("SIG");
         SPECIAL_VARIABLES.add("STDOUT");
         SPECIAL_VARIABLES.add("STDERR");
+        SPECIAL_VARIABLES.add("STDIN");
     }
 
     public static void initializeGlobals() {
-        getGlobalVariable("$main::@");    // initialize $@ to "undef"
-        getGlobalVariable("$main::_");    // initialize $_ to "undef"
-        getGlobalVariable("$main::\"").set(" ");    // initialize $" to " "
-        getGlobalArray("@main::INC");
-        getGlobalHash("%main::INC");
+        getGlobalVariable("main::@");    // initialize $@ to "undef"
+        getGlobalVariable("main::_");    // initialize $_ to "undef"
+        getGlobalVariable("main::\"").set(" ");    // initialize $" to " "
+        getGlobalArray("main::INC");
+        getGlobalHash("main::INC");
     }
 
+    /**
+     * Normalizes a Perl variable name by ensuring it includes the default package if not already specified.
+     *
+     * @param variable       The variable name to normalize, without sigil. This should be a Perl variable name, potentially without a package.
+     * @param defaultPackage The default package to prepend to the variable name if it does not already include a package.
+     * @return The normalized variable name, without sigil, including the default package if it was not already specified.
+     */
     public static String normalizeVariableName(String variable, String defaultPackage) {
 
         // Create a cache key based on both the variable and the default package
@@ -51,28 +61,26 @@ public class Namespace {
             return cache.get(cacheKey);
         }
 
-        char sigil = variable.charAt(0);
-        String name = variable.substring(1);
-        if (!Character.isLetter(name.charAt(0)) || SPECIAL_VARIABLES.contains(name)) {
+        if (!Character.isLetter(variable.charAt(0)) || SPECIAL_VARIABLES.contains(variable)) {
             defaultPackage = "main";    // special variables are always in main
-            if (name.length() == 2 && name.charAt(0) == '^' && name.charAt(1) >= 'A' && name.charAt(1) <= 'Z') {
+            if (variable.length() == 2 && variable.charAt(0) == '^' && variable.charAt(1) >= 'A' && variable.charAt(1) <= 'Z') {
                 // For $^A to $^Z, convert the second character to the corresponding ASCII control character.
                 // For example, $^A should become ${chr(1)}
-                char controlChar = (char) (name.charAt(1) - 64);
-                name = String.valueOf(controlChar);
+                char controlChar = (char) (variable.charAt(1) - 64);
+                variable = String.valueOf(controlChar);
             }
         }
 
         StringBuilder normalized = new StringBuilder(variable.length() + defaultPackage.length() + 2);
-        if (name.startsWith("::")) {
+        if (variable.startsWith("::")) {
             // $::x
-            normalized.append(sigil).append(defaultPackage).append(name);
-        } else if (name.contains("::")) {
+            normalized.append(defaultPackage).append(variable);
+        } else if (variable.contains("::")) {
             // If already in a package, return as-is
             normalized.append(variable);
         } else {
             // Prepend default package
-            normalized.append(sigil).append(defaultPackage).append("::").append(name);
+            normalized.append(defaultPackage).append("::").append(variable);
         }
 
         // Convert to string and store in cache
@@ -80,24 +88,6 @@ public class Namespace {
         cache.put(cacheKey, normalizedStr);
 
         return normalizedStr;
-    }
-
-    public static RuntimeScalar setGlobalVariable(String key, RuntimeScalar value) {
-        RuntimeScalar var = globalVariables.get(key);
-        if (var == null) {
-            var = new RuntimeScalar();
-            globalVariables.put(key, var);
-        }
-        return var.set(value);
-    }
-
-    public static RuntimeScalar setGlobalVariable(String key, String value) {
-        RuntimeScalar var = globalVariables.get(key);
-        if (var == null) {
-            var = new RuntimeScalar();
-            globalVariables.put(key, var);
-        }
-        return var.set(value);
     }
 
     public static RuntimeScalar getGlobalVariable(String key) {
@@ -137,6 +127,19 @@ public class Namespace {
 
     public static boolean existsGlobalHash(String key) {
         return globalHashes.containsKey(key);
+    }
+
+    public static RuntimeCode getGlobalCodeRef(String key) {
+        RuntimeCode var = globalCodeRefs.get(key);
+        if (var == null) {
+            var = null; // RuntimeCode is not an Lvalue
+            globalCodeRefs.put(key, var);
+        }
+        return var;
+    }
+
+    public static boolean existsGlobalCodeRef(String key) {
+        return globalCodeRefs.containsKey(key);
     }
 }
 
