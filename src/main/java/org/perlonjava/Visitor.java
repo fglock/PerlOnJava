@@ -1,6 +1,6 @@
 package org.perlonjava;
 
-import org.perlonjava.node.*;
+import org.perlonjava.astnode.*;
 
 /**
  * The Visitor interface defines a set of methods for visiting different types of nodes

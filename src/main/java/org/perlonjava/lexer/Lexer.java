@@ -1,4 +1,4 @@
-package org.perlonjava;
+package org.perlonjava.lexer;
 
 import java.util.ArrayList;
 import java.util.List;

@@ -1,4 +1,4 @@
-package org.perlonjava;
+package org.perlonjava.lexer;
 
 /**
  * The LexerTokenType enum defines the various types of tokens that can be encountered

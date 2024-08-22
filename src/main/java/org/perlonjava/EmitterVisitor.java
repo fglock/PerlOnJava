@@ -4,7 +4,8 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
-import org.perlonjava.node.*;
+import org.perlonjava.astnode.*;
+import org.perlonjava.parser.Parser;
 import org.perlonjava.runtime.RuntimeCode;
 import org.perlonjava.runtime.RuntimeContextType;
 
