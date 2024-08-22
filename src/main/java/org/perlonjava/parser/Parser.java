@@ -110,7 +110,9 @@ public class Parser {
                 case "package":
                     consume();
                     Node operand = parseZeroOrOneList(1);
-                    return new OperatorNode(token.text, ((ListNode) operand).elements.get(0), tokenIndex);
+                    IdentifierNode nameNode = ((IdentifierNode) ((ListNode) operand).elements.get(0));
+                    ctx.symbolTable.setCurrentPackage(nameNode.name);
+                    return new OperatorNode(token.text, nameNode, tokenIndex);
                 case "sub":
                     consume();
                     return parseAnonSub(true);
