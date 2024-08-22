@@ -553,29 +553,40 @@ public class Parser {
      * @return The parsed identifier as a String, or null if there is no valid identifier.
      */
     private String parseComplexIdentifier() {
+        // Save the current token index to allow backtracking if needed
         int saveIndex = tokenIndex;
+
+        // Skip any leading whitespace
         tokenIndex = skipWhitespace(tokenIndex, tokens);
 
+        // Check if the identifier is enclosed in braces
         boolean insideBraces = false;
         if (tokens.get(tokenIndex).text.equals("{")) {
             insideBraces = true;
-            tokenIndex++;
+            tokenIndex++; // Consume the opening brace
         }
 
+        // Parse the identifier using the inner method
         String identifier = parseComplexIdentifierInner();
 
+        // If an identifier was found and it was inside braces, ensure the braces are properly closed
         if (identifier != null && insideBraces) {
+            // Skip any whitespace after the identifier
             tokenIndex = skipWhitespace(tokenIndex, tokens);
+
+            // Check for the closing brace
             if (tokens.get(tokenIndex).text.equals("}")) {
-                tokenIndex++;   // consume `}`
+                tokenIndex++; // Consume the closing brace
                 return identifier;
             } else {
-                // backtrack: found `${expression}` instead of `${identifier}`
+                // If the closing brace is not found, backtrack to the saved index
+                // This indicates that we found `${expression}` instead of `${identifier}`
                 tokenIndex = saveIndex;
                 return null;
             }
         }
 
+        // Return the parsed identifier, or null if no valid identifier was found
         return identifier;
     }
 
