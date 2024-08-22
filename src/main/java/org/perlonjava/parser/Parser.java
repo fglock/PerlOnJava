@@ -35,6 +35,7 @@ public class Parser {
     private final ErrorMessageUtil errorUtil;
     private int tokenIndex = 0;
     private boolean parsingForLoopVariable = false;
+    private boolean parsingTakeReference = false;
 
     public Parser(ErrorMessageUtil errorUtil, List<LexerToken> tokens) {
         this.errorUtil = errorUtil;
@@ -505,6 +506,12 @@ public class Parser {
                     case "//":
                         // Handle single and double-quoted strings
                         return parseRawString(token.text);
+                    case "\\":
+                        // Take reference
+                        parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
+                        operand = parseExpression(getPrecedence(token.text) + 1);
+                        parsingTakeReference = false;
+                        return new OperatorNode(token.text, operand, tokenIndex);
                     default:
                         // Handle unary operators
                         if (UNARY_OP.contains(token.text)) {
@@ -520,8 +527,18 @@ public class Parser {
                                         throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
                                     }
                                     // create a Variable
-                                    return new OperatorNode(
+                                    Node opNode = new OperatorNode(
                                             text, new IdentifierNode(varName, tokenIndex), tokenIndex);
+                                    if (!peek().text.equals("(") && text.equals("&") && !parsingTakeReference) {
+                                        // allow `&subr` to "auto-call"
+                                        // rewrite to `&subr(@_)`
+                                        ListNode list = new ListNode(tokenIndex);
+                                        list.elements.add(new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex));
+                                        return new BinaryOperatorNode(
+                                            "(",
+                                            opNode, list, tokenIndex);
+                                    }
+                                    return opNode;
                                 } else if (peek().text.equals("{")) {
                                     // Handle curly brackets to parse a nested expression
                                     //  `${v}`

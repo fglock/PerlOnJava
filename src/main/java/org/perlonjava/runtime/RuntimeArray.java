@@ -251,7 +251,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         return this;
     }
 
-    // Convert the array to a string (for debugging purposes)
+    // Convert the array to a string
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("[");

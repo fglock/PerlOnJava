@@ -27,6 +27,8 @@ say $b->[1];
 
 *x = sub { print "HERE @_\n" };
 &x(123);
+@_ = (456, "ABC");
+&x;
 
 5;    # return value
 
