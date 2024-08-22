@@ -25,5 +25,8 @@ say $a->{a};
 my $b = [ 4, 5 ];
 say $b->[1];
 
+*x = sub { print "HERE @_\n" };
+&x(123);
+
 5;    # return value
 
