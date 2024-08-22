@@ -532,11 +532,10 @@ public class Parser {
                                     if (!peek().text.equals("(") && text.equals("&") && !parsingTakeReference) {
                                         // allow `&subr` to "auto-call"
                                         // rewrite to `&subr(@_)`
-                                        ListNode list = new ListNode(tokenIndex);
-                                        list.elements.add(new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex));
+                                        Node list = new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex);
                                         return new BinaryOperatorNode(
-                                            "(",
-                                            opNode, list, tokenIndex);
+                                                "(",
+                                                opNode, list, tokenIndex);
                                     }
                                     return opNode;
                                 } else if (peek().text.equals("{")) {
