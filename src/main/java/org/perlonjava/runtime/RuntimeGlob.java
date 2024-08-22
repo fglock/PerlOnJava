@@ -22,6 +22,11 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
 
     // Setters
     public RuntimeScalar set(RuntimeScalar value) {
+        switch (value.type) {
+            case CODE:
+                Namespace.putGlobalCodeRef(this.globName, (RuntimeCode) value.value);
+                return value;
+        }
         // XXX TODO
         throw new IllegalStateException("typeglob assignment not implemented");
         // return value;
