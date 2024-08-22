@@ -492,10 +492,10 @@ public class Parser {
                         return new ListNode(parseList(")", 0), tokenIndex);
                     case "{":
                         // Handle curly brackets to parse a nested expression
-                        return new HashLiteralNode(parseList("}", 1), tokenIndex);
+                        return new HashLiteralNode(parseList("}", 0), tokenIndex);
                     case "[":
                         // Handle square brackets to parse a nested expression
-                        return new ArrayLiteralNode(parseList("]", 1), tokenIndex);
+                        return new ArrayLiteralNode(parseList("]", 0), tokenIndex);
                     case ".":
                         // Handle fractional numbers
                         return parseFractionalNumber();
@@ -522,6 +522,12 @@ public class Parser {
                                     // create a Variable
                                     return new OperatorNode(
                                             text, new IdentifierNode(varName, tokenIndex), tokenIndex);
+                                } else if (peek().text.equals("{")) {
+                                    // Handle curly brackets to parse a nested expression
+                                    //  `${v}`
+                                    consume();
+                                    return new OperatorNode(
+                                            text, new HashLiteralNode(parseList("}", 1), tokenIndex), tokenIndex);
                                 }
                             }
                             operand = parseExpression(getPrecedence(text) + 1);
@@ -547,6 +553,7 @@ public class Parser {
      * @return The parsed identifier as a String, or null if there is no valid identifier.
      */
     private String parseComplexIdentifier() {
+        int saveIndex = tokenIndex;
         tokenIndex = skipWhitespace(tokenIndex, tokens);
 
         boolean insideBraces = false;
@@ -558,7 +565,15 @@ public class Parser {
         String identifier = parseComplexIdentifierInner();
 
         if (identifier != null && insideBraces) {
-            consume(LexerTokenType.OPERATOR, "}");
+            tokenIndex = skipWhitespace(tokenIndex, tokens);
+            if (tokens.get(tokenIndex).text.equals("}")) {
+                tokenIndex++;   // consume `}`
+                return identifier;
+            } else {
+                // backtrack: found `${expression}` instead of `${identifier}`
+                tokenIndex = saveIndex;
+                return null;
+            }
         }
 
         return identifier;
