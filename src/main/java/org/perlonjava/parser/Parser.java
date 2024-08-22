@@ -508,12 +508,14 @@ public class Parser {
                         // Handle unary operators
                         if (UNARY_OP.contains(token.text)) {
                             String text = token.text;
-                            if (isSigil(text)) {
+                            if (isSigil(text) || text.equals("&") || text.equals("*")) {
                                 String varName = parseComplexIdentifier();
                                 if (varName != null) {
                                     // some characters are illegal after a variable
-                                    if (peek().text.equals("(") && !parsingForLoopVariable) {
-                                        // not parsing "for my $v (..."
+                                    if (peek().text.equals("(") && !text.equals("&") && !parsingForLoopVariable) {
+                                        // parentheses is only allowed after a variable in these cases:
+                                        //  `for my $v (...`
+                                        //  `&name(...
                                         throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
                                     }
                                     // create a Variable
