@@ -1,4 +1,4 @@
-package org.perlonjava;
+package org.perlonjava.codegen;
 
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Label;

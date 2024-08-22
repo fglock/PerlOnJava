@@ -1,7 +1,9 @@
-package org.perlonjava;
+package org.perlonjava.codegen;
 
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
+import org.perlonjava.runtime.ErrorMessageUtil;
+import org.perlonjava.runtime.ScopedSymbolTable;
 import org.perlonjava.runtime.RuntimeContextType;
 
 import java.util.EnumMap;

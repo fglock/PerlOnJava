@@ -1,4 +1,4 @@
-package org.perlonjava;
+package org.perlonjava.codegen;
 
 import org.perlonjava.astnode.*;
 
