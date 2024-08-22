@@ -246,6 +246,11 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 return "REF(0x14500834042)";
             case CODE:
                 return ((RuntimeCode) value).toStringRef();
+            case GLOB:
+                if (value == null) {
+                    return "CODE(0x14500834042)";
+                }
+                return ((RuntimeCode) value).toStringRef();
             default:
                 return "REF(" + value.hashCode() + ")";
         }
