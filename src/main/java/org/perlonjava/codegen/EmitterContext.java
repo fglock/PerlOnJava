@@ -3,8 +3,8 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.perlonjava.runtime.ErrorMessageUtil;
-import org.perlonjava.runtime.ScopedSymbolTable;
 import org.perlonjava.runtime.RuntimeContextType;
+import org.perlonjava.runtime.ScopedSymbolTable;
 
 import java.util.EnumMap;
 import java.util.Map;
