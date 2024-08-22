@@ -1,4 +1,4 @@
-package org.perlonjava;
+package org.perlonjava.scriptengine;
 
 import org.perlonjava.astnode.Node;
 import org.perlonjava.codegen.EmitterContext;

@@ -1,4 +1,4 @@
-package org.perlonjava;
+package org.perlonjava.scriptengine;
 
 import javax.script.ScriptEngine;
 import javax.script.ScriptEngineFactory;
