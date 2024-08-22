@@ -20,6 +20,11 @@ public class RuntimeCode implements RuntimeScalarReference {
     public static HashMap<String, EmitterContext> evalContext = new HashMap<>(); // storage for eval string compiler context
     public Method methodObject;
     public Object codeObject; // apply() needs this
+    public String prototype;
+
+    public RuntimeCode(String prototype) {
+        this.prototype = prototype;
+    }
 
     public RuntimeCode(Method methodObject, Object codeObject) {
         this.methodObject = methodObject;
@@ -103,18 +108,10 @@ public class RuntimeCode implements RuntimeScalarReference {
         // This method takes RuntimeArray and RuntimeContextType as parameters.
         Method mm = clazz.getMethod("apply", RuntimeArray.class, RuntimeContextType.class);
 
-        // Create a new RuntimeScalar instance to hold the CODE object
-        RuntimeScalar r = new RuntimeScalar();
-
         // Wrap the method and the code object in a RuntimeCode instance
         // This allows us to store both the method and the object it belongs to
-        r.value = new RuntimeCode(mm, codeObject);
-
-        // Set the type of the RuntimeScalar to CODE to indicate it holds a code reference
-        r.type = RuntimeScalarType.CODE;
-
-        // Return the fully constructed RuntimeScalar object
-        return r;
+        // Create a new RuntimeScalar instance to hold the CODE object
+        return new RuntimeScalar(new RuntimeCode(mm, codeObject));
     }
 
     // Method to apply (execute) a subroutine reference
