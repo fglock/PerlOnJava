@@ -94,6 +94,7 @@
 - [x] code references like:  `&subr`
 - [ ] `require` operator
 - [ ] `use` and `no` statements
+- [ ] `__SUB__`
 - [ ] `BEGIN` block
 - [ ] `DESTROY` method keyword
 - [ ] labels
@@ -102,7 +103,7 @@
 
 ## Namespaces and global variables
 - [x] Global variable infrastructure
-- [ ] Namespaces
+- [x] Namespaces
 - [x] `@_` and `$@` special variables; `$_[0]` parameter variable
 - [x] `$"` special variable
 - [x] `$_` special variable
