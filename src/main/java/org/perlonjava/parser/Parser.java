@@ -203,9 +203,28 @@ public class Parser {
         return false;
     }
 
-    private Node parseAnonSub() {
+    private Node parseAnonSub(boolean wantName) {
         // token == "sub"
         // TODO - optional name, subroutine prototype
+
+        String subName = null;
+        if (wantName) {
+            subName = parseComplexIdentifier();  // maybe null
+        }
+
+        // Optional prototype
+        Node prototype = null;
+        if (peek().text.equals("(")) {
+            prototype = parseRawString("q");    // parse like q() operator
+        }
+
+        // Optional attributes
+        List<String> attributes = new ArrayList<>();
+        while (peek().text.equals(":")) {
+            consume(LexerTokenType.OPERATOR, ":");
+            attributes.add(consume(LexerTokenType.IDENTIFIER).text);
+        }
+
         consume(LexerTokenType.OPERATOR, "{");
         Node block = parseBlock();
         consume(LexerTokenType.OPERATOR, "}");
@@ -216,7 +235,7 @@ public class Parser {
             throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
         }
 
-        return new AnonSubNode(block, false, tokenIndex);
+        return new AnonSubNode(subName, prototype, attributes, block, false, tokenIndex);
     }
 
     private Node parseWhileStatement() {
@@ -444,7 +463,9 @@ public class Parser {
                             //         NumberNode: 123
                             //     ListNode:
                             return new BinaryOperatorNode("->",
-                                    new AnonSubNode(block, true, tokenIndex),
+
+
+                            new AnonSubNode(null, null, null, block, true, tokenIndex),
                                     new ListNode(tokenIndex), tokenIndex);
                         } else {
                             // Otherwise, parse a primary expression
@@ -463,7 +484,7 @@ public class Parser {
                         break;
                     case "sub":
                         // Handle 'sub' keyword to parse an anonymous subroutine
-                        return parseAnonSub();
+                        return parseAnonSub(false);
                     case "q":
                     case "qq":
                     case "qx":
