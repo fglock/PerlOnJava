@@ -1,6 +1,7 @@
 package org.perlonjava.parser;
 
 import org.perlonjava.astnode.*;
+import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
@@ -32,13 +33,13 @@ public class Parser {
                             "$#" // sigils
                     ));
     private final List<LexerToken> tokens;
-    private final ErrorMessageUtil errorUtil;
+    private final EmitterContext ctx;
     private int tokenIndex = 0;
     private boolean parsingForLoopVariable = false;
     private boolean parsingTakeReference = false;
 
-    public Parser(ErrorMessageUtil errorUtil, List<LexerToken> tokens) {
-        this.errorUtil = errorUtil;
+    public Parser(EmitterContext ctx, List<LexerToken> tokens) {
+        this.ctx = ctx;
         this.tokens = tokens;
     }
 
@@ -68,21 +69,6 @@ public class Parser {
             default:
                 return false;
         }
-    }
-
-    public static void main(String[] args) throws Exception {
-        String fileName = "example.pl";
-        String code = "my $var = 42; 1 ? 2 : 3; print \"Hello, World!\\n\";";
-        if (args.length >= 2 && args[0].equals("-e")) {
-            code = args[1]; // Read the code from the command line parameter
-            fileName = "-e";
-        }
-        Lexer lexer = new Lexer(code);
-        List<LexerToken> tokens = lexer.tokenize();
-        ErrorMessageUtil errorMessageUtil = new ErrorMessageUtil(fileName, tokens);
-        Parser parser = new Parser(errorMessageUtil, tokens);
-        Node ast = parser.parse();
-        System.out.println(ast);
     }
 
     public Node parse() {
@@ -168,10 +154,10 @@ public class Parser {
                     }
                     return new For3Node(false, null, condition, null, expression, tokenIndex);
             }
-            throw new PerlCompilerException(tokenIndex, "Not implemented: " + token, errorUtil);
+            throw new PerlCompilerException(tokenIndex, "Not implemented: " + token, ctx.errorUtil);
         }
         if (token.type != LexerTokenType.EOF && !token.text.equals("}") && !token.text.equals(";")) {
-            throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, errorUtil);
+            throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, ctx.errorUtil);
         }
         if (token.text.equals(";")) {
             consume();
@@ -256,7 +242,7 @@ public class Parser {
         LexerToken token = peek();
         if (token.text.equals("(") || token.text.equals("{") || token.text.equals("[")) {
             // Throw an exception indicating a syntax error.
-            throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
+            throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
         }
 
         // Finally, we return a new 'AnonSubNode' object with the parsed data: the name, prototype, attributes, block,
@@ -320,7 +306,7 @@ public class Parser {
         }
         // 3-argument for
         if (varNode != null) {
-            throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
+            throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
         }
         consume(LexerTokenType.OPERATOR, ";");
 
@@ -572,7 +558,7 @@ public class Parser {
                                         // parentheses is only allowed after a variable in these cases:
                                         //  `for my $v (...`
                                         //  `&name(...
-                                        throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
+                                        throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
                                     }
                                     // create a Variable
                                     Node opNode = new OperatorNode(
@@ -605,10 +591,10 @@ public class Parser {
                 return null;
             default:
                 // Throw an exception for any unexpected token
-                throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, errorUtil);
+                throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, ctx.errorUtil);
         }
         // Throw an exception if no valid case was found
-        throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, errorUtil);
+        throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, ctx.errorUtil);
     }
 
     /**
@@ -737,7 +723,7 @@ public class Parser {
                 return StringParser.parseSingleQuotedString(rawStr.buffers.get(0), rawStr.startDelim, rawStr.endDelim, rawStr.index);
             case "\"":
             case "qq":
-                return StringParser.parseDoubleQuotedString(rawStr.buffers.get(0), errorUtil, rawStr.index);
+                return StringParser.parseDoubleQuotedString(rawStr.buffers.get(0), ctx.errorUtil, rawStr.index);
             case "qw":
                 // Use a regular expression to split the string.
                 // " +" matches one or more ASCII space characters
@@ -794,7 +780,7 @@ public class Parser {
             int index = 1;
             for (; index < exponentPart.length(); index++) {
                 if (!Character.isDigit(exponentPart.charAt(index)) && exponentPart.charAt(index) != '_') {
-                    throw new PerlCompilerException(tokenIndex, "Malformed number", errorUtil);
+                    throw new PerlCompilerException(tokenIndex, "Malformed number", ctx.errorUtil);
                 }
             }
             number.append(exponentPart);
@@ -925,7 +911,7 @@ public class Parser {
             case "++":
                 return new OperatorNode(token.text + "postfix", left, tokenIndex);
         }
-        throw new PerlCompilerException(tokenIndex, "Unexpected infix operator: " + token, errorUtil);
+        throw new PerlCompilerException(tokenIndex, "Unexpected infix operator: " + token, ctx.errorUtil);
     }
 
     private LexerToken peek() {
@@ -948,7 +934,7 @@ public class Parser {
         LexerToken token = consume();
         if (token.type != type) {
             throw new PerlCompilerException(
-                    tokenIndex, "Expected token " + type + " but got " + token, errorUtil);
+                    tokenIndex, "Expected token " + type + " but got " + token, ctx.errorUtil);
         }
         return token;
     }
@@ -959,7 +945,7 @@ public class Parser {
             throw new PerlCompilerException(
                     tokenIndex,
                     "Expected token " + type + " with text " + text + " but got " + token,
-                    errorUtil);
+                    ctx.errorUtil);
         }
     }
 
@@ -1110,7 +1096,7 @@ public class Parser {
             consume();
             expr = new ListNode(parseList(")", 0), tokenIndex);
             if (expr.elements.size() > 1) {
-                throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
+                throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
             }
         } else if (token.type == LexerTokenType.EOF || LISTTERMINATORS.contains(token.text) || token.text.equals(",")) {
             // no argument
@@ -1120,7 +1106,7 @@ public class Parser {
             expr = ListNode.makeList(parseExpression(getPrecedence(",") + 1));
         }
         if (expr.elements.size() < minItems) {
-            throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
+            throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
         }
         return expr;
     }
@@ -1154,7 +1140,7 @@ public class Parser {
         }
 
         if (expr.elements.size() < minItems) {
-            throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
+            throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
         }
         return expr;
     }
@@ -1185,7 +1171,7 @@ public class Parser {
         }
 
         if (expr.elements.size() < minItems) {
-            throw new PerlCompilerException(tokenIndex, "Syntax error", errorUtil);
+            throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
         }
 
         return expr.elements;
