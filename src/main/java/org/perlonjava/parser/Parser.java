@@ -5,8 +5,7 @@ import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.runtime.ErrorMessageUtil;
-import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.*;
 
 import java.util.*;
 
@@ -245,6 +244,12 @@ public class Parser {
         if (token.text.equals("(") || token.text.equals("{") || token.text.equals("[")) {
             // Throw an exception indicating a syntax error.
             throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
+        }
+
+        if (subName != null) {
+            // register the named subroutine
+            RuntimeCode codeRef = new RuntimeCode(subName);
+            Namespace.getGlobalCodeRef(subName).set(new RuntimeScalar(codeRef));
         }
 
         // Finally, we return a new 'AnonSubNode' object with the parsed data: the name, prototype, attributes, block,
