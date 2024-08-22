@@ -32,7 +32,6 @@ public class EmitterVisitor implements Visitor {
         operatorHandlers.put("x", "repeat");
         operatorHandlers.put("&.", "bitwiseStringAnd");
         operatorHandlers.put("&&", "logicalAnd");
-        operatorHandlers.put("|", "bitwiseOr");
         operatorHandlers.put("|.", "bitwiseStringOr");
         operatorHandlers.put("||", "logicalOr");
         operatorHandlers.put("^.", "bitwiseStringXor");

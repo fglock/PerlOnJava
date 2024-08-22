@@ -2,12 +2,24 @@ package org.perlonjava.astnode;
 
 import org.perlonjava.codegen.Visitor;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * The AnonSubNode class represents a node in the abstract syntax tree (AST) that holds an anonymous sub.
  * The parts of the node are: "block".
  * This class implements the Node interface, allowing it to be visited by a Visitor.
  */
 public class AnonSubNode extends AbstractNode {
+    // Optional name
+    public final String name;
+
+    // Optional prototype
+    public final Node prototype;
+
+    // Optional attributes
+    public final List<String> attributes;
+
     /**
      * The block of the subroutine
      */
@@ -23,7 +35,10 @@ public class AnonSubNode extends AbstractNode {
      *
      * @param block the block of the subroutine
      */
-    public AnonSubNode(Node block, boolean useTryCatch, int tokenIndex) {
+    public AnonSubNode(String name, Node prototype, List<String> attributes, Node block, boolean useTryCatch, int tokenIndex) {
+        this.name = name;
+        this.prototype = prototype;
+        this.attributes = attributes;
         this.block = block;
         this.useTryCatch = useTryCatch;
         this.tokenIndex = tokenIndex;
