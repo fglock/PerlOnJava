@@ -474,8 +474,9 @@ public class Parser {
                         // Handle special-quoted domain-specific arguments
                         return parseRawString(token.text);
                     default:
-                        // Handle any other identifier as a simple identifier node
-                        return new IdentifierNode(token.text, tokenIndex);
+                        // Handle any other identifier as an identifier node
+                        tokenIndex--;   // re-parse
+                        return new IdentifierNode(parseComplexIdentifier(), tokenIndex);
                 }
                 break;
             case NUMBER:
