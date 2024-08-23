@@ -251,17 +251,13 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         return this;
     }
 
-    // Convert the array to a string
+    // Convert the array to a string, without separators
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder("[");
+        StringBuilder sb = new StringBuilder();
         for (int i = 0; i < elements.size(); i++) {
-            if (i > 0) {
-                sb.append(", ");
-            }
             sb.append(elements.get(i).toString());
         }
-        sb.append("]");
         return sb.toString();
     }
 
