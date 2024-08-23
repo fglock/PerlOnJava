@@ -25,10 +25,25 @@ say $a->{a};
 my $b = [ 4, 5 ];
 say $b->[1];
 
+# named subroutine with typeglob assignment
+
 *x = sub { print "HERE @_\n" };
 &x(123);
+
+# &name calls the subroutine reusing existing @_
+
 @_ = (456, "ABC");
 &x;
+
+# named subroutine
+
+sub modify_argument { $_[0]++ }
+my $v = 13;
+modify_argument($v);
+print "not " if $v != 14; say "ok # subroutine list argument is an alias to the argument. expected 14, got $v";
+$v = 13;
+modify_argument $v;
+print "not " if $v != 14; say "ok # subroutine scalar argument is an alias to the argument. expected 14, got $v";
 
 5;    # return value
 
