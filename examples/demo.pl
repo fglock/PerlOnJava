@@ -57,5 +57,8 @@ sub no_proto { "VALUE" }
 $v = no_proto . "2";
 print "not" if $v ne "VALUE2"; say "ok # subroutine without prototype returned $v";
 
+# $v = no_proto or "2";
+# print "not" if $v ne "VALUE"; say "ok # subroutine without prototype returned $v";
+
 5;    # return value
 
