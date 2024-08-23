@@ -62,6 +62,7 @@
 - [x] Assigning to a closure variable mutates the variable in the original context
 - [x] `@_` contains aliases to the caller variables
 - [x] Named subroutines
+- [ ] Subroutine prototypes (partially implemented)
 - [ ] Inline "constant" subroutines optimization
 
 ## Regular Expressions

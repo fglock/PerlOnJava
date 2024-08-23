@@ -391,8 +391,18 @@ public class Parser {
         }
 
         // Handle the parameter list for the subroutine call
-        // XXX TODO: Handle prototype or parameter variables
-        Node arguments = parseZeroOrMoreList(0);
+        Node arguments = null;
+        if (prototype == null) {
+            // no prototype
+            arguments = parseZeroOrMoreList(0);
+        } else if (prototype.isEmpty()) {
+            // prototype is empty string
+            List<Node> list = new ArrayList<>();
+            arguments = new ListNode(list, tokenIndex);
+        } else {
+            // XXX TODO: Handle more prototypes or parameter variables
+            arguments = parseZeroOrMoreList(0);
+        }
 
         // Rewrite and return the subroutine call as `&name(arguments)`
         return new BinaryOperatorNode("(",
@@ -833,7 +843,12 @@ public class Parser {
     private Node parseFractionalNumber() {
         StringBuilder number = new StringBuilder("0.");
 
-        number.append(consume(LexerTokenType.NUMBER).text); // consume digits after '.'
+        LexerToken token = tokens.get(tokenIndex++);
+        if (token.type != LexerTokenType.NUMBER) {
+            throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
+        }
+
+        number.append(token.text); // consume digits after '.'
         // Check for exponent part
         checkNumberExponent(number);
         return new NumberNode(number.toString(), tokenIndex);

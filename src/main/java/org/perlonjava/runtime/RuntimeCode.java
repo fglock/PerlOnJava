@@ -69,11 +69,10 @@ public class RuntimeCode implements RuntimeScalarReference {
         // Process the string source code to create the LexerToken list
         Lexer lexer = new Lexer(code.toString());
         List<LexerToken> tokens = lexer.tokenize(); // Tokenize the Perl code
-        evalCtx.errorUtil = new ErrorMessageUtil(evalCtx.fileName, tokens);
         try {
             // Create the AST
             // Create an instance of ErrorMessageUtil with the file name and token list
-            ErrorMessageUtil errorUtil = new ErrorMessageUtil(evalCtx.fileName, tokens);
+            evalCtx.errorUtil = new ErrorMessageUtil(evalCtx.fileName, tokens);
             Parser parser = new Parser(evalCtx, tokens); // Parse the tokens
             ast = parser.parse(); // Generate the abstract syntax tree (AST)
         } catch (Exception e) {
@@ -86,8 +85,8 @@ public class RuntimeCode implements RuntimeScalarReference {
         }
 
         // Create a new instance of ErrorMessageUtil, resetting the line counter
-        ctx.errorUtil = new ErrorMessageUtil(ctx.fileName, tokens);
-        ctx.symbolTable = ctx.symbolTable.clone(); // reset the symboltable
+        evalCtx.errorUtil = new ErrorMessageUtil(ctx.fileName, tokens);
+        evalCtx.symbolTable = ctx.symbolTable.clone(); // reset the symboltable
         Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(evalCtx, newEnv, // Closure variables
                 ast, true  // use try-catch
         );
