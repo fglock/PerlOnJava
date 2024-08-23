@@ -1202,6 +1202,17 @@ public class Parser {
     //
     private ListNode parseZeroOrMoreList(int minItems) {
         LexerToken token = peek();
+
+        if (token.text.equals(".") && (tokens.get(tokenIndex).type != LexerTokenType.NUMBER)) {
+            // Followed by `.` (string concatenation operator)
+            // return an empty list
+            if (minItems > 0) {
+                throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
+            }
+            List<Node> list = new ArrayList<>();
+            return new ListNode(list, tokenIndex);
+        }
+
         if (token.text.equals("(")) {
             // arguments in parentheses, can be 0 or more arguments:    print(), print(10)
             // Commas are allowed after the arguments:       print(10,)
