@@ -2,12 +2,10 @@ package org.perlonjava.parser;
 
 import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.EmitterContext;
+import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.runtime.Namespace;
-import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.RuntimeCode;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.*;
 
 import java.util.*;
 
@@ -250,7 +248,7 @@ public class Parser {
 
         // Finally, we create a new 'AnonSubNode' object with the parsed data: the name, prototype, attributes, block,
         // `useTryCatch` flag, and token position.
-        AnonSubNode anonSubNode = new AnonSubNode(subName, prototype, attributes, block, false, tokenIndex);
+        AnonSubNode anonSubNode =  new AnonSubNode(subName, prototype, attributes, block, false, tokenIndex);
 
         if (subName != null) {
             // Additional steps for named subroutine:
@@ -264,11 +262,11 @@ public class Parser {
 
             // return typeglob assignment
             return new BinaryOperatorNode("=",
-                    new OperatorNode("*",
-                            new IdentifierNode(fullName, tokenIndex),
-                            tokenIndex),
-                    anonSubNode,
-                    tokenIndex);
+                new OperatorNode("*",
+                    new IdentifierNode(fullName, tokenIndex),
+                    tokenIndex),
+                anonSubNode,
+                tokenIndex);
         }
 
         // return anonymous subroutine
