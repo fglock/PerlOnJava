@@ -17,7 +17,7 @@
 - [x] **Perl-like compile-time error messages**: Error messages mimic those in Perl for consistency.
 - [x] **Perl line numbers in bytecode**: Bytecode includes line numbers for better debugging.
 - [ ] **Perl-like runtime error messages**: Runtime errors are not yet formatted similarly to Perl's.
-- [ ] **Perl-like warnings**: Warnings need to be formatted to resemble Perl’s output.
+- [ ] **Perl-like warnings**: Internal support for most warnings is missing. Warnings need to be formatted to resemble Perl’s output.
 - [x] **Comments**: Support for comments in code is implemented.
 
 ## Scalars
@@ -97,7 +97,7 @@
 - [x] **`eval` block**: `eval` blocks are implemented.
 - [x] **`do` block**: `do` blocks are supported.
 - [ ] **`do` file**: File execution using `do` is not yet implemented.
-- [ ] **`print` statement**: Basic `print` and `say` statements are missing.
+- [ ] **`print` statement**: Basic `print` and `say` statements are implemented, but support for file handles is missing.
 - [x] **Short-circuit and, or**: Short-circuit logical operators are supported.
 - [x] **Low-precedence/high precedence operators**: Logical operators like `not`, `or`, `and` are supported.
 - [x] **Ternary operator**: The ternary conditional operator is implemented.
@@ -114,6 +114,7 @@
 - [ ] **Labels**: Labels and their usage are not supported.
 - [ ] **Search for labels in call stack**: Label searching in the call stack is missing.
 - [ ] **Here-docs**: Here-docs for multiline string literals are not yet implemented.
+- [ ] **`<>` and `glob`**: support for the `glob` operator is missing.
 
 ## Namespaces and Global Variables
 - [x] **Global variable infrastructure**: Support for global variables is implemented.
@@ -121,7 +122,7 @@
 - [x] **`@_` and `$@` special variables**: Special variables like `@_` and `$@` are supported.
 - [x] **`$"` special variable**: The special variable `$"` is implemented.
 - [x] **`$_` special variable**: The special variable `$_` is supported.
-- [ ] **Thread-safe `@_`, `$_`, and regex variables**: Thread safety for special variables is missing.
+- [ ] **Thread-safe `@_`, `$_`, and regex variables**: Thread safety for global special variables is missing.
 
 ## Non-strict Features
 - [ ] **Use string as a scalar reference**: Support for scalar references from strings is not yet implemented.
