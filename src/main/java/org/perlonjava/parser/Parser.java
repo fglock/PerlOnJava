@@ -1209,8 +1209,11 @@ public class Parser {
     private ListNode parseZeroOrMoreList(int minItems) {
         LexerToken token = peek();
 
-        if (token.text.equals(".") && (tokens.get(tokenIndex).type != LexerTokenType.NUMBER)) {
-            // Followed by `.` (string concatenation operator)
+        if ((token.text.equals(".") && (tokens.get(tokenIndex).type != LexerTokenType.NUMBER))
+            || token.type == LexerTokenType.EOF || LISTTERMINATORS.contains(token.text)
+        ) {
+            // If followed by `.` (string concatenation operator)
+            // or one of the list terminators
             // return an empty list
             if (minItems > 0) {
                 throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
