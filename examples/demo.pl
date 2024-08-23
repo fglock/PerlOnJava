@@ -40,10 +40,16 @@ say $b->[1];
 sub modify_argument { $_[0]++ }
 my $v = 13;
 modify_argument($v);
-print "not " if $v != 14; say "ok # subroutine list argument is an alias to the argument. expected 14, got $v";
+print "not " if $v != 14; say "ok # subroutine list argument is an alias to the argument; returned $v";
 $v = 13;
 modify_argument $v;
-print "not " if $v != 14; say "ok # subroutine scalar argument is an alias to the argument. expected 14, got $v";
+print "not " if $v != 14; say "ok # subroutine scalar argument is an alias to the argument; returned  $v";
+
+# constant subroutine
+
+sub CONST () { "VALUE" }
+$v = CONST . "2";
+print "not" if $v ne "VALUE2"; say "ok # constant subroutine returned $v";
 
 5;    # return value
 

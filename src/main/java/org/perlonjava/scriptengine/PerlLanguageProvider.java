@@ -95,7 +95,7 @@ public class PerlLanguageProvider {
 
         // Create the AST
         // Create an instance of ErrorMessageUtil with the file name and token list
-        ErrorMessageUtil errorUtil = new ErrorMessageUtil(ctx.fileName, tokens);
+        ctx.errorUtil = new ErrorMessageUtil(ctx.fileName, tokens);
         Parser parser = new Parser(ctx, tokens); // Parse the tokens
         Node ast = parser.parse(); // Generate the abstract syntax tree (AST)
         if (ctx.parseOnly) {
