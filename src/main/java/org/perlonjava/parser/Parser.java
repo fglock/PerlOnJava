@@ -440,7 +440,7 @@ public class Parser {
 
     /**
      * Parses an expression based on operator precedence.
-     *
+     * <p>
      * Higher precedence means tighter: `*` has higher precedence than `+`
      *
      * @param precedence The precedence level of the current expression.
