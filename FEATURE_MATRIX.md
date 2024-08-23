@@ -60,7 +60,7 @@
 - [x] Anonymous subroutines with closure variables
 - [x] Return from inside a block
 - [x] Assigning to a closure variable mutates the variable in the original context
-- [ ] `@_` contains aliases to the caller variables
+- [x] `@_` contains aliases to the caller variables
 - [x] Named subroutines
 - [ ] Inline "constant" subroutines optimization
 

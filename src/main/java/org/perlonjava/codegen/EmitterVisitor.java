@@ -411,7 +411,7 @@ public class EmitterVisitor implements Visitor {
         node.right.accept(this.with(RuntimeContextType.LIST)); // right parameter: parameter list
 
         // Transform the value in the stack to RuntimeArray
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getArray", "()Lorg/perlonjava/runtime/RuntimeArray;", true);
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", true);
         ctx.mv.visitFieldInsn(
                 Opcodes.GETSTATIC,
                 "org/perlonjava/runtime/RuntimeContextType",
@@ -982,7 +982,7 @@ public class EmitterVisitor implements Visitor {
         mv.visitVarInsn(Opcodes.ALOAD, 1); // push @_ to the stack
         // Transform the value in the stack to RuntimeArray
         // XXX not needed
-        // mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getArray", "()Lorg/perlonjava/runtime/RuntimeArray;", true);
+        // mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", true);
 
         mv.visitFieldInsn(
                 Opcodes.GETSTATIC,
