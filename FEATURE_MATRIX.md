@@ -64,6 +64,7 @@
 - [x] Named subroutines
 - [ ] Subroutine prototypes (partially implemented)
 - [ ] Inline "constant" subroutines optimization
+- [ ] Subroutine attributes
 
 ## Regular Expressions
 - [ ] Basic Matching
@@ -112,4 +113,8 @@
 
 ## Non-strict features
 - [ ] Use string as a scalar reference: `${"name"}`
+
+## Features that are probably incompatible with JVM
+- [ ] `DESTROY`
+- [ ] Perl `XS` code
 
