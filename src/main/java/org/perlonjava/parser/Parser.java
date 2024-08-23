@@ -357,33 +357,44 @@ public class Parser {
         return new For3Node(true, initialization, condition, increment, body, tokenIndex);
     }
 
+    /**
+     * Parses a subroutine call in the code.
+     *
+     * @return A Node representing the parsed subroutine call.
+     */
     private Node parseSubroutineCall() {
+        // Parse the subroutine name as a complex identifier
         String subName = parseComplexIdentifier();
         ctx.logDebug("SubroutineCall subName `" + subName + "` package " + ctx.symbolTable.getCurrentPackage());
+
+        // Normalize the subroutine name to include the current package
         String fullName = Namespace.normalizeVariableName(subName, ctx.symbolTable.getCurrentPackage());
 
+        // Create an identifier node for the subroutine name
         IdentifierNode nameNode = new IdentifierNode(subName, tokenIndex);
 
+        // Check if the subroutine exists in the global namespace
         boolean subExists = Namespace.existsGlobalCodeRef(fullName);
         String prototype = null;
         if (subExists) {
-            // fetch subroutine
+            // Fetch the subroutine reference
             RuntimeScalar codeRef = Namespace.getGlobalCodeRef(fullName);
             prototype = ((RuntimeCode) codeRef.value).prototype;
         }
         ctx.logDebug("SubroutineCall exists " + subExists + " prototype `" + prototype + "`");
 
+        // Check if the subroutine call has parentheses
         boolean hasParentheses = peek().text.equals("(");
         if (!subExists && !hasParentheses) {
-            // not a subroutine call
+            // If the subroutine does not exist and there are no parentheses, it is not a subroutine call
             return nameNode;
         }
 
-        // handle the parameter list
-        // XXX TODO handle prototype or parameter variables
+        // Handle the parameter list for the subroutine call
+        // XXX TODO: Handle prototype or parameter variables
         Node arguments = parseZeroOrMoreList(0);
 
-        // rewrite and return:  `&name(arguments)`
+        // Rewrite and return the subroutine call as `&name(arguments)`
         return new BinaryOperatorNode("(",
                 new OperatorNode("&", nameNode, nameNode.tokenIndex),
                 arguments,
