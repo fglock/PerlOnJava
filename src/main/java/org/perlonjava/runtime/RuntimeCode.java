@@ -52,7 +52,7 @@ public class RuntimeCode implements RuntimeScalarReference {
                 ctx.contextType, // call context
                 true, // is boxed
                 ctx.errorUtil, // error message utility
-                ctx.debugEnabled, ctx.tokenizeOnly, ctx.compileOnly, ctx.parseOnly);
+                ctx.debugEnabled, ctx.tokenizeOnly, ctx.compileOnly, ctx.parseOnly, ctx.disassembleEnabled);
 
         // TODO - this can be cached for performance
         // retrieve closure variable list

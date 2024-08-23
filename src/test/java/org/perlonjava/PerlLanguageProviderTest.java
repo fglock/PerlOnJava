@@ -16,6 +16,7 @@ public class PerlLanguageProviderTest {
         boolean tokenizeOnly = false;
         boolean compileOnly = false;
         boolean parseOnly = false;
+        boolean disassembleEnabled = false;
 
         try {
             RuntimeList result = PerlLanguageProvider.executePerlCode(
@@ -24,7 +25,7 @@ public class PerlLanguageProviderTest {
                 debugEnabled,
                 tokenizeOnly,
                 compileOnly,
-                parseOnly
+                parseOnly, disassembleEnabled
             );
 
             // Add assertions to verify the result
@@ -46,6 +47,7 @@ public class PerlLanguageProviderTest {
         boolean tokenizeOnly = false;
         boolean compileOnly = false;
         boolean parseOnly = false;
+        boolean disassembleEnabled = false;
 
         assertThrows(Throwable.class, () -> {
             PerlLanguageProvider.executePerlCode(
@@ -54,7 +56,8 @@ public class PerlLanguageProviderTest {
                 debugEnabled,
                 tokenizeOnly,
                 compileOnly,
-                parseOnly
+                parseOnly,
+                disassembleEnabled
             );
         }, "Expected an exception to be thrown");
     }

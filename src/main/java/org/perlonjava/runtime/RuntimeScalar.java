@@ -304,7 +304,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         // Check if the type of this RuntimeScalar is CODE
         if (type == RuntimeScalarType.CODE) {
             // Cast the value to RuntimeCode and call apply()
-            return (RuntimeList) ((RuntimeCode) this.value).apply(a, callContext);
+            return ((RuntimeCode) this.value).apply(a, callContext);
         } else {
             // If the type is not CODE, throw an exception indicating an invalid state
             throw new IllegalStateException("Variable does not contain a code reference");

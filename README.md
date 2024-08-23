@@ -149,7 +149,7 @@ For the most up-to-date information on features and limitations, please refer to
 
 ## Debugging Tools
 
-1. **Run Emitting Debug Information**:
+1. **Execute Emitting Debug Information**:
     ```sh
     java -jar target/perlonjava-1.0-SNAPSHOT.jar --debug -e ' print 123 '
     ```
@@ -162,13 +162,17 @@ For the most up-to-date information on features and limitations, please refer to
     ```sh
     java -jar target/perlonjava-1.0-SNAPSHOT.jar --debug -c -e ' print 123 '
     ```
+3. **Execute and Emit Disassembled ASM Code**:
+    ```sh
+    java -jar target/perlonjava-1.0-SNAPSHOT.jar --disassemble -e ' print 123 '
+    ```
 
-3. **Run the Lexer Only**:
+4. **Run the Lexer Only**:
     ```sh
     java -jar target/perlonjava-1.0-SNAPSHOT.jar --tokenize -e ' print 123 '
     ```
 
-4. **Run the Parser Only**:
+5. **Run the Parser Only**:
     ```sh
     java -jar target/perlonjava-1.0-SNAPSHOT.jar --parse -e ' print 123 '
     ```

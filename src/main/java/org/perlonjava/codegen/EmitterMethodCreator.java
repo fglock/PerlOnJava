@@ -1,11 +1,12 @@
 package org.perlonjava.codegen;
 
-import org.objectweb.asm.ClassWriter;
-import org.objectweb.asm.Label;
-import org.objectweb.asm.MethodVisitor;
-import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.*;
+import org.objectweb.asm.util.TraceClassVisitor;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.runtime.RuntimeContextType;
+
+import java.io.PrintWriter;
+import java.io.StringWriter;
 
 /**
  * EmitterMethodCreator is a utility class that uses the ASM library to dynamically generate Java
@@ -257,6 +258,17 @@ public class EmitterMethodCreator implements Opcodes {
         // Complete the class
         cw.visitEnd();
         byte[] classData = cw.toByteArray(); // Generate the bytecode
+
+        if (ctx.disassembleEnabled) {
+            // Disassemble the bytecode
+            ClassReader cr = new ClassReader(classData);
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            TraceClassVisitor tcv = new TraceClassVisitor(pw);
+            cr.accept(tcv, 0);
+
+            System.out.println(sw);
+        }
 
         // Custom class loader to load generated classes.
         //
