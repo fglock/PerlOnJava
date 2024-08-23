@@ -2,10 +2,12 @@ package org.perlonjava.parser;
 
 import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.EmitterContext;
-import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.Namespace;
+import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.RuntimeCode;
+import org.perlonjava.runtime.RuntimeScalar;
 
 import java.util.*;
 
@@ -248,7 +250,7 @@ public class Parser {
 
         // Finally, we create a new 'AnonSubNode' object with the parsed data: the name, prototype, attributes, block,
         // `useTryCatch` flag, and token position.
-        AnonSubNode anonSubNode =  new AnonSubNode(subName, prototype, attributes, block, false, tokenIndex);
+        AnonSubNode anonSubNode = new AnonSubNode(subName, prototype, attributes, block, false, tokenIndex);
 
         if (subName != null) {
             // Additional steps for named subroutine:
@@ -262,11 +264,11 @@ public class Parser {
 
             // return typeglob assignment
             return new BinaryOperatorNode("=",
-                new OperatorNode("*",
-                    new IdentifierNode(fullName, tokenIndex),
-                    tokenIndex),
-                anonSubNode,
-                tokenIndex);
+                    new OperatorNode("*",
+                            new IdentifierNode(fullName, tokenIndex),
+                            tokenIndex),
+                    anonSubNode,
+                    tokenIndex);
         }
 
         // return anonymous subroutine
@@ -355,6 +357,39 @@ public class Parser {
         return new For3Node(true, initialization, condition, increment, body, tokenIndex);
     }
 
+    private Node parseSubroutineCall() {
+        String subName = parseComplexIdentifier();
+        ctx.logDebug("SubroutineCall subName `" + subName + "` package " + ctx.symbolTable.getCurrentPackage());
+        String fullName = Namespace.normalizeVariableName(subName, ctx.symbolTable.getCurrentPackage());
+
+        IdentifierNode nameNode = new IdentifierNode(subName, tokenIndex);
+
+        boolean subExists = Namespace.existsGlobalCodeRef(fullName);
+        String prototype = null;
+        if (subExists) {
+            // fetch subroutine
+            RuntimeScalar codeRef = Namespace.getGlobalCodeRef(fullName);
+            prototype = ((RuntimeCode) codeRef.value).prototype;
+        }
+        ctx.logDebug("SubroutineCall exists " + subExists + " prototype `" + prototype + "`");
+
+        boolean hasParentheses = peek().text.equals("(");
+        if (!subExists && !hasParentheses) {
+            // not a subroutine call
+            return nameNode;
+        }
+
+        // handle the parameter list
+        // XXX TODO handle prototype or parameter variables
+        Node arguments = parseZeroOrMoreList(0);
+
+        // rewrite and return:  `&name(arguments)`
+        return new BinaryOperatorNode("(",
+                new OperatorNode("&", nameNode, nameNode.tokenIndex),
+                arguments,
+                tokenIndex);
+    }
+
     private Node parseIfStatement() {
         LexerToken operator = consume(LexerTokenType.IDENTIFIER); // "if", "unless", "elsif"
         consume(LexerTokenType.OPERATOR, "(");
@@ -418,6 +453,7 @@ public class Parser {
     }
 
     private Node parsePrimary() {
+        int startIndex = tokenIndex;
         LexerToken token = consume(); // Consume the next token from the input
         Node operand;
 
@@ -533,8 +569,8 @@ public class Parser {
                         return parseRawString(token.text);
                     default:
                         // Handle any other identifier as an identifier node
-                        tokenIndex--;   // re-parse
-                        return new IdentifierNode(parseComplexIdentifier(), tokenIndex);
+                        tokenIndex = startIndex;   // re-parse
+                        return parseSubroutineCall();
                 }
                 break;
             case NUMBER:
@@ -570,7 +606,7 @@ public class Parser {
                         parsingTakeReference = false;
                         return new OperatorNode(token.text, operand, tokenIndex);
                     default:
-                        // Handle unary operators
+                        // Handle unary operators like `! + ++` and sigils `$ @ % * *`
                         if (UNARY_OP.contains(token.text)) {
                             String text = token.text;
                             if (isSigil(text) || text.equals("&") || text.equals("*")) {
