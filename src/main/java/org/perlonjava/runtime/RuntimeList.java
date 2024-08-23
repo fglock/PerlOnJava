@@ -3,6 +3,7 @@ package org.perlonjava.runtime;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The RuntimeList class simulates a Perl list.
@@ -78,10 +79,24 @@ public class RuntimeList implements RuntimeDataProvider {
     }
 
     // Get the array value of the List
-    public RuntimeArray getArray() {
-        RuntimeArray newArray = new RuntimeArray();
-        this.addToArray(newArray);
-        return newArray;
+    public RuntimeArray getArrayOfAlias() {
+        RuntimeArray arr = new RuntimeArray();
+        List<RuntimeBaseEntity> arrElements = arr.elements;
+        for (RuntimeBaseEntity elem : elements) {
+            if (elem instanceof RuntimeScalar) {
+                arrElements.add(elem);
+            } else if (elem instanceof RuntimeArray) {
+                for (RuntimeBaseEntity arrElem : ((RuntimeArray) elem).elements) {
+                    arrElements.add(arrElem);
+                }
+            } else if (elem instanceof RuntimeHash) {
+                for (Map.Entry<String, RuntimeScalar> entry : ((RuntimeHash) elem).elements.entrySet()) {
+                    arrElements.add(new RuntimeScalar(entry.getKey()));
+                    arrElements.add(entry.getValue());
+                }
+            }
+        }
+        return arr;
     }
 
     // Get the list value of the list
@@ -144,7 +159,7 @@ public class RuntimeList implements RuntimeDataProvider {
 
     // Method to return an iterator
     public Iterator<RuntimeScalar> iterator() {
-        return this.getArray().iterator();
+        return this.getArrayOfAlias().iterator();
     }
 
     // Operators

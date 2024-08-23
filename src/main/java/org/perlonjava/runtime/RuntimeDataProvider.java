@@ -13,7 +13,7 @@ public interface RuntimeDataProvider {
      *
      * @return a RuntimeArray object.
      */
-    RuntimeArray getArray();
+    RuntimeArray getArrayOfAlias();
 
     /**
      * Retrieves a RuntimeList instance.
