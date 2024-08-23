@@ -399,6 +399,12 @@ public class Parser {
             // prototype is empty string
             List<Node> list = new ArrayList<>();
             arguments = new ListNode(list, tokenIndex);
+        } else if (prototype.equals("$")) {
+            // prototype is `$`
+            arguments = parseZeroOrOneList(1);
+        } else if (prototype.equals(";$")) {
+            // prototype is `;$`
+            arguments = parseZeroOrOneList(0);
         } else {
             // XXX TODO: Handle more prototypes or parameter variables
             arguments = parseZeroOrMoreList(0);
