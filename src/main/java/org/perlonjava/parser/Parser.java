@@ -1209,9 +1209,7 @@ public class Parser {
     private ListNode parseZeroOrMoreList(int minItems) {
         LexerToken token = peek();
 
-        if ((token.text.equals(".") && (tokens.get(tokenIndex).type != LexerTokenType.NUMBER))
-            || token.type == LexerTokenType.EOF || LISTTERMINATORS.contains(token.text)
-        ) {
+        if (token.text.equals(".") && (tokens.get(tokenIndex).type != LexerTokenType.NUMBER)) {
             // If followed by `.` (string concatenation operator)
             // or one of the list terminators
             // return an empty list
@@ -1230,7 +1228,7 @@ public class Parser {
         }
 
         ListNode expr = new ListNode(tokenIndex);
-        while (token.type != LexerTokenType.EOF) {
+        while (token.type != LexerTokenType.EOF && !LISTTERMINATORS.contains(token.text)) {
             // argument without parentheses
             expr.elements.add(parseExpression(getPrecedence(",") + 1));
             token = peek();
