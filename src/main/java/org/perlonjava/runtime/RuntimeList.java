@@ -79,7 +79,9 @@ public class RuntimeList implements RuntimeDataProvider {
 
     // Get the array value of the List
     public RuntimeArray getArray() {
-        return new RuntimeArray(this);
+        RuntimeArray newArray = new RuntimeArray();
+        this.addToArray(newArray);
+        return newArray;
     }
 
     // Get the list value of the list
