@@ -2,10 +2,12 @@ package org.perlonjava.parser;
 
 import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.EmitterContext;
-import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.Namespace;
+import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.RuntimeCode;
+import org.perlonjava.runtime.RuntimeScalar;
 
 import java.util.*;
 
@@ -246,16 +248,31 @@ public class Parser {
             throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
         }
 
+        // Finally, we create a new 'AnonSubNode' object with the parsed data: the name, prototype, attributes, block,
+        // `useTryCatch` flag, and token position.
+        AnonSubNode anonSubNode = new AnonSubNode(subName, prototype, attributes, block, false, tokenIndex);
+
         if (subName != null) {
+            // Additional steps for named subroutine:
+            // - register the subroutine in the namespace
+            // - add the typeglob assignment:  *name = sub () :attr {...}
+
             // register the named subroutine
             String fullName = Namespace.normalizeVariableName(subName, ctx.symbolTable.getCurrentPackage());
             RuntimeCode codeRef = new RuntimeCode(prototype);
             Namespace.getGlobalCodeRef(fullName).set(new RuntimeScalar(codeRef));
+
+            // return typeglob assignment
+            return new BinaryOperatorNode("=",
+                    new OperatorNode("*",
+                            new IdentifierNode(fullName, tokenIndex),
+                            tokenIndex),
+                    anonSubNode,
+                    tokenIndex);
         }
 
-        // Finally, we return a new 'AnonSubNode' object with the parsed data: the name, prototype, attributes, block,
-        // `useTryCatch` flag, and token position.
-        return new AnonSubNode(subName, prototype, attributes, block, false, tokenIndex);
+        // return anonymous subroutine
+        return anonSubNode;
     }
 
 
