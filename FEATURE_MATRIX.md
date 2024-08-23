@@ -58,8 +58,8 @@
 
 ## Subroutines
 - [x] Anonymous subroutines with closure variables
-- [x] return from inside a block
-- [x] assigning to a closure variable mutates the variable in the original context
+- [x] Return from inside a block
+- [x] Assigning to a closure variable mutates the variable in the original context
 - [ ] `@_` contains aliases to the caller variables
 - [x] Named subroutines
 - [ ] Inline "constant" subroutines optimization
@@ -69,7 +69,7 @@
 - [ ] Advanced Regex Features
 
 ## Statements and special operators
-- [x] context void, scalar, list
+- [x] Context void, scalar, list
 - [x] `if`/`else`/`elsif` and `unless`
 - [x] 3-argument `for` loop
 - [x] `foreach` loop
@@ -83,22 +83,22 @@
 - [x] `do` block
 - [ ] `do` file
 - [ ] `print` statement (Simple `print` and `say` statement implemented)
-- [x] short-circuit and, or
-- [x] low-precedence/high precedence operators: `not`, `or`, `and`
-- [x] ternary operator
+- [x] Short-circuit and, or
+- [x] Low-precedence/high precedence operators: `not`, `or`, `and`
+- [x] Ternary operator
 - [ ] compound assignment operators (most are implemented)
 - [ ] `package` declaration (partially implemented)
 - [ ] `version` objects
 - [x] `__PACKAGE__`
-- [x] typeglob operations like: `*x = sub {}`
-- [x] code references like:  `&subr`
+- [x] Typeglob operations like: `*x = sub {}`
+- [x] Code references like:  `&subr`
 - [ ] `require` operator
 - [ ] `use` and `no` statements
 - [ ] `__SUB__`
 - [ ] `BEGIN` block
 - [ ] `DESTROY` method keyword
-- [ ] labels
-- [ ] search for labels in call stack
+- [ ] Labels
+- [ ] Search for labels in call stack
 - [ ] Here-docs
 
 ## Namespaces and global variables
@@ -108,4 +108,7 @@
 - [x] `$"` special variable
 - [x] `$_` special variable
 - [ ] Thread-safe `@_`, `$_` and regex variables like `$1`
+
+## Non-strict features
+- [ ] Use string as a scalar reference: `${"name"}`
 
