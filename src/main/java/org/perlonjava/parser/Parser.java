@@ -441,6 +441,8 @@ public class Parser {
     /**
      * Parses an expression based on operator precedence.
      *
+     * Higher precedence means tighter: `*` has higher precedence than `+`
+     *
      * @param precedence The precedence level of the current expression.
      * @return The root node of the parsed expression.
      */
@@ -462,15 +464,17 @@ public class Parser {
             int tokenPrecedence = getPrecedence(token.text);
 
             // If the token's precedence is less than the precedence of the current expression, stop parsing.
-            if (tokenPrecedence < precedence) {
+            if (tokenPrecedence <= precedence) {
                 break;
             }
 
             // If the operator is right associative (like exponentiation), parse it with lower precedence.
             if (isRightAssociative(token.text)) {
+                ctx.logDebug("parseExpression `" + token.text + "` precedence: " + tokenPrecedence + " right assoc");
                 left = parseInfix(left, tokenPrecedence - 1); // Parse the right side with lower precedence.
             } else {
                 // Otherwise, parse it normally with the same precedence.
+                ctx.logDebug("parseExpression `" + token.text + "` precedence: " + tokenPrecedence + " left assoc");
                 left = parseInfix(left, tokenPrecedence);
             }
         }
