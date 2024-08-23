@@ -51,5 +51,11 @@ sub CONST () { "VALUE" }
 $v = CONST . "2";
 print "not" if $v ne "VALUE2"; say "ok # constant subroutine returned $v";
 
+# subroutine call operator precedence
+
+sub no_proto { "VALUE" }
+$v = no_proto . "2";
+print "not" if $v ne "VALUE2"; say "ok # subroutine without prototype returned $v";
+
 5;    # return value
 
