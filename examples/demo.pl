@@ -49,7 +49,11 @@ print "not " if $v != 14; say "ok # subroutine scalar argument is an alias to th
 
 sub CONST () { "VALUE" }
 $v = CONST . "2";
-print "not" if $v ne "VALUE2"; say "ok # constant subroutine returned $v";
+print "not " if $v ne "VALUE2"; say "ok # constant subroutine returned $v";
+
+# XXX
+# $v = CONST => "2";
+# print "not " if $v ne "CONST"; say "ok # constant subroutine returned $v";
 
 # subroutine call operator precedence
 
