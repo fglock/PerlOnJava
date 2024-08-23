@@ -129,8 +129,13 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     }
 
     // Get the list value of the list
-    public RuntimeArray getArray() {
-        return this;
+    public RuntimeArray getArrayOfAlias() {
+        RuntimeArray arr = new RuntimeArray();
+        List<RuntimeBaseEntity> arrElements = arr.elements;
+        for (RuntimeBaseEntity elem : elements) {
+            arrElements.add(elem);
+        }
+        return arr;
     }
 
     // Get the list value of the list
@@ -217,7 +222,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
 
     // keys() operator
     public RuntimeArray keys() {
-        return RuntimeList.generateList(0, this.size() - 1).getArray();
+        return RuntimeList.generateList(0, this.size() - 1).getArrayOfAlias();
     }
 
     // values() operator

@@ -170,8 +170,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     // Get the array value of the Scalar
-    public RuntimeArray getArray() {
-        return new RuntimeArray(this);
+    public RuntimeArray getArrayOfAlias() {
+        RuntimeArray arr = new RuntimeArray();
+        arr.elements.add(this);
+        return arr;
     }
 
     // Get the list value of the Scalar
@@ -820,6 +822,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Method to return an iterator
     public Iterator<RuntimeScalar> iterator() {
-        return this.getArray().iterator();
+        return this.getArrayOfAlias().iterator();
     }
 }

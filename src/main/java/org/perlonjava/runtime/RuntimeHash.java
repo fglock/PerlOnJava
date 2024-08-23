@@ -131,7 +131,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
     }
 
     // Get the array value of the Scalar
-    public RuntimeArray getArray() {
+    public RuntimeArray getArrayOfAlias() {
         return this.entryArray();
     }
 
