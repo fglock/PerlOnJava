@@ -40,6 +40,7 @@ public class PerlScriptEngine extends AbstractScriptEngine {
                     false,
                     false,
                     false,
+                    false,
                     false
             );
             return result != null ? result.toString() : null;

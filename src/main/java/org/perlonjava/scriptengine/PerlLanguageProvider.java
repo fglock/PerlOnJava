@@ -50,7 +50,7 @@ public class PerlLanguageProvider {
      * @return The result of the Perl code execution.
      * @throws Throwable If an error occurs during execution.
      */
-    public static RuntimeList executePerlCode(String code, String fileName, boolean debugEnabled, boolean tokenizeOnly, boolean compileOnly, boolean parseOnly) throws Throwable {
+    public static RuntimeList executePerlCode(String code, String fileName, boolean debugEnabled, boolean tokenizeOnly, boolean compileOnly, boolean parseOnly, boolean disassembleEnabled) throws Throwable {
 
         ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
         // Enter a new scope in the symbol table and add special Perl variables
@@ -72,7 +72,8 @@ public class PerlLanguageProvider {
                 debugEnabled,   // debugEnabled flag
                 tokenizeOnly,
                 compileOnly,
-                parseOnly
+                parseOnly,
+                disassembleEnabled
         );
 
 

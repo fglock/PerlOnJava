@@ -38,6 +38,13 @@ public class ArgumentParser {
                     }
                     parsedArgs.parseOnly = true;
                     break;
+                case "--disassemble":
+                    if (parsedArgs.tokenizeOnly || parsedArgs.parseOnly) {
+                        System.err.println("Error: --disassemble cannot be combined with --tokenize or --parse");
+                        System.exit(1);
+                    }
+                    parsedArgs.disassembleEnabled = true;
+                    break;
                 case "-c":
                     if (parsedArgs.tokenizeOnly || parsedArgs.parseOnly) {
                         System.err.println("Error: -c cannot be combined with --tokenize or --parse");
@@ -72,12 +79,14 @@ public class ArgumentParser {
         System.out.println("  --debug         Enables debugging mode.");
         System.out.println("  --tokenize      Tokenizes the input code.");
         System.out.println("  --parse         Parses the input code.");
+        System.out.println("  --disassemble   Disassemble the generated code.");
         System.out.println("  -c              Compiles the input code only.");
         System.out.println("  -h, --help      Displays this help message.");
     }
 
     public static class ParsedArguments {
         public boolean debugEnabled = false;
+        public boolean disassembleEnabled = false;
         public boolean tokenizeOnly = false;
         public boolean parseOnly = false;
         public boolean compileOnly = false;
