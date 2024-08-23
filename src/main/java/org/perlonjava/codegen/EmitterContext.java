@@ -27,6 +27,7 @@ public class EmitterContext {
     public boolean tokenizeOnly;
     public boolean compileOnly;
     public boolean parseOnly;
+    public boolean disassembleEnabled;
     /**
      * The name of the file being processed.
      */
@@ -87,7 +88,8 @@ public class EmitterContext {
             boolean debugEnabled,
             boolean tokenizeOnly,
             boolean compileOnly,
-            boolean parseOnly) {
+            boolean parseOnly,
+            boolean disassembleEnabled) {
         this.fileName = fileName;
         this.javaClassName = javaClassName;
         this.symbolTable = symbolTable;
@@ -100,6 +102,7 @@ public class EmitterContext {
         this.tokenizeOnly = tokenizeOnly;
         this.compileOnly = compileOnly;
         this.parseOnly = parseOnly;
+        this.disassembleEnabled = disassembleEnabled;
     }
 
     /**
@@ -117,7 +120,7 @@ public class EmitterContext {
             return contextCache.get(contextType);
         }
         // Create a new context and cache it
-        EmitterContext newContext = new EmitterContext(this.fileName, this.javaClassName, this.symbolTable, this.returnLabel, this.mv, contextType, this.isBoxed, errorUtil, debugEnabled, tokenizeOnly, compileOnly, parseOnly);
+        EmitterContext newContext = new EmitterContext(this.fileName, this.javaClassName, this.symbolTable, this.returnLabel, this.mv, contextType, this.isBoxed, errorUtil, debugEnabled, tokenizeOnly, compileOnly, parseOnly, disassembleEnabled);
         contextCache.put(contextType, newContext);
         return newContext;
     }

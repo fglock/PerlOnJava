@@ -29,7 +29,8 @@ public class Main {
                     parsedArgs.debugEnabled,
                     parsedArgs.tokenizeOnly,
                     parsedArgs.compileOnly,
-                    parsedArgs.parseOnly
+                    parsedArgs.parseOnly,
+                    parsedArgs.disassembleEnabled
             );
         } catch (Throwable t) {
             t.printStackTrace();

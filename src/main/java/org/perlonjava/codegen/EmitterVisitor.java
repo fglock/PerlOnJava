@@ -878,7 +878,8 @@ public class EmitterVisitor implements Visitor {
                         ctx.debugEnabled,
                         ctx.tokenizeOnly,
                         ctx.compileOnly,
-                        ctx.parseOnly);
+                        ctx.parseOnly,
+                        ctx.disassembleEnabled);
         RuntimeCode.evalContext.put(evalTag, evalCtx);
 
         // Here the compiled code will call RuntimeCode.evalStringHelper(code, evalTag) method.
@@ -1046,7 +1047,8 @@ public class EmitterVisitor implements Visitor {
                         ctx.debugEnabled,
                         ctx.tokenizeOnly,
                         ctx.compileOnly,
-                        ctx.parseOnly);
+                        ctx.parseOnly,
+                        ctx.disassembleEnabled);
         Class<?> generatedClass =
                 EmitterMethodCreator.createClassWithMethod(
                         subCtx, newEnv, node.block, node.useTryCatch
