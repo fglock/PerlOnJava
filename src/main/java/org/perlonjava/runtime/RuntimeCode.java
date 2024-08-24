@@ -80,14 +80,18 @@ public class RuntimeCode implements RuntimeScalarReference {
             // Set the global error variable "$@" using GlobalContext.setGlobalVariable(key, value)
             GlobalContext.getGlobalVariable("main::@").set(e.toString());
 
-            ast = new OperatorNode("undef", null, 1); // return an "undef" ast
+            // In case of error return an "undef" ast
+            ast = new OperatorNode("undef", null, 1);
         }
 
         // Create a new instance of ErrorMessageUtil, resetting the line counter
         evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
         evalCtx.symbolTable = ctx.symbolTable.clone(); // reset the symboltable
-        Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(evalCtx, newEnv, // Closure variables
-                ast, true  // use try-catch
+        Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
+                evalCtx,
+                newEnv, // Closure variables
+                ast,
+                true  // use try-catch
         );
         return generatedClass;
     }
