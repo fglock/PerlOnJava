@@ -8,7 +8,7 @@ import java.util.Set;
 /**
  * The RuntimeScalar class simulates Perl namespaces.
  */
-public class Namespace {
+public class GlobalContext {
 
     private static final Map<String, RuntimeScalar> globalVariables = new HashMap<>();
     private static final Map<String, RuntimeArray> globalArrays = new HashMap<>();
