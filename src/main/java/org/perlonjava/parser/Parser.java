@@ -127,6 +127,7 @@ public class Parser {
                     BlockNode block = parseOptionalPackageBlock(nameNode, packageNode);
                     if (block != null) return block;
 
+                    parseStatementTerminator();
                     ctx.symbolTable.setCurrentPackage(nameNode.name);
                     return packageNode;
                 case "sub":
@@ -150,37 +151,49 @@ public class Parser {
             switch (token.text) {
                 case "if":
                     consume();
-                    return new BinaryOperatorNode("&&", parseExpression(0), expression, tokenIndex);
+                    Node modifierExpression = parseExpression(0);
+                    parseStatementTerminator();
+                    return new BinaryOperatorNode("&&", modifierExpression, expression, tokenIndex);
                 case "unless":
                     consume();
-                    return new BinaryOperatorNode("||", parseExpression(0), expression, tokenIndex);
+                    modifierExpression = parseExpression(0);
+                    parseStatementTerminator();
+                    return new BinaryOperatorNode("||", modifierExpression, expression, tokenIndex);
                 case "for":
                 case "foreach":
                     consume();
+                    modifierExpression = parseExpression(0);
+                    parseStatementTerminator();
                     return new For1Node(
                             false,
                             new OperatorNode("$", new IdentifierNode("_", tokenIndex), tokenIndex),  // $_
-                            parseExpression(0),
+                            modifierExpression,
                             expression,
                             tokenIndex);
                 case "while":
                 case "until":
                     consume();
-                    Node condition = parseExpression(0);
+                    modifierExpression = parseExpression(0);
+                    parseStatementTerminator();
                     if (token.text.equals("until")) {
-                        condition = new OperatorNode("not", condition, condition.getIndex());
+                        modifierExpression = new OperatorNode("not", modifierExpression, modifierExpression.getIndex());
                     }
-                    return new For3Node(false, null, condition, null, expression, tokenIndex);
+                    return new For3Node(false, null, modifierExpression, null, expression, tokenIndex);
             }
             throw new PerlCompilerException(tokenIndex, "Not implemented: " + token, ctx.errorUtil);
         }
+        parseStatementTerminator();
+        return expression;
+    }
+
+    private void parseStatementTerminator() {
+        LexerToken token = peek();
         if (token.type != LexerTokenType.EOF && !token.text.equals("}") && !token.text.equals(";")) {
-            throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, ctx.errorUtil);
+            throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
         }
         if (token.text.equals(";")) {
             consume();
         }
-        return expression;
     }
 
     private BlockNode parseOptionalPackageBlock(IdentifierNode nameNode, OperatorNode packageNode) {
@@ -235,7 +248,7 @@ public class Parser {
                 }
             }
 
-            ctx.logDebug("Dotted-decimal Version: " + version.toString());
+            ctx.logDebug("Dotted-decimal Version: " + version);
         }
     }
 
@@ -1285,7 +1298,7 @@ public class Parser {
         LexerToken token = peek();
 
         if ((token.text.equals(".") && tokens.get(tokenIndex).type != LexerTokenType.NUMBER)
-            || token.text.equals("eq") || token.text.equals("ne")) {
+                || token.text.equals("eq") || token.text.equals("ne")) {
             // XXX add other infix operators
 
             // If followed by `.` (string concatenation operator)
