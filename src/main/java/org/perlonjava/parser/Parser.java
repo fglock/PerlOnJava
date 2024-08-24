@@ -76,7 +76,7 @@ public class Parser {
         return parseBlock();
     }
 
-    private Node parseBlock() {
+    private BlockNode parseBlock() {
         ctx.symbolTable.enterScope();
         List<Node> statements = new ArrayList<>();
         LexerToken token = peek();
@@ -98,6 +98,7 @@ public class Parser {
 
     public Node parseStatement() {
         LexerToken token = peek();
+        ctx.logDebug("parseStatement `" + token.text + "`");
 
         if (token.type == LexerTokenType.IDENTIFIER) {
             switch (token.text) {
@@ -112,10 +113,31 @@ public class Parser {
                     return parseWhileStatement();
                 case "package":
                     consume();
-                    Node operand = parseZeroOrOneList(1);
-                    IdentifierNode nameNode = ((IdentifierNode) ((ListNode) operand).elements.get(0));
+                    String packageName = parseComplexIdentifier();
+                    if (packageName == null) {
+                        throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
+                    }
+                    IdentifierNode nameNode = new IdentifierNode(packageName, tokenIndex);
+                    OperatorNode packageNode = new OperatorNode(token.text, nameNode, tokenIndex);
+
+                    token = peek();
+                    if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
+                        // package NAME BLOCK
+                        consume(LexerTokenType.OPERATOR, "{");
+                        ctx.symbolTable.enterScope();
+                        ctx.symbolTable.setCurrentPackage(nameNode.name);
+                        BlockNode block = parseBlock();
+
+                        // Insert packageNode as first statement in block
+                        block.elements.add(0, packageNode);
+
+                        ctx.symbolTable.exitScope();
+                        consume(LexerTokenType.OPERATOR, "}");
+                        return block;
+                    }
+
                     ctx.symbolTable.setCurrentPackage(nameNode.name);
-                    return new OperatorNode(token.text, nameNode, tokenIndex);
+                    return packageNode;
                 case "sub":
                     consume();
                     return parseAnonSub(true);
@@ -1215,7 +1237,10 @@ public class Parser {
     private ListNode parseZeroOrMoreList(int minItems) {
         LexerToken token = peek();
 
-        if (token.text.equals(".") && (tokens.get(tokenIndex).type != LexerTokenType.NUMBER)) {
+        if ((token.text.equals(".") && tokens.get(tokenIndex).type != LexerTokenType.NUMBER)
+            || token.text.equals("eq") || token.text.equals("ne")) {
+            // XXX add other infix operators
+
             // If followed by `.` (string concatenation operator)
             // or one of the list terminators
             // return an empty list
