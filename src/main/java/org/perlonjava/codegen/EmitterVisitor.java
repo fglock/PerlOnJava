@@ -4,6 +4,7 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
+import org.perlonjava.ArgumentParser;
 import org.perlonjava.astnode.*;
 import org.perlonjava.parser.Parser;
 import org.perlonjava.runtime.GlobalContext;
@@ -862,12 +863,14 @@ public class EmitterVisitor implements Visitor {
             newEnv[index] = variableName;
         }
 
+        ArgumentParser.CompilerOptions compilerOptions = ctx.compilerOptions.clone();
+        compilerOptions.fileName = "(eval)";
+
         // save the eval context in a HashMap in RuntimeScalar class
         String evalTag = "eval" + EmitterMethodCreator.classCounter++;
         // create the eval context
         EmitterContext evalCtx =
                 new EmitterContext(
-                        "(eval)", // filename
                         null, // internal java class name will be created at runtime
                         ctx.symbolTable.clone(), // clone the symbolTable
                         null, // return label
@@ -875,11 +878,7 @@ public class EmitterVisitor implements Visitor {
                         ctx.contextType, // call context
                         true, // is boxed
                         ctx.errorUtil, // error message utility
-                        ctx.debugEnabled,
-                        ctx.tokenizeOnly,
-                        ctx.compileOnly,
-                        ctx.parseOnly,
-                        ctx.disassembleEnabled);
+                        compilerOptions);
         RuntimeCode.evalContext.put(evalTag, evalCtx);
 
         // Here the compiled code will call RuntimeCode.evalStringHelper(code, evalTag) method.
@@ -1036,7 +1035,6 @@ public class EmitterVisitor implements Visitor {
         // create the new method
         EmitterContext subCtx =
                 new EmitterContext(
-                        ctx.fileName, // same source filename
                         EmitterMethodCreator.generateClassName(), // internal java class name
                         ctx.symbolTable, // closure symbolTable
                         null, // return label
@@ -1044,11 +1042,7 @@ public class EmitterVisitor implements Visitor {
                         RuntimeContextType.RUNTIME, // call context
                         true, // is boxed
                         ctx.errorUtil, // error message utility
-                        ctx.debugEnabled,
-                        ctx.tokenizeOnly,
-                        ctx.compileOnly,
-                        ctx.parseOnly,
-                        ctx.disassembleEnabled);
+                        ctx.compilerOptions);
         Class<?> generatedClass =
                 EmitterMethodCreator.createClassWithMethod(
                         subCtx, newEnv, node.block, node.useTryCatch
