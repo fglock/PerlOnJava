@@ -83,6 +83,7 @@ public class PerlLanguageProvider {
             }
             return null; // success
         }
+        compilerOptions.code = null;    // Throw away the source code to spare memory
 
         // Create the AST
         // Create an instance of ErrorMessageUtil with the file name and token list
