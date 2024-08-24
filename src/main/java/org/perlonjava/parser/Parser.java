@@ -17,22 +17,7 @@ public class Parser {
     private static final Set<String> LISTTERMINATORS =
             new HashSet<>(Arrays.asList(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when", "not", "and", "or"));
     private static final Set<String> UNARY_OP =
-            new HashSet<>(
-                    Arrays.asList(
-                            "!",
-                            "~",
-                            "\\",
-                            "-",
-                            "+",
-                            "--",
-                            "++", // operators
-                            "$",
-                            "@",
-                            "%",
-                            "*",
-                            "&",
-                            "$#" // sigils
-                    ));
+            new HashSet<>(Arrays.asList("!", "~", "\\", "-", "+", "--", "++", "$", "@", "%", "*", "&", "$#"));
     private final List<LexerToken> tokens;
     private final EmitterContext ctx;
     private int tokenIndex = 0;
@@ -132,7 +117,7 @@ public class Parser {
                     return packageNode;
                 case "sub":
                     consume();
-                    return parseAnonSub(true);
+                    return parseSubroutineDefinition(true);
 
             }
         }
@@ -280,7 +265,7 @@ public class Parser {
         return false;
     }
 
-    private Node parseAnonSub(boolean wantName) {
+    private Node parseSubroutineDefinition(boolean wantName) {
         // This method is responsible for parsing an anonymous subroutine (a subroutine without a name)
         // or a named subroutine based on the 'wantName' flag.
 
@@ -642,18 +627,9 @@ public class Parser {
                             Node block = parseBlock();
                             consume(LexerTokenType.OPERATOR, "}");
                             // transform:  eval { 123 }
-                            // into:  sub { 123 }->()
-                            //
-                            //   BinaryOperatorNode: ->
-                            //     AnonSubNode:
-                            //       BlockNode:
-                            //         NumberNode: 123
-                            //     ListNode:
+                            // into:  sub { 123 }->()  with useTryCatch flag
                             return new BinaryOperatorNode("->",
-
-
-                                    new AnonSubNode(null, null, null, block, true, tokenIndex),
-                                    new ListNode(tokenIndex), tokenIndex);
+                                    new AnonSubNode(null, null, null, block, true, tokenIndex), new ListNode(tokenIndex), tokenIndex);
                         } else {
                             // Otherwise, parse a primary expression
                             operand = parsePrimary();
@@ -671,7 +647,7 @@ public class Parser {
                         break;
                     case "sub":
                         // Handle 'sub' keyword to parse an anonymous subroutine
-                        return parseAnonSub(false);
+                        return parseSubroutineDefinition(false);
                     case "q":
                     case "qq":
                     case "qx":
