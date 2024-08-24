@@ -10,23 +10,12 @@ public class PerlLanguageProviderTest {
 
     @Test
     public void testExecutePerlCode() {
-        String code = "print 'Hello, World!';";
-        String fileName = "test.pl";
-        boolean debugEnabled = false;
-        boolean tokenizeOnly = false;
-        boolean compileOnly = false;
-        boolean parseOnly = false;
-        boolean disassembleEnabled = false;
+        ArgumentParser.CompilerOptions options = new ArgumentParser.CompilerOptions();
+        options.code = "print 'Hello, World!';";
+        options.fileName = "test.pl";
 
         try {
-            RuntimeList result = PerlLanguageProvider.executePerlCode(
-                code,
-                fileName,
-                debugEnabled,
-                tokenizeOnly,
-                compileOnly,
-                parseOnly, disassembleEnabled
-            );
+            RuntimeList result = PerlLanguageProvider.executePerlCode(options);
 
             // Add assertions to verify the result
             assertNotNull(result, "Result should not be null");
@@ -41,24 +30,12 @@ public class PerlLanguageProviderTest {
 
     @Test
     public void testExecutePerlCodeWithError() {
-        String code = "print 'Hello, World!' 123;"; // There is an error in Perl code
-        String fileName = "test_error.pl";
-        boolean debugEnabled = false;
-        boolean tokenizeOnly = false;
-        boolean compileOnly = false;
-        boolean parseOnly = false;
-        boolean disassembleEnabled = false;
+        ArgumentParser.CompilerOptions options = new ArgumentParser.CompilerOptions();
+        options.code = "print 'Hello, World!' 123;"; // There is an error in Perl code
+        options.fileName = "test_error.pl";
 
         assertThrows(Throwable.class, () -> {
-            PerlLanguageProvider.executePerlCode(
-                code,
-                fileName,
-                debugEnabled,
-                tokenizeOnly,
-                compileOnly,
-                parseOnly,
-                disassembleEnabled
-            );
+            PerlLanguageProvider.executePerlCode(options);
         }, "Expected an exception to be thrown");
     }
 }

@@ -43,8 +43,7 @@ public class RuntimeCode implements RuntimeScalarReference {
 
         // retrieve the eval context that was saved at program compile-time
         EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
-
-        EmitterContext evalCtx = new EmitterContext("(eval)", // filename
+        EmitterContext evalCtx = new EmitterContext(
                 EmitterMethodCreator.generateClassName(), // internal java class name
                 ctx.symbolTable.clone(), // clone the symbolTable
                 null, // return label
@@ -52,7 +51,7 @@ public class RuntimeCode implements RuntimeScalarReference {
                 ctx.contextType, // call context
                 true, // is boxed
                 ctx.errorUtil, // error message utility
-                ctx.debugEnabled, ctx.tokenizeOnly, ctx.compileOnly, ctx.parseOnly, ctx.disassembleEnabled);
+                ctx.compilerOptions);
 
         // TODO - this can be cached for performance
         // retrieve closure variable list
@@ -72,7 +71,7 @@ public class RuntimeCode implements RuntimeScalarReference {
         try {
             // Create the AST
             // Create an instance of ErrorMessageUtil with the file name and token list
-            evalCtx.errorUtil = new ErrorMessageUtil(evalCtx.fileName, tokens);
+            evalCtx.errorUtil = new ErrorMessageUtil(evalCtx.compilerOptions.fileName, tokens);
             Parser parser = new Parser(evalCtx, tokens); // Parse the tokens
             ast = parser.parse(); // Generate the abstract syntax tree (AST)
         } catch (Exception e) {
@@ -85,7 +84,7 @@ public class RuntimeCode implements RuntimeScalarReference {
         }
 
         // Create a new instance of ErrorMessageUtil, resetting the line counter
-        evalCtx.errorUtil = new ErrorMessageUtil(ctx.fileName, tokens);
+        evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
         evalCtx.symbolTable = ctx.symbolTable.clone(); // reset the symboltable
         Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(evalCtx, newEnv, // Closure variables
                 ast, true  // use try-catch

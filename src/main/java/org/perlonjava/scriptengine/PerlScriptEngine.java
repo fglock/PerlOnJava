@@ -1,5 +1,6 @@
 package org.perlonjava.scriptengine;
 
+import org.perlonjava.ArgumentParser;
 import org.perlonjava.runtime.RuntimeList;
 
 import javax.script.*;
@@ -34,15 +35,11 @@ public class PerlScriptEngine extends AbstractScriptEngine {
     @Override
     public Object eval(String script, ScriptContext context) throws ScriptException {
         try {
-            RuntimeList result = PerlLanguageProvider.executePerlCode(
-                    script,
-                    "<STDIN>",
-                    false,
-                    false,
-                    false,
-                    false,
-                    false
-            );
+            ArgumentParser.CompilerOptions options = new ArgumentParser.CompilerOptions();
+            options.fileName = "<STDIN>";
+            options.code = script;
+
+            RuntimeList result = PerlLanguageProvider.executePerlCode(options);
             return result != null ? result.toString() : null;
         } catch (Throwable t) {
             ScriptException scriptException = new ScriptException("Error executing Perl script: " + t.getMessage());

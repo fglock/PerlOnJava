@@ -2,6 +2,7 @@ package org.perlonjava.codegen;
 
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
+import org.perlonjava.ArgumentParser;
 import org.perlonjava.runtime.ErrorMessageUtil;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.ScopedSymbolTable;
@@ -20,18 +21,13 @@ public class EmitterContext {
      * Cache for contexts with different ContextTypes
      */
     private final Map<RuntimeContextType, EmitterContext> contextCache = new EnumMap<>(RuntimeContextType.class);
+
     /**
-     * Debugging options.
+     * CompilerOptions is a configuration class that holds various settings and flags
+     * used by the compiler during the compilation process.
      */
-    public boolean debugEnabled;  //  Flag to enable or disable debugging
-    public boolean tokenizeOnly;
-    public boolean compileOnly;
-    public boolean parseOnly;
-    public boolean disassembleEnabled;
-    /**
-     * The name of the file being processed.
-     */
-    public String fileName;
+    public ArgumentParser.CompilerOptions compilerOptions;
+
     /**
      * The name of the Java class being generated.
      */
@@ -41,7 +37,7 @@ public class EmitterContext {
      */
     public ScopedSymbolTable symbolTable;
     /**
-     * The label to which the method should return.
+     * The label to which the current method should return.
      */
     public Label returnLabel;
     /**
@@ -64,7 +60,6 @@ public class EmitterContext {
     /**
      * Constructs a new EmitterContext with the specified parameters.
      *
-     * @param fileName      the name of the file being processed
      * @param javaClassName the name of the Java class being generated
      * @param symbolTable   the symbol table used for scoping symbols within the context
      * @param returnLabel   the label to which the method should return
@@ -72,12 +67,9 @@ public class EmitterContext {
      * @param contextType   the type of the context, defined by the RuntimeContextType enum
      * @param isBoxed       indicates whether the context is for a boxed object (true) or a native object (false)
      * @param errorUtil     formats error messages with source code context
-     * @param debugEnabled  enables or disables printing debug messages with ctx.logDebug(message)
-     * @param tokenizeOnly  stop after the tokenizing step
-     * @param compileOnly   stop after the compilation step
+     * @param compilerOptions compiler flags, file name and source code
      */
     public EmitterContext(
-            String fileName,
             String javaClassName,
             ScopedSymbolTable symbolTable,
             Label returnLabel,
@@ -85,12 +77,7 @@ public class EmitterContext {
             RuntimeContextType contextType,
             boolean isBoxed,
             ErrorMessageUtil errorUtil,
-            boolean debugEnabled,
-            boolean tokenizeOnly,
-            boolean compileOnly,
-            boolean parseOnly,
-            boolean disassembleEnabled) {
-        this.fileName = fileName;
+            ArgumentParser.CompilerOptions compilerOptions) {
         this.javaClassName = javaClassName;
         this.symbolTable = symbolTable;
         this.returnLabel = returnLabel;
@@ -98,11 +85,7 @@ public class EmitterContext {
         this.contextType = contextType;
         this.isBoxed = isBoxed;
         this.errorUtil = errorUtil;
-        this.debugEnabled = debugEnabled;
-        this.tokenizeOnly = tokenizeOnly;
-        this.compileOnly = compileOnly;
-        this.parseOnly = parseOnly;
-        this.disassembleEnabled = disassembleEnabled;
+        this.compilerOptions = compilerOptions;
     }
 
     /**
@@ -120,13 +103,15 @@ public class EmitterContext {
             return contextCache.get(contextType);
         }
         // Create a new context and cache it
-        EmitterContext newContext = new EmitterContext(this.fileName, this.javaClassName, this.symbolTable, this.returnLabel, this.mv, contextType, this.isBoxed, errorUtil, debugEnabled, tokenizeOnly, compileOnly, parseOnly, disassembleEnabled);
+        EmitterContext newContext = new EmitterContext(
+                this.javaClassName, this.symbolTable, this.returnLabel,
+                this.mv, contextType, this.isBoxed, this.errorUtil, this.compilerOptions);
         contextCache.put(contextType, newContext);
         return newContext;
     }
 
     public void logDebug(String message) {
-        if (this.debugEnabled) { // Use ctx.debugEnabled
+        if (this.compilerOptions.debugEnabled) { // Use ctx.debugEnabled
             System.out.println(message);
         }
     }

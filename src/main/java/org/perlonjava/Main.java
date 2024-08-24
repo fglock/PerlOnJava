@@ -23,15 +23,7 @@ public class Main {
         }
 
         try {
-            PerlLanguageProvider.executePerlCode(
-                    parsedArgs.code,
-                    parsedArgs.fileName,
-                    parsedArgs.debugEnabled,
-                    parsedArgs.tokenizeOnly,
-                    parsedArgs.compileOnly,
-                    parsedArgs.parseOnly,
-                    parsedArgs.disassembleEnabled
-            );
+            PerlLanguageProvider.executePerlCode(parsedArgs);
         } catch (Throwable t) {
             t.printStackTrace();
             System.exit(1);
