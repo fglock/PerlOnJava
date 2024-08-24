@@ -50,7 +50,7 @@ public class Lexer {
     }
 
     // Input characters to be tokenized
-    public final char[] input;
+    public char[] input;
     // Current position in the input
     public int position;
     // Length of the input
@@ -96,6 +96,7 @@ public class Lexer {
         tokens.add(new LexerToken(LexerTokenType.EOF, EOF));
         tokens.add(new LexerToken(LexerTokenType.EOF, EOF));
 
+        this.input = null;  // Throw away input to spare memory
         return tokens;
     }
 

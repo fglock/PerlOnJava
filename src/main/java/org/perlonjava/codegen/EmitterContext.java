@@ -60,13 +60,13 @@ public class EmitterContext {
     /**
      * Constructs a new EmitterContext with the specified parameters.
      *
-     * @param javaClassName the name of the Java class being generated
-     * @param symbolTable   the symbol table used for scoping symbols within the context
-     * @param returnLabel   the label to which the method should return
-     * @param mv            the MethodVisitor instance used to visit the method instructions
-     * @param contextType   the type of the context, defined by the RuntimeContextType enum
-     * @param isBoxed       indicates whether the context is for a boxed object (true) or a native object (false)
-     * @param errorUtil     formats error messages with source code context
+     * @param javaClassName   the name of the Java class being generated
+     * @param symbolTable     the symbol table used for scoping symbols within the context
+     * @param returnLabel     the label to which the method should return
+     * @param mv              the MethodVisitor instance used to visit the method instructions
+     * @param contextType     the type of the context, defined by the RuntimeContextType enum
+     * @param isBoxed         indicates whether the context is for a boxed object (true) or a native object (false)
+     * @param errorUtil       formats error messages with source code context
      * @param compilerOptions compiler flags, file name and source code
      */
     public EmitterContext(
