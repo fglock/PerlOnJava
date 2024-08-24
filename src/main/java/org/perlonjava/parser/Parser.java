@@ -77,6 +77,7 @@ public class Parser {
     }
 
     private Node parseBlock() {
+        ctx.symbolTable.enterScope();
         List<Node> statements = new ArrayList<>();
         LexerToken token = peek();
         while (token.type != LexerTokenType.EOF
@@ -91,6 +92,7 @@ public class Parser {
         if (statements.isEmpty()) {
             statements.add(new ListNode(tokenIndex));
         }
+        ctx.symbolTable.exitScope();
         return new BlockNode(statements, tokenIndex);
     }
 
