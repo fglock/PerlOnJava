@@ -5,8 +5,8 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 
 public class ArgumentParser {
-    public static ParsedArguments parseArguments(String[] args) {
-        ParsedArguments parsedArgs = new ParsedArguments();
+    public static CompilerOptions parseArguments(String[] args) {
+        CompilerOptions parsedArgs = new CompilerOptions();
         parsedArgs.code = null;
 
         for (int i = 0; i < args.length; i++) {
@@ -84,7 +84,7 @@ public class ArgumentParser {
         System.out.println("  -h, --help      Displays this help message.");
     }
 
-    public static class ParsedArguments {
+    public static class CompilerOptions {
         public boolean debugEnabled = false;
         public boolean disassembleEnabled = false;
         public boolean tokenizeOnly = false;

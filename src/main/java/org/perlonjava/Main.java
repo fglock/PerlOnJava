@@ -15,7 +15,7 @@ public class Main {
      * @param args Command-line arguments.
      */
     public static void main(String[] args) {
-        ArgumentParser.ParsedArguments parsedArgs = ArgumentParser.parseArguments(args);
+        ArgumentParser.CompilerOptions parsedArgs = ArgumentParser.parseArguments(args);
 
         if (parsedArgs.code == null) {
             System.err.println("No code provided. Use -e <code> or specify a filename.");
