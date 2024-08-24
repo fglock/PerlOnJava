@@ -78,8 +78,8 @@ public class RuntimeCode implements RuntimeScalarReference {
         } catch (Exception e) {
             // compilation error in eval-string
 
-            // Set the global error variable "$@" using Namespace.setGlobalVariable(key, value)
-            Namespace.getGlobalVariable("main::@").set(e.toString());
+            // Set the global error variable "$@" using GlobalContext.setGlobalVariable(key, value)
+            GlobalContext.getGlobalVariable("main::@").set(e.toString());
 
             ast = new OperatorNode("undef", null, 1); // return an "undef" ast
         }

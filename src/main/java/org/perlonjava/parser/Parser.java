@@ -4,7 +4,7 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.runtime.Namespace;
+import org.perlonjava.runtime.GlobalContext;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeCode;
 import org.perlonjava.runtime.RuntimeScalar;
@@ -258,9 +258,9 @@ public class Parser {
             // - add the typeglob assignment:  *name = sub () :attr {...}
 
             // register the named subroutine
-            String fullName = Namespace.normalizeVariableName(subName, ctx.symbolTable.getCurrentPackage());
+            String fullName = GlobalContext.normalizeVariableName(subName, ctx.symbolTable.getCurrentPackage());
             RuntimeCode codeRef = new RuntimeCode(prototype);
-            Namespace.getGlobalCodeRef(fullName).set(new RuntimeScalar(codeRef));
+            GlobalContext.getGlobalCodeRef(fullName).set(new RuntimeScalar(codeRef));
 
             // return typeglob assignment
             return new BinaryOperatorNode("=",
@@ -368,17 +368,17 @@ public class Parser {
         ctx.logDebug("SubroutineCall subName `" + subName + "` package " + ctx.symbolTable.getCurrentPackage());
 
         // Normalize the subroutine name to include the current package
-        String fullName = Namespace.normalizeVariableName(subName, ctx.symbolTable.getCurrentPackage());
+        String fullName = GlobalContext.normalizeVariableName(subName, ctx.symbolTable.getCurrentPackage());
 
         // Create an identifier node for the subroutine name
         IdentifierNode nameNode = new IdentifierNode(subName, tokenIndex);
 
         // Check if the subroutine exists in the global namespace
-        boolean subExists = Namespace.existsGlobalCodeRef(fullName);
+        boolean subExists = GlobalContext.existsGlobalCodeRef(fullName);
         String prototype = null;
         if (subExists) {
             // Fetch the subroutine reference
-            RuntimeScalar codeRef = Namespace.getGlobalCodeRef(fullName);
+            RuntimeScalar codeRef = GlobalContext.getGlobalCodeRef(fullName);
             prototype = ((RuntimeCode) codeRef.value).prototype;
         }
         ctx.logDebug("SubroutineCall exists " + subExists + " prototype `" + prototype + "`");

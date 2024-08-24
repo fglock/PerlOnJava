@@ -6,7 +6,7 @@ import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.perlonjava.astnode.*;
 import org.perlonjava.parser.Parser;
-import org.perlonjava.runtime.Namespace;
+import org.perlonjava.runtime.GlobalContext;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeCode;
 import org.perlonjava.runtime.RuntimeContextType;
@@ -616,33 +616,33 @@ public class EmitterVisitor implements Visitor {
 
     private void fetchGlobalVariable(boolean createIfNotExists, String sigil, String varName, int tokenIndex) {
 
-        String var = Namespace.normalizeVariableName(varName, ctx.symbolTable.getCurrentPackage());
+        String var = GlobalContext.normalizeVariableName(varName, ctx.symbolTable.getCurrentPackage());
         ctx.logDebug("GETVAR lookup global " + sigil + varName + " normalized to " + var + " createIfNotExists:" + createIfNotExists);
 
-        if (sigil.equals("$") && (createIfNotExists || Namespace.existsGlobalVariable(var))) {
+        if (sigil.equals("$") && (createIfNotExists || GlobalContext.existsGlobalVariable(var))) {
             // fetch a global variable
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/Namespace",
+                    "org/perlonjava/runtime/GlobalContext",
                     "getGlobalVariable",
                     "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
                     false);
-        } else if (sigil.equals("@") && (createIfNotExists || Namespace.existsGlobalArray(var))) {
+        } else if (sigil.equals("@") && (createIfNotExists || GlobalContext.existsGlobalArray(var))) {
             // fetch a global variable
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/Namespace",
+                    "org/perlonjava/runtime/GlobalContext",
                     "getGlobalArray",
                     "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeArray;",
                     false);
-        } else if (sigil.equals("%") && (createIfNotExists || Namespace.existsGlobalHash(var))) {
+        } else if (sigil.equals("%") && (createIfNotExists || GlobalContext.existsGlobalHash(var))) {
             // fetch a global variable
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/Namespace",
+                    "org/perlonjava/runtime/GlobalContext",
                     "getGlobalHash",
                     "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeHash;",
                     false);
@@ -670,7 +670,7 @@ public class EmitterVisitor implements Visitor {
 
             if (sigil.equals("*")) {
                 // typeglob
-                String fullName = Namespace.normalizeVariableName(name, ctx.symbolTable.getCurrentPackage());
+                String fullName = GlobalContext.normalizeVariableName(name, ctx.symbolTable.getCurrentPackage());
                 mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeGlob");
                 mv.visitInsn(Opcodes.DUP);
                 mv.visitLdcInsn(fullName); // emit string
@@ -685,11 +685,11 @@ public class EmitterVisitor implements Visitor {
 
             if (sigil.equals("&")) {
                 // Code
-                String fullName = Namespace.normalizeVariableName(name, ctx.symbolTable.getCurrentPackage());
+                String fullName = GlobalContext.normalizeVariableName(name, ctx.symbolTable.getCurrentPackage());
                 mv.visitLdcInsn(fullName); // emit string
                 ctx.mv.visitMethodInsn(
                         Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/Namespace",
+                        "org/perlonjava/runtime/GlobalContext",
                         "getGlobalCodeRef",
                         "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
                         false);

@@ -77,7 +77,7 @@ public class PerlLanguageProvider {
         );
 
 
-        Namespace.initializeGlobals();
+        GlobalContext.initializeGlobals();
 
         ctx.logDebug("parse code: " + code);
         ctx.logDebug("  call context " + ctx.contextType);

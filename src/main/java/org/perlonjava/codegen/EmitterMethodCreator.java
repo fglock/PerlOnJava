@@ -222,10 +222,10 @@ public class EmitterMethodCreator implements Opcodes {
             // Convert the exception to a string
             mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/ErrorMessageUtil", "stringifyException", "(Ljava/lang/Exception;)Ljava/lang/String;", false);
 
-            // Set the global error variable "$@" using Namespace.setGlobalVariable(key, value)
+            // Set the global error variable "$@" using GlobalContext.setGlobalVariable(key, value)
             mv.visitLdcInsn("$main::@");
             mv.visitInsn(Opcodes.SWAP);
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Namespace", "setGlobalVariable", "(Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/GlobalContext", "setGlobalVariable", "(Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
             mv.visitInsn(Opcodes.POP);    // throw away the RuntimeScalar result
 
             // Restore the stack state to match the end of the try block if needed

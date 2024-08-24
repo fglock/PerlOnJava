@@ -24,7 +24,7 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
     public RuntimeScalar set(RuntimeScalar value) {
         switch (value.type) {
             case CODE:
-                Namespace.getGlobalCodeRef(this.globName).set(value);
+                GlobalContext.getGlobalCodeRef(this.globName).set(value);
                 return value;
         }
         // XXX TODO
