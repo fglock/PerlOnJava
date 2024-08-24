@@ -1,5 +1,6 @@
 package org.perlonjava.scriptengine;
 
+import org.perlonjava.ArgumentParser;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.codegen.EmitterMethodCreator;
@@ -41,16 +42,11 @@ public class PerlLanguageProvider {
     /**
      * Executes the given Perl code and returns the result.
      *
-     * @param code         The Perl code to execute.
-     * @param fileName     The source filename.
-     * @param debugEnabled Flag to enable debugging.
-     * @param tokenizeOnly Flag to enable tokenization only.
-     * @param compileOnly  Flag to enable compilation only.
-     * @param parseOnly    Flag to enable parsing only.
+     * @param compilerOptions Compiler flags, file name and source code
      * @return The result of the Perl code execution.
      * @throws Throwable If an error occurs during execution.
      */
-    public static RuntimeList executePerlCode(String code, String fileName, boolean debugEnabled, boolean tokenizeOnly, boolean compileOnly, boolean parseOnly, boolean disassembleEnabled) throws Throwable {
+    public static RuntimeList executePerlCode(ArgumentParser.CompilerOptions compilerOptions) throws Throwable {
 
         ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
         // Enter a new scope in the symbol table and add special Perl variables
@@ -61,7 +57,6 @@ public class PerlLanguageProvider {
 
         // Create the compiler context
         EmitterContext ctx = new EmitterContext(
-                fileName, // Source filename
                 EmitterMethodCreator.generateClassName(), // internal java class name
                 globalSymbolTable.clone(), // Top-level symbol table
                 null, // Return label
@@ -69,23 +64,19 @@ public class PerlLanguageProvider {
                 RuntimeContextType.VOID, // Call context
                 true, // Is boxed
                 null,  // errorUtil
-                debugEnabled,   // debugEnabled flag
-                tokenizeOnly,
-                compileOnly,
-                parseOnly,
-                disassembleEnabled
+                compilerOptions
         );
 
 
         GlobalContext.initializeGlobals();
 
-        ctx.logDebug("parse code: " + code);
+        ctx.logDebug("parse code: " + compilerOptions.code);
         ctx.logDebug("  call context " + ctx.contextType);
 
         // Create the LexerToken list
-        Lexer lexer = new Lexer(code);
+        Lexer lexer = new Lexer(compilerOptions.code);
         List<LexerToken> tokens = lexer.tokenize(); // Tokenize the Perl code
-        if (ctx.tokenizeOnly) {
+        if (ctx.compilerOptions.tokenizeOnly) {
             // Printing the tokens
             for (LexerToken token : tokens) {
                 System.out.println(token);
@@ -95,10 +86,10 @@ public class PerlLanguageProvider {
 
         // Create the AST
         // Create an instance of ErrorMessageUtil with the file name and token list
-        ctx.errorUtil = new ErrorMessageUtil(ctx.fileName, tokens);
+        ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
         Parser parser = new Parser(ctx, tokens); // Parse the tokens
         Node ast = parser.parse(); // Generate the abstract syntax tree (AST)
-        if (ctx.parseOnly) {
+        if (ctx.compilerOptions.parseOnly) {
             // Printing the ast
             System.out.println(ast);
             return null; // success
@@ -108,7 +99,7 @@ public class PerlLanguageProvider {
         // Create the Java class from the AST
         ctx.logDebug("createClassWithMethod");
         // Create a new instance of ErrorMessageUtil, resetting the line counter
-        ctx.errorUtil = new ErrorMessageUtil(ctx.fileName, tokens);
+        ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
         ctx.symbolTable = globalSymbolTable.clone(); // reset the symboltable
         Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
                 ctx,
@@ -116,7 +107,7 @@ public class PerlLanguageProvider {
                 ast,
                 false   // no try-catch
         );
-        if (ctx.compileOnly) {
+        if (ctx.compilerOptions.compileOnly) {
             return null; // success
         }
 

@@ -102,7 +102,7 @@ public class EmitterMethodCreator implements Opcodes {
         ctx.contextType = RuntimeContextType.RUNTIME;
 
         // Set the source file name. This is used for runtime error messages
-        cw.visitSource(ctx.fileName, null);
+        cw.visitSource(ctx.compilerOptions.fileName, null);
 
         // Define the class with version, access flags, name, signature, superclass, and interfaces
         cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, ctx.javaClassName, null, "java/lang/Object", null);
@@ -259,7 +259,7 @@ public class EmitterMethodCreator implements Opcodes {
         cw.visitEnd();
         byte[] classData = cw.toByteArray(); // Generate the bytecode
 
-        if (ctx.disassembleEnabled) {
+        if (ctx.compilerOptions.disassembleEnabled) {
             // Disassemble the bytecode
             ClassReader cr = new ClassReader(classData);
             StringWriter sw = new StringWriter();
