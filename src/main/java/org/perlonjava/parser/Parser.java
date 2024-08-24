@@ -120,53 +120,12 @@ public class Parser {
                     IdentifierNode nameNode = new IdentifierNode(packageName, tokenIndex);
                     OperatorNode packageNode = new OperatorNode(token.text, nameNode, tokenIndex);
 
-                    token = peek();
-                    if (token.text.startsWith("v")) {
-                        // parseDottedDecimalVersion
-                        StringBuilder version = new StringBuilder(token.text); // start with 'v'
-                        consume();
+                    // Parse Version string; throw away the result
+                    // XXX use the Version string
+                    parseOptionalPackageVersion();
 
-                        // Ensure at least two more components (three components total)
-                        for (int i = 0; i < 2; i++) {
-                            if (!peek().text.equals(".")) {
-                                throw new PerlCompilerException(tokenIndex, "Dotted-decimal version must have at least 3 components", ctx.errorUtil);
-                            }
-                            version.append(consume().text); // consume '.'
-                            if (peek().type == LexerTokenType.NUMBER) {
-                                version.append(consume().text); // consume number
-                            } else {
-                                throw new PerlCompilerException(tokenIndex, "Invalid dotted-decimal format", ctx.errorUtil);
-                            }
-                        }
-
-                        // Optionally consume more components
-                        while (peek().text.equals(".")) {
-                            version.append(consume().text); // consume '.'
-                            if (peek().type == LexerTokenType.NUMBER) {
-                                version.append(consume().text); // consume digits
-                            } else {
-                                throw new PerlCompilerException(tokenIndex, "Invalid dotted-decimal format", ctx.errorUtil);
-                            }
-                        }
-
-                        ctx.logDebug("Dotted-decimal Version: " + version.toString());
-                    }
-
-                    token = peek();
-                    if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
-                        // package NAME BLOCK
-                        consume(LexerTokenType.OPERATOR, "{");
-                        ctx.symbolTable.enterScope();
-                        ctx.symbolTable.setCurrentPackage(nameNode.name);
-                        BlockNode block = parseBlock();
-
-                        // Insert packageNode as first statement in block
-                        block.elements.add(0, packageNode);
-
-                        ctx.symbolTable.exitScope();
-                        consume(LexerTokenType.OPERATOR, "}");
-                        return block;
-                    }
+                    BlockNode block = parseOptionalPackageBlock(nameNode, packageNode);
+                    if (block != null) return block;
 
                     ctx.symbolTable.setCurrentPackage(nameNode.name);
                     return packageNode;
@@ -222,6 +181,62 @@ public class Parser {
             consume();
         }
         return expression;
+    }
+
+    private BlockNode parseOptionalPackageBlock(IdentifierNode nameNode, OperatorNode packageNode) {
+        LexerToken token;
+        token = peek();
+        if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
+            // package NAME BLOCK
+            consume(LexerTokenType.OPERATOR, "{");
+            ctx.symbolTable.enterScope();
+            ctx.symbolTable.setCurrentPackage(nameNode.name);
+            BlockNode block = parseBlock();
+
+            // Insert packageNode as first statement in block
+            block.elements.add(0, packageNode);
+
+            ctx.symbolTable.exitScope();
+            consume(LexerTokenType.OPERATOR, "}");
+            return block;
+        }
+        return null;
+    }
+
+    private void parseOptionalPackageVersion() {
+        LexerToken token;
+        token = peek();
+        if (token.type == LexerTokenType.NUMBER) {
+            parseNumber(consume());
+        } else if (token.text.startsWith("v")) {
+            // parseDottedDecimalVersion
+            StringBuilder version = new StringBuilder(token.text); // start with 'v'
+            consume();
+
+            int componentCount = 0;
+
+            // Loop through components separated by '.'
+            while (true) {
+                if (!peek().text.equals(".")) {
+                    if (componentCount < 2) { // Ensures at least 3 components (v1.2.3)
+                        throw new PerlCompilerException(tokenIndex, "Dotted-decimal version must have at least 3 components", ctx.errorUtil);
+                    } else {
+                        break; // Stop if there's no '.' and we have enough components
+                    }
+                }
+
+                version.append(consume().text); // consume '.'
+
+                if (peek().type == LexerTokenType.NUMBER) {
+                    version.append(consume().text); // consume number
+                    componentCount++;
+                } else {
+                    throw new PerlCompilerException(tokenIndex, "Invalid dotted-decimal format", ctx.errorUtil);
+                }
+            }
+
+            ctx.logDebug("Dotted-decimal Version: " + version.toString());
+        }
     }
 
     // disambiguate between Block or Hash literal
