@@ -54,6 +54,12 @@ print "not " if $v ne "VALUE2"; say "ok # constant subroutine returned $v";
 $v = CONST => "2";
 print "not " if $v ne "CONST"; say "ok # constant subroutine returned $v";
 
+package Other {
+    sub CONST () { "OTHER" }
+    print "not " if CONST ne "OTHER"; say "ok # constant subroutine defined in other package";
+}
+print "not " if CONST ne "VALUE"; say "ok # constant subroutine was not overwritten";
+
 # subroutine call operator precedence
 
 sub no_proto { "VALUE" }
