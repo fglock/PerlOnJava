@@ -3,7 +3,7 @@ package org.perlonjava.runtime;
 import java.util.*;
 
 /**
- * A scoped symbol table that supports nested scopes for variable and package declarations.
+ * A scoped symbol table that supports nested scopes for lexical variables and package declarations.
  */
 public class ScopedSymbolTable {
     // A stack to manage nested scopes of symbol tables.
