@@ -1,13 +1,13 @@
 package org.perlonjava.parser;
 
 import org.perlonjava.astnode.*;
+import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.ErrorMessageUtil;
 import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -43,7 +43,7 @@ public class StringParser {
      * @param redo   Flag to indicate if the parsing should be redone; example:  s/.../.../
      * @return ParsedString object containing the parsed string and updated token index.
      */
-    public static ParsedString parseRawStringWithDelimiter(List<LexerToken> tokens, int index, boolean redo) {
+    public static ParsedString parseRawStringWithDelimiter(EmitterContext ctx, List<LexerToken> tokens, int index, boolean redo) {
         int tokPos = index;  // Current position in the tokens list
         char startDelim = 0;  // Starting delimiter
         char endDelim = 0;  // Ending delimiter
@@ -56,7 +56,7 @@ public class StringParser {
 
         while (state != END_TOKEN) {
             if (tokens.get(tokPos).type == LexerTokenType.EOF) {
-                throw new IllegalStateException("Can't find string terminator " + endDelim + " anywhere before EOF");
+                throw new PerlCompilerException(tokPos, "Can't find string terminator " + endDelim + " anywhere before EOF", ctx.errorUtil);
             }
 
             for (char ch : tokens.get(tokPos).text.toCharArray()) {
@@ -104,7 +104,7 @@ public class StringParser {
                         break;
 
                     default:
-                        throw new IllegalStateException("Unexpected state: " + state);
+                        throw new PerlCompilerException(tokPos, "Unexpected state: " + state, ctx.errorUtil);
                 }
             }
             tokPos++;  // Move to the next token
@@ -117,14 +117,10 @@ public class StringParser {
         return new ParsedString(index, tokPos, buffers, startDelim, endDelim);
     }
 
-    public static StringParser.ParsedString parseRawStrings(List<LexerToken> tokens, int tokenIndex, int stringCount) {
-        if (stringCount <= 0) {
-            throw new IllegalArgumentException("need string_count");
-        }
-
+    public static StringParser.ParsedString parseRawStrings(EmitterContext ctx, List<LexerToken> tokens, int tokenIndex, int stringCount) {
         int pos = tokenIndex;
         boolean redo = (stringCount == 3);
-        StringParser.ParsedString ast = parseRawStringWithDelimiter(tokens, pos, redo); // use redo flag to extract 2 strings
+        StringParser.ParsedString ast = parseRawStringWithDelimiter(ctx, tokens, pos, redo); // use redo flag to extract 2 strings
         if (stringCount == 1) {
             return ast;
         }
@@ -134,7 +130,7 @@ public class StringParser {
             char delim = ast.startDelim; // / or {
             if (QUOTE_PAIR.containsKey(delim)) {
                 pos = Parser.skipWhitespace(pos, tokens);
-                StringParser.ParsedString ast2 = parseRawStringWithDelimiter(tokens, pos, false);
+                StringParser.ParsedString ast2 = parseRawStringWithDelimiter(ctx, tokens, pos, false);
                 ast.buffers.add(ast2.buffers.get(0));
                 ast.next = ast2.next;
                 pos = ast.next;
