@@ -37,6 +37,7 @@
 - [ ] **Objects**: Object-oriented features are not yet implemented.
 - [ ] **Tied Scalars**: Support for tying scalars to classes is missing.
 - [ ] **Cached string/numeric conversions; dualvars**: Caching and dual variable support are not implemented.
+- [ ] **Unicode**: Support for non-Unicode strings is not implemented.
 
 ## Operators
 - [x] **Simple arithmetic**: Operators like `+`, `-`, `*`, and `%` are supported.
@@ -58,6 +59,8 @@
 - [x] **Autoquote before `=>`**: Autoquoting before `=>` is implemented.
 - [x] **Select an element from a list**: Indexing into lists is supported.
 - [x] **`keys`, `values` operators**: Operators for hash keys and values are implemented.
+- [ ] **List subscripts**: like `(stat($file))[8]`
+- [ ] **List assignment in scalar context**: List assignment in scalar context returns the number of elements produced by the expression on the right side of the assignment
 - [ ] **`$#array`**: Operator for array count is not implemented.
 - [x] **`scalar`**: Operator to get scalar value is not implemented.
 - [ ] **Array dereference**: Dereferencing arrays using `@$x` is not yet implemented.
@@ -113,11 +116,13 @@
 - [ ] **`require` operator**: The `require` operator is not yet implemented.
 - [ ] **`use` and `no` statements**: Module imports and version changes via `use` and `no` are missing.
 - [ ] **`__SUB__`**: The `__SUB__` special variable is not yet supported.
+- [ ] **Special literals**: `__FILE__`, `__LINE__` not yet supported.
 - [ ] **`BEGIN` block**: `BEGIN` blocks are missing.
 - [ ] **Labels**: Labels and their usage are not supported.
 - [ ] **Search for labels in call stack**: Label searching in the call stack is missing.
 - [ ] **Here-docs**: Here-docs for multiline string literals are not yet implemented.
 - [ ] **`<>` and `glob`**: support for the `glob` operator is missing.
+- [ ] **End of file markers** control characters `^D` and `^Z`, and the tokens `__END__` and `__DATA__`
 
 ## Namespaces and Global Variables
 - [x] **Global variable infrastructure**: Support for global variables is implemented.
