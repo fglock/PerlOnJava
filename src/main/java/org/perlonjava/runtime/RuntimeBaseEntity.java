@@ -9,5 +9,13 @@ public abstract class RuntimeBaseEntity implements RuntimeDataProvider {
     public void addToList(RuntimeList list) {
         list.add(this);
     }
+
+    // Get the array value of the object as aliases
+    public RuntimeArray getArrayOfAlias() {
+        RuntimeArray arr = new RuntimeArray();
+        this.setArrayOfAlias(arr);
+        return arr;
+    }
+
 }
 

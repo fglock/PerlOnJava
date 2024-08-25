@@ -169,9 +169,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
     }
 
-    // Get the array value of the Scalar
-    public RuntimeArray getArrayOfAlias() {
-        RuntimeArray arr = new RuntimeArray();
+    // Get the Scalar alias into an Array
+    public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
         arr.elements.add(this);
         return arr;
     }
@@ -822,6 +821,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Method to return an iterator
     public Iterator<RuntimeScalar> iterator() {
-        return this.getArrayOfAlias().iterator();
+        RuntimeArray arr = new RuntimeArray();
+        return this.setArrayOfAlias(arr).iterator();
     }
 }
