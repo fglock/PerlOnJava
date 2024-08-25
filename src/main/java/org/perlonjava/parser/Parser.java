@@ -34,9 +34,9 @@ public class Parser {
     ));
     private final List<LexerToken> tokens;
     private final EmitterContext ctx;
-    private int tokenIndex = 0;
     private boolean parsingForLoopVariable = false;
     private boolean parsingTakeReference = false;
+    public int tokenIndex = 0;
 
     public Parser(EmitterContext ctx, List<LexerToken> tokens) {
         this.ctx = ctx;
@@ -778,7 +778,7 @@ public class Parser {
      *
      * @return The parsed identifier as a String, or null if there is no valid identifier.
      */
-    private String parseComplexIdentifier() {
+    public String parseComplexIdentifier() {
         // Save the current token index to allow backtracking if needed
         int saveIndex = tokenIndex;
 
@@ -924,7 +924,7 @@ public class Parser {
                 return StringParser.parseSingleQuotedString(rawStr.buffers.get(0), rawStr.startDelim, rawStr.endDelim, rawStr.index);
             case "\"":
             case "qq":
-                return StringParser.parseDoubleQuotedString(rawStr.buffers.get(0), ctx.errorUtil, rawStr.index);
+                return StringParser.parseDoubleQuotedString(ctx, rawStr.buffers.get(0), ctx.errorUtil, rawStr.index);
             case "qw":
                 // Use a regular expression to split the string.
                 // " +" matches one or more ASCII space characters
@@ -1067,7 +1067,7 @@ public class Parser {
         throw new PerlCompilerException(tokenIndex, "Unexpected infix operator: " + token, ctx.errorUtil);
     }
 
-    private LexerToken peek() {
+    public LexerToken peek() {
         tokenIndex = skipWhitespace(tokenIndex, tokens);
         if (tokenIndex >= tokens.size()) {
             return new LexerToken(LexerTokenType.EOF, "");
@@ -1075,7 +1075,7 @@ public class Parser {
         return tokens.get(tokenIndex);
     }
 
-    private LexerToken consume() {
+    public LexerToken consume() {
         tokenIndex = skipWhitespace(tokenIndex, tokens);
         if (tokenIndex >= tokens.size()) {
             return new LexerToken(LexerTokenType.EOF, "");
@@ -1083,7 +1083,7 @@ public class Parser {
         return tokens.get(tokenIndex++);
     }
 
-    private LexerToken consume(LexerTokenType type) {
+    public LexerToken consume(LexerTokenType type) {
         LexerToken token = consume();
         if (token.type != type) {
             throw new PerlCompilerException(
@@ -1092,7 +1092,7 @@ public class Parser {
         return token;
     }
 
-    private void consume(LexerTokenType type, String text) {
+    public void consume(LexerTokenType type, String text) {
         LexerToken token = consume();
         if (token.type != type || !token.text.equals(text)) {
             throw new PerlCompilerException(
