@@ -8,7 +8,7 @@ import java.util.Map;
 /**
  * The RuntimeList class simulates a Perl list.
  */
-public class RuntimeList implements RuntimeDataProvider {
+public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvider {
     public List<RuntimeBaseEntity> elements;
 
     // Constructor
@@ -78,23 +78,10 @@ public class RuntimeList implements RuntimeDataProvider {
         return elements.size();
     }
 
-    // Get the array value of the List
-    public RuntimeArray getArrayOfAlias() {
-        RuntimeArray arr = new RuntimeArray();
-        List<RuntimeBaseEntity> arrElements = arr.elements;
+    // Get the array value of the List as aliases into an Array
+    public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
         for (RuntimeBaseEntity elem : elements) {
-            if (elem instanceof RuntimeScalar) {
-                arrElements.add(elem);
-            } else if (elem instanceof RuntimeArray) {
-                for (RuntimeBaseEntity arrElem : ((RuntimeArray) elem).elements) {
-                    arrElements.add(arrElem);
-                }
-            } else if (elem instanceof RuntimeHash) {
-                for (Map.Entry<String, RuntimeScalar> entry : ((RuntimeHash) elem).elements.entrySet()) {
-                    arrElements.add(new RuntimeScalar(entry.getKey()));
-                    arrElements.add(entry.getValue());
-                }
-            }
+            elem.setArrayOfAlias(arr);
         }
         return arr;
     }

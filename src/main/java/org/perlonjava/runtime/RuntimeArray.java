@@ -129,16 +129,6 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     }
 
     // Get the list value of the list
-    public RuntimeArray getArrayOfAlias() {
-        RuntimeArray arr = new RuntimeArray();
-        List<RuntimeBaseEntity> arrElements = arr.elements;
-        for (RuntimeBaseEntity elem : elements) {
-            arrElements.add(elem);
-        }
-        return arr;
-    }
-
-    // Get the list value of the list
     public RuntimeList getList() {
         return new RuntimeList(this);
     }
@@ -228,6 +218,15 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     // values() operator
     public RuntimeArray values() {
         return this;
+    }
+
+    // Get Array aliases into an Array
+    public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
+        List<RuntimeBaseEntity> arrElements = arr.elements;
+        for (RuntimeBaseEntity arrElem : this.elements) {
+            arrElements.add(arrElem);
+        }
+        return arr;
     }
 
     // Method to return an iterator

@@ -80,11 +80,6 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
         return ret;
     }
 
-    // Get the array value of the typeglob
-    public RuntimeArray getArrayOfAlias() {
-        return new RuntimeArray(this.getScalar());
-    }
-
     // Get the list value of the Scalar
     public RuntimeList getList() {
         return new RuntimeList(this.getScalar());
@@ -111,7 +106,14 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
 
     // Method to return an iterator
     public Iterator<RuntimeScalar> iterator() {
-        return this.getArrayOfAlias().iterator();
+        RuntimeArray arr = new RuntimeArray();
+        return this.setArrayOfAlias(arr).iterator();
+    }
+
+    // Get the Glob alias into an Array
+    public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
+        arr.elements.add(this.getScalar());
+        return arr;
     }
 
     public RuntimeGlob undefine() {
