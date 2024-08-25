@@ -120,11 +120,11 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
                 ((RuntimeScalar) elem).set(arr.shift());
             } else if (elem instanceof RuntimeArray) {
                 ((RuntimeArray) elem).elements = arr.elements;
-                arr = new RuntimeArray();
+                arr.undefine();
             } else if (elem instanceof RuntimeHash) {
                 RuntimeHash hash = RuntimeHash.fromArray(arr);
                 ((RuntimeHash) elem).elements = hash.elements;
-                arr = new RuntimeArray();
+                arr.undefine();
             }
         }
         return new RuntimeList(value);
