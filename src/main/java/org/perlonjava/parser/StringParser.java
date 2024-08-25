@@ -2,6 +2,7 @@ package org.perlonjava.parser;
 
 import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.EmitterContext;
+import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.ErrorMessageUtil;
@@ -114,10 +115,10 @@ public class StringParser {
         return new ParsedString(index, tokPos, buffers, startDelim, endDelim);
     }
 
-    public static StringParser.ParsedString parseRawStrings(EmitterContext ctx, List<LexerToken> tokens, int tokenIndex, int stringCount) {
+    public static ParsedString parseRawStrings(EmitterContext ctx, List<LexerToken> tokens, int tokenIndex, int stringCount) {
         int pos = tokenIndex;
         boolean redo = (stringCount == 3);
-        StringParser.ParsedString ast = parseRawStringWithDelimiter(ctx, tokens, pos, redo); // use redo flag to extract 2 strings
+        ParsedString ast = parseRawStringWithDelimiter(ctx, tokens, pos, redo); // use redo flag to extract 2 strings
         if (stringCount == 1) {
             return ast;
         }
@@ -127,7 +128,7 @@ public class StringParser {
             char delim = ast.startDelim; // / or {
             if (QUOTE_PAIR.containsKey(delim)) {
                 pos = Parser.skipWhitespace(pos, tokens);
-                StringParser.ParsedString ast2 = parseRawStringWithDelimiter(ctx, tokens, pos, false);
+                ParsedString ast2 = parseRawStringWithDelimiter(ctx, tokens, pos, false);
                 ast.buffers.add(ast2.buffers.get(0));
                 ast.next = ast2.next;
                 pos = ast.next;
@@ -149,9 +150,56 @@ public class StringParser {
         return ast;
     }
 
-    static Node parseDoubleQuotedString(String input, ErrorMessageUtil errorUtil, int tokenIndex) {
+    static Node parseDoubleQuotedString(EmitterContext ctx, String input, ErrorMessageUtil errorUtil, int tokenIndex) {
         StringBuilder str = new StringBuilder();  // Buffer to hold the parsed string
         List<Node> parts = new ArrayList<>();  // List to hold parts of the parsed string
+
+        //  Lexer lexer = new Lexer(input);
+        //  List<LexerToken> tokens = lexer.tokenize();
+        //  for (LexerToken token : tokens) {
+        //      System.out.println(token);
+        //  }
+        //  Parser parser = new Parser(ctx, tokens);
+        //  boolean consumeBracket = false;
+
+        //  // Loop through the character array until the end
+        //  while (true) {
+        //      ctx.logDebug("str at "+parser.tokenIndex);
+        //      LexerToken token = tokens.get(parser.tokenIndex++);  // Get the current token
+        //      if (token.type == LexerTokenType.EOF) {
+        //          break;
+        //      }
+        //      String text = token.text;
+        //      switch (text) {
+        //          case "$":
+        //          case "@":
+        //              ctx.logDebug("str sigil");
+        //              if (parser.peek().text.equals("{")) {
+        //                  // block-like
+        //                  parser.consume();
+        //                  ctx.logDebug("str block-like");
+        //                  consumeBracket = true;
+        //              }
+        //              String identifier = parser.parseComplexIdentifier();
+        //              if (identifier == null) {
+        //                      if (consumeBracket) {
+        //                          throw new IllegalStateException("Unexpected value: " + text);
+        //                      }
+        //              } else {
+        //                      ctx.logDebug("str Identifier: " + identifier);
+        //                      // XXX TODO
+        //              }
+        //              if (consumeBracket) {
+        //                  parser.consume(LexerTokenType.OPERATOR, "}");
+        //              }
+        //              break;
+        //          default:
+        //              // throw new IllegalStateException("Unexpected value: " + text);
+        //      }
+        //  }
+
+        // XXX Old code -----------
+
         char[] chars = input.toCharArray();  // Convert the input string to a character array
         int length = chars.length;  // Length of the character array
         int index = 0;  // Current position in the character array
