@@ -26,6 +26,12 @@ public class Parser {
             "<<=", "&&=", "-=", "/=", "|=", "|.=", ">>=", "||=", ".=",
             "%=", "^=", "^.=", "//=", "x=", "=~", "!~", "x", "..", "..."
     ));
+    private static final Set<String> LVALUE_INFIX_OP = new HashSet<>(Arrays.asList(
+            "=", "**=", "+=", "*=", "&=", "&.=",
+            "<<=", "&&=", "-=", "/=", "|=", "|.=",
+            ">>=", "||=", ".=", "%=", "^=", "^.=",
+            "//=", "x="
+    ));
     private final List<LexerToken> tokens;
     private final EmitterContext ctx;
     private int tokenIndex = 0;
@@ -1255,16 +1261,22 @@ public class Parser {
     private ListNode parseZeroOrMoreList(int minItems) {
         LexerToken token = peek();
 
-        if ((token.text.equals(".") && tokens.get(tokenIndex).type != LexerTokenType.NUMBER)
-                || INFIX_OP.contains(token.text) || token.text.equals(",")) {
-
-            // If followed by `.` (string concatenation operator)
-            // or one of the list terminators
-            // return an empty list
-            if (minItems > 0) {
-                throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
+        if (INFIX_OP.contains(token.text) || token.text.equals(",")) {
+            if (token.text.equals(".") && tokens.get(tokenIndex).type == LexerTokenType.NUMBER) {
+                // looks like a fractional number, not an infix `.`
             }
-            return new ListNode(tokenIndex);
+            else {
+                // subroutine call with zero arguments, followed by infix operator
+                if (LVALUE_INFIX_OP.contains(token.text)) {
+                    throw new PerlCompilerException(tokenIndex, "Can't modify non-lvalue subroutine call", ctx.errorUtil);
+                }
+
+                // return an empty list
+                if (minItems > 0) {
+                    throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
+                }
+                return new ListNode(tokenIndex);
+            }
         }
 
         if (token.text.equals("(")) {
