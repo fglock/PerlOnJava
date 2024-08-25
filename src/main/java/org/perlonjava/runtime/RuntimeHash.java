@@ -2,8 +2,8 @@ package org.perlonjava.runtime;
 
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The RuntimeHash class simulates Perl hashes.
