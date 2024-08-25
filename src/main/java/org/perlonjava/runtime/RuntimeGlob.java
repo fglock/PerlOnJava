@@ -113,5 +113,13 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
     public Iterator<RuntimeScalar> iterator() {
         return this.getArrayOfAlias().iterator();
     }
+
+    public RuntimeGlob undefine() {
+        // undefine CODE        
+        GlobalContext.getGlobalCodeRef(this.globName).set(new RuntimeScalar());
+        // XXX TODO undefine scalar, array, hash
+        return this;
+    }
+
 }
 

@@ -72,5 +72,11 @@ public interface RuntimeDataProvider {
      * @return a Iterator<Runtime>
      */
     Iterator<RuntimeScalar> iterator();
+
+    /**
+     * undefine the elements of the object
+     * @return the object.
+     */
+    public RuntimeDataProvider undefine();
 }
 
