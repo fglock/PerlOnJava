@@ -167,13 +167,7 @@ public class RuntimeList implements RuntimeDataProvider {
     // undefine the elements of the list
     public RuntimeList undefine() {
         for (RuntimeBaseEntity elem : elements) {
-            if (elem instanceof RuntimeScalar) {
-                ((RuntimeScalar) elem).undefine();
-            } else if (elem instanceof RuntimeArray) {
-                ((RuntimeArray) elem).undefine();
-            } else if (elem instanceof RuntimeHash) {
-                ((RuntimeHash) elem).undefine();
-            }
+            elem.undefine();
         }
         return this;
     }
