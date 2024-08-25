@@ -28,14 +28,12 @@ public class StringParser {
     private static final int END_TOKEN = 3;
 
     // Map to hold pairs of matching delimiters
-    private static final Map<Character, Character> QUOTE_PAIR = new HashMap<>();
-
-    static {
-        QUOTE_PAIR.put('<', '>');
-        QUOTE_PAIR.put('{', '}');
-        QUOTE_PAIR.put('(', ')');
-        QUOTE_PAIR.put('[', ']');
-    }
+    private static final Map<Character, Character> QUOTE_PAIR = Map.of(
+            '<', '>',
+            '{', '}',
+            '(', ')',
+            '[', ']'
+    );
 
     /**
      * Parses a raw string with delimiters from a list of tokens.
