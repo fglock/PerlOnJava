@@ -231,7 +231,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
 
     // Method to return an iterator
     public Iterator<RuntimeScalar> iterator() {
-        return new RuntimeListIterator();
+        return new RuntimeArrayIterator();
     }
 
     public String toStringRef() {
@@ -266,7 +266,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     }
 
     // Inner class implementing the Iterator interface
-    private class RuntimeListIterator implements Iterator<RuntimeScalar> {
+    private class RuntimeArrayIterator implements Iterator<RuntimeScalar> {
         private int currentIndex = 0;
 
         @Override

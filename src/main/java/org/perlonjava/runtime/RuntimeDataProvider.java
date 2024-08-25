@@ -84,8 +84,9 @@ public interface RuntimeDataProvider {
 
     /**
      * undefine the elements of the object
+     *
      * @return the object.
      */
-    public RuntimeDataProvider undefine();
+    RuntimeDataProvider undefine();
 }
 
