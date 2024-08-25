@@ -10,6 +10,7 @@ public interface RuntimeDataProvider {
 
     /**
      * Retrieves a RuntimeArray of aliases instance.
+     * This is used to build the subroutine call parameter list `@_`
      *
      * @return a RuntimeArray object.
      */
@@ -17,6 +18,7 @@ public interface RuntimeDataProvider {
 
     /**
      * Push the data into a RuntimeArray of aliases instance.
+     * This provides data to getArrayOfAlias() and to iterator()
      *
      * @return a RuntimeArray object.
      */
