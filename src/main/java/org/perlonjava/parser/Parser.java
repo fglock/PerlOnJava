@@ -98,7 +98,7 @@ public class Parser {
                     return parseWhileStatement();
                 case "package":
                     consume();
-                    String packageName = parseComplexIdentifier();
+                    String packageName = parseSubroutineIdentifier();
                     if (packageName == null) {
                         throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
                     }
@@ -274,9 +274,9 @@ public class Parser {
 
         // If the 'wantName' flag is true and the next token is an identifier, we parse the subroutine name.
         if (wantName && peek().type == LexerTokenType.IDENTIFIER) {
-            // 'parseComplexIdentifier' is called to handle cases where the subroutine name might be complex
+            // 'parseSubroutineIdentifier' is called to handle cases where the subroutine name might be complex
             // (e.g., namespaced, fully qualified names). It may return null if no valid name is found.
-            subName = parseComplexIdentifier();
+            subName = parseSubroutineIdentifier();
         }
 
         // Initialize the prototype node to null. This will store the prototype of the subroutine if it exists.
@@ -433,8 +433,11 @@ public class Parser {
      */
     private Node parseSubroutineCall() {
         // Parse the subroutine name as a complex identifier
-        String subName = parseComplexIdentifier();
+        String subName = parseSubroutineIdentifier();
         ctx.logDebug("SubroutineCall subName `" + subName + "` package " + ctx.symbolTable.getCurrentPackage());
+        if (subName == null) {
+            throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
+        }
 
         // Normalize the subroutine name to include the current package
         String fullName = GlobalContext.normalizeVariableName(subName, ctx.symbolTable.getCurrentPackage());
@@ -839,6 +842,31 @@ public class Parser {
                 return variableName.toString();
             }
 
+            tokenIndex++;
+            token = tokens.get(tokenIndex);
+            nextToken = tokens.get(tokenIndex + 1);
+        }
+    }
+
+    private String parseSubroutineIdentifier() {
+        tokenIndex = skipWhitespace(tokenIndex, tokens);
+        StringBuilder variableName = new StringBuilder();
+        LexerToken token = tokens.get(tokenIndex);
+        LexerToken nextToken = tokens.get(tokenIndex + 1);
+        if (token.type == LexerTokenType.NUMBER) {
+            return null;
+        }
+        while (true) {
+            if (token.type == LexerTokenType.WHITESPACE || token.type == LexerTokenType.EOF || token.type == LexerTokenType.NEWLINE || (token.type == LexerTokenType.OPERATOR && !token.text.equals("::"))) {
+                return variableName.toString();
+            }
+            variableName.append(token.text);
+            if ((token.type == LexerTokenType.IDENTIFIER || token.type == LexerTokenType.NUMBER)
+                    && (!nextToken.text.equals("::"))
+            ) {
+                tokenIndex++;
+                return variableName.toString();
+            }
             tokenIndex++;
             token = tokens.get(tokenIndex);
             nextToken = tokens.get(tokenIndex + 1);
