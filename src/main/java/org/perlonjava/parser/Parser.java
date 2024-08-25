@@ -447,6 +447,8 @@ public class Parser {
      */
     private Node parseSubroutineCall() {
         // Parse the subroutine name as a complex identifier
+        // Alternately, this could be a v-string like v10.20.30   XXX TODO
+
         String subName = parseSubroutineIdentifier();
         ctx.logDebug("SubroutineCall subName `" + subName + "` package " + ctx.symbolTable.getCurrentPackage());
         if (subName == null) {
@@ -527,6 +529,10 @@ public class Parser {
      * Parses an expression based on operator precedence.
      * <p>
      * Higher precedence means tighter: `*` has higher precedence than `+`
+     * <p>
+     * Explanation of the  <a href="https://en.wikipedia.org/wiki/Operator-precedence_parser">precedence climbing method</a>
+     * can be found in Wikipedia.
+     * </p>
      *
      * @param precedence The precedence level of the current expression.
      * @return The root node of the parsed expression.
@@ -656,7 +662,7 @@ public class Parser {
                         }
                         return new OperatorNode("eval", operand, tokenIndex);
                     case "do":
-                        // Handle 'do' keyword which can be followed by a block
+                        // Handle 'do' keyword which can be followed by a block or filename
                         token = peek();
                         if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
                             consume(LexerTokenType.OPERATOR, "{");
@@ -679,7 +685,7 @@ public class Parser {
                         // Handle special-quoted domain-specific arguments
                         return parseRawString(token.text);
                     default:
-                        // Handle any other identifier as an identifier node
+                        // Handle any other identifier as a subroutine call or identifier node
                         tokenIndex = startIndex;   // re-parse
                         return parseSubroutineCall();
                 }
