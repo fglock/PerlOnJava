@@ -134,7 +134,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     }
 
     // Get the scalar value of the list
-    public RuntimeScalar getScalar() {
+    public RuntimeScalar scalar() {
         return new RuntimeScalar(elements.size());
     }
 

@@ -73,7 +73,7 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
     }
 
     // Get the scalar value of the Scalar
-    public RuntimeScalar getScalar() {
+    public RuntimeScalar scalar() {
         RuntimeScalar ret = new RuntimeScalar();
         ret.type = RuntimeScalarType.GLOB;
         ret.value = this;
@@ -82,16 +82,16 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
 
     // Get the list value of the Scalar
     public RuntimeList getList() {
-        return new RuntimeList(this.getScalar());
+        return new RuntimeList(this.scalar());
     }
 
     // Add itself to a RuntimeArray.
     public void addToArray(RuntimeArray array) {
-        array.push(this.getScalar());
+        array.push(this.scalar());
     }
 
     public RuntimeList set(RuntimeList value) {
-        return new RuntimeList(this.set(value.getScalar()));
+        return new RuntimeList(this.set(value.scalar()));
     }
 
     // keys() operator
@@ -106,12 +106,12 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
 
     // Method to return an iterator
     public Iterator<RuntimeScalar> iterator() {
-        return this.getScalar().iterator();
+        return this.scalar().iterator();
     }
 
     // Get the Glob alias into an Array
     public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
-        arr.elements.add(this.getScalar());
+        arr.elements.add(this.scalar());
         return arr;
     }
 

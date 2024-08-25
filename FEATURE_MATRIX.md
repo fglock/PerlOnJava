@@ -59,7 +59,7 @@
 - [x] **Select an element from a list**: Indexing into lists is supported.
 - [x] **`keys`, `values` operators**: Operators for hash keys and values are implemented.
 - [ ] **`$#array`**: Operator for array count is not implemented.
-- [ ] **`scalar`**: Operator to get scalar value is not implemented.
+- [x] **`scalar`**: Operator to get scalar value is not implemented.
 - [ ] **Array dereference**: Dereferencing arrays using `@$x` is not yet implemented.
 - [ ] **Hash dereference**: Dereferencing hashes using `%$x` is not yet implemented.
 - [ ] **Basic Array Operations**: Some basic array operations are implemented; others are missing.

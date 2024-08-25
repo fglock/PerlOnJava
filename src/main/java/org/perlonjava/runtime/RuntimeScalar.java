@@ -182,7 +182,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     // Get the scalar value of the Scalar
-    public RuntimeScalar getScalar() {
+    public RuntimeScalar scalar() {
         return this;
     }
 
@@ -228,7 +228,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeList set(RuntimeList value) {
-        return new RuntimeList(this.set(value.getScalar()));
+        return new RuntimeList(this.set(value.scalar()));
     }
 
     @Override
