@@ -18,6 +18,14 @@ public class Parser {
             new HashSet<>(Arrays.asList(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when", "not", "and", "or"));
     private static final Set<String> UNARY_OP =
             new HashSet<>(Arrays.asList("!", "~", "\\", "-", "+", "--", "++", "$", "@", "%", "*", "&", "$#"));
+    private static final Set<String> INFIX_OP = new HashSet<>(Arrays.asList(
+            "or", "xor", "and", "||", "//", "&&", "|", "^", "&",
+            "==", "!=", "<=>", "eq", "ne", "cmp", "<", ">", "<=",
+            ">=", "lt", "gt", "le", "ge", "<<", ">>", "+", "-", "*",
+            "**", "/", "%", ".", "=", "**=", "+=", "*=", "&=", "&.=",
+            "<<=", "&&=", "-=", "/=", "|=", "|.=", ">>=", "||=", ".=",
+            "%=", "^=", "^.=", "//=", "x=", "=~", "!~", "x", "..", "..."
+    ));
     private final List<LexerToken> tokens;
     private final EmitterContext ctx;
     private int tokenIndex = 0;
@@ -469,8 +477,7 @@ public class Parser {
             arguments = parseZeroOrMoreList(0);
         } else if (prototype.isEmpty()) {
             // prototype is empty string
-            List<Node> list = new ArrayList<>();
-            arguments = new ListNode(list, tokenIndex);
+            arguments = new ListNode(tokenIndex);
         } else if (prototype.equals("$")) {
             // prototype is `$`
             arguments = parseZeroOrOneList(1);
@@ -985,66 +992,13 @@ public class Parser {
         LexerToken token = consume();
 
         Node right;
+
+        if (INFIX_OP.contains(token.text)) {
+            right = parseExpression(precedence);
+            return new BinaryOperatorNode(token.text, left, right, tokenIndex);
+        }
+
         switch (token.text) {
-            case "or":
-            case "xor":
-            case "and":
-            case "||":
-            case "//":
-            case "&&":
-            case "|":
-            case "^":
-            case "&":
-            case "==":
-            case "!=":
-            case "<=>":
-            case "eq":
-            case "ne":
-            case "cmp":
-            case "<":
-            case ">":
-            case "<=":
-            case ">=":
-            case "lt":
-            case "gt":
-            case "le":
-            case "ge":
-            case "<<":
-            case ">>":
-            case "+":
-            case "-":
-            case "*":
-            case "**":
-            case "/":
-            case "%":
-            case ".":
-            case "=":
-            case "**=":
-            case "+=":
-            case "*=":
-            case "&=":
-            case "&.=":
-            case "<<=":
-            case "&&=":
-            case "-=":
-            case "/=":
-            case "|=":
-            case "|.=":
-            case ">>=":
-            case "||=":
-            case ".=":
-            case "%=":
-            case "^=":
-            case "^.=":
-            case "//=":
-            case "x=":
-            case "=~":
-            case "!~":
-            case "x":
-            case "..":
-            case "...":
-                right = parseExpression(precedence);
-                return new BinaryOperatorNode(token.text, left, right, tokenIndex);
             case ",":
             case "=>":
                 if (token.text.equals("=>") && left instanceof IdentifierNode) {
@@ -1302,8 +1256,7 @@ public class Parser {
         LexerToken token = peek();
 
         if ((token.text.equals(".") && tokens.get(tokenIndex).type != LexerTokenType.NUMBER)
-                || token.text.equals("eq") || token.text.equals("ne")) {
-            // XXX add other infix operators
+                || INFIX_OP.contains(token.text) || token.text.equals(",")) {
 
             // If followed by `.` (string concatenation operator)
             // or one of the list terminators
@@ -1311,8 +1264,7 @@ public class Parser {
             if (minItems > 0) {
                 throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
             }
-            List<Node> list = new ArrayList<>();
-            return new ListNode(list, tokenIndex);
+            return new ListNode(tokenIndex);
         }
 
         if (token.text.equals("(")) {
@@ -1361,8 +1313,7 @@ public class Parser {
         if (token.text.equals(close)) {
             // empty list
             consume();
-            List<Node> list = new ArrayList<>();
-            expr = new ListNode(list, tokenIndex);
+            expr = new ListNode(tokenIndex);
         } else {
             expr = ListNode.makeList(parseExpression(0));
             consume(LexerTokenType.OPERATOR, close);
