@@ -581,9 +581,12 @@ public class Parser {
                     return new StringNode(token.text, tokenIndex);
                 }
                 switch (token.text) {
+                    case "__LINE__":
+                        return new NumberNode(Integer.toString(ctx.errorUtil.getLineNumber(tokenIndex)), tokenIndex);
+                    case "__FILE__":
+                        return new StringNode(ctx.compilerOptions.fileName, tokenIndex);
                     case "__PACKAGE__":
-                        // this takes no parameters
-                        return new OperatorNode(token.text, null, tokenIndex);
+                        return new StringNode(ctx.symbolTable.getCurrentPackage(), tokenIndex);
                     case "not":
                         // Handle 'not' keyword as a unary operator with an operand
                         operand = parseExpression(getPrecedence(token.text) + 1);
