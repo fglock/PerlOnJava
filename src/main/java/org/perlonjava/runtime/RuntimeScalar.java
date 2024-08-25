@@ -1,6 +1,7 @@
 package org.perlonjava.runtime;
 
 import java.util.Iterator;
+import java.util.NoSuchElementException;
 
 /**
  * The RuntimeScalar class simulates Perl scalar variables.
@@ -821,7 +822,33 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Method to return an iterator
     public Iterator<RuntimeScalar> iterator() {
-        RuntimeArray arr = new RuntimeArray();
-        return this.setArrayOfAlias(arr).iterator();
+        return new RuntimeScalarIterator(this);
+    }
+
+    private static class RuntimeScalarIterator implements Iterator<RuntimeScalar> {
+        private final RuntimeScalar scalar;
+        private boolean hasNext = true;
+
+        public RuntimeScalarIterator(RuntimeScalar scalar) {
+            this.scalar = scalar;
+        }
+
+        @Override
+        public boolean hasNext() {
+            return hasNext;
+        }
+
+        @Override
+        public RuntimeScalar next() {
+            if (!hasNext) {
+                throw new NoSuchElementException();
+            }
+            hasNext = false;
+            return scalar;
+        }
+
+        public void reset() {
+            hasNext = true;
+        }
     }
 }

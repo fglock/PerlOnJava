@@ -3,7 +3,7 @@ package org.perlonjava.runtime;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
+import java.util.NoSuchElementException;
 
 /**
  * The RuntimeList class simulates a Perl list.
@@ -146,10 +146,8 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
 
     // Method to return an iterator
     public Iterator<RuntimeScalar> iterator() {
-        return this.getArrayOfAlias().iterator();
+        return new RuntimeListIterator(elements);
     }
-
-    // Operators
 
     // undefine the elements of the list
     public RuntimeList undefine() {
@@ -158,6 +156,8 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         }
         return this;
     }
+
+    // Operators
 
     public RuntimeScalar print() {
         StringBuilder sb = new StringBuilder();
@@ -175,5 +175,43 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         }
         System.out.println(sb);
         return new RuntimeScalar(1);
+    }
+
+    private static class RuntimeListIterator implements Iterator<RuntimeScalar> {
+        private final List<RuntimeBaseEntity> elements;
+        private int currentIndex = 0;
+        private Iterator<RuntimeScalar> currentIterator;
+
+        public RuntimeListIterator(List<RuntimeBaseEntity> elements) {
+            this.elements = elements;
+            if (!elements.isEmpty()) {
+                currentIterator = elements.get(0).iterator();
+            }
+        }
+
+        @Override
+        public boolean hasNext() {
+            while (currentIterator != null) {
+                if (currentIterator.hasNext()) {
+                    return true;
+                }
+                // Move to the next element's iterator
+                currentIndex++;
+                if (currentIndex < elements.size()) {
+                    currentIterator = elements.get(currentIndex).iterator();
+                } else {
+                    currentIterator = null; // No more elements
+                }
+            }
+            return false;
+        }
+
+        @Override
+        public RuntimeScalar next() {
+            if (!hasNext()) {
+                throw new NoSuchElementException();
+            }
+            return currentIterator.next();
+        }
     }
 }

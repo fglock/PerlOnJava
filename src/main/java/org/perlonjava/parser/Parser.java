@@ -1264,8 +1264,7 @@ public class Parser {
         if (INFIX_OP.contains(token.text) || token.text.equals(",")) {
             if (token.text.equals(".") && tokens.get(tokenIndex).type == LexerTokenType.NUMBER) {
                 // looks like a fractional number, not an infix `.`
-            }
-            else {
+            } else {
                 // subroutine call with zero arguments, followed by infix operator
                 if (LVALUE_INFIX_OP.contains(token.text)) {
                     throw new PerlCompilerException(tokenIndex, "Can't modify non-lvalue subroutine call", ctx.errorUtil);
