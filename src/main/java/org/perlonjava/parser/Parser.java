@@ -915,7 +915,7 @@ public class Parser {
                 stringParts = 2;    // m{str}modifier
                 break;
         }
-        rawStr = StringParser.parseRawStrings(tokens, tokenIndex, stringParts);
+        rawStr = StringParser.parseRawStrings(ctx, tokens, tokenIndex, stringParts);
         tokenIndex = rawStr.next;
 
         switch (operator) {
