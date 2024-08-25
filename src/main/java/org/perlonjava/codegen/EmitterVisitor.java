@@ -517,9 +517,6 @@ public class EmitterVisitor implements Visitor {
                     listNode.accept(this);
                 }
                 return;
-            case "__PACKAGE__":
-                new StringNode(ctx.symbolTable.getCurrentPackage(), node.tokenIndex).accept(this);
-                return;
             case "$":
             case "@":
             case "%":
