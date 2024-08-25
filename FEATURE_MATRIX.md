@@ -116,7 +116,7 @@
 - [ ] **`require` operator**: The `require` operator is not yet implemented.
 - [ ] **`use` and `no` statements**: Module imports and version changes via `use` and `no` are missing.
 - [ ] **`__SUB__`**: The `__SUB__` special variable is not yet supported.
-- [ ] **Special literals**: `__FILE__`, `__LINE__` not yet supported.
+- [x] **Special literals**: `__FILE__`, `__LINE__`
 - [ ] **`BEGIN` block**: `BEGIN` blocks are missing.
 - [ ] **Labels**: Labels and their usage are not supported.
 - [ ] **Search for labels in call stack**: Label searching in the call stack is missing.
