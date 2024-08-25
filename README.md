@@ -278,9 +278,12 @@ public class Main {
    - Support for closures
    - Eval-string functionality
    - Enhanced statements, data types, and call context
+- **v1.2.0**: Added Namespaces and named subroutines.
+   - Added typeglobs 
+   - Added more operators
 
 ### Upcoming Milestones
-- **v1.2.0**: Planned release date: 2024-10-01
+- **v1.3.0**: Planned release date: 2024-10-01
    - Addition of 20 new operators
    - Various bug fixes and performance improvements
 
@@ -297,6 +300,9 @@ The following benchmarks provide an order of magnitude comparison with Perl:
    - Numeric operations: 2x faster than Perl
    - String operations: Comparable to Perl
    - Eval-string: 10x slower than Perl
+
+- **v1.2.0**:
+    - No performance related changes
 
 ## License
 
