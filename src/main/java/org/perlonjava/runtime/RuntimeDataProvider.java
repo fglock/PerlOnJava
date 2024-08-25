@@ -37,7 +37,7 @@ public interface RuntimeDataProvider {
      *
      * @return a RuntimeScalar object.
      */
-    RuntimeScalar getScalar();
+    RuntimeScalar scalar();
 
     /**
      * Add itself to a RuntimeArray.

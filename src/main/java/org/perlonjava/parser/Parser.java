@@ -620,6 +620,7 @@ public class Parser {
                         // Handle 'say' keyword as a unary operator with a RuntimeList operand
                         operand = parseZeroOrMoreList(0);
                         return new OperatorNode(token.text, operand, tokenIndex);
+                    case "scalar":
                     case "values":
                     case "keys":
                         operand = parseZeroOrOneList(1);

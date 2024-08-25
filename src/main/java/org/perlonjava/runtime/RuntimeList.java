@@ -102,12 +102,12 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
     }
 
     // Get the scalar value of the list
-    public RuntimeScalar getScalar() {
+    public RuntimeScalar scalar() {
         if (elements.isEmpty()) {
             return new RuntimeScalar(); // Return undefined if empty
         }
         // XXX expand the last element
-        return elements.get(elements.size() - 1).getScalar();
+        return elements.get(elements.size() - 1).scalar();
     }
 
     // Set the items in the list to the values in another list

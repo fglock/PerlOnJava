@@ -137,7 +137,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
     }
 
     // Get the scalar value of the hash
-    public RuntimeScalar getScalar() {
+    public RuntimeScalar scalar() {
         return new RuntimeScalar(this.size());
     }
 
