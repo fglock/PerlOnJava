@@ -106,8 +106,7 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
 
     // Method to return an iterator
     public Iterator<RuntimeScalar> iterator() {
-        RuntimeArray arr = new RuntimeArray();
-        return this.setArrayOfAlias(arr).iterator();
+        return this.getScalar().iterator();
     }
 
     // Get the Glob alias into an Array
