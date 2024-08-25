@@ -9,11 +9,18 @@ import java.util.Iterator;
 public interface RuntimeDataProvider {
 
     /**
-     * Retrieves a RuntimeArray instance.
+     * Retrieves a RuntimeArray of aliases instance.
      *
      * @return a RuntimeArray object.
      */
     RuntimeArray getArrayOfAlias();
+
+    /**
+     * Push the data into a RuntimeArray of aliases instance.
+     *
+     * @return a RuntimeArray object.
+     */
+    RuntimeArray setArrayOfAlias(RuntimeArray arr);
 
     /**
      * Retrieves a RuntimeList instance.

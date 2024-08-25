@@ -3,6 +3,7 @@ package org.perlonjava.runtime;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.List;
 
 /**
  * The RuntimeHash class simulates Perl hashes.
@@ -130,11 +131,6 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         return array;
     }
 
-    // Get the array value of the Scalar
-    public RuntimeArray getArrayOfAlias() {
-        return this.entryArray();
-    }
-
     // Get the list value of the hash
     public RuntimeList getList() {
         return new RuntimeList(this);
@@ -212,6 +208,16 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
             sb.append(entry.getKey()).append(entry.getValue());
         }
         return sb.toString();
+    }
+
+    // Get Hash aliases into an Array
+    public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
+        List<RuntimeBaseEntity> arrElements = arr.elements;
+        for (Map.Entry<String, RuntimeScalar> entry : this.elements.entrySet()) {
+            arrElements.add(new RuntimeScalar(entry.getKey()));
+            arrElements.add(entry.getValue());
+        }
+        return arr;
     }
 
     // Inner class implementing the Iterator interface
