@@ -102,9 +102,6 @@ public class StringParser {
                     case END_TOKEN:
                         remain.append(ch);  // Append remaining characters to remain buffer
                         break;
-
-                    default:
-                        throw new PerlCompilerException(tokPos, "Unexpected state: " + state, ctx.errorUtil);
                 }
             }
             tokPos++;  // Move to the next token
