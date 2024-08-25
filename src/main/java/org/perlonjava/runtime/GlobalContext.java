@@ -18,18 +18,9 @@ public class GlobalContext {
     // Cache to store previously normalized variables for faster lookup
     private static final Map<String, String> cache = new HashMap<>();
 
-    private static final Set<String> SPECIAL_VARIABLES = new HashSet<>();
-
-    static {
-        // Populate with Perl's special variables
-        SPECIAL_VARIABLES.add("ARGV");
-        SPECIAL_VARIABLES.add("ENV");
-        SPECIAL_VARIABLES.add("INC");
-        SPECIAL_VARIABLES.add("SIG");
-        SPECIAL_VARIABLES.add("STDOUT");
-        SPECIAL_VARIABLES.add("STDERR");
-        SPECIAL_VARIABLES.add("STDIN");
-    }
+    private static final Set<String> SPECIAL_VARIABLES = Set.of(
+            "ARGV", "ENV", "INC", "SIG", "STDOUT", "STDERR", "STDIN"
+    );
 
     public static void initializeGlobals() {
         getGlobalVariable("main::@");    // initialize $@ to "undef"
