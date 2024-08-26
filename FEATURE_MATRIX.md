@@ -64,7 +64,7 @@
 - [ ] **`$#array`**: Operator for array count is not implemented.
 - [x] **`scalar`**: Operator to get scalar value is not implemented.
 - [x] **Array dereference**: Dereferencing arrays using `@$x`.
-- [ ] **Hash dereference**: Dereferencing hashes using `%$x` is not yet implemented.
+- [x] **Hash dereference**: Dereferencing hashes using `%$x`.
 - [ ] **Basic Array Operations**: Some basic array operations are implemented; others are missing.
 - [ ] **Array Slices**: Array slices like `@array[2, 3]` are not yet implemented.
 - [ ] **Hash Slices**: Hash slices like `@hash{"a", "b"}` are missing.

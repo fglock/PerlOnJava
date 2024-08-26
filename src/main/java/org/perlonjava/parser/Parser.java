@@ -1272,10 +1272,15 @@ public class Parser {
         LexerToken token = peek();
 
         if (INFIX_OP.contains(token.text) || token.text.equals(",")) {
-            if (token.text.equals(".") && tokens.get(tokenIndex).type == LexerTokenType.NUMBER) {
+            tokenIndex++;
+            ctx.logDebug("parseZeroOrMoreList infix `" + token.text + "` followed by `" + peek().text  + "`");
+            if (token.text.equals("%") && peek().text.equals("$")) {
+                // looks like a hash deref, not an infix `%`
+            } else if (token.text.equals(".") && tokens.get(tokenIndex).type == LexerTokenType.NUMBER) {
                 // looks like a fractional number, not an infix `.`
             } else {
                 // subroutine call with zero arguments, followed by infix operator
+                tokenIndex--;
                 if (LVALUE_INFIX_OP.contains(token.text)) {
                     throw new PerlCompilerException(tokenIndex, "Can't modify non-lvalue subroutine call", ctx.errorUtil);
                 }
@@ -1286,6 +1291,7 @@ public class Parser {
                 }
                 return new ListNode(tokenIndex);
             }
+            tokenIndex--;
         }
 
         if (token.text.equals("(")) {

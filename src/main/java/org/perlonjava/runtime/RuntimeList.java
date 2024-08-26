@@ -130,17 +130,13 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         return new RuntimeList(value);
     }
 
-    // Convert the list to a string (for debugging purposes)
+    // Convert the list to a string
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder("[");
+        StringBuilder sb = new StringBuilder();
         for (int i = 0; i < elements.size(); i++) {
-            if (i > 0) {
-                sb.append(", ");
-            }
             sb.append(elements.get(i).toString());
         }
-        sb.append("]");
         return sb.toString();
     }
 
