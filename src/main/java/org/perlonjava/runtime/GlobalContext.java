@@ -3,6 +3,7 @@ package org.perlonjava.runtime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.ArrayList;
 
 /**
  * The RuntimeScalar class simulates Perl namespaces.
@@ -15,7 +16,31 @@ public class GlobalContext {
     private static final Map<String, RuntimeScalar> globalCodeRefs = new HashMap<>();
 
     // Cache to store previously normalized variables for faster lookup
-    private static final Map<String, String> cache = new HashMap<>();
+    private static final Map<String, String> nameCache = new HashMap<>();
+
+    // Cache to store blessed class lookups
+    private static int currentBlessId = 0;
+    private static final Map<String, Integer> blessIdCache = new HashMap<>();
+    private static final ArrayList<String> blessStrCache = new ArrayList<>();
+
+    static {
+        blessStrCache.add("");  // this starts with index 1
+    }
+
+    public static int getBlessId(String str) {
+        Integer id = blessIdCache.get(str);
+        if (id == null) {
+            currentBlessId++;
+            blessIdCache.put(str, currentBlessId);
+            blessStrCache.add(currentBlessId, str);
+            id = currentBlessId;
+        }
+        return id;
+    }
+
+    public static String getBlessStr(int id) {
+        return blessStrCache.get(id);
+    }
 
     private static final Set<String> SPECIAL_VARIABLES = Set.of(
             "ARGV", "ENV", "INC", "SIG", "STDOUT", "STDERR", "STDIN"
@@ -42,8 +67,8 @@ public class GlobalContext {
         String cacheKey = defaultPackage + "::" + variable;
 
         // Check the cache first
-        if (cache.containsKey(cacheKey)) {
-            return cache.get(cacheKey);
+        if (nameCache.containsKey(cacheKey)) {
+            return nameCache.get(cacheKey);
         }
 
         if (!Character.isLetter(variable.charAt(0)) || SPECIAL_VARIABLES.contains(variable)) {
@@ -70,7 +95,7 @@ public class GlobalContext {
 
         // Convert to string and store in cache
         String normalizedStr = normalized.toString();
-        cache.put(cacheKey, normalizedStr);
+        nameCache.put(cacheKey, normalizedStr);
 
         return normalizedStr;
     }

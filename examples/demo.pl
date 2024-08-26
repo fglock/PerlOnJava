@@ -25,6 +25,9 @@ say $a->{a};
 my $b = [ 4, 5 ];
 say $b->[1];
 
+############################
+#  Subroutines
+
 # named subroutine with typeglob assignment
 
 *x = sub { print "HERE @_\n" };
@@ -68,6 +71,16 @@ print "not" if $v ne "VALUE2"; say "ok # subroutine without prototype returned $
 
 $v = no_proto or "2";
 print "not" if $v ne "VALUE"; say "ok # subroutine without prototype returned $v";
+
+
+############################
+#  Objects
+
+$v = {};
+print "not" if ref($v) ne "HASH"; say "ok # unblessed reference returns data type";
+
+bless $v, "Pkg";
+print "not" if ref($v) ne "Pkg"; say "ok # blessed reference returns package name";
 
 5;    # return value
 

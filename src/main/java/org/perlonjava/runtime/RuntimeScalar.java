@@ -247,23 +247,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
     }
 
-    public RuntimeScalar ref() {
-        String str = "";
-        switch (type) {
-            case CODE:
-                str = "CODE";
-            case GLOB:
-                str = "GLOB";
-            case REFERENCE:
-                str = "REF";
-            case ARRAYREFERENCE:
-                str = "ARRAY";
-            case HASHREFERENCE:
-                str = "HASH";
-        }
-        return new RuntimeScalar(str);
-    }
-
     public String toStringRef() {
         switch (type) {
             case UNDEF:
@@ -366,6 +349,86 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             // If the type is not CODE, throw an exception indicating an invalid state
             throw new IllegalStateException("Variable does not contain a code reference");
         }
+    }
+
+    // Method to "bless" a Perl reference into an object
+    public RuntimeScalar bless(RuntimeScalar className) throws Exception {
+        switch (type) {
+            case REFERENCE:
+            case ARRAYREFERENCE:
+            case HASHREFERENCE:
+                String str = className.toString();
+                if (str.isEmpty()) {
+                    str = "main";
+                }
+                ((RuntimeBaseEntity) value).blessId = GlobalContext.getBlessId(str);
+                break;
+            default:
+                throw new IllegalStateException("Can't bless non-reference value");
+        }
+        return this;
+    }
+ 
+     public RuntimeScalar ref() {
+        String str;
+        switch (type) {
+            case CODE:
+                str = "CODE";
+                break;
+            case GLOB:
+                str = "GLOB";
+                break;
+            case REFERENCE:
+                int blessId = ((RuntimeBaseEntity) value).blessId;
+                str = blessId == 0 ? "REF" : GlobalContext.getBlessStr(blessId);
+                break;
+            case ARRAYREFERENCE:
+                blessId = ((RuntimeBaseEntity) value).blessId;
+                str = blessId == 0 ? "ARRAY" : GlobalContext.getBlessStr(blessId);
+                break;
+            case HASHREFERENCE:
+                blessId = ((RuntimeBaseEntity) value).blessId;
+                str = blessId == 0 ? "HASH" : GlobalContext.getBlessStr(blessId);
+                break;
+            default:
+                str = "";
+        }
+        return new RuntimeScalar(str);
+    }
+
+    // Method to call a Perl object method
+    public RuntimeList call(String methodName, RuntimeArray a, RuntimeContextType callContext) throws Exception {
+        // Retrieve Perl class name
+        String perlClassName = "";
+        switch (type) {
+            case REFERENCE:
+            case ARRAYREFERENCE:
+            case HASHREFERENCE:
+                int blessId = ((RuntimeBaseEntity) value).blessId;
+                if (blessId == 0) {
+                    throw new IllegalStateException("Can't call method \"" + methodName + "\" on unblessed reference");
+                }
+                // TODO instance method call
+
+      //        if (type == RuntimeScalarType.CODE) {
+      //            // Cast the value to RuntimeCode and call apply()
+      //            return ((RuntimeCode) this.value).apply(a, callContext);
+      //        } else {
+      //            // If the type is not CODE, throw an exception indicating an invalid state
+      //            throw new IllegalStateException("Variable does not contain a code reference");
+      //        }
+
+                break;
+            case UNDEF:
+                throw new IllegalStateException("Can't call method \"" + methodName + "\" on an undefined value");
+            default:
+                perlClassName = this.toString();
+                if (perlClassName.isEmpty()) {
+                    throw new IllegalStateException("Can't call method \"" + methodName + "\" on an undefined value");
+                }
+                // TODO class method call
+        }
+        return new RuntimeList();
     }
 
     // Helper method to autoincrement a String variable
