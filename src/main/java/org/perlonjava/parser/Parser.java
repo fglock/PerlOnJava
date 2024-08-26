@@ -662,6 +662,14 @@ public class Parser {
                             }
                         }
                         return new OperatorNode(text, operand, tokenIndex);
+                    case "bless":
+                        operand = parseZeroOrMoreList(1);
+                        Node ref = ((ListNode) operand).elements.get(0);
+                        Node className = ((ListNode) operand).elements.get(1);
+                        if (className == null) {
+                            className = new StringNode("main", tokenIndex);
+                        }
+                        return new BinaryOperatorNode("bless", ref, className, tokenIndex);
                     case "join":
                         // Handle 'join' keyword as a Binary operator with a RuntimeList operand
                         operand = parseZeroOrMoreList(1);

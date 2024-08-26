@@ -53,6 +53,7 @@ public class EmitterVisitor implements Visitor {
         operatorHandlers.put("cmp", "cmp");
         operatorHandlers.put("=~", "bindMatch");
         operatorHandlers.put("!~", "bindNotMatch");
+        operatorHandlers.put("bless", "bless");
     }
 
     private final EmitterContext ctx;

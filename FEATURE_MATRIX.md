@@ -4,6 +4,7 @@
 
 1. [Compiler Usability](#compiler-usability)
 2. [Scalars](#scalars)
+2. [Objects](#objects)
 3. [Operators](#operators)
 4. [Arrays, Hashes, and Lists](#arrays-hashes-and-lists)
 5. [Subroutines](#subroutines)
@@ -33,10 +34,13 @@
 - ✔️   **References**: References to variables and data structures are supported.
 - ❌  **Autovivification**: Some aspects of autovivification are supported, but not fully implemented.
 - ❌  **File handles**: Support for file handles is missing.
-- ❌  **Objects**: Object-oriented features are not yet implemented.
 - ❌  **Tied Scalars**: Support for tying scalars to classes is missing.
 - ❌  **Cached string/numeric conversions; dualvars**: Caching and dual variable support are not implemented.
 - ❌  **Unicode**: Support for non-Unicode strings is not implemented.
+
+## Objects
+- ❌  **Objects**: Object-oriented features are not yet implemented.
+- ✔️   **Object operators**: `ref` and `bless`
 
 ## Operators
 - ✔️   **Simple arithmetic**: Operators like `+`, `-`, `*`, and `%` are supported.
