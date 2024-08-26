@@ -209,6 +209,29 @@ public class StringParser {
                         case "b":
                             str.append('\b');  // Append backspace
                             break;
+                        case "E":
+                            break;  // Marks the end of \Q sequence
+                        case "Q":
+                            // \Q quotemeta: Start an inner loop to handle the quoted section
+                            while (true) {
+                                token = tokens.get(parser.tokenIndex++);
+                                LexerToken nextToken = tokens.get(parser.tokenIndex);
+                                if (token.type == LexerTokenType.EOF) {
+                                    break;
+                                }
+                                if (token.text.equals("\\") && nextToken.text.startsWith("E")) {
+                                    parser.tokenIndex--;
+                                    break;
+                                }
+                                if (token.type == LexerTokenType.IDENTIFIER || token.type == LexerTokenType.NUMBER) {
+                                    str.append(token.text);
+                                } else {
+                                    for (char c : token.text.toCharArray()) {
+                                            str.append("\\").append(c);
+                                    }
+                                }
+                            }
+                            break;
                         case "x":
                             StringBuilder unicodeSeq = new StringBuilder();
                             token = tokens.get(parser.tokenIndex);
