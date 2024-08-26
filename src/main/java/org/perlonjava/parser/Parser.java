@@ -32,15 +32,49 @@ public class Parser {
             ">>=", "||=", ".=", "%=", "^=", "^.=",
             "//=", "x="
     ));
+
+    private static final Map<String, Integer> precedenceMap = new HashMap<>();
+
+    static {
+        addOperatorsToMap(1, "or", "xor");
+        addOperatorsToMap(2, "and");
+        addOperatorsToMap(3, "not");
+        addOperatorsToMap(4, "print");
+        addOperatorsToMap(5, ",", "=>");
+        addOperatorsToMap(6, "=", "**=", "+=", "*=", "&=", "&.=", "<<=", "&&=", "-=", "/=", "|=", "|.=", ">>=", "||=", ".=", "%=", "^=", "^.=", "//=", "x=");
+        addOperatorsToMap(7, "?");
+        addOperatorsToMap(8, "..", "...");
+        addOperatorsToMap(9, "||", "^^", "//");
+        addOperatorsToMap(10, "&&");
+        addOperatorsToMap(11, "|", "^");
+        addOperatorsToMap(12, "&");
+        addOperatorsToMap(13, "==", "!=", "<=>", "eq", "ne", "cmp");
+        addOperatorsToMap(14, "<", ">", "<=", ">=", "lt", "gt", "le", "ge");
+        addOperatorsToMap(16, ">>", "<<");
+        addOperatorsToMap(17, "+", "-");
+        addOperatorsToMap(18, "*", "/", "%", "x");
+        addOperatorsToMap(19, "=~", "!~");
+        addOperatorsToMap(20, "!", "~", "\\");
+        addOperatorsToMap(21, "**");
+        addOperatorsToMap(22, "++", "--");
+        addOperatorsToMap(23, "->");
+    }
+
     private final List<LexerToken> tokens;
     private final EmitterContext ctx;
+    public int tokenIndex = 0;
     private boolean parsingForLoopVariable = false;
     private boolean parsingTakeReference = false;
-    public int tokenIndex = 0;
 
     public Parser(EmitterContext ctx, List<LexerToken> tokens) {
         this.ctx = ctx;
         this.tokens = tokens;
+    }
+
+    private static void addOperatorsToMap(int precedence, String... operators) {
+        for (String operator : operators) {
+            precedenceMap.put(operator, precedence);
+        }
     }
 
     public static int skipWhitespace(int tokenIndex, List<LexerToken> tokens) {
@@ -69,6 +103,10 @@ public class Parser {
             default:
                 return false;
         }
+    }
+
+    private int getPrecedence(String operator) {
+        return precedenceMap.getOrDefault(operator, 24);
     }
 
     public Node parse() {
@@ -1102,106 +1140,6 @@ public class Parser {
         }
     }
 
-    private int getPrecedence(String operator) {
-        // Define precedence levels for operators
-        switch (operator) {
-            case "or":
-            case "xor":
-                return 1;
-            case "and":
-                return 2;
-            case "not":
-                return 3;
-            case "print":
-                return 4;
-            case ",":
-            case "=>":
-                return 5;
-            case "=":
-            case "**=":
-            case "+=":
-            case "*=":
-            case "&=":
-            case "&.=":
-            case "<<=":
-            case "&&=":
-            case "-=":
-            case "/=":
-            case "|=":
-            case "|.=":
-            case ">>=":
-            case "||=":
-            case ".=":
-            case "%=":
-            case "^=":
-            case "^.=":
-            case "//=":
-            case "x=":
-                return 6;
-            case "?":
-                return 7;
-            case "..":
-            case "...":
-                return 8;
-            case "||":
-            case "^^":
-            case "//":
-                return 9;
-            case "&&":
-                return 10;
-
-            case "|":
-            case "^":
-                return 11;
-            case "&":
-                return 12;
-
-            case "==":
-            case "!=":
-            case "<=>":
-            case "eq":
-            case "ne":
-            case "cmp":
-                return 13;
-            case "<":
-            case ">":
-            case "<=":
-            case ">=":
-            case "lt":
-            case "gt":
-            case "le":
-            case "ge":
-                return 14;
-            case ">>":
-            case "<<":
-                return 16;
-            case "+":
-            case "-":
-                return 17;
-            case "*":
-            case "/":
-            case "%":
-            case "x":
-                return 18;
-            case "=~":
-            case "!~":
-                return 19;
-            case "!":
-            case "~":
-            case "\\":
-                return 20;
-            case "**":
-                return 21;
-            case "++":
-            case "--":
-                return 22;
-            case "->":
-                return 23;
-            default:
-                return 24;
-        }
-    }
-
     private boolean isRightAssociative(String s) {
         // Define right associative operators
         switch (s) {
@@ -1269,18 +1207,24 @@ public class Parser {
     // The Minimum number of arguments can be set.
     //
     private ListNode parseZeroOrMoreList(int minItems) {
-        LexerToken token = peek();
+        int previousIndex = tokenIndex;
+        LexerToken token = consume();
+        LexerToken token1 = tokens.get(tokenIndex); // next token including spaces
+        LexerToken nextToken = peek();  // after spaces
 
         if (INFIX_OP.contains(token.text) || token.text.equals(",")) {
-            tokenIndex++;
-            ctx.logDebug("parseZeroOrMoreList infix `" + token.text + "` followed by `" + peek().text  + "`");
-            if (token.text.equals("%") && peek().text.equals("$")) {
+            // tokenIndex++;
+            ctx.logDebug("parseZeroOrMoreList infix `" + token.text + "` followed by `" + nextToken.text + "`");
+            if (token.text.equals("%") && nextToken.text.equals("$")) {
                 // looks like a hash deref, not an infix `%`
-            } else if (token.text.equals(".") && tokens.get(tokenIndex).type == LexerTokenType.NUMBER) {
+                ctx.logDebug("parseZeroOrMoreList looks like Hash");
+            } else if (token.text.equals(".") && token1.type == LexerTokenType.NUMBER) {
                 // looks like a fractional number, not an infix `.`
+                ctx.logDebug("parseZeroOrMoreList looks like Number");
             } else {
                 // subroutine call with zero arguments, followed by infix operator
-                tokenIndex--;
+                tokenIndex = previousIndex;
+                ctx.logDebug("parseZeroOrMoreList return zero at `" + tokens.get(tokenIndex) + "`");
                 if (LVALUE_INFIX_OP.contains(token.text)) {
                     throw new PerlCompilerException(tokenIndex, "Can't modify non-lvalue subroutine call", ctx.errorUtil);
                 }
@@ -1291,8 +1235,8 @@ public class Parser {
                 }
                 return new ListNode(tokenIndex);
             }
-            tokenIndex--;
         }
+        tokenIndex = previousIndex;
 
         if (token.text.equals("(")) {
             // arguments in parentheses, can be 0 or more arguments:    print(), print(10)
