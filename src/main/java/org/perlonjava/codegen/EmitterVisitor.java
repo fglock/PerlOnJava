@@ -721,8 +721,15 @@ public class EmitterVisitor implements Visitor {
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "arrayDeref", "()Lorg/perlonjava/runtime/RuntimeArray;", false);
             return;
         }
+        if (operator.equals("%")) {
+            // `%$a`
+            ctx.logDebug("GETVAR `%$a`");
+            node.operand.accept(this.with(RuntimeContextType.LIST));
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "hashDeref", "()Lorg/perlonjava/runtime/RuntimeHash;", false);
+            return;
+        }
         if (operator.equals("$")) {
-            // `@$a`
+            // `$$a`
             ctx.logDebug("GETVAR `$$a`");
             node.operand.accept(this.with(RuntimeContextType.SCALAR));
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "scalarDeref", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
