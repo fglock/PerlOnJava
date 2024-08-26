@@ -275,6 +275,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return true;
     }
 
+    // Method to implement `$v->{key}`
     public RuntimeScalar hashDerefGet(RuntimeScalar index) {
         switch (type) {
             case UNDEF:
@@ -288,6 +289,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
     }
 
+    // Method to implement `$v->[10]`
     public RuntimeScalar arrayDerefGet(RuntimeScalar index) {
         switch (type) {
             case UNDEF:
@@ -298,6 +300,30 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 return ((RuntimeArray) value).get(index.getInt());
             default:
                 throw new IllegalStateException("Variable does not contain an array reference");
+        }
+    }
+
+    // Method to implement `@$v`
+    public RuntimeArray arrayDeref() {
+        switch (type) {
+            case UNDEF:
+                throw new IllegalStateException("Can't use an undefined value as an ARRAY reference");
+            case ARRAYREFERENCE:
+                return (RuntimeArray) value;
+            default:
+                throw new IllegalStateException("Variable does not contain an array reference");
+        }
+    }
+
+    // Method to implement `$$v`
+    public RuntimeScalar scalarDeref() {
+        switch (type) {
+            case UNDEF:
+                throw new IllegalStateException("Can't use an undefined value as a SCALAR reference");
+            case REFERENCE:
+                return (RuntimeScalar) value;
+            default:
+                throw new IllegalStateException("Variable does not contain a scalar reference");
         }
     }
 

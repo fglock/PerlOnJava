@@ -63,7 +63,7 @@
 - [ ] **List assignment in scalar context**: List assignment in scalar context returns the number of elements produced by the expression on the right side of the assignment
 - [ ] **`$#array`**: Operator for array count is not implemented.
 - [x] **`scalar`**: Operator to get scalar value is not implemented.
-- [ ] **Array dereference**: Dereferencing arrays using `@$x` is not yet implemented.
+- [x] **Array dereference**: Dereferencing arrays using `@$x`.
 - [ ] **Hash dereference**: Dereferencing hashes using `%$x` is not yet implemented.
 - [ ] **Basic Array Operations**: Some basic array operations are implemented; others are missing.
 - [ ] **Array Slices**: Array slices like `@array[2, 3]` are not yet implemented.
