@@ -315,6 +315,18 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
     }
 
+    // Method to implement `%$v`
+    public RuntimeHash hashDeref() {
+        switch (type) {
+            case UNDEF:
+                throw new IllegalStateException("Can't use an undefined value as an HASH reference");
+            case HASHREFERENCE:
+                return (RuntimeHash) value;
+            default:
+                throw new IllegalStateException("Variable does not contain an hash reference");
+        }
+    }
+
     // Method to implement `$$v`
     public RuntimeScalar scalarDeref() {
         switch (type) {
