@@ -13,26 +13,29 @@ import java.util.*;
 
 public class Parser {
     private static final Set<String> TERMINATORS =
-            new HashSet<>(Arrays.asList(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when"));
+            Set.of(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when");
     private static final Set<String> LISTTERMINATORS =
-            new HashSet<>(Arrays.asList(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when", "not", "and", "or"));
+            Set.of(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when", "not", "and", "or");
     private static final Set<String> UNARY_OP =
-            new HashSet<>(Arrays.asList("!", "~", "\\", "-", "+", "--", "++", "$", "@", "%", "*", "&", "$#"));
-    private static final Set<String> INFIX_OP = new HashSet<>(Arrays.asList(
+            Set.of("!", "~", "\\", "-", "+", "--", "++", "$", "@", "%", "*", "&", "$#");
+    private static final Set<String> INFIX_OP = Set.of(
             "or", "xor", "and", "||", "//", "&&", "|", "^", "&",
             "==", "!=", "<=>", "eq", "ne", "cmp", "<", ">", "<=",
             ">=", "lt", "gt", "le", "ge", "<<", ">>", "+", "-", "*",
             "**", "/", "%", ".", "=", "**=", "+=", "*=", "&=", "&.=",
             "<<=", "&&=", "-=", "/=", "|=", "|.=", ">>=", "||=", ".=",
             "%=", "^=", "^.=", "//=", "x=", "=~", "!~", "x", "..", "..."
-    ));
-    private static final Set<String> LVALUE_INFIX_OP = new HashSet<>(Arrays.asList(
+    );
+    private static final Set<String> LVALUE_INFIX_OP = Set.of(
             "=", "**=", "+=", "*=", "&=", "&.=",
             "<<=", "&&=", "-=", "/=", "|=", "|.=",
             ">>=", "||=", ".=", "%=", "^=", "^.=",
             "//=", "x="
-    ));
-
+    );
+    private static final Set<String> RIGHT_ASSOC_OP = Set.of(
+            "=", "**=", "+=", "*=", "&=", "&.=", "<<=", "&&=", "-=", "/=", "|=", "|.=",
+            ">>=", "||=", ".=", "%=", "^=", "^.=", "//=", "x=", "**", "?"
+    );
     private static final Map<String, Integer> precedenceMap = new HashMap<>();
 
     static {
@@ -598,7 +601,7 @@ public class Parser {
             }
 
             // If the operator is right associative (like exponentiation), parse it with lower precedence.
-            if (isRightAssociative(token.text)) {
+            if (RIGHT_ASSOC_OP.contains(token.text)) {
                 ctx.logDebug("parseExpression `" + token.text + "` precedence: " + tokenPrecedence + " right assoc");
                 left = parseInfix(left, tokenPrecedence - 1); // Parse the right side with lower precedence.
             } else {
@@ -1137,37 +1140,6 @@ public class Parser {
                     tokenIndex,
                     "Expected token " + type + " with text " + text + " but got " + token,
                     ctx.errorUtil);
-        }
-    }
-
-    private boolean isRightAssociative(String s) {
-        // Define right associative operators
-        switch (s) {
-            case "=":
-            case "**=":
-            case "+=":
-            case "*=":
-            case "&=":
-            case "&.=":
-            case "<<=":
-            case "&&=":
-            case "-=":
-            case "/=":
-            case "|=":
-            case "|.=":
-            case ">>=":
-            case "||=":
-            case ".=":
-            case "%=":
-            case "^=":
-            case "^.=":
-            case "//=":
-            case "x=":
-            case "**":
-            case "?":
-                return true;
-            default:
-                return false;
         }
     }
 
