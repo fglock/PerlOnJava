@@ -41,6 +41,11 @@
 ## Objects
 - ❌  **Objects**: Object-oriented features are not yet implemented.
 - ✔️   **Object operators**: `ref` and `bless`
+- ❌  **Inheritance**: `UNIVERSAL` class, `@ISA`, `SUPER` are not yet implemented.
+- ❌  **Multiple Inheritance**: `parent` and multiple inheritance are not yet implemented.
+- ❌  **Method caching**: is not yet implemented.
+- ❌  **Autoload**: `AUTOLOAD` is not yet implemented.
+- ❌  **`DESTROY`**: Handling of object destruction may be incompatible with JVM garbage collection.
 
 ## Operators
 - ✔️   **Simple arithmetic**: Operators like `+`, `-`, `*`, and `%` are supported.
