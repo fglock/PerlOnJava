@@ -227,7 +227,7 @@ public class StringParser {
                                     str.append(token.text);
                                 } else {
                                     for (char c : token.text.toCharArray()) {
-                                            str.append("\\").append(c);
+                                        str.append("\\").append(c);
                                     }
                                 }
                             }
