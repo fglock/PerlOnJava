@@ -65,6 +65,18 @@ public class EmitterVisitor implements Visitor {
         this.ctx = ctx;
     }
 
+    public static boolean isInteger(String str) {
+        if (str == null || str.isEmpty()) {
+            return false;
+        }
+        try {
+            Integer.parseInt(str);
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
     /**
      * Returns an EmitterVisitor with the specified context type. Uses a cache to avoid creating new
      * instances unnecessarily.
@@ -738,18 +750,6 @@ public class EmitterVisitor implements Visitor {
 
         // TODO ${a} ${[ 123 ]}
         throw new PerlCompilerException(node.tokenIndex, "Not implemented: " + operator, ctx.errorUtil);
-    }
-
-    public static boolean isInteger(String str) {
-        if (str == null || str.isEmpty()) {
-            return false;
-        }
-        try {
-            Integer.parseInt(str);
-            return true;
-        } catch (NumberFormatException e) {
-            return false;
-        }
     }
 
     private void handleSetOperator(BinaryOperatorNode node) throws Exception {
