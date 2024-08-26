@@ -642,6 +642,7 @@ public class Parser {
                     case "log":
                     case "rand":
                     case "undef":
+                    case "quotemeta":
                         String text = token.text;
                         operand = parseZeroOrOneList(0);
                         if (((ListNode) operand).elements.isEmpty()) {
