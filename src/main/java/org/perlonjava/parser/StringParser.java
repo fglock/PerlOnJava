@@ -205,7 +205,7 @@ public class StringParser {
                                 parser.tokenIndex++;
                                 while (true) {
                                     ctx.logDebug("str at " + parser.tokenIndex);
-                                     token = tokens.get(parser.tokenIndex++);  // Get the current token
+                                    token = tokens.get(parser.tokenIndex++);  // Get the current token
                                     if (token.type == LexerTokenType.EOF) {
                                         throw new PerlCompilerException(tokenIndex, "Expected '}' after \\x{", errorUtil);
                                     }
@@ -241,27 +241,45 @@ public class StringParser {
                         ctx.logDebug("str operand " + operand);
                         parser.consume(LexerTokenType.OPERATOR, "}");
                     } else {
-                        // XXX TODO -  $$a  @$a
                         String identifier = parser.parseComplexIdentifier();
+                        operand = null;
                         if (identifier == null) {
-                            throw new IllegalStateException("Unexpected value: " + text);
-                        } else {
-                            ctx.logDebug("str Identifier: " + identifier);
-                            operand = new OperatorNode(
-                                    text, new IdentifierNode(identifier, tokenIndex), tokenIndex);
-                            outerLoop:
-                            while (true) {
-                                text = parser.peek().text;
-                                switch (text) {
-                                    case "[":
-                                    case "{":
-                                    case "->":
-                                        operand = parser.parseInfix(operand, 0);
-                                        ctx.logDebug("str operand " + operand);
-                                        break;
-                                    default:
-                                        break outerLoop;
+                            // parse $$$a  @$$a
+                            int dollarCount = 0;
+                            while (parser.peek().text.equals("$")) {
+                                dollarCount++;
+                                parser.tokenIndex++;
+                            }
+                            if (dollarCount > 0) {
+                                identifier = parser.parseComplexIdentifier();
+                                if (identifier == null) {
+                                    throw new PerlCompilerException(tokenIndex, "Unexpected value after $ in string", errorUtil);
                                 }
+                                operand = new IdentifierNode(identifier, tokenIndex);
+                                for (int i = 0; i < dollarCount; i++) {
+                                    operand = new OperatorNode("$", operand, tokenIndex);
+                                }
+                            } else {
+                                throw new PerlCompilerException(tokenIndex, "Unexpected value after " + text + " in string", errorUtil);
+                            }
+                        } else {
+                            operand = new IdentifierNode(identifier, tokenIndex);
+                        }
+                        ctx.logDebug("str Identifier: " + identifier);
+                        operand = new OperatorNode(
+                                text, operand, tokenIndex);
+                        outerLoop:
+                        while (true) {
+                            text = parser.peek().text;
+                            switch (text) {
+                                case "[":
+                                case "{":
+                                case "->":
+                                    operand = parser.parseInfix(operand, 0);
+                                    ctx.logDebug("str operand " + operand);
+                                    break;
+                                default:
+                                    break outerLoop;
                             }
                         }
                     }
