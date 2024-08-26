@@ -572,6 +572,7 @@ public class EmitterVisitor implements Visitor {
             case "rand":
             case "undef":
             case "quotemeta":
+            case "ref":
             case "scalar":
                 handleUnaryBuiltin(node, operator);
                 break;

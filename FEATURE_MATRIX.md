@@ -47,6 +47,7 @@
 - ✔️   **`q`, `qq`, `qw` String operators**: Various string quoting mechanisms are supported.
 - ✔️   **Bitwise operators**: Bitwise operations like `&`, `|`, `^`, `<<`, and `>>` are supported.
 - ✔️   **Autoincrement, Autodecrement; String increment**: Increment and decrement operators, including for strings, are implemented.
+- ✔️   **Scalar string and math operators**: `quotemeta`, `ref`, `undef`, `log`, `rand`.
 - ✔️   **`join`**: Join operator for combining array elements into a string is supported.
 - ❌  **`split`**: Splitting strings into arrays is not yet implemented.
 - ❌  **`grep`, `map`, `sort`**: List processing functions are missing.
@@ -110,13 +111,12 @@
 - ❌  **Compound assignment operators**: Most compound assignment operators are implemented; specifics needed.
 - ✔️   **`package` declaration**: `package BLOCK` is also supported.
 - ❌  **`version` objects**: Version objects are not yet supported.
-- ✔️   **`__PACKAGE__`**: `__PACKAGE__` is implemented.
 - ✔️   **Typeglob operations**: Operations like `*x = sub {}` are supported.
 - ✔️   **Code references**: Code references like `&subr` are implemented.
 - ❌  **`require` operator**: The `require` operator is not yet implemented.
 - ❌  **`use` and `no` statements**: Module imports and version changes via `use` and `no` are missing.
 - ❌  **`__SUB__`**: The `__SUB__` special variable is not yet supported.
-- ✔️   **Special literals**: `__FILE__`, `__LINE__`
+- ✔️   **Special literals**: `__PACKAGE__`, `__FILE__`, `__LINE__`
 - ❌  **`BEGIN` block**: `BEGIN` blocks are missing.
 - ❌  **Labels**: Labels and their usage are not supported.
 - ❌  **Search for labels in call stack**: Label searching in the call stack is missing.
