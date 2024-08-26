@@ -537,7 +537,7 @@ public class Parser {
      * @param precedence The precedence level of the current expression.
      * @return The root node of the parsed expression.
      */
-    private Node parseExpression(int precedence) {
+    public Node parseExpression(int precedence) {
         // First, parse the primary expression (like a number or a variable).
         Node left = parsePrimary();
 
@@ -1004,7 +1004,7 @@ public class Parser {
         }
     }
 
-    private Node parseInfix(Node left, int precedence) {
+    public Node parseInfix(Node left, int precedence) {
         LexerToken token = consume();
 
         Node right;
