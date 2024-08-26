@@ -27,7 +27,7 @@
 - [x] **Variable assignment**: Basic variable assignment is implemented.
 - [x] **Basic types**: Support for integers, doubles, strings, CODE, and undef is present.
 - [x] **String Interpolation**: Both array and scalar string interpolation are supported.
-- [ ] **String Interpolation escapes**: Escapes within interpolated strings are incomplete.
+- [x] **String Interpolation escapes**: Handles escape sequences  within interpolated strings.
 - [x] **Expand backslash-n and simple sequences**: Handling of basic escape sequences like `\n` is implemented.
 - [x] **String numification**: Strings can be converted to numbers automatically.
 - [x] **Numbers with underscores**: Numbers with underscores (e.g., `1_000`) are supported.
