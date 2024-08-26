@@ -698,8 +698,10 @@ public class EmitterVisitor implements Visitor {
             int varIndex = ctx.symbolTable.getVariableIndex(sigil + name);
             if (varIndex == -1) {
                 // not a declared `my` or `our` variable
-                // Create and fetch a global variable
-                boolean createIfNotExists = name.contains("::");
+                // Fetch a global variable.
+                // Autovivify if the name is fully qualified, or if it is a regex variable like `$1`
+                // TODO special variables: `$,` `$$`
+                boolean createIfNotExists = name.contains("::") || isInteger(name);
                 fetchGlobalVariable(createIfNotExists, sigil, name, node.getIndex());
             } else {
                 // retrieve the `my` or `our` variable from local vars
@@ -712,9 +714,35 @@ public class EmitterVisitor implements Visitor {
             ctx.logDebug("GETVAR end " + varIndex);
             return;
         }
-        // TODO special variables $1 $`
+        if (operator.equals("@")) {
+            // `@$a`
+            ctx.logDebug("GETVAR `@$a`");
+            node.operand.accept(this.with(RuntimeContextType.LIST));
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "arrayDeref", "()Lorg/perlonjava/runtime/RuntimeArray;", false);
+            return;
+        }
+        if (operator.equals("$")) {
+            // `@$a`
+            ctx.logDebug("GETVAR `$$a`");
+            node.operand.accept(this.with(RuntimeContextType.SCALAR));
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "scalarDeref", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            return;
+        }
+
         // TODO ${a} ${[ 123 ]}
         throw new PerlCompilerException(node.tokenIndex, "Not implemented: " + operator, ctx.errorUtil);
+    }
+
+    public static boolean isInteger(String str) {
+        if (str == null || str.isEmpty()) {
+            return false;
+        }
+        try {
+            Integer.parseInt(str);
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     private void handleSetOperator(BinaryOperatorNode node) throws Exception {
