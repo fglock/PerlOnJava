@@ -154,151 +154,124 @@ public class StringParser {
         StringBuilder str = new StringBuilder();  // Buffer to hold the parsed string
         List<Node> parts = new ArrayList<>();  // List to hold parts of the parsed string
 
-        //  Lexer lexer = new Lexer(input);
-        //  List<LexerToken> tokens = lexer.tokenize();
-        //  for (LexerToken token : tokens) {
-        //      System.out.println(token);
-        //  }
-        //  Parser parser = new Parser(ctx, tokens);
-        //  boolean consumeBracket = false;
+        Lexer lexer = new Lexer(input);
+        List<LexerToken> tokens = lexer.tokenize();
+        Parser parser = new Parser(ctx, tokens);
 
-        //  // Loop through the character array until the end
-        //  while (true) {
-        //      ctx.logDebug("str at "+parser.tokenIndex);
-        //      LexerToken token = tokens.get(parser.tokenIndex++);  // Get the current token
-        //      if (token.type == LexerTokenType.EOF) {
-        //          break;
-        //      }
-        //      String text = token.text;
-        //      switch (text) {
-        //          case "$":
-        //          case "@":
-        //              ctx.logDebug("str sigil");
-        //              if (parser.peek().text.equals("{")) {
-        //                  // block-like
-        //                  parser.consume();
-        //                  ctx.logDebug("str block-like");
-        //                  consumeBracket = true;
-        //              }
-        //              String identifier = parser.parseComplexIdentifier();
-        //              if (identifier == null) {
-        //                      if (consumeBracket) {
-        //                          throw new IllegalStateException("Unexpected value: " + text);
-        //                      }
-        //              } else {
-        //                      ctx.logDebug("str Identifier: " + identifier);
-        //                      // XXX TODO
-        //              }
-        //              if (consumeBracket) {
-        //                  parser.consume(LexerTokenType.OPERATOR, "}");
-        //              }
-        //              break;
-        //          default:
-        //              // throw new IllegalStateException("Unexpected value: " + text);
-        //      }
-        //  }
-
-        // XXX Old code -----------
-
-        char[] chars = input.toCharArray();  // Convert the input string to a character array
-        int length = chars.length;  // Length of the character array
-        int index = 0;  // Current position in the character array
-
-        // Loop through the character array until the end
-        while (index < length) {
-            char ch = chars[index];  // Get the current character
-            if (ch == '\\') {
-                index++;  // Move to the next character
-                if (index < length) {
-                    char nextChar = chars[index];  // Get the next character
-                    index++;  // Move to the next character
-                    switch (nextChar) {
-                        case '\\':
-                        case '"':
-                            str.append(nextChar);  // Append the escaped character
+        // Loop through the token array until the end
+        while (true) {
+            ctx.logDebug("str at " + parser.tokenIndex);
+            LexerToken token = tokens.get(parser.tokenIndex++);  // Get the current token
+            if (token.type == LexerTokenType.EOF) {
+                break;
+            }
+            String text = token.text;
+            switch (text) {
+                case "\\":
+                    String escape;
+                    token = tokens.get(parser.tokenIndex);
+                    if (token.text.length() == 1) {
+                        escape = token.text;
+                        parser.tokenIndex++;
+                    } else {
+                        escape = token.text.substring(0, 1);
+                        token.text = token.text.substring(1);
+                    }
+                    switch (escape) {
+                        case "\\":
+                        case "\"":
+                            str.append(escape);  // Append the escaped character
                             break;
-                        case 'n':
+                        case "n":
                             str.append('\n');  // Append newline
                             break;
-                        case 't':
+                        case "t":
                             str.append('\t');  // Append tab
                             break;
-                        case 'r':
+                        case "r":
                             str.append('\r');  // Append carriage return
                             break;
-                        case 'f':
+                        case "f":
                             str.append('\f');  // Append form feed
                             break;
-                        case 'b':
+                        case "b":
                             str.append('\b');  // Append backspace
                             break;
-                        case 'x':
+                        case "x":
                             // Handle \x{...} for Unicode
                             StringBuilder unicodeSeq = new StringBuilder();
-                            if (index < length && chars[index] == '{') {
-                                index++;  // Move to the next character
-                                while (index < length && chars[index] != '}') {
-                                    unicodeSeq.append(chars[index]);
-                                    index++;
+                            token = tokens.get(parser.tokenIndex);
+                            if (token.text.equals("{")) {
+                                parser.tokenIndex++;
+                                while (true) {
+                                    ctx.logDebug("str at " + parser.tokenIndex);
+                                     token = tokens.get(parser.tokenIndex++);  // Get the current token
+                                    if (token.type == LexerTokenType.EOF) {
+                                        throw new PerlCompilerException(tokenIndex, "Expected '}' after \\x{", errorUtil);
+                                    }
+                                    if (token.text.equals("}")) {
+                                        break;
+                                    }
+                                    unicodeSeq.append(token.text);
                                 }
-                                if (index < length && chars[index] == '}') {
-                                    str.append((char) Integer.parseInt(unicodeSeq.toString(), 16));
-                                    index++;  // Move to the next character
-                                } else {
-                                    throw new PerlCompilerException(tokenIndex, "Expected '}' after \\x{", errorUtil);
-                                }
+                                str.append((char) Integer.parseInt(unicodeSeq.toString().trim(), 16));
                             } else {
                                 throw new PerlCompilerException(tokenIndex, "Expected '{' after \\x", errorUtil);
                             }
                             break;
                         default:
-                            str.append('\\').append(nextChar);  // Append the backslash and the next character
+                            str.append('\\').append(escape);  // Append the backslash and the next character
                             break;
                     }
-                }
-            } else if (ch == '$' || ch == '@') {
-                boolean isArray = ch == '@';
-                Node operand;
-                if (str.length() > 0) {
-                    parts.add(new StringNode(str.toString(), tokenIndex));  // Add the string so far to parts
-                    str = new StringBuilder();  // Reset the buffer
-                }
-                index++;  // Move to the next character
-                if (index < length && (chars[index] == '_' || chars[index] == '@' || Character.isDigit(chars[index]))) {
-                    // Handle special variables like $@, $1, etc.
-                    String specialVar = String.valueOf(chars[index]);
-                    index++;  // Move past the special variable character
-                    operand = new OperatorNode(String.valueOf(ch), new IdentifierNode(specialVar, tokenIndex), tokenIndex);
-                } else if (index < length && Character.isJavaIdentifierStart(chars[index])) {
-                    StringBuilder identifier = new StringBuilder();
-                    while (index < length && Character.isJavaIdentifierPart(chars[index])) {
-                        identifier.append(chars[index]);
-                        index++;
+                    break;
+                case "$":
+                case "@":
+                    if (str.length() > 0) {
+                        parts.add(new StringNode(str.toString(), tokenIndex));  // Add the string so far to parts
+                        str = new StringBuilder();  // Reset the buffer
                     }
-                    operand = new OperatorNode(String.valueOf(ch), new IdentifierNode(identifier.toString(), tokenIndex), tokenIndex);
-                } else if (index < length && chars[index] == '{') {
-                    index++;  // Move to the next character
-                    StringBuilder varName = new StringBuilder();
-                    while (index < length && Character.isJavaIdentifierPart(chars[index])) {
-                        varName.append(chars[index]);
-                        index++;
-                    }
-                    if (index < length && chars[index] == '}') {
-                        index++;  // Consume the closing '}'
-                        operand = new OperatorNode(String.valueOf(ch), new IdentifierNode(varName.toString(), tokenIndex), tokenIndex);
+                    ctx.logDebug("str sigil");
+                    Node operand;
+                    boolean isArray = text.equals("@");
+                    if (parser.peek().text.equals("{")) {
+                        // block-like
+                        ctx.logDebug("str block-like");
+                        parser.peek().text = text;  // replace bracket with sigil
+                        operand = parser.parseExpression(0);
+                        ctx.logDebug("str operand " + operand);
+                        parser.consume(LexerTokenType.OPERATOR, "}");
                     } else {
-                        throw new PerlCompilerException(tokenIndex, "Expected '}' after variable name", errorUtil);
+                        // XXX TODO -  $$a  @$a
+                        String identifier = parser.parseComplexIdentifier();
+                        if (identifier == null) {
+                            throw new IllegalStateException("Unexpected value: " + text);
+                        } else {
+                            ctx.logDebug("str Identifier: " + identifier);
+                            operand = new OperatorNode(
+                                    text, new IdentifierNode(identifier, tokenIndex), tokenIndex);
+                            outerLoop:
+                            while (true) {
+                                text = parser.peek().text;
+                                switch (text) {
+                                    case "[":
+                                    case "{":
+                                    case "->":
+                                        operand = parser.parseInfix(operand, 0);
+                                        ctx.logDebug("str operand " + operand);
+                                        break;
+                                    default:
+                                        break outerLoop;
+                                }
+                            }
+                        }
                     }
-                } else {
-                    throw new PerlCompilerException(tokenIndex, "Invalid variable name after " + ch, errorUtil);
-                }
-                if (isArray) {
-                    operand = new BinaryOperatorNode("join", new OperatorNode("$", new IdentifierNode("\"", tokenIndex), tokenIndex), operand, tokenIndex);
-                }
-                parts.add(operand);
-            } else {
-                str.append(ch);  // Append the current character
-                index++;  // Move to the next character
+                    if (isArray) {
+                        operand = new BinaryOperatorNode("join", new OperatorNode("$", new IdentifierNode("\"", tokenIndex), tokenIndex), operand, tokenIndex);
+                    }
+                    parts.add(operand);
+                    break;
+                default:
+                    str.append(text);
             }
         }
 
