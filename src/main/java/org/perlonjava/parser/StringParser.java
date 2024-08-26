@@ -170,6 +170,18 @@ public class StringParser {
                 case "\\":
                     String escape;
                     token = tokens.get(parser.tokenIndex);
+                    if (token.type == LexerTokenType.NUMBER) {
+                        //  octal like `\200`
+                        if (token.text.length() <= 3) {
+                            escape = token.text;
+                            parser.tokenIndex++;
+                        } else {
+                            escape = token.text.substring(0, 3);
+                            token.text = token.text.substring(3);
+                        }
+                        str.append((char) Integer.parseInt(escape, 8));
+                        break;
+                    }
                     if (token.text.length() == 1) {
                         escape = token.text;
                         parser.tokenIndex++;
