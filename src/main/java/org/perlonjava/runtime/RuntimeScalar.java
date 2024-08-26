@@ -247,6 +247,23 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
     }
 
+    public RuntimeScalar ref() {
+        String str = "";
+        switch (type) {
+            case CODE:
+                str = "CODE";
+            case GLOB:
+                str = "GLOB";
+            case REFERENCE:
+                str = "REF";
+            case ARRAYREFERENCE:
+                str = "ARRAY";
+            case HASHREFERENCE:
+                str = "HASH";
+        }
+        return new RuntimeScalar(str);
+    }
+
     public String toStringRef() {
         switch (type) {
             case UNDEF:
