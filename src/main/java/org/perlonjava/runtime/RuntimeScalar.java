@@ -408,6 +408,17 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 if (blessId == 0) {
                     throw new IllegalStateException("Can't call method \"" + methodName + "\" on unblessed reference");
                 }
+                String className = GlobalContext.getBlessStr(blessId);
+                System.out.println("RuntimeScalar call " + className + " " + methodName + "");
+
+                // method name can be fully qualified
+                // method name can be variable or dereference: $file->${ \'save' };
+                // class name can be string
+                // class name can be STDOUT
+                // class name can be subroutine: Class->new() is Class()->new() if Class is a subroutine
+                // class name Class::->new() is the same as Class->new()
+                // subroutine reference can be method
+
                 // TODO instance method call
 
       //        if (type == RuntimeScalarType.CODE) {
