@@ -293,14 +293,27 @@ public class StringParser {
                                 text, operand, tokenIndex);
                         outerLoop:
                         while (true) {
-                            text = parser.peek().text;
+                            text = tokens.get(parser.tokenIndex).text;
                             switch (text) {
                                 case "[":
                                 case "{":
-                                case "->":
                                     operand = parser.parseInfix(operand, 0);
                                     ctx.logDebug("str operand " + operand);
                                     break;
+                                case "->":
+                                    int previousIndex = parser.tokenIndex;
+                                    parser.tokenIndex++;
+                                    text = tokens.get(parser.tokenIndex).text;
+                                    switch (text) {
+                                        case "[":
+                                        case "{":
+                                            operand = parser.parseInfix(operand, 0);
+                                            ctx.logDebug("str operand " + operand);
+                                            break;
+                                        default:
+                                            parser.tokenIndex = previousIndex;
+                                            break outerLoop;
+                                    }
                                 default:
                                     break outerLoop;
                             }
