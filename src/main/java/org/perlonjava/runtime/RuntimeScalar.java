@@ -834,6 +834,18 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(Math.random() * this.getDouble());
     }
 
+    public RuntimeScalar quotemeta() {
+        StringBuilder quoted = new StringBuilder();
+        for (char c : this.value.toString().toCharArray()) {
+            if (Character.isLetterOrDigit(c)) {
+                quoted.append(c);
+            } else {
+                quoted.append("\\").append(c);
+            }
+        }
+        return new RuntimeScalar(quoted.toString());
+    }
+
     public RuntimeScalar join(RuntimeList list) {
         String delimiter = this.toString();
         // Join the list into a string

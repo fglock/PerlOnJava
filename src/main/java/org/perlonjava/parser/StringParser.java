@@ -266,7 +266,7 @@ public class StringParser {
                             }
                             break;
                         default:
-                            str.append('\\').append(escape);  // Append the backslash and the next character
+                            str.append(escape);  // Append the backslash and the next character
                             break;
                     }
                     break;
