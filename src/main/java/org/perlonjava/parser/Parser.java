@@ -785,6 +785,7 @@ public class Parser {
                                         // parentheses is only allowed after a variable in these cases:
                                         //  `for my $v (...`
                                         //  `&name(...
+                                        //  `obj->$name(...`
                                         throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
                                     }
                                     // create a Variable
@@ -1100,7 +1101,9 @@ public class Parser {
                         right = new ArrayLiteralNode(parseList("]", 1), tokenIndex);
                         return new BinaryOperatorNode(token.text, left, right, tokenIndex);
                 }
+                parsingForLoopVariable = true;
                 right = parseExpression(precedence);
+                parsingForLoopVariable = false;
                 return new BinaryOperatorNode(token.text, left, right, tokenIndex);
             case "(":
                 right = new ListNode(parseList(")", 0), tokenIndex);
