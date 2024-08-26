@@ -198,10 +198,21 @@ public class StringParser {
                             str.append('\b');  // Append backspace
                             break;
                         case "x":
-                            // Handle \x{...} for Unicode
                             StringBuilder unicodeSeq = new StringBuilder();
                             token = tokens.get(parser.tokenIndex);
-                            if (token.text.equals("{")) {
+                            text = token.text;
+                            if (token.type == LexerTokenType.IDENTIFIER) {
+                                // Handle \x9 \x20
+                                if (text.length() <= 2) {
+                                    escape = text;
+                                    parser.tokenIndex++;
+                                } else {
+                                    escape = text.substring(0, 2);
+                                    token.text = text.substring(2);
+                                }
+                                str.append((char) Integer.parseInt(escape, 16));
+                            } else if (text.equals("{")) {
+                                // Handle \x{...} for Unicode
                                 parser.tokenIndex++;
                                 while (true) {
                                     ctx.logDebug("str at " + parser.tokenIndex);
