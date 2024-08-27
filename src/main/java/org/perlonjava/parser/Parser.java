@@ -929,6 +929,14 @@ public class Parser {
                 parsingForLoopVariable = true;
                 right = parseExpression(precedence);
                 parsingForLoopVariable = false;
+
+                if (right instanceof BinaryOperatorNode && ((BinaryOperatorNode) right).operator.equals("(")) {
+                    // right has parameter list
+                } else {
+                    // insert an empty parameter list
+                    right = new BinaryOperatorNode("(", right, new ListNode(tokenIndex), tokenIndex);
+                }
+
                 return new BinaryOperatorNode(token.text, left, right, tokenIndex);
             case "(":
                 right = new ListNode(parseList(")", 0), tokenIndex);
