@@ -488,7 +488,40 @@ public class EmitterVisitor implements Visitor {
             ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "hashDerefGet", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
         } else {
-            throw new RuntimeException("Unexpected right operand for `->` operator: " + node.right);
+            // ->method()   ->$method()
+            //
+            // right is BinaryOperatorNode:"("
+            BinaryOperatorNode right = (BinaryOperatorNode) node.right;
+
+            // `object.call(method, arguments, context)`
+            Node object = node.left;
+            Node method = right.left;
+            Node arguments = right.right;
+
+            object.accept(scalarVisitor);
+            method.accept(scalarVisitor);
+            arguments.accept(this.with(RuntimeContextType.LIST)); // right parameter: parameter list
+
+            // Transform the value in the stack to RuntimeArray
+            ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", true);
+            ctx.mv.visitFieldInsn(
+                    Opcodes.GETSTATIC,
+                    "org/perlonjava/runtime/RuntimeContextType",
+                    ctx.contextType.toString(),
+                    "Lorg/perlonjava/runtime/RuntimeContextType;"); // call context
+            ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/RuntimeScalar",
+                    "call",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;Lorg/perlonjava/runtime/RuntimeContextType;)Lorg/perlonjava/runtime/RuntimeList;",
+                    false); // generate an .call()
+            if (ctx.contextType == RuntimeContextType.SCALAR) {
+                // Transform the value in the stack to RuntimeScalar
+                ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            } else if (ctx.contextType == RuntimeContextType.VOID) {
+                // Remove the value from the stack
+                ctx.mv.visitInsn(Opcodes.POP);
+            }
         }
     }
 

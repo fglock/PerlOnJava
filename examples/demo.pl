@@ -76,11 +76,19 @@ print "not" if $v ne "VALUE"; say "ok # subroutine without prototype returned $v
 ############################
 #  Objects
 
+# bless() and ref()
+
 $v = {};
 print "not" if ref($v) ne "HASH"; say "ok # unblessed reference returns data type";
 
 bless $v, "Pkg";
 print "not" if ref($v) ne "Pkg"; say "ok # blessed reference returns package name";
+
+# method is a CODE
+
+my $obj = "123";
+my $method = sub { "called" };
+print "not" if $obj->$method ne "called"; say "ok # CODE method is called";
 
 5;    # return value
 
