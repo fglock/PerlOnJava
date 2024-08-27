@@ -52,6 +52,7 @@ public class LValueVisitor implements Visitor {
     @Override
     public void visit(OperatorNode node) throws Exception {
         switch (node.operator) {
+            case "our":
             case "my":  // 'my' depends on the operand's context, can be SCALAR or LIST
                 node.operand.accept(this);
                 break;
