@@ -218,6 +218,14 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(false).getList();
     }
 
+    // Implements the isa operator
+    public RuntimeScalar isa(RuntimeScalar className) {
+        RuntimeArray args = new RuntimeArray();
+        args.push(this);
+        args.push(className);
+        return isa(args, RuntimeContextType.SCALAR).scalar();
+    }
+
     // Getters
     public int getInt() {
         switch (type) {

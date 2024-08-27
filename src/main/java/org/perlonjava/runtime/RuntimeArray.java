@@ -34,12 +34,14 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     }
 
     // Add a value to the end of the array
-    public void push(RuntimeBaseEntity value) {
+    public RuntimeScalar push(RuntimeBaseEntity value) {
         elements.add(value);
+        return new RuntimeScalar(elements.size());
     }
 
-    public void push(RuntimeScalar value) {
+    public RuntimeScalar push(RuntimeScalar value) {
         elements.add(value);
+        return new RuntimeScalar(elements.size());
     }
 
     // Add a value to the beginning of the array
