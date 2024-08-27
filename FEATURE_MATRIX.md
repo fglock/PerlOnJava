@@ -46,7 +46,7 @@
 - ✔️   **UNIVERSAL class**: `isa`, `can`, `DOES` are implemented.
 - ❌  **Version check**: `VERSION ( [ REQUIRE ] )` is not yet implemented.
 - ❌  **Inheritance**: `SUPER` is not yet implemented.
-- ❌  **Method caching**: is not yet implemented.
+- ✔️   **Method caching**: Method resolution is cached..
 - ❌  **Autoload**: `AUTOLOAD` is not yet implemented.
 - ❌  **`DESTROY`**: Handling of object destruction may be incompatible with JVM garbage collection.
 

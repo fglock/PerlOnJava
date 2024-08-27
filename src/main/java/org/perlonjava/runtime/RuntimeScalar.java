@@ -448,57 +448,52 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         // class name can be subroutine: Class->new() is Class()->new() if Class is a subroutine
         // class name Class::->new() is the same as Class->new()
 
+        // Check the method cache
         String normalizedMethodName = GlobalContext.normalizeVariableName(methodName, perlClassName);
-
-        // Check the method cache first
         RuntimeScalar cachedMethod = InheritanceResolver.getCachedMethod(normalizedMethodName);
         if (cachedMethod != null) {
             return cachedMethod.apply(args, callContext);
         }
 
-        if (!GlobalContext.existsGlobalCodeRef(normalizedMethodName)) {
-            // Get the linearized inheritance hierarchy using C3
-            List<String> linearizedClasses = InheritanceResolver.linearizeC3(perlClassName);
+        // Get the linearized inheritance hierarchy using C3
+        List<String> linearizedClasses = InheritanceResolver.linearizeC3(perlClassName);
 
-            // Iterate over the linearized classes to find the method
-            for (String className : linearizedClasses) {
-                String normalizedClassMethodName = GlobalContext.normalizeVariableName(methodName, className);
-                if (GlobalContext.existsGlobalCodeRef(normalizedClassMethodName)) {
-                    // If the method is found, retrieve and apply it
-                    RuntimeScalar codeRef = GlobalContext.getGlobalCodeRef(normalizedClassMethodName);
+        // Iterate over the linearized classes to find the method
+        for (String className : linearizedClasses) {
+            String normalizedClassMethodName = GlobalContext.normalizeVariableName(methodName, className);
+            if (GlobalContext.existsGlobalCodeRef(normalizedClassMethodName)) {
+                // If the method is found, retrieve and apply it
+                RuntimeScalar codeRef = GlobalContext.getGlobalCodeRef(normalizedClassMethodName);
 
-                    // Save the method in the cache
-                    InheritanceResolver.cacheMethod(normalizedMethodName, codeRef);
+                // Save the method in the cache
+                InheritanceResolver.cacheMethod(normalizedMethodName, codeRef);
 
-                    return codeRef.apply(args, callContext);
-                }
+                return codeRef.apply(args, callContext);
             }
-
-            // If it is a UNIVERSAL method, then execute the method
-            String argString = args.get(1).toString();
-            switch (methodName) {
-                case "isa":
-                case "DOES":
-                    // Checks if the object is of a given class or a subclass
-                    return new RuntimeScalar(linearizedClasses.contains(argString)).getList();
-                case "can":
-                    // Checks if the object can perform a given method
-                    for (String className : linearizedClasses) {
-                        String normalizedClassMethodName = GlobalContext.normalizeVariableName(argString, className);
-                        if (GlobalContext.existsGlobalCodeRef(normalizedClassMethodName)) {
-                            // If the method is found, return it
-                            return GlobalContext.getGlobalCodeRef(normalizedClassMethodName).getList();
-                        }
-                    }
-                    return new RuntimeScalar(false).getList();
-            }
-
-            // If the method is not found in any class, throw an exception
-            throw new IllegalStateException("Can't locate object method \"" + methodName + "\" via package \"" + perlClassName + "\" (perhaps you forgot to load \"" + perlClassName + "\"?)");
         }
 
-        RuntimeScalar codeRef = GlobalContext.getGlobalCodeRef(normalizedMethodName);
-        return codeRef.apply(args, callContext);
+        // If it is a UNIVERSAL method, then execute the method
+        // XXX TODO UNIVERSAL methods are not cached
+        String argString = args.get(1).toString();
+        switch (methodName) {
+            case "isa":
+            case "DOES":
+                // Checks if the object is of a given class or a subclass
+                return new RuntimeScalar(linearizedClasses.contains(argString)).getList();
+            case "can":
+                // Checks if the object can perform a given method
+                for (String className : linearizedClasses) {
+                    String normalizedClassMethodName = GlobalContext.normalizeVariableName(argString, className);
+                    if (GlobalContext.existsGlobalCodeRef(normalizedClassMethodName)) {
+                        // If the method is found, return it
+                        return GlobalContext.getGlobalCodeRef(normalizedClassMethodName).getList();
+                    }
+                }
+                return new RuntimeScalar(false).getList();
+        }
+
+        // If the method is not found in any class, throw an exception
+        throw new IllegalStateException("Can't locate object method \"" + methodName + "\" via package \"" + perlClassName + "\" (perhaps you forgot to load \"" + perlClassName + "\"?)");
     }
 
     // Helper method to autoincrement a String variable
