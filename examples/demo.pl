@@ -98,6 +98,10 @@ package Obj { sub meth { 123 } }
 
 print "not" if $obj->meth ne "123"; say "ok # method is resolved and called";
 
+print "not" if Obj->meth ne "123"; say "ok # class method is resolved and called";
+
+print "not" if Obj::->meth ne "123"; say "ok # class method is resolved and called, alternate syntax";
+
 # inheritance
 
 package Obj2 { sub meth2 { 456 } our @ISA = ("Obj"); }
