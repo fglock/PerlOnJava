@@ -90,5 +90,13 @@ my $obj = "123";
 my $method = sub { "called" };
 print "not" if $obj->$method ne "called"; say "ok # CODE method is called";
 
+# method is in a class
+
+$obj = bless {}, "Obj";
+
+package Obj { sub meth { 123 } }
+
+print "not" if $obj->meth ne "123"; say "ok # method is resolved and called";
+
 5;    # return value
 
