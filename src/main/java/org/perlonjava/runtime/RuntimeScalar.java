@@ -58,8 +58,12 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar(boolean value) {
-        this.type = RuntimeScalarType.INTEGER;
-        this.value = value ? 1 : 0;
+        if (value) {
+            this.type = RuntimeScalarType.INTEGER;
+            this.value = 1;
+        } else {
+            this.type = RuntimeScalarType.UNDEF;
+        }
     }
 
     public RuntimeScalar(RuntimeScalar scalar) {
@@ -460,11 +464,23 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 }
             }
 
-            // If it is a UNIVERSAL method, then execute
+            // If it is a UNIVERSAL method, then execute the method
             String argString = args.get(1).toString();
             switch (methodName) {
                 case "isa":
+                case "DOES":
+                    // Checks if the object is of a given class or a subclass
                     return new RuntimeScalar(linearizedClasses.contains(argString)).getList();
+                case "can":
+                    // Checks if the object can perform a given method
+                    for (String className : linearizedClasses) {
+                        String normalizedClassMethodName = GlobalContext.normalizeVariableName(argString, className);
+                        if (GlobalContext.existsGlobalCodeRef(normalizedClassMethodName)) {
+                            // If the method is found, return it
+                            return GlobalContext.getGlobalCodeRef(normalizedClassMethodName).getList();
+                        }
+                    }
+                    return new RuntimeScalar(false).getList();
             }
 
             // If the method is not found in any class, throw an exception

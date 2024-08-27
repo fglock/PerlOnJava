@@ -100,11 +100,15 @@ print "not" if $obj->meth ne "123"; say "ok # method is resolved and called";
 
 # inheritance
 
-package Obj2 { sub meth2 { 123 } our @ISA = ("Obj"); }
+package Obj2 { sub meth2 { 456 } our @ISA = ("Obj"); }
 
 $obj = bless {}, "Obj2";
 
 print "not" if $obj->meth ne "123"; say "ok # method is resolved and called in the parent class";
+
+print "not" if !$obj->isa("Obj"); say "ok # object isa() superclass";
+
+print "not" if $obj->can("meth")->() ne "123"; say "ok # object can() returns method from superclass";
 
 5;    # return value
 
