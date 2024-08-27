@@ -3,6 +3,20 @@ package org.perlonjava.runtime;
 import java.util.*;
 
 public class InheritanceResolver {
+    // Method resolution cache
+    private static final Map<String, RuntimeScalar> methodCache = new HashMap<>();
+
+    public static void invalidateCache() {
+        methodCache.clear();
+    }
+
+    public static RuntimeScalar getCachedMethod(String normalizedMethodName) {
+        return methodCache.get(normalizedMethodName);
+    }
+
+    public static void cacheMethod(String normalizedMethodName, RuntimeScalar method) {
+        methodCache.put(normalizedMethodName, method);
+    }
 
     /**
      * Linearizes the inheritance hierarchy of a class using the C3 algorithm.

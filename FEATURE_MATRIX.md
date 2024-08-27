@@ -44,6 +44,7 @@
 - ✔️   **Special variables**: `@ISA` is implemented.
 - ✔️   **Multiple Inheritance**: C3 method resolution is implemented.
 - ✔️   **UNIVERSAL class**: `isa`, `can`, `DOES` are implemented.
+- ❌  **Version check**: `VERSION ( [ REQUIRE ] )` is not yet implemented.
 - ❌  **Inheritance**: `SUPER` is not yet implemented.
 - ❌  **Method caching**: is not yet implemented.
 - ❌  **Autoload**: `AUTOLOAD` is not yet implemented.
