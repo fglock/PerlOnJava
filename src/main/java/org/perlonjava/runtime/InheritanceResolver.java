@@ -5,9 +5,11 @@ import java.util.*;
 public class InheritanceResolver {
     // Method resolution cache
     private static final Map<String, RuntimeScalar> methodCache = new HashMap<>();
+    private static final Map<String, List<String>> linearizedClassesCache = new HashMap<>();
 
     public static void invalidateCache() {
         methodCache.clear();
+        linearizedClassesCache.clear();
     }
 
     public static RuntimeScalar getCachedMethod(String normalizedMethodName) {
@@ -25,9 +27,14 @@ public class InheritanceResolver {
      * @return A list of class names in the order of method resolution.
      */
     public static List<String> linearizeC3(String className) {
-        Map<String, List<String>> isaMap = new HashMap<>();
-        populateIsaMap(className, isaMap);
-        return linearizeC3Helper(className, isaMap);
+        List<String> result = linearizedClassesCache.get(className);
+        if (result == null) {
+            Map<String, List<String>> isaMap = new HashMap<>();
+            populateIsaMap(className, isaMap);
+            result = linearizeC3Helper(className, isaMap);
+            linearizedClassesCache.put(className, result);
+        }
+        return result;
     }
 
     /**
