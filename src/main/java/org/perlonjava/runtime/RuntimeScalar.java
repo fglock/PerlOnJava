@@ -436,10 +436,17 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         // class name can be subroutine: Class->new() is Class()->new() if Class is a subroutine
         // class name Class::->new() is the same as Class->new()
 
-        // TODO XXX - resolve Class::method using @ISA
         String normalizedMethodName = GlobalContext.normalizeVariableName(methodName, perlClassName);
 
         if (!GlobalContext.existsGlobalCodeRef(normalizedMethodName)) {
+            // retrieve @ISA
+            RuntimeArray isaArray = GlobalContext.getGlobalArray(perlClassName + "::ISA");
+
+            // TODO XXX - resolve Class::method using @ISA
+            for (RuntimeBaseEntity className : isaArray.elements) {
+                System.out.println("TODO method lookup in " + className);
+            }
+
             throw new IllegalStateException("Can't locate object method \"" + methodName + "\" via package \"" + perlClassName + "\" (perhaps you forgot to load \"" + perlClassName + "\"?)");
         }
 
