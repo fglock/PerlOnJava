@@ -43,7 +43,8 @@
 - ✔️   **Object operators**: `ref` and `bless`
 - ✔️   **Special variables**: `@ISA` is implemented.
 - ✔️   **Multiple Inheritance**: C3 method resolution is implemented.
-- ❌  **Inheritance**: `UNIVERSAL` class, `SUPER` are not yet implemented.
+- ✔️   **UNIVERSAL class**: `isa`, `can`, `DOES` are implemented.
+- ❌  **Inheritance**: `SUPER` is not yet implemented.
 - ❌  **Method caching**: is not yet implemented.
 - ❌  **Autoload**: `AUTOLOAD` is not yet implemented.
 - ❌  **`DESTROY`**: Handling of object destruction may be incompatible with JVM garbage collection.
