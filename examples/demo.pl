@@ -126,6 +126,8 @@ print "not" if $obj->meth ne "123"; say "ok # method is resolved and called in t
 
 print "not" if !$obj->isa("Obj"); say "ok # object isa() superclass";
 
+print "not" if !($obj isa "Obj"); say "ok # object isa() superclass";
+
 print "not" if $obj->can("meth")->($obj) ne "123"; say "ok # object can() returns method from superclass";
 
 5;    # return value

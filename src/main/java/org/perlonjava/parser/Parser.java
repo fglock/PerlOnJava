@@ -24,7 +24,7 @@ public class Parser {
             ">=", "lt", "gt", "le", "ge", "<<", ">>", "+", "-", "*",
             "**", "/", "%", ".", "=", "**=", "+=", "*=", "&=", "&.=",
             "<<=", "&&=", "-=", "/=", "|=", "|.=", ">>=", "||=", ".=",
-            "%=", "^=", "^.=", "//=", "x=", "=~", "!~", "x", "..", "..."
+            "%=", "^=", "^.=", "//=", "x=", "=~", "!~", "x", "..", "...", "isa"
     );
     private static final Set<String> LVALUE_INFIX_OP = Set.of(
             "=", "**=", "+=", "*=", "&=", "&.=",
@@ -53,14 +53,15 @@ public class Parser {
         addOperatorsToMap(12, "&");
         addOperatorsToMap(13, "==", "!=", "<=>", "eq", "ne", "cmp");
         addOperatorsToMap(14, "<", ">", "<=", ">=", "lt", "gt", "le", "ge");
-        addOperatorsToMap(16, ">>", "<<");
-        addOperatorsToMap(17, "+", "-");
-        addOperatorsToMap(18, "*", "/", "%", "x");
-        addOperatorsToMap(19, "=~", "!~");
-        addOperatorsToMap(20, "!", "~", "\\");
-        addOperatorsToMap(21, "**");
-        addOperatorsToMap(22, "++", "--");
-        addOperatorsToMap(23, "->");
+        addOperatorsToMap(15, "isa");
+        addOperatorsToMap(17, ">>", "<<");
+        addOperatorsToMap(18, "+", "-");
+        addOperatorsToMap(19, "*", "/", "%", "x");
+        addOperatorsToMap(20, "=~", "!~");
+        addOperatorsToMap(21, "!", "~", "\\");
+        addOperatorsToMap(22, "**");
+        addOperatorsToMap(23, "++", "--");
+        addOperatorsToMap(24, "->");
     }
 
     public final EmitterContext ctx;

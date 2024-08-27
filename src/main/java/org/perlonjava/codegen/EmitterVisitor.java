@@ -37,6 +37,7 @@ public class EmitterVisitor implements Visitor {
         operatorHandlers.put("||", "logicalOr");
         operatorHandlers.put("^.", "bitwiseStringXor");
         operatorHandlers.put("//", "logicalDefinedOr");
+        operatorHandlers.put("isa", "isa");
         operatorHandlers.put("<", "lessThan");
         operatorHandlers.put("<=", "lessThanOrEqual");
         operatorHandlers.put(">", "greaterThan");
