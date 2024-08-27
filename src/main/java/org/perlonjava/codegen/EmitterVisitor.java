@@ -498,7 +498,12 @@ public class EmitterVisitor implements Visitor {
             Node method = right.left;
             Node arguments = right.right;
 
-            // Convert method to StringNode
+            // Convert class to Stringnode if needed:  Class->method()
+            if (object instanceof IdentifierNode) {
+                object = new StringNode(((IdentifierNode) object).name, ((IdentifierNode) object).tokenIndex);
+            }
+
+            // Convert method to StringNode if needed
             if (method instanceof OperatorNode) {
                 OperatorNode op = (OperatorNode) method;
                 // &method is introduced by the parser if the method is predeclared

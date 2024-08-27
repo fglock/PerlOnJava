@@ -439,14 +439,20 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 if (perlClassName.isEmpty()) {
                     throw new IllegalStateException("Can't call method \"" + methodName + "\" on an undefined value");
                 }
+                if (perlClassName.endsWith("::")) {
+                    perlClassName = perlClassName.substring(0, perlClassName.length() - 2);
+                }
         }
 
-        // method name can be fully qualified
-        // method name can be variable or dereference: $file->${ \'save' };
-        // class name can be string
-        // class name can be STDOUT
-        // class name can be subroutine: Class->new() is Class()->new() if Class is a subroutine
-        // class name Class::->new() is the same as Class->new()
+        // Method name can be:
+        // - Fully qualified
+        // - A variable or dereference (e.g., $file->${ \'save' })
+
+        // Class name can be:
+        // - A string
+        // - STDOUT
+        // - A subroutine (e.g., Class->new() is Class()->new() if Class is a subroutine)
+        // - Class::->new() is the same as Class->new()
 
         // Check the method cache
         String normalizedMethodName = GlobalContext.normalizeVariableName(methodName, perlClassName);
