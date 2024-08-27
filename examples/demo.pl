@@ -1,37 +1,51 @@
 # A sample Perl script with a bit of everything
 # use feature 'say';
 
+# Test variable assignment and modification
 my $a = 15;
 my $x = $a;
-say $x;
+print "not " if $x != 15; say "ok 1 - \$x is 15";
+
 $a = 12;
-say $a;
-say( sub { say @_ } );                     # anon sub
-( sub { say 'HERE' } )->(88888);           # anon sub
-( sub { say "<@_>" } )->( 88, 89, 90 );    # anon sub
-eval ' $a = $a + 1 ';                      # eval string
-say $a;
+print "not " if $a != 12; say "ok 2 - \$a is 12";
+
+# Test anonymous subroutine
+my $anon_sub = sub { return @_ };
+my @result = $anon_sub->(1, 2, 3);
+print "not " if "@result" ne "1 2 3"; say "ok 3 - anonymous subroutine returned '@result'";
+
+# Test eval string
+eval '$a = $a + 1';
+print "not " if $a != 13; say "ok 4 - eval string modified \$a to 13";
+
+# Test do block with conditional statements
 do {
-    $a;
-    if    (1) { say 123 }
-    elsif (3) { say 345 }
-    else      { say 456 }
+    if (1) { $a = 123 }
+    elsif (3) { $a = 345 }
+    else { $a = 456 }
 };
-print "Finished; value is $a\n";
-my ( $i, %j ) = ( 1, 2, 3, 4, 5 );
-say(%j);
+print "not " if $a != 123; say "ok 5 - do block executed if block, \$a is 123";
+
+# Test hash and array references
 $a = { a => 'hash-value' };
-say $a->{a};
+print "not " if $a->{a} ne 'hash-value'; say "ok 6 - hash value is '$a->{a}'";
+
 my $b = [ 4, 5 ];
-say $b->[1];
+print "not " if $b->[1] != 5; say "ok 7 - array value is $b->[1]";
+
 
 ############################
 #  Subroutines
 
 # named subroutine with typeglob assignment
 
-*x = sub { print "HERE @_\n" };
-&x(123);
+*x = sub { return "<@_>" };
+my $result = &x(123);
+print "not " if $result ne "<123>"; say "ok 8 - named subroutine with typeglob returned '$result'";
+
+@_ = (345);
+$result = &x;
+print "not " if $result ne "<345>"; say "ok 9 - named subroutine with typeglob, no parameters, returned '$result'";
 
 # &name calls the subroutine reusing existing @_
 
