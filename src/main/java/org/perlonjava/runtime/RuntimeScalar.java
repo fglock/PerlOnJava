@@ -450,6 +450,12 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
         String normalizedMethodName = GlobalContext.normalizeVariableName(methodName, perlClassName);
 
+        // Check the method cache first
+        RuntimeScalar cachedMethod = InheritanceResolver.getCachedMethod(normalizedMethodName);
+        if (cachedMethod != null) {
+            return cachedMethod.apply(args, callContext);
+        }
+
         if (!GlobalContext.existsGlobalCodeRef(normalizedMethodName)) {
             // Get the linearized inheritance hierarchy using C3
             List<String> linearizedClasses = InheritanceResolver.linearizeC3(perlClassName);
@@ -460,6 +466,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 if (GlobalContext.existsGlobalCodeRef(normalizedClassMethodName)) {
                     // If the method is found, retrieve and apply it
                     RuntimeScalar codeRef = GlobalContext.getGlobalCodeRef(normalizedClassMethodName);
+
+                    // Save the method in the cache
+                    InheritanceResolver.cacheMethod(normalizedMethodName, codeRef);
+
                     return codeRef.apply(args, callContext);
                 }
             }

@@ -25,6 +25,10 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
         switch (value.type) {
             case CODE:
                 GlobalContext.getGlobalCodeRef(this.globName).set(value);
+
+                // Invalidate the method resolution cache
+                InheritanceResolver.invalidateCache();
+
                 return value;
         }
         // XXX TODO
@@ -118,6 +122,10 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
     public RuntimeGlob undefine() {
         // undefine CODE        
         GlobalContext.getGlobalCodeRef(this.globName).set(new RuntimeScalar());
+
+        // Invalidate the method resolution cache
+        InheritanceResolver.invalidateCache();
+
         // XXX TODO undefine scalar, array, hash
         return this;
     }

@@ -10,6 +10,7 @@ import java.util.ArrayList;
  */
 public class GlobalContext {
 
+    // Global variables and subroutines
     private static final Map<String, RuntimeScalar> globalVariables = new HashMap<>();
     private static final Map<String, RuntimeArray> globalArrays = new HashMap<>();
     private static final Map<String, RuntimeHash> globalHashes = new HashMap<>();
