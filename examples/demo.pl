@@ -98,5 +98,13 @@ package Obj { sub meth { 123 } }
 
 print "not" if $obj->meth ne "123"; say "ok # method is resolved and called";
 
+# inheritance
+
+package Obj2 { sub meth2 { 123 } our @ISA = ("Obj"); }
+
+$obj = bless {}, "Obj2";
+
+print "not" if $obj->meth ne "123"; say "ok # method is resolved and called in the parent class";
+
 5;    # return value
 
