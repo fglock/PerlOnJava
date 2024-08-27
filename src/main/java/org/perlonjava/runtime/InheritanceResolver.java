@@ -12,10 +12,34 @@ public class InheritanceResolver {
      */
     public static List<String> linearizeC3(String className) {
         Map<String, List<String>> isaMap = new HashMap<>();
-        // Populate isaMap with @ISA arrays for each class
-        // Example: isaMap.put("D", Arrays.asList("B", "C"));
-
+        populateIsaMap(className, isaMap);
         return linearizeC3Helper(className, isaMap);
+    }
+
+    /**
+     * Populates the isaMap with @ISA arrays for each class.
+     *
+     * @param className The name of the class to populate.
+     * @param isaMap    The map to populate with @ISA arrays.
+     */
+    private static void populateIsaMap(String className, Map<String, List<String>> isaMap) {
+        if (isaMap.containsKey(className)) {
+            return; // Already populated
+        }
+
+        // Retrieve @ISA array for the given class
+        RuntimeArray isaArray = GlobalContext.getGlobalArray(className + "::ISA");
+        List<String> parents = new ArrayList<>();
+        for (RuntimeBaseEntity entity : isaArray.elements) {
+            parents.add(entity.toString());
+        }
+
+        isaMap.put(className, parents);
+
+        // Recursively populate for parent classes
+        for (String parent : parents) {
+            populateIsaMap(parent, isaMap);
+        }
     }
 
     /**
@@ -76,4 +100,3 @@ public class InheritanceResolver {
         return result;
     }
 }
-
