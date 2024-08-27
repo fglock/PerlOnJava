@@ -1,6 +1,7 @@
 package org.perlonjava.runtime;
 
 import java.util.Iterator;
+import java.util.List;
 import java.util.NoSuchElementException;
 
 /**
@@ -396,14 +397,21 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(str);
     }
 
-    // Call a Perl object method
-    public RuntimeList call(RuntimeScalar method, RuntimeArray a, RuntimeContextType callContext) throws Exception {
+    /**
+     * Call a method in a Perl-like class hierarchy using the C3 linearization algorithm.
+     *
+     * @param method        The method to resolve.
+     * @param args          The arguments to pass to the method.
+     * @param callContext   The call context.
+     * @return The result of the method call.
+     */
+    public RuntimeList call(RuntimeScalar method, RuntimeArray args, RuntimeContextType callContext) throws Exception {
         // insert `this` into the parameter list
-        a.elements.add(0, method);
+        args.elements.add(0, method);
 
         if (method.type == RuntimeScalarType.CODE) {
-            // method is a subroutine reference
-            return method.apply(a, callContext);
+            // If method is a subroutine reference, just call it
+            return method.apply(args, callContext);
         }
 
         String methodName = method.toString();
@@ -439,19 +447,25 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         String normalizedMethodName = GlobalContext.normalizeVariableName(methodName, perlClassName);
 
         if (!GlobalContext.existsGlobalCodeRef(normalizedMethodName)) {
-            // retrieve @ISA
-            RuntimeArray isaArray = GlobalContext.getGlobalArray(perlClassName + "::ISA");
+            // Get the linearized inheritance hierarchy using C3
+            List<String> linearizedClasses = InheritanceResolver.linearizeC3(perlClassName);
 
-            // TODO XXX - resolve Class::method using @ISA
-            for (RuntimeBaseEntity className : isaArray.elements) {
-                System.out.println("TODO method lookup in " + className);
+            // Iterate over the linearized classes to find the method
+            for (String className : linearizedClasses) {
+                String normalizedClassMethodName = GlobalContext.normalizeVariableName(methodName, className);
+                if (GlobalContext.existsGlobalCodeRef(normalizedClassMethodName)) {
+                    // If the method is found, retrieve and apply it
+                    RuntimeScalar codeRef = GlobalContext.getGlobalCodeRef(normalizedClassMethodName);
+                    return codeRef.apply(args, callContext);
+                }
             }
 
+            // If the method is not found in any class, throw an exception
             throw new IllegalStateException("Can't locate object method \"" + methodName + "\" via package \"" + perlClassName + "\" (perhaps you forgot to load \"" + perlClassName + "\"?)");
         }
 
         RuntimeScalar codeRef = GlobalContext.getGlobalCodeRef(normalizedMethodName);
-        return codeRef.apply(a, callContext);
+        return codeRef.apply(args, callContext);
     }
 
     // Helper method to autoincrement a String variable
