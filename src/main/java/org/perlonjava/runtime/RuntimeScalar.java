@@ -460,6 +460,13 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 }
             }
 
+            // If it is a UNIVERSAL method, then execute
+            String argString = args.get(1).toString();
+            switch (methodName) {
+                case "isa":
+                    return new RuntimeScalar(linearizedClasses.contains(argString)).getList();
+            }
+
             // If the method is not found in any class, throw an exception
             throw new IllegalStateException("Can't locate object method \"" + methodName + "\" via package \"" + perlClassName + "\" (perhaps you forgot to load \"" + perlClassName + "\"?)");
         }

@@ -499,6 +499,13 @@ public class EmitterVisitor implements Visitor {
             Node arguments = right.right;
 
             // Convert method to StringNode
+            if (method instanceof OperatorNode) {
+                OperatorNode op = (OperatorNode) method;
+                // &method is introduced by the parser if the method is predeclared
+                if (op.operator.equals("&")) {
+                    method = op.operand;
+                }
+            }
             if (method instanceof IdentifierNode) {
                 method = new StringNode(((IdentifierNode) method).name, ((IdentifierNode) method).tokenIndex);
             }
