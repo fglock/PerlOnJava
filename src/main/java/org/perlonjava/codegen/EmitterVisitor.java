@@ -498,6 +498,11 @@ public class EmitterVisitor implements Visitor {
             Node method = right.left;
             Node arguments = right.right;
 
+            // Convert method to StringNode
+            if (method instanceof IdentifierNode) {
+                method = new StringNode(((IdentifierNode) method).name, ((IdentifierNode) method).tokenIndex);
+            }
+
             object.accept(scalarVisitor);
             method.accept(scalarVisitor);
             arguments.accept(this.with(RuntimeContextType.LIST)); // right parameter: parameter list

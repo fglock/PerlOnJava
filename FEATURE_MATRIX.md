@@ -39,7 +39,7 @@
 - ❌  **Unicode**: Support for non-Unicode strings is not implemented.
 
 ## Objects
-- ❌  **Objects**: Object-oriented features are not yet implemented.
+- ✔️   **Objects**: Creating classes, method call syntax works.
 - ✔️   **Object operators**: `ref` and `bless`
 - ❌  **Inheritance**: `UNIVERSAL` class, `@ISA`, `SUPER` are not yet implemented.
 - ❌  **Multiple Inheritance**: `parent` and multiple inheritance are not yet implemented.
