@@ -475,6 +475,7 @@ public class Parser {
                         if (((ListNode) operand).elements.isEmpty()) {
                             switch (text) {
                                 case "undef":
+                                    operand = null;
                                     break;  // leave it empty
                                 case "rand":
                                     // create "1"
@@ -998,6 +999,14 @@ public class Parser {
     // Comma is allowed after the argument:   rand, rand 10,
     //
     private ListNode parseZeroOrOneList(int minItems) {
+        if (looksLikeEmptyList()) {
+            // return an empty list
+            if (minItems > 0) {
+                throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
+            }
+            return new ListNode(tokenIndex);
+        }
+
         ListNode expr;
         LexerToken token = peek();
         if (token.text.equals("(")) {
@@ -1021,11 +1030,8 @@ public class Parser {
         return expr;
     }
 
-    // List parser for predeclared function calls, accepts a list with Parentheses or without
-    //
-    // The Minimum number of arguments can be set.
-    //
-    private ListNode parseZeroOrMoreList(int minItems) {
+    private boolean looksLikeEmptyList() {
+        boolean isEmptyList = false;
         int previousIndex = tokenIndex;
         LexerToken token = consume();
         LexerToken token1 = tokens.get(tokenIndex); // next token including spaces
@@ -1042,21 +1048,31 @@ public class Parser {
                 ctx.logDebug("parseZeroOrMoreList looks like Number");
             } else {
                 // subroutine call with zero arguments, followed by infix operator
-                tokenIndex = previousIndex;
                 ctx.logDebug("parseZeroOrMoreList return zero at `" + tokens.get(tokenIndex) + "`");
                 if (LVALUE_INFIX_OP.contains(token.text)) {
                     throw new PerlCompilerException(tokenIndex, "Can't modify non-lvalue subroutine call", ctx.errorUtil);
                 }
-
-                // return an empty list
-                if (minItems > 0) {
-                    throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
-                }
-                return new ListNode(tokenIndex);
+                isEmptyList = true;
             }
         }
         tokenIndex = previousIndex;
+        return isEmptyList;
+    }
 
+    // List parser for predeclared function calls, accepts a list with Parentheses or without
+    //
+    // The Minimum number of arguments can be set.
+    //
+    private ListNode parseZeroOrMoreList(int minItems) {
+        if (looksLikeEmptyList()) {
+            // return an empty list
+            if (minItems > 0) {
+                throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
+            }
+            return new ListNode(tokenIndex);
+        }
+
+        LexerToken token = peek();
         if (token.text.equals("(")) {
             // arguments in parentheses, can be 0 or more arguments:    print(), print(10)
             // Commas are allowed after the arguments:       print(10,)
