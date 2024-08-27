@@ -396,8 +396,19 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(str);
     }
 
-    // Method to call a Perl object method
-    public RuntimeList call(String methodName, RuntimeArray a, RuntimeContextType callContext) throws Exception {
+    // Call a Perl object method
+    public RuntimeList call(RuntimeScalar method, RuntimeArray a, RuntimeContextType callContext) throws Exception {
+        System.out.println("RuntimeScalar call " + this + "." + method + "");
+        // insert `this` into the parameter list
+        a.elements.add(0, method);
+
+        if (method.type == RuntimeScalarType.CODE) {
+            // method is a subroutine reference
+            return method.apply(a, callContext);
+        }
+
+        String methodName = method.toString();
+
         // Retrieve Perl class name
         String perlClassName = "";
         switch (type) {
@@ -417,7 +428,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 // class name can be STDOUT
                 // class name can be subroutine: Class->new() is Class()->new() if Class is a subroutine
                 // class name Class::->new() is the same as Class->new()
-                // subroutine reference can be method
 
                 // TODO instance method call
 
