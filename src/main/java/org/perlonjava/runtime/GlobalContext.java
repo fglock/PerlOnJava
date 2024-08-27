@@ -1,9 +1,10 @@
 package org.perlonjava.runtime;
 
+import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.ArrayList;
 
 /**
  * The RuntimeScalar class simulates Perl namespaces.
@@ -18,11 +19,13 @@ public class GlobalContext {
 
     // Cache to store previously normalized variables for faster lookup
     private static final Map<String, String> nameCache = new HashMap<>();
-
-    // Cache to store blessed class lookups
-    private static int currentBlessId = 0;
     private static final Map<String, Integer> blessIdCache = new HashMap<>();
     private static final ArrayList<String> blessStrCache = new ArrayList<>();
+    private static final Set<String> SPECIAL_VARIABLES = Set.of(
+            "ARGV", "ENV", "INC", "SIG", "STDOUT", "STDERR", "STDIN"
+    );
+    // Cache to store blessed class lookups
+    private static int currentBlessId = 0;
 
     static {
         blessStrCache.add("");  // this starts with index 1
@@ -43,16 +46,31 @@ public class GlobalContext {
         return blessStrCache.get(id);
     }
 
-    private static final Set<String> SPECIAL_VARIABLES = Set.of(
-            "ARGV", "ENV", "INC", "SIG", "STDOUT", "STDERR", "STDIN"
-    );
-
     public static void initializeGlobals() {
         getGlobalVariable("main::@");    // initialize $@ to "undef"
         getGlobalVariable("main::_");    // initialize $_ to "undef"
         getGlobalVariable("main::\"").set(" ");    // initialize $" to " "
         getGlobalArray("main::INC");
         getGlobalHash("main::INC");
+
+        // Initialize UNIVERSAL class
+        try {
+            // UNIVERSAL methods are defined in RuntimeScalar class
+            Class<?> clazz = RuntimeScalar.class;
+            RuntimeScalar instance = new RuntimeScalar();
+
+            Method mm = clazz.getMethod("can", RuntimeArray.class, RuntimeContextType.class);
+            getGlobalCodeRef("UNIVERSAL::can").set(new RuntimeScalar(new RuntimeCode(mm, instance)));
+
+            mm = clazz.getMethod("isa", RuntimeArray.class, RuntimeContextType.class);
+            getGlobalCodeRef("UNIVERSAL::isa").set(new RuntimeScalar(new RuntimeCode(mm, instance)));
+            getGlobalCodeRef("UNIVERSAL::DOES").set(new RuntimeScalar(new RuntimeCode(mm, instance)));
+        } catch (NoSuchMethodException e) {
+            System.err.println("Warning: Missing method UNIVERSAL::can");
+        }
+
+        // Reset method cache after initializing UNIVERSAL
+        InheritanceResolver.invalidateCache();
     }
 
     /**

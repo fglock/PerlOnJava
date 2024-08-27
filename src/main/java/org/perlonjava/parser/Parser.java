@@ -63,8 +63,8 @@ public class Parser {
         addOperatorsToMap(23, "->");
     }
 
-    private final List<LexerToken> tokens;
     public final EmitterContext ctx;
+    private final List<LexerToken> tokens;
     public int tokenIndex = 0;
     public boolean parsingForLoopVariable = false;
     private boolean parsingTakeReference = false;
