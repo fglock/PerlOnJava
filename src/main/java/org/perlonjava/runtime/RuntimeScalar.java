@@ -128,6 +128,96 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar();
     }
 
+    // Checks if the object is of a given class or a subclass
+    // Note this is a Perl method, it expects `this` to be the first argument
+    public static RuntimeList isa(RuntimeArray args, RuntimeContextType ctx) {
+        if (args.size() != 2) {
+            throw new IllegalStateException("Bad number of arguments for isa() method");
+        }
+        RuntimeScalar object = (RuntimeScalar) args.get(0);
+        String argString = args.get(1).toString();
+
+        // Retrieve Perl class name
+        String perlClassName = "";
+        switch (object.type) {
+            case REFERENCE:
+            case ARRAYREFERENCE:
+            case HASHREFERENCE:
+                int blessId = ((RuntimeBaseEntity) object.value).blessId;
+                if (blessId == 0) {
+                    return new RuntimeScalar(false).getList();
+                }
+                perlClassName = GlobalContext.getBlessStr(blessId);
+                break;
+            case UNDEF:
+                return new RuntimeScalar(false).getList();
+            default:
+                perlClassName = object.toString();
+                if (perlClassName.isEmpty()) {
+                    return new RuntimeScalar(false).getList();
+                }
+                if (perlClassName.endsWith("::")) {
+                    perlClassName = perlClassName.substring(0, perlClassName.length() - 2);
+                }
+        }
+
+        // Get the linearized inheritance hierarchy using C3
+        List<String> linearizedClasses = InheritanceResolver.linearizeC3(perlClassName);
+
+        return new RuntimeScalar(linearizedClasses.contains(argString)).getList();
+    }
+
+    // Checks if the object can perform a given method
+    // Note this is a Perl method, it expects `this` to be the first argument
+    public static RuntimeList can(RuntimeArray args, RuntimeContextType ctx) {
+        if (args.size() != 2) {
+            throw new IllegalStateException("Bad number of arguments for can() method");
+        }
+        RuntimeScalar object = (RuntimeScalar) args.get(0);
+        String methodName = args.get(1).toString();
+
+        // Retrieve Perl class name
+        String perlClassName = "";
+        switch (object.type) {
+            case REFERENCE:
+            case ARRAYREFERENCE:
+            case HASHREFERENCE:
+                int blessId = ((RuntimeBaseEntity) object.value).blessId;
+                if (blessId == 0) {
+                    return new RuntimeScalar(false).getList();
+                }
+                perlClassName = GlobalContext.getBlessStr(blessId);
+                break;
+            case UNDEF:
+                return new RuntimeScalar(false).getList();
+            default:
+                perlClassName = object.toString();
+                if (perlClassName.isEmpty()) {
+                    return new RuntimeScalar(false).getList();
+                }
+                if (perlClassName.endsWith("::")) {
+                    perlClassName = perlClassName.substring(0, perlClassName.length() - 2);
+                }
+        }
+
+        // Check the method cache
+        String normalizedMethodName = GlobalContext.normalizeVariableName(methodName, perlClassName);
+        RuntimeScalar cachedMethod = InheritanceResolver.getCachedMethod(normalizedMethodName);
+        if (cachedMethod != null) {
+            return cachedMethod.getList();
+        }
+
+        // Get the linearized inheritance hierarchy using C3
+        for (String className : InheritanceResolver.linearizeC3(perlClassName)) {
+            String normalizedClassMethodName = GlobalContext.normalizeVariableName(methodName, className);
+            if (GlobalContext.existsGlobalCodeRef(normalizedClassMethodName)) {
+                // If the method is found, return it
+                return GlobalContext.getGlobalCodeRef(normalizedClassMethodName).getList();
+            }
+        }
+        return new RuntimeScalar(false).getList();
+    }
+
     // Getters
     public int getInt() {
         switch (type) {
@@ -347,7 +437,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     // Method to apply (execute) a subroutine reference
     public RuntimeList apply(RuntimeArray a, RuntimeContextType callContext) throws Exception {
         // Check if the type of this RuntimeScalar is CODE
-        if (type == RuntimeScalarType.CODE) {
+        if (this.type == RuntimeScalarType.CODE) {
             // Cast the value to RuntimeCode and call apply()
             return ((RuntimeCode) this.value).apply(a, callContext);
         } else {
@@ -373,8 +463,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
         return this;
     }
- 
-     public RuntimeScalar ref() {
+
+    public RuntimeScalar ref() {
         String str;
         switch (type) {
             case CODE:
@@ -404,14 +494,14 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     /**
      * Call a method in a Perl-like class hierarchy using the C3 linearization algorithm.
      *
-     * @param method        The method to resolve.
-     * @param args          The arguments to pass to the method.
-     * @param callContext   The call context.
+     * @param method      The method to resolve.
+     * @param args        The arguments to pass to the method.
+     * @param callContext The call context.
      * @return The result of the method call.
      */
     public RuntimeList call(RuntimeScalar method, RuntimeArray args, RuntimeContextType callContext) throws Exception {
         // insert `this` into the parameter list
-        args.elements.add(0, method);
+        args.elements.add(0, this);
 
         if (method.type == RuntimeScalarType.CODE) {
             // If method is a subroutine reference, just call it
@@ -476,26 +566,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
                 return codeRef.apply(args, callContext);
             }
-        }
-
-        // If it is a UNIVERSAL method, then execute the method
-        // XXX TODO UNIVERSAL methods are not cached
-        String argString = args.get(1).toString();
-        switch (methodName) {
-            case "isa":
-            case "DOES":
-                // Checks if the object is of a given class or a subclass
-                return new RuntimeScalar(linearizedClasses.contains(argString)).getList();
-            case "can":
-                // Checks if the object can perform a given method
-                for (String className : linearizedClasses) {
-                    String normalizedClassMethodName = GlobalContext.normalizeVariableName(argString, className);
-                    if (GlobalContext.existsGlobalCodeRef(normalizedClassMethodName)) {
-                        // If the method is found, return it
-                        return GlobalContext.getGlobalCodeRef(normalizedClassMethodName).getList();
-                    }
-                }
-                return new RuntimeScalar(false).getList();
         }
 
         // If the method is not found in any class, throw an exception

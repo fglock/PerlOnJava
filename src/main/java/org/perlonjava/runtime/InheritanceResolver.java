@@ -32,6 +32,7 @@ public class InheritanceResolver {
             Map<String, List<String>> isaMap = new HashMap<>();
             populateIsaMap(className, isaMap);
             result = linearizeC3Helper(className, isaMap);
+            result.add("UNIVERSAL");
             linearizedClassesCache.put(className, result);
         }
         return result;
