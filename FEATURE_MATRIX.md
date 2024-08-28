@@ -46,7 +46,7 @@
 - ✔️   **Multiple Inheritance**: C3 method resolution is implemented.
 - ✔️   **UNIVERSAL class**: `isa`, `can`, `DOES` are implemented.
 - ✔️   **Method caching**: Method resolution is cached.
-- ❌  **Version check**: `VERSION ( [ REQUIRE ] )` is not yet implemented.
+- ❌  **Version check**: Method `VERSION ( [ REQUIRE ] )` is not yet implemented.
 - ❌  **Inheritance**: `SUPER` is not yet implemented.
 - ❌  **Autoload**: `AUTOLOAD` is not yet implemented.
 - ❌  **`DESTROY`**: Handling of object destruction may be incompatible with JVM garbage collection.
