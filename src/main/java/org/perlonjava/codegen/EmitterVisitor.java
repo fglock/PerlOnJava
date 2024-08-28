@@ -182,6 +182,10 @@ public class EmitterVisitor implements Visitor {
             case "(":
                 handleApplyOperator(node);
                 return;
+            case "push":
+            case "unshift":
+                handlePushOperator(operator, node);
+                return;
             case "join":
                 handleJoinOperator(operator, node);
                 return;
@@ -236,6 +240,17 @@ public class EmitterVisitor implements Visitor {
             return;
         }
         throw new RuntimeException("Unexpected infix operator: " + operator);
+    }
+
+    private void handlePushOperator(String operator, BinaryOperatorNode node) throws Exception {
+        node.left.accept(this.with(RuntimeContextType.LIST));
+        node.right.accept(this.with(RuntimeContextType.LIST));
+        // Transform the value in the stack to List
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getList", "()Lorg/perlonjava/runtime/RuntimeList;", true);
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", operator, "(Lorg/perlonjava/runtime/RuntimeDataProvider;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
     }
 
     private void handleJoinOperator(String operator, BinaryOperatorNode node) throws Exception {
@@ -566,6 +581,16 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
+    private void handleArrayUnaryBuiltin(OperatorNode node, String operator) throws Exception {
+        // Handle:  $#array  $#$array_ref
+        OperatorNode arrayNode = new OperatorNode("@", node.operand, node.tokenIndex);
+        arrayNode.accept(this.with(RuntimeContextType.LIST));
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
+    }
+
     @Override
     public void visit(OperatorNode node) throws Exception {
         String operator = node.operator;
@@ -642,6 +667,9 @@ public class EmitterVisitor implements Visitor {
                 break;
             case "\\":
                 handleUnaryBuiltin(node, "createReference");
+                break;
+            case "$#":
+                handleArrayUnaryBuiltin(node, "indexLastElem");
                 break;
             default:
                 throw new UnsupportedOperationException("Unsupported operator: " + operator);

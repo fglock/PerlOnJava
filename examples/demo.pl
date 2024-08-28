@@ -33,6 +33,8 @@ print "not " if $a->{a} ne 'hash-value'; say "ok 6 - hash value is '$a->{a}'";
 my $b = [ 4, 5 ];
 print "not " if $b->[1] != 5; say "ok 7 - array value is $b->[1]";
 
+push @$b, 6;
+print "not " if $#$b != 2; say "ok 8 - push increased array count";
 
 ############################
 #  Subroutines
@@ -41,11 +43,11 @@ print "not " if $b->[1] != 5; say "ok 7 - array value is $b->[1]";
 
 *x = sub { return "<@_>" };
 my $result = &x(123);
-print "not " if $result ne "<123>"; say "ok 8 - named subroutine with typeglob returned '$result'";
+print "not " if $result ne "<123>"; say "ok # named subroutine with typeglob returned '$result'";
 
 @_ = (345);
 $result = &x;
-print "not " if $result ne "<345>"; say "ok 9 - named subroutine with typeglob, no parameters, returned '$result'";
+print "not " if $result ne "<345>"; say "ok # named subroutine with typeglob, no parameters, returned '$result'";
 
 # &name calls the subroutine reusing existing @_
 
