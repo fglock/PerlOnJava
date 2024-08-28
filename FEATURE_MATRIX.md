@@ -144,8 +144,7 @@
 - ✔️   **Global variable infrastructure**: Support for global variables is implemented.
 - ✔️   **Namespaces**: Namespace support is present.
 - ✔️   **`@_` and `$@` special variables**: Special variables like `@_` and `$@` are supported.
-- ✔️   **`$"` special variable**: The special variable `$"` is implemented.
-- ✔️   **`$_` special variable**: The special variable `$_` is supported.
+- ✔️   **Special variables**: The special variables `$_`, `$"`, `$a`, `$b` are implemented.
 - ❌  **Thread-safe `@_`, `$_`, and regex variables**: Thread safety for global special variables is missing.
 
 ## Non-strict Features
