@@ -370,7 +370,7 @@ public class Parser {
         Node arguments = null;
         if (prototype == null) {
             // no prototype
-            arguments = parseZeroOrMoreList(0, false);
+            arguments = parseZeroOrMoreList(0, false, true);
         } else if (prototype.isEmpty()) {
             // prototype is empty string
             arguments = new ListNode(tokenIndex);
@@ -382,7 +382,7 @@ public class Parser {
             arguments = parseZeroOrOneList(0);
         } else {
             // XXX TODO: Handle more prototypes or parameter variables
-            arguments = parseZeroOrMoreList(0, false);
+            arguments = parseZeroOrMoreList(0, false, true);
         }
 
         // Rewrite and return the subroutine call as `&name(arguments)`
@@ -499,7 +499,7 @@ public class Parser {
                         }
                         return new OperatorNode(text, operand, tokenIndex);
                     case "bless":
-                        operand = parseZeroOrMoreList(1, false);
+                        operand = parseZeroOrMoreList(1, false, true);
                         Node ref = ((ListNode) operand).elements.get(0);
                         Node className = ((ListNode) operand).elements.get(1);
                         if (className == null) {
@@ -510,14 +510,22 @@ public class Parser {
                     case "unshift":
                     case "join":
                         // Handle 'join' keyword as a Binary operator with a RuntimeList operand
-                        operand = parseZeroOrMoreList(1, false);
+                        operand = parseZeroOrMoreList(1, false, true);
                         Node separator = ((ListNode) operand).elements.remove(0);
                         return new BinaryOperatorNode(token.text, separator, operand, tokenIndex);
+                    case "sort":
+                    case "map":
+                    case "grep":
+                        // Handle 'sort' keyword as a unary operator with a RuntimeList operand
+                        operand = parseZeroOrMoreList(0, true, false);
+                        return new OperatorNode(token.text, operand, tokenIndex);
                     case "splice":
+                        operand = parseZeroOrMoreList(0, false, true);
+                        return new OperatorNode(token.text, operand, tokenIndex);
                     case "print":
                     case "say":
                         // Handle 'say' keyword as a unary operator with a RuntimeList operand
-                        operand = parseZeroOrMoreList(0, false);
+                        operand = parseZeroOrMoreList(0, true, true);
                         return new OperatorNode(token.text, operand, tokenIndex);
                     case "scalar":
                     case "values":
@@ -532,7 +540,8 @@ public class Parser {
                     case "return":
                         // Handle 'return' keyword as a unary operator with an operand;
                         // Parenthensis are ignored.
-                        operand = parseExpression(getPrecedence("print") + 1);
+                        // operand = parseExpression(getPrecedence("print") + 1);
+                        operand = parseZeroOrMoreList(0, false, false);
                         return new OperatorNode("return", operand, tokenIndex);
                     case "eval":
                         // Handle 'eval' keyword which can be followed by a block or an expression
@@ -1075,20 +1084,33 @@ public class Parser {
     //
     // The Minimum number of arguments can be set.
     //
-    private ListNode parseZeroOrMoreList(int minItems, boolean wantBlockNode) {
+    // wantBlockNode:   sort { $a <=> $b } @array
+    //
+    // obeyParentheses: print ("this", "that"), "not printed"
+    //
+    // not obeyParentheses:  return ("this", "that"), "this too"
+    //
+    private ListNode parseZeroOrMoreList(int minItems, boolean wantBlockNode, boolean obeyParentheses) {
         ListNode expr = new ListNode(tokenIndex);
 
-        if (wantBlockNode && peek().text.equals("{")) {
-            consume(LexerTokenType.OPERATOR, "{");
-            Node block = parseBlock();
-            consume(LexerTokenType.OPERATOR, "}");
-            expr.elements.add(block);
+        boolean hasParen = false;
+        if (wantBlockNode) {
+            if (peek().text.equals("(")) {
+                consume();
+                hasParen = true;
+            }
+            if (peek().text.equals("{")) {
+                consume();
+                Node block = parseBlock();
+                consume(LexerTokenType.OPERATOR, "}");
+                expr.elements.add(block);
+            }
         }
 
         if (!looksLikeEmptyList()) {
             // it doesn't look like an empty list
             LexerToken token = peek();
-            if (token.text.equals("(")) {
+            if (obeyParentheses && token.text.equals("(")) {
                 // arguments in parentheses, can be 0 or more arguments:    print(), print(10)
                 // Commas are allowed after the arguments:       print(10,)
                 consume();
@@ -1110,6 +1132,10 @@ public class Parser {
             }
         }
 
+        if (hasParen) {
+            consume(LexerTokenType.OPERATOR, ")");
+        }
+
         if (expr.elements.size() < minItems) {
             throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
         }
@@ -1128,21 +1154,25 @@ public class Parser {
     //    new ArrayLiteralNode(parseList("]", 1), tokenIndex);
     //
     private List<Node> parseList(String close, int minItems) {
+        ctx.logDebug("parseList start");
         ListNode expr;
 
         LexerToken token = peek();
+        ctx.logDebug("parseList start at "+token);
         if (token.text.equals(close)) {
             // empty list
             consume();
             expr = new ListNode(tokenIndex);
         } else {
             expr = ListNode.makeList(parseExpression(0));
+            ctx.logDebug("parseList end at "+peek());
             consume(LexerTokenType.OPERATOR, close);
         }
 
         if (expr.elements.size() < minItems) {
             throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
         }
+        ctx.logDebug("parseList end");
 
         return expr.elements;
     }
