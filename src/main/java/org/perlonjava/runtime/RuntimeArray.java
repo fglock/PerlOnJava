@@ -27,20 +27,15 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
 
     // Add itself to a RuntimeArray.
     public void addToArray(RuntimeArray array) {
-        int size = this.size();
-        for (int i = 0; i < size; i++) {
-            array.push(new RuntimeScalar((RuntimeScalar) this.elements.get(i)));
+        List<RuntimeBaseEntity> elements = array.elements;
+        for (RuntimeBaseEntity arrElem : this.elements) {
+            elements.add(new RuntimeScalar((RuntimeScalar) arrElem));
         }
     }
 
     // Add a value to the end of the array
-    public RuntimeScalar push(RuntimeBaseEntity value) {
-        elements.add(value);
-        return new RuntimeScalar(elements.size());
-    }
-
-    public RuntimeScalar push(RuntimeScalar value) {
-        elements.add(value);
+    public RuntimeScalar push(RuntimeDataProvider value) {
+        value.addToArray(this);
         return new RuntimeScalar(elements.size());
     }
 
@@ -133,6 +128,11 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     // Get the list value of the list
     public RuntimeList getList() {
         return new RuntimeList(this);
+    }
+
+    // Get the index of the last element
+    public RuntimeScalar indexLastElem() {
+        return new RuntimeScalar(elements.size() - 1);
     }
 
     // Get the scalar value of the list
