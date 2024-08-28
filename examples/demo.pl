@@ -39,6 +39,14 @@ print "not " if $#$b != 2; say "ok 8 - push increased array count";
 unshift @$b, 3;
 print "not " if "@$b" ne "3 4 5 6"; say "ok 9 - unshift";
 
+$a = pop @$b;
+print "not " if "@$b" ne "3 4 5"; say "ok 10 - pop";
+print "not " if $a != 6; say "ok 11 - pop";
+
+$a = shift @$b;
+print "not " if "@$b" ne "4 5"; say "ok 12 - shift";
+print "not " if $a != 3; say "ok 13 - pop";
+
 ############################
 #  Subroutines
 

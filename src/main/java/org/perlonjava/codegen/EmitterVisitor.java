@@ -582,9 +582,13 @@ public class EmitterVisitor implements Visitor {
     }
 
     private void handleArrayUnaryBuiltin(OperatorNode node, String operator) throws Exception {
-        // Handle:  $#array  $#$array_ref
-        OperatorNode arrayNode = new OperatorNode("@", node.operand, node.tokenIndex);
-        arrayNode.accept(this.with(RuntimeContextType.LIST));
+        // Handle:  $#array  $#$array_ref  shift @array  pop @array
+        Node operand = node.operand;
+        ctx.logDebug("handleArrayUnaryBuiltin " + operand);
+        if (operand instanceof ListNode) {
+            operand = ((ListNode) operand).elements.get(0);
+        }
+        operand.accept(this.with(RuntimeContextType.LIST));
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
         if (ctx.contextType == RuntimeContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.POP);
@@ -669,7 +673,12 @@ public class EmitterVisitor implements Visitor {
                 handleUnaryBuiltin(node, "createReference");
                 break;
             case "$#":
+                node = new OperatorNode("$#",  new OperatorNode("@", node.operand, node.tokenIndex), node.tokenIndex);
                 handleArrayUnaryBuiltin(node, "indexLastElem");
+                break;
+            case "pop":
+            case "shift":
+                handleArrayUnaryBuiltin(node, operator);
                 break;
             default:
                 throw new UnsupportedOperationException("Unsupported operator: " + operator);
