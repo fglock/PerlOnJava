@@ -517,8 +517,14 @@ public class Parser {
                     case "map":
                     case "grep":
                         // Handle 'sort' keyword as a unary operator with a RuntimeList operand
-                        operand = parseZeroOrMoreList(0, true, false);
-                        return new OperatorNode(token.text, operand, tokenIndex);
+                        operand = parseZeroOrMoreList(1, true, false);
+                        // transform:   { 123 }
+                        // into:        sub { 123 }
+                        Node block = ((ListNode) operand).elements.remove(0);
+                        if (block instanceof BlockNode) {
+                            block = new AnonSubNode(null, null, null, block, false, tokenIndex);
+                        }
+                        return new BinaryOperatorNode(token.text, block, operand, tokenIndex);
                     case "splice":
                         operand = parseZeroOrMoreList(0, false, true);
                         return new OperatorNode(token.text, operand, tokenIndex);
@@ -549,7 +555,7 @@ public class Parser {
                         if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
                             // If the next token is '{', parse a block
                             consume(LexerTokenType.OPERATOR, "{");
-                            Node block = parseBlock();
+                            block = parseBlock();
                             consume(LexerTokenType.OPERATOR, "}");
                             // transform:  eval { 123 }
                             // into:  sub { 123 }->()  with useTryCatch flag
@@ -565,7 +571,7 @@ public class Parser {
                         token = peek();
                         if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
                             consume(LexerTokenType.OPERATOR, "{");
-                            Node block = parseBlock();
+                            block = parseBlock();
                             consume(LexerTokenType.OPERATOR, "}");
                             return block;
                         }

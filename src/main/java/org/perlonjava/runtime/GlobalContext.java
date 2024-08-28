@@ -50,6 +50,8 @@ public class GlobalContext {
         getGlobalVariable("main::@");    // initialize $@ to "undef"
         getGlobalVariable("main::_");    // initialize $_ to "undef"
         getGlobalVariable("main::\"").set(" ");    // initialize $" to " "
+        getGlobalVariable("main::a");    // initialize $a to "undef"
+        getGlobalVariable("main::b");    // initialize $b to "undef"
         getGlobalArray("main::INC");
         getGlobalHash("main::INC");
 
