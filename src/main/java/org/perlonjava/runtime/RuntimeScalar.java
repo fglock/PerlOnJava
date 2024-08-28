@@ -291,7 +291,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Add itself to a RuntimeArray.
     public void addToArray(RuntimeArray array) {
-        array.push(new RuntimeScalar(this));
+        array.elements.add(new RuntimeScalar(this));
     }
 
     // Setters

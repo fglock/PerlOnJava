@@ -497,11 +497,13 @@ public class Parser {
                             className = new StringNode("main", tokenIndex);
                         }
                         return new BinaryOperatorNode("bless", ref, className, tokenIndex);
+                    case "push":
+                    case "unshift":
                     case "join":
                         // Handle 'join' keyword as a Binary operator with a RuntimeList operand
                         operand = parseZeroOrMoreList(1);
                         Node separator = ((ListNode) operand).elements.remove(0);
-                        return new BinaryOperatorNode("join", separator, operand, tokenIndex);
+                        return new BinaryOperatorNode(token.text, separator, operand, tokenIndex);
                     case "print":
                     case "say":
                         // Handle 'say' keyword as a unary operator with a RuntimeList operand
