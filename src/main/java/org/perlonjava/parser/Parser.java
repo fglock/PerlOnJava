@@ -513,6 +513,7 @@ public class Parser {
                         operand = parseZeroOrMoreList(1);
                         Node separator = ((ListNode) operand).elements.remove(0);
                         return new BinaryOperatorNode(token.text, separator, operand, tokenIndex);
+                    case "splice":
                     case "print":
                     case "say":
                         // Handle 'say' keyword as a unary operator with a RuntimeList operand

@@ -33,6 +33,15 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         }
     }
 
+    /**
+     * Add itself to a RuntimeScalar.
+     *
+     * @param scalar The RuntimeScalar object
+     */
+    public RuntimeScalar addToScalar(RuntimeScalar scalar) {
+        return scalar.set(this.size());
+    }
+
     // Add values to the end of the array
     public RuntimeScalar push(RuntimeDataProvider value) {
         value.addToArray(this);
@@ -153,43 +162,61 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     }
 
     // Splice the array
-    public RuntimeArray splice(int offset, int length, RuntimeScalar... list) {
-        RuntimeArray removedElements = new RuntimeArray();
+    // 
+    // splice ARRAY,OFFSET,LENGTH,LIST
+    //
+    public RuntimeList splice(RuntimeList list) {
+        RuntimeList removedElements = new RuntimeList();
+
+        int size = this.elements.size();
+
+        int offset;
+        if (list.elements.size() > 0) {
+            RuntimeDataProvider value = list.elements.remove(0);
+            offset = value.scalar().getInt();
+        } else {
+            offset = 0;
+        }
+
+        int length;
+        if (list.elements.size() > 0) {
+            RuntimeDataProvider value = list.elements.remove(0);
+            length = value.scalar().getInt();
+        } else {
+            length = size;
+        }
 
         // Handle negative offset
         if (offset < 0) {
-            offset = elements.size() + offset;
+            offset = size + offset;
+        }
+
+        // Ensure offset is within bounds
+        if (offset > size) {
+            offset = size;
         }
 
         // Handle negative length
         if (length < 0) {
-            length = elements.size() - offset + length;
+            length = size - offset + length;
         }
+
+        // Ensure length is within bounds
+        length = Math.min(length, size - offset);
 
         // Remove elements
         for (int i = 0; i < length && offset < elements.size(); i++) {
-            removedElements.push(elements.remove(offset));
+            removedElements.elements.add(elements.remove(offset));
         }
 
         // Add new elements
-        for (int i = 0; i < list.length; i++) {
-            elements.add(offset + i, list[i]);
+        if (list != null) {
+            RuntimeArray arr = new RuntimeArray();
+            arr.push(list);
+            this.elements.addAll(offset, arr.elements);
         }
 
         return removedElements;
-    }
-
-    // Overloaded splice methods
-    public RuntimeArray splice(int offset, int length) {
-        return splice(offset, length, new RuntimeScalar[0]);
-    }
-
-    public RuntimeArray splice(int offset) {
-        return splice(offset, elements.size() - offset);
-    }
-
-    public RuntimeArray splice() {
-        return splice(0, elements.size());
     }
 
     // Sort the array

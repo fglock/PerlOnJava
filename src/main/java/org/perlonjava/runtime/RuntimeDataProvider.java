@@ -54,6 +54,14 @@ public interface RuntimeDataProvider {
     void addToList(RuntimeList list);
 
     /**
+     * Add itself to a RuntimeScalar.
+     *
+     * @param scalar The RuntimeScalar object
+     * @return scalar
+     */
+    RuntimeScalar addToScalar(RuntimeScalar scalar);
+
+    /**
      * Set itself to a RuntimeList.
      *
      * @param list The RuntimeList object
