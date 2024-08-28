@@ -24,7 +24,8 @@
 ## Scalars
 - ✔️   **`my` variable declaration**: Local variables can be declared using `my`.
 - ✔️   **`our` variable declaration**: Global variables can be declared using `our`.
-- ❌  **`local` variable declaration**: Support for temporary local variable changes is missing.
+- ❌  **`local` variable declaration**: Support for temporary local variable changes is missing. `local` is also missing for typeglobs.
+- ❌  **`state` variable declaration**: Support for state variable changes is missing.
 - ✔️   **Variable assignment**: Basic variable assignment is implemented.
 - ✔️   **Basic types**: Support for integers, doubles, strings, CODE, and undef is present.
 - ✔️   **String Interpolation**: Both array and scalar string interpolation are supported.
@@ -44,7 +45,7 @@
 - ✔️   **Special variables**: `@ISA` is implemented.
 - ✔️   **Multiple Inheritance**: C3 method resolution is implemented.
 - ✔️   **UNIVERSAL class**: `isa`, `can`, `DOES` are implemented.
-- ✔️   **Method caching**: Method resolution is cached..
+- ✔️   **Method caching**: Method resolution is cached.
 - ❌  **Version check**: `VERSION ( [ REQUIRE ] )` is not yet implemented.
 - ❌  **Inheritance**: `SUPER` is not yet implemented.
 - ❌  **Autoload**: `AUTOLOAD` is not yet implemented.
@@ -97,6 +98,8 @@
 - ❌  **Inline "constant" subroutines optimization**: Optimization for inline constants is not yet implemented.
 - ❌  **Subroutine attributes**: Subroutine attributes are not yet supported.
 - ❌  **`lvalue` subroutines**: Subroutines with attribute `:lvalue` are not yet supported.
+- ❌  **Lexical subroutines**: Subroutines declared `my`, `state`, or `our` are not yet supported.
+- ❌  **CORE namespace**: `CORE` and `CORE::GLOBAL` are not implemented.
 
 ## Regular Expressions
 - ❌  **Basic Matching**: Basic regex matching is not yet implemented.
