@@ -294,6 +294,15 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         array.elements.add(new RuntimeScalar(this));
     }
 
+    /**
+     * Add itself to a RuntimeScalar.
+     *
+     * @param scalar The RuntimeScalar object
+     */
+    public RuntimeScalar addToScalar(RuntimeScalar scalar) {
+        return scalar.set(this);
+    }
+
     // Setters
     public RuntimeScalar set(RuntimeScalar value) {
         this.type = value.type;

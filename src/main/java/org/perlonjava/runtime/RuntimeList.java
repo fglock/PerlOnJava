@@ -60,6 +60,15 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         this.elements.clear();    // consume the list
     }
 
+    /**
+     * Add itself to a RuntimeScalar.
+     *
+     * @param scalar The RuntimeScalar object
+     */
+    public RuntimeScalar addToScalar(RuntimeScalar scalar) {
+        return scalar.set(this.scalar());
+    }
+
     // Add an element to the list
     public void add(RuntimeBaseEntity value) {
         this.elements.add(value);

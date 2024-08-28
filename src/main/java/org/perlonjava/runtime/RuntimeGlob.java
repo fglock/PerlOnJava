@@ -94,6 +94,15 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
         array.push(this.scalar());
     }
 
+    /**
+     * Add itself to a RuntimeScalar.
+     *
+     * @param scalar The RuntimeScalar object
+     */
+    public RuntimeScalar addToScalar(RuntimeScalar scalar) {
+        return scalar.set(this);
+    }
+
     public RuntimeList set(RuntimeList value) {
         return new RuntimeList(this.set(value.scalar()));
     }
