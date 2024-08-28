@@ -370,7 +370,7 @@ public class Parser {
         Node arguments = null;
         if (prototype == null) {
             // no prototype
-            arguments = parseZeroOrMoreList(0);
+            arguments = parseZeroOrMoreList(0, false);
         } else if (prototype.isEmpty()) {
             // prototype is empty string
             arguments = new ListNode(tokenIndex);
@@ -382,7 +382,7 @@ public class Parser {
             arguments = parseZeroOrOneList(0);
         } else {
             // XXX TODO: Handle more prototypes or parameter variables
-            arguments = parseZeroOrMoreList(0);
+            arguments = parseZeroOrMoreList(0, false);
         }
 
         // Rewrite and return the subroutine call as `&name(arguments)`
@@ -499,7 +499,7 @@ public class Parser {
                         }
                         return new OperatorNode(text, operand, tokenIndex);
                     case "bless":
-                        operand = parseZeroOrMoreList(1);
+                        operand = parseZeroOrMoreList(1, false);
                         Node ref = ((ListNode) operand).elements.get(0);
                         Node className = ((ListNode) operand).elements.get(1);
                         if (className == null) {
@@ -510,14 +510,14 @@ public class Parser {
                     case "unshift":
                     case "join":
                         // Handle 'join' keyword as a Binary operator with a RuntimeList operand
-                        operand = parseZeroOrMoreList(1);
+                        operand = parseZeroOrMoreList(1, false);
                         Node separator = ((ListNode) operand).elements.remove(0);
                         return new BinaryOperatorNode(token.text, separator, operand, tokenIndex);
                     case "splice":
                     case "print":
                     case "say":
                         // Handle 'say' keyword as a unary operator with a RuntimeList operand
-                        operand = parseZeroOrMoreList(0);
+                        operand = parseZeroOrMoreList(0, false);
                         return new OperatorNode(token.text, operand, tokenIndex);
                     case "scalar":
                     case "values":
@@ -1075,35 +1075,38 @@ public class Parser {
     //
     // The Minimum number of arguments can be set.
     //
-    private ListNode parseZeroOrMoreList(int minItems) {
-        if (looksLikeEmptyList()) {
-            // return an empty list
-            if (minItems > 0) {
-                throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
-            }
-            return new ListNode(tokenIndex);
-        }
-
-        LexerToken token = peek();
-        if (token.text.equals("(")) {
-            // arguments in parentheses, can be 0 or more arguments:    print(), print(10)
-            // Commas are allowed after the arguments:       print(10,)
-            consume();
-            return new ListNode(parseList(")", 0), tokenIndex);
-        }
-
+    private ListNode parseZeroOrMoreList(int minItems, boolean wantBlockNode) {
         ListNode expr = new ListNode(tokenIndex);
-        while (token.type != LexerTokenType.EOF && !LISTTERMINATORS.contains(token.text)) {
-            // argument without parentheses
-            expr.elements.add(parseExpression(getPrecedence(",") + 1));
-            token = peek();
-            if (token.text.equals(",") || token.text.equals("=>")) {
-                while (token.text.equals(",") || token.text.equals("=>")) {
-                    consume();
-                    token = peek();
-                }
+
+        if (wantBlockNode && peek().text.equals("{")) {
+            consume(LexerTokenType.OPERATOR, "{");
+            Node block = parseBlock();
+            consume(LexerTokenType.OPERATOR, "}");
+            expr.elements.add(block);
+        }
+
+        if (!looksLikeEmptyList()) {
+            // it doesn't look like an empty list
+            LexerToken token = peek();
+            if (token.text.equals("(")) {
+                // arguments in parentheses, can be 0 or more arguments:    print(), print(10)
+                // Commas are allowed after the arguments:       print(10,)
+                consume();
+                expr.elements.addAll(parseList(")", 0));
             } else {
-                return expr;
+                while (token.type != LexerTokenType.EOF && !LISTTERMINATORS.contains(token.text)) {
+                    // Argument without parentheses
+                    expr.elements.add(parseExpression(getPrecedence(",") + 1));
+                    token = peek();
+                    if (token.text.equals(",") || token.text.equals("=>")) {
+                        while (token.text.equals(",") || token.text.equals("=>")) {
+                            consume();
+                            token = peek();
+                        }
+                    } else {
+                        break;
+                    }
+                }
             }
         }
 
