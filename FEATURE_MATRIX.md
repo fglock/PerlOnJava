@@ -70,7 +70,6 @@
 - ✔️   **`my LIST`**: Declaration of lists using `my` is supported.
 - ✔️   **Autoquote before `=>`**: Autoquoting before `=>` is implemented.
 - ✔️   **Select an element from a list**: Indexing into lists is supported.
-- ✔️   **`keys`, `values` operators**: Operators for hash keys and values are implemented.
 - ✔️   **List subscripts**: like `(stat($file))[8]`
 - ❌  **List assignment in scalar context**: List assignment in scalar context returns the number of elements produced by the expression on the right side of the assignment
 - ✔️   **`$#array`**: Operator for array count is implemented.
@@ -82,7 +81,7 @@
 - ❌  **Hash Slices**: Hash slices like `@hash{"a", "b"}` are missing.
 - ✔️   **Array literals**: Array literals are supported.
 - ❌  **Tied Arrays**: Tied arrays are not yet implemented.
-- ❌  **Basic Hash Operations**: Some basic hash operations are implemented; others are missing.
+- ❌  **Basic Hash Operations**: `keys`, `values` are implemented. `each`, `delete`, `exists` are missing.
 - ✔️   **Hash literals**: Hash literals are supported.
 - ❌  **Tied Hashes**: Tied hashes are not yet implemented.
 
