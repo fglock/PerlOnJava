@@ -81,6 +81,41 @@ splice @$b, -3, -1;
 print "not " if "@$b" ne "1 2 5"; say "ok 22 - splice with negative length";
 
 ############################
+# Map tests
+
+my @array = (1, 2, 3, 4, 5);
+my @mapped = map { $_ * 2 } @array;
+print "not " if "@mapped" ne "2 4 6 8 10"; say "ok 23 - map doubled each element";
+
+##  @mapped = map { $_ % 2 == 0 ? $_ * 2 : $_ } @array;
+##  print "not " if "@mapped" ne "1 4 3 8 5"; say "ok 24 - map conditionally doubled even elements";
+
+############################
+# Grep tests
+
+my @filtered = grep { $_ % 2 == 0 } @array;
+print "not " if "@filtered" ne "2 4"; say "ok 25 - grep filtered even elements";
+
+@filtered = grep { $_ > 3 } @array;
+print "not " if "@filtered" ne "4 5"; say "ok 26 - grep filtered elements greater than 3";
+
+############################
+# Sort tests
+
+my @unsorted = (5, 3, 1, 4, 2);
+my @sorted = sort { $a <=> $b } @unsorted;
+##  print "not " if "@sorted" ne "1 2 3 4 5"; say "ok 27 - sort in numerical ascending order";
+
+##  @sorted = sort { $b <=> $a } @unsorted;
+##  print "not " if "@sorted" ne "5 4 3 2 1"; say "ok 28 - sort in numerical descending order";
+
+##  @sorted = sort { length($a) <=> length($b) } qw(foo foobar bar);
+##  print "not " if "@sorted" ne "foo bar foobar"; say "ok 29 - sort by string length";
+
+##  @sorted = sort { $a cmp $b } qw(zebra apple monkey);
+##  print "not " if "@sorted" ne "apple monkey zebra"; say "ok 30 - sort in alphabetical order";
+
+############################
 #  Subroutines
 
 # named subroutine with typeglob assignment

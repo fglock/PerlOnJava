@@ -191,14 +191,15 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
      */
     public RuntimeList sort(RuntimeScalar perlComparatorClosure) {
         // Create a new list from the elements of this RuntimeArray
-        List<RuntimeBaseEntity> array = new ArrayList<>(this.elements);
+        RuntimeArray array = new RuntimeArray();
+        this.setArrayOfAlias(array);
 
         RuntimeScalar varA = GlobalContext.getGlobalVariable("main::a");
         RuntimeScalar varB = GlobalContext.getGlobalVariable("main::b");
         RuntimeArray comparatorArgs = new RuntimeArray();
 
         // Sort the new array using the Perl comparator subroutine
-        array.sort((a, b) -> {
+        array.elements.sort((a, b) -> {
             try {
                 // Create $a, $b arguments for the comparator
                 varA.set((RuntimeScalar) a);
@@ -217,7 +218,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
 
         // Create a new RuntimeList to hold the sorted elements
         RuntimeList sortedList = new RuntimeList();
-        sortedList.elements = array;
+        sortedList.elements = array.elements;
 
         // Return the sorted RuntimeList
         return sortedList;
@@ -231,6 +232,9 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
      * @throws RuntimeException If the Perl filter subroutine throws an exception.
      */
     public RuntimeList grep(RuntimeScalar perlFilterClosure) {
+        RuntimeArray array = new RuntimeArray();
+        this.setArrayOfAlias(array);
+
         // Create a new list to hold the filtered elements
         List<RuntimeBaseEntity> filteredElements = new ArrayList<>();
 
@@ -238,7 +242,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         RuntimeArray filterArgs = new RuntimeArray();
 
         // Iterate over each element in the current RuntimeArray
-        for (RuntimeBaseEntity element : this.elements) {
+        for (RuntimeBaseEntity element : array.elements) {
             try {
                 // Create $_ argument for the filter subroutine
                 var_.set((RuntimeScalar) element);
@@ -273,6 +277,9 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
      * @throws RuntimeException If the Perl map subroutine throws an exception.
      */
     public RuntimeList map(RuntimeScalar perlMapClosure) {
+        RuntimeArray array = new RuntimeArray();
+        this.setArrayOfAlias(array);
+
         // Create a new list to hold the transformed elements
         List<RuntimeBaseEntity> transformedElements = new ArrayList<>();
 
@@ -280,7 +287,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         RuntimeArray mapArgs = new RuntimeArray();
 
         // Iterate over each element in the current RuntimeArray
-        for (RuntimeBaseEntity element : this.elements) {
+        for (RuntimeBaseEntity element : array.elements) {
             try {
                 // Create $_ argument for the map subroutine
                 var_.set((RuntimeScalar) element);
