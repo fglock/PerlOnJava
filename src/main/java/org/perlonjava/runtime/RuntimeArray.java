@@ -33,15 +33,18 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         }
     }
 
-    // Add a value to the end of the array
+    // Add values to the end of the array
     public RuntimeScalar push(RuntimeDataProvider value) {
         value.addToArray(this);
         return new RuntimeScalar(elements.size());
     }
 
-    // Add a value to the beginning of the array
-    public void unshift(RuntimeScalar value) {
-        elements.add(0, value);
+    // Add values to the beginning of the array
+    public RuntimeScalar unshift(RuntimeDataProvider value) {
+        RuntimeArray arr = new RuntimeArray();
+        arr.push(value);
+        this.elements.addAll(0, arr.elements);
+        return new RuntimeScalar(this.elements.size());
     }
 
     // Remove and return the last value of the array
