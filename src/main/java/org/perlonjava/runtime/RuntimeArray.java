@@ -171,7 +171,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         int size = this.elements.size();
 
         int offset;
-        if (list.elements.size() > 0) {
+        if (!list.elements.isEmpty()) {
             RuntimeDataProvider value = list.elements.remove(0);
             offset = value.scalar().getInt();
         } else {
@@ -179,7 +179,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         }
 
         int length;
-        if (list.elements.size() > 0) {
+        if (!list.elements.isEmpty()) {
             RuntimeDataProvider value = list.elements.remove(0);
             length = value.scalar().getInt();
         } else {
@@ -210,7 +210,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         }
 
         // Add new elements
-        if (list != null) {
+        if (!list.elements.isEmpty()) {
             RuntimeArray arr = new RuntimeArray();
             arr.push(list);
             this.elements.addAll(offset, arr.elements);
