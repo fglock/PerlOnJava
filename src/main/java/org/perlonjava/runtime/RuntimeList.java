@@ -193,13 +193,16 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         // Create a new list from the elements of this RuntimeArray
         List<RuntimeBaseEntity> array = new ArrayList<>(this.elements);
 
+        RuntimeScalar varA = GlobalContext.getGlobalVariable("main::a");
+        RuntimeScalar varB = GlobalContext.getGlobalVariable("main::b");
+        RuntimeArray comparatorArgs = new RuntimeArray();
+
         // Sort the new array using the Perl comparator subroutine
         array.sort((a, b) -> {
             try {
                 // Create a RuntimeArray to hold the arguments for the comparator
-                RuntimeArray comparatorArgs = new RuntimeArray();
-                comparatorArgs.elements.add(a);
-                comparatorArgs.elements.add(b);
+                varA.set((RuntimeScalar) a);
+                varB.set((RuntimeScalar) b);
 
                 // Apply the Perl comparator subroutine with the arguments
                 RuntimeList result = perlComparatorClosure.apply(comparatorArgs, RuntimeContextType.SCALAR);
