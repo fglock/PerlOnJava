@@ -36,6 +36,9 @@ print "not " if $b->[1] != 5; say "ok 7 - array value is $b->[1]";
 push @$b, 6;
 print "not " if $#$b != 2; say "ok 8 - push increased array count";
 
+unshift @$b, 3;
+print "not " if "@$b" ne "3 4 5 6"; say "ok 9 - unshift";
+
 ############################
 #  Subroutines
 
