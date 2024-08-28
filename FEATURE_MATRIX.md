@@ -44,9 +44,9 @@
 - ✔️   **Special variables**: `@ISA` is implemented.
 - ✔️   **Multiple Inheritance**: C3 method resolution is implemented.
 - ✔️   **UNIVERSAL class**: `isa`, `can`, `DOES` are implemented.
+- ✔️   **Method caching**: Method resolution is cached..
 - ❌  **Version check**: `VERSION ( [ REQUIRE ] )` is not yet implemented.
 - ❌  **Inheritance**: `SUPER` is not yet implemented.
-- ✔️   **Method caching**: Method resolution is cached..
 - ❌  **Autoload**: `AUTOLOAD` is not yet implemented.
 - ❌  **`DESTROY`**: Handling of object destruction may be incompatible with JVM garbage collection.
 
@@ -54,7 +54,6 @@
 - ✔️   **Simple arithmetic**: Operators like `+`, `-`, `*`, and `%` are supported.
 - ✔️   **Numeric Comparison operators**: Comparison operators such as `==`, `!=`, `>`, `<`, etc., are implemented.
 - ✔️   **String concat**: Concatenation of strings using `.` is supported.
-- ❌  **`substr`**: Substring extraction is not yet implemented.
 - ✔️   **String Comparison operators**: String comparison operators such as `eq`, `ne`, `lt`, `gt`, etc., are implemented.
 - ✔️   **`q`, `qq`, `qw` String operators**: Various string quoting mechanisms are supported.
 - ✔️   **Bitwise operators**: Bitwise operations like `&`, `|`, `^`, `<<`, and `>>` are supported.
@@ -63,6 +62,9 @@
 - ✔️   **`join`**: Join operator for combining array elements into a string is supported.
 - ❌  **`split`**: Splitting strings into arrays is not yet implemented.
 - ❌  **`grep`, `map`, `sort`**: List processing functions are missing.
+- ❌  **`substr`**: Substring extraction is not yet implemented.
+- ❌  **Lvalue `substr`**: Assignable Substring extraction is not yet implemented.
+- ❌  **Vectors**: `vec` is not yet implemented.
 
 ## Arrays, Hashes, and Lists
 - ✔️   **Array, Hash, and List infrastructure**: Basic infrastructure for arrays, hashes, and lists is implemented.
@@ -77,6 +79,7 @@
 - ✔️   **Array dereference**: Dereferencing arrays using `@$x`.
 - ✔️   **Hash dereference**: Dereferencing hashes using `%$x`.
 - ✔️   **Basic Array Operations**: `push`, `unshift`, `pop`, `shift`  are implemented.
+- ❌  **Array `splice`**: Array `splice` operator is not yet implemented.
 - ❌  **Array Slices**: Array slices like `@array[2, 3]` are not yet implemented.
 - ❌  **Hash Slices**: Hash slices like `@hash{"a", "b"}` are missing.
 - ✔️   **Array literals**: Array literals are supported.
