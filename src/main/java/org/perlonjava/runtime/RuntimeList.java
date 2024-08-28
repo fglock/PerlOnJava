@@ -200,7 +200,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         // Sort the new array using the Perl comparator subroutine
         array.sort((a, b) -> {
             try {
-                // Create a RuntimeArray to hold the arguments for the comparator
+                // Create $a, $b arguments for the comparator
                 varA.set((RuntimeScalar) a);
                 varB.set((RuntimeScalar) b);
 
@@ -234,18 +234,20 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         // Create a new list to hold the filtered elements
         List<RuntimeBaseEntity> filteredElements = new ArrayList<>();
 
+        RuntimeScalar var_ = GlobalContext.getGlobalVariable("main::_");
+        RuntimeArray filterArgs = new RuntimeArray();
+
         // Iterate over each element in the current RuntimeArray
         for (RuntimeBaseEntity element : this.elements) {
             try {
-                // Create a RuntimeArray to hold the argument for the filter subroutine
-                RuntimeArray filterArgs = new RuntimeArray();
-                filterArgs.elements.add(element);
+                // Create $_ argument for the filter subroutine
+                var_.set((RuntimeScalar) element);
 
                 // Apply the Perl filter subroutine with the argument
                 RuntimeList result = perlFilterClosure.apply(filterArgs, RuntimeContextType.SCALAR);
 
                 // Check the result of the filter subroutine
-                if (result.elements.get(0).scalar().getInt() != 0) {
+                if (result.elements.get(0).scalar().getBoolean()) {
                     // If the result is non-zero, add the element to the filtered list
                     filteredElements.add(element);
                 }
@@ -274,12 +276,14 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         // Create a new list to hold the transformed elements
         List<RuntimeBaseEntity> transformedElements = new ArrayList<>();
 
+        RuntimeScalar var_ = GlobalContext.getGlobalVariable("main::_");
+        RuntimeArray mapArgs = new RuntimeArray();
+
         // Iterate over each element in the current RuntimeArray
         for (RuntimeBaseEntity element : this.elements) {
             try {
-                // Create a RuntimeArray to hold the argument for the map subroutine
-                RuntimeArray mapArgs = new RuntimeArray();
-                mapArgs.elements.add(element);
+                // Create $_ argument for the map subroutine
+                var_.set((RuntimeScalar) element);
 
                 // Apply the Perl map subroutine with the argument
                 RuntimeList result = perlMapClosure.apply(mapArgs, RuntimeContextType.LIST);
