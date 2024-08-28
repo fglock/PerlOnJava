@@ -252,22 +252,41 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         return sb.toString();
     }
 
+    /**
+     * Sorts the elements of this RuntimeArray using a Perl comparator subroutine.
+     *
+     * @param perlComparatorClosure A RuntimeScalar representing the Perl comparator subroutine.
+     * @return A new RuntimeList with the elements sorted according to the Perl comparator.
+     * @throws RuntimeException If the Perl comparator subroutine throws an exception.
+     */
     public RuntimeList sort(RuntimeScalar perlComparatorClosure) {
-        List<RuntimeBaseEntity> array = new List<>;
-        array.addAll(this.elements);
+        // Create a new list from the elements of this RuntimeArray
+        List<RuntimeBaseEntity> array = new ArrayList<>(this.elements);
 
         // Sort the new array using the Perl comparator subroutine
-        Arrays.sort(array, (a, b) -> {
-            RuntimeArray comparatorArgs = new RuntimeArray();
-            comparatorArgs.add(a);
-            comparatorArgs.add(b);
-            RuntimeList result = perlComparatorClosure.apply(comparatorArgs, ctx);
-            return result.elements.get(0).toInt();
+        array.sort((a, b) -> {
+            try {
+                // Create a RuntimeArray to hold the arguments for the comparator
+                RuntimeArray comparatorArgs = new RuntimeArray();
+                comparatorArgs.elements.add(a);
+                comparatorArgs.elements.add(b);
+
+                // Apply the Perl comparator subroutine with the arguments
+                RuntimeList result = perlComparatorClosure.apply(comparatorArgs, RuntimeContextType.SCALAR);
+
+                // Retrieve the comparison result and return it as an integer
+                return result.elements.get(0).scalar().getInt();
+            } catch (Exception e) {
+                // Wrap any exceptions thrown by the comparator in a RuntimeException
+                throw new RuntimeException(e);
+            }
         });
 
+        // Create a new RuntimeList to hold the sorted elements
         RuntimeList sortedList = new RuntimeList();
         sortedList.elements = array;
 
+        // Return the sorted RuntimeList
         return sortedList;
     }
 
