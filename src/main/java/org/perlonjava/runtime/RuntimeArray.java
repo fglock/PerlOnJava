@@ -229,12 +229,6 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         return removedElements;
     }
 
-    // Sort the array
-    // XXX move to RuntimeList
-    public void sort(Comparator<RuntimeBaseEntity> comparator) {
-        elements.sort(comparator);
-    }
-
     // Reverse the array
     public void reverse() {
         Collections.reverse(elements);
@@ -250,121 +244,6 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
             sb.append(elements.get(i).toString());
         }
         return sb.toString();
-    }
-
-    /**
-     * Sorts the elements of this RuntimeArray using a Perl comparator subroutine.
-     *
-     * @param perlComparatorClosure A RuntimeScalar representing the Perl comparator subroutine.
-     * @return A new RuntimeList with the elements sorted according to the Perl comparator.
-     * @throws RuntimeException If the Perl comparator subroutine throws an exception.
-     */
-    public RuntimeList sort(RuntimeScalar perlComparatorClosure) {
-        // Create a new list from the elements of this RuntimeArray
-        List<RuntimeBaseEntity> array = new ArrayList<>(this.elements);
-
-        // Sort the new array using the Perl comparator subroutine
-        array.sort((a, b) -> {
-            try {
-                // Create a RuntimeArray to hold the arguments for the comparator
-                RuntimeArray comparatorArgs = new RuntimeArray();
-                comparatorArgs.elements.add(a);
-                comparatorArgs.elements.add(b);
-
-                // Apply the Perl comparator subroutine with the arguments
-                RuntimeList result = perlComparatorClosure.apply(comparatorArgs, RuntimeContextType.SCALAR);
-
-                // Retrieve the comparison result and return it as an integer
-                return result.elements.get(0).scalar().getInt();
-            } catch (Exception e) {
-                // Wrap any exceptions thrown by the comparator in a RuntimeException
-                throw new RuntimeException(e);
-            }
-        });
-
-        // Create a new RuntimeList to hold the sorted elements
-        RuntimeList sortedList = new RuntimeList();
-        sortedList.elements = array;
-
-        // Return the sorted RuntimeList
-        return sortedList;
-    }
-
-    /**
-     * Filters the elements of this RuntimeArray using a Perl subroutine.
-     *
-     * @param perlFilterClosure A RuntimeScalar representing the Perl filter subroutine.
-     * @return A new RuntimeList with the elements that match the filter criteria.
-     * @throws RuntimeException If the Perl filter subroutine throws an exception.
-     */
-    public RuntimeList grep(RuntimeScalar perlFilterClosure) {
-        // Create a new list to hold the filtered elements
-        List<RuntimeBaseEntity> filteredElements = new ArrayList<>();
-
-        // Iterate over each element in the current RuntimeArray
-        for (RuntimeBaseEntity element : this.elements) {
-            try {
-                // Create a RuntimeArray to hold the argument for the filter subroutine
-                RuntimeArray filterArgs = new RuntimeArray();
-                filterArgs.elements.add(element);
-
-                // Apply the Perl filter subroutine with the argument
-                RuntimeList result = perlFilterClosure.apply(filterArgs, RuntimeContextType.SCALAR);
-
-                // Check the result of the filter subroutine
-                if (result.elements.get(0).scalar().getInt() != 0) {
-                    // If the result is non-zero, add the element to the filtered list
-                    filteredElements.add(element);
-                }
-            } catch (Exception e) {
-                // Wrap any exceptions thrown by the filter subroutine in a RuntimeException
-                throw new RuntimeException(e);
-            }
-        }
-
-        // Create a new RuntimeList to hold the filtered elements
-        RuntimeList filteredList = new RuntimeList();
-        filteredList.elements = filteredElements;
-
-        // Return the filtered RuntimeList
-        return filteredList;
-    }
-
-    /**
-     * Transforms the elements of this RuntimeArray using a Perl subroutine.
-     *
-     * @param perlMapClosure A RuntimeScalar representing the Perl map subroutine.
-     * @return A new RuntimeList with the transformed elements.
-     * @throws RuntimeException If the Perl map subroutine throws an exception.
-     */
-    public RuntimeList map(RuntimeScalar perlMapClosure) {
-        // Create a new list to hold the transformed elements
-        List<RuntimeBaseEntity> transformedElements = new ArrayList<>();
-
-        // Iterate over each element in the current RuntimeArray
-        for (RuntimeBaseEntity element : this.elements) {
-            try {
-                // Create a RuntimeArray to hold the argument for the map subroutine
-                RuntimeArray mapArgs = new RuntimeArray();
-                mapArgs.elements.add(element);
-
-                // Apply the Perl map subroutine with the argument
-                RuntimeList result = perlMapClosure.apply(mapArgs, RuntimeContextType.LIST);
-
-                // Add all elements of the result list to the transformed list
-                transformedElements.addAll(result.elements);
-            } catch (Exception e) {
-                // Wrap any exceptions thrown by the map subroutine in a RuntimeException
-                throw new RuntimeException(e);
-            }
-        }
-
-        // Create a new RuntimeList to hold the transformed elements
-        RuntimeList transformedList = new RuntimeList();
-        transformedList.elements = transformedElements;
-
-        // Return the transformed RuntimeList
-        return transformedList;
     }
 
     // keys() operator
