@@ -161,10 +161,20 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         return result;
     }
 
-    // Splice the array
-    // 
-    // splice ARRAY,OFFSET,LENGTH,LIST
-    //
+    /**
+     * Splices the array based on the parameters provided in the RuntimeList.
+     * The RuntimeList should contain the following elements in order:
+     * - OFFSET: The starting position for the splice operation (int).
+     * - LENGTH: The number of elements to be removed (int).
+     * - LIST: The list of elements to be inserted at the splice position (RuntimeList).
+     * <p>
+     * If OFFSET is not provided, it defaults to 0.
+     * If LENGTH is not provided, it defaults to the size of the array.
+     * If LIST is not provided, no elements are inserted.
+     *
+     * @param list the RuntimeList containing the splice parameters and elements
+     * @return a RuntimeList containing the elements that were removed
+     */
     public RuntimeList splice(RuntimeList list) {
         RuntimeList removedElements = new RuntimeList();
 
