@@ -595,6 +595,19 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
+    private void handleSpliceBuiltin(OperatorNode node, String operator) throws Exception {
+        // Handle:  splice @array, LIST
+        ctx.logDebug("handleSpliceBuiltin " + node);
+        Node args = node.operand;
+        Node operand = ((ListNode) args).elements.remove(0);
+        operand.accept(this.with(RuntimeContextType.LIST));
+        args.accept(this.with(RuntimeContextType.LIST));
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", operator, "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
+    }
+
     @Override
     public void visit(OperatorNode node) throws Exception {
         String operator = node.operator;
@@ -675,6 +688,9 @@ public class EmitterVisitor implements Visitor {
             case "$#":
                 node = new OperatorNode("$#",  new OperatorNode("@", node.operand, node.tokenIndex), node.tokenIndex);
                 handleArrayUnaryBuiltin(node, "indexLastElem");
+                break;
+            case "splice":
+                handleSpliceBuiltin(node, operator);
                 break;
             case "pop":
             case "shift":

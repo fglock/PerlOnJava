@@ -55,6 +55,15 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         }
     }
 
+    /**
+     * Add itself to a RuntimeScalar.
+     *
+     * @param scalar The RuntimeScalar object
+     */
+    public RuntimeScalar addToScalar(RuntimeScalar scalar) {
+        return scalar.set(this.scalar());
+    }
+
     // Replace the whole hash with the elements of a list
     public RuntimeList set(RuntimeList value) {
         RuntimeArray arr = new RuntimeArray();
