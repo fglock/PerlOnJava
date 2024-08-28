@@ -138,7 +138,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         String argString = args.get(1).toString();
 
         // Retrieve Perl class name
-        String perlClassName = "";
+        String perlClassName;
         switch (object.type) {
             case REFERENCE:
             case ARRAYREFERENCE:
@@ -177,7 +177,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         String methodName = args.get(1).toString();
 
         // Retrieve Perl class name
-        String perlClassName = "";
+        String perlClassName;
         switch (object.type) {
             case REFERENCE:
             case ARRAYREFERENCE:
@@ -464,7 +464,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     // Method to "bless" a Perl reference into an object
-    public RuntimeScalar bless(RuntimeScalar className) throws Exception {
+    public RuntimeScalar bless(RuntimeScalar className) {
         switch (type) {
             case REFERENCE:
             case ARRAYREFERENCE:
@@ -528,7 +528,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         String methodName = method.toString();
 
         // Retrieve Perl class name
-        String perlClassName = "";
+        String perlClassName;
         switch (type) {
             case REFERENCE:
             case ARRAYREFERENCE:
