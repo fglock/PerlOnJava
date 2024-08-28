@@ -470,10 +470,19 @@ public class Parser {
                     case "undef":
                     case "quotemeta":
                     case "ref":
+                    case "pop":
+                    case "shift":
                         String text = token.text;
                         operand = parseZeroOrOneList(0);
                         if (((ListNode) operand).elements.isEmpty()) {
                             switch (text) {
+                                case "pop":
+                                case "shift":
+                                    // create `@_` variable
+                                    // XXX in main program, use `@ARGV`
+                                    operand = new OperatorNode(
+                                            "@", new IdentifierNode("_", tokenIndex), tokenIndex);
+                                    break;
                                 case "undef":
                                     operand = null;
                                     break;  // leave it empty
