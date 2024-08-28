@@ -134,7 +134,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (args.size() != 2) {
             throw new IllegalStateException("Bad number of arguments for isa() method");
         }
-        RuntimeScalar object = (RuntimeScalar) args.get(0);
+        RuntimeScalar object = args.get(0);
         String argString = args.get(1).toString();
 
         // Retrieve Perl class name
@@ -173,7 +173,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (args.size() != 2) {
             throw new IllegalStateException("Bad number of arguments for can() method");
         }
-        RuntimeScalar object = (RuntimeScalar) args.get(0);
+        RuntimeScalar object = args.get(0);
         String methodName = args.get(1).toString();
 
         // Retrieve Perl class name

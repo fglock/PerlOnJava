@@ -686,7 +686,7 @@ public class EmitterVisitor implements Visitor {
                 handleUnaryBuiltin(node, "createReference");
                 break;
             case "$#":
-                node = new OperatorNode("$#",  new OperatorNode("@", node.operand, node.tokenIndex), node.tokenIndex);
+                node = new OperatorNode("$#", new OperatorNode("@", node.operand, node.tokenIndex), node.tokenIndex);
                 handleArrayUnaryBuiltin(node, "indexLastElem");
                 break;
             case "splice":
