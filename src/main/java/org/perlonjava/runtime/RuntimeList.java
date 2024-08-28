@@ -143,8 +143,8 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < elements.size(); i++) {
-            sb.append(elements.get(i).toString());
+        for (RuntimeBaseEntity element : elements) {
+            sb.append(element.toString());
         }
         return sb.toString();
     }

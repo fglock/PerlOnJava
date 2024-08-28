@@ -833,26 +833,25 @@ public class EmitterVisitor implements Visitor {
             ctx.logDebug("GETVAR end " + varIndex);
             return;
         }
-        if (operator.equals("@")) {
-            // `@$a`
-            ctx.logDebug("GETVAR `@$a`");
-            node.operand.accept(this.with(RuntimeContextType.LIST));
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "arrayDeref", "()Lorg/perlonjava/runtime/RuntimeArray;", false);
-            return;
-        }
-        if (operator.equals("%")) {
-            // `%$a`
-            ctx.logDebug("GETVAR `%$a`");
-            node.operand.accept(this.with(RuntimeContextType.LIST));
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "hashDeref", "()Lorg/perlonjava/runtime/RuntimeHash;", false);
-            return;
-        }
-        if (operator.equals("$")) {
-            // `$$a`
-            ctx.logDebug("GETVAR `$$a`");
-            node.operand.accept(this.with(RuntimeContextType.SCALAR));
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "scalarDeref", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
-            return;
+        switch (operator) {
+            case "@":
+                // `@$a`
+                ctx.logDebug("GETVAR `@$a`");
+                node.operand.accept(this.with(RuntimeContextType.LIST));
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "arrayDeref", "()Lorg/perlonjava/runtime/RuntimeArray;", false);
+                return;
+            case "%":
+                // `%$a`
+                ctx.logDebug("GETVAR `%$a`");
+                node.operand.accept(this.with(RuntimeContextType.LIST));
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "hashDeref", "()Lorg/perlonjava/runtime/RuntimeHash;", false);
+                return;
+            case "$":
+                // `$$a`
+                ctx.logDebug("GETVAR `$$a`");
+                node.operand.accept(this.with(RuntimeContextType.SCALAR));
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "scalarDeref", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                return;
         }
 
         // TODO ${a} ${[ 123 ]}
@@ -1038,7 +1037,7 @@ public class EmitterVisitor implements Visitor {
 
         // Retrieve the eval argument and push to the stack
         // This is the code string that we will compile into a class.
-        // The string is evaluated outside of the try-catch block.
+        // The string is evaluated outside the try-catch block.
         node.operand.accept(this.with(RuntimeContextType.SCALAR));
 
         int skipVariables = EmitterMethodCreator.skipVariables; // skip (this, @_, wantarray)

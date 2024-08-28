@@ -104,7 +104,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         return this;
     }
 
-    // Replace the the whole array with the elements of a list
+    // Replace the whole array with the elements of a list
     public RuntimeList set(RuntimeList value) {
         this.elements.clear();
         value.addToArray(this);
@@ -265,9 +265,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     // Get Array aliases into an Array
     public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
         List<RuntimeBaseEntity> arrElements = arr.elements;
-        for (RuntimeBaseEntity arrElem : this.elements) {
-            arrElements.add(arrElem);
-        }
+        arrElements.addAll(this.elements);
         return arr;
     }
 
@@ -301,8 +299,8 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < elements.size(); i++) {
-            sb.append(elements.get(i).toString());
+        for (RuntimeBaseEntity element : elements) {
+            sb.append(element.toString());
         }
         return sb.toString();
     }
