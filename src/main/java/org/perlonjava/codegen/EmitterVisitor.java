@@ -872,17 +872,24 @@ public class EmitterVisitor implements Visitor {
                 ctx.logDebug("SET right side scalar");
                 node.right.accept(this.with(RuntimeContextType.SCALAR));   // emit the value
                 node.left.accept(this.with(RuntimeContextType.SCALAR));   // emit the variable
-                mv.visitInsn(Opcodes.SWAP); // move the target first
 
+                boolean isGlob = false;
                 String leftDescriptor = "org/perlonjava/runtime/RuntimeScalar";
                 if (node.left instanceof OperatorNode && ((OperatorNode) node.left).operator.equals("*")) {
                     leftDescriptor = "org/perlonjava/runtime/RuntimeGlob";
+                    isGlob = true;
                 }
                 String rightDescriptor = "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;";
                 if (node.right instanceof OperatorNode && ((OperatorNode) node.right).operator.equals("*")) {
                     rightDescriptor = "(Lorg/perlonjava/runtime/RuntimeGlob;)Lorg/perlonjava/runtime/RuntimeScalar;";
+                    isGlob = true;
                 }
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, leftDescriptor, "set", rightDescriptor, false);
+                if (isGlob) {
+                    mv.visitInsn(Opcodes.SWAP); // move the target first
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, leftDescriptor, "set", rightDescriptor, false);
+                } else {
+                    mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "addToScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", true);
+                }
                 break;
             case LIST:
                 ctx.logDebug("SET right side list");

@@ -1,5 +1,7 @@
 # A sample Perl script with a bit of everything
+# use 5.32.0;
 # use feature 'say';
+# use feature 'isa';
 
 # Test variable assignment and modification
 my $a = 15;
@@ -57,26 +59,26 @@ print "not " if "@$b" ne "4 7"; say "ok 14 - splice replace one element";
 splice @$b, 1, 0, 8, 9;
 print "not " if "@$b" ne "4 8 9 7"; say "ok 15 - splice insert elements";
 
-## $a = splice @$b, 2, 2;
-## print "not " if "@$b" ne "4 8"; say "ok 16 - splice remove elements";
-## print "not " if "@$a" ne "9 7"; say "ok 17 - splice removed elements";
-## 
-## splice @$b, 1;
-## print "not " if "@$b" ne "4"; say "ok 18 - splice remove from offset";
-## 
-## splice @$b, 0, 0, 1, 2, 3;
-## print "not " if "@$b" ne "1 2 3 4"; say "ok 19 - splice insert at beginning";
-## 
-## splice @$b;
-## print "not " if "@$b" ne ""; say "ok 20 - splice remove all elements";
-## 
-## # Negative offset and length
-## $b = [1, 2, 3, 4, 5];
-## splice @$b, -2, 1, 6;
-## print "not " if "@$b" ne "1 2 3 6 5"; say "ok 21 - splice with negative offset";
-## 
-## splice @$b, -3, -1;
-## print "not " if "@$b" ne "1 2 3 6"; say "ok 22 - splice with negative length";
+$a = splice @$b, 2, 2;
+print "not " if "@$b" ne "4 8"; say "ok 16 - splice remove elements";
+print "not " if "$a" ne "7"; say "ok 17 - splice removed elements";
+
+splice @$b, 1;
+print "not " if "@$b" ne "4"; say "ok 18 - splice remove from offset";
+
+splice @$b, 0, 0, 1, 2, 3;
+print "not " if "@$b" ne "1 2 3 4"; say "ok 19 - splice insert at beginning";
+
+splice @$b;
+print "not " if "@$b" ne ""; say "ok 20 - splice remove all elements";
+
+# Negative offset and length
+$b = [1, 2, 3, 4, 5];
+splice @$b, -2, 1, 6;
+print "not " if "@$b" ne "1 2 3 6 5"; say "ok 21 - splice with negative offset";
+
+splice @$b, -3, -1;
+print "not " if "@$b" ne "1 2 5"; say "ok 22 - splice with negative length";
 
 ############################
 #  Subroutines
