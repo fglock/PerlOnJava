@@ -78,8 +78,7 @@
 - ✔️   **`scalar`**: Operator to get scalar value is not implemented.
 - ✔️   **Array dereference**: Dereferencing arrays using `@$x`.
 - ✔️   **Hash dereference**: Dereferencing hashes using `%$x`.
-- ✔️   **Basic Array Operations**: `push`, `unshift`, `pop`, `shift`  are implemented.
-- ❌  **Array `splice`**: Array `splice` operator is not yet implemented.
+- ✔️   **Basic Array Operations**: `push`, `unshift`, `pop`, `shift`, `splice` are implemented.
 - ❌  **Array Slices**: Array slices like `@array[2, 3]` are not yet implemented.
 - ❌  **Hash Slices**: Hash slices like `@hash{"a", "b"}` are missing.
 - ✔️   **Array literals**: Array literals are supported.
