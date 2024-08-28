@@ -252,6 +252,25 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         return sb.toString();
     }
 
+    public RuntimeList sort(RuntimeScalar perlComparatorClosure) {
+        List<RuntimeBaseEntity> array = new List<>;
+        array.addAll(this.elements);
+
+        // Sort the new array using the Perl comparator subroutine
+        Arrays.sort(array, (a, b) -> {
+            RuntimeArray comparatorArgs = new RuntimeArray();
+            comparatorArgs.add(a);
+            comparatorArgs.add(b);
+            RuntimeList result = perlComparatorClosure.apply(comparatorArgs, ctx);
+            return result.elements.get(0).toInt();
+        });
+
+        RuntimeList sortedList = new RuntimeList();
+        sortedList.elements = array;
+
+        return sortedList;
+    }
+
     // keys() operator
     public RuntimeArray keys() {
         return RuntimeList.generateList(0, this.size() - 1).getArrayOfAlias();
