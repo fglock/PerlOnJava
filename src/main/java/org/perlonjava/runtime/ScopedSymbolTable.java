@@ -118,6 +118,21 @@ public class ScopedSymbolTable {
         return visibleVariables;
     }
 
+    public String[] getVisibleVariableNames() {
+        // retrieve closure variable list
+        // alternately, scan the AST for variables and capture only the ones that are used
+        Map<Integer, String> visibleVariables = this.getAllVisibleVariables();
+        String[] newEnv = new String[visibleVariables.size()];
+
+        // visibleVariables is sparse; we use varPos to compact the variables into newEnv[]
+        int varPos = 0;
+        for (Integer index : visibleVariables.keySet()) {
+            String variableName = visibleVariables.get(index);
+            newEnv[varPos++] = variableName;
+        }
+        return newEnv;
+    }
+
     /**
      * Gets the current package scope.
      *
