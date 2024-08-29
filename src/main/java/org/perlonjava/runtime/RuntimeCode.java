@@ -58,9 +58,10 @@ public class RuntimeCode implements RuntimeScalarReference {
         // alternately, scan the AST for variables and capture only the ones that are used
         Map<Integer, String> visibleVariables = evalCtx.symbolTable.getAllVisibleVariables();
         String[] newEnv = new String[visibleVariables.size()];
+        int localVarIndex = 0;
         for (Integer index : visibleVariables.keySet()) {
             String variableName = visibleVariables.get(index);
-            newEnv[index] = variableName;
+            newEnv[localVarIndex++] = variableName;
         }
 
         Node ast;
