@@ -74,7 +74,7 @@ my $count = ($first, $second, @lvalue_array) = @array;
 print "not " if $count != 5; say "ok # List assignment with lvalue array returned '$count'";
 print "not " if $first != 1; say "ok # First variable assigned correctly with value '$first'";
 print "not " if $second != 2; say "ok # Second variable assigned correctly with value '$second'";
-## TODO print "not " if "@lvalue_array" ne "3 4 5"; say "ok # Lvalue array assigned correctly with values '@lvalue_array'";
+print "not " if "@lvalue_array" ne "3 4 5"; say "ok # Lvalue array assigned correctly with values '@lvalue_array'";
 
 @array = (10, 20);
 $count = ($first, $second, @lvalue_array) = @array;
@@ -90,14 +90,14 @@ $count = ($first, $second, %lvalue_hash) = @array;
 print "not " if $count != 5; say "ok # List assignment with lvalue hash returned '$count'";
 print "not " if $first != 1; say "ok # First variable assigned correctly with value '$first'";
 print "not " if $second != 2; say "ok # Second variable assigned correctly with value '$second'";
-## TODO print "not " if keys %lvalue_hash != 1 || $lvalue_hash{3} != 4; say "ok # Lvalue hash assigned correctly with keys and values";
+## print "not " if keys %lvalue_hash != 1 || $lvalue_hash{3} != 4; say "ok # Lvalue hash assigned correctly with keys and values";
 
 @array = (10, 20);
 $count = ($first, $second, %lvalue_hash) = @array;
 print "not " if $count != 2; say "ok # List assignment with lvalue hash returned '$count'";
 print "not " if $first != 10; say "ok # First variable assigned correctly with value '$first'";
 print "not " if $second != 20; say "ok # Second variable assigned correctly with value '$second'";
-## TODO print "not " if keys %lvalue_hash != 0; say "ok # Lvalue hash assigned correctly with keys and values";
+## print "not " if keys %lvalue_hash != 0; say "ok # Lvalue hash assigned correctly with keys and values";
 
 }
 
