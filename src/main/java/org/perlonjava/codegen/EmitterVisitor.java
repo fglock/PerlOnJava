@@ -683,6 +683,7 @@ public class EmitterVisitor implements Visitor {
             case "scalar":
             case "length":
             case "int":
+            case "defined":
                 if (operator.equals("int")) {
                     operator = "integer";
                 }
