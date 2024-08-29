@@ -883,24 +883,26 @@ public class Parser {
 
         // Check for binary, octal, or hexadecimal prefixes
         if (token.text.startsWith("0")) {
+            System.out.println("Number with zero");
             if (token.text.length() == 1) {
-                String letter = tokens.get(tokenIndex + 1).text;
+                String letter = tokens.get(tokenIndex).text;
                 char secondChar = letter.charAt(0);
                 if (secondChar == 'b' || secondChar == 'B') {
                     // Binary number: 0b...
                     consume();
-                    int number = Integer.parseInt(token.text, 2);
-                    return new NumberNode(Integer.toString(number), tokenIndex);
+                    int num = Integer.parseInt(letter.substring(1), 2);
+                    return new NumberNode(Integer.toString(num), tokenIndex);
                 } else if (secondChar == 'x' || secondChar == 'X') {
                     // Hexadecimal number: 0x...
                     consume();
-                    int number = Integer.parseInt(token.text, 16);
-                    return new NumberNode(Integer.toString(number), tokenIndex);
+                    int num = Integer.parseInt(letter.substring(1), 16);
+                    return new NumberNode(Integer.toString(num), tokenIndex);
+                }
             } else if (token.text.length() > 1) {
                 char secondChar = token.text.charAt(1);
-                    // Octal number: 0...
-                    int number = Integer.parseInt(token.text, 8);
-                    return new NumberNode(Integer.toString(number), tokenIndex);
+                // Octal number: 0...
+                int num = Integer.parseInt(token.text, 8);
+                return new NumberNode(Integer.toString(num), tokenIndex);
             }
         }
 
