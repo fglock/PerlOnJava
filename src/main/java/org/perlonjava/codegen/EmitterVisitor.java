@@ -921,12 +921,7 @@ public class EmitterVisitor implements Visitor {
                 nodeRight.accept(this.with(RuntimeContextType.LIST));   // emit the value
                 node.left.accept(this.with(RuntimeContextType.LIST));   // emit the variable
                 mv.visitInsn(Opcodes.SWAP); // move the target first
-                mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "set", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", true);
-                if (ctx.contextType == RuntimeContextType.SCALAR) {
-                    // Transform the value in the stack to Scalar
-                    // XXX HERE
-                    mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "count", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
-                }
+                mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "set", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeArray;", true);
                 break;
             default:
                 throw new IllegalArgumentException("Unsupported assignment context: " + lvalueContext);

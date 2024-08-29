@@ -107,8 +107,8 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
         return scalar.set(this);
     }
 
-    public RuntimeList set(RuntimeList value) {
-        return new RuntimeList(this.set(value.scalar()));
+    public RuntimeArray set(RuntimeList value) {
+        return new RuntimeArray(this.set(value.scalar()));
     }
 
     // keys() operator
