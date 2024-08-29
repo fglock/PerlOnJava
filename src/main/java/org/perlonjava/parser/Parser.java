@@ -482,10 +482,16 @@ public class Parser {
                         return new StringNode(ctx.compilerOptions.fileName, tokenIndex);
                     case "__PACKAGE__":
                         return new StringNode(ctx.symbolTable.getCurrentPackage(), tokenIndex);
+                    case "time":
+                    case "fork":
+                    case "wait":
+                    case "wantarray":
+                        // Handle operators with zero arguments
+                        return new OperatorNode(token.text, null, tokenIndex);
                     case "not":
                         // Handle 'not' keyword as a unary operator with an operand
                         operand = parseExpression(getPrecedence(token.text) + 1);
-                        return new OperatorNode("not", operand, tokenIndex);
+                        return new OperatorNode(token.text, operand, tokenIndex);
                     case "abs":
                     case "log":
                     case "rand":
