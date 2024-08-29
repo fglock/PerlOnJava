@@ -253,7 +253,8 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
                 // Check the result of the filter subroutine
                 if (result.elements.get(0).scalar().getBoolean()) {
                     // If the result is non-zero, add the element to the filtered list
-                    filteredElements.add(element);
+                    // We need to clone, otherwise we would be adding an alias to the original element
+                    filteredElements.add(((RuntimeScalar) element).clone());
                 }
             } catch (Exception e) {
                 // Wrap any exceptions thrown by the filter subroutine in a RuntimeException
@@ -295,8 +296,13 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
                 // Apply the Perl map subroutine with the argument
                 RuntimeList result = perlMapClosure.apply(mapArgs, RuntimeContextType.LIST);
 
+                // `result` list contains aliases to the original array;
+                // We need to make copies of the result elements
+                RuntimeArray arr = new RuntimeArray();
+                result.addToArray(arr);
+
                 // Add all elements of the result list to the transformed list
-                transformedElements.addAll(result.elements);
+                transformedElements.addAll(arr.elements);
             } catch (Exception e) {
                 // Wrap any exceptions thrown by the map subroutine in a RuntimeException
                 throw new RuntimeException(e);
