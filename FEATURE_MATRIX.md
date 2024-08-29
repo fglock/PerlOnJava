@@ -61,8 +61,8 @@
 - ✔️   **Autoincrement, Autodecrement; String increment**: Increment and decrement operators, including for strings, are implemented.
 - ✔️   **Scalar string and math operators**: `quotemeta`, `ref`, `undef`, `log`, `rand`.
 - ✔️   **`join`**: Join operator for combining array elements into a string is supported.
+- ✔️   **`grep`, `map`, `sort`**: List processing functions are implemented.
 - ❌  **`split`**: Splitting strings into arrays is not yet implemented.
-- ❌  **`grep`, `map`, `sort`**: List processing functions are missing.
 - ❌  **`substr`**: Substring extraction is not yet implemented.
 - ❌  **Lvalue `substr`**: Assignable Substring extraction is not yet implemented.
 - ❌  **Vectors**: `vec` is not yet implemented.
