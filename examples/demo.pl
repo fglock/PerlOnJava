@@ -87,8 +87,8 @@ my @array = (1, 2, 3, 4, 5);
 my @mapped = map { $_ * 2 } @array;
 print "not " if "@mapped" ne "2 4 6 8 10"; say "ok 23 - map doubled each element";
 
-##  @mapped = map { $_ % 2 == 0 ? $_ * 2 : $_ } @array;
-##  print "not " if "@mapped" ne "1 4 3 8 5"; say "ok 24 - map conditionally doubled even elements";
+@mapped = map { $_ % 2 == 0 ? $_ * 2 : $_ } @array;
+print "not " if "@mapped" ne "1 4 3 8 5"; say "ok 24 - map conditionally doubled even elements";
 
 ############################
 # Grep tests

@@ -76,6 +76,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         this.value = value;
     }
 
+    public RuntimeScalar clone() {
+        return new RuntimeScalar(this);
+    }
+
     // Helper method to autoincrement a String variable
     private static String _string_increment(String s) {
         // Check if the string length is less than 2
