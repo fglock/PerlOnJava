@@ -37,11 +37,9 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
     public static RuntimeHash fromArray(RuntimeArray array) {
         RuntimeHash hash = new RuntimeHash();
         for (int i = 0; i < array.size(); i += 2) {
-            if (i + 1 < array.size()) {
-                String key = array.get(i).toString();
-                RuntimeScalar value = array.get(i + 1);
-                hash.put(key, value);
-            }
+            String key = array.get(i).toString();
+            RuntimeScalar value = array.get(i + 1);
+            hash.put(key, value);
         }
         return hash;
     }
