@@ -11,7 +11,6 @@ import org.perlonjava.parser.Parser;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 public class RuntimeCode implements RuntimeScalarReference {
 
