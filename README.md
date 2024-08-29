@@ -281,13 +281,14 @@ public class Main {
 - **v1.2.0**: Added Namespaces and named subroutines.
    - Added typeglobs 
    - Added more operators
+- **v1.3.0**: Added Objects.
+   - Objects and object operators, UNIVERSAL class
+   - Array and List related operators
+   - More tests and various bug fixes
 
 ### Upcoming Milestones
-- **v1.3.0**: Planned release date: 2024-10-01
-   - Objects and object operators, UNIVERSAL class
-   - Array related operators
-   - Various bug fixes
 - **v1.4.0**: Planned release date: 2024-12-01
+   - TBD
    - Performance improvements
 
 ## Benchmarks
