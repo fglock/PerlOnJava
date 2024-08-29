@@ -7,10 +7,7 @@ import org.objectweb.asm.Type;
 import org.perlonjava.ArgumentParser;
 import org.perlonjava.astnode.*;
 import org.perlonjava.parser.Parser;
-import org.perlonjava.runtime.GlobalContext;
-import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.RuntimeCode;
-import org.perlonjava.runtime.RuntimeContextType;
+import org.perlonjava.runtime.*;
 
 import java.util.*;
 
@@ -1019,13 +1016,21 @@ public class EmitterVisitor implements Visitor {
         Map<Integer, String> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
         String[] newEnv = new String[visibleVariables.size()];
         ctx.logDebug("(eval) ctx.symbolTable.getAllVisibleVariables");
-        int localVarIndex = 0;
+
+        ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
+        newSymbolTable.enterScope();
+        newSymbolTable.setCurrentPackage(ctx.symbolTable.getCurrentPackage());
         for (Integer index : visibleVariables.keySet()) {
+            newSymbolTable.addVariable(visibleVariables.get(index));
+        }
+        ctx.logDebug("evalStringHelper " + newSymbolTable);
+
+        for (Integer index : newSymbolTable.getAllVisibleVariables().keySet()) {
             String variableName = visibleVariables.get(index);
             ctx.logDebug("  " + index + " " + variableName);
-            newEnv[localVarIndex++] = variableName;
+            newEnv[index] = variableName;
         }
-
+        
         ArgumentParser.CompilerOptions compilerOptions = ctx.compilerOptions.clone();
         compilerOptions.fileName = "(eval)";
 
@@ -1035,7 +1040,7 @@ public class EmitterVisitor implements Visitor {
         EmitterContext evalCtx =
                 new EmitterContext(
                         null, // internal java class name will be created at runtime
-                        ctx.symbolTable.clone(), // clone the symbolTable
+                        newSymbolTable.clone(), // clone the symbolTable
                         null, // return label
                         null, // method visitor
                         ctx.contextType, // call context
@@ -1120,29 +1125,16 @@ public class EmitterVisitor implements Visitor {
 
         // Load the closure variables.
         // Here we translate the "local variable" index from the current symbol table to the new symbol table
-        int newIndex = 0;  // new variable index
-        for (Integer currentIndex : visibleVariables.keySet()) {
-            if (newIndex >= skipVariables) {
+        for (Integer index : newSymbolTable.getAllVisibleVariables().keySet()) {
+            if (index >= skipVariables) {
+                String varName = newEnv[index];
                 mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
-                mv.visitIntInsn(Opcodes.BIPUSH, newIndex - skipVariables); // Push the new index
-                mv.visitVarInsn(Opcodes.ALOAD, currentIndex); // Load the constructor argument
+                mv.visitIntInsn(Opcodes.BIPUSH, index - skipVariables); // Push the new index
+                mv.visitVarInsn(Opcodes.ALOAD, ctx.symbolTable.getVariableIndex(varName)); // Load the constructor argument
                 mv.visitInsn(Opcodes.AASTORE); // Store the argument in the array
+                ctx.logDebug("Put variable " + ctx.symbolTable.getVariableIndex(varName) + " at parameter #" + (index - skipVariables) + " " + varName);
             }
-            newIndex++;
         }
-
-
-
-//        for (int i = skipVariables; i < newEnv.length; i++) {
-//            mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
-//            // Stack: [Constructor, Object[], Object[]]
-//            mv.visitIntInsn(Opcodes.BIPUSH, i - skipVariables); // Push the index
-//            // Stack: [Constructor, Object[], Object[], int]
-//            mv.visitVarInsn(Opcodes.ALOAD, i); // Load the constructor argument
-//            // Stack: [Constructor, Object[], Object[], int, arg]
-//            mv.visitInsn(Opcodes.AASTORE); // Store the argument in the array
-//            // Stack: [Constructor, Object[]]
-//        }
 
         mv.visitMethodInsn(
                 Opcodes.INVOKEVIRTUAL,
@@ -1206,7 +1198,16 @@ public class EmitterVisitor implements Visitor {
         // alternately, scan the AST for variables and capture only the ones that are used
         Map<Integer, String> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
         String[] newEnv = new String[visibleVariables.size()];
-        ctx.logDebug(" ctx.symbolTable.getAllVisibleVariables");
+        ctx.logDebug("AnonSyb ctx.symbolTable.getAllVisibleVariables");
+
+        ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
+        newSymbolTable.enterScope();
+        newSymbolTable.setCurrentPackage(ctx.symbolTable.getCurrentPackage());
+        for (Integer index : visibleVariables.keySet()) {
+            newSymbolTable.addVariable(visibleVariables.get(index));
+        }
+        ctx.logDebug("AnonSub " + newSymbolTable);
+
         int localVarIndex = 0;
         for (Integer index : visibleVariables.keySet()) {
             String variableName = visibleVariables.get(index);
@@ -1218,7 +1219,7 @@ public class EmitterVisitor implements Visitor {
         EmitterContext subCtx =
                 new EmitterContext(
                         EmitterMethodCreator.generateClassName(), // internal java class name
-                        ctx.symbolTable, // closure symbolTable
+                        newSymbolTable.clone(), // closure symbolTable
                         null, // return label
                         null, // method visitor
                         RuntimeContextType.RUNTIME, // call context
