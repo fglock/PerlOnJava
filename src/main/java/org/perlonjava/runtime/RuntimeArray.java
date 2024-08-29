@@ -33,7 +33,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         }
     }
 
-    int countElements() { return elements.size(); }
+    public int countElements() { return elements.size(); }
 
     /**
      * Add itself to a RuntimeScalar.

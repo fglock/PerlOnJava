@@ -80,7 +80,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(this);
     }
 
-    int countElements() { return 1; }
+    public int countElements() { return 1; }
 
     // Helper method to autoincrement a String variable
     private static String _string_increment(String s) {
