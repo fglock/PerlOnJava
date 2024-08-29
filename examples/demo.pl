@@ -110,10 +110,10 @@ print "not " if "@filtered" ne "4 5"; say "ok 26 - grep filtered elements greate
     # In order for sort to work, we have to mask the lexical $a, $b that we have declared before.
     our ($a, $b);   # Hide the existing `my` variables
 
-    ## my @unsorted = (5, 3, 1, 4, 2);
-    ## my @sorted = sort { $a <=> $b } @unsorted;
-    ## print "not " if "@sorted" ne "1 2 3 4 5"; say "ok 27 - sort in numerical ascending order";
-    ## 
+    my @unsorted = (5, 3, 1, 4, 2);
+    my @sorted = sort { $a <=> $b } @unsorted;
+    print "not " if "@sorted" ne "1 2 3 4 5"; say "ok 27 - sort in numerical ascending order";
+    
     ## @sorted = sort { $b <=> $a } @unsorted;
     ## print "not " if "@sorted" ne "5 4 3 2 1"; say "ok 28 - sort in numerical descending order";
     ## 
