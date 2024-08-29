@@ -924,7 +924,7 @@ public class EmitterVisitor implements Visitor {
                 if (ctx.contextType == RuntimeContextType.SCALAR) {
                     // Transform the value in the stack to Scalar
                     // XXX HERE
-                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "count", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                    mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "count", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
                 }
                 break;
             default:
