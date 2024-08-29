@@ -1076,6 +1076,14 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(Math.random() * this.getDouble());
     }
 
+    public RuntimeScalar integer() {
+        return new RuntimeScalar(getInt());
+    }
+
+    public RuntimeScalar length() {
+        return new RuntimeScalar(toString().length());
+    }
+
     public RuntimeScalar quotemeta() {
         StringBuilder quoted = new StringBuilder();
         for (char c : this.value.toString().toCharArray()) {
