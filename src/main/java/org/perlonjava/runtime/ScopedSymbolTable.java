@@ -118,6 +118,16 @@ public class ScopedSymbolTable {
         return visibleVariables;
     }
 
+    // XXX TODO cache this
+    public String[] getVariableNames() {
+        Map<Integer, String> visibleVariables = this.getAllVisibleVariables();
+        String[] vars = new String[visibleVariables.size()];
+        for (Integer index : visibleVariables.keySet()) {
+            vars[index] = visibleVariables.get(index);
+        }
+        return vars;
+    }
+
     /**
      * Gets the current package scope.
      *
