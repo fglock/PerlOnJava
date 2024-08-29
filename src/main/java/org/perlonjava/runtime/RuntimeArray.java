@@ -1,6 +1,9 @@
 package org.perlonjava.runtime;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
 
 /**
  * The RuntimeArray class simulates Perl arrays.
@@ -33,7 +36,9 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         }
     }
 
-    public int countElements() { return elements.size(); }
+    public int countElements() {
+        return elements.size();
+    }
 
     /**
      * Add itself to a RuntimeScalar.

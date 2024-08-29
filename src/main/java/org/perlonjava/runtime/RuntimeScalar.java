@@ -76,12 +76,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         this.value = value;
     }
 
-    public RuntimeScalar clone() {
-        return new RuntimeScalar(this);
-    }
-
-    public int countElements() { return 1; }
-
     // Helper method to autoincrement a String variable
     private static String _string_increment(String s) {
         // Check if the string length is less than 2
@@ -222,6 +216,14 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             }
         }
         return new RuntimeScalar(false).getList();
+    }
+
+    public RuntimeScalar clone() {
+        return new RuntimeScalar(this);
+    }
+
+    public int countElements() {
+        return 1;
     }
 
     // Implements the isa operator

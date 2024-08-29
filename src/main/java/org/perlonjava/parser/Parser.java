@@ -235,7 +235,7 @@ public class Parser {
         bracesLoop:
         while (braceCount > 0) {
             LexerToken token = consume();
-            ctx.logDebug("isHashLiteral "+token + " braceCount:" + braceCount);
+            ctx.logDebug("isHashLiteral " + token + " braceCount:" + braceCount);
             if (token.type == LexerTokenType.EOF) {
                 break bracesLoop; // not a hash literal;
             }
@@ -1188,14 +1188,14 @@ public class Parser {
         ListNode expr;
 
         LexerToken token = peek();
-        ctx.logDebug("parseList start at "+token);
+        ctx.logDebug("parseList start at " + token);
         if (token.text.equals(close)) {
             // empty list
             consume();
             expr = new ListNode(tokenIndex);
         } else {
             expr = ListNode.makeList(parseExpression(0));
-            ctx.logDebug("parseList end at "+peek());
+            ctx.logDebug("parseList end at " + peek());
             consume(LexerTokenType.OPERATOR, close);
         }
 
