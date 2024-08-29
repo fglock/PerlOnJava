@@ -92,7 +92,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
     // Get a value by key
     public RuntimeScalar get(RuntimeScalar key) {
         // XXX TODO autovivification
-        return elements.getOrDefault(key, new RuntimeScalar()); // Return undefined if key is not present
+        return elements.getOrDefault(key.toString(), new RuntimeScalar()); // Return undefined if key is not present
     }
 
     // Check if a key exists in the hash
