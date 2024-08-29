@@ -154,6 +154,30 @@ public class ScopedSymbolTable {
     }
 
     /**
+     * toString() method for debugging
+     */
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("ScopedSymbolTable {\n");
+
+        sb.append("  stack: [\n");
+        for (SymbolTable symbolTable : stack) {
+            sb.append("    ").append(symbolTable.toString()).append(",\n");
+        }
+        sb.append("  ],\n");
+
+        sb.append("  packageStack: [\n");
+        for (String pkg : packageStack) {
+            sb.append("    ").append(pkg).append(",\n");
+        }
+        sb.append("  ]\n");
+
+        sb.append("}");
+        return sb.toString();
+    }
+
+    /**
      * A simple symbol table that maps variable names to unique integer indices.
      */
     static class SymbolTable {
@@ -188,6 +212,22 @@ public class ScopedSymbolTable {
         public int getVariableIndex(String name) {
             // Return the index of the variable, or -1 if not found
             return table.getOrDefault(name, -1);
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("SymbolTable {\n");
+
+            sb.append("  table: {\n");
+            for (Map.Entry<String, Integer> entry : table.entrySet()) {
+                sb.append("    ").append(entry.getKey()).append(": ").append(entry.getValue()).append(",\n");
+            }
+            sb.append("  },\n");
+
+            sb.append("  index: ").append(index).append("\n");
+            sb.append("}");
+            return sb.toString();
         }
     }
 }
