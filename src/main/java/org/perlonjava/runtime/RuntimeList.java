@@ -87,6 +87,15 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         return elements.size();
     }
 
+    // Get the total number of elements in all elements of the list
+    public RuntimeScalar count() {
+        int count = 0;
+        for (RuntimeBaseEntity elem : elements) {
+            count = count + elem.count();;
+        }
+        return new RuntimeScalar(count);
+    }
+
     // Get the array value of the List as aliases into an Array
     public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
         for (RuntimeBaseEntity elem : elements) {
@@ -120,6 +129,11 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
     }
 
     // Set the items in the list to the values in another list
+    // (THIS LIST) = (ARG LIST)
+    //
+    // In LIST context returns the ARG LIST
+    // In SCALAR context returns the number of elements in ARG LIST
+    //
     public RuntimeList set(RuntimeList value) {
         // flatten the right side
         RuntimeArray arr = new RuntimeArray();
