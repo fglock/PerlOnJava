@@ -54,21 +54,11 @@ public class RuntimeCode implements RuntimeScalarReference {
                 true, // is boxed
                 ctx.errorUtil, // error message utility
                 ctx.compilerOptions);
-
-        // TODO - this can be cached for performance
-        // retrieve closure variable list and create a new symbol table
-        // alternately, scan the AST for variables and capture only the ones that are used
-        Map<Integer, String> visibleVariables = evalCtx.symbolTable.getAllVisibleVariables();
-        String[] newEnv = new String[visibleVariables.size()];
-        for (Integer index : visibleVariables.keySet()) {
-            newEnv[index] = visibleVariables.get(index);
-        }
-
-        Node ast;
-
+        
         // Process the string source code to create the LexerToken list
         Lexer lexer = new Lexer(code.toString());
         List<LexerToken> tokens = lexer.tokenize(); // Tokenize the Perl code
+        Node ast;
         try {
             // Create the AST
             // Create an instance of ErrorMessageUtil with the file name and token list
