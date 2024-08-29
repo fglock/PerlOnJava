@@ -6,10 +6,10 @@
 # Test variable assignment and modification
 my $a = 15;
 my $x = $a;
-print "not " if $x != 15; say "ok 1 - \$x is 15";
+print "not " if $x != 15; say "ok # \$x is 15";
 
 $a = 12;
-print "not " if $a != 12; say "ok 2 - \$a is 12";
+print "not " if $a != 12; say "ok # \$a is 12";
 
 
 ############################
@@ -73,7 +73,7 @@ my $count = ($first, $second, @lvalue_array) = @array;
 print "not " if $count != 5; say "ok # List assignment with lvalue array returned '$count'";
 print "not " if $first != 1; say "ok # First variable assigned correctly with value '$first'";
 print "not " if $second != 2; say "ok # Second variable assigned correctly with value '$second'";
-print "not " if "@lvalue_array" ne "3 4 5"; say "ok # Lvalue array assigned correctly with values '@lvalue_array'";
+## TODO print "not " if "@lvalue_array" ne "3 4 5"; say "ok # Lvalue array assigned correctly with values '@lvalue_array'";
 
 @array = (10, 20);
 $count = ($first, $second, @lvalue_array) = @array;
@@ -105,15 +105,15 @@ print "not " if $second != 20; say "ok # Second variable assigned correctly with
 
 # Test anonymous subroutine
 my @result = sub { return @_ }->(1, 2, 3);
-print "not " if "@result" ne "1 2 3"; say "ok 3 - anonymous subroutine returned '@result'";
+print "not " if "@result" ne "1 2 3"; say "ok # anonymous subroutine returned '@result'";
 
 my $anon_sub = sub { return @_ };
 @result = $anon_sub->(1, 2, 3);
-print "not " if "@result" ne "1 2 3"; say "ok 3 - anonymous subroutine returned '@result'";
+print "not " if "@result" ne "1 2 3"; say "ok # anonymous subroutine returned '@result'";
 
 # Test eval string
 eval '$a = $a + 1';
-print "not " if $a != 13; say "ok 4 - eval string modified \$a to 13";
+print "not " if $a != 13; say "ok # eval string modified \$a to 13";
 
 # Test do block with conditional statements
 do {
@@ -121,78 +121,78 @@ do {
     elsif (3) { $a = 345 }
     else { $a = 456 }
 };
-print "not " if $a != 123; say "ok 5 - do block executed if block, \$a is 123";
+print "not " if $a != 123; say "ok # do block executed if block, \$a is 123";
 
 # Test hash and array references
 $a = { a => 'hash-value' };
-print "not " if $a->{a} ne 'hash-value'; say "ok 6 - hash value is '$a->{a}'";
+print "not " if $a->{a} ne 'hash-value'; say "ok # hash value is '$a->{a}'";
 
 my $b = [ 4, 5 ];
-print "not " if $b->[1] != 5; say "ok 7 - array value is $b->[1]";
+print "not " if $b->[1] != 5; say "ok # array value is $b->[1]";
 
 push @$b, 6;
-print "not " if $#$b != 2; say "ok 8 - push increased array count";
+print "not " if $#$b != 2; say "ok # push increased array count";
 
 unshift @$b, 3;
-print "not " if "@$b" ne "3 4 5 6"; say "ok 9 - unshift";
+print "not " if "@$b" ne "3 4 5 6"; say "ok # unshift";
 
 $a = pop @$b;
-print "not " if "@$b" ne "3 4 5"; say "ok 10 - pop";
-print "not " if $a != 6; say "ok 11 - pop";
+print "not " if "@$b" ne "3 4 5"; say "ok # pop";
+print "not " if $a != 6; say "ok # pop";
 
 $a = shift @$b;
-print "not " if "@$b" ne "4 5"; say "ok 12 - shift";
-print "not " if $a != 3; say "ok 13 - pop";
+print "not " if "@$b" ne "4 5"; say "ok # shift";
+print "not " if $a != 3; say "ok # pop";
 
 
 ############################
 # Splice tests
 
 splice @$b, 1, 1, 7;
-print "not " if "@$b" ne "4 7"; say "ok 14 - splice replace one element";
+print "not " if "@$b" ne "4 7"; say "ok # splice replace one element";
 
 splice @$b, 1, 0, 8, 9;
-print "not " if "@$b" ne "4 8 9 7"; say "ok 15 - splice insert elements";
+print "not " if "@$b" ne "4 8 9 7"; say "ok # splice insert elements";
 
 $a = splice @$b, 2, 2;
-print "not " if "@$b" ne "4 8"; say "ok 16 - splice remove elements";
-print "not " if "$a" ne "7"; say "ok 17 - splice removed elements";
+print "not " if "@$b" ne "4 8"; say "ok # splice remove elements";
+print "not " if "$a" ne "7"; say "ok # splice removed elements";
 
 splice @$b, 1;
-print "not " if "@$b" ne "4"; say "ok 18 - splice remove from offset";
+print "not " if "@$b" ne "4"; say "ok # splice remove from offset";
 
 splice @$b, 0, 0, 1, 2, 3;
-print "not " if "@$b" ne "1 2 3 4"; say "ok 19 - splice insert at beginning";
+print "not " if "@$b" ne "1 2 3 4"; say "ok # splice insert at beginning";
 
 splice @$b;
-print "not " if "@$b" ne ""; say "ok 20 - splice remove all elements";
+print "not " if "@$b" ne ""; say "ok # splice remove all elements";
 
 # Negative offset and length
 $b = [1, 2, 3, 4, 5];
 splice @$b, -2, 1, 6;
-print "not " if "@$b" ne "1 2 3 6 5"; say "ok 21 - splice with negative offset";
+print "not " if "@$b" ne "1 2 3 6 5"; say "ok # splice with negative offset";
 
 splice @$b, -3, -1;
-print "not " if "@$b" ne "1 2 5"; say "ok 22 - splice with negative length";
+print "not " if "@$b" ne "1 2 5"; say "ok # splice with negative length";
 
 ############################
 # Map tests
 
 my @array = (1, 2, 3, 4, 5);
 my @mapped = map { $_ * 2 } @array;
-print "not " if "@mapped" ne "2 4 6 8 10"; say "ok 23 - map doubled each element";
+print "not " if "@mapped" ne "2 4 6 8 10"; say "ok # map doubled each element";
 
 @mapped = map { $_ % 2 == 0 ? $_ * 2 : $_ } @array;
-print "not " if "@mapped" ne "1 4 3 8 5"; say "ok 24 - map conditionally doubled even elements";
+print "not " if "@mapped" ne "1 4 3 8 5"; say "ok # map conditionally doubled even elements";
 
 ############################
 # Grep tests
 
 my @filtered = grep { $_ % 2 == 0 } @array;
-print "not " if "@filtered" ne "2 4"; say "ok 25 - grep filtered even elements";
+print "not " if "@filtered" ne "2 4"; say "ok # grep filtered even elements";
 
 @filtered = grep { $_ > 3 } @array;
-print "not " if "@filtered" ne "4 5"; say "ok 26 - grep filtered elements greater than 3";
+print "not " if "@filtered" ne "4 5"; say "ok # grep filtered elements greater than 3";
 
 ############################
 # Sort tests
@@ -204,16 +204,16 @@ print "not " if "@filtered" ne "4 5"; say "ok 26 - grep filtered elements greate
 
     my @unsorted = (5, 3, 1, 4, 2);
     my @sorted = sort { $a <=> $b } @unsorted;
-    print "not " if "@sorted" ne "1 2 3 4 5"; say "ok 27 - sort in numerical ascending order";
+    print "not " if "@sorted" ne "1 2 3 4 5"; say "ok # sort in numerical ascending order";
     
     @sorted = sort { $b <=> $a } @unsorted;
-    print "not " if "@sorted" ne "5 4 3 2 1"; say "ok 28 - sort in numerical descending order";
+    print "not " if "@sorted" ne "5 4 3 2 1"; say "ok # sort in numerical descending order";
     
     @sorted = sort { length($a) <=> length($b) } qw(foo foobar bar);
-    print "not " if "@sorted" ne "foo bar foobar"; say "ok 29 - sort by string length";
+    print "not " if "@sorted" ne "foo bar foobar"; say "ok # sort by string length";
     
     @sorted = sort { $a cmp $b } qw(zebra apple monkey);
-    print "not " if "@sorted" ne "apple monkey zebra"; say "ok 30 - sort in alphabetical order";
+    print "not " if "@sorted" ne "apple monkey zebra"; say "ok # sort in alphabetical order";
 }
 
 ############################

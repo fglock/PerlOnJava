@@ -19,5 +19,9 @@ public abstract class RuntimeBaseEntity implements RuntimeDataProvider {
         return arr;
     }
 
+    // Get the total number of elements in all elements of the list as a RuntimeScalar
+    public RuntimeScalar count() {
+        return new RuntimeScalar(countElements());
+    }
 }
 

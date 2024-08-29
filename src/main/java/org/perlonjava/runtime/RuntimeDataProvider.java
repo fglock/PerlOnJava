@@ -58,12 +58,15 @@ public interface RuntimeDataProvider {
      */
     int countElements();
 
-    /**
-     * Add itself to a RuntimeScalar.
-     *
-     * @param scalar The RuntimeScalar object
-     * @return scalar
-     */
+    // Get the total number of elements in all elements of the list as a RuntimeScalar
+    RuntimeScalar count();
+
+        /**
+         * Add itself to a RuntimeScalar.
+         *
+         * @param scalar The RuntimeScalar object
+         * @return scalar
+         */
     RuntimeScalar addToScalar(RuntimeScalar scalar);
 
     /**
