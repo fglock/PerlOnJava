@@ -117,8 +117,8 @@ print "not " if "@filtered" ne "4 5"; say "ok 26 - grep filtered elements greate
     @sorted = sort { $b <=> $a } @unsorted;
     print "not " if "@sorted" ne "5 4 3 2 1"; say "ok 28 - sort in numerical descending order";
     
-    ## @sorted = sort { length($a) <=> length($b) } qw(foo foobar bar);
-    ## print "not " if "@sorted" ne "foo bar foobar"; say "ok 29 - sort by string length";
+    @sorted = sort { length($a) <=> length($b) } qw(foo foobar bar);
+    print "not " if "@sorted" ne "foo bar foobar"; say "ok 29 - sort by string length";
     
     @sorted = sort { $a cmp $b } qw(zebra apple monkey);
     print "not " if "@sorted" ne "apple monkey zebra"; say "ok 30 - sort in alphabetical order";
