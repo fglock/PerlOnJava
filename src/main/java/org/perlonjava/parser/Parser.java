@@ -881,6 +881,29 @@ public class Parser {
     public Node parseNumber(LexerToken token) {
         StringBuilder number = new StringBuilder(token.text);
 
+        // Check for binary, octal, or hexadecimal prefixes
+        if (token.text.startsWith("0")) {
+            if (token.text.length() == 1) {
+                String letter = tokens.get(tokenIndex + 1).text;
+                char secondChar = letter.charAt(0);
+                if (secondChar == 'b' || secondChar == 'B') {
+                    // Binary number: 0b...
+                    consume();
+                    int number = Integer.parseInt(token.text, 2);
+                    return new NumberNode(Integer.toString(number), tokenIndex);
+                } else if (secondChar == 'x' || secondChar == 'X') {
+                    // Hexadecimal number: 0x...
+                    consume();
+                    int number = Integer.parseInt(token.text, 16);
+                    return new NumberNode(Integer.toString(number), tokenIndex);
+            } else if (token.text.length() > 1) {
+                char secondChar = token.text.charAt(1);
+                    // Octal number: 0...
+                    int number = Integer.parseInt(token.text, 8);
+                    return new NumberNode(Integer.toString(number), tokenIndex);
+            }
+        }
+
         // Check for fractional part
         if (tokens.get(tokenIndex).text.equals(".")) {
             number.append(consume().text); // consume '.'
