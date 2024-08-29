@@ -103,7 +103,6 @@ print "not " if "@filtered" ne "4 5"; say "ok 26 - grep filtered elements greate
 # Sort tests
 
 {
-    ;
     # Note: `sort` uses the global $a, $b variables.
     # In order for sort to work, we have to mask the lexical $a, $b that we have declared before.
     our ($a, $b);   # Hide the existing `my` variables

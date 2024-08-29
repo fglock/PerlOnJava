@@ -222,29 +222,47 @@ public class Parser {
 
     // disambiguate between Block or Hash literal
     public boolean isHashLiteral() {
-        int index = tokenIndex + 1; // Start after the opening '{'
+        int currentIndex = tokenIndex;
+
+        // Start after the opening '{'
+        consume(LexerTokenType.OPERATOR, "{");
+
         int braceCount = 1; // Track nested braces
+        bracesLoop:
         while (braceCount > 0) {
-            LexerToken token = tokens.get(index++);
+            LexerToken token = consume();
+            ctx.logDebug("isHashLiteral "+token + " braceCount:" + braceCount);
             if (token.type == LexerTokenType.EOF) {
-                return false; // not a hash literal;
+                break bracesLoop; // not a hash literal;
             }
             if (token.type == LexerTokenType.OPERATOR) {
                 switch (token.text) {
                     case "{":
+                    case "(":
                         braceCount++;
                         break;
+                    case ")":
                     case "}":
                         braceCount--;
                         break;
                     case ",":
                     case "=>":
-                        return true; // Likely a hash literal
+                        if (braceCount == 1) {
+                            ctx.logDebug("isHashLiteral TRUE");
+                            tokenIndex = currentIndex;
+                            return true; // Likely a hash literal
+                        }
+                        break;
                     case ";":
-                        return false; // Likely a block
+                        if (braceCount == 1) {
+                            break bracesLoop; // Likely a block
+                        }
+                        break;
                 }
             }
         }
+        ctx.logDebug("isHashLiteral FALSE");
+        tokenIndex = currentIndex;
         return false;
     }
 
