@@ -32,6 +32,7 @@
 - ✔️   **String Interpolation escapes**: Handles escape sequences like `\n` within interpolated strings.
 - ✔️   **String numification**: Strings can be converted to numbers automatically.
 - ✔️   **Numbers with underscores**: Numbers with underscores (e.g., `1_000`) are supported.
+- ✔️   **Numbers in different bases**: Numbers in binary, hex, octal: `0b1010`, `0xAA`, `078`.
 - ✔️   **References**: References to variables and data structures are supported.
 - ❌  **Autovivification**: Some aspects of autovivification are supported, but not fully implemented.
 - ❌  **File handles**: Support for file handles is missing.
