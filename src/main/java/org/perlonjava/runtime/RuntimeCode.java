@@ -43,9 +43,11 @@ public class RuntimeCode implements RuntimeScalarReference {
 
         // retrieve the eval context that was saved at program compile-time
         EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
+        ScopedSymbolTable symbolTable = ctx.symbolTable.clone();
+
         EmitterContext evalCtx = new EmitterContext(
                 EmitterMethodCreator.generateClassName(), // internal java class name
-                ctx.symbolTable.clone(), // clone the symbolTable
+                ctx.symbolTable.clone(), // symbolTable
                 null, // return label
                 null, // method visitor
                 ctx.contextType, // call context
@@ -54,14 +56,12 @@ public class RuntimeCode implements RuntimeScalarReference {
                 ctx.compilerOptions);
 
         // TODO - this can be cached for performance
-        // retrieve closure variable list
+        // retrieve closure variable list and create a new symbol table
         // alternately, scan the AST for variables and capture only the ones that are used
         Map<Integer, String> visibleVariables = evalCtx.symbolTable.getAllVisibleVariables();
         String[] newEnv = new String[visibleVariables.size()];
-        int localVarIndex = 0;
         for (Integer index : visibleVariables.keySet()) {
-            String variableName = visibleVariables.get(index);
-            newEnv[localVarIndex++] = variableName;
+            newEnv[index] = visibleVariables.get(index);
         }
 
         Node ast;
@@ -87,7 +87,7 @@ public class RuntimeCode implements RuntimeScalarReference {
 
         // Create a new instance of ErrorMessageUtil, resetting the line counter
         evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
-        evalCtx.symbolTable = ctx.symbolTable.clone(); // reset the symboltable
+        evalCtx.symbolTable = symbolTable.clone(); // reset the symboltable
         Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
                 evalCtx,
                 newEnv, // Closure variables
