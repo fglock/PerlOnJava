@@ -65,7 +65,7 @@ public class Parser {
     }
 
     public final EmitterContext ctx;
-    private final List<LexerToken> tokens;
+    public final List<LexerToken> tokens;
     public int tokenIndex = 0;
     public boolean parsingForLoopVariable = false;
     private boolean parsingTakeReference = false;
@@ -683,8 +683,10 @@ public class Parser {
                                     // Handle curly brackets to parse a nested expression
                                     //  `${v}`
                                     consume();
+                                    Node block = parseBlock();
+                                    consume(LexerTokenType.OPERATOR, "}");
                                     return new OperatorNode(
-                                            text, new HashLiteralNode(parseList("}", 1), tokenIndex), tokenIndex);
+                                            text, block, tokenIndex);
                                 }
                             }
                             operand = parseExpression(getPrecedence(text) + 1);
