@@ -133,17 +133,15 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
     // In LIST context returns the ARG LIST
     // In SCALAR context returns the number of elements in ARG LIST
     //
-    public RuntimeList set(RuntimeList value) {
-
-        // preserve the right side as return value from the method
-        RuntimeList original = new RuntimeList();
-        for (RuntimeBaseEntity elem : value.elements) {
-            original.add(elem);
-        }
+    public RuntimeArray set(RuntimeList value) {
 
         // flatten the right side
+        RuntimeArray original = new RuntimeArray();
+        value.addToArray(original);
+
+        // retrieve the list
         RuntimeArray arr = new RuntimeArray();
-        value.addToArray(arr);
+        original.addToArray(arr);
 
         for (RuntimeBaseEntity elem : elements) {
             if (elem instanceof RuntimeScalar) {
@@ -157,7 +155,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
                 arr.elements = new ArrayList<>();
             }
         }
-        return new RuntimeList(original);
+        return original;
     }
 
     // Convert the list to a string

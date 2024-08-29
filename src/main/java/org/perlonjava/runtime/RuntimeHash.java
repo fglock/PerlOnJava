@@ -67,7 +67,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
     }
 
     // Replace the whole hash with the elements of a list
-    public RuntimeList set(RuntimeList value) {
+    public RuntimeArray set(RuntimeList value) {
         RuntimeArray arr = new RuntimeArray();
         value.addToArray(arr);
         if (arr.size() % 2 != 0) {  // add an undef if the array size is odd
@@ -75,7 +75,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         }
         RuntimeHash hash = fromArray(arr);
         this.elements = hash.elements;
-        return new RuntimeList(this);
+        return new RuntimeArray(new RuntimeList(this));
     }
 
     // Add a key-value pair to the hash
