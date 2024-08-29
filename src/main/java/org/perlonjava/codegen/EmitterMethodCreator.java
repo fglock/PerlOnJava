@@ -92,8 +92,11 @@ public class EmitterMethodCreator implements Opcodes {
      * @return The generated class.
      * @throws Exception If an error occurs during class creation.
      */
-    public static Class<?> createClassWithMethod(EmitterContext ctx, String[] env, Node ast, boolean useTryCatch)
+    public static Class<?> createClassWithMethod(EmitterContext ctx, Node ast, boolean useTryCatch)
             throws Exception {
+
+        String[] env = ctx.symbolTable.getVariableNames();
+
         // Create a ClassWriter with COMPUTE_FRAMES and COMPUTE_MAXS options for automatic frame and max
         // stack size calculation
         ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);

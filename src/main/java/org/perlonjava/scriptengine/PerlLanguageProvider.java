@@ -104,7 +104,6 @@ public class PerlLanguageProvider {
         ctx.symbolTable = globalSymbolTable.clone(); // reset the symboltable
         Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
                 ctx,
-                new String[]{}, // Closure variables
                 ast,
                 false   // no try-catch
         );

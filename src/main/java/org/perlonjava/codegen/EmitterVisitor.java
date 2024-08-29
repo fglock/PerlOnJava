@@ -1228,7 +1228,7 @@ public class EmitterVisitor implements Visitor {
                         ctx.compilerOptions);
         Class<?> generatedClass =
                 EmitterMethodCreator.createClassWithMethod(
-                        subCtx, newEnv, node.block, node.useTryCatch
+                        subCtx, node.block, node.useTryCatch
                 );
         String newClassNameDot = subCtx.javaClassName.replace('/', '.');
         ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + subCtx.javaClassName);

@@ -90,7 +90,6 @@ public class RuntimeCode implements RuntimeScalarReference {
         evalCtx.symbolTable = symbolTable.clone(); // reset the symboltable
         Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
                 evalCtx,
-                newEnv, // Closure variables
                 ast,
                 true  // use try-catch
         );
