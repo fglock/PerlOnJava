@@ -883,7 +883,6 @@ public class Parser {
 
         // Check for binary, octal, or hexadecimal prefixes
         if (token.text.startsWith("0")) {
-            System.out.println("Number with zero");
             if (token.text.length() == 1) {
                 String letter = tokens.get(tokenIndex).text;
                 char secondChar = letter.charAt(0);
