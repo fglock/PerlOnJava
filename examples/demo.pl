@@ -97,7 +97,7 @@ $count = ($first, $second, %lvalue_hash) = @array;
 print "not " if $count != 2; say "ok # List assignment with lvalue hash returned '$count'";
 print "not " if $first != 10; say "ok # First variable assigned correctly with value '$first'";
 print "not " if $second != 20; say "ok # Second variable assigned correctly with value '$second'";
-## print "not " if keys %lvalue_hash != 0; say "ok # Lvalue hash assigned correctly with keys and values";
+print "not " if keys %lvalue_hash != 0; say "ok # Lvalue hash assigned correctly with keys and values";
 
 }
 

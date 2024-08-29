@@ -561,8 +561,8 @@ public class Parser {
                     case "scalar":
                     case "values":
                     case "keys":
-                        operand = parseZeroOrOneList(1);
-                        return new OperatorNode(token.text, ((ListNode) operand).elements.get(0), tokenIndex);
+                        operand = parsePrimary();
+                        return new OperatorNode(token.text, operand, tokenIndex);
                     case "our":
                     case "my":
                         // Handle 'my' keyword as a unary operator with an operand
@@ -1092,7 +1092,7 @@ public class Parser {
         if (INFIX_OP.contains(token.text) || token.text.equals(",")) {
             // tokenIndex++;
             ctx.logDebug("parseZeroOrMoreList infix `" + token.text + "` followed by `" + nextToken.text + "`");
-            if (token.text.equals("%") && nextToken.text.equals("$")) {
+            if (token.text.equals("%") && (nextToken.text.equals("$") || nextToken.type == LexerTokenType.IDENTIFIER)) {
                 // looks like a hash deref, not an infix `%`
                 ctx.logDebug("parseZeroOrMoreList looks like Hash");
             } else if (token.text.equals(".") && token1.type == LexerTokenType.NUMBER) {
