@@ -85,12 +85,12 @@ print "not " if "@lvalue_array" ne ""; say "ok # Lvalue array assigned correctly
 
 # Test with non-empty left-hand side including a hash
 my %lvalue_hash;
-@array = (1, 2, 3, 4, 5);
+@array = (10, 20, 30, 40, 50);
 $count = ($first, $second, %lvalue_hash) = @array;
 print "not " if $count != 5; say "ok # List assignment with lvalue hash returned '$count'";
-print "not " if $first != 1; say "ok # First variable assigned correctly with value '$first'";
-print "not " if $second != 2; say "ok # Second variable assigned correctly with value '$second'";
-## print "not " if keys %lvalue_hash != 1 || $lvalue_hash{3} != 4; say "ok # Lvalue hash assigned correctly with keys and values: @{[ %lvalue_hash ]}";
+print "not " if $first != 10; say "ok # First variable assigned correctly with value '$first'";
+print "not " if $second != 20; say "ok # Second variable assigned correctly with value '$second'";
+# print "not " if keys %lvalue_hash != 2 || $lvalue_hash{30} != 40; say "ok # Lvalue hash assigned correctly with keys and values: @{[ %lvalue_hash ]} keys: @{[ keys %lvalue_hash ]}";
 
 @array = (10, 20);
 $count = ($first, $second, %lvalue_hash) = @array;
