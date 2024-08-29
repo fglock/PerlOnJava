@@ -681,6 +681,11 @@ public class EmitterVisitor implements Visitor {
             case "quotemeta":
             case "ref":
             case "scalar":
+            case "length":
+            case "int":
+                if (operator.equals("int")) {
+                    operator = "integer";
+                }
                 handleUnaryBuiltin(node, operator);
                 break;
             case "++":
