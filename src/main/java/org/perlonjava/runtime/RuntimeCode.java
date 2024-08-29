@@ -54,7 +54,7 @@ public class RuntimeCode implements RuntimeScalarReference {
                 true, // is boxed
                 ctx.errorUtil, // error message utility
                 ctx.compilerOptions);
-        
+
         // Process the string source code to create the LexerToken list
         Lexer lexer = new Lexer(code.toString());
         List<LexerToken> tokens = lexer.tokenize(); // Tokenize the Perl code

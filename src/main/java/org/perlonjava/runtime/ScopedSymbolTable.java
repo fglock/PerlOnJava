@@ -11,6 +11,9 @@ public class ScopedSymbolTable {
     private final Stack<SymbolTable> stack = new Stack<>();
     private final Stack<String> packageStack = new Stack<>();
 
+    // Cache for the getAllVisibleVariables method
+    private Map<Integer, String> visibleVariablesCache;
+
     /**
      * Constructs a ScopedSymbolTable.
      */
@@ -21,6 +24,8 @@ public class ScopedSymbolTable {
      * Enters a new scope by pushing a new SymbolTable onto the stack.
      */
     public void enterScope() {
+        clearVisibleVariablesCache();
+
         int lastIndex = 0;
         String packageName = "main";
         // If there are existing scopes, get the last index from the current scope
@@ -38,6 +43,7 @@ public class ScopedSymbolTable {
      * Exits the current scope by popping the top SymbolTable from the stack.
      */
     public void exitScope() {
+        clearVisibleVariablesCache();
         stack.pop();
         packageStack.pop();
     }
@@ -49,6 +55,7 @@ public class ScopedSymbolTable {
      * @return The index of the variable in the current scope.
      */
     public int addVariable(String name) {
+        clearVisibleVariablesCache();
         return stack.peek().addVariable(name);
     }
 
@@ -70,6 +77,14 @@ public class ScopedSymbolTable {
     }
 
     /**
+     * Clears the cache for the getAllVisibleVariables method.
+     * This method should be called whenever the symbol table is modified.
+     */
+    public void clearVisibleVariablesCache() {
+        visibleVariablesCache = null;
+    }
+
+    /**
      * Retrieves the index of a variable in the current scope.
      * This method is used to track variable redeclarations in the same scope.
      *
@@ -88,6 +103,11 @@ public class ScopedSymbolTable {
      * @return A TreeMap of variable index to variable name for all visible variables.
      */
     public Map<Integer, String> getAllVisibleVariables() {
+        // Check if the result is already cached
+        if (visibleVariablesCache != null) {
+            return visibleVariablesCache;
+        }
+
         // TreeMap to store variable indices as keys and variable names as values.
         // TreeMap is used to keep the entries sorted by the keys (variable indices).
         Map<Integer, String> visibleVariables = new TreeMap<>();
@@ -113,6 +133,9 @@ public class ScopedSymbolTable {
                 }
             }
         }
+
+        // Cache the result
+        visibleVariablesCache = visibleVariables;
 
         // Return the TreeMap containing all visible variables sorted by their indices.
         return visibleVariables;
