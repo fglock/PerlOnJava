@@ -1019,10 +1019,11 @@ public class EmitterVisitor implements Visitor {
         Map<Integer, String> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
         String[] newEnv = new String[visibleVariables.size()];
         ctx.logDebug("(eval) ctx.symbolTable.getAllVisibleVariables");
+        int localVarIndex = 0;
         for (Integer index : visibleVariables.keySet()) {
             String variableName = visibleVariables.get(index);
             ctx.logDebug("  " + index + " " + variableName);
-            newEnv[index] = variableName;
+            newEnv[localVarIndex++] = variableName;
         }
 
         ArgumentParser.CompilerOptions compilerOptions = ctx.compilerOptions.clone();
@@ -1188,10 +1189,11 @@ public class EmitterVisitor implements Visitor {
         Map<Integer, String> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
         String[] newEnv = new String[visibleVariables.size()];
         ctx.logDebug(" ctx.symbolTable.getAllVisibleVariables");
+        int localVarIndex = 0;
         for (Integer index : visibleVariables.keySet()) {
             String variableName = visibleVariables.get(index);
             ctx.logDebug("  " + index + " " + variableName);
-            newEnv[index] = variableName;
+            newEnv[localVarIndex++] = variableName;
         }
 
         // create the new method
