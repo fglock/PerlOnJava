@@ -75,7 +75,7 @@ public interface RuntimeDataProvider {
      * @param list The RuntimeList object
      * @return list
      */
-    RuntimeList set(RuntimeList list);
+    RuntimeArray set(RuntimeList list);
 
     /**
      * Retrives the result of keys() as a RuntimeArray instance.

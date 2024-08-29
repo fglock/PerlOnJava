@@ -347,8 +347,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return this;
     }
 
-    public RuntimeList set(RuntimeList value) {
-        return new RuntimeList(this.set(value.scalar()));
+    public RuntimeArray set(RuntimeList value) {
+        return new RuntimeArray(this.set(value.scalar()));
     }
 
     @Override
