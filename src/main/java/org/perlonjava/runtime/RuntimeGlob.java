@@ -36,6 +36,8 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
         // return value;
     }
 
+    int countElements() { return 1; }
+
     /**
      * Returns a string representation of the typeglob reference.
      * The format is "GLOB(hashCode)" where hashCode is the unique identifier for this instance.

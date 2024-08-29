@@ -54,6 +54,11 @@ public interface RuntimeDataProvider {
     void addToList(RuntimeList list);
 
     /**
+     * Count the number of RuntimeScalar elements.
+     */
+    int countElements();
+
+    /**
      * Add itself to a RuntimeScalar.
      *
      * @param scalar The RuntimeScalar object
