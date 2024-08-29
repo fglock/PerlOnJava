@@ -155,9 +155,13 @@ public class Parser {
                 case "package":
                     return Statement.parsePackageDeclaration(this, token);
                 case "sub":
-                    consume();
-                    return parseSubroutineDefinition(true);
-
+                    // Must be followed by an indentifier
+                    tokenIndex++;
+                    if (peek().type == LexerTokenType.IDENTIFIER) {
+                        return parseSubroutineDefinition(true);
+                    }
+                    // otherwise backtrack
+                    tokenIndex--;
             }
         }
         if (token.type == LexerTokenType.OPERATOR
