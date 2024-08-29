@@ -276,16 +276,21 @@ public class StringParser {
                         parts.add(new StringNode(str.toString(), tokenIndex));  // Add the string so far to parts
                         str = new StringBuilder();  // Reset the buffer
                     }
+                    String sigil = text;
                     ctx.logDebug("str sigil");
                     Node operand;
-                    boolean isArray = text.equals("@");
+                    boolean isArray = sigil.equals("@");
                     if (parser.peek().text.equals("{")) {
                         // block-like
-                        ctx.logDebug("str block-like");
-                        parser.peek().text = text;  // replace bracket with sigil
-                        operand = parser.parseExpression(0);
+                        // extract the string between brackets
+                        StringParser.ParsedString rawStr = StringParser.parseRawStrings(ctx, parser.tokens, parser.tokenIndex, 1);
+                        String blockStr = rawStr.buffers.get(0);
+                        ctx.logDebug("str block-like: " + blockStr);
+                        blockStr = sigil + "{" + blockStr + "}";
+                        Parser blockParser = new Parser(ctx, new Lexer(blockStr).tokenize());
+                        operand = blockParser.parseBlock();
+                        parser.tokenIndex = rawStr.next;
                         ctx.logDebug("str operand " + operand);
-                        parser.consume(LexerTokenType.OPERATOR, "}");
                     } else {
                         String identifier = parser.parseComplexIdentifier();
                         operand = null;
