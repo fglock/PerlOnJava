@@ -1116,16 +1116,34 @@ public class EmitterVisitor implements Visitor {
         // Stack: [Constructor, int]
         mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object"); // Create a new array of Object
         // Stack: [Constructor, Object[]]
-        for (int i = skipVariables; i < newEnv.length; i++) {
-            mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
-            // Stack: [Constructor, Object[], Object[]]
-            mv.visitIntInsn(Opcodes.BIPUSH, i - skipVariables); // Push the index
-            // Stack: [Constructor, Object[], Object[], int]
-            mv.visitVarInsn(Opcodes.ALOAD, i); // Load the constructor argument
-            // Stack: [Constructor, Object[], Object[], int, arg]
-            mv.visitInsn(Opcodes.AASTORE); // Store the argument in the array
-            // Stack: [Constructor, Object[]]
+
+
+        // Load the closure variables.
+        // Here we translate the "local variable" index from the current symbol table to the new symbol table
+        int newIndex = 0;  // new variable index
+        for (Integer currentIndex : visibleVariables.keySet()) {
+            if (newIndex >= skipVariables) {
+                mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
+                mv.visitIntInsn(Opcodes.BIPUSH, newIndex - skipVariables); // Push the new index
+                mv.visitVarInsn(Opcodes.ALOAD, currentIndex); // Load the constructor argument
+                mv.visitInsn(Opcodes.AASTORE); // Store the argument in the array
+            }
+            newIndex++;
         }
+
+
+
+//        for (int i = skipVariables; i < newEnv.length; i++) {
+//            mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
+//            // Stack: [Constructor, Object[], Object[]]
+//            mv.visitIntInsn(Opcodes.BIPUSH, i - skipVariables); // Push the index
+//            // Stack: [Constructor, Object[], Object[], int]
+//            mv.visitVarInsn(Opcodes.ALOAD, i); // Load the constructor argument
+//            // Stack: [Constructor, Object[], Object[], int, arg]
+//            mv.visitInsn(Opcodes.AASTORE); // Store the argument in the array
+//            // Stack: [Constructor, Object[]]
+//        }
+
         mv.visitMethodInsn(
                 Opcodes.INVOKEVIRTUAL,
                 "java/lang/reflect/Constructor",
@@ -1272,11 +1290,18 @@ public class EmitterVisitor implements Visitor {
         mv.visitIntInsn(
                 Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
         mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object"); // Create a new array of Object
-        for (int i = skipVariables; i < newEnv.length; i++) {
-            mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
-            mv.visitIntInsn(Opcodes.BIPUSH, i - skipVariables); // Push the index
-            mv.visitVarInsn(Opcodes.ALOAD, i); // Load the constructor argument
-            mv.visitInsn(Opcodes.AASTORE); // Store the argument in the array
+
+        // Load the closure variables.
+        // Here we translate the "local variable" index from the current symbol table to the new symbol table
+        int newIndex = 0;  // new variable index
+        for (Integer currentIndex : visibleVariables.keySet()) {
+            if (newIndex >= skipVariables) {
+                mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
+                mv.visitIntInsn(Opcodes.BIPUSH, newIndex - skipVariables); // Push the new index
+                mv.visitVarInsn(Opcodes.ALOAD, currentIndex); // Load the constructor argument
+                mv.visitInsn(Opcodes.AASTORE); // Store the argument in the array
+            }
+            newIndex++;
         }
         mv.visitMethodInsn(
                 Opcodes.INVOKEVIRTUAL,
