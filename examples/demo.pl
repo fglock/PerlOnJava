@@ -55,10 +55,11 @@ print "not " if $first != 10; say "ok # First variable assigned correctly with v
 print "not " if $second != 20; say "ok # Second variable assigned correctly with value '$second'";
 
 @array = (100);
+$second = 20;
 $count = ($first, $second) = @array;
 print "not " if $count != 1; say "ok # List assignment with non-empty left-hand side returned '$count'";
 print "not " if $first != 100; say "ok # First variable assigned correctly with value '$first'";
-## TODO print "not " if defined $second; say "ok # Second variable is undefined as expected";
+print "not " if defined $second; say "ok # Second variable is undefined as expected";
 }
 
 ############################

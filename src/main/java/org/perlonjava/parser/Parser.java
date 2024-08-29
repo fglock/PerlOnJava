@@ -496,6 +496,7 @@ public class Parser {
                     case "shift":
                     case "int":
                     case "length":
+                    case "defined":
                         String text = token.text;
                         operand = parseZeroOrOneList(0);
                         if (((ListNode) operand).elements.isEmpty()) {
