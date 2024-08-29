@@ -46,7 +46,9 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         return hash;
     }
 
-    public int countElements() { return size(); }
+    public int countElements() {
+        return size();
+    }
 
     // Add itself to a RuntimeArray.
     public void addToArray(RuntimeArray array) {
