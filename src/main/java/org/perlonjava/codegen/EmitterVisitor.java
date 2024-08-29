@@ -1016,15 +1016,8 @@ public class EmitterVisitor implements Visitor {
         // TODO - this can be cached and reused at runtime for performance
         // retrieve the closure variable list into "newEnv" array
         // we save all variables, because we don't yet what code we are going to compile.
-        Map<Integer, String> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
-        String[] newEnv = new String[visibleVariables.size()];
-        ctx.logDebug("(eval) ctx.symbolTable.getAllVisibleVariables");
-        for (Integer index : visibleVariables.keySet()) {
-            String variableName = visibleVariables.get(index);
-            ctx.logDebug("  " + index + " " + variableName);
-            newEnv[index] = variableName;
-        }
-
+        String[] newEnv = ctx.symbolTable.getVisibleVariableNames();
+        
         ArgumentParser.CompilerOptions compilerOptions = ctx.compilerOptions.clone();
         compilerOptions.fileName = "(eval)";
 
@@ -1185,14 +1178,7 @@ public class EmitterVisitor implements Visitor {
 
         // retrieve closure variable list
         // alternately, scan the AST for variables and capture only the ones that are used
-        Map<Integer, String> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
-        String[] newEnv = new String[visibleVariables.size()];
-        ctx.logDebug(" ctx.symbolTable.getAllVisibleVariables");
-        for (Integer index : visibleVariables.keySet()) {
-            String variableName = visibleVariables.get(index);
-            ctx.logDebug("  " + index + " " + variableName);
-            newEnv[index] = variableName;
-        }
+        String[] newEnv = ctx.symbolTable.getVisibleVariableNames();
 
         // create the new method
         EmitterContext subCtx =
