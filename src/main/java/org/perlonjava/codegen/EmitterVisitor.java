@@ -1014,7 +1014,6 @@ public class EmitterVisitor implements Visitor {
         // retrieve the closure variable list into "newEnv" array
         // we save all variables, because we don't yet what code we are going to compile.
         Map<Integer, String> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
-        String[] newEnv = new String[visibleVariables.size()];
         ctx.logDebug("(eval) ctx.symbolTable.getAllVisibleVariables");
 
         ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
@@ -1023,14 +1022,9 @@ public class EmitterVisitor implements Visitor {
         for (Integer index : visibleVariables.keySet()) {
             newSymbolTable.addVariable(visibleVariables.get(index));
         }
+        String[] newEnv = newSymbolTable.getVariableNames();
         ctx.logDebug("evalStringHelper " + newSymbolTable);
 
-        for (Integer index : newSymbolTable.getAllVisibleVariables().keySet()) {
-            String variableName = visibleVariables.get(index);
-            ctx.logDebug("  " + index + " " + variableName);
-            newEnv[index] = variableName;
-        }
-        
         ArgumentParser.CompilerOptions compilerOptions = ctx.compilerOptions.clone();
         compilerOptions.fileName = "(eval)";
 
@@ -1197,8 +1191,7 @@ public class EmitterVisitor implements Visitor {
         // retrieve closure variable list
         // alternately, scan the AST for variables and capture only the ones that are used
         Map<Integer, String> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
-        String[] newEnv = new String[visibleVariables.size()];
-        ctx.logDebug("AnonSyb ctx.symbolTable.getAllVisibleVariables");
+        ctx.logDebug("AnonSub ctx.symbolTable.getAllVisibleVariables");
 
         ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
         newSymbolTable.enterScope();
@@ -1206,14 +1199,8 @@ public class EmitterVisitor implements Visitor {
         for (Integer index : visibleVariables.keySet()) {
             newSymbolTable.addVariable(visibleVariables.get(index));
         }
+        String[] newEnv = newSymbolTable.getVariableNames();
         ctx.logDebug("AnonSub " + newSymbolTable);
-
-        int localVarIndex = 0;
-        for (Integer index : visibleVariables.keySet()) {
-            String variableName = visibleVariables.get(index);
-            ctx.logDebug("  " + index + " " + variableName);
-            newEnv[localVarIndex++] = variableName;
-        }
 
         // create the new method
         EmitterContext subCtx =
