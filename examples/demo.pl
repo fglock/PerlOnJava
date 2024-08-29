@@ -12,8 +12,11 @@ $a = 12;
 print "not " if $a != 12; say "ok 2 - \$a is 12";
 
 # Test anonymous subroutine
+my @result = sub { return @_ }->(1, 2, 3);
+print "not " if "@result" ne "1 2 3"; say "ok 3 - anonymous subroutine returned '@result'";
+
 my $anon_sub = sub { return @_ };
-my @result = $anon_sub->(1, 2, 3);
+@result = $anon_sub->(1, 2, 3);
 print "not " if "@result" ne "1 2 3"; say "ok 3 - anonymous subroutine returned '@result'";
 
 # Test eval string
