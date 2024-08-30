@@ -110,14 +110,17 @@ For the most up-to-date information on features and limitations, please refer to
 │   │                   ├── RuntimeScalar.java
 │   │                   └── other runtime classes
 │   └── test/
-│       └── java/
-│           └── org/
-│               └── perlonjava/
-│                   └── PerlLanguageProviderTest.java
+│       ├── java/
+│       │   └── org/
+│       │       └── perlonjava/
+│       │           └── PerlLanguageProviderTest.java
+│       └── resources/
+│           └── Perl test files
 ├── build.gradle
 ├── pom.xml
 ├── settings.gradle
 ├── examples/
+│   └── Perl example files
 └── misc/
     └── project notes
 ```
