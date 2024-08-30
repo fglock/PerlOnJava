@@ -1,4 +1,20 @@
 # A sample Perl script with a bit of everything
+#
+# Note:
+#
+#   - This Perl scripts is not part of the automated test suite.
+#     It is provided for educational and illustrative purposes.
+#
+#   - Automated tests for Perl scripts are located in the src/test/resources directory.
+#     These test files are executed during the build process by Maven/Gradle to ensure the correctness of the Perl code.
+#
+#   - To run the automated tests manually, you can use the following commands:
+#     - For Maven: `mvn test`
+#     - For Gradle: `gradle test`
+#
+#   These commands will compile the Java code, run the Java and Perl tests, and generate test reports.
+#
+
 # use 5.32.0;
 # use feature 'say';
 # use feature 'isa';
