@@ -168,6 +168,10 @@ public class EmitterVisitor implements Visitor {
                 node.left.accept(scalarVisitor); // target - left parameter
                 handleOrOperator(node);
                 return;
+            case "||=":
+                node.left.accept(scalarVisitor); // target - left parameter
+                handleOrEqualOperator(node);
+                return;
             case "&&":
             case "and":
                 node.left.accept(scalarVisitor); // target - left parameter
@@ -314,6 +318,44 @@ public class EmitterVisitor implements Visitor {
         // stack is [right]
 
         mv.visitLabel(endLabel);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            mv.visitInsn(Opcodes.POP);
+        }
+    }
+
+    private void handleOrEqualOperator(BinaryOperatorNode node) throws Exception {
+        // Implements `||=`
+
+        MethodVisitor mv = ctx.mv;
+        Label endLabel = new Label(); // Label for the end of the operation
+
+        // Duplicate the left operand to evaluate its truthiness
+        mv.visitInsn(Opcodes.DUP);
+        // stack is [left, left]
+
+        // Convert the result to a boolean
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "getBoolean", "()Z", false);
+        // stack is [left, boolean]
+
+        // If the boolean value is true, jump to endLabel (we keep the left operand)
+        mv.visitJumpInsn(Opcodes.IFNE, endLabel);
+
+        node.right.accept(this.with(RuntimeContextType.SCALAR)); // Evaluate right operand in scalar context
+        // stack is [left, right]
+
+        mv.visitInsn(Opcodes.DUP_X1); // Stack becomes [right, left, right]
+        mv.visitInsn(Opcodes.SWAP);   // Stack becomes [right, right, left]
+
+        // Assign right to left
+        mv.visitInsn(Opcodes.SWAP);
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "addToScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", true);
+        mv.visitInsn(Opcodes.POP);
+        // stack is [right]
+
+        // At this point, the stack either has the left (if it was true) or the right (if left was false)
+        mv.visitLabel(endLabel);
+
+        // If the context is VOID, we need to pop the result from the stack
         if (ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP);
         }
