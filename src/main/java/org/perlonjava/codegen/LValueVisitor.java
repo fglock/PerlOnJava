@@ -13,9 +13,9 @@ import org.perlonjava.runtime.RuntimeContextType;
  * LValueVisitor.getContext(node);
  */
 public class LValueVisitor implements Visitor {
-    private RuntimeContextType context = RuntimeContextType.VOID;
+    private int context = RuntimeContextType.VOID;
 
-    public static RuntimeContextType getContext(Node node) throws Exception {
+    public static int getContext(Node node) throws Exception {
         LValueVisitor lvVisitor = new LValueVisitor();
         node.accept(lvVisitor);
         return lvVisitor.context;

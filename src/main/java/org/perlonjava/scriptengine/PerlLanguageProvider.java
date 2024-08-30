@@ -118,10 +118,10 @@ public class PerlLanguageProvider {
         Object instance = constructor.newInstance();
 
         // Find the apply method
-        Method applyMethod = generatedClass.getMethod("apply", RuntimeArray.class, RuntimeContextType.class);
+        Method applyMethod = generatedClass.getMethod("apply", RuntimeArray.class, int.class);
 
         // Define the method type
-        MethodType methodType = MethodType.methodType(RuntimeList.class, RuntimeArray.class, RuntimeContextType.class);
+        MethodType methodType = MethodType.methodType(RuntimeList.class, RuntimeArray.class, int.class);
 
         // Use invokedynamic to invoke the method
         CallSite callSite = new ConstantCallSite(lookup.findVirtual(generatedClass, "apply", methodType));

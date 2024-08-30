@@ -128,9 +128,14 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar();
     }
 
+    public static RuntimeScalar wantarray(int ctx) {
+        return ctx == RuntimeContextType.VOID ? new RuntimeScalar() :
+                new RuntimeScalar(ctx == RuntimeContextType.LIST);
+    }
+
     // Checks if the object is of a given class or a subclass
     // Note this is a Perl method, it expects `this` to be the first argument
-    public static RuntimeList isa(RuntimeArray args, RuntimeContextType ctx) {
+    public static RuntimeList isa(RuntimeArray args, int ctx) {
         if (args.size() != 2) {
             throw new IllegalStateException("Bad number of arguments for isa() method");
         }
@@ -169,7 +174,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Checks if the object can perform a given method
     // Note this is a Perl method, it expects `this` to be the first argument
-    public static RuntimeList can(RuntimeArray args, RuntimeContextType ctx) {
+    public static RuntimeList can(RuntimeArray args, int ctx) {
         if (args.size() != 2) {
             throw new IllegalStateException("Bad number of arguments for can() method");
         }
@@ -460,7 +465,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     // Method to apply (execute) a subroutine reference
-    public RuntimeList apply(RuntimeArray a, RuntimeContextType callContext) throws Exception {
+    public RuntimeList apply(RuntimeArray a, int callContext) throws Exception {
         // Check if the type of this RuntimeScalar is CODE
         if (this.type == RuntimeScalarType.CODE) {
             // Cast the value to RuntimeCode and call apply()
@@ -524,7 +529,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
      * @param callContext The call context.
      * @return The result of the method call.
      */
-    public RuntimeList call(RuntimeScalar method, RuntimeArray args, RuntimeContextType callContext) throws Exception {
+    public RuntimeList call(RuntimeScalar method, RuntimeArray args, int callContext) throws Exception {
         // insert `this` into the parameter list
         args.elements.add(0, this);
 
