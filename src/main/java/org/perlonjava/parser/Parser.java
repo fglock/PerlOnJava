@@ -1107,7 +1107,7 @@ public class Parser {
             expr = new ListNode(tokenIndex);
         } else {
             // argument without parentheses
-            expr = ListNode.makeList(parseExpression(getPrecedence(",") + 1));
+            expr = ListNode.makeList(parseExpression(getPrecedence("isa") + 1));
         }
         if (expr.elements.size() < minItems) {
             throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
