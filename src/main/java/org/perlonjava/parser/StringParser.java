@@ -160,7 +160,6 @@ public class StringParser {
 
         // Loop through the token array until the end
         while (true) {
-            ctx.logDebug("str at " + parser.tokenIndex);
             LexerToken token = tokens.get(parser.tokenIndex++);  // Get the current token
             if (token.type == LexerTokenType.EOF) {
                 break;
@@ -250,7 +249,6 @@ public class StringParser {
                                 // Handle \x{...} for Unicode
                                 parser.tokenIndex++;
                                 while (true) {
-                                    ctx.logDebug("str at " + parser.tokenIndex);
                                     token = tokens.get(parser.tokenIndex++);  // Get the current token
                                     if (token.type == LexerTokenType.EOF) {
                                         throw new PerlCompilerException(tokenIndex, "Expected '}' after \\x{", errorUtil);

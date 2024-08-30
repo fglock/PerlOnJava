@@ -1014,6 +1014,19 @@ public class EmitterVisitor implements Visitor {
     }
 
     private void handleReturnOperator(OperatorNode node) throws Exception {
+        ctx.logDebug("visit(return) in context " + ctx.contextType);
+        ctx.logDebug("visit(return) will visit " + node.operand + " in context " + ctx.with(RuntimeContextType.RUNTIME).contextType);
+
+        if (node.operand instanceof ListNode) {
+            ListNode list = (ListNode) node.operand;
+            if (list.elements.size() == 1) {
+                // special case for a list with 1 element
+                list.elements.get(0).accept(this.with(RuntimeContextType.RUNTIME));
+                ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.returnLabel);
+                return;
+            }
+        }
+
         node.operand.accept(this.with(RuntimeContextType.RUNTIME));
         ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.returnLabel);
         // TODO return (1,2), 3
