@@ -290,7 +290,7 @@ public class StringParser {
                         parser.tokenIndex = rawStr.next;
                         ctx.logDebug("str operand " + operand);
                     } else {
-                        String identifier = parser.parseComplexIdentifier();
+                        String identifier = IdentifierParser.parseComplexIdentifier(parser);
                         if (identifier == null) {
                             // parse $$$a  @$$a
                             int dollarCount = 0;
@@ -299,7 +299,7 @@ public class StringParser {
                                 parser.tokenIndex++;
                             }
                             if (dollarCount > 0) {
-                                identifier = parser.parseComplexIdentifier();
+                                identifier = IdentifierParser.parseComplexIdentifier(parser);
                                 if (identifier == null) {
                                     throw new PerlCompilerException(tokenIndex, "Unexpected value after $ in string", errorUtil);
                                 }
