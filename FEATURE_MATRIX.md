@@ -81,8 +81,7 @@
 - ✔️   **Array dereference**: Dereferencing arrays using `@$x`.
 - ✔️   **Hash dereference**: Dereferencing hashes using `%$x`.
 - ✔️   **Basic Array Operations**: `push`, `unshift`, `pop`, `shift`, `splice` are implemented.
-- ❌  **Array Slices**: Array slices like `@array[2, 3]` are not yet implemented.
-- ❌  **Hash Slices**: Hash slices like `@hash{"a", "b"}` are missing.
+- ✔️   **Slices**: Array and Hash slices like `@array[2, 3]` and `@hash{"a", "b"}` are implemented.
 - ✔️   **Array literals**: Array literals are supported.
 - ❌  **Tied Arrays**: Tied arrays are not yet implemented.
 - ❌  **Basic Hash Operations**: `keys`, `values` are implemented. `each`, `delete`, `exists` are missing.
