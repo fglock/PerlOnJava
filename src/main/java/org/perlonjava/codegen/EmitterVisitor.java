@@ -637,14 +637,8 @@ public class EmitterVisitor implements Visitor {
 
         switch (operator) {
             case "package":
-                String name = ((IdentifierNode) node.operand).name;
-                ctx.symbolTable.setCurrentPackage(name);
-                if (ctx.contextType != RuntimeContextType.VOID) {
-                    // if context is not void, return an empty list
-                    ListNode listNode = new ListNode(node.tokenIndex);
-                    listNode.accept(this);
-                }
-                return;
+                handlePackageOperator(node);
+                break;
             case "$":
             case "@":
             case "%":
@@ -685,7 +679,6 @@ public class EmitterVisitor implements Visitor {
                 break;
             case "abs":
             case "defined":
-            case "int":
             case "length":
             case "log":
             case "quotemeta":
@@ -694,10 +687,10 @@ public class EmitterVisitor implements Visitor {
             case "scalar":
             case "undef":
             case "wantarray":
-                if (operator.equals("int")) {
-                    operator = "integer";
-                }
                 handleUnaryBuiltin(node, operator);
+                break;
+            case "int":
+                handleUnaryBuiltin(node, "integer");
                 break;
             case "++":
                 handleUnaryBuiltin(node, "preAutoIncrement");
@@ -727,6 +720,16 @@ public class EmitterVisitor implements Visitor {
                 break;
             default:
                 throw new UnsupportedOperationException("Unsupported operator: " + operator);
+        }
+    }
+
+    private void handlePackageOperator(OperatorNode node) throws Exception {
+        String name = ((IdentifierNode) node.operand).name;
+        ctx.symbolTable.setCurrentPackage(name);
+        if (ctx.contextType != RuntimeContextType.VOID) {
+            // if context is not void, return an empty list
+            ListNode listNode = new ListNode(node.tokenIndex);
+            listNode.accept(this);
         }
     }
 
