@@ -136,3 +136,60 @@ print "not " if $a != 10; say "ok # 5 << 1 equals 10";
 $a = 5 >> 1;
 print "not " if $a != 2; say "ok # 5 >> 1 equals 2";
 
+###################
+# Compound Assignment Operators
+
+# Addition Assignment
+my $a = 5;
+$a += 3;
+print "not " if $a != 8; say "ok # 5 += 3 equals 8";
+
+# Subtraction Assignment
+$a = 10;
+$a -= 2;
+print "not " if $a != 8; say "ok # 10 -= 2 equals 8";
+
+# Multiplication Assignment
+$a = 4;
+$a *= 2;
+print "not " if $a != 8; say "ok # 4 *= 2 equals 8";
+
+# Division Assignment
+$a = 16;
+$a /= 2;
+print "not " if $a != 8; say "ok # 16 /= 2 equals 8";
+
+# Modulus Assignment
+$a = 10;
+$a %= 3;
+print "not " if $a != 1; say "ok # 10 %= 3 equals 1";
+
+# Exponentiation Assignment
+$a = 2;
+$a **= 3;
+print "not " if $a != 8; say "ok # 2 **= 3 equals 8";
+
+# Bitwise AND Assignment
+$a = 12; # 1100 in binary
+$a &= 10; # 1010 in binary
+print "not " if $a != 8; say "ok # 12 &= 10 equals 8";
+
+# Bitwise OR Assignment
+$a = 5; # 0101 in binary
+$a |= 3; # 0011 in binary
+print "not " if $a != 7; say "ok # 5 |= 3 equals 7";
+
+# Bitwise XOR Assignment
+$a = 5; # 0101 in binary
+$a ^= 3; # 0011 in binary
+print "not " if $a != 6; say "ok # 5 ^= 3 equals 6";
+
+# Bitwise Shift Left Assignment
+$a = 2; # 0010 in binary
+$a <<= 2; # Shift left by 2 bits
+print "not " if $a != 8; say "ok # 2 <<= 2 equals 8";
+
+# Bitwise Shift Right Assignment
+$a = 8; # 1000 in binary
+$a >>= 2; # Shift right by 2 bits
+print "not " if $a != 2; say "ok # 8 >>= 2 equals 2";

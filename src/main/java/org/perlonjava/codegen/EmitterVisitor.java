@@ -230,18 +230,22 @@ public class EmitterVisitor implements Visitor {
 
         String methodStr = operatorHandlers.get(operator);
         if (methodStr != null) {
-            node.left.accept(scalarVisitor); // target - left parameter
-            node.right.accept(scalarVisitor); // right parameter
-            // stack: [left, right]
-            // perform the operation
-            ctx.mv.visitMethodInsn(
-                    Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", methodStr, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-            if (ctx.contextType == RuntimeContextType.VOID) {
-                ctx.mv.visitInsn(Opcodes.POP);
-            }
+            handleBinaryOperator(node, scalarVisitor, methodStr);
             return;
         }
         throw new RuntimeException("Unexpected infix operator: " + operator);
+    }
+
+    private void handleBinaryOperator(BinaryOperatorNode node, EmitterVisitor scalarVisitor, String methodStr) throws Exception {
+        node.left.accept(scalarVisitor); // target - left parameter
+        node.right.accept(scalarVisitor); // right parameter
+        // stack: [left, right]
+        // perform the operation
+        ctx.mv.visitMethodInsn(
+                Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", methodStr, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
     }
 
     private void handleCompoundAssignment(BinaryOperatorNode node, EmitterVisitor scalarVisitor, String methodStr) throws Exception {
