@@ -61,10 +61,10 @@ public class GlobalContext {
             Class<?> clazz = RuntimeScalar.class;
             RuntimeScalar instance = new RuntimeScalar();
 
-            Method mm = clazz.getMethod("can", RuntimeArray.class, RuntimeContextType.class);
+            Method mm = clazz.getMethod("can", RuntimeArray.class, int.class);
             getGlobalCodeRef("UNIVERSAL::can").set(new RuntimeScalar(new RuntimeCode(mm, instance)));
 
-            mm = clazz.getMethod("isa", RuntimeArray.class, RuntimeContextType.class);
+            mm = clazz.getMethod("isa", RuntimeArray.class, int.class);
             getGlobalCodeRef("UNIVERSAL::isa").set(new RuntimeScalar(new RuntimeCode(mm, instance)));
             getGlobalCodeRef("UNIVERSAL::DOES").set(new RuntimeScalar(new RuntimeCode(mm, instance)));
         } catch (NoSuchMethodException e) {

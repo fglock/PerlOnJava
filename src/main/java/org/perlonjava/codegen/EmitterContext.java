@@ -4,10 +4,9 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.perlonjava.ArgumentParser;
 import org.perlonjava.runtime.ErrorMessageUtil;
-import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.ScopedSymbolTable;
 
-import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -20,7 +19,7 @@ public class EmitterContext {
     /**
      * Cache for contexts with different ContextTypes
      */
-    private final Map<RuntimeContextType, EmitterContext> contextCache = new EnumMap<>(RuntimeContextType.class);
+    private final Map<Integer, EmitterContext> contextCache = new HashMap<>();
 
     /**
      * CompilerOptions is a configuration class that holds various settings and flags
@@ -47,7 +46,7 @@ public class EmitterContext {
     /**
      * The type of the current context, defined by the RuntimeContextType enum - VOID, SCALAR, etc
      */
-    public RuntimeContextType contextType;
+    public int contextType;
     /**
      * Indicates whether the current context is for a boxed object (true) or a native object (false).
      */
@@ -64,7 +63,7 @@ public class EmitterContext {
      * @param symbolTable     the symbol table used for scoping symbols within the context
      * @param returnLabel     the label to which the method should return
      * @param mv              the MethodVisitor instance used to visit the method instructions
-     * @param contextType     the type of the context, defined by the RuntimeContextType enum
+     * @param contextType     the type of the context, defined by the RuntimeContextType int value
      * @param isBoxed         indicates whether the context is for a boxed object (true) or a native object (false)
      * @param errorUtil       formats error messages with source code context
      * @param compilerOptions compiler flags, file name and source code
@@ -74,7 +73,7 @@ public class EmitterContext {
             ScopedSymbolTable symbolTable,
             Label returnLabel,
             MethodVisitor mv,
-            RuntimeContextType contextType,
+            int contextType,
             boolean isBoxed,
             ErrorMessageUtil errorUtil,
             ArgumentParser.CompilerOptions compilerOptions) {
@@ -97,7 +96,7 @@ public class EmitterContext {
      * @param contextType the new context type
      * @return a new EmitterContext with the updated context type
      */
-    public EmitterContext with(RuntimeContextType contextType) {
+    public EmitterContext with(int contextType) {
         // Check if the context is already cached
         if (contextCache.containsKey(contextType)) {
             return contextCache.get(contextType);

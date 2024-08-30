@@ -9,20 +9,20 @@ package org.perlonjava.runtime;
  * allowing for more organized and efficient handling of various scenarios within
  * a Perl interpreter or compiler.</p>
  */
-public enum RuntimeContextType {
+public class RuntimeContextType {
     /**
      * Represents a void context in Perl, where no value is expected or returned.
      * This is typically used for functions or operations that do not produce a result.
      * In Perl, this is often seen in statements that are executed for their side effects.
      */
-    VOID,
+    public static final int VOID = 0;
 
     /**
      * Represents a scalar context in Perl, where a single scalar value is expected
      * or returned. Scalar values in Perl include numbers, strings, and references.
      * This context is used for operations that produce or operate on individual data items.
      */
-    SCALAR,
+    public static final int SCALAR = 1;
 
     /**
      * Represents a list context in Perl, where a list of values is expected or returned.
@@ -30,7 +30,7 @@ public enum RuntimeContextType {
      * such as arrays or lists. In Perl, list context can affect how functions and operators
      * behave and what they return.
      */
-    LIST,
+    public static final int LIST = 2;
 
     /**
      * Represents a runtime context in Perl, where the context will be decided at runtime.
@@ -39,6 +39,6 @@ public enum RuntimeContextType {
      * called from different places in different contexts, and the actual context will be
      * determined during the execution of the program.
      */
-    RUNTIME
+    public static final int RUNTIME = 3;
 }
 
