@@ -352,39 +352,58 @@ public class EmitterVisitor implements Visitor {
         EmitterVisitor scalarVisitor =
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
 
-        // check if node.left is a `$` variable - it means we have a RuntimeArray instead of RuntimeScalar
-
-    /*
-      BinaryOperatorNode: [
-        OperatorNode: $
-          IdentifierNode: a
-        ArrayLiteralNode:
-          NumberNode: 10
-    */
-
+        // check if node.left is a `$` or `@` variable - it means we have a RuntimeArray instead of RuntimeScalar
         if (node.left instanceof OperatorNode) { // $ @ %
             OperatorNode sigilNode = (OperatorNode) node.left;
             String sigil = sigilNode.operator;
-            if (sigil.equals("$")) {
-                if (sigilNode.operand instanceof IdentifierNode) { // $a
-                    IdentifierNode identifierNode = (IdentifierNode) sigilNode.operand;
-                    // Rewrite the variable node from `$` to `@`
-                    OperatorNode varNode = new OperatorNode("@", identifierNode, sigilNode.tokenIndex);
+            if (sigil.equals("$") && sigilNode.operand instanceof IdentifierNode) {
+                /*  $a[10]
+                 *  BinaryOperatorNode: [
+                 *    OperatorNode: $
+                 *      IdentifierNode: a
+                 *    ArrayLiteralNode:
+                 *      NumberNode: 10
+                 */
+                IdentifierNode identifierNode = (IdentifierNode) sigilNode.operand;
+                // Rewrite the variable node from `$` to `@`
+                OperatorNode varNode = new OperatorNode("@", identifierNode, sigilNode.tokenIndex);
 
-                    ctx.logDebug("visit(BinaryOperatorNode) $var[] ");
-                    varNode.accept(this.with(RuntimeContextType.LIST)); // target - left parameter
+                ctx.logDebug("visit(BinaryOperatorNode) $var[] ");
+                varNode.accept(this.with(RuntimeContextType.LIST)); // target - left parameter
 
-                    // emit the [0] as a RuntimeList
-                    ListNode nodeRight = ((ArrayLiteralNode) node.right).asListNode();
-                    nodeRight.accept(scalarVisitor);
+                // emit the [0] as a RuntimeList
+                ListNode nodeRight = ((ArrayLiteralNode) node.right).asListNode();
+                nodeRight.accept(scalarVisitor);
 
-                    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", "get", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", "get", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
-                    if (ctx.contextType == RuntimeContextType.VOID) {
-                        ctx.mv.visitInsn(Opcodes.POP);
-                    }
-                    return;
+                if (ctx.contextType == RuntimeContextType.VOID) {
+                    ctx.mv.visitInsn(Opcodes.POP);
                 }
+                return;
+            }
+            if (sigil.equals("@") && sigilNode.operand instanceof IdentifierNode) {
+                /*  @a[10, 20]
+                 *  BinaryOperatorNode: [
+                 *    OperatorNode: @
+                 *      IdentifierNode: a
+                 *    ArrayLiteralNode:
+                 *      NumberNode: 10
+                 *      NumberNode: 20
+                 */
+                ctx.logDebug("visit(BinaryOperatorNode) @var[] ");
+                sigilNode.accept(this.with(RuntimeContextType.LIST)); // target - left parameter
+
+                // emit the [10, 20] as a RuntimeList
+                ListNode nodeRight = ((ArrayLiteralNode) node.right).asListNode();
+                nodeRight.accept(this.with(RuntimeContextType.LIST));
+
+                ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", "getSlice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
+
+                if (ctx.contextType == RuntimeContextType.VOID) {
+                    ctx.mv.visitInsn(Opcodes.POP);
+                }
+                return;
             }
         }
         if (node.left instanceof ListNode) { // ("a","b","c")[2]
