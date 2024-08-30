@@ -130,7 +130,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public static RuntimeScalar wantarray(int ctx) {
         return ctx == RuntimeContextType.VOID ? new RuntimeScalar() :
-                new RuntimeScalar(ctx == RuntimeContextType.LIST);
+                new RuntimeScalar(ctx == RuntimeContextType.LIST ? 1 : 0);
     }
 
     // Checks if the object is of a given class or a subclass
