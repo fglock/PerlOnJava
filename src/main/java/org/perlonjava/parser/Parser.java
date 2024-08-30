@@ -96,17 +96,6 @@ public class Parser {
         return tokenIndex;
     }
 
-    public static boolean isSigil(String s) {
-        switch (s) {
-            case "$":
-            case "@":
-            case "%":
-                return true;
-            default:
-                return false;
-        }
-    }
-
     private int getPrecedence(String operator) {
         return precedenceMap.getOrDefault(operator, 24);
     }
@@ -157,7 +146,7 @@ public class Parser {
                     // Must be followed by an indentifier
                     tokenIndex++;
                     if (peek().type == LexerTokenType.IDENTIFIER) {
-                        return parseSubroutineDefinition(true);
+                        return Statement.parseSubroutineDefinition(this, true);
                     }
                     // otherwise backtrack
                     tokenIndex = currentIndex;
@@ -268,86 +257,6 @@ public class Parser {
         tokenIndex = currentIndex;
         return false;
     }
-
-    private Node parseSubroutineDefinition(boolean wantName) {
-        // This method is responsible for parsing an anonymous subroutine (a subroutine without a name)
-        // or a named subroutine based on the 'wantName' flag.
-
-        // Initialize the subroutine name to null. This will store the name of the subroutine if 'wantName' is true.
-        String subName = null;
-
-        // If the 'wantName' flag is true and the next token is an identifier, we parse the subroutine name.
-        if (wantName && peek().type == LexerTokenType.IDENTIFIER) {
-            // 'parseSubroutineIdentifier' is called to handle cases where the subroutine name might be complex
-            // (e.g., namespaced, fully qualified names). It may return null if no valid name is found.
-            subName = parseSubroutineIdentifier();
-        }
-
-        // Initialize the prototype node to null. This will store the prototype of the subroutine if it exists.
-        String prototype = null;
-
-        // Check if the next token is an opening parenthesis '(' indicating a prototype.
-        if (peek().text.equals("(")) {
-            // If a prototype exists, we parse it using 'parseRawString' method which handles it like the 'q()' operator.
-            // This means it will take everything inside the parentheses as a literal string.
-            prototype = ((StringNode) parseRawString("q")).value;
-        }
-
-        // Initialize a list to store any attributes the subroutine might have.
-        List<String> attributes = new ArrayList<>();
-
-        // While there are attributes (denoted by a colon ':'), we keep parsing them.
-        while (peek().text.equals(":")) {
-            // Consume the colon operator.
-            consume(LexerTokenType.OPERATOR, ":");
-            // Consume the attribute name (an identifier) and add it to the attributes list.
-            attributes.add(consume(LexerTokenType.IDENTIFIER).text);
-        }
-
-        // After parsing name, prototype, and attributes, we expect an opening curly brace '{' to denote the start of the subroutine block.
-        consume(LexerTokenType.OPERATOR, "{");
-
-        // Parse the block of the subroutine, which contains the actual code.
-        Node block = parseBlock();
-
-        // After the block, we expect a closing curly brace '}' to denote the end of the subroutine.
-        consume(LexerTokenType.OPERATOR, "}");
-
-        // Now we check if the next token is one of the illegal characters that cannot follow a subroutine.
-        // These are '(', '{', and '['. If any of these follow, we throw a syntax error.
-        LexerToken token = peek();
-        if (token.text.equals("(") || token.text.equals("{") || token.text.equals("[")) {
-            // Throw an exception indicating a syntax error.
-            throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
-        }
-
-        // Finally, we create a new 'AnonSubNode' object with the parsed data: the name, prototype, attributes, block,
-        // `useTryCatch` flag, and token position.
-        AnonSubNode anonSubNode = new AnonSubNode(subName, prototype, attributes, block, false, tokenIndex);
-
-        if (subName != null) {
-            // Additional steps for named subroutine:
-            // - register the subroutine in the namespace
-            // - add the typeglob assignment:  *name = sub () :attr {...}
-
-            // register the named subroutine
-            String fullName = GlobalContext.normalizeVariableName(subName, ctx.symbolTable.getCurrentPackage());
-            RuntimeCode codeRef = new RuntimeCode(prototype);
-            GlobalContext.getGlobalCodeRef(fullName).set(new RuntimeScalar(codeRef));
-
-            // return typeglob assignment
-            return new BinaryOperatorNode("=",
-                    new OperatorNode("*",
-                            new IdentifierNode(fullName, tokenIndex),
-                            tokenIndex),
-                    anonSubNode,
-                    tokenIndex);
-        }
-
-        // return anonymous subroutine
-        return anonSubNode;
-    }
-
 
     /**
      * Parses a subroutine call.
@@ -608,7 +517,7 @@ public class Parser {
                         break;
                     case "sub":
                         // Handle 'sub' keyword to parse an anonymous subroutine
-                        return parseSubroutineDefinition(false);
+                        return Statement.parseSubroutineDefinition(this, false);
                     case "q":
                     case "qq":
                     case "qx":
@@ -627,7 +536,7 @@ public class Parser {
                 break;
             case NUMBER:
                 // Handle number literals
-                return parseNumber(token);
+                return NumberParser.parseNumber(this, token);
             case STRING:
                 // Handle string literals
                 return new StringNode(token.text, tokenIndex);
@@ -644,7 +553,7 @@ public class Parser {
                         return new ArrayLiteralNode(parseList("]", 0), tokenIndex);
                     case ".":
                         // Handle fractional numbers
-                        return parseFractionalNumber();
+                        return NumberParser.parseFractionalNumber(this);
                     case "'":
                     case "\"":
                     case "/":
@@ -855,7 +764,7 @@ public class Parser {
         }
     }
 
-    private Node parseRawString(String operator) {
+    public Node parseRawString(String operator) {
         // handle special quotes for operators: q qq qx qw // s/// m//
         if (operator.equals("'") || operator.equals("\"") || operator.equals("/") || operator.equals("//")) {
             tokenIndex--;   // will re-parse the quote
@@ -885,15 +794,7 @@ public class Parser {
             case "qq":
                 return StringParser.parseDoubleQuotedString(ctx, rawStr.buffers.get(0), ctx.errorUtil, rawStr.index);
             case "qw":
-                // Use a regular expression to split the string.
-                // " +" matches one or more ASCII space characters
-                String[] words = rawStr.buffers.get(0).trim().split(" +");
-                ListNode list = new ListNode(rawStr.index);
-                int size = words.length;
-                for (int i = 0; i < size; i++) {
-                    list.elements.add(new StringNode(words[i], rawStr.index));
-                }
-                return list;
+                return StringParser.parseWordsString(rawStr);
         }
 
         ListNode list = new ListNode(rawStr.index);
@@ -902,89 +803,6 @@ public class Parser {
             list.elements.add(new StringNode(rawStr.buffers.get(i), rawStr.index));
         }
         return new OperatorNode(operator, list, rawStr.index);
-    }
-
-    public Node parseNumber(LexerToken token) {
-        StringBuilder number = new StringBuilder(token.text);
-
-        // Check for binary, octal, or hexadecimal prefixes
-        if (token.text.startsWith("0")) {
-            if (token.text.length() == 1) {
-                String letter = tokens.get(tokenIndex).text;
-                char secondChar = letter.charAt(0);
-                if (secondChar == 'b' || secondChar == 'B') {
-                    // Binary number: 0b...
-                    consume();
-                    int num = Integer.parseInt(letter.substring(1), 2);
-                    return new NumberNode(Integer.toString(num), tokenIndex);
-                } else if (secondChar == 'x' || secondChar == 'X') {
-                    // Hexadecimal number: 0x...
-                    consume();
-                    int num = Integer.parseInt(letter.substring(1), 16);
-                    return new NumberNode(Integer.toString(num), tokenIndex);
-                }
-            } else if (token.text.length() > 1) {
-                char secondChar = token.text.charAt(1);
-                // Octal number: 0...
-                int num = Integer.parseInt(token.text, 8);
-                return new NumberNode(Integer.toString(num), tokenIndex);
-            }
-        }
-
-        // Check for fractional part
-        if (tokens.get(tokenIndex).text.equals(".")) {
-            number.append(consume().text); // consume '.'
-            if (tokens.get(tokenIndex).type == LexerTokenType.NUMBER) {
-                number.append(consume().text); // consume digits after '.'
-            }
-        }
-        // Check for exponent part
-        checkNumberExponent(number);
-
-        return new NumberNode(number.toString(), tokenIndex);
-    }
-
-    private Node parseFractionalNumber() {
-        StringBuilder number = new StringBuilder("0.");
-
-        LexerToken token = tokens.get(tokenIndex++);
-        if (token.type != LexerTokenType.NUMBER) {
-            throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
-        }
-
-        number.append(token.text); // consume digits after '.'
-        // Check for exponent part
-        checkNumberExponent(number);
-        return new NumberNode(number.toString(), tokenIndex);
-    }
-
-    private void checkNumberExponent(StringBuilder number) {
-        // Check for exponent part
-        String exponentPart = peek().text;
-        if (exponentPart.startsWith("e")
-                || exponentPart.startsWith("E")) {
-            consume(); // consume 'e' or 'E' and possibly more 'E10'
-
-            // Check if the rest of the token contains digits (e.g., "E10")
-            int index = 1;
-            for (; index < exponentPart.length(); index++) {
-                if (!Character.isDigit(exponentPart.charAt(index)) && exponentPart.charAt(index) != '_') {
-                    throw new PerlCompilerException(tokenIndex, "Malformed number", ctx.errorUtil);
-                }
-            }
-            number.append(exponentPart);
-
-            // If the exponent part was not fully consumed, check for separate tokens
-            if (index == 1) {
-                // Check for optional sign
-                if (tokens.get(tokenIndex).text.equals("-") || tokens.get(tokenIndex).text.equals("+")) {
-                    number.append(consume().text); // consume '-' or '+'
-                }
-
-                // Consume exponent digits
-                number.append(consume(LexerTokenType.NUMBER).text);
-            }
-        }
     }
 
     public Node parseInfix(Node left, int precedence) {
