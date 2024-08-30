@@ -174,7 +174,7 @@ public class EmitterVisitor implements Visitor {
                 handleAndOperator(node);
                 return;
             case "=":
-                handleSetOperator(node);
+                handleAssignOperator(node);
                 return;
             case "->":
                 handleArrowOperator(node);
@@ -542,6 +542,7 @@ public class EmitterVisitor implements Visitor {
      * Handles the `->` operator.
      */
     private void handleArrowOperator(BinaryOperatorNode node) throws Exception {
+        MethodVisitor mv = ctx.mv;
         ctx.logDebug("handleArrowOperator " + node + " in context " + ctx.contextType);
         EmitterVisitor scalarVisitor =
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
@@ -865,12 +866,11 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleVariableOperator(OperatorNode node, String operator) throws Exception {
+    private void handleVariableOperator(OperatorNode node, String sigil) throws Exception {
         if (ctx.contextType == RuntimeContextType.VOID) {
             return;
         }
         MethodVisitor mv = ctx.mv;
-        String sigil = operator;
         if (node.operand instanceof IdentifierNode) { // $a @a %a
             String name = ((IdentifierNode) node.operand).name;
             ctx.logDebug("GETVAR " + sigil + name);
@@ -922,7 +922,7 @@ public class EmitterVisitor implements Visitor {
             ctx.logDebug("GETVAR end " + varIndex);
             return;
         }
-        switch (operator) {
+        switch (sigil) {
             case "@":
                 // `@$a`
                 ctx.logDebug("GETVAR `@$a`");
@@ -944,10 +944,10 @@ public class EmitterVisitor implements Visitor {
         }
 
         // TODO ${a} ${[ 123 ]}
-        throw new PerlCompilerException(node.tokenIndex, "Not implemented: " + operator, ctx.errorUtil);
+        throw new PerlCompilerException(node.tokenIndex, "Not implemented: " + sigil, ctx.errorUtil);
     }
 
-    private void handleSetOperator(BinaryOperatorNode node) throws Exception {
+    private void handleAssignOperator(BinaryOperatorNode node) throws Exception {
         ctx.logDebug("SET " + node);
         MethodVisitor mv = ctx.mv;
         // Determine the assign type based on the left side.
@@ -1255,7 +1255,6 @@ public class EmitterVisitor implements Visitor {
         // If the context is LIST or RUNTIME, the stack should contain [RuntimeList]
         // If the context is SCALAR, the stack should contain [RuntimeScalar]
         // If the context is VOID, the stack should be empty
-
     }
 
     @Override
@@ -1304,15 +1303,15 @@ public class EmitterVisitor implements Visitor {
         RuntimeCode.anonSubs.put(subCtx.javaClassName, generatedClass); // cache the class
 
         /* The following ASM code is equivalent to:
-         *  // get the class
+         *  // get the class:
          *  Class<?> generatedClass = RuntimeCode.anonSubs.get("java.Class.Name");
-         *  // Find the constructor
+         *  // Find the constructor:
          *  Constructor<?> constructor = generatedClass.getConstructor(RuntimeScalar.class, RuntimeScalar.class);
-         *  // Instantiate the class
+         *  // Instantiate the class:
          *  Object instance = constructor.newInstance();
-         *  // Find the apply method
+         *  // Find the apply method:
          *  Method applyMethod = generatedClass.getMethod("apply", RuntimeArray.class, int.class);
-         *  // construct a CODE variable
+         *  // construct a CODE variable:
          *  RuntimeScalar.new(applyMethod);
          */
 
@@ -1397,7 +1396,6 @@ public class EmitterVisitor implements Visitor {
 
         // If the context is not VOID, the stack should contain [RuntimeScalar] (the CODE variable)
         // If the context is VOID, the stack should be empty
-
         ctx.logDebug("SUB end");
     }
 
