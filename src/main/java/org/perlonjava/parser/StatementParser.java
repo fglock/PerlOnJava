@@ -117,7 +117,7 @@ public class StatementParser {
 
     public static Node parsePackageDeclaration(Parser parser, LexerToken token) {
         parser.consume();
-        String packageName = parser.parseSubroutineIdentifier();
+        String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
         if (packageName == null) {
             throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
         }
@@ -203,7 +203,7 @@ public class StatementParser {
         if (wantName && parser.peek().type == LexerTokenType.IDENTIFIER) {
             // 'parseSubroutineIdentifier' is called to handle cases where the subroutine name might be complex
             // (e.g., namespaced, fully qualified names). It may return null if no valid name is found.
-            subName = parser.parseSubroutineIdentifier();
+            subName = IdentifierParser.parseSubroutineIdentifier(parser);
         }
 
         // Initialize the prototype node to null. This will store the prototype of the subroutine if it exists.

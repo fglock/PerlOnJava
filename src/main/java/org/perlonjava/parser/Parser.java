@@ -267,7 +267,7 @@ public class Parser {
         // Parse the subroutine name as a complex identifier
         // Alternately, this could be a v-string like v10.20.30   XXX TODO
 
-        String subName = parseSubroutineIdentifier();
+        String subName = IdentifierParser.parseSubroutineIdentifier(this);
         ctx.logDebug("SubroutineCall subName `" + subName + "` package " + ctx.symbolTable.getCurrentPackage());
         if (subName == null) {
             throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
@@ -604,7 +604,7 @@ public class Parser {
      */
     private Node parseVariable(String sigil) {
         Node operand;
-        String varName = parseComplexIdentifier();
+        String varName = IdentifierParser.parseComplexIdentifier(this);
 
         if (varName != null) {
             // Variable name is valid.
@@ -639,129 +639,6 @@ public class Parser {
         // Parse the expression with the appropriate precedence
         operand = parseExpression(getPrecedence(sigil) + 1);
         return new OperatorNode(sigil, operand, tokenIndex);
-    }
-
-    /**
-     * Parses a complex Perl identifier from the list of tokens, excluding the sigil.
-     *
-     * @return The parsed identifier as a String, or null if there is no valid identifier.
-     */
-    public String parseComplexIdentifier() {
-        // Save the current token index to allow backtracking if needed
-        int saveIndex = tokenIndex;
-
-        // Skip any leading whitespace
-        tokenIndex = skipWhitespace(tokenIndex, tokens);
-
-        // Check if the identifier is enclosed in braces
-        boolean insideBraces = false;
-        if (tokens.get(tokenIndex).text.equals("{")) {
-            insideBraces = true;
-            tokenIndex++; // Consume the opening brace
-        }
-
-        // Parse the identifier using the inner method
-        String identifier = parseComplexIdentifierInner();
-
-        // If an identifier was found, and it was inside braces, ensure the braces are properly closed
-        if (identifier != null && insideBraces) {
-            // Skip any whitespace after the identifier
-            tokenIndex = skipWhitespace(tokenIndex, tokens);
-
-            // Check for the closing brace
-            if (tokens.get(tokenIndex).text.equals("}")) {
-                tokenIndex++; // Consume the closing brace
-                return identifier;
-            } else {
-                // If the closing brace is not found, backtrack to the saved index
-                // This indicates that we found `${expression}` instead of `${identifier}`
-                tokenIndex = saveIndex;
-                return null;
-            }
-        }
-
-        // Return the parsed identifier, or null if no valid identifier was found
-        return identifier;
-    }
-
-    private String parseComplexIdentifierInner() {
-        tokenIndex = skipWhitespace(tokenIndex, tokens);
-
-        boolean isFirstToken = true;
-        StringBuilder variableName = new StringBuilder();
-
-        LexerToken token = tokens.get(tokenIndex);
-        LexerToken nextToken = tokens.get(tokenIndex + 1);
-        while (true) {
-            if (token.type == LexerTokenType.OPERATOR || token.type == LexerTokenType.NUMBER || token.type == LexerTokenType.STRING) {
-                if (token.text.equals("$") && (nextToken.text.equals("$")
-                        || nextToken.type == LexerTokenType.IDENTIFIER
-                        || nextToken.type == LexerTokenType.NUMBER)) {
-                    // `@$` `$$` can't be followed by `$` or name or number
-                    return null;
-                }
-                if (token.text.equals("^") && nextToken.type == LexerTokenType.IDENTIFIER && Character.isUpperCase(nextToken.text.charAt(0))) {
-                    // `$^` can be followed by an optional uppercase identifier: `$^A`
-                    variableName.append(token.text);
-                    variableName.append(nextToken.text);
-                    tokenIndex += 2;
-                    return variableName.toString();
-                }
-                if (isFirstToken && token.type == LexerTokenType.NUMBER) {
-                    // finish because $1 can't be followed by `::`
-                    variableName.append(token.text);
-                    tokenIndex++;
-                    return variableName.toString();
-                }
-                if (!token.text.equals("::") && !(token.type == LexerTokenType.NUMBER)) {
-                    // `::` or number can continue the loop
-                    // XXX STRING token type needs more work (Unicode, control characters)
-                    variableName.append(token.text);
-                    tokenIndex++;
-                    return variableName.toString();
-                }
-            } else if (token.type == LexerTokenType.WHITESPACE || token.type == LexerTokenType.EOF || token.type == LexerTokenType.NEWLINE) {
-                return variableName.toString();
-            }
-            isFirstToken = false;
-            variableName.append(token.text);
-
-            if ((token.type == LexerTokenType.IDENTIFIER || token.type == LexerTokenType.NUMBER)
-                    && (!nextToken.text.equals("::"))
-            ) {
-                tokenIndex++;
-                return variableName.toString();
-            }
-
-            tokenIndex++;
-            token = tokens.get(tokenIndex);
-            nextToken = tokens.get(tokenIndex + 1);
-        }
-    }
-
-    public String parseSubroutineIdentifier() {
-        tokenIndex = skipWhitespace(tokenIndex, tokens);
-        StringBuilder variableName = new StringBuilder();
-        LexerToken token = tokens.get(tokenIndex);
-        LexerToken nextToken = tokens.get(tokenIndex + 1);
-        if (token.type == LexerTokenType.NUMBER) {
-            return null;
-        }
-        while (true) {
-            if (token.type == LexerTokenType.WHITESPACE || token.type == LexerTokenType.EOF || token.type == LexerTokenType.NEWLINE || (token.type == LexerTokenType.OPERATOR && !token.text.equals("::"))) {
-                return variableName.toString();
-            }
-            variableName.append(token.text);
-            if ((token.type == LexerTokenType.IDENTIFIER || token.type == LexerTokenType.NUMBER)
-                    && (!nextToken.text.equals("::"))
-            ) {
-                tokenIndex++;
-                return variableName.toString();
-            }
-            tokenIndex++;
-            token = tokens.get(tokenIndex);
-            nextToken = tokens.get(tokenIndex + 1);
-        }
     }
 
     public Node parseRawString(String operator) {
