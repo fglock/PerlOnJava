@@ -138,6 +138,7 @@ public class Parser {
     }
 
     public Node parseStatement() {
+        int currentIndex = tokenIndex;
         LexerToken token = peek();
         ctx.logDebug("parseStatement `" + token.text + "`");
 
@@ -161,7 +162,7 @@ public class Parser {
                         return parseSubroutineDefinition(true);
                     }
                     // otherwise backtrack
-                    tokenIndex--;
+                    tokenIndex = currentIndex;
             }
         }
         if (token.type == LexerTokenType.OPERATOR
@@ -237,7 +238,7 @@ public class Parser {
             LexerToken token = consume();
             ctx.logDebug("isHashLiteral " + token + " braceCount:" + braceCount);
             if (token.type == LexerTokenType.EOF) {
-                break bracesLoop; // not a hash literal;
+                break; // not a hash literal;
             }
             if (token.type == LexerTokenType.OPERATOR) {
                 switch (token.text) {

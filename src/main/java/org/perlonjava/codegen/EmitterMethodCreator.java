@@ -155,7 +155,7 @@ public class EmitterMethodCreator implements Opcodes {
                 cw.visitMethod(
                         Opcodes.ACC_PUBLIC,
                         "apply",
-                        "(Lorg/perlonjava/runtime/RuntimeArray;Lorg/perlonjava/runtime/RuntimeContextType;)Lorg/perlonjava/runtime/RuntimeList;",
+                        "(Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                         null,
                         new String[]{"java/lang/Exception"});
         mv = ctx.mv;

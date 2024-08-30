@@ -97,7 +97,7 @@ public class RuntimeCode implements RuntimeScalarReference {
 
         // Get the 'apply' method from the class.
         // This method takes RuntimeArray and RuntimeContextType as parameters.
-        Method mm = clazz.getMethod("apply", RuntimeArray.class, RuntimeContextType.class);
+        Method mm = clazz.getMethod("apply", RuntimeArray.class, int.class);
 
         // Wrap the method and the code object in a RuntimeCode instance
         // This allows us to store both the method and the object it belongs to
@@ -106,7 +106,7 @@ public class RuntimeCode implements RuntimeScalarReference {
     }
 
     // Method to apply (execute) a subroutine reference
-    public RuntimeList apply(RuntimeArray a, RuntimeContextType callContext) throws Exception {
+    public RuntimeList apply(RuntimeArray a, int callContext) throws Exception {
         // Invoke the method associated with the code object, passing the RuntimeArray and RuntimeContextType as arguments
         // This executes the subroutine and returns the result, which is expected to be a RuntimeList
         return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);

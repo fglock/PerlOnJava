@@ -58,7 +58,7 @@ public class EmitterVisitor implements Visitor {
     /**
      * Cache for EmitterVisitor instances with different ContextTypes
      */
-    private final Map<RuntimeContextType, EmitterVisitor> visitorCache = new EnumMap<>(RuntimeContextType.class);
+    private final Map<Integer, EmitterVisitor> visitorCache = new HashMap<>();
 
     public EmitterVisitor(EmitterContext ctx) {
         this.ctx = ctx;
@@ -90,7 +90,7 @@ public class EmitterVisitor implements Visitor {
      * @param contextType The context type for the new EmitterVisitor.
      * @return An EmitterVisitor with the specified context type.
      */
-    public EmitterVisitor with(RuntimeContextType contextType) {
+    public EmitterVisitor with(int contextType) {
         // Check if the visitor is already cached
         if (visitorCache.containsKey(contextType)) {
             return visitorCache.get(contextType);
@@ -455,16 +455,12 @@ public class EmitterVisitor implements Visitor {
 
         // Transform the value in the stack to RuntimeArray
         ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", true);
-        ctx.mv.visitFieldInsn(
-                Opcodes.GETSTATIC,
-                "org/perlonjava/runtime/RuntimeContextType",
-                ctx.contextType.toString(),
-                "Lorg/perlonjava/runtime/RuntimeContextType;"); // call context
+        ctx.mv.visitLdcInsn(ctx.contextType);   // push call context to stack
         ctx.mv.visitMethodInsn(
                 Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/RuntimeScalar",
                 "apply",
-                "(Lorg/perlonjava/runtime/RuntimeArray;Lorg/perlonjava/runtime/RuntimeContextType;)Lorg/perlonjava/runtime/RuntimeList;",
+                "(Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                 false); // generate an .apply() call
         if (ctx.contextType == RuntimeContextType.SCALAR) {
             // Transform the value in the stack to RuntimeScalar
@@ -550,16 +546,12 @@ public class EmitterVisitor implements Visitor {
 
             // Transform the value in the stack to RuntimeArray
             ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", true);
-            ctx.mv.visitFieldInsn(
-                    Opcodes.GETSTATIC,
-                    "org/perlonjava/runtime/RuntimeContextType",
-                    ctx.contextType.toString(),
-                    "Lorg/perlonjava/runtime/RuntimeContextType;"); // call context
+            ctx.mv.visitLdcInsn(ctx.contextType);   // push call context to stack
             ctx.mv.visitMethodInsn(
                     Opcodes.INVOKEVIRTUAL,
                     "org/perlonjava/runtime/RuntimeScalar",
                     "call",
-                    "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;Lorg/perlonjava/runtime/RuntimeContextType;)Lorg/perlonjava/runtime/RuntimeList;",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                     false); // generate an .call()
             if (ctx.contextType == RuntimeContextType.SCALAR) {
                 // Transform the value in the stack to RuntimeScalar
@@ -577,20 +569,27 @@ public class EmitterVisitor implements Visitor {
      * @param operator The name of the built-in method to call.
      */
     private void handleUnaryBuiltin(OperatorNode node, String operator) throws Exception {
+        MethodVisitor mv = ctx.mv;
         if (node.operand == null) {
             // Unary operator with optional arguments, called without arguments
-            // example: undef()
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            // example: undef()  wantarray()
+            if (operator.equals("wantarray")) {
+                // Retrieve wantarray value from JVM local vars
+                mv.visitVarInsn(Opcodes.ILOAD, ctx.symbolTable.getVariableIndex("wantarray"));
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", operator, "(I)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            } else {
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            }
         } else if (operator.equals("undef")) {
             operator = "undefine";
             node.operand.accept(this.with(RuntimeContextType.RUNTIME));
-            ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", operator, "()Lorg/perlonjava/runtime/RuntimeList;", false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", operator, "()Lorg/perlonjava/runtime/RuntimeList;", false);
         } else {
             node.operand.accept(this.with(RuntimeContextType.SCALAR));
-            ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
         }
         if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
+            mv.visitInsn(Opcodes.POP);
         }
     }
 
@@ -675,15 +674,16 @@ public class EmitterVisitor implements Visitor {
                 handleUnaryBuiltin(node, "not");
                 break;
             case "abs":
+            case "defined":
+            case "int":
+            case "length":
             case "log":
-            case "rand":
-            case "undef":
             case "quotemeta":
+            case "rand":
             case "ref":
             case "scalar":
-            case "length":
-            case "int":
-            case "defined":
+            case "undef":
+            case "wantarray":
                 if (operator.equals("int")) {
                     operator = "integer";
                 }
@@ -882,11 +882,11 @@ public class EmitterVisitor implements Visitor {
         MethodVisitor mv = ctx.mv;
         // Determine the assign type based on the left side.
         // Inspect the AST and get the L-value context: SCALAR or LIST
-        RuntimeContextType lvalueContext = LValueVisitor.getContext(node);
+        int lvalueContext = LValueVisitor.getContext(node);
         ctx.logDebug("SET Lvalue context: " + lvalueContext);
         // Execute the right side first: assignment is right-associative
         switch (lvalueContext) {
-            case SCALAR:
+            case RuntimeContextType.SCALAR:
                 ctx.logDebug("SET right side scalar");
                 node.right.accept(this.with(RuntimeContextType.SCALAR));   // emit the value
                 node.left.accept(this.with(RuntimeContextType.SCALAR));   // emit the variable
@@ -909,7 +909,7 @@ public class EmitterVisitor implements Visitor {
                     mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "addToScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", true);
                 }
                 break;
-            case LIST:
+            case RuntimeContextType.LIST:
                 ctx.logDebug("SET right side list");
                 Node nodeRight = node.right;
                 // make sure the right node is a ListNode
@@ -1152,16 +1152,12 @@ public class EmitterVisitor implements Visitor {
         // XXX not needed
         // mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", true);
 
-        mv.visitFieldInsn(
-                Opcodes.GETSTATIC,
-                "org/perlonjava/runtime/RuntimeContextType",
-                ctx.contextType.toString(),
-                "Lorg/perlonjava/runtime/RuntimeContextType;"); // call context
+        ctx.mv.visitLdcInsn(ctx.contextType);   // push call context to stack
         mv.visitMethodInsn(
                 Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/RuntimeScalar",
                 "apply",
-                "(Lorg/perlonjava/runtime/RuntimeArray;Lorg/perlonjava/runtime/RuntimeContextType;)Lorg/perlonjava/runtime/RuntimeList;",
+                "(Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                 false); // generate an .apply() call
 
         // 5. Clean up the stack according to context
@@ -1232,7 +1228,7 @@ public class EmitterVisitor implements Visitor {
          *  // Instantiate the class
          *  Object instance = constructor.newInstance();
          *  // Find the apply method
-         *  Method applyMethod = generatedClass.getMethod("apply", RuntimeArray.class, RuntimeContextType.class);
+         *  Method applyMethod = generatedClass.getMethod("apply", RuntimeArray.class, int.class);
          *  // construct a CODE variable
          *  RuntimeScalar.new(applyMethod);
          */
