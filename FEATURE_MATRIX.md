@@ -75,7 +75,7 @@
 - ✔️   **Autoquote before `=>`**: Autoquoting before `=>` is implemented.
 - ✔️   **Select an element from a list**: Indexing into lists is supported.
 - ✔️   **List subscripts**: like `(stat($file))[8]`
-- ❌  **List assignment in scalar context**: List assignment in scalar context returns the number of elements produced by the expression on the right side of the assignment
+- ✔️   **List assignment in scalar context**: List assignment in scalar context returns the number of elements produced by the expression on the right side of the assignment
 - ✔️   **`$#array`**: Operator for array count is implemented.
 - ✔️   **`scalar`**: Operator to get scalar value is not implemented.
 - ✔️   **Array dereference**: Dereferencing arrays using `@$x`.
@@ -95,6 +95,7 @@
 - ✔️   **Assigning to a closure variable mutates the variable in the original context**: Closure variable mutation is implemented.
 - ✔️   **`@_` contains aliases to the caller variables**: The `@_` array reflects caller arguments correctly.
 - ✔️   **Named subroutines**: Support for named subroutines is implemented.
+- ✔️   **Calling context**: `wantarray` is implemented.
 - ❌  **Subroutine prototypes**: Partial implementation of prototypes; some features are supported.
 - ❌  **Inline "constant" subroutines optimization**: Optimization for inline constants is not yet implemented.
 - ❌  **Subroutine attributes**: Subroutine attributes are not yet supported.
