@@ -223,17 +223,7 @@ public class EmitterVisitor implements Visitor {
                 String newOp = operator.substring(0, operator.length() - 1);
                 String methodStr = operatorHandlers.get(newOp);
                 if (methodStr != null) {
-                    // compound assignment operators like `+=`
-                    // XXX TODO - special lazy evaluation case for: `&&=` `||=`
-                    node.left.accept(scalarVisitor); // target - left parameter
-                    ctx.mv.visitInsn(Opcodes.DUP);
-                    node.right.accept(scalarVisitor); // right parameter
-                    // stack: [left, left, right]
-                    // perform the operation
-                    ctx.mv.visitMethodInsn(
-                            Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", methodStr, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-                    // assign to the Lvalue
-                    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                    handleCompoundAssignment(node, scalarVisitor, methodStr);
                     return;
                 }
         }
@@ -252,6 +242,20 @@ public class EmitterVisitor implements Visitor {
             return;
         }
         throw new RuntimeException("Unexpected infix operator: " + operator);
+    }
+
+    private void handleCompoundAssignment(BinaryOperatorNode node, EmitterVisitor scalarVisitor, String methodStr) throws Exception {
+        // compound assignment operators like `+=`
+        // XXX TODO - special lazy evaluation case for: `&&=` `||=`
+        node.left.accept(scalarVisitor); // target - left parameter
+        ctx.mv.visitInsn(Opcodes.DUP);
+        node.right.accept(scalarVisitor); // right parameter
+        // stack: [left, left, right]
+        // perform the operation
+        ctx.mv.visitMethodInsn(
+                Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", methodStr, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        // assign to the Lvalue
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
     }
 
     private void handlePushOperator(String operator, BinaryOperatorNode node) throws Exception {
