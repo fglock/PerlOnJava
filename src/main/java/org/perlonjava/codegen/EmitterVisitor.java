@@ -6,7 +6,6 @@ import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.perlonjava.ArgumentParser;
 import org.perlonjava.astnode.*;
-import org.perlonjava.parser.Parser;
 import org.perlonjava.runtime.*;
 
 import java.util.*;
@@ -970,10 +969,10 @@ public class EmitterVisitor implements Visitor {
             }
             return;
         } else if (node.operand instanceof OperatorNode) { //  [my our] followed by [$ @ %]
-            Node sigilNode = node.operand;
-            String sigil = ((OperatorNode) sigilNode).operator;
-            if (Parser.isSigil(sigil)) {
-                Node identifierNode = ((OperatorNode) sigilNode).operand;
+            OperatorNode sigilNode = (OperatorNode) node.operand;
+            String sigil = sigilNode.operator;
+            if ("$@%".contains(sigil)) {
+                Node identifierNode = sigilNode.operand;
                 if (identifierNode instanceof IdentifierNode) { // my $a
                     String name = ((IdentifierNode) identifierNode).name;
                     String var = sigil + name;

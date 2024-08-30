@@ -408,6 +408,18 @@ public class StringParser {
         return new StringNode(str.toString(), tokenIndex);
     }
 
+    public static ListNode parseWordsString(ParsedString rawStr) {
+        // Use a regular expression to split the string.
+        // " +" matches one or more ASCII space characters
+        String[] words = rawStr.buffers.get(0).trim().split(" +");
+        ListNode list = new ListNode(rawStr.index);
+        int size = words.length;
+        for (int i = 0; i < size; i++) {
+            list.elements.add(new StringNode(words[i], rawStr.index));
+        }
+        return list;
+    }
+
     /**
      * Class to represent the parsed string and its position in the tokens list.
      */
