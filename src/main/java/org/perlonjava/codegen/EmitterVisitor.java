@@ -177,6 +177,10 @@ public class EmitterVisitor implements Visitor {
                 node.left.accept(scalarVisitor); // target - left parameter
                 handleAndOperator(node);
                 return;
+            case "&&=":
+                node.left.accept(scalarVisitor); // target - left parameter
+                handleAndEqualOperator(node);
+                return;
             case "=":
                 handleAssignOperator(node);
                 return;
@@ -210,13 +214,11 @@ public class EmitterVisitor implements Visitor {
             case "&=":
             case "&.=":
             case "<<=":
-            case "&&=":
             case "-=":
             case "/=":
             case "|=":
             case "|.=":
             case ">>=":
-            case "||=":
             case ".=":
             case "%=":
             case "^=":
@@ -298,6 +300,38 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
+    private void handleAndEqualOperator(BinaryOperatorNode node) throws Exception {
+        MethodVisitor mv = ctx.mv;
+        Label endLabel = new Label(); // Label for the end of the operation
+
+        // the left parameter is in the stack
+        mv.visitInsn(Opcodes.DUP);
+        // stack is [left, left]
+
+        // Convert the result to a boolean
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "getBoolean", "()Z", false);
+        // stack is [left, boolean]
+
+        // If the left operand boolean value is false, return left operand
+        mv.visitJumpInsn(Opcodes.IFEQ, endLabel);
+
+        node.right.accept(this.with(RuntimeContextType.SCALAR)); // Evaluate right operand in scalar context
+        // stack is [left, right]
+
+        mv.visitInsn(Opcodes.DUP_X1); // Stack becomes [right, left, right]
+        mv.visitInsn(Opcodes.SWAP);   // Stack becomes [right, right, left]
+
+        // Assign right to left
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "addToScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", true);
+        mv.visitInsn(Opcodes.POP);
+        // stack is [right]
+
+        mv.visitLabel(endLabel);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            mv.visitInsn(Opcodes.POP);
+        }
+    }
+
     private void handleAndOperator(BinaryOperatorNode node) throws Exception {
         MethodVisitor mv = ctx.mv;
         Label endLabel = new Label(); // Label for the end of the operation
@@ -347,7 +381,6 @@ public class EmitterVisitor implements Visitor {
         mv.visitInsn(Opcodes.SWAP);   // Stack becomes [right, right, left]
 
         // Assign right to left
-        mv.visitInsn(Opcodes.SWAP);
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "addToScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", true);
         mv.visitInsn(Opcodes.POP);
         // stack is [right]
