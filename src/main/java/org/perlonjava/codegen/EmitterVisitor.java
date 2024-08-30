@@ -1783,6 +1783,4 @@ public class EmitterVisitor implements Visitor {
         }
         ctx.logDebug("visit(ArrayLiteralNode) end");
     }
-
-    // Add other visit methods as needed
 }
