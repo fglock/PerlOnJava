@@ -166,20 +166,20 @@ public class EmitterVisitor implements Visitor {
             case "||":
             case "or":
                 node.left.accept(scalarVisitor); // target - left parameter
-                handleOrOperator(node);
+                handleOrOperator(node, Opcodes.IFNE);
                 return;
             case "||=":
                 node.left.accept(scalarVisitor); // target - left parameter
-                handleOrEqualOperator(node);
+                handleOrEqualOperator(node, Opcodes.IFNE);
                 return;
             case "&&":
             case "and":
                 node.left.accept(scalarVisitor); // target - left parameter
-                handleAndOperator(node);
+                handleOrOperator(node, Opcodes.IFEQ);
                 return;
             case "&&=":
                 node.left.accept(scalarVisitor); // target - left parameter
-                handleAndEqualOperator(node);
+                handleOrEqualOperator(node, Opcodes.IFEQ);
                 return;
             case "=":
                 handleAssignOperator(node);
@@ -300,64 +300,7 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleAndEqualOperator(BinaryOperatorNode node) throws Exception {
-        MethodVisitor mv = ctx.mv;
-        Label endLabel = new Label(); // Label for the end of the operation
-
-        // the left parameter is in the stack
-        mv.visitInsn(Opcodes.DUP);
-        // stack is [left, left]
-
-        // Convert the result to a boolean
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "getBoolean", "()Z", false);
-        // stack is [left, boolean]
-
-        // If the left operand boolean value is false, return left operand
-        mv.visitJumpInsn(Opcodes.IFEQ, endLabel);
-
-        node.right.accept(this.with(RuntimeContextType.SCALAR)); // Evaluate right operand in scalar context
-        // stack is [left, right]
-
-        mv.visitInsn(Opcodes.DUP_X1); // Stack becomes [right, left, right]
-        mv.visitInsn(Opcodes.SWAP);   // Stack becomes [right, right, left]
-
-        // Assign right to left
-        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "addToScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", true);
-        mv.visitInsn(Opcodes.POP);
-        // stack is [right]
-
-        mv.visitLabel(endLabel);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handleAndOperator(BinaryOperatorNode node) throws Exception {
-        MethodVisitor mv = ctx.mv;
-        Label endLabel = new Label(); // Label for the end of the operation
-
-        // the left parameter is in the stack
-        mv.visitInsn(Opcodes.DUP);
-        // stack is [left, left]
-
-        // Convert the result to a boolean
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "getBoolean", "()Z", false);
-        // stack is [left, boolean]
-
-        // If the left operand boolean value is false, return left operand
-        mv.visitJumpInsn(Opcodes.IFEQ, endLabel);
-
-        mv.visitInsn(Opcodes.POP); // remove left operand
-        node.right.accept(this.with(RuntimeContextType.SCALAR)); // right operand in scalar context
-        // stack is [right]
-
-        mv.visitLabel(endLabel);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handleOrEqualOperator(BinaryOperatorNode node) throws Exception {
+    private void handleOrEqualOperator(BinaryOperatorNode node, int compareOpcode) throws Exception {
         // Implements `||=`
 
         MethodVisitor mv = ctx.mv;
@@ -372,7 +315,7 @@ public class EmitterVisitor implements Visitor {
         // stack is [left, boolean]
 
         // If the boolean value is true, jump to endLabel (we keep the left operand)
-        mv.visitJumpInsn(Opcodes.IFNE, endLabel);
+        mv.visitJumpInsn(compareOpcode, endLabel);
 
         node.right.accept(this.with(RuntimeContextType.SCALAR)); // Evaluate right operand in scalar context
         // stack is [left, right]
@@ -394,7 +337,7 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleOrOperator(BinaryOperatorNode node) throws Exception {
+    private void handleOrOperator(BinaryOperatorNode node, int compareOpcode) throws Exception {
         MethodVisitor mv = ctx.mv;
         Label endLabel = new Label(); // Label for the end of the operation
 
@@ -407,7 +350,7 @@ public class EmitterVisitor implements Visitor {
         // stack is [left, boolean]
 
         // If the left operand boolean value is true, return left operand
-        mv.visitJumpInsn(Opcodes.IFNE, endLabel);
+        mv.visitJumpInsn(compareOpcode, endLabel);
 
         mv.visitInsn(Opcodes.POP); // remove left operand
         node.right.accept(this.with(RuntimeContextType.SCALAR)); // right operand in scalar context
