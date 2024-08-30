@@ -663,7 +663,7 @@ public class Parser {
                     case "%":
                     case "&":
                     case "*":
-                        return parseVariable(token);
+                        return parseVariable(token.text);
                     case "!":
                     case "~":
                     case "-":
@@ -689,18 +689,18 @@ public class Parser {
     /**
      * Parses a variable from the given lexer token.
      *
-     * @param token The lexer token representing the variable.
+     * @param sigil The sigil that starts the variable.
      * @return The parsed variable node.
      * @throws PerlCompilerException If there is a syntax error.
      */
-    private Node parseVariable(LexerToken token) {
+    private Node parseVariable(String sigil) {
         Node operand;
-        String text = token.text;
         String varName = parseComplexIdentifier();
 
         if (varName != null) {
+            // Variable name is valid.
             // Check for illegal characters after a variable
-            if (peek().text.equals("(") && !text.equals("&") && !parsingForLoopVariable) {
+            if (peek().text.equals("(") && !sigil.equals("&") && !parsingForLoopVariable) {
                 // Parentheses are only allowed after a variable in specific cases:
                 // - `for my $v (...`
                 // - `&name(...`
@@ -709,10 +709,10 @@ public class Parser {
             }
 
             // Create a Variable node
-            Node opNode = new OperatorNode(text, new IdentifierNode(varName, tokenIndex), tokenIndex);
+            Node opNode = new OperatorNode(sigil, new IdentifierNode(varName, tokenIndex), tokenIndex);
 
             // Handle auto-call: transform `&subr` to `&subr(@_)`
-            if (!peek().text.equals("(") && text.equals("&") && !parsingTakeReference) {
+            if (!peek().text.equals("(") && sigil.equals("&") && !parsingTakeReference) {
                 Node list = new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex);
                 return new BinaryOperatorNode("(", opNode, list, tokenIndex);
             }
@@ -723,12 +723,13 @@ public class Parser {
             consume(); // Consume the '{'
             Node block = parseBlock(); // Parse the block inside the curly brackets
             consume(LexerTokenType.OPERATOR, "}"); // Consume the '}'
-            return new OperatorNode(text, block, tokenIndex);
+            return new OperatorNode(sigil, block, tokenIndex);
         }
 
+        // Not a variable name, not a block. This could be a dereference like @$a
         // Parse the expression with the appropriate precedence
-        operand = parseExpression(getPrecedence(text) + 1);
-        return new OperatorNode(text, operand, tokenIndex);
+        operand = parseExpression(getPrecedence(sigil) + 1);
+        return new OperatorNode(sigil, operand, tokenIndex);
     }
 
     /**
