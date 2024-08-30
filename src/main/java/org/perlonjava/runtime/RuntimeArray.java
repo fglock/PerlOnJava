@@ -159,11 +159,13 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         return new RuntimeScalar(elements.size());
     }
 
-    // Slice the array
-    public RuntimeArray slice(int start, int end) {
-        RuntimeArray result = new RuntimeArray();
-        for (int i = start; i < end && i < elements.size(); i++) {
-            result.push(elements.get(i));
+    // Slice the array:  @x[10, 20]
+    public RuntimeList getSlice(RuntimeList value) {
+        RuntimeList result = new RuntimeList();
+        List<RuntimeBaseEntity> outElements = result.elements;
+        Iterator<RuntimeScalar> iterator = value.iterator();
+        while (iterator.hasNext()) {
+            outElements.add(this.get(iterator.next()));
         }
         return result;
     }
