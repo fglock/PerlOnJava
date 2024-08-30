@@ -165,20 +165,16 @@ public class EmitterVisitor implements Visitor {
         switch (operator) { // handle operators that support short-circuit or other special cases
             case "||":
             case "or":
-                node.left.accept(scalarVisitor); // target - left parameter
                 handleOrOperator(node, Opcodes.IFNE);
                 return;
             case "||=":
-                node.left.accept(scalarVisitor); // target - left parameter
                 handleOrEqualOperator(node, Opcodes.IFNE);
                 return;
             case "&&":
             case "and":
-                node.left.accept(scalarVisitor); // target - left parameter
                 handleOrOperator(node, Opcodes.IFEQ);
                 return;
             case "&&=":
-                node.left.accept(scalarVisitor); // target - left parameter
                 handleOrEqualOperator(node, Opcodes.IFEQ);
                 return;
             case "=":
@@ -306,7 +302,9 @@ public class EmitterVisitor implements Visitor {
         MethodVisitor mv = ctx.mv;
         Label endLabel = new Label(); // Label for the end of the operation
 
-        // Duplicate the left operand to evaluate its truthiness
+        node.left.accept(this.with(RuntimeContextType.SCALAR)); // target - left parameter
+        // the left parameter is in the stack
+
         mv.visitInsn(Opcodes.DUP);
         // stack is [left, left]
 
@@ -341,7 +339,9 @@ public class EmitterVisitor implements Visitor {
         MethodVisitor mv = ctx.mv;
         Label endLabel = new Label(); // Label for the end of the operation
 
+        node.left.accept(this.with(RuntimeContextType.SCALAR)); // target - left parameter
         // the left parameter is in the stack
+
         mv.visitInsn(Opcodes.DUP);
         // stack is [left, left]
 
