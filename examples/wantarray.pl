@@ -28,8 +28,8 @@ print "not " if $void_context_result ne "void"; say "ok # wantarray in void cont
 my @nested_list_context_result = sub { return sub { return wantarray_as_string(wantarray) }->() }->();
 print "not " if "@nested_list_context_result" ne "list"; say "ok # wantarray in nested list context returned '@nested_list_context_result'";
 
-# TODO my $nested_scalar_context_result = sub { return sub { return wantarray_as_string(wantarray) }->() }->();
-# TODO print "not " if $nested_scalar_context_result ne "scalar"; say "ok # wantarray in nested scalar context returned '$nested_scalar_context_result'";
+my $nested_scalar_context_result = sub { return sub { return wantarray_as_string(wantarray) }->() }->();
+print "not " if $nested_scalar_context_result ne "scalar"; say "ok # wantarray in nested scalar context returned '$nested_scalar_context_result'";
 
 # Test wantarray with eval
 my $eval_result = eval 'wantarray_as_string(wantarray)';
