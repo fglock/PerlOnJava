@@ -350,7 +350,7 @@ public class Parser {
 
 
     /**
-     * Parses a subroutine call in the code.
+     * Parses a subroutine call.
      *
      * @return A Node representing the parsed subroutine call.
      */
@@ -663,40 +663,7 @@ public class Parser {
                     case "%":
                     case "&":
                     case "*":
-                        String text = token.text;
-                        String varName = parseComplexIdentifier();
-                        if (varName != null) {
-                            // some characters are illegal after a variable
-                            if (peek().text.equals("(") && !text.equals("&") && !parsingForLoopVariable) {
-                                // parentheses is only allowed after a variable in these cases:
-                                //  `for my $v (...`
-                                //  `&name(...
-                                //  `obj->$name(...`
-                                throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
-                            }
-                            // create a Variable
-                            Node opNode = new OperatorNode(
-                                    text, new IdentifierNode(varName, tokenIndex), tokenIndex);
-                            if (!peek().text.equals("(") && text.equals("&") && !parsingTakeReference) {
-                                // allow `&subr` to "auto-call"
-                                // rewrite to `&subr(@_)`
-                                Node list = new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex);
-                                return new BinaryOperatorNode(
-                                        "(",
-                                        opNode, list, tokenIndex);
-                            }
-                            return opNode;
-                        } else if (peek().text.equals("{")) {
-                            // Handle curly brackets to parse a nested expression
-                            //  `${v}`
-                            consume();
-                            Node block = parseBlock();
-                            consume(LexerTokenType.OPERATOR, "}");
-                            return new OperatorNode(
-                                    text, block, tokenIndex);
-                        }
-                        operand = parseExpression(getPrecedence(text) + 1);
-                        return new OperatorNode(text, operand, tokenIndex);
+                        return parseVariable(token);
                     case "!":
                     case "~":
                     case "-":
@@ -704,9 +671,8 @@ public class Parser {
                     case "--":
                     case "++":
                         // Handle unary operators like `! + ++`
-                        text = token.text;
-                        operand = parseExpression(getPrecedence(text) + 1);
-                        return new OperatorNode(text, operand, tokenIndex);
+                        operand = parseExpression(getPrecedence(token.text) + 1);
+                        return new OperatorNode(token.text, operand, tokenIndex);
                 }
                 break;
             case EOF:
@@ -718,6 +684,44 @@ public class Parser {
         }
         // Throw an exception if no valid case was found
         throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, ctx.errorUtil);
+    }
+
+    private Node parseVariable(LexerToken token) {
+        Node operand;
+        String text = token.text;
+        String varName = parseComplexIdentifier();
+        if (varName != null) {
+            // some characters are illegal after a variable
+            if (peek().text.equals("(") && !text.equals("&") && !parsingForLoopVariable) {
+                // parentheses is only allowed after a variable in these cases:
+                //  `for my $v (...`
+                //  `&name(...
+                //  `obj->$name(...`
+                throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
+            }
+            // create a Variable
+            Node opNode = new OperatorNode(
+                    text, new IdentifierNode(varName, tokenIndex), tokenIndex);
+            if (!peek().text.equals("(") && text.equals("&") && !parsingTakeReference) {
+                // allow `&subr` to "auto-call"
+                // rewrite to `&subr(@_)`
+                Node list = new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex);
+                return new BinaryOperatorNode(
+                        "(",
+                        opNode, list, tokenIndex);
+            }
+            return opNode;
+        } else if (peek().text.equals("{")) {
+            // Handle curly brackets to parse a nested expression
+            //  `${v}`
+            consume();
+            Node block = parseBlock();
+            consume(LexerTokenType.OPERATOR, "}");
+            return new OperatorNode(
+                    text, block, tokenIndex);
+        }
+        operand = parseExpression(getPrecedence(text) + 1);
+        return new OperatorNode(text, operand, tokenIndex);
     }
 
     /**
