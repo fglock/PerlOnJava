@@ -101,6 +101,16 @@ public class EmitterVisitor implements Visitor {
         return newVisitor;
     }
 
+    public void pushCallContext() {
+        // push call context to stack
+        if (ctx.contextType == RuntimeContextType.RUNTIME) {
+            // Retrieve wantarray value from JVM local vars
+            ctx.mv.visitVarInsn(Opcodes.ILOAD, ctx.symbolTable.getVariableIndex("wantarray"));
+        } else {
+            ctx.mv.visitLdcInsn(ctx.contextType);
+        }
+    }
+
     @Override
     public void visit(NumberNode node) {
         ctx.logDebug("visit(NumberNode) in context " + ctx.contextType);
@@ -455,7 +465,7 @@ public class EmitterVisitor implements Visitor {
 
         // Transform the value in the stack to RuntimeArray
         ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", true);
-        ctx.mv.visitLdcInsn(ctx.contextType);   // push call context to stack
+        pushCallContext();   // push call context to stack
         ctx.mv.visitMethodInsn(
                 Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/RuntimeScalar",
@@ -1152,7 +1162,7 @@ public class EmitterVisitor implements Visitor {
         // XXX not needed
         // mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", true);
 
-        ctx.mv.visitLdcInsn(ctx.contextType);   // push call context to stack
+        pushCallContext();   // push call context to stack
         mv.visitMethodInsn(
                 Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/RuntimeScalar",
