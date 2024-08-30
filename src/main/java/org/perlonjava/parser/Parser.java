@@ -686,40 +686,47 @@ public class Parser {
         throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, ctx.errorUtil);
     }
 
+    /**
+     * Parses a variable from the given lexer token.
+     *
+     * @param token The lexer token representing the variable.
+     * @return The parsed variable node.
+     * @throws PerlCompilerException If there is a syntax error.
+     */
     private Node parseVariable(LexerToken token) {
         Node operand;
         String text = token.text;
         String varName = parseComplexIdentifier();
+
         if (varName != null) {
-            // some characters are illegal after a variable
+            // Check for illegal characters after a variable
             if (peek().text.equals("(") && !text.equals("&") && !parsingForLoopVariable) {
-                // parentheses is only allowed after a variable in these cases:
-                //  `for my $v (...`
-                //  `&name(...
-                //  `obj->$name(...`
+                // Parentheses are only allowed after a variable in specific cases:
+                // - `for my $v (...`
+                // - `&name(...`
+                // - `obj->$name(...`
                 throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
             }
-            // create a Variable
-            Node opNode = new OperatorNode(
-                    text, new IdentifierNode(varName, tokenIndex), tokenIndex);
+
+            // Create a Variable node
+            Node opNode = new OperatorNode(text, new IdentifierNode(varName, tokenIndex), tokenIndex);
+
+            // Handle auto-call: transform `&subr` to `&subr(@_)`
             if (!peek().text.equals("(") && text.equals("&") && !parsingTakeReference) {
-                // allow `&subr` to "auto-call"
-                // rewrite to `&subr(@_)`
                 Node list = new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex);
-                return new BinaryOperatorNode(
-                        "(",
-                        opNode, list, tokenIndex);
+                return new BinaryOperatorNode("(", opNode, list, tokenIndex);
             }
+
             return opNode;
         } else if (peek().text.equals("{")) {
-            // Handle curly brackets to parse a nested expression
-            //  `${v}`
-            consume();
-            Node block = parseBlock();
-            consume(LexerTokenType.OPERATOR, "}");
-            return new OperatorNode(
-                    text, block, tokenIndex);
+            // Handle curly brackets to parse a nested expression `${v}`
+            consume(); // Consume the '{'
+            Node block = parseBlock(); // Parse the block inside the curly brackets
+            consume(LexerTokenType.OPERATOR, "}"); // Consume the '}'
+            return new OperatorNode(text, block, tokenIndex);
         }
+
+        // Parse the expression with the appropriate precedence
         operand = parseExpression(getPrecedence(text) + 1);
         return new OperatorNode(text, operand, tokenIndex);
     }
