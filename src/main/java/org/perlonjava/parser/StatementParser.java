@@ -11,7 +11,8 @@ import org.perlonjava.runtime.RuntimeScalar;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Statement {
+public class StatementParser {
+
     public static Node parseWhileStatement(Parser parser) {
         LexerToken operator = parser.consume(LexerTokenType.IDENTIFIER); // "while" "until"
 

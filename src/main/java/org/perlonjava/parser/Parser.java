@@ -14,7 +14,7 @@ import java.util.*;
 public class Parser {
     private static final Set<String> TERMINATORS =
             Set.of(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when");
-    private static final Set<String> LISTTERMINATORS =
+    private static final Set<String> LIST_TERMINATORS =
             Set.of(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when", "not", "and", "or");
     private static final Set<String> INFIX_OP = Set.of(
             "or", "xor", "and", "||", "//", "&&", "|", "^", "&",
@@ -133,20 +133,20 @@ public class Parser {
             switch (token.text) {
                 case "if":
                 case "unless":
-                    return Statement.parseIfStatement(this);
+                    return StatementParser.parseIfStatement(this);
                 case "for":
                 case "foreach":
-                    return Statement.parseForStatement(this);
+                    return StatementParser.parseForStatement(this);
                 case "while":
                 case "until":
-                    return Statement.parseWhileStatement(this);
+                    return StatementParser.parseWhileStatement(this);
                 case "package":
-                    return Statement.parsePackageDeclaration(this, token);
+                    return StatementParser.parsePackageDeclaration(this, token);
                 case "sub":
-                    // Must be followed by an indentifier
+                    // Must be followed by an identifier
                     tokenIndex++;
                     if (peek().type == LexerTokenType.IDENTIFIER) {
-                        return Statement.parseSubroutineDefinition(this, true);
+                        return StatementParser.parseSubroutineDefinition(this, true);
                     }
                     // otherwise backtrack
                     tokenIndex = currentIndex;
@@ -484,7 +484,7 @@ public class Parser {
                         return new OperatorNode(token.text, operand, tokenIndex);
                     case "return":
                         // Handle 'return' keyword as a unary operator with an operand;
-                        // Parenthensis are ignored.
+                        // Parentheses are ignored.
                         // operand = parseExpression(getPrecedence("print") + 1);
                         operand = parseZeroOrMoreList(0, false, false);
                         return new OperatorNode("return", operand, tokenIndex);
@@ -517,7 +517,7 @@ public class Parser {
                         break;
                     case "sub":
                         // Handle 'sub' keyword to parse an anonymous subroutine
-                        return Statement.parseSubroutineDefinition(this, false);
+                        return StatementParser.parseSubroutineDefinition(this, false);
                     case "q":
                     case "qq":
                     case "qx":
@@ -663,7 +663,7 @@ public class Parser {
         // Parse the identifier using the inner method
         String identifier = parseComplexIdentifierInner();
 
-        // If an identifier was found and it was inside braces, ensure the braces are properly closed
+        // If an identifier was found, and it was inside braces, ensure the braces are properly closed
         if (identifier != null && insideBraces) {
             // Skip any whitespace after the identifier
             tokenIndex = skipWhitespace(tokenIndex, tokens);
@@ -767,7 +767,7 @@ public class Parser {
     public Node parseRawString(String operator) {
         // handle special quotes for operators: q qq qx qw // s/// m//
         if (operator.equals("'") || operator.equals("\"") || operator.equals("/") || operator.equals("//")) {
-            tokenIndex--;   // will re-parse the quote
+            tokenIndex--;   // will reparse the quote
         }
         StringParser.ParsedString rawStr;
         int stringParts = 1;
@@ -823,7 +823,7 @@ public class Parser {
                     left = new StringNode(((IdentifierNode) left).name, ((IdentifierNode) left).tokenIndex);
                 }
                 token = peek();
-                if (token.type == LexerTokenType.EOF || LISTTERMINATORS.contains(token.text) || token.text.equals(",") || token.text.equals("=>")) {
+                if (token.type == LexerTokenType.EOF || LIST_TERMINATORS.contains(token.text) || token.text.equals(",") || token.text.equals("=>")) {
                     // "postfix" comma
                     return ListNode.makeList(left);
                 }
@@ -939,7 +939,7 @@ public class Parser {
             if (expr.elements.size() > 1) {
                 throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
             }
-        } else if (token.type == LexerTokenType.EOF || LISTTERMINATORS.contains(token.text) || token.text.equals(",")) {
+        } else if (token.type == LexerTokenType.EOF || LIST_TERMINATORS.contains(token.text) || token.text.equals(",")) {
             // no argument
             expr = new ListNode(tokenIndex);
         } else {
@@ -1018,7 +1018,7 @@ public class Parser {
                 consume();
                 expr.elements.addAll(parseList(")", 0));
             } else {
-                while (token.type != LexerTokenType.EOF && !LISTTERMINATORS.contains(token.text)) {
+                while (token.type != LexerTokenType.EOF && !LIST_TERMINATORS.contains(token.text)) {
                     // Argument without parentheses
                     expr.elements.add(parseExpression(getPrecedence(",")));
                     token = peek();
