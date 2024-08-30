@@ -6,8 +6,10 @@ plugins {
 group = 'org.perlonjava'
 version = '1.0-SNAPSHOT'
 
-sourceCompatibility = '11'
-targetCompatibility = '11'
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
 
 repositories {
     mavenCentral()
@@ -17,6 +19,7 @@ dependencies {
     implementation 'org.ow2.asm:asm:9.7'
     implementation 'org.ow2.asm:asm-util:9.7'
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
+    testImplementation 'junit:junit:4.13.2'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
 }
 
