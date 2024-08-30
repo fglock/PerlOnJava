@@ -16,6 +16,7 @@ public class GlobalContext {
     private static final Map<String, RuntimeArray> globalArrays = new HashMap<>();
     private static final Map<String, RuntimeHash> globalHashes = new HashMap<>();
     private static final Map<String, RuntimeScalar> globalCodeRefs = new HashMap<>();
+    private static final Map<String, RuntimeIO> globalIORefs = new HashMap<>();
 
     // Cache to store previously normalized variables for faster lookup
     private static final Map<String, String> nameCache = new HashMap<>();
@@ -54,6 +55,9 @@ public class GlobalContext {
         getGlobalVariable("main::b");    // initialize $b to "undef"
         getGlobalArray("main::INC");
         getGlobalHash("main::INC");
+        getGlobalIO("main::STDOUT");
+        getGlobalIO("main::STDERR");
+        getGlobalIO("main::STDIN");
 
         // Initialize UNIVERSAL class
         try {
@@ -172,6 +176,19 @@ public class GlobalContext {
 
     public static boolean existsGlobalCodeRef(String key) {
         return globalCodeRefs.containsKey(key);
+    }
+
+    public static RuntimeIO getGlobalIO(String key) {
+        RuntimeIO var = globalIORefs.get(key);
+        if (var == null) {
+            var = new RuntimeIO();
+            globalIORefs.put(key, var);
+        }
+        return var;
+    }
+
+    public static boolean existsGlobalIO(String key) {
+        return globalIORefs.containsKey(key);
     }
 }
 
