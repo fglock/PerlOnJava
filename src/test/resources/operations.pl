@@ -140,7 +140,7 @@ print "not " if $a != 2; say "ok # 5 >> 1 equals 2";
 # Compound Assignment Operators
 
 # Addition Assignment
-my $a = 5;
+$a = 5;
 $a += 3;
 print "not " if $a != 8; say "ok # 5 += 3 equals 8";
 
