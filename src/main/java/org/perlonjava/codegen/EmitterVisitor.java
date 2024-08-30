@@ -297,7 +297,7 @@ public class EmitterVisitor implements Visitor {
     }
 
     private void handleOrEqualOperator(BinaryOperatorNode node, int compareOpcode) throws Exception {
-        // Implements `||=`
+        // Implements `||=` `&&=`, depending on compareOpcode
 
         MethodVisitor mv = ctx.mv;
         Label endLabel = new Label(); // Label for the end of the operation
@@ -336,6 +336,8 @@ public class EmitterVisitor implements Visitor {
     }
 
     private void handleOrOperator(BinaryOperatorNode node, int compareOpcode) throws Exception {
+        // Implements `||` `&&`, depending on compareOpcode
+
         MethodVisitor mv = ctx.mv;
         Label endLabel = new Label(); // Label for the end of the operation
 
@@ -1149,8 +1151,6 @@ public class EmitterVisitor implements Visitor {
         // Here the compiled code will call RuntimeCode.evalStringHelper(code, evalTag) method.
         // It will compile the string and return a new Class.
         //
-        // XXX TODO - We need to catch any errors and set Perl error variable "$@"
-        //
         // The generated method closure variables are going to be initialized in the next step.
         // Then we can call the method.
 
@@ -1282,9 +1282,6 @@ public class EmitterVisitor implements Visitor {
             return;
         }
         MethodVisitor mv = ctx.mv;
-
-        // XXX TODO - if the sub has an empty block, we return an empty list
-        // XXX TODO - when calling a sub with no arguments, we use an empty list argument
 
         // retrieve closure variable list
         // alternately, scan the AST for variables and capture only the ones that are used
