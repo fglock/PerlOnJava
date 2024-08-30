@@ -16,8 +16,6 @@ public class Parser {
             Set.of(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when");
     private static final Set<String> LISTTERMINATORS =
             Set.of(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when", "not", "and", "or");
-    private static final Set<String> UNARY_OP =
-            Set.of("!", "~", "\\", "-", "+", "--", "++", "$", "@", "%", "*", "&", "$#");
     private static final Set<String> INFIX_OP = Set.of(
             "or", "xor", "and", "||", "//", "&&", "|", "^", "&",
             "==", "!=", "<=>", "eq", "ne", "cmp", "<", ">", "<=",
@@ -659,47 +657,56 @@ public class Parser {
                         operand = parseExpression(getPrecedence(token.text) + 1);
                         parsingTakeReference = false;
                         return new OperatorNode(token.text, operand, tokenIndex);
-                    default:
-                        // Handle unary operators like `! + ++` and sigils `$ @ % * *`
-                        if (UNARY_OP.contains(token.text)) {
-                            String text = token.text;
-                            if (isSigil(text) || text.equals("&") || text.equals("*")) {
-                                String varName = parseComplexIdentifier();
-                                if (varName != null) {
-                                    // some characters are illegal after a variable
-                                    if (peek().text.equals("(") && !text.equals("&") && !parsingForLoopVariable) {
-                                        // parentheses is only allowed after a variable in these cases:
-                                        //  `for my $v (...`
-                                        //  `&name(...
-                                        //  `obj->$name(...`
-                                        throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
-                                    }
-                                    // create a Variable
-                                    Node opNode = new OperatorNode(
-                                            text, new IdentifierNode(varName, tokenIndex), tokenIndex);
-                                    if (!peek().text.equals("(") && text.equals("&") && !parsingTakeReference) {
-                                        // allow `&subr` to "auto-call"
-                                        // rewrite to `&subr(@_)`
-                                        Node list = new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex);
-                                        return new BinaryOperatorNode(
-                                                "(",
-                                                opNode, list, tokenIndex);
-                                    }
-                                    return opNode;
-                                } else if (peek().text.equals("{")) {
-                                    // Handle curly brackets to parse a nested expression
-                                    //  `${v}`
-                                    consume();
-                                    Node block = parseBlock();
-                                    consume(LexerTokenType.OPERATOR, "}");
-                                    return new OperatorNode(
-                                            text, block, tokenIndex);
-                                }
+                    case "$":
+                    case "$#":
+                    case "@":
+                    case "%":
+                    case "&":
+                    case "*":
+                        String text = token.text;
+                        String varName = parseComplexIdentifier();
+                        if (varName != null) {
+                            // some characters are illegal after a variable
+                            if (peek().text.equals("(") && !text.equals("&") && !parsingForLoopVariable) {
+                                // parentheses is only allowed after a variable in these cases:
+                                //  `for my $v (...`
+                                //  `&name(...
+                                //  `obj->$name(...`
+                                throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
                             }
-                            operand = parseExpression(getPrecedence(text) + 1);
-                            return new OperatorNode(text, operand, tokenIndex);
+                            // create a Variable
+                            Node opNode = new OperatorNode(
+                                    text, new IdentifierNode(varName, tokenIndex), tokenIndex);
+                            if (!peek().text.equals("(") && text.equals("&") && !parsingTakeReference) {
+                                // allow `&subr` to "auto-call"
+                                // rewrite to `&subr(@_)`
+                                Node list = new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex);
+                                return new BinaryOperatorNode(
+                                        "(",
+                                        opNode, list, tokenIndex);
+                            }
+                            return opNode;
+                        } else if (peek().text.equals("{")) {
+                            // Handle curly brackets to parse a nested expression
+                            //  `${v}`
+                            consume();
+                            Node block = parseBlock();
+                            consume(LexerTokenType.OPERATOR, "}");
+                            return new OperatorNode(
+                                    text, block, tokenIndex);
                         }
-                        break;
+                        operand = parseExpression(getPrecedence(text) + 1);
+                        return new OperatorNode(text, operand, tokenIndex);
+                    case "!":
+                    case "~":
+                    case "-":
+                    case "+":
+                    case "--":
+                    case "++":
+                        // Handle unary operators like `! + ++`
+                        text = token.text;
+                        operand = parseExpression(getPrecedence(text) + 1);
+                        return new OperatorNode(text, operand, tokenIndex);
                 }
                 break;
             case EOF:
