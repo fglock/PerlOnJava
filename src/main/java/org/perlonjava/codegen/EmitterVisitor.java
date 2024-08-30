@@ -429,7 +429,7 @@ public class EmitterVisitor implements Visitor {
         EmitterVisitor scalarVisitor =
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
 
-        // check if node.left is a `$` variable - it means we have a RuntimeHash instead of RuntimeScalar
+        // check if node.left is a `$` or `@` variable
         if (node.left instanceof OperatorNode) { // $ @ %
             OperatorNode sigilNode = (OperatorNode) node.left;
             String sigil = sigilNode.operator;
