@@ -1155,6 +1155,7 @@ public class Parser {
     // not obeyParentheses:  return ("this", "that"), "this too"
     //
     private ListNode parseZeroOrMoreList(int minItems, boolean wantBlockNode, boolean obeyParentheses) {
+        ctx.logDebug("parseZeroOrMoreList start");
         ListNode expr = new ListNode(tokenIndex);
 
         boolean hasParen = false;
@@ -1182,7 +1183,7 @@ public class Parser {
             } else {
                 while (token.type != LexerTokenType.EOF && !LISTTERMINATORS.contains(token.text)) {
                     // Argument without parentheses
-                    expr.elements.add(parseExpression(getPrecedence(",") + 1));
+                    expr.elements.add(parseExpression(getPrecedence(",")));
                     token = peek();
                     if (token.text.equals(",") || token.text.equals("=>")) {
                         while (token.text.equals(",") || token.text.equals("=>")) {
@@ -1199,6 +1200,7 @@ public class Parser {
         if (hasParen) {
             consume(LexerTokenType.OPERATOR, ")");
         }
+        ctx.logDebug("parseZeroOrMoreList end: " + expr);
 
         if (expr.elements.size() < minItems) {
             throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
