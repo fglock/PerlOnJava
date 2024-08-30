@@ -291,7 +291,6 @@ public class StringParser {
                         ctx.logDebug("str operand " + operand);
                     } else {
                         String identifier = parser.parseComplexIdentifier();
-                        operand = null;
                         if (identifier == null) {
                             // parse $$$a  @$$a
                             int dollarCount = 0;
@@ -413,9 +412,8 @@ public class StringParser {
         // " +" matches one or more ASCII space characters
         String[] words = rawStr.buffers.get(0).trim().split(" +");
         ListNode list = new ListNode(rawStr.index);
-        int size = words.length;
-        for (int i = 0; i < size; i++) {
-            list.elements.add(new StringNode(words[i], rawStr.index));
+        for (String word : words) {
+            list.elements.add(new StringNode(word, rawStr.index));
         }
         return list;
     }
