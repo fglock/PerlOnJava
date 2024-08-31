@@ -1030,7 +1030,7 @@ public class Parser {
     private Node parseFileHandleBareword() {
         // Test for bareword like STDOUT, STDERR, FILE
         Node result = null;
-        String name = IdentifierParser.parseComplexIdentifier(this);
+        String name = IdentifierParser.parseSubroutineIdentifier(this);
         if (name != null) {
             String packageName = ctx.symbolTable.getCurrentPackage();
             if (name.equals("STDOUT") || name.equals("STDERR") || name.equals("STDIN")) {
