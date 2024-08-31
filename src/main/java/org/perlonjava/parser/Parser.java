@@ -874,19 +874,29 @@ public class Parser {
         ctx.logDebug("parseZeroOrMoreList start");
         ListNode expr = new ListNode(tokenIndex);
 
+        int currentIndex = tokenIndex;
         LexerToken token = peek();
 
         if (wantFileHandle) {
             if (token.type == LexerTokenType.IDENTIFIER) {
-                // Test for STDOUT, STDERR
-                String name = token.text;   // TODO fetch full name + "main::"
+                // Test for bareword like STDOUT, STDERR, FILE
+                String name = IdentifierParser.parseComplexIdentifier(this);
+                String packageName = ctx.symbolTable.getCurrentPackage();
+                if (name.equals("STDOUT") || name.equals("STDERR")) {
+                    packageName = "main";
+                }
+                name = GlobalContext.normalizeVariableName(name, packageName);
                 if (GlobalContext.existsGlobalIO(name)) {
                     // FileHandle name exists
-                    // Assert that it is not followed by comma
+                    // Assert that it is not followed by comma or infix
+                    ctx.logDebug("Maybe file handle: " + name);
                     // TODO accept handle name
+                } else {
+                    // backtrack
+                    tokenIndex = currentIndex;
                 }
             } else if (token.text.equals("$")) {
-                // Test for variable name not followed by comma
+                // Test for variable name not followed by comma or infix
             } else {
                 // Try block syntax
             }
