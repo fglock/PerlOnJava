@@ -39,7 +39,13 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Constructor for standard output and error streams
     public RuntimeIO(FileDescriptor fd, boolean isOutput) throws IOException {
         if (isOutput) {
-            this.outputStream = new FileOutputStream(fd);
+            if (fd == FileDescriptor.out) {
+                this.outputStream = System.out;
+            } else if (fd == FileDescriptor.err) {
+                this.outputStream = System.err;
+            } else {
+                this.outputStream = new FileOutputStream(fd);
+            }
         } else {
             this.inputStream = new FileInputStream(fd);
         }
@@ -197,8 +203,12 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     // Method to append data to a file
     public void write(String data) throws IOException {
-        file.seek(file.length()); // Move to end for appending
-        file.write(data.getBytes());
+        if (outputStream != null) {
+            outputStream.write(data.getBytes());
+        } else {
+            file.seek(file.length()); // Move to end for appending
+            file.write(data.getBytes());
+        }
     }
 
 }

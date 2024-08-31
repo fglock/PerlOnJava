@@ -825,10 +825,23 @@ public class EmitterVisitor implements Visitor {
 
     private void handleSayOperator(String operator, BinaryOperatorNode node) throws Exception {
 
-        // File Handle is operator.left
+        // Emit the argument list
+        node.right.accept(this.with(RuntimeContextType.LIST));
+        // Transform the value in the stack to List
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getList", "()Lorg/perlonjava/runtime/RuntimeList;", true);
+
+        // Emit the File Handle
         if (node.left instanceof IdentifierNode) {
+            // `print FILE 123`
             // retrieve STDOUT, STDERR from GlobalIORef
-            // TODO print FILE 123
+            // fetch a global fileHandle by name
+            ctx.mv.visitLdcInsn(((IdentifierNode) node.left).name);
+            ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/GlobalContext",
+                    "getGlobalIO",
+                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
         } else if (node.left instanceof BlockNode) {
             // {STDERR}  or  {$fh}
             // TODO
@@ -837,11 +850,8 @@ public class EmitterVisitor implements Visitor {
             // TODO
         }
 
-        node.right.accept(this.with(RuntimeContextType.LIST));
-        // Transform the value in the stack to List
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getList", "()Lorg/perlonjava/runtime/RuntimeList;", true);
         // Call the operator, return Scalar
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         if (ctx.contextType == RuntimeContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.POP);
         }
