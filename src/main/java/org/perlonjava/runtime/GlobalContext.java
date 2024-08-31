@@ -67,7 +67,7 @@ public class GlobalContext {
         } catch (IOException e) {
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
         }
-        
+
         // Initialize UNIVERSAL class
         try {
             // UNIVERSAL methods are defined in RuntimeScalar class
@@ -81,7 +81,7 @@ public class GlobalContext {
             getGlobalCodeRef("UNIVERSAL::isa").set(new RuntimeScalar(new RuntimeCode(mm, instance)));
             getGlobalCodeRef("UNIVERSAL::DOES").set(new RuntimeScalar(new RuntimeCode(mm, instance)));
         } catch (NoSuchMethodException e) {
-            System.err.println("Warning: Missing method UNIVERSAL::can");
+            System.err.println("Warning: Missing UNIVERSAL method: " + e.getMessage());
         }
 
         // Reset method cache after initializing UNIVERSAL
