@@ -892,10 +892,18 @@ public class Parser {
             Node fileHandle = null;
             if (token.type == LexerTokenType.IDENTIFIER) {
                 // bareword
-                fileHandle = parseFileHandle();
+                fileHandle = parseFileHandleBareword();
             } else if (token.text.equals("$")) {
                 // variable name
                 fileHandle = parsePrimary();
+                // assert that is not followed by infix
+                if (INFIX_OP.contains(peek().text)) {
+                    fileHandle = null;
+                }
+                // assert that list is not empty
+                if (looksLikeEmptyList()) {
+                    fileHandle = null;
+                }
             } else if (token.text.equals("{")) {
                 // block syntax
                 consume();
@@ -1019,7 +1027,7 @@ public class Parser {
         return isSpace;
     }
 
-    private Node parseFileHandle() {
+    private Node parseFileHandleBareword() {
         // Test for bareword like STDOUT, STDERR, FILE
         Node result = null;
         String name = IdentifierParser.parseComplexIdentifier(this);
