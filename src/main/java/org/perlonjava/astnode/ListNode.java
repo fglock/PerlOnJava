@@ -17,6 +17,12 @@ public class ListNode extends AbstractNode {
     public final List<Node> elements;
 
     /**
+     * Optional fileHandle or block.
+     * Used in: print, say, map, grep, sort
+     */
+    public Node handle;
+
+    /**
      * Constructs a new ListNode with the specified list of child nodes.
      *
      * @param elements the list of child nodes to be stored in this ListNode
@@ -24,11 +30,13 @@ public class ListNode extends AbstractNode {
     public ListNode(List<Node> elements, int tokenIndex) {
         this.elements = elements;
         this.tokenIndex = tokenIndex;
+        this.handle = null;
     }
 
     public ListNode(int tokenIndex) {
         this.elements = new ArrayList<>();
         this.tokenIndex = tokenIndex;
+        this.handle = null;
     }
 
     public static ListNode makeList(Node left) {
