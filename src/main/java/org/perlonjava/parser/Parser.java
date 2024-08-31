@@ -897,13 +897,11 @@ public class Parser {
                 fileHandle = parseBlock();
                 consume(LexerTokenType.OPERATOR, "}");
             }
-            if (fileHandle == null) {
+            if (fileHandle == null || !isSpaceAfterPrintBlock()) {
                 // backtrack
                 tokenIndex = currentIndex;
                 hasParen = false;
-            } else {
-                ctx.logDebug("Maybe file handle: " + fileHandle);
-                // TODO Assert that the fileHandle is not followed by comma or infix
+                fileHandle = null;
             }
         }
 
@@ -917,6 +915,9 @@ public class Parser {
                 Node block = parseBlock();
                 consume(LexerTokenType.OPERATOR, "}");
                 expr.elements.add(block);
+            }
+            if (!isSpaceAfterPrintBlock()) {
+                throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
             }
         }
 
@@ -954,6 +955,52 @@ public class Parser {
             throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
         }
         return expr;
+    }
+
+    private boolean isSpaceAfterPrintBlock() {
+        LexerToken token;
+        token = peek();
+        boolean isSpace = false;
+        switch (token.type) {
+            case EOF:
+            case IDENTIFIER:
+            case NUMBER:
+            case STRING:
+                isSpace = true;
+                break;
+            case OPERATOR:
+                switch (token.text) {
+                    case "[":
+                    case "\"":
+                    case "//":
+                    case "\\":
+                    case "$":
+                    case "$#":
+                    case "@":
+                    case "%":
+                    case "&":
+                    case "!":
+                    case "~":
+                    case "+":
+                    case "-":
+                    case "/":
+                    case "*":
+                    case ";":
+                    case "++":
+                    case "--":
+                        isSpace = true;
+                        break;
+                    case ".":
+                        // TODO must be followed by NUMBER
+                        break;
+                    case "(":
+                    case "'":
+                        // TODO must have space before
+                        break;
+                }
+                break;
+        }
+        return isSpace;
     }
 
     private Node parseFileHandle() {
