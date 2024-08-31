@@ -916,7 +916,7 @@ public class Parser {
                 consume(LexerTokenType.OPERATOR, "}");
                 expr.elements.add(block);
             }
-            if (!isSpaceAfterPrintBlock()) {
+            if (!isSpaceAfterPrintBlock() || looksLikeEmptyList()) {
                 throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
             }
         }
