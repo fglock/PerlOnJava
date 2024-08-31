@@ -459,7 +459,8 @@ public class Parser {
                         operand = parseZeroOrMoreList(1, true, false, false);
                         // transform:   { 123 }
                         // into:        sub { 123 }
-                        Node block = ((ListNode) operand).elements.remove(0);
+                        Node block = ((ListNode) operand).handle;
+                        ((ListNode) operand).handle = null;
                         if (block instanceof BlockNode) {
                             block = new AnonSubNode(null, null, null, block, false, tokenIndex);
                         }
@@ -470,7 +471,9 @@ public class Parser {
                     case "print":
                     case "say":
                         // Handle 'say' keyword as a unary operator with a RuntimeList operand
-                        operand = parseZeroOrMoreList(0, true, true, true);
+                        operand = parseZeroOrMoreList(0, false, true, true);
+                        Node handle = ((ListNode) operand).handle;
+                        ctx.logDebug("Print operator " + token.text + " handle: " + handle);
                         return new OperatorNode(token.text, operand, tokenIndex);
                     case "scalar":
                     case "values":
@@ -836,7 +839,9 @@ public class Parser {
         LexerToken token1 = tokens.get(tokenIndex); // next token including spaces
         LexerToken nextToken = peek();  // after spaces
 
-        if (INFIX_OP.contains(token.text) || token.text.equals(",")) {
+        if (token.type == LexerTokenType.EOF || LIST_TERMINATORS.contains(token.text)) {
+            isEmptyList = true;
+        } else if (INFIX_OP.contains(token.text) || token.text.equals(",")) {
             // tokenIndex++;
             ctx.logDebug("parseZeroOrMoreList infix `" + token.text + "` followed by `" + nextToken.text + "`");
             if (token.text.equals("%") && (nextToken.text.equals("$") || nextToken.type == LexerTokenType.IDENTIFIER)) {
@@ -902,6 +907,8 @@ public class Parser {
                 tokenIndex = currentIndex;
                 hasParen = false;
                 fileHandle = null;
+            } else {
+                expr.handle = fileHandle;
             }
         }
 
@@ -912,9 +919,8 @@ public class Parser {
             }
             if (peek().text.equals("{")) {
                 consume();
-                Node block = parseBlock();
+                expr.handle = parseBlock();
                 consume(LexerTokenType.OPERATOR, "}");
-                expr.elements.add(block);
             }
             if (!isSpaceAfterPrintBlock() || looksLikeEmptyList()) {
                 throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
@@ -958,8 +964,8 @@ public class Parser {
     }
 
     private boolean isSpaceAfterPrintBlock() {
-        LexerToken token;
-        token = peek();
+        int currentIndex = tokenIndex;
+        LexerToken token = peek();
         boolean isSpace = false;
         switch (token.type) {
             case EOF:
@@ -991,11 +997,21 @@ public class Parser {
                         isSpace = true;
                         break;
                     case ".":
-                        // TODO must be followed by NUMBER
+                        // must be followed by NUMBER
+                        consume();
+                        if (tokens.get(tokenIndex).type == LexerTokenType.NUMBER) {
+                            isSpace = true;
+                        }
+                        tokenIndex = currentIndex;
                         break;
                     case "(":
                     case "'":
-                        // TODO must have space before
+                        // must have space before
+                        consume();
+                        if (tokenIndex != currentIndex) {
+                            isSpace = true;
+                        }
+                        tokenIndex = currentIndex;
                         break;
                 }
                 break;

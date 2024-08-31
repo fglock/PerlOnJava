@@ -222,6 +222,13 @@ public class PrintVisitor implements Visitor {
         appendIndent();
         sb.append("ListNode:\n");
         indentLevel++;
+        if (node.handle != null) {
+            appendIndent();
+            sb.append("Handle:\n");
+            indentLevel++;
+            node.handle.accept(this);
+            indentLevel--;
+        }
         for (Node element : node.elements) {
             element.accept(this);
         }
