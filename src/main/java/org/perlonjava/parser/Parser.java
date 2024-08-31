@@ -882,7 +882,7 @@ public class Parser {
                 // Test for bareword like STDOUT, STDERR, FILE
                 String name = IdentifierParser.parseComplexIdentifier(this);
                 String packageName = ctx.symbolTable.getCurrentPackage();
-                if (name.equals("STDOUT") || name.equals("STDERR")) {
+                if (name.equals("STDOUT") || name.equals("STDERR") || name.equals("STDIN")) {
                     packageName = "main";
                 }
                 name = GlobalContext.normalizeVariableName(name, packageName);
