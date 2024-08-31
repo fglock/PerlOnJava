@@ -30,6 +30,12 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
                 InheritanceResolver.invalidateCache();
 
                 return value;
+            case GLOB:
+                if (value.value instanceof RuntimeIO) {
+                    // *STDOUT = $new_handle
+                    GlobalContext.getGlobalIO(this.globName).set(value);
+                }
+                return value;
         }
         // XXX TODO
         throw new IllegalStateException("typeglob assignment not implemented");
