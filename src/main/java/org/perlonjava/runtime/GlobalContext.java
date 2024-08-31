@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import java.io.FileDescriptor;
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -16,7 +18,7 @@ public class GlobalContext {
     private static final Map<String, RuntimeArray> globalArrays = new HashMap<>();
     private static final Map<String, RuntimeHash> globalHashes = new HashMap<>();
     private static final Map<String, RuntimeScalar> globalCodeRefs = new HashMap<>();
-    private static final Map<String, RuntimeIO> globalIORefs = new HashMap<>();
+    private static final Map<String, RuntimeScalar> globalIORefs = new HashMap<>();
 
     // Cache to store previously normalized variables for faster lookup
     private static final Map<String, String> nameCache = new HashMap<>();
@@ -53,12 +55,19 @@ public class GlobalContext {
         getGlobalVariable("main::\"").set(" ");    // initialize $" to " "
         getGlobalVariable("main::a");    // initialize $a to "undef"
         getGlobalVariable("main::b");    // initialize $b to "undef"
+        getGlobalVariable("main::!");    // initialize $! to "undef"
         getGlobalArray("main::INC");
         getGlobalHash("main::INC");
-        getGlobalIO("main::STDOUT");
-        getGlobalIO("main::STDERR");
-        getGlobalIO("main::STDIN");
 
+        try {
+            // Initialize STDOUT, STDERR, STDIN
+            getGlobalIO("main::STDOUT").set(new RuntimeIO(FileDescriptor.out, true));
+            getGlobalIO("main::STDERR").set(new RuntimeIO(FileDescriptor.err, true));
+            getGlobalIO("main::STDIN").set(new RuntimeIO(FileDescriptor.in, false));
+        } catch (IOException e) {
+            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+        }
+        
         // Initialize UNIVERSAL class
         try {
             // UNIVERSAL methods are defined in RuntimeScalar class
@@ -178,10 +187,10 @@ public class GlobalContext {
         return globalCodeRefs.containsKey(key);
     }
 
-    public static RuntimeIO getGlobalIO(String key) {
-        RuntimeIO var = globalIORefs.get(key);
+    public static RuntimeScalar getGlobalIO(String key) {
+        RuntimeScalar var = globalIORefs.get(key);
         if (var == null) {
-            var = new RuntimeIO();
+            var = new RuntimeScalar().set(new RuntimeIO());
             globalIORefs.put(key, var);
         }
         return var;
