@@ -291,7 +291,10 @@ public class Main {
 
 ### Upcoming Milestones
 - **v1.4.0**: Planned release date: 2024-12-01
+   - File i/o operators, STDOUT, STDERR, STDIN
+- **v1.5.0**: Planned release date: 2025-01-10
    - TBD
+   - Perl standard tests
    - Performance improvements
 
 ## Benchmarks
