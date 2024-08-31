@@ -8,13 +8,13 @@ package org.perlonjava.runtime;
     Implementing modes for read/write (+<, +>) operations.
  */
 
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.RandomAccessFile;
+import java.io.*;
 
 public class RuntimeIO implements RuntimeScalarReference {
 
     private RandomAccessFile file;
+    private InputStream inputStream;
+    private OutputStream outputStream;
     private boolean isEOF;
 
     public RuntimeIO() {
@@ -34,6 +34,16 @@ public class RuntimeIO implements RuntimeScalarReference {
                 System.err.println("File operation failed: " + e.getMessage());
             }
         }
+    }
+
+    // Constructor for standard output and error streams
+    public RuntimeIO(FileDescriptor fd, boolean isOutput) throws IOException {
+        if (isOutput) {
+            this.outputStream = new FileOutputStream(fd);
+        } else {
+            this.inputStream = new FileInputStream(fd);
+        }
+        this.isEOF = false;
     }
 
     public static void main(String[] args) {
@@ -62,6 +72,34 @@ public class RuntimeIO implements RuntimeScalarReference {
                 System.out.println(" at position: " + fhGetc.tell());
             }
             fhGetc.close();
+
+        } catch (IOException e) {
+            System.err.println("File operation failed: " + e.getMessage());
+        }
+
+        try {
+            // Fetching standard handles
+            RuntimeIO stdout = new RuntimeIO(FileDescriptor.out, true);
+            RuntimeIO stderr = new RuntimeIO(FileDescriptor.err, true);
+            RuntimeIO stdin = new RuntimeIO(FileDescriptor.in, false);
+
+            // Writing to STDOUT
+            stdout.write("This goes to STDOUT.\n");
+
+            // Writing to STDERR
+            stderr.write("This goes to STDERR.\n");
+
+            // Reading from STDIN
+            System.out.println("Type something and press enter: ");
+            byte[] buffer = new byte[128];
+            int bytesRead = stdin.read(buffer);
+            String input = new String(buffer, 0, bytesRead);
+            stdout.write("You typed: " + input);
+
+            // Closing handles (not usually necessary for standard streams)
+            stdout.close();
+            stderr.close();
+            stdin.close();
 
         } catch (IOException e) {
             System.err.println("File operation failed: " + e.getMessage());
@@ -127,18 +165,34 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     // Method to get the current file pointer position (tell equivalent)
     public long tell() throws IOException {
-        return file.getFilePointer();
+        if (file != null) {
+            return file.getFilePointer();
+        } else {
+            throw new UnsupportedOperationException("Tell operation is not supported for standard streams");
+        }
     }
 
     // Method to move the file pointer (seek equivalent)
     public void seek(long pos) throws IOException {
-        file.seek(pos);
-        isEOF = false;
+        if (file != null) {
+            file.seek(pos);
+            isEOF = false;
+        } else {
+            throw new UnsupportedOperationException("Seek operation is not supported for standard streams");
+        }
     }
 
     // Method to close the filehandle
     public void close() throws IOException {
-        file.close();
+        if (file != null) {
+            file.close();
+        }
+        if (inputStream != null) {
+            inputStream.close();
+        }
+        if (outputStream != null) {
+            outputStream.close();
+        }
     }
 
     // Method to append data to a file
