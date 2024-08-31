@@ -300,7 +300,7 @@ public class Parser {
         Node arguments = null;
         if (prototype == null) {
             // no prototype
-            arguments = parseZeroOrMoreList(0, false, true);
+            arguments = parseZeroOrMoreList(0, false, true, false);
         } else if (prototype.isEmpty()) {
             // prototype is empty string
             arguments = new ListNode(tokenIndex);
@@ -312,7 +312,7 @@ public class Parser {
             arguments = parseZeroOrOneList(0);
         } else {
             // XXX TODO: Handle more prototypes or parameter variables
-            arguments = parseZeroOrMoreList(0, false, true);
+            arguments = parseZeroOrMoreList(0, false, true, false);
         }
 
         // Rewrite and return the subroutine call as `&name(arguments)`
@@ -438,7 +438,7 @@ public class Parser {
                         }
                         return new OperatorNode(text, operand, tokenIndex);
                     case "bless":
-                        operand = parseZeroOrMoreList(1, false, true);
+                        operand = parseZeroOrMoreList(1, false, true, false);
                         Node ref = ((ListNode) operand).elements.get(0);
                         Node className = ((ListNode) operand).elements.get(1);
                         if (className == null) {
@@ -449,14 +449,14 @@ public class Parser {
                     case "unshift":
                     case "join":
                         // Handle 'join' keyword as a Binary operator with a RuntimeList operand
-                        operand = parseZeroOrMoreList(1, false, true);
+                        operand = parseZeroOrMoreList(1, false, true, false);
                         Node separator = ((ListNode) operand).elements.remove(0);
                         return new BinaryOperatorNode(token.text, separator, operand, tokenIndex);
                     case "sort":
                     case "map":
                     case "grep":
                         // Handle 'sort' keyword as a unary operator with a RuntimeList operand
-                        operand = parseZeroOrMoreList(1, true, false);
+                        operand = parseZeroOrMoreList(1, true, false, false);
                         // transform:   { 123 }
                         // into:        sub { 123 }
                         Node block = ((ListNode) operand).elements.remove(0);
@@ -465,12 +465,12 @@ public class Parser {
                         }
                         return new BinaryOperatorNode(token.text, block, operand, tokenIndex);
                     case "splice":
-                        operand = parseZeroOrMoreList(0, false, true);
+                        operand = parseZeroOrMoreList(0, false, true, false);
                         return new OperatorNode(token.text, operand, tokenIndex);
                     case "print":
                     case "say":
                         // Handle 'say' keyword as a unary operator with a RuntimeList operand
-                        operand = parseZeroOrMoreList(0, true, true);
+                        operand = parseZeroOrMoreList(0, true, true, true);
                         return new OperatorNode(token.text, operand, tokenIndex);
                     case "scalar":
                     case "values":
@@ -486,7 +486,7 @@ public class Parser {
                         // Handle 'return' keyword as a unary operator with an operand;
                         // Parentheses are ignored.
                         // operand = parseExpression(getPrecedence("print") + 1);
-                        operand = parseZeroOrMoreList(0, false, false);
+                        operand = parseZeroOrMoreList(0, false, false, false);
                         return new OperatorNode("return", operand, tokenIndex);
                     case "eval":
                         // Handle 'eval' keyword which can be followed by a block or an expression
@@ -868,9 +868,29 @@ public class Parser {
     //
     // not obeyParentheses:  return ("this", "that"), "this too"
     //
-    private ListNode parseZeroOrMoreList(int minItems, boolean wantBlockNode, boolean obeyParentheses) {
+    // wantFileHandle:  print STDOUT "this\n";
+    //
+    private ListNode parseZeroOrMoreList(int minItems, boolean wantBlockNode, boolean obeyParentheses, boolean wantFileHandle) {
         ctx.logDebug("parseZeroOrMoreList start");
         ListNode expr = new ListNode(tokenIndex);
+
+        LexerToken token = peek();
+
+        if (wantFileHandle) {
+            if (token.type == LexerTokenType.IDENTIFIER) {
+                // Test for STDOUT, STDERR
+                String name = token.text;   // TODO fetch full name + "main::"
+                if (GlobalContext.existsGlobalIO(name)) {
+                    // FileHandle name exists
+                    // Assert that it is not followed by comma
+                    // TODO accept handle name
+                }
+            } else if (token.text.equals("$")) {
+                // Test for variable name not followed by comma
+            } else {
+                // Try block syntax
+            }
+        }
 
         boolean hasParen = false;
         if (wantBlockNode) {
@@ -888,7 +908,7 @@ public class Parser {
 
         if (!looksLikeEmptyList()) {
             // it doesn't look like an empty list
-            LexerToken token = peek();
+            token = peek();
             if (obeyParentheses && token.text.equals("(")) {
                 // arguments in parentheses, can be 0 or more arguments:    print(), print(10)
                 // Commas are allowed after the arguments:       print(10,)
