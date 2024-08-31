@@ -201,6 +201,10 @@ public class EmitterVisitor implements Visitor {
             case "grep":
                 handleMapOperator(operator, node);
                 return;
+            case "print":
+            case "say":
+                handleSayOperator(operator, node);
+                return;
             case "join":
                 handleJoinOperator(operator, node);
                 return;
@@ -728,10 +732,6 @@ public class EmitterVisitor implements Visitor {
             case "values":
                 handleKeysOperator(node, operator);
                 break;
-            case "print":
-            case "say":
-                handleSayOperator(node, operator);
-                break;
             case "our":
             case "my":
                 handleMyOperator(node, operator);
@@ -823,9 +823,21 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleSayOperator(OperatorNode node, String operator) throws Exception {
-        // TODO print FILE 123
-        node.operand.accept(this.with(RuntimeContextType.LIST));
+    private void handleSayOperator(String operator, BinaryOperatorNode node) throws Exception {
+
+        // File Handle is operator.left
+        if (node.left instanceof IdentifierNode) {
+            // retrieve STDOUT, STDERR from GlobalIORef
+            // TODO print FILE 123
+        } else if (node.left instanceof BlockNode) {
+            // {STDERR}  or  {$fh}
+            // TODO
+        } else {
+            // $fh
+            // TODO
+        }
+
+        node.right.accept(this.with(RuntimeContextType.LIST));
         // Transform the value in the stack to List
         ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getList", "()Lorg/perlonjava/runtime/RuntimeList;", true);
         // Call the operator, return Scalar
