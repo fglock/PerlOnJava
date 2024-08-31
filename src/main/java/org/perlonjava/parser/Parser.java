@@ -875,34 +875,38 @@ public class Parser {
         ListNode expr = new ListNode(tokenIndex);
 
         int currentIndex = tokenIndex;
+        boolean hasParen = false;
         LexerToken token = peek();
 
         if (wantFileHandle) {
+            if (token.text.equals("(")) {
+                consume();
+                hasParen = true;
+                token = peek();
+            }
+            Node fileHandle = null;
             if (token.type == LexerTokenType.IDENTIFIER) {
-                // Test for bareword like STDOUT, STDERR, FILE
-                String name = IdentifierParser.parseComplexIdentifier(this);
-                String packageName = ctx.symbolTable.getCurrentPackage();
-                if (name.equals("STDOUT") || name.equals("STDERR") || name.equals("STDIN")) {
-                    packageName = "main";
-                }
-                name = GlobalContext.normalizeVariableName(name, packageName);
-                if (GlobalContext.existsGlobalIO(name)) {
-                    // FileHandle name exists
-                    // Assert that it is not followed by comma or infix
-                    ctx.logDebug("Maybe file handle: " + name);
-                    // TODO accept handle name
-                } else {
-                    // backtrack
-                    tokenIndex = currentIndex;
-                }
+                // bareword
+                fileHandle = parseFileHandle();
             } else if (token.text.equals("$")) {
-                // Test for variable name not followed by comma or infix
+                // variable name
+                fileHandle = parsePrimary();
+            } else if (token.text.equals("{")) {
+                // block syntax
+                consume();
+                fileHandle = parseBlock();
+                consume(LexerTokenType.OPERATOR, "}");
+            }
+            if (fileHandle == null) {
+                // backtrack
+                tokenIndex = currentIndex;
+                hasParen = false;
             } else {
-                // Try block syntax
+                ctx.logDebug("Maybe file handle: " + fileHandle);
+                // TODO Assert that the fileHandle is not followed by comma or infix
             }
         }
 
-        boolean hasParen = false;
         if (wantBlockNode) {
             if (peek().text.equals("(")) {
                 consume();
@@ -950,6 +954,24 @@ public class Parser {
             throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
         }
         return expr;
+    }
+
+    private Node parseFileHandle() {
+        // Test for bareword like STDOUT, STDERR, FILE
+        Node result = null;
+        String name = IdentifierParser.parseComplexIdentifier(this);
+        if (name != null) {
+            String packageName = ctx.symbolTable.getCurrentPackage();
+            if (name.equals("STDOUT") || name.equals("STDERR") || name.equals("STDIN")) {
+                packageName = "main";
+            }
+            name = GlobalContext.normalizeVariableName(name, packageName);
+            if (GlobalContext.existsGlobalIO(name)) {
+                // FileHandle name exists
+                result = new IdentifierNode(name, tokenIndex);
+            }
+        }
+        return result;
     }
 
     // Generic List parser for Parentheses, Hash literal, Array literal,
