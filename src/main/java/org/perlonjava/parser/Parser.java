@@ -455,7 +455,7 @@ public class Parser {
                     case "sort":
                     case "map":
                     case "grep":
-                        // Handle 'sort' keyword as a unary operator with a RuntimeList operand
+                        // Handle 'sort' keyword as a Binary operator with a Code and List operands
                         operand = parseZeroOrMoreList(1, true, false, false);
                         // transform:   { 123 }
                         // into:        sub { 123 }
@@ -470,11 +470,14 @@ public class Parser {
                         return new OperatorNode(token.text, operand, tokenIndex);
                     case "print":
                     case "say":
-                        // Handle 'say' keyword as a unary operator with a RuntimeList operand
+                        // Handle 'print' keyword as a Binary operator with a FileHandle and List operands
                         operand = parseZeroOrMoreList(0, false, true, true);
                         Node handle = ((ListNode) operand).handle;
-                        ctx.logDebug("Print operator " + token.text + " handle: " + handle);
-                        return new OperatorNode(token.text, operand, tokenIndex);
+                        if (handle == null) {
+                            handle = new IdentifierNode("main::STDOUT", tokenIndex);
+                        }
+                        ((ListNode) operand).handle = null;
+                        return new BinaryOperatorNode(token.text, handle, operand, tokenIndex);
                     case "scalar":
                     case "values":
                     case "keys":
