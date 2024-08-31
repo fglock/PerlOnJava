@@ -1,9 +1,12 @@
 package org.perlonjava.runtime;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
+
+import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
 
 /**
  * The RuntimeList class simulates a Perl list.
@@ -183,21 +186,34 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
 
     // Operators
 
-    public RuntimeScalar print() {
+    public RuntimeScalar print(RuntimeScalar fileHandle) {
         StringBuilder sb = new StringBuilder();
         for (RuntimeBaseEntity element : elements) {
             sb.append(element.toString());
         }
-        System.out.print(sb);
+        try {
+            ((RuntimeIO) fileHandle.value).write(sb.toString());
+        } catch (
+                IOException e) {
+            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+            return new RuntimeScalar();
+        }
         return new RuntimeScalar(1);
     }
 
-    public RuntimeScalar say() {
+    public RuntimeScalar say(RuntimeScalar fileHandle) {
         StringBuilder sb = new StringBuilder();
         for (RuntimeBaseEntity element : elements) {
             sb.append(element.toString());
         }
-        System.out.println(sb);
+        sb.append("\n");
+        try {
+            ((RuntimeIO) fileHandle.value).write(sb.toString());
+        } catch (
+                IOException e) {
+            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+            return new RuntimeScalar();
+        }
         return new RuntimeScalar(1);
     }
 
@@ -213,8 +229,8 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         RuntimeArray array = new RuntimeArray();
         this.setArrayOfAlias(array);
 
-        RuntimeScalar varA = GlobalContext.getGlobalVariable("main::a");
-        RuntimeScalar varB = GlobalContext.getGlobalVariable("main::b");
+        RuntimeScalar varA = getGlobalVariable("main::a");
+        RuntimeScalar varB = getGlobalVariable("main::b");
         RuntimeArray comparatorArgs = new RuntimeArray();
 
         // Sort the new array using the Perl comparator subroutine
@@ -257,7 +273,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         // Create a new list to hold the filtered elements
         List<RuntimeBaseEntity> filteredElements = new ArrayList<>();
 
-        RuntimeScalar var_ = GlobalContext.getGlobalVariable("main::_");
+        RuntimeScalar var_ = getGlobalVariable("main::_");
         RuntimeArray filterArgs = new RuntimeArray();
 
         // Iterate over each element in the current RuntimeArray
@@ -303,7 +319,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         // Create a new list to hold the transformed elements
         List<RuntimeBaseEntity> transformedElements = new ArrayList<>();
 
-        RuntimeScalar var_ = GlobalContext.getGlobalVariable("main::_");
+        RuntimeScalar var_ = getGlobalVariable("main::_");
         RuntimeArray mapArgs = new RuntimeArray();
 
         // Iterate over each element in the current RuntimeArray
