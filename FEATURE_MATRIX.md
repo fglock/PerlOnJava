@@ -21,6 +21,10 @@
 - ❌  **Perl-like warnings**: Internal support for most warnings is missing. Warnings need to be formatted to resemble Perl’s output.
 - ✔️   **Comments**: Support for comments in code is implemented.
 
+## Testing
+- ✔️   **TAP tests**: Running standard Perl testing protocol.
+- ✔️   **CI/CD**: Github testing pipeline in Ubuntu.
+
 ## Scalars
 - ✔️   **`my` variable declaration**: Local variables can be declared using `my`.
 - ✔️   **`our` variable declaration**: Global variables can be declared using `our`.
@@ -120,7 +124,7 @@
 - ✔️   **`eval` block**: `eval` blocks are implemented.
 - ✔️   **`do` block**: `do` blocks are supported.
 - ❌  **`do` file**: File execution using `do` is not yet implemented.
-- ❌  **`print` statement**: Basic `print` and `say` statements are implemented, but support for file handles is missing.
+- ✔️   **`print` statement**: `print` and `say` statements are implemented, with support for file handles.
 - ❌  **`printf` and `sprintf`**: String formatting is not yet implemented.
 - ✔️   **Short-circuit and, or**: Short-circuit logical operators are supported.
 - ✔️   **Low-precedence/high precedence operators**: Logical operators like `not`, `or`, `and` are supported.
@@ -146,10 +150,12 @@
 - ✔️   **Namespaces**: Namespace support is present.
 - ✔️   **`@_` and `$@` special variables**: Special variables like `@_` and `$@` are supported.
 - ✔️   **Special variables**: The special variables `$_`, `$"`, `$a`, `$b` are implemented.
+- ✔️   **I/O symbols**: `STDOUT`, `STDERR`, `STDIN` are implemented.
 - ❌  **Thread-safe `@_`, `$_`, and regex variables**: Thread safety for global special variables is missing.
 
-## Non-strict Features
+## Non-strict and Obsolete Features
 - ❌  **Use string as a scalar reference**: Support for scalar references from strings is not yet implemented.
+- ❌  **`format` operator**: Format is not implemented.
 
 ## Features Probably Incompatible with JVM
 - ❌  **`DESTROY`**: Handling of object destruction may be incompatible with JVM garbage collection.
