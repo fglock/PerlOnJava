@@ -884,42 +884,18 @@ public class Parser {
 
         int currentIndex = tokenIndex;
         boolean hasParen = false;
-        LexerToken token = peek();
+        LexerToken token;
 
         if (wantFileHandle) {
-            if (token.text.equals("(")) {
+            if (peek().text.equals("(")) {
                 consume();
                 hasParen = true;
-                token = peek();
             }
-            Node fileHandle = null;
-            if (token.type == LexerTokenType.IDENTIFIER) {
-                // bareword
-                fileHandle = parseFileHandleBareword();
-            } else if (token.text.equals("$")) {
-                // variable name
-                fileHandle = parsePrimary();
-                // assert that is not followed by infix
-                if (INFIX_OP.contains(peek().text)) {
-                    fileHandle = null;
-                }
-                // assert that list is not empty
-                if (looksLikeEmptyList()) {
-                    fileHandle = null;
-                }
-            } else if (token.text.equals("{")) {
-                // block syntax
-                consume();
-                fileHandle = parseBlock();
-                consume(LexerTokenType.OPERATOR, "}");
-            }
-            if (fileHandle == null || !isSpaceAfterPrintBlock()) {
+            expr.handle = parseFileHandle();
+            if (expr.handle == null || !isSpaceAfterPrintBlock()) {
                 // backtrack
                 tokenIndex = currentIndex;
                 hasParen = false;
-                fileHandle = null;
-            } else {
-                expr.handle = fileHandle;
             }
         }
 
@@ -972,6 +948,47 @@ public class Parser {
             throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
         }
         return expr;
+    }
+
+    private Node parseFileHandle() {
+        boolean hasBracket = false;
+        if (peek().text.equals("{")) {
+            consume();
+            hasBracket = true;
+        }
+        LexerToken token = peek();
+        Node fileHandle = null;
+        if (token.type == LexerTokenType.IDENTIFIER) {
+            // bareword
+            // Test for bareword like STDOUT, STDERR, FILE
+            String name = IdentifierParser.parseSubroutineIdentifier(this);
+            if (name != null) {
+                String packageName = ctx.symbolTable.getCurrentPackage();
+                if (name.equals("STDOUT") || name.equals("STDERR") || name.equals("STDIN")) {
+                    packageName = "main";
+                }
+                name = GlobalContext.normalizeVariableName(name, packageName);
+                if (GlobalContext.existsGlobalIO(name)) {
+                    // FileHandle name exists
+                    fileHandle = new IdentifierNode(name, tokenIndex);
+                }
+            }
+        } else if (token.text.equals("$")) {
+            // variable name
+            fileHandle = parsePrimary();
+            // assert that is not followed by infix
+            if (INFIX_OP.contains(peek().text)) {
+                fileHandle = null;
+            }
+            // assert that list is not empty
+            if (!hasBracket && looksLikeEmptyList()) {
+                fileHandle = null;
+            }
+        }
+        if (hasBracket) {
+            consume(LexerTokenType.OPERATOR, "}");
+        }
+        return fileHandle;
     }
 
     private boolean isSpaceAfterPrintBlock() {
@@ -1028,24 +1045,6 @@ public class Parser {
                 break;
         }
         return isSpace;
-    }
-
-    private Node parseFileHandleBareword() {
-        // Test for bareword like STDOUT, STDERR, FILE
-        Node result = null;
-        String name = IdentifierParser.parseSubroutineIdentifier(this);
-        if (name != null) {
-            String packageName = ctx.symbolTable.getCurrentPackage();
-            if (name.equals("STDOUT") || name.equals("STDERR") || name.equals("STDIN")) {
-                packageName = "main";
-            }
-            name = GlobalContext.normalizeVariableName(name, packageName);
-            if (GlobalContext.existsGlobalIO(name)) {
-                // FileHandle name exists
-                result = new IdentifierNode(name, tokenIndex);
-            }
-        }
-        return result;
     }
 
     // Generic List parser for Parentheses, Hash literal, Array literal,
