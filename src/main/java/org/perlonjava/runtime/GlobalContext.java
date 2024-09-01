@@ -1,7 +1,6 @@
 package org.perlonjava.runtime;
 
 import java.io.FileDescriptor;
-import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -59,14 +58,10 @@ public class GlobalContext {
         getGlobalArray("main::INC");
         getGlobalHash("main::INC");
 
-        try {
-            // Initialize STDOUT, STDERR, STDIN
-            getGlobalIO("main::STDOUT").set(new RuntimeIO(FileDescriptor.out, true));
-            getGlobalIO("main::STDERR").set(new RuntimeIO(FileDescriptor.err, true));
-            getGlobalIO("main::STDIN").set(new RuntimeIO(FileDescriptor.in, false));
-        } catch (IOException e) {
-            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
-        }
+        // Initialize STDOUT, STDERR, STDIN
+        getGlobalIO("main::STDOUT").set(new RuntimeIO(FileDescriptor.out, true));
+        getGlobalIO("main::STDERR").set(new RuntimeIO(FileDescriptor.err, true));
+        getGlobalIO("main::STDIN").set(new RuntimeIO(FileDescriptor.in, false));
 
         // Initialize UNIVERSAL class
         try {
