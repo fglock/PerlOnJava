@@ -976,13 +976,17 @@ public class Parser {
         } else if (token.text.equals("$")) {
             // variable name
             fileHandle = parsePrimary();
-            // assert that is not followed by infix
-            if (INFIX_OP.contains(peek().text)) {
-                fileHandle = null;
-            }
-            // assert that list is not empty
-            if (!hasBracket && looksLikeEmptyList()) {
-                fileHandle = null;
+            if (!hasBracket) {
+                // assert that is not followed by infix
+                if (INFIX_OP.contains(peek().text)) {
+                    // print $fh + 2;  # not a file handle
+                    fileHandle = null;
+                }
+                // assert that list is not empty
+                if (looksLikeEmptyList()) {
+                    // print $fh;  # not a file handle
+                    fileHandle = null;
+                }
             }
         }
         if (hasBracket) {
