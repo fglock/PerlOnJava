@@ -1,6 +1,5 @@
 package org.perlonjava.runtime;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -191,14 +190,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         for (RuntimeBaseEntity element : elements) {
             sb.append(element.toString());
         }
-        try {
-            ((RuntimeIO) fileHandle.value).write(sb.toString());
-        } catch (
-                IOException e) {
-            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
-            return new RuntimeScalar();
-        }
-        return new RuntimeScalar(1);
+        return ((RuntimeIO) fileHandle.value).write(sb.toString());
     }
 
     public RuntimeScalar say(RuntimeScalar fileHandle) {
@@ -207,14 +199,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
             sb.append(element.toString());
         }
         sb.append("\n");
-        try {
-            ((RuntimeIO) fileHandle.value).write(sb.toString());
-        } catch (
-                IOException e) {
-            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
-            return new RuntimeScalar();
-        }
-        return new RuntimeScalar(1);
+        return ((RuntimeIO) fileHandle.value).write(sb.toString());
     }
 
     /**
