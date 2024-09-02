@@ -17,18 +17,57 @@ This is a Perl compiler under development. It compiles Perl into Java bytecode a
 
 ## Introduction
 
-This project aims to develop a Perl compiler that translates Perl code into Java bytecode and executes it.
-The compiler is still under development and is intended to provide a way to run Perl scripts on the Java
-Virtual Machine (JVM). The project leverages the ASM library to generate Java bytecode dynamically.
+This project aims to develop a Perl compiler that translates Perl code into Java bytecode and executes it on the Java
+Virtual Machine (JVM). While the project is still under active development, it provides an experimental platform for
+running Perl scripts in a JVM environment.
 
-The primary goals of this project are:
-- To provide a seamless way to run Perl scripts on the JVM.
-- To explore the integration of Perl and Java, allowing for interoperability between the two languages.
-- To offer a platform for experimenting with compiler design and bytecode generation.
+### Key Goals
 
-The project is structured into several modules, including a lexer, parser, and bytecode generator. Each
-module plays a crucial role in the compilation process, from tokenizing the Perl script to generating the
-corresponding Java bytecode.
+* **Seamless Execution of Perl Scripts on the JVM**: The primary focus is on enabling the execution of small to
+  medium-sized Perl scripts on the JVM, offering a unique way to integrate Perl with Java-based ecosystems.
+* **Exploring Perl and Java Interoperability**: This project serves as a bridge between Perl and Java, allowing
+  developers to experiment with interactions between the two languages.
+* **Compiler Design and Bytecode Generation**: The project offers a platform for those interested in the intricacies of
+  compiler design and bytecode generation, utilizing the ASM library for dynamic Java bytecode creation.
+
+### Current Limitations
+
+This project is an ambitious attempt to bring Perl to the JVM, but it's important to set realistic expectations
+regarding its current state and scope:
+
+* **Limited Module Support**: The compiler does not support XS modules or many CPAN libraries, particularly those that
+  rely heavily on C extensions (e.g., `Moose`, `DBI`, `List::Util`, and `Socket`). This restricts its ability to run
+  complex Perl applications that depend on such modules.
+
+* **Focus on Small to Medium Scripts**: The compiler is best suited for simpler Perl scripts that do not rely on
+  extensive module dependencies or deep Perl features. Large-scale Perl applications, especially those involving heavy
+  module usage, are beyond its current capabilities.
+
+* **Syntax Compatibility**: While the compiler handles many of Perl's core features, it may not fully support advanced
+  syntax-changing modules or some of the more esoteric features of Perl.
+
+### What This Project Is Not
+
+* **A Drop-in Replacement for Perl**: This is not intended to replace Perl or to be a full Perl interpreter. Instead,
+  it’s an experimental tool that provides a Perl-like environment within the JVM. Users should not expect full backwards
+  compatibility with native Perl.
+
+### Who Might Find This Useful?
+
+* **Java Developers with Perl Knowledge**: If you're a Java developer familiar with Perl, this project offers an
+  interesting way to integrate Perl scripts into Java applications.
+* **Compiler and Language Enthusiasts**: Those interested in the process of translating high-level languages into JVM
+  bytecode might find the project’s approach and methodology enlightening.
+* **Experimenters and Tinkerers**: If you enjoy experimenting with language interoperability or are looking for a unique
+  way to run Perl scripts on the JVM, this project might be a fun tool to explore.
+
+### Future Directions
+
+The project is evolving, and while it currently supports a subset of Perl features, future development may expand its
+capabilities. Community feedback and contributions are welcome to help guide its direction.
+
+The project is structured into several modules, including a lexer, parser, and bytecode generator. Each module plays a
+crucial role in the compilation process, from tokenizing the Perl script to generating the corresponding Java bytecode.
 
 ## Features
 
@@ -36,18 +75,22 @@ This compiler currently supports several key Perl features:
 
 - **Closures**: Supports anonymous functions and lexical variable closures, allowing for encapsulation of code.
 - **Eval-string**: Executes Perl code dynamically, supporting basic expressions and statements.
-- **Statements, Data Types, and Call Context**: Handles common Perl statements (e.g., `if`, `foreach`), data types (e.g., scalars, arrays, hashes), and maintains Perl’s context sensitivity (e.g., scalar vs list context).
+- **Statements, Data Types, and Call Context**: Handles common Perl statements (e.g., `if`, `foreach`), data types (
+  e.g., scalars, arrays, hashes), and maintains Perl’s context sensitivity (e.g., scalar vs list context).
 
-Additionally, it supports the Java Scripting API (JSR 223), enabling Perl scripts to be executed within Java applications using the `ScriptEngine` interface. Note that while this provides integration with Java, there may be limitations compared to native Perl execution.
+Additionally, it supports the Java Scripting API (JSR 223), enabling Perl scripts to be executed within Java
+applications using the `ScriptEngine` interface. Note that while this provides integration with Java, there may be
+limitations compared to native Perl execution.
 
 However, some areas present challenges:
 
-- **CPAN Modules and XS Code**: Compiling CPAN modules and XS (C-extensions) is challenging due to dependencies on native code and system libraries. Support for these features is limited and require additional development.
+- **CPAN Modules and XS Code**: Compiling CPAN modules and XS (C-extensions) is challenging due to dependencies on
+  native code and system libraries. Support for these features is limited and require additional development.
 
-For the most up-to-date information on features and limitations, please refer to the [FEATURE_MATRIX](FEATURE_MATRIX.md) file.
+For the most up-to-date information on features and limitations, please refer to the [FEATURE_MATRIX](FEATURE_MATRIX.md)
+file.
 
 ## Build
-
 
 ### Compile and Package with Maven
 
@@ -136,8 +179,6 @@ For the most up-to-date information on features and limitations, please refer to
 - The project uses the `com.github.johnrengelman.shadow` plugin for Gradle to create a shaded JAR.
 - Both Maven and Gradle configurations are set to use Java 11.
 
-
-
 ## Running the jar file
 
 1. **Show Instructions**:
@@ -183,33 +224,42 @@ For the most up-to-date information on features and limitations, please refer to
 ## Modules
 
 ### Lexer and Parser
+
 - **Lexer**: Used to split the code into symbols like space, identifier, operator.
-- **Parser**: Picks up the symbols and organizes them into an Abstract Syntax Tree (AST) of objects like block, subroutine.
+- **Parser**: Picks up the symbols and organizes them into an Abstract Syntax Tree (AST) of objects like block,
+  subroutine.
 
 ### StringParser
+
 - StringParser is used to parse domain-specific languages within Perl, such as Regex and string interpolation.
 
 ### ClassWriter
+
 - **ClassWriter**: Used to generate the bytecode for the class.
 - The user code is translated into a method.
 - The generated bytecode is loaded using a custom class loader.
 
 ### EmitterVisitor and EmitterContext
+
 - **EmitterVisitor**: Used to generate the bytecode for the operations within the method.
 - It traverses the AST and generates the corresponding ASM bytecode.
 - **EmitterContext**: Holds the current state of the Symbol Table and calling context (void, scalar, list).
 - **PrinterVisitor**: Provides pretty-print stringification for the AST.
 
 ### AST Nodes: *Node
+
 - Representations of AST nodes for code blocks, variable declarations, and operations.
 
 ### Symbol Table
+
 - **SymbolTable** and **ScopedSymbolTable**: Manage variable names and their corresponding local variable indices.
 
 ### Runtime classes: Runtime*
+
 - **Runtime**: Provides the implementation of the behavior of a Perl scalar variable, Code, Array, Hash.
 
 ### Main Method
+
 - The main method generates the bytecode for the program body.
 - The generated method is loaded into a variable as a code reference and executed.
 
@@ -237,9 +287,11 @@ For the most up-to-date information on features and limitations, please refer to
 
 ### PerlScriptEngine installation
 
-To use `PerlScriptEngine`, include the necessary dependencies in your project. For example, if you are using Maven, add the following to your `pom.xml`:
+To use `PerlScriptEngine`, include the necessary dependencies in your project. For example, if you are using Maven, add
+the following to your `pom.xml`:
 
 ```xml
+
 <dependency>
     <groupId>org.perlonjava</groupId>
     <artifactId>perl-script-engine</artifactId>
@@ -275,27 +327,29 @@ public class Main {
 ## Milestones
 
 ### Completed Milestones
+
 - **v1.0.0**: Initial proof of concept for the parser and execution engine.
 - **v1.1.0**: Established architecture and added key features. The system now supports benchmarks and tests.
-   - JSR 223 integration
-   - Support for closures
-   - Eval-string functionality
-   - Enhanced statements, data types, and call context
+    - JSR 223 integration
+    - Support for closures
+    - Eval-string functionality
+    - Enhanced statements, data types, and call context
 - **v1.2.0**: Added Namespaces and named subroutines.
-   - Added typeglobs 
-   - Added more operators
+    - Added typeglobs
+    - Added more operators
 - **v1.3.0**: Added Objects.
-   - Objects and object operators, UNIVERSAL class
-   - Array and List related operators
-   - More tests and various bug fixes
+    - Objects and object operators, UNIVERSAL class
+    - Array and List related operators
+    - More tests and various bug fixes
 
 ### Upcoming Milestones
+
 - **v1.4.0**: Planned release date: 2024-12-01
-   - File i/o operators, STDOUT, STDERR, STDIN
+    - File i/o operators, STDOUT, STDERR, STDIN
 - **v1.5.0**: Planned release date: 2025-01-10
-   - TBD
-   - Perl standard tests
-   - Performance improvements
+    - TBD
+    - Perl standard tests
+    - Performance improvements
 
 ## Benchmarks
 
@@ -304,12 +358,12 @@ public class Main {
 The following benchmarks provide an order of magnitude comparison with Perl:
 
 - **v1.0.0**:
-   - Lexer and Parser: Processes 50k lines per second; direct comparison with Perl is not applicable.
+    - Lexer and Parser: Processes 50k lines per second; direct comparison with Perl is not applicable.
 
 - **v1.1.0**:
-   - Numeric operations: 2x faster than Perl
-   - String operations: Comparable to Perl
-   - Eval-string: 10x slower than Perl
+    - Numeric operations: 2x faster than Perl
+    - String operations: Comparable to Perl
+    - Eval-string: 10x slower than Perl
 
 - **v1.2.0** and **v1.3.0**:
     - No performance related changes
@@ -317,7 +371,6 @@ The following benchmarks provide an order of magnitude comparison with Perl:
 ## License
 
 This project is licensed under the Perl License - see the [LICENSE](LICENSE.md) file for details.
-
 
 ![Java CI with Maven](https://github.com/fglock/PerlOnJava/workflows/Java%20CI%20with%20Maven/badge.svg)
 
