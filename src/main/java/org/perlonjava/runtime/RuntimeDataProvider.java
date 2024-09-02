@@ -40,6 +40,11 @@ public interface RuntimeDataProvider {
     RuntimeScalar scalar();
 
     /**
+     * Create a reference
+     */
+    RuntimeScalar createReference();
+    
+    /**
      * Add itself to a RuntimeArray.
      *
      * @param array The RuntimeArray object

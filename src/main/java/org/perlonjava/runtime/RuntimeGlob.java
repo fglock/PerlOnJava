@@ -46,6 +46,10 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
         return 1;
     }
 
+    public String toString() {
+        return "*" + this.globName;
+    }
+
     /**
      * Returns a string representation of the typeglob reference.
      * The format is "GLOB(hashCode)" where hashCode is the unique identifier for this instance.
@@ -90,6 +94,14 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
     public RuntimeScalar scalar() {
         RuntimeScalar ret = new RuntimeScalar();
         ret.type = RuntimeScalarType.GLOB;
+        ret.value = this;
+        return ret;
+    }
+
+    // Create a reference
+    public RuntimeScalar createReference() {
+        RuntimeScalar ret = new RuntimeScalar();
+        ret.type = RuntimeScalarType.GLOBREFERENCE;
         ret.value = this;
         return ret;
     }
