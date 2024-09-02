@@ -348,7 +348,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar set(RuntimeGlob value) {
         this.type = RuntimeScalarType.GLOB;
-        this.value = this;
+        this.value = value;
         return this;
     }
 
@@ -373,6 +373,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 return (String) value;
             case UNDEF:
                 return "";
+            case GLOB:
+                return value.toString();
             default:
                 return ((RuntimeScalarReference) value).toStringRef();
         }

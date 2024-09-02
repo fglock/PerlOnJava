@@ -10,6 +10,7 @@ public enum RuntimeScalarType {
     REFERENCE,
     GLOB,
     ARRAYREFERENCE,
-    HASHREFERENCE
-    // also BLESSED and special literals like filehandles, typeglobs, and regular expressions
+    HASHREFERENCE,
+    GLOBREFERENCE
+    // also BLESSED and special literals like regular expressions
 }
