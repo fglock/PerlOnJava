@@ -280,7 +280,6 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         return fh.close();
     }
 
-
     /**
      * Opens a file and initialize a file handle.
      *
