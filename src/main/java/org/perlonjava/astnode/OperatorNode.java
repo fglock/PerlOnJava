@@ -39,7 +39,7 @@ public class OperatorNode extends AbstractNode {
      * @param visitor the visitor that will perform the operation on this node
      */
     @Override
-    public void accept(Visitor visitor) throws Exception {
+    public void accept(Visitor visitor) {
         visitor.visit(this);
     }
 }

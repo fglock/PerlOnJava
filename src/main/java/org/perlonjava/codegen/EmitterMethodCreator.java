@@ -90,10 +90,8 @@ public class EmitterMethodCreator implements Opcodes {
      * @param ast         The abstract syntax tree representing the method body.
      * @param useTryCatch Flag to enable try-catch in the generated class. This is used in `eval` operator.
      * @return The generated class.
-     * @throws Exception If an error occurs during class creation.
      */
-    public static Class<?> createClassWithMethod(EmitterContext ctx, Node ast, boolean useTryCatch)
-            throws Exception {
+    public static Class<?> createClassWithMethod(EmitterContext ctx, Node ast, boolean useTryCatch) {
 
         String[] env = ctx.symbolTable.getVariableNames();
 

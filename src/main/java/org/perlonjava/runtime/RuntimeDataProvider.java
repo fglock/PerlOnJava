@@ -43,7 +43,7 @@ public interface RuntimeDataProvider {
      * Create a reference
      */
     RuntimeScalar createReference();
-    
+
     /**
      * Add itself to a RuntimeArray.
      *

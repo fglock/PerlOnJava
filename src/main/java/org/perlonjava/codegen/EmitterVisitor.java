@@ -149,14 +149,14 @@ public class EmitterVisitor implements Visitor {
     }
 
     @Override
-    public void visit(IdentifierNode node) throws Exception {
+    public void visit(IdentifierNode node) {
         // Emit code for identifier
         throw new PerlCompilerException(
                 node.tokenIndex, "Not implemented: bare word " + node.name, ctx.errorUtil);
     }
 
     @Override
-    public void visit(BinaryOperatorNode node) throws Exception {
+    public void visit(BinaryOperatorNode node) {
         String operator = node.operator;
         ctx.logDebug("visit(BinaryOperatorNode) " + operator + " in context " + ctx.contextType);
         EmitterVisitor scalarVisitor =
@@ -242,7 +242,7 @@ public class EmitterVisitor implements Visitor {
         throw new RuntimeException("Unexpected infix operator: " + operator);
     }
 
-    private void handleBinaryOperator(BinaryOperatorNode node, EmitterVisitor scalarVisitor, String methodStr) throws Exception {
+    private void handleBinaryOperator(BinaryOperatorNode node, EmitterVisitor scalarVisitor, String methodStr) {
         node.left.accept(scalarVisitor); // target - left parameter
         node.right.accept(scalarVisitor); // right parameter
         // stack: [left, right]
@@ -254,7 +254,7 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleCompoundAssignment(BinaryOperatorNode node, EmitterVisitor scalarVisitor, String methodStr) throws Exception {
+    private void handleCompoundAssignment(BinaryOperatorNode node, EmitterVisitor scalarVisitor, String methodStr) {
         // compound assignment operators like `+=`
         node.left.accept(scalarVisitor); // target - left parameter
         ctx.mv.visitInsn(Opcodes.DUP);
@@ -267,7 +267,7 @@ public class EmitterVisitor implements Visitor {
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
     }
 
-    private void handlePushOperator(String operator, BinaryOperatorNode node) throws Exception {
+    private void handlePushOperator(String operator, BinaryOperatorNode node) {
         node.left.accept(this.with(RuntimeContextType.LIST));
         node.right.accept(this.with(RuntimeContextType.LIST));
         // Transform the value in the stack to List
@@ -278,7 +278,7 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleMapOperator(String operator, BinaryOperatorNode node) throws Exception {
+    private void handleMapOperator(String operator, BinaryOperatorNode node) {
         node.right.accept(this.with(RuntimeContextType.LIST));  // list
         // Transform the value in the stack to List
         ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getList", "()Lorg/perlonjava/runtime/RuntimeList;", true);
@@ -289,7 +289,7 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleJoinOperator(String operator, BinaryOperatorNode node) throws Exception {
+    private void handleJoinOperator(String operator, BinaryOperatorNode node) {
         node.left.accept(this.with(RuntimeContextType.SCALAR));
         node.right.accept(this.with(RuntimeContextType.LIST));
         // Transform the value in the stack to List
@@ -300,7 +300,7 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleOrEqualOperator(BinaryOperatorNode node, int compareOpcode) throws Exception {
+    private void handleOrEqualOperator(BinaryOperatorNode node, int compareOpcode) {
         // Implements `||=` `&&=`, depending on compareOpcode
 
         MethodVisitor mv = ctx.mv;
@@ -339,7 +339,7 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleOrOperator(BinaryOperatorNode node, int compareOpcode) throws Exception {
+    private void handleOrOperator(BinaryOperatorNode node, int compareOpcode) {
         // Implements `||` `&&`, depending on compareOpcode
 
         MethodVisitor mv = ctx.mv;
@@ -371,7 +371,7 @@ public class EmitterVisitor implements Visitor {
     /**
      * Handles the postfix `[]` operator.
      */
-    private void handleArrayElementOperator(BinaryOperatorNode node) throws Exception {
+    private void handleArrayElementOperator(BinaryOperatorNode node) {
         ctx.logDebug("handleArrayElementOperator " + node + " in context " + ctx.contextType);
         EmitterVisitor scalarVisitor =
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
@@ -448,7 +448,7 @@ public class EmitterVisitor implements Visitor {
     /**
      * Handles the postfix `{}` node.
      */
-    private void handleHashElementOperator(BinaryOperatorNode node) throws Exception {
+    private void handleHashElementOperator(BinaryOperatorNode node) {
         ctx.logDebug("handleHashElementOperator " + node + " in context " + ctx.contextType);
         EmitterVisitor scalarVisitor =
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
@@ -536,7 +536,7 @@ public class EmitterVisitor implements Visitor {
     /**
      * Handles the postfix `()` node.
      */
-    private void handleApplyOperator(BinaryOperatorNode node) throws Exception {
+    private void handleApplyOperator(BinaryOperatorNode node) {
         ctx.logDebug("handleApplyElementOperator " + node + " in context " + ctx.contextType);
         EmitterVisitor scalarVisitor =
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
@@ -565,7 +565,7 @@ public class EmitterVisitor implements Visitor {
     /**
      * Handles the `->` operator.
      */
-    private void handleArrowOperator(BinaryOperatorNode node) throws Exception {
+    private void handleArrowOperator(BinaryOperatorNode node) {
         MethodVisitor mv = ctx.mv;
         ctx.logDebug("handleArrowOperator " + node + " in context " + ctx.contextType);
         EmitterVisitor scalarVisitor =
@@ -660,7 +660,7 @@ public class EmitterVisitor implements Visitor {
      *
      * @param operator The name of the built-in method to call.
      */
-    private void handleUnaryBuiltin(OperatorNode node, String operator) throws Exception {
+    private void handleUnaryBuiltin(OperatorNode node, String operator) {
         MethodVisitor mv = ctx.mv;
         if (node.operand == null) {
             // Unary operator with optional arguments, called without arguments
@@ -685,7 +685,7 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleArrayUnaryBuiltin(OperatorNode node, String operator) throws Exception {
+    private void handleArrayUnaryBuiltin(OperatorNode node, String operator) {
         // Handle:  $#array  $#$array_ref  shift @array  pop @array
         Node operand = node.operand;
         ctx.logDebug("handleArrayUnaryBuiltin " + operand);
@@ -699,7 +699,7 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleSpliceBuiltin(OperatorNode node, String operator) throws Exception {
+    private void handleSpliceBuiltin(OperatorNode node, String operator) {
         // Handle:  splice @array, LIST
         ctx.logDebug("handleSpliceBuiltin " + node);
         Node args = node.operand;
@@ -713,7 +713,7 @@ public class EmitterVisitor implements Visitor {
     }
 
     @Override
-    public void visit(OperatorNode node) throws Exception {
+    public void visit(OperatorNode node) {
         MethodVisitor mv = ctx.mv;
         String operator = node.operator;
         ctx.logDebug("visit(OperatorNode) " + operator + " in context " + ctx.contextType);
@@ -807,7 +807,7 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handlePackageOperator(OperatorNode node) throws Exception {
+    private void handlePackageOperator(OperatorNode node) {
         String name = ((IdentifierNode) node.operand).name;
         ctx.symbolTable.setCurrentPackage(name);
         if (ctx.contextType != RuntimeContextType.VOID) {
@@ -817,7 +817,7 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleKeysOperator(OperatorNode node, String operator) throws Exception {
+    private void handleKeysOperator(OperatorNode node, String operator) {
         node.operand.accept(this.with(RuntimeContextType.LIST));
         ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", operator, "()Lorg/perlonjava/runtime/RuntimeArray;", true);
         if (ctx.contextType == RuntimeContextType.LIST) {
@@ -829,7 +829,7 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleSayOperator(String operator, BinaryOperatorNode node) throws Exception {
+    private void handleSayOperator(String operator, BinaryOperatorNode node) {
         // Emit the argument list
         node.right.accept(this.with(RuntimeContextType.LIST));
         // Transform the value in the stack to List
@@ -863,11 +863,12 @@ public class EmitterVisitor implements Visitor {
             // TODO
         } else {
             // $fh
-            // TODO
+            String operator = ((OperatorNode) node).operator;
+            handleVariableOperator((OperatorNode) node, operator);
         }
     }
 
-    private void handleUnaryPlusOperator(OperatorNode node) throws Exception {
+    private void handleUnaryPlusOperator(OperatorNode node) {
         node.operand.accept(this.with(RuntimeContextType.SCALAR));
         if (ctx.contextType == RuntimeContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.POP);
@@ -918,7 +919,7 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleVariableOperator(OperatorNode node, String sigil) throws Exception {
+    private void handleVariableOperator(OperatorNode node, String sigil) {
         if (ctx.contextType == RuntimeContextType.VOID) {
             return;
         }
@@ -999,7 +1000,7 @@ public class EmitterVisitor implements Visitor {
         throw new PerlCompilerException(node.tokenIndex, "Not implemented: " + sigil, ctx.errorUtil);
     }
 
-    private void handleAssignOperator(BinaryOperatorNode node) throws Exception {
+    private void handleAssignOperator(BinaryOperatorNode node) {
         ctx.logDebug("SET " + node);
         MethodVisitor mv = ctx.mv;
         // Determine the assign type based on the left side.
@@ -1055,7 +1056,7 @@ public class EmitterVisitor implements Visitor {
         ctx.logDebug("SET end");
     }
 
-    private void handleMyOperator(OperatorNode node, String operator) throws Exception {
+    private void handleMyOperator(OperatorNode node, String operator) {
         if (node.operand instanceof ListNode) { // my ($a, $b)  our ($a, $b)
             // process each item of the list; then returns the list
             ListNode listNode = (ListNode) node.operand;
@@ -1125,7 +1126,7 @@ public class EmitterVisitor implements Visitor {
                 node.tokenIndex, "Not implemented: " + node.operator, ctx.errorUtil);
     }
 
-    private void handleReturnOperator(OperatorNode node) throws Exception {
+    private void handleReturnOperator(OperatorNode node) {
         ctx.logDebug("visit(return) in context " + ctx.contextType);
         ctx.logDebug("visit(return) will visit " + node.operand + " in context " + ctx.with(RuntimeContextType.RUNTIME).contextType);
 
@@ -1144,7 +1145,7 @@ public class EmitterVisitor implements Visitor {
         // TODO return (1,2), 3
     }
 
-    private void handleEvalOperator(OperatorNode node) throws Exception {
+    private void handleEvalOperator(OperatorNode node) {
         // eval string
 
         // TODO - this can be cached and reused at runtime for performance
@@ -1308,7 +1309,7 @@ public class EmitterVisitor implements Visitor {
     }
 
     @Override
-    public void visit(AnonSubNode node) throws Exception {
+    public void visit(AnonSubNode node) {
         ctx.logDebug("SUB start");
         if (ctx.contextType == RuntimeContextType.VOID) {
             return;
@@ -1447,7 +1448,7 @@ public class EmitterVisitor implements Visitor {
     }
 
     @Override
-    public void visit(For1Node node) throws Exception {
+    public void visit(For1Node node) {
         ctx.logDebug("FOR1 start");
 
         // Enter a new scope in the symbol table
@@ -1516,7 +1517,7 @@ public class EmitterVisitor implements Visitor {
 
 
     @Override
-    public void visit(For3Node node) throws Exception {
+    public void visit(For3Node node) {
         ctx.logDebug("FOR3 start");
         MethodVisitor mv = ctx.mv;
 
@@ -1585,7 +1586,7 @@ public class EmitterVisitor implements Visitor {
     }
 
     @Override
-    public void visit(IfNode node) throws Exception {
+    public void visit(IfNode node) {
         ctx.logDebug("IF start: " + node.operator);
 
         // Enter a new scope in the symbol table
@@ -1633,7 +1634,7 @@ public class EmitterVisitor implements Visitor {
     }
 
     @Override
-    public void visit(TernaryOperatorNode node) throws Exception {
+    public void visit(TernaryOperatorNode node) {
         ctx.logDebug("TERNARY_OP start");
 
         // Create labels for the else and end branches
@@ -1668,7 +1669,7 @@ public class EmitterVisitor implements Visitor {
     }
 
     @Override
-    public void visit(BlockNode node) throws Exception {
+    public void visit(BlockNode node) {
         ctx.logDebug("generateCodeBlock start");
         ctx.symbolTable.enterScope();
         EmitterVisitor voidVisitor =
@@ -1699,7 +1700,7 @@ public class EmitterVisitor implements Visitor {
     }
 
     @Override
-    public void visit(ListNode node) throws Exception {
+    public void visit(ListNode node) {
         ctx.logDebug("visit(ListNode) in context " + ctx.contextType);
         MethodVisitor mv = ctx.mv;
 
@@ -1738,7 +1739,7 @@ public class EmitterVisitor implements Visitor {
     }
 
     @Override
-    public void visit(StringNode node) throws Exception {
+    public void visit(StringNode node) {
         if (ctx.contextType == RuntimeContextType.VOID) {
             return;
         }
@@ -1759,7 +1760,7 @@ public class EmitterVisitor implements Visitor {
     }
 
     @Override
-    public void visit(HashLiteralNode node) throws Exception {
+    public void visit(HashLiteralNode node) {
         ctx.logDebug("visit(HashLiteralNode) in context " + ctx.contextType);
         MethodVisitor mv = ctx.mv;
 
@@ -1781,7 +1782,7 @@ public class EmitterVisitor implements Visitor {
     }
 
     @Override
-    public void visit(ArrayLiteralNode node) throws Exception {
+    public void visit(ArrayLiteralNode node) {
         ctx.logDebug("visit(ArrayLiteralNode) in context " + ctx.contextType);
         MethodVisitor mv = ctx.mv;
 

@@ -25,19 +25,19 @@ public class PrintVisitor implements Visitor {
     }
 
     @Override
-    public void visit(NumberNode node) throws Exception {
+    public void visit(NumberNode node) {
         appendIndent();
         sb.append("NumberNode: ").append(node.value).append("\n");
     }
 
     @Override
-    public void visit(IdentifierNode node) throws Exception {
+    public void visit(IdentifierNode node) {
         appendIndent();
         sb.append("IdentifierNode: ").append(node.name).append("\n");
     }
 
     @Override
-    public void visit(BinaryOperatorNode node) throws Exception {
+    public void visit(BinaryOperatorNode node) {
         appendIndent();
         sb.append("BinaryOperatorNode: ").append(node.operator).append("\n");
         indentLevel++;
@@ -47,7 +47,7 @@ public class PrintVisitor implements Visitor {
     }
 
     @Override
-    public void visit(OperatorNode node) throws Exception {
+    public void visit(OperatorNode node) {
         appendIndent();
         sb.append("OperatorNode: ").append(node.operator).append("\n");
         if (node.operand != null) {
@@ -58,7 +58,7 @@ public class PrintVisitor implements Visitor {
     }
 
     @Override
-    public void visit(For1Node node) throws Exception {
+    public void visit(For1Node node) {
         appendIndent();
         sb.append("For1Node:\n");
         indentLevel++;
@@ -97,7 +97,7 @@ public class PrintVisitor implements Visitor {
     }
 
     @Override
-    public void visit(For3Node node) throws Exception {
+    public void visit(For3Node node) {
         appendIndent();
         sb.append("For3Node:\n");
         indentLevel++;
@@ -145,7 +145,7 @@ public class PrintVisitor implements Visitor {
     }
 
     @Override
-    public void visit(IfNode node) throws Exception {
+    public void visit(IfNode node) {
         appendIndent();
         sb.append("IfNode: ").append(node.operator).append("\n");
         indentLevel++;
@@ -158,7 +158,7 @@ public class PrintVisitor implements Visitor {
     }
 
     @Override
-    public void visit(AnonSubNode node) throws Exception {
+    public void visit(AnonSubNode node) {
         appendIndent();
         sb.append("AnonSubNode:\n");
         indentLevel++;
@@ -190,7 +190,7 @@ public class PrintVisitor implements Visitor {
     }
 
     @Override
-    public void visit(TernaryOperatorNode node) throws Exception {
+    public void visit(TernaryOperatorNode node) {
         appendIndent();
         sb.append("TernaryOperatorNode: ").append(node.operator).append("\n");
         indentLevel++;
@@ -201,13 +201,13 @@ public class PrintVisitor implements Visitor {
     }
 
     @Override
-    public void visit(StringNode node) throws Exception {
+    public void visit(StringNode node) {
         appendIndent();
         sb.append("StringNode: '").append(node.value).append("'\n");
     }
 
     @Override
-    public void visit(BlockNode node) throws Exception {
+    public void visit(BlockNode node) {
         appendIndent();
         sb.append("BlockNode:\n");
         indentLevel++;
@@ -218,7 +218,7 @@ public class PrintVisitor implements Visitor {
     }
 
     @Override
-    public void visit(ListNode node) throws Exception {
+    public void visit(ListNode node) {
         appendIndent();
         sb.append("ListNode:\n");
         indentLevel++;
@@ -236,7 +236,7 @@ public class PrintVisitor implements Visitor {
     }
 
     @Override
-    public void visit(ArrayLiteralNode node) throws Exception {
+    public void visit(ArrayLiteralNode node) {
         appendIndent();
         sb.append("ArrayLiteralNode:\n");
         indentLevel++;
@@ -247,7 +247,7 @@ public class PrintVisitor implements Visitor {
     }
 
     @Override
-    public void visit(HashLiteralNode node) throws Exception {
+    public void visit(HashLiteralNode node) {
         appendIndent();
         sb.append("HashLiteralNode:\n");
         indentLevel++;
