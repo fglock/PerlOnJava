@@ -190,20 +190,30 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
 
     // Operators
 
-    public RuntimeScalar print(RuntimeGlob fileHandle) {
-        this.print(GlobalContext.getGlobalIO(fileHandle.globName));
-    }
-
-    public RuntimeScalar say(RuntimeGlob fileHandle) {
-        this.print(GlobalContext.getGlobalIO(fileHandle.globName));
-    }
-
     public RuntimeScalar print(RuntimeScalar fileHandle) {
         StringBuilder sb = new StringBuilder();
         for (RuntimeBaseEntity element : elements) {
             sb.append(element.toString());
         }
-        return ((RuntimeIO) fileHandle.value).write(sb.toString());
+
+        // System.out.println(fileHandle.type + " " + fileHandle.toString());
+
+        RuntimeIO fh;
+        if (fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
+            String globName = ((RuntimeGlob) fileHandle.value).globName;
+            fh = (RuntimeIO) GlobalContext.getGlobalIO(globName).value;
+        } else if (fileHandle.type == RuntimeScalarType.GLOB ) {
+            if (fileHandle.value instanceof RuntimeGlob) {
+                String globName = ((RuntimeGlob) fileHandle.value).globName;
+                fh = (RuntimeIO) GlobalContext.getGlobalIO(globName).value;
+            } else {
+                fh = (RuntimeIO) fileHandle.value;
+            }
+        } else {
+            fh = (RuntimeIO) fileHandle.value;
+            // throw  new RuntimeException("Invalid fileHandle type: " + fileHandle.type);
+        }
+        return fh.write(sb.toString());
     }
 
     public RuntimeScalar say(RuntimeScalar fileHandle) {
@@ -212,7 +222,25 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
             sb.append(element.toString());
         }
         sb.append("\n");
-        return ((RuntimeIO) fileHandle.value).write(sb.toString());
+
+        // System.out.println(fileHandle.type + " " + fileHandle.toString());
+
+        RuntimeIO fh;
+        if (fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
+            String globName = ((RuntimeGlob) fileHandle.value).globName;
+            fh = (RuntimeIO) GlobalContext.getGlobalIO(globName).value;
+        } else if (fileHandle.type == RuntimeScalarType.GLOB ) {
+            if (fileHandle.value instanceof RuntimeGlob) {
+                String globName = ((RuntimeGlob) fileHandle.value).globName;
+                fh = (RuntimeIO) GlobalContext.getGlobalIO(globName).value;
+            } else {
+                fh = (RuntimeIO) fileHandle.value;
+            }
+        } else {
+            fh = (RuntimeIO) fileHandle.value;
+            // throw  new RuntimeException("Invalid fileHandle type: " + fileHandle.type);
+        }
+        return fh.write(sb.toString());
     }
 
     /**
