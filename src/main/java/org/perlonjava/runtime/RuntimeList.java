@@ -260,16 +260,16 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
 //        open FILEHANDLE,EXPR
 //        open FILEHANDLE
 
-        // TODO fetch parameters
+        // fetch parameters - we are assuming the usual 3-argument open
         String mode = elements.get(0).toString();
         String fileName = elements.get(1).toString();
 
-        // Fetch the content to the file handle, if any
-        RuntimeIO fh = fileHandle.getRuntimeIO();
-        // TODO close old fh if it is not null
-        // Open a new fh
-        fh = new RuntimeIO(fileName, mode);
-        // TODO store the fh back into the fileHandle parameter
+        RuntimeIO fh = RuntimeIO.open(fileName, mode);
+        if (fh == null) {
+            return new RuntimeScalar();
+        }
+        fileHandle.type = RuntimeScalarType.GLOB;
+        fileHandle.value = fh;
         return new RuntimeScalar(1); // success
     }
 

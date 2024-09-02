@@ -61,9 +61,9 @@ public class GlobalContext {
         getGlobalHash("main::INC");
 
         // Initialize STDOUT, STDERR, STDIN
-        getGlobalIO("main::STDOUT").set(new RuntimeIO(FileDescriptor.out, true));
-        getGlobalIO("main::STDERR").set(new RuntimeIO(FileDescriptor.err, true));
-        getGlobalIO("main::STDIN").set(new RuntimeIO(FileDescriptor.in, false));
+        getGlobalIO("main::STDOUT").set(RuntimeIO.open(FileDescriptor.out, true));
+        getGlobalIO("main::STDERR").set(RuntimeIO.open(FileDescriptor.err, true));
+        getGlobalIO("main::STDIN").set(RuntimeIO.open(FileDescriptor.in, false));
 
         // Initialize UNIVERSAL class
         try {
