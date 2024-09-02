@@ -128,6 +128,40 @@ print "not " if $substr ne "World"; say "ok # substr('Hello, World!', 7, -1)";
 
 
 ###################
+# sprintf tests
+
+# Test integer formatting
+my $int = sprintf("%d", 42);
+print "not " if $int ne "42"; say "ok # sprintf('%d', 42)";
+
+# Test floating-point formatting
+my $float = sprintf("%.2f", 3.14159);
+print "not " if $float ne "3.14"; say "ok # sprintf('%.2f', 3.14159)";
+
+# Test string formatting
+my $str = sprintf("%s", "Hello, World!");
+print "not " if $str ne "Hello, World!"; say "ok # sprintf('%s', 'Hello, World!')";
+
+# Test multiple arguments
+my $formatted = sprintf("Name: %s, Age: %d", "Alice", 30);
+print "not " if $formatted ne "Name: Alice, Age: 30"; say "ok # sprintf('Name: %s, Age: %d', 'Alice', 30)";
+
+# Test padding and width
+my $padded = sprintf("|%10s|", "test");
+print "not " if $padded ne "|      test|"; say "ok # sprintf('|%10s|', 'test') |$padded|";
+
+# Test negative width
+my $negative_width = sprintf("|%-10s|", "test");
+print "not " if $negative_width ne "|test      |"; say "ok # sprintf('|%-10s|', 'test') |$negative_width|";
+
+## XXX TODO
+## # Test invalid format string
+## my $invalid_format;
+## eval { $invalid_format = sprintf("%z", "data") };
+## print "not " if $@; # Expecting an error
+## print "ok # sprintf with invalid format string causes an error\n";
+
+###################
 # Logical Operators
 
 # Logical AND
