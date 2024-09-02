@@ -190,6 +190,14 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
 
     // Operators
 
+    public RuntimeScalar print(RuntimeGlob fileHandle) {
+        this.print(GlobalContext.getGlobalIO(fileHandle.globName));
+    }
+
+    public RuntimeScalar say(RuntimeGlob fileHandle) {
+        this.print(GlobalContext.getGlobalIO(fileHandle.globName));
+    }
+
     public RuntimeScalar print(RuntimeScalar fileHandle) {
         StringBuilder sb = new StringBuilder();
         for (RuntimeBaseEntity element : elements) {
