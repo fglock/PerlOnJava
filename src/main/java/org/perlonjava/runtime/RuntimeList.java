@@ -248,6 +248,32 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
     }
 
     /**
+     * Opens a file and initialize a file handle.
+     *
+     * @param fileHandle The file handle.
+     * @return A RuntimeScalar indicating the result of the open operation.
+     */
+    public RuntimeScalar open(RuntimeScalar fileHandle) {
+//        open FILEHANDLE,MODE,EXPR
+//        open FILEHANDLE,MODE,EXPR,LIST
+//        open FILEHANDLE,MODE,REFERENCE
+//        open FILEHANDLE,EXPR
+//        open FILEHANDLE
+
+        // TODO fetch parameters
+        String mode = elements.get(0).toString();
+        String fileName = elements.get(1).toString();
+
+        // Fetch the content to the file handle, if any
+        RuntimeIO fh = fileHandle.getRuntimeIO();
+        // TODO close old fh if it is not null
+        // Open a new fh
+        fh = new RuntimeIO(fileName, mode);
+        // TODO store the fh back into the fileHandle parameter
+        return new RuntimeScalar(1); // success
+    }
+
+    /**
      * Sorts the elements of this RuntimeArray using a Perl comparator subroutine.
      *
      * @param perlComparatorClosure A RuntimeScalar representing the Perl comparator subroutine.
