@@ -469,30 +469,31 @@ public class Parser {
                     case "splice":
                         operand = parseZeroOrMoreList(0, false, true, false);
                         return new OperatorNode(token.text, operand, tokenIndex);
-//                    case "readline":
-//                    case "eof":
-//                    case "tell":
-//                    case "getc":
-//                    case "open":
-//                    case "close":
-//                    case "seek":
-//                        // Handle 'open' keyword as a Binary operator with a FileHandle and List operands
-//                        operand = parseZeroOrMoreList(0, false, true, true);
-//                        Node handle = ((ListNode) operand).handle;
-//                        if (handle == null) {
-//                            handle = new IdentifierNode("main::STDOUT", tokenIndex);
-//                        }
-//                        ((ListNode) operand).handle = null;
-//                        return new BinaryOperatorNode(token.text, handle, operand, tokenIndex);
+                    case "readline":
+                    case "eof":
+                    case "tell":
+                    case "getc":
+                    case "open":
+                    case "close":
+                    case "seek":
+                        // Handle 'open' keyword as a Binary operator with a FileHandle and List operands
+                        operand = parseZeroOrMoreList(0, false, true, false);
+                        // Node handle = ((ListNode) operand).handle;
+                        // ((ListNode) operand).handle = null;
+                        Node handle = ((ListNode) operand).elements.remove(0);
+                        if (handle == null) {
+                            handle = new IdentifierNode("main::STDOUT", tokenIndex);
+                        }
+                        return new BinaryOperatorNode(token.text, handle, operand, tokenIndex);
                     case "print":
                     case "say":
                         // Handle 'print' keyword as a Binary operator with a FileHandle and List operands
                         operand = parseZeroOrMoreList(0, false, true, true);
-                        Node handle = ((ListNode) operand).handle;
+                        handle = ((ListNode) operand).handle;
+                        ((ListNode) operand).handle = null;
                         if (handle == null) {
                             handle = new IdentifierNode("main::STDOUT", tokenIndex);
                         }
-                        ((ListNode) operand).handle = null;
                         return new BinaryOperatorNode(token.text, handle, operand, tokenIndex);
                     case "scalar":
                     case "values":

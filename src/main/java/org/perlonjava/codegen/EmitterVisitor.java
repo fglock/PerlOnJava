@@ -201,6 +201,7 @@ public class EmitterVisitor implements Visitor {
             case "grep":
                 handleMapOperator(operator, node);
                 return;
+            case "open":
             case "print":
             case "say":
                 handleSayOperator(operator, node);
@@ -836,7 +837,12 @@ public class EmitterVisitor implements Visitor {
         ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getList", "()Lorg/perlonjava/runtime/RuntimeList;", true);
 
         // Emit the File Handle
-        emitFileHandle(node.left);
+        if (node.left instanceof OperatorNode) {
+            // my $fh  $fh
+            node.left.accept(this.with(RuntimeContextType.SCALAR));
+        } else {
+            emitFileHandle(node.left);
+        }
 
         // Call the operator, return Scalar
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
@@ -861,10 +867,6 @@ public class EmitterVisitor implements Visitor {
         } else if (node instanceof BlockNode) {
             // {STDERR}  or  {$fh}
             // TODO
-        } else {
-            // $fh
-            String operator = ((OperatorNode) node).operator;
-            handleVariableOperator((OperatorNode) node, operator);
         }
     }
 
