@@ -22,7 +22,7 @@ public interface Node {
      *
      * @param visitor the visitor that will perform the operation on the node
      */
-    void accept(Visitor visitor) throws Exception;
+    void accept(Visitor visitor);
 
     /**
      * Gets the index of the node in the token list.
