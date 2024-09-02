@@ -1187,7 +1187,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
         // Regular expression to find format specifiers in the format string
         // Example of format specifiers: %d, %f, %s, etc.
-        Pattern pattern = Pattern.compile("%[\\d\\.]*[a-zA-Z]");
+        Pattern pattern = Pattern.compile("%[\\-\\+\\d\\s]*\\.?\\d*[a-zA-Z]");
         Matcher matcher = pattern.matcher(format);
 
         int index = 0;

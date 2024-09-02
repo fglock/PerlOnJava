@@ -221,7 +221,7 @@ public class EmitterMethodCreator implements Opcodes {
             //      Opcodes.INVOKEVIRTUAL, "java/lang/Exception", "printStackTrace", "()V", false);
 
             // Convert the exception to a string
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/ErrorMessageUtil", "stringifyException", "(Ljava/lang/Exception;)Ljava/lang/String;", false);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/ErrorMessageUtil", "stringifyException", "(Ljava/lang/Exception;)Ljava/lang/String;", false);
 
             // Set the global error variable "$@" using GlobalContext.setGlobalVariable(key, value)
             mv.visitLdcInsn("$main::@");
