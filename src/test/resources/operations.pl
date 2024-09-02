@@ -154,12 +154,11 @@ print "not " if $padded ne "|      test|"; say "ok # sprintf('|%10s|', 'test') |
 my $negative_width = sprintf("|%-10s|", "test");
 print "not " if $negative_width ne "|test      |"; say "ok # sprintf('|%-10s|', 'test') |$negative_width|";
 
-## XXX TODO
-## # Test invalid format string
-## my $invalid_format;
-## eval { $invalid_format = sprintf("%z", "data") };
-## print "not " if $@; # Expecting an error
-## print "ok # sprintf with invalid format string causes an error\n";
+# Test invalid format string
+my $invalid_format;
+eval { $invalid_format = sprintf("%z", "data") };
+print "not " if $@; # Expecting an error
+print "ok # sprintf with invalid format string causes an error\n";
 
 ###################
 # Logical Operators
