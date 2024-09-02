@@ -192,7 +192,26 @@ public class RuntimeIO implements RuntimeScalarReference {
             if (bufferedReader == null) {
                 throw new UnsupportedOperationException("Readline is not supported for output streams");
             }
-            return new RuntimeScalar(bufferedReader.readLine());
+
+            String sep = getGlobalVariable("main::/").toString();  // fetch $/
+            boolean hasSeparator = !sep.isEmpty();
+            int separator = hasSeparator ? sep.charAt(0) : 0;
+
+            StringBuilder line = new StringBuilder();
+            int c;
+
+            while ((c = bufferedReader.read()) != -1) {
+                line.append((char) c);
+                if (hasSeparator && c == separator) {
+                    break;
+                }
+            }
+
+            if (line.length() == 0) {
+                return null; // end of stream
+            }
+
+            return new RuntimeScalar( line.toString());
         } catch (Exception e) {
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
             return new RuntimeScalar();

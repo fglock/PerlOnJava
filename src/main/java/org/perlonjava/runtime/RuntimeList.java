@@ -248,6 +248,17 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
     }
 
     /**
+     * Reads a line from a file handle.
+     *
+     * @param fileHandle The file handle.
+     * @return A RuntimeScalar with the line.
+     */
+    public RuntimeScalar readline(RuntimeScalar fileHandle) {
+        RuntimeIO fh = fileHandle.getRuntimeIO();
+        return fh.readline();
+    }
+
+    /**
      * Opens a file and initialize a file handle.
      *
      * @param fileHandle The file handle.
