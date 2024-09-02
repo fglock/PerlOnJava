@@ -190,45 +190,61 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
 
     // Operators
 
+    /**
+     * Prints the elements to the specified file handle with a separator and newline.
+     *
+     * @param fileHandle The file handle to write to.
+     * @return A RuntimeScalar indicating the result of the write operation.
+     */
     public RuntimeScalar print(RuntimeScalar fileHandle) {
         StringBuilder sb = new StringBuilder();
+        String separator = getGlobalVariable("main::,").toString(); // fetch $,
+        String newline = getGlobalVariable("main::\\").toString();  // fetch $\
+        boolean first = true;
+
+        // Iterate through elements and append them with the separator
         for (RuntimeBaseEntity element : elements) {
+            if (!first) {
+                sb.append(separator);
+            }
             sb.append(element.toString());
+            first = false;
         }
-        RuntimeIO fh = getRuntimeIO(fileHandle);
+
+        // Append the newline character
+        sb.append(newline);
+
+        // Write the content to the file handle
+        RuntimeIO fh = fileHandle.getRuntimeIO();
         return fh.write(sb.toString());
     }
 
+    /**
+     * Prints the elements to the specified file handle with a separator and a newline at the end.
+     *
+     * @param fileHandle The file handle to write to.
+     * @return A RuntimeScalar indicating the result of the write operation.
+     */
     public RuntimeScalar say(RuntimeScalar fileHandle) {
         StringBuilder sb = new StringBuilder();
+        String separator = getGlobalVariable("main::,").toString(); // fetch $,
+        boolean first = true;
+
+        // Iterate through elements and append them with the separator
         for (RuntimeBaseEntity element : elements) {
-            sb.append(element.toString());
-        }
-        sb.append("\n");
-        RuntimeIO fh = getRuntimeIO(fileHandle);
-        return fh.write(sb.toString());
-    }
-    
-    private RuntimeIO getRuntimeIO(RuntimeScalar fileHandle) {
-        RuntimeIO fh;
-        if (fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
-            // my $fh2 = \*STDOUT;
-            String globName = ((RuntimeGlob) fileHandle.value).globName;
-            fh = (RuntimeIO) GlobalContext.getGlobalIO(globName).value;
-        } else if (fileHandle.type == RuntimeScalarType.GLOB ) {
-            // my $fh = *STDOUT;
-            if (fileHandle.value instanceof RuntimeGlob) {
-                String globName = ((RuntimeGlob) fileHandle.value).globName;
-                fh = (RuntimeIO) GlobalContext.getGlobalIO(globName).value;
-            } else {
-                fh = (RuntimeIO) fileHandle.value;
+            if (!first) {
+                sb.append(separator);
             }
-        } else {
-            // print STDOUT ...
-            fh = (RuntimeIO) fileHandle.value;
-            // throw  new RuntimeException("Invalid fileHandle type: " + fileHandle.type);
+            sb.append(element.toString());
+            first = false;
         }
-        return fh;
+
+        // Append the newline character
+        sb.append("\n");
+
+        // Write the content to the file handle
+        RuntimeIO fh = fileHandle.getRuntimeIO();
+        return fh.write(sb.toString());
     }
 
     /**
