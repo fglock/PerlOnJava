@@ -1184,6 +1184,32 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalarIterator(this);
     }
 
+    public RuntimeIO getRuntimeIO() {
+        RuntimeIO fh;
+        if (type == RuntimeScalarType.GLOBREFERENCE) {
+            // my $fh2 = \*STDOUT;
+            // System.out.println("GLOBREFERENCE");
+            String globName = ((RuntimeGlob) value).globName;
+            fh = (RuntimeIO) GlobalContext.getGlobalIO(globName).value;
+        } else if (type == RuntimeScalarType.GLOB ) {
+            // my $fh = *STDOUT;
+            if (value instanceof RuntimeGlob) {
+                // System.out.println("GLOB");
+                String globName = ((RuntimeGlob) value).globName;
+                fh = (RuntimeIO) GlobalContext.getGlobalIO(globName).value;
+            } else {
+                // System.out.println("GLOB but IO");
+                fh = (RuntimeIO) value;
+            }
+        } else {
+            // print STDOUT ...
+            // System.out.println("IO");
+            fh = (RuntimeIO) value;
+            // throw  new RuntimeException("Invalid fileHandle type: " + fileHandle.type);
+        }
+        return fh;
+    }
+
     private static class RuntimeScalarIterator implements Iterator<RuntimeScalar> {
         private final RuntimeScalar scalar;
         private boolean hasNext = true;
