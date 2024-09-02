@@ -126,7 +126,7 @@
 - ❌  **`do` file**: File execution using `do` is not yet implemented.
 - ✔️   **`print` operators**: `print` and `say` statements are implemented, with support for file handles.
 - ❌  **`printf` and `sprintf`**: String formatting is not yet implemented.
-- ✔️   **`I/O operators**: `open` is implemented.
+- ✔️   **`I/O operators**: `open`, `readline` are implemented.
 - ✔️   **Short-circuit and, or**: Short-circuit logical operators are supported.
 - ✔️   **Low-precedence/high precedence operators**: Logical operators like `not`, `or`, `and` are supported.
 - ✔️   **Ternary operator**: The ternary conditional operator is implemented.
@@ -150,7 +150,7 @@
 - ✔️   **Global variable infrastructure**: Support for global variables is implemented.
 - ✔️   **Namespaces**: Namespace support is present.
 - ✔️   **`@_` and `$@` special variables**: Special variables like `@_` and `$@` are supported.
-- ✔️   **Special variables**: The special variables `$_`, `$"`, `$\\`, `$,`, `$a`, `$b` are implemented.
+- ✔️   **Special variables**: The special variables `$_`, `$"`, `$\\`, `$,`, `$/`, `$a`, `$b` are implemented.
 - ✔️   **I/O symbols**: `STDOUT`, `STDERR`, `STDIN` are implemented.
 - ❌  **Thread-safe `@_`, `$_`, and regex variables**: Thread safety for global special variables is missing.
 
