@@ -195,24 +195,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         for (RuntimeBaseEntity element : elements) {
             sb.append(element.toString());
         }
-
-        // System.out.println(fileHandle.type + " " + fileHandle.toString());
-
-        RuntimeIO fh;
-        if (fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
-            String globName = ((RuntimeGlob) fileHandle.value).globName;
-            fh = (RuntimeIO) GlobalContext.getGlobalIO(globName).value;
-        } else if (fileHandle.type == RuntimeScalarType.GLOB ) {
-            if (fileHandle.value instanceof RuntimeGlob) {
-                String globName = ((RuntimeGlob) fileHandle.value).globName;
-                fh = (RuntimeIO) GlobalContext.getGlobalIO(globName).value;
-            } else {
-                fh = (RuntimeIO) fileHandle.value;
-            }
-        } else {
-            fh = (RuntimeIO) fileHandle.value;
-            // throw  new RuntimeException("Invalid fileHandle type: " + fileHandle.type);
-        }
+        RuntimeIO fh = getRuntimeIO(fileHandle);
         return fh.write(sb.toString());
     }
 
@@ -222,14 +205,18 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
             sb.append(element.toString());
         }
         sb.append("\n");
-
-        // System.out.println(fileHandle.type + " " + fileHandle.toString());
-
+        RuntimeIO fh = getRuntimeIO(fileHandle);
+        return fh.write(sb.toString());
+    }
+    
+    private RuntimeIO getRuntimeIO(RuntimeScalar fileHandle) {
         RuntimeIO fh;
         if (fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
+            // my $fh2 = \*STDOUT;
             String globName = ((RuntimeGlob) fileHandle.value).globName;
             fh = (RuntimeIO) GlobalContext.getGlobalIO(globName).value;
         } else if (fileHandle.type == RuntimeScalarType.GLOB ) {
+            // my $fh = *STDOUT;
             if (fileHandle.value instanceof RuntimeGlob) {
                 String globName = ((RuntimeGlob) fileHandle.value).globName;
                 fh = (RuntimeIO) GlobalContext.getGlobalIO(globName).value;
@@ -237,10 +224,11 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
                 fh = (RuntimeIO) fileHandle.value;
             }
         } else {
+            // print STDOUT ...
             fh = (RuntimeIO) fileHandle.value;
             // throw  new RuntimeException("Invalid fileHandle type: " + fileHandle.type);
         }
-        return fh.write(sb.toString());
+        return fh;
     }
 
     /**
