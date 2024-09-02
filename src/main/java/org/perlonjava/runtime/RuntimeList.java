@@ -129,6 +129,11 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         return elements.get(elements.size() - 1).scalar();
     }
 
+    public RuntimeScalar createReference() {
+        // TODO
+        throw new IllegalStateException("TODO - create reference of list not implemented");
+    }
+
     // Set the items in the list to the values in another list
     // (THIS LIST) = (ARG LIST)
     //

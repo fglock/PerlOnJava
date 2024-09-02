@@ -713,6 +713,7 @@ public class EmitterVisitor implements Visitor {
 
     @Override
     public void visit(OperatorNode node) throws Exception {
+        MethodVisitor mv = ctx.mv;
         String operator = node.operator;
         ctx.logDebug("visit(OperatorNode) " + operator + " in context " + ctx.contextType);
 
@@ -782,7 +783,12 @@ public class EmitterVisitor implements Visitor {
                 handleUnaryBuiltin(node, "postAutoDecrement");
                 break;
             case "\\":
-                handleUnaryBuiltin(node, "createReference");
+                // TODO operand can be a list
+                node.operand.accept(this.with(RuntimeContextType.SCALAR));
+                ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "createReference", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+                if (ctx.contextType == RuntimeContextType.VOID) {
+                    mv.visitInsn(Opcodes.POP);
+                }
                 break;
             case "$#":
                 node = new OperatorNode("$#", new OperatorNode("@", node.operand, node.tokenIndex), node.tokenIndex);
@@ -1801,7 +1807,7 @@ public class EmitterVisitor implements Visitor {
 
             // The stack now has the RuntimeArray instance again
         }
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", "createReference", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "createReference", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
 
         if (ctx.contextType == RuntimeContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.POP);
