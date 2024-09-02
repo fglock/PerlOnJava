@@ -9,8 +9,8 @@ public enum RuntimeScalarType {
     UNDEF,
     REFERENCE,
     GLOB,
+    REGEX,
     ARRAYREFERENCE,
     HASHREFERENCE,
     GLOBREFERENCE
-    // also BLESSED and special literals like regular expressions
 }
