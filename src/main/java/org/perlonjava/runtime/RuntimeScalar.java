@@ -1105,6 +1105,44 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(toString().length());
     }
 
+    public RuntimeScalar substr(RuntimeList list) {
+        String str = this.toString();
+        int strLength = str.length();
+
+        int size = list.elements.size();
+        int offset = Integer.parseInt(list.elements.get(0).toString());
+        int length = (size > 1) ? Integer.parseInt(list.elements.get(1).toString()) : strLength - offset;
+
+        // Handle negative offsets
+        if (offset < 0) {
+            offset = strLength + offset;
+        }
+
+        // Ensure offset is within bounds
+        if (offset < 0) {
+            offset = 0;
+        }
+        if (offset > strLength) {
+            offset = strLength;
+        }
+
+        // Handle negative lengths
+        if (length < 0) {
+            length = strLength + length - offset;
+        }
+
+        // Ensure length is non-negative and within bounds
+        if (length < 0) {
+            length = 0;
+        }
+        if (offset + length > strLength) {
+            length = strLength - offset;
+        }
+
+        String result = str.substring(offset, offset + length);
+        return new RuntimeScalar(result);
+    }
+
     public RuntimeScalar quotemeta() {
         StringBuilder quoted = new StringBuilder();
         for (char c : this.value.toString().toCharArray()) {

@@ -448,6 +448,7 @@ public class Parser {
                     case "push":
                     case "unshift":
                     case "join":
+                    case "substr":
                         // Handle 'join' keyword as a Binary operator with a RuntimeList operand
                         operand = parseZeroOrMoreList(1, false, true, false);
                         Node separator = ((ListNode) operand).elements.remove(0);
