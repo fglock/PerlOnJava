@@ -485,6 +485,7 @@ public class Parser {
                             handle = new IdentifierNode("main::STDOUT", tokenIndex);
                         }
                         return new BinaryOperatorNode(token.text, handle, operand, tokenIndex);
+                    case "printf":
                     case "print":
                     case "say":
                         // Handle 'print' keyword as a Binary operator with a FileHandle and List operands

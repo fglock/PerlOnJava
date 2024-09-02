@@ -124,7 +124,7 @@
 - ✔️   **`eval` block**: `eval` blocks are implemented.
 - ✔️   **`do` block**: `do` blocks are supported.
 - ❌  **`do` file**: File execution using `do` is not yet implemented.
-- ✔️   **`print` operators**: `print` and `say` statements are implemented, with support for file handles.
+- ✔️   **`print` operators**: `print`, `printf` and `say` statements are implemented, with support for file handles.
 - ❌  **`printf` and `sprintf`**: String formatting is not yet implemented.
 - ✔️   **`I/O operators**: `open`, `readline`, `eof`, `close` are implemented.
 - ✔️   **Short-circuit and, or**: Short-circuit logical operators are supported.
