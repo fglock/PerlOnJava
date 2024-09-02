@@ -1191,7 +1191,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             // System.out.println("GLOBREFERENCE");
             String globName = ((RuntimeGlob) value).globName;
             fh = (RuntimeIO) GlobalContext.getGlobalIO(globName).value;
-        } else if (type == RuntimeScalarType.GLOB ) {
+        } else if (type == RuntimeScalarType.GLOB) {
             // my $fh = *STDOUT;
             if (value instanceof RuntimeGlob) {
                 // System.out.println("GLOB");

@@ -24,58 +24,62 @@ public class RuntimeIO implements RuntimeScalarReference {
     }
 
     // Constructor to open the file with a specific mode
-    public RuntimeIO(String fileName, String mode) {
+    public static RuntimeIO open(String fileName, String mode) {
+        RuntimeIO fh = new RuntimeIO();
         try {
-            String javaMode = convertMode(mode);
-            this.file = new RandomAccessFile(fileName, javaMode);
-            this.bufferedReader = new BufferedReader(new FileReader(file.getFD()));
-            this.isEOF = false;
+            String javaMode = fh.convertMode(mode);
+            fh.file = new RandomAccessFile(fileName, javaMode);
+            fh.bufferedReader = new BufferedReader(new FileReader(fh.file.getFD()));
+            fh.isEOF = false;
 
             // Truncate the file if mode is '>'
             if (">".equals(mode)) {
-                file.setLength(0);
+                fh.file.setLength(0);
             }
             if (">>".equals(mode)) {
-                file.seek(file.length()); // Move to end for appending
+                fh.file.seek(fh.file.length()); // Move to end for appending
             }
         } catch (IOException e) {
-            System.err.println("File operation failed: " + e.getMessage());
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+            fh = null;
         }
+        return fh;
     }
 
     // Constructor for standard output and error streams
-    public RuntimeIO(FileDescriptor fd, boolean isOutput) {
+    public static RuntimeIO open(FileDescriptor fd, boolean isOutput) {
+        RuntimeIO fh = new RuntimeIO();
         try {
             if (isOutput) {
                 if (fd == FileDescriptor.out) {
-                    this.outputStream = System.out;
+                    fh.outputStream = System.out;
                 } else if (fd == FileDescriptor.err) {
-                    this.outputStream = System.err;
+                    fh.outputStream = System.err;
                 } else {
-                    this.outputStream = new FileOutputStream(fd);
+                    fh.outputStream = new FileOutputStream(fd);
                 }
             } else {
-                this.inputStream = new FileInputStream(fd);
-                this.bufferedReader = new BufferedReader(new InputStreamReader(inputStream));
+                fh.inputStream = new FileInputStream(fd);
+                fh.bufferedReader = new BufferedReader(new InputStreamReader(fh.inputStream));
             }
-            this.isEOF = false;
+            fh.isEOF = false;
         } catch (Exception e) {
-            System.err.println("File operation failed: " + e.getMessage());
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+            fh = null;
         }
+        return fh;
     }
 
     public static void main(String[] args) {
         // Example usage of FileHandle
 
         // Writing to a file
-        RuntimeIO fhWrite = new RuntimeIO("output.txt", ">");
+        RuntimeIO fhWrite = RuntimeIO.open("output.txt", ">");
         fhWrite.write("This line gets written into output.txt.\n");
         fhWrite.close();
 
         // Reading from a file
-        RuntimeIO fhRead = new RuntimeIO("output.txt", "<");
+        RuntimeIO fhRead = RuntimeIO.open("output.txt", "<");
         byte[] buffer = new byte[128];
         int bytesRead;
         while ((bytesRead = fhRead.read(buffer)) != -1) {
@@ -84,7 +88,7 @@ public class RuntimeIO implements RuntimeScalarReference {
         fhRead.close();
 
         // Example with getc and tell
-        RuntimeIO fhGetc = new RuntimeIO("output.txt", "<");
+        RuntimeIO fhGetc = RuntimeIO.open("output.txt", "<");
         int ch;
         while ((ch = fhGetc.getc()) != -1) {
             System.out.print((char) ch);
@@ -93,9 +97,9 @@ public class RuntimeIO implements RuntimeScalarReference {
         fhGetc.close();
 
         // Fetching standard handles
-        RuntimeIO stdout = new RuntimeIO(FileDescriptor.out, true);
-        RuntimeIO stderr = new RuntimeIO(FileDescriptor.err, true);
-        RuntimeIO stdin = new RuntimeIO(FileDescriptor.in, false);
+        RuntimeIO stdout = RuntimeIO.open(FileDescriptor.out, true);
+        RuntimeIO stderr = RuntimeIO.open(FileDescriptor.err, true);
+        RuntimeIO stdin = RuntimeIO.open(FileDescriptor.in, false);
 
         // Writing to STDOUT
         stdout.write("This goes to STDOUT.\n");
