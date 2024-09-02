@@ -95,6 +95,39 @@ print "not " if !$a; say "ok # 'abc' lt 'abd' is true";
 
 
 ###################
+# Substring Tests
+
+# Substring with positive offset
+$str = "Hello, World!";
+my $substr = substr($str, 7);
+print "not " if $substr ne "World!"; say "ok # substr('Hello, World!', 7)";
+
+# Substring with positive offset and length
+$substr = substr($str, 7, 5);
+print "not " if $substr ne "World"; say "ok # substr('Hello, World!', 7, 5)";
+
+# Substring with negative offset
+$substr = substr($str, -6);
+print "not " if $substr ne "World!"; say "ok # substr('Hello, World!', -6)";
+
+# Substring with negative offset and length
+$substr = substr($str, -6, 5);
+print "not " if $substr ne "World"; say "ok # substr('Hello, World!', -6, 5)";
+
+# Substring with offset out of bounds
+$substr = substr($str, 20);
+print "not " if $substr ne ""; say "ok # substr('Hello, World!', 20)";
+
+# Substring with length out of bounds
+$substr = substr($str, 7, 20);
+print "not " if $substr ne "World!"; say "ok # substr('Hello, World!', 7, 20)";
+
+# Substring with negative length
+$substr = substr($str, 7, -1);
+print "not " if $substr ne "World"; say "ok # substr('Hello, World!', 7, -1)";
+
+
+###################
 # Logical Operators
 
 # Logical AND
