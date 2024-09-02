@@ -161,4 +161,5 @@
 ## Features Probably Incompatible with JVM
 - ❌  **`DESTROY`**: Handling of object destruction may be incompatible with JVM garbage collection.
 - ❌  **Perl `XS` code**: XS code interfacing with C is not supported on the JVM.
+- ❌  **Auto-close files**: File auto-close depends on handling of object destruction, may be incompatible with JVM garbage collection.
 
