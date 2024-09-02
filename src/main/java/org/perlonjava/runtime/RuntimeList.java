@@ -1,8 +1,9 @@
 package org.perlonjava.runtime;
 
-import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.NoSuchElementException;
 
 import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
 
@@ -196,42 +197,10 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
      * @return A RuntimeScalar indicating the result of the write operation.
      */
     public RuntimeScalar printf(RuntimeScalar fileHandle) {
-        String format = elements.remove(0).toString();
+        RuntimeScalar format = (RuntimeScalar) elements.remove(0); // Extract the format string from elements
 
-        Object[] args = new Object[elements.size()];
-
-        // Regular expression to find format specifiers in the format string
-        Pattern pattern = Pattern.compile("%[\\d\\.]*[a-zA-Z]");
-        Matcher matcher = pattern.matcher(format);
-
-        int index = 0;
-
-        // Iterate through the format string and convert elements based on format specifiers
-        while (matcher.find() && index < elements.size()) {
-            String specifier = matcher.group();
-            RuntimeScalar element = (RuntimeScalar) elements.get(index);
-            Object arg;
-
-            // Determine the type of argument based on the format specifier
-            if (specifier.endsWith("d") || specifier.endsWith("i")) { // Integer specifiers
-                arg = element.getInt();
-            } else if (specifier.endsWith("f") || specifier.endsWith("e") || specifier.endsWith("g")) { // Floating-point specifiers
-                arg = element.getDouble();
-            } else { // Default to string representation for other specifiers
-                arg = element.toString();
-            }
-
-            args[index] = arg;
-            index++;
-        }
-
-        // Format the string using the provided format and the elements
-        String formattedString;
-        try {
-            formattedString = String.format(format, args);
-        } catch (IllegalFormatException e) {
-            throw new RuntimeException("Invalid format string: " + format, e);
-        }
+        // Use sprintf to get the formatted string
+        String formattedString = format.sprintf(this).toString();
 
         // Write the formatted content to the file handle
         RuntimeIO fh = fileHandle.getRuntimeIO();
