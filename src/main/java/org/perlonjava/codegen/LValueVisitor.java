@@ -15,24 +15,24 @@ import org.perlonjava.runtime.RuntimeContextType;
 public class LValueVisitor implements Visitor {
     private int context = RuntimeContextType.VOID;
 
-    public static int getContext(Node node) throws Exception {
+    public static int getContext(Node node) {
         LValueVisitor lvVisitor = new LValueVisitor();
         node.accept(lvVisitor);
         return lvVisitor.context;
     }
 
     @Override
-    public void visit(NumberNode node) throws Exception {
+    public void visit(NumberNode node) {
         context = RuntimeContextType.VOID;
     }
 
     @Override
-    public void visit(IdentifierNode node) throws Exception {
+    public void visit(IdentifierNode node) {
         context = RuntimeContextType.VOID;
     }
 
     @Override
-    public void visit(BinaryOperatorNode node) throws Exception {
+    public void visit(BinaryOperatorNode node) {
         switch (node.operator) {
             case "=":   // $a = ...
                 node.left.accept(this);
@@ -50,7 +50,7 @@ public class LValueVisitor implements Visitor {
     }
 
     @Override
-    public void visit(OperatorNode node) throws Exception {
+    public void visit(OperatorNode node) {
         switch (node.operator) {
             case "our":
             case "my":  // 'my' depends on the operand's context, can be SCALAR or LIST
@@ -71,53 +71,53 @@ public class LValueVisitor implements Visitor {
     }
 
     @Override
-    public void visit(For1Node node) throws Exception {
+    public void visit(For1Node node) {
         context = RuntimeContextType.VOID;
     }
 
     @Override
-    public void visit(For3Node node) throws Exception {
+    public void visit(For3Node node) {
         context = RuntimeContextType.VOID;
     }
 
     @Override
-    public void visit(IfNode node) throws Exception {
+    public void visit(IfNode node) {
         context = RuntimeContextType.VOID;
     }
 
     @Override
-    public void visit(AnonSubNode node) throws Exception {
+    public void visit(AnonSubNode node) {
         context = RuntimeContextType.VOID;
     }
 
     @Override
-    public void visit(TernaryOperatorNode node) throws Exception {
+    public void visit(TernaryOperatorNode node) {
         // XXX FIXME
         context = RuntimeContextType.VOID;
     }
 
     @Override
-    public void visit(StringNode node) throws Exception {
+    public void visit(StringNode node) {
         context = RuntimeContextType.VOID;
     }
 
     @Override
-    public void visit(BlockNode node) throws Exception {
+    public void visit(BlockNode node) {
         context = RuntimeContextType.VOID;
     }
 
     @Override
-    public void visit(ListNode node) throws Exception {
+    public void visit(ListNode node) {
         context = RuntimeContextType.LIST; // ($a, $b)
     }
 
     @Override
-    public void visit(ArrayLiteralNode node) throws Exception {
+    public void visit(ArrayLiteralNode node) {
         context = RuntimeContextType.VOID;
     }
 
     @Override
-    public void visit(HashLiteralNode node) throws Exception {
+    public void visit(HashLiteralNode node) {
         context = RuntimeContextType.VOID;
     }
 }

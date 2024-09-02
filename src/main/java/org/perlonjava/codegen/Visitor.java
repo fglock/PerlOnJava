@@ -40,83 +40,83 @@ public interface Visitor {
      *
      * @param node the BinaryOperatorNode to visit
      */
-    void visit(BinaryOperatorNode node) throws Exception;
+    void visit(BinaryOperatorNode node);
 
     /**
      * Visit an IdentifierNode.
      *
      * @param node the IdentifierNode to visit
      */
-    void visit(IdentifierNode node) throws Exception;
+    void visit(IdentifierNode node);
 
     /**
      * Visit a BlockNode.
      *
      * @param node the BlockNode to visit
      */
-    void visit(BlockNode node) throws Exception;
+    void visit(BlockNode node);
 
     /**
      * Visit a ListNode / HashLiteralNode / ArrayLiteralNode
      *
      * @param node the ListNode to visit
      */
-    void visit(ListNode node) throws Exception;
+    void visit(ListNode node);
 
-    void visit(HashLiteralNode node) throws Exception;
+    void visit(HashLiteralNode node);
 
-    void visit(ArrayLiteralNode node) throws Exception;
+    void visit(ArrayLiteralNode node);
 
     /**
      * Visit a NumberNode.
      *
      * @param node the NumberNode to visit
      */
-    void visit(NumberNode node) throws Exception;
+    void visit(NumberNode node);
 
     /**
      * Visit a StringNode.
      *
      * @param node the StringNode to visit
      */
-    void visit(StringNode node) throws Exception;
+    void visit(StringNode node);
 
     /**
      * Visit a ForNode.
      *
      * @param node the ForNode to visit
      */
-    void visit(For1Node node) throws Exception;
+    void visit(For1Node node);
 
-    void visit(For3Node node) throws Exception;
+    void visit(For3Node node);
 
     /**
      * Visit a IfNode.
      *
      * @param node the IfNode to visit
      */
-    void visit(IfNode node) throws Exception;
+    void visit(IfNode node);
 
     /**
      * Visit a TernaryOperatorNode.
      *
      * @param node the TernaryOperatorNode to visit
      */
-    void visit(TernaryOperatorNode node) throws Exception;
+    void visit(TernaryOperatorNode node);
 
     /**
      * Visit a OperatorNode.
      *
      * @param node the OperatorNode to visit
      */
-    void visit(OperatorNode node) throws Exception;
+    void visit(OperatorNode node);
 
     /**
      * Visit a AnonSubNode.
      *
      * @param node the AnonSubNode to visit
      */
-    void visit(AnonSubNode node) throws Exception;
+    void visit(AnonSubNode node);
 
     // Add other node types as needed
 }
