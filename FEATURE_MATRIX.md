@@ -68,7 +68,7 @@
 - ✔️   **`join`**: Join operator for combining array elements into a string is supported.
 - ✔️   **`grep`, `map`, `sort`**: List processing functions are implemented.
 - ❌  **`split`**: Splitting strings into arrays is not yet implemented.
-- ❌  **`substr`**: Substring extraction is not yet implemented.
+- ✔️   **`substr`**: Substring extraction works.
 - ❌  **Lvalue `substr`**: Assignable Substring extraction is not yet implemented.
 - ❌  **Vectors**: `vec` is not yet implemented.
 
