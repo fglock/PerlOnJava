@@ -141,6 +141,10 @@ public class GlobalContext {
         return var;
     }
 
+    public static RuntimeScalar setGlobalVariable(String key, String value) {
+        return getGlobalVariable(key).set(value);
+    }
+
     public static boolean existsGlobalVariable(String key) {
         return globalVariables.containsKey(key);
     }
