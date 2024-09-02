@@ -255,7 +255,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
     }
 
-    private double getDouble() {
+    public double getDouble() {
         switch (this.type) {
             case INTEGER:
                 return (int) this.value;

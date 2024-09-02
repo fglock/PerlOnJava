@@ -205,6 +205,7 @@ public class EmitterVisitor implements Visitor {
             case "close":
             case "readline":
             case "open":
+            case "printf":
             case "print":
             case "say":
                 handleSayOperator(operator, node);
