@@ -341,14 +341,14 @@ public class Main {
     - Objects and object operators, UNIVERSAL class
     - Array and List related operators
     - More tests and various bug fixes
+- **v1.4.0**: I/O operators
+    - File i/o operators, STDOUT, STDERR, STDIN
+    - TAP (Perl standard) tests
 
 ### Upcoming Milestones
 
-- **v1.4.0**: Planned release date: 2024-12-01
-    - File i/o operators, STDOUT, STDERR, STDIN
 - **v1.5.0**: Planned release date: 2025-01-10
     - TBD
-    - Perl standard tests
     - Performance improvements
 
 ## Benchmarks
@@ -365,7 +365,7 @@ The following benchmarks provide an order of magnitude comparison with Perl:
     - String operations: Comparable to Perl
     - Eval-string: 10x slower than Perl
 
-- **v1.2.0** and **v1.3.0**:
+- **v1.2.0** through **v1.4.0**:
     - No performance related changes
 
 ## License
