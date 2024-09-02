@@ -193,6 +193,10 @@ public class RuntimeIO implements RuntimeScalarReference {
                 throw new UnsupportedOperationException("Readline is not supported for output streams");
             }
 
+            if (this.isEOF) {
+                return null; // If EOF flag is already set, return null
+            }
+
             String sep = getGlobalVariable("main::/").toString();  // fetch $/
             boolean hasSeparator = !sep.isEmpty();
             int separator = hasSeparator ? sep.charAt(0) : 0;
@@ -207,11 +211,16 @@ public class RuntimeIO implements RuntimeScalarReference {
                 }
             }
 
-            if (line.length() == 0) {
-                return null; // end of stream
+            if (c == -1 && line.length() == 0) {
+                this.isEOF = true; // Set EOF flag when end of stream is reached
+                return new RuntimeScalar();
             }
 
-            return new RuntimeScalar( line.toString());
+            if (c == -1) {
+                this.isEOF = true; // Set EOF flag if the last line does not end with a newline
+            }
+
+            return new RuntimeScalar(line.toString());
         } catch (Exception e) {
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
             return new RuntimeScalar();
@@ -219,8 +228,8 @@ public class RuntimeIO implements RuntimeScalarReference {
     }
 
     // Method to check for end-of-file (eof equivalent)
-    public boolean eof() {
-        return isEOF;
+    public RuntimeScalar eof() {
+        return new RuntimeScalar(this.isEOF);
     }
 
     // Method to get the current file pointer position (tell equivalent)

@@ -126,7 +126,7 @@
 - ❌  **`do` file**: File execution using `do` is not yet implemented.
 - ✔️   **`print` operators**: `print` and `say` statements are implemented, with support for file handles.
 - ❌  **`printf` and `sprintf`**: String formatting is not yet implemented.
-- ✔️   **`I/O operators**: `open`, `readline` are implemented.
+- ✔️   **`I/O operators**: `open`, `readline`, `eof`, `close` are implemented.
 - ✔️   **Short-circuit and, or**: Short-circuit logical operators are supported.
 - ✔️   **Low-precedence/high precedence operators**: Logical operators like `not`, `or`, `and` are supported.
 - ✔️   **Ternary operator**: The ternary conditional operator is implemented.

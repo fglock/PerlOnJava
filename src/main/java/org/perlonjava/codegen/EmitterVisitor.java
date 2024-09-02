@@ -201,6 +201,8 @@ public class EmitterVisitor implements Visitor {
             case "grep":
                 handleMapOperator(operator, node);
                 return;
+            case "eof":
+            case "close":
             case "readline":
             case "open":
             case "print":
