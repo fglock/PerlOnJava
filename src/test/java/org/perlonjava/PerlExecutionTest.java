@@ -26,7 +26,8 @@ public class PerlExecutionTest {
         return Arrays.asList(new Object[][]{
                 {"demo.pl"},
                 {"operations.pl"},
-                {"wantarray.pl"}
+                {"wantarray.pl"},
+                {"typeglob.pl"}
         });
     }
 
