@@ -1,8 +1,11 @@
 package org.perlonjava.runtime;
 
+import java.util.IllegalFormatException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * The RuntimeScalar class simulates Perl scalar variables.
@@ -1168,6 +1171,54 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
         return new RuntimeScalar(sb.toString());
     }
+
+    /**
+     * Formats the elements according to the specified format string.
+     *
+     * @param formatStr The format string specifying how to format the elements.
+     * @return A formatted string.
+     */
+    public RuntimeScalar sprintf(RuntimeList list) {
+        String format = this.toString();
+
+        Object[] args = new Object[list.elements.size()];
+
+        // Regular expression to find format specifiers in the format string
+        Pattern pattern = Pattern.compile("%[\\d\\.]*[a-zA-Z]");
+        Matcher matcher = pattern.matcher(format);
+
+        int index = 0;
+
+        // Iterate through the format string and convert elements based on format specifiers
+        while (matcher.find() && index < list.elements.size()) {
+            String specifier = matcher.group();
+            RuntimeScalar element = (RuntimeScalar) list.elements.get(index);
+            Object arg;
+
+            // Determine the type of argument based on the format specifier
+            if (specifier.endsWith("d") || specifier.endsWith("i")) { // Integer specifiers
+                arg = element.getInt();
+            } else if (specifier.endsWith("f") || specifier.endsWith("e") || specifier.endsWith("g")) { // Floating-point specifiers
+                arg = element.getDouble();
+            } else { // Default to string representation for other specifiers
+                arg = element.toString();
+            }
+
+            args[index] = arg;
+            index++;
+        }
+
+        // Format the string using the provided format and the elements
+        String formattedString;
+        try {
+            formattedString = String.format(format, args);
+        } catch (IllegalFormatException e) {
+            throw new RuntimeException("Invalid format string: " + format, e);
+        }
+
+        return new RuntimeScalar(formattedString);
+    }
+
 
     // keys() operator
     public RuntimeArray keys() {
