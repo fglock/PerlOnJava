@@ -1175,50 +1175,61 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     /**
      * Formats the elements according to the specified format string.
      *
-     * @param formatStr The format string specifying how to format the elements.
-     * @return A formatted string.
+     * @param list The list of elements to be formatted.
+     * @return A RuntimeScalar containing the formatted string.
      */
     public RuntimeScalar sprintf(RuntimeList list) {
+        // The format string that specifies how the elements should be formatted
         String format = this.toString();
 
+        // Create an array to hold the arguments for the format string
         Object[] args = new Object[list.elements.size()];
 
         // Regular expression to find format specifiers in the format string
+        // Example of format specifiers: %d, %f, %s, etc.
         Pattern pattern = Pattern.compile("%[\\d\\.]*[a-zA-Z]");
         Matcher matcher = pattern.matcher(format);
 
         int index = 0;
 
-        // Iterate through the format string and convert elements based on format specifiers
+        // Iterate through the format string and map each format specifier
+        // to the corresponding element in the list
         while (matcher.find() && index < list.elements.size()) {
+            // Get the current format specifier (e.g., %d, %f, %s)
             String specifier = matcher.group();
+            // Get the corresponding element from the list
             RuntimeScalar element = (RuntimeScalar) list.elements.get(index);
             Object arg;
 
             // Determine the type of argument based on the format specifier
-            if (specifier.endsWith("d") || specifier.endsWith("i")) { // Integer specifiers
+            if (specifier.endsWith("d") || specifier.endsWith("i")) {
+                // Integer specifiers: convert the element to an integer
                 arg = element.getInt();
-            } else if (specifier.endsWith("f") || specifier.endsWith("e") || specifier.endsWith("g")) { // Floating-point specifiers
+            } else if (specifier.endsWith("f") || specifier.endsWith("e") || specifier.endsWith("g")) {
+                // Floating-point specifiers: convert the element to a double
                 arg = element.getDouble();
-            } else { // Default to string representation for other specifiers
+            } else {
+                // For other specifiers (e.g., %s), convert the element to a string
                 arg = element.toString();
             }
 
+            // Store the converted argument in the args array
             args[index] = arg;
             index++;
         }
 
-        // Format the string using the provided format and the elements
+        // Format the string using the format string and the arguments array
         String formattedString;
         try {
             formattedString = String.format(format, args);
         } catch (IllegalFormatException e) {
+            // If the format string is invalid, throw a runtime exception
             throw new RuntimeException("Invalid format string: " + format, e);
         }
 
+        // Return the formatted string wrapped in a RuntimeScalar
         return new RuntimeScalar(formattedString);
     }
-
 
     // keys() operator
     public RuntimeArray keys() {
