@@ -259,6 +259,29 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
     }
 
     /**
+     * Reads EOF flag from a file handle.
+     *
+     * @param fileHandle The file handle.
+     * @return A RuntimeScalar with the flag.
+     */
+    public RuntimeScalar eof(RuntimeScalar fileHandle) {
+        RuntimeIO fh = fileHandle.getRuntimeIO();
+        return fh.eof();
+    }
+
+    /**
+     * Close a file handle.
+     *
+     * @param fileHandle The file handle.
+     * @return A RuntimeScalar with the result of the close operation.
+     */
+    public RuntimeScalar close(RuntimeScalar fileHandle) {
+        RuntimeIO fh = fileHandle.getRuntimeIO();
+        return fh.close();
+    }
+
+
+    /**
      * Opens a file and initialize a file handle.
      *
      * @param fileHandle The file handle.
