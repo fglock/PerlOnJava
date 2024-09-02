@@ -255,7 +255,6 @@ public class EmitterVisitor implements Visitor {
 
     private void handleCompoundAssignment(BinaryOperatorNode node, EmitterVisitor scalarVisitor, String methodStr) throws Exception {
         // compound assignment operators like `+=`
-        // XXX TODO - special lazy evaluation case for: `&&=` `||=`
         node.left.accept(scalarVisitor); // target - left parameter
         ctx.mv.visitInsn(Opcodes.DUP);
         node.right.accept(scalarVisitor); // right parameter
