@@ -694,9 +694,9 @@ public class Parser {
             case "'":
             case "q":
                 return StringParser.parseSingleQuotedString(rawStr);
-            case "\"":
             case "qr":
                 return StringParser.parseRegexString(ctx, rawStr);
+            case "\"":
             case "qq":
                 return StringParser.parseDoubleQuotedString(ctx, rawStr, true);
             case "qw":
