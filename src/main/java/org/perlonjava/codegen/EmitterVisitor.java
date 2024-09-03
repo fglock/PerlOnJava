@@ -215,6 +215,9 @@ public class EmitterVisitor implements Visitor {
             case "join":
                 handleJoinOperator(operator, node);
                 return;
+            case "!~":
+                this.visit(new OperatorNode("not", node, node.tokenIndex));
+                return;
             case "=~":
                 // static RuntimeBaseEntity matchRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx)
                 //

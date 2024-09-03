@@ -139,7 +139,7 @@ my $float = sprintf("%.2f", 3.14159);
 print "not " if $float ne "3.14"; say "ok # sprintf('%.2f', 3.14159)";
 
 # Test string formatting
-my $str = sprintf("%s", "Hello, World!");
+$str = sprintf("%s", "Hello, World!");
 print "not " if $str ne "Hello, World!"; say "ok # sprintf('%s', 'Hello, World!')";
 
 # Test multiple arguments
