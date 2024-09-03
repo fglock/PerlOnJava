@@ -547,6 +547,7 @@ public class Parser {
                     case "qq":
                     case "qx":
                     case "qw":
+                    case "qr":
                     case "tr":
                     case "y":
                     case "s":
@@ -680,6 +681,7 @@ public class Parser {
                 stringParts = 3;    // s{str}{str}modifier
                 break;
             case "m":
+            case "qr":
             case "/":
             case "//":
                 stringParts = 2;    // m{str}modifier
@@ -691,10 +693,12 @@ public class Parser {
         switch (operator) {
             case "'":
             case "q":
-                return StringParser.parseSingleQuotedString(rawStr.buffers.get(0), rawStr.startDelim, rawStr.endDelim, rawStr.index);
+                return StringParser.parseSingleQuotedString(rawStr);
             case "\"":
+            case "qr":
+                return StringParser.parseRegexString(ctx, rawStr);
             case "qq":
-                return StringParser.parseDoubleQuotedString(ctx, rawStr.buffers.get(0), ctx.errorUtil, rawStr.index);
+                return StringParser.parseDoubleQuotedString(ctx, rawStr);
             case "qw":
                 return StringParser.parseWordsString(rawStr);
         }
