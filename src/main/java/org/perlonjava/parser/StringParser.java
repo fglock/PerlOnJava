@@ -152,11 +152,11 @@ public class StringParser {
     static Node parseRegexString(EmitterContext ctx, ParsedString rawStr) {
         Node parsed;
         if (rawStr.startDelim == '\'') {
-            // single quote delimiter
+            // single quote delimiter, use the string as-is
             parsed = new StringNode(rawStr.buffers.get(0), rawStr.index);
         } else {
-            // XXX TODO keep the escape in backslash-dot
-            parsed = parseDoubleQuotedString(ctx, rawStr);
+            // interpolate variables, but ignore the escapes
+            parsed = parseDoubleQuotedString(ctx, rawStr, false);
         }
         Node modifiers = new StringNode(rawStr.buffers.get(1), rawStr.index);
         List<Node> elements = new ArrayList<>();
@@ -166,7 +166,7 @@ public class StringParser {
         return new OperatorNode("quoteRegex", list, rawStr.index);
     }
 
-    static Node parseDoubleQuotedString(EmitterContext ctx, ParsedString rawStr) {
+    static Node parseDoubleQuotedString(EmitterContext ctx, ParsedString rawStr, boolean parseEscapes) {
         String input = rawStr.buffers.get(0);
         int tokenIndex = rawStr.next;
 
@@ -186,105 +186,19 @@ public class StringParser {
             String text = token.text;
             switch (text) {
                 case "\\":
-                    String escape;
-                    token = tokens.get(parser.tokenIndex);
-                    if (token.type == LexerTokenType.NUMBER) {
-                        //  octal like `\200`
-                        if (token.text.length() <= 3) {
-                            escape = token.text;
+                    if (parseEscapes) {
+                        parseDoubleQuotedEscapes(ctx, tokens, parser, str, tokenIndex);
+                    } else {
+                        // consume the escaped character without processing
+                        str.append(text);
+                        token = tokens.get(parser.tokenIndex);
+                        if (token.text.length() == 1) {
+                            str.append(token.text);
                             parser.tokenIndex++;
                         } else {
-                            escape = token.text.substring(0, 3);
-                            token.text = token.text.substring(3);
+                            str.append(token.text.substring(0, 1));
+                            token.text = token.text.substring(1);
                         }
-                        str.append((char) Integer.parseInt(escape, 8));
-                        break;
-                    }
-                    if (token.text.length() == 1) {
-                        escape = token.text;
-                        parser.tokenIndex++;
-                    } else {
-                        escape = token.text.substring(0, 1);
-                        token.text = token.text.substring(1);
-                    }
-                    switch (escape) {
-                        case "\\":
-                        case "\"":
-                            str.append(escape);  // Append the escaped character
-                            break;
-                        case "n":
-                            str.append('\n');  // Append newline
-                            break;
-                        case "t":
-                            str.append('\t');  // Append tab
-                            break;
-                        case "r":
-                            str.append('\r');  // Append carriage return
-                            break;
-                        case "f":
-                            str.append('\f');  // Append form feed
-                            break;
-                        case "b":
-                            str.append('\b');  // Append backspace
-                            break;
-                        case "E":
-                            break;  // Marks the end of \Q sequence
-                        case "Q":
-                            // \Q quotemeta: Start an inner loop to handle the quoted section
-                            while (true) {
-                                token = tokens.get(parser.tokenIndex++);
-                                LexerToken nextToken = tokens.get(parser.tokenIndex);
-                                if (token.type == LexerTokenType.EOF) {
-                                    break;
-                                }
-                                if (token.text.equals("\\") && nextToken.text.startsWith("E")) {
-                                    parser.tokenIndex--;
-                                    break;
-                                }
-                                if (token.type == LexerTokenType.IDENTIFIER || token.type == LexerTokenType.NUMBER) {
-                                    str.append(token.text);
-                                } else {
-                                    for (char c : token.text.toCharArray()) {
-                                        str.append("\\").append(c);
-                                    }
-                                }
-                            }
-                            break;
-                        case "x":
-                            StringBuilder unicodeSeq = new StringBuilder();
-                            token = tokens.get(parser.tokenIndex);
-                            text = token.text;
-                            if (token.type == LexerTokenType.IDENTIFIER) {
-                                // Handle \x9 \x20
-                                if (text.length() <= 2) {
-                                    escape = text;
-                                    parser.tokenIndex++;
-                                } else {
-                                    escape = text.substring(0, 2);
-                                    token.text = text.substring(2);
-                                }
-                                str.append((char) Integer.parseInt(escape, 16));
-                            } else if (text.equals("{")) {
-                                // Handle \x{...} for Unicode
-                                parser.tokenIndex++;
-                                while (true) {
-                                    token = tokens.get(parser.tokenIndex++);  // Get the current token
-                                    if (token.type == LexerTokenType.EOF) {
-                                        throw new PerlCompilerException(tokenIndex, "Expected '}' after \\x{", ctx.errorUtil);
-                                    }
-                                    if (token.text.equals("}")) {
-                                        break;
-                                    }
-                                    unicodeSeq.append(token.text);
-                                }
-                                str.append((char) Integer.parseInt(unicodeSeq.toString().trim(), 16));
-                            } else {
-                                throw new PerlCompilerException(tokenIndex, "Expected '{' after \\x", ctx.errorUtil);
-                            }
-                            break;
-                        default:
-                            str.append(escape);  // Append the backslash and the next character
-                            break;
                     }
                     break;
                 case "$":
@@ -394,6 +308,111 @@ public class StringParser {
                 result = new BinaryOperatorNode(".", result, parts.get(i), tokenIndex);
             }
             return result;
+        }
+    }
+
+    private static void parseDoubleQuotedEscapes(EmitterContext ctx, List<LexerToken> tokens, Parser parser, StringBuilder str, int tokenIndex) {
+        LexerToken token;
+        String text;
+        String escape;
+        token = tokens.get(parser.tokenIndex);
+        if (token.type == LexerTokenType.NUMBER) {
+            //  octal like `\200`
+            if (token.text.length() <= 3) {
+                escape = token.text;
+                parser.tokenIndex++;
+            } else {
+                escape = token.text.substring(0, 3);
+                token.text = token.text.substring(3);
+            }
+            str.append((char) Integer.parseInt(escape, 8));
+            return;
+        }
+        if (token.text.length() == 1) {
+            escape = token.text;
+            parser.tokenIndex++;
+        } else {
+            escape = token.text.substring(0, 1);
+            token.text = token.text.substring(1);
+        }
+        switch (escape) {
+            case "\\":
+            case "\"":
+                str.append(escape);  // Append the escaped character
+                break;
+            case "n":
+                str.append('\n');  // Append newline
+                break;
+            case "t":
+                str.append('\t');  // Append tab
+                break;
+            case "r":
+                str.append('\r');  // Append carriage return
+                break;
+            case "f":
+                str.append('\f');  // Append form feed
+                break;
+            case "b":
+                str.append('\b');  // Append backspace
+                break;
+            case "E":
+                break;  // Marks the end of \Q sequence
+            case "Q":
+                // \Q quotemeta: Start an inner loop to handle the quoted section
+                while (true) {
+                    token = tokens.get(parser.tokenIndex++);
+                    LexerToken nextToken = tokens.get(parser.tokenIndex);
+                    if (token.type == LexerTokenType.EOF) {
+                        break;
+                    }
+                    if (token.text.equals("\\") && nextToken.text.startsWith("E")) {
+                        parser.tokenIndex--;
+                        break;
+                    }
+                    if (token.type == LexerTokenType.IDENTIFIER || token.type == LexerTokenType.NUMBER) {
+                        str.append(token.text);
+                    } else {
+                        for (char c : token.text.toCharArray()) {
+                            str.append("\\").append(c);
+                        }
+                    }
+                }
+                break;
+            case "x":
+                StringBuilder unicodeSeq = new StringBuilder();
+                token = tokens.get(parser.tokenIndex);
+                text = token.text;
+                if (token.type == LexerTokenType.IDENTIFIER) {
+                    // Handle \x9 \x20
+                    if (text.length() <= 2) {
+                        escape = text;
+                        parser.tokenIndex++;
+                    } else {
+                        escape = text.substring(0, 2);
+                        token.text = text.substring(2);
+                    }
+                    str.append((char) Integer.parseInt(escape, 16));
+                } else if (text.equals("{")) {
+                    // Handle \x{...} for Unicode
+                    parser.tokenIndex++;
+                    while (true) {
+                        token = tokens.get(parser.tokenIndex++);  // Get the current token
+                        if (token.type == LexerTokenType.EOF) {
+                            throw new PerlCompilerException(tokenIndex, "Expected '}' after \\x{", ctx.errorUtil);
+                        }
+                        if (token.text.equals("}")) {
+                            break;
+                        }
+                        unicodeSeq.append(token.text);
+                    }
+                    str.append((char) Integer.parseInt(unicodeSeq.toString().trim(), 16));
+                } else {
+                    throw new PerlCompilerException(tokenIndex, "Expected '{' after \\x", ctx.errorUtil);
+                }
+                break;
+            default:
+                str.append(escape);  // Append the backslash and the next character
+                break;
         }
     }
 
