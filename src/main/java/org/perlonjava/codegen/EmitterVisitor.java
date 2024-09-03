@@ -233,7 +233,7 @@ public class EmitterVisitor implements Visitor {
                 //  BinaryOperatorNode: =~
                 //    OperatorNode: $
                 //      IdentifierNode: a
-                //    OperatorNode: matchRegex
+                //    OperatorNode: matchRegex (or `qr` object)
                 //      ListNode:
                 //        StringNode: 'abc'
                 //        StringNode: 'i'
