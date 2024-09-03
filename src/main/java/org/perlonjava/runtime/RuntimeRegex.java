@@ -64,14 +64,14 @@ public class RuntimeRegex implements RuntimeScalarReference {
         if (matcher.find()) {
             // Set global variables for captured groups ($1, $2, etc.)
             for (int i = 1; i <= matcher.groupCount(); i++) {
-                GlobalContext.setGlobalVariable("$" + i, matcher.group(i));
+                GlobalContext.setGlobalVariable("main::" + i, matcher.group(i));
             }
 
             if (ctx == RuntimeContextType.LIST) {
                 // Return all matched groups as a list
                 RuntimeList result = new RuntimeList();
                 List<RuntimeBaseEntity> matchedGroups = result.elements;
-                for (int i = 0; i <= matcher.groupCount(); i++) {
+                for (int i = 1; i <= matcher.groupCount(); i++) {
                     matchedGroups.add(new RuntimeScalar(matcher.group(i)));
                 }
                 return result;
@@ -80,7 +80,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
             return new RuntimeScalar(1);
         } else {
             // No match found, clear global variables
-            GlobalContext.setGlobalVariable("$1", "");
+            GlobalContext.setGlobalVariable("main::1", "");
             // Return false
             if (ctx == RuntimeContextType.LIST) {
                 return new RuntimeList();

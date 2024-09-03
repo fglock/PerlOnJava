@@ -227,7 +227,9 @@ public class EmitterVisitor implements Visitor {
                 //        StringNode: 'i'
                 //
                 // emit the matchRegex as a quoteRegex
-                ((OperatorNode) node.right).operator = "quoteRegex";
+                if (node.right instanceof OperatorNode && ((OperatorNode) node.right).operator.equals("matchRegex")) {
+                    ((OperatorNode) node.right).operator = "quoteRegex";
+                }
                 node.right.accept(scalarVisitor);
                 node.left.accept(scalarVisitor);
                 pushCallContext();
