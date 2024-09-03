@@ -1,6 +1,5 @@
 package org.perlonjava.runtime;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -14,8 +13,8 @@ public class RuntimeRegex implements RuntimeScalarReference {
     private static final int CASE_INSENSITIVE = Pattern.CASE_INSENSITIVE;
     private static final int MULTILINE = Pattern.MULTILINE;
     private static final int DOTALL = Pattern.DOTALL;
-    private Pattern pattern;
     boolean isGlobalMatch;
+    private Pattern pattern;
 
     /**
      * Creates a RuntimeRegex object from a regex pattern string with optional modifiers.
@@ -104,6 +103,54 @@ public class RuntimeRegex implements RuntimeScalarReference {
         } else {
             return new RuntimeScalar();
         }
+    }
+
+    /**
+     * Applies a Perl "s///" substitution on a string.
+     * `my $v =~ s/$pattern/$replacement/;`
+     *
+     * @param quotedRegex The regex pattern object, created by getQuotedRegex()
+     * @param string      The string to be modified.
+     * @param replacement The replacement string.
+     * @param ctx         The context LIST, SCALAR, VOID
+     * @return A RuntimeScalar or RuntimeList
+     */
+    public static RuntimeBaseEntity substituteRegex(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar replacement, int ctx) {
+        String inputStr = string.toString();
+        RuntimeRegex regex = (RuntimeRegex) quotedRegex.value;
+        Pattern pattern = regex.pattern;
+        Matcher matcher = pattern.matcher(inputStr);
+
+        // The result string after substitutions
+        StringBuilder resultBuffer = new StringBuilder();
+        int found = 0;
+
+        // Perform the substitution
+        while (matcher.find()) {
+            found++;
+
+            // Handle special replacement patterns (like $1, $2, etc.)
+            String replacementStr = replacement.toString();
+            String evaluatedReplacement = matcher.replaceAll(replacementStr);
+
+            matcher.appendReplacement(resultBuffer, evaluatedReplacement);
+
+            if (!regex.isGlobalMatch) {
+                break;
+            }
+        }
+        matcher.appendTail(resultBuffer);
+
+        // Update the original string with the result
+        String resultStr = found > 0 ? resultBuffer.toString() : inputStr;
+
+        // Save the modified string back to the original scalar (if required)
+        if (found > 0) {
+            string.set(resultStr);
+        }
+
+        // return the number of substitutions made, or `undef`
+        return found > 0 ? new RuntimeScalar(found) : new RuntimeScalar();
     }
 
     @Override
