@@ -812,9 +812,9 @@ public class EmitterVisitor implements Visitor {
                 // RuntimeRegex.getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers) {
                 ((ListNode) node.operand).elements.get(0).accept(this);
                 ((ListNode) node.operand).elements.get(1).accept(this);
-                ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/RuntimeScalar", "getQuotedRegex",
-                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false)
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/RuntimeRegex", "getQuotedRegex",
+                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                 if (ctx.contextType == RuntimeContextType.VOID) {
                     ctx.mv.visitInsn(Opcodes.POP);
                 }
