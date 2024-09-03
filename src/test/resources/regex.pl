@@ -166,5 +166,79 @@ print "not " if scalar(@matches) != 1; say "ok # 'Hello World' matches '(hello)'
 print "not " if $matches[0] ne 'Hello'; say "ok # \$matches[0] is 'Hello'";
 
 
+###################
+# Perl !~ Operator Tests in Scalar Context
+
+my ($captured1, $captured2);
+
+# Simple non-match in scalar context
+$string = "Hello World";
+$pattern = qr/Goodbye/;
+$match = $string !~ $pattern;
+print "not " if !$match; say "ok # 'Hello World' does not match 'Goodbye'";
+
+# Case-insensitive non-match
+$string = "Hello World";
+$pattern = qr/HELLO/i;
+$match = $string !~ $pattern;
+print "not " if $match; say "ok # 'Hello World' matches 'HELLO' with /i modifier";
+
+# Match with quantifiers (non-match)
+$string = "aaa";
+$pattern = qr/a{4}/;
+$match = $string !~ $pattern;
+print "not " if !$match; say "ok # 'aaa' does not match 'a{4}'";
+
+###################
+# Perl !~ Operator Tests in List Context
+
+# Simple non-match in list context (no captures)
+$string = "Hello World";
+$pattern = qr/(Goodbye) (World)/;
+@matches = $string !~ $pattern;
+print "not " if scalar(@matches) != 1; say "ok # 'Hello World' does not match '(Goodbye) (World)' in list context <@matches>";
+
+# Non-match with captures
+$string = "Hello World";
+$pattern = qr/(Goodbye) (Everyone)/;
+$match = $string !~ $pattern;
+print "not " if !$match; say "ok # 'Hello World' does not match '(Goodbye) (Everyone)' and returns 1 in scalar context";
+
+# Non-match with global modifier (no match)
+$string = "aaa bbb ccc";
+$pattern = qr/ddd/;
+@matches = $string !~ /$pattern/g;
+print "not " if scalar(@matches) != 1; say "ok # 'aaa bbb ccc' does not match 'ddd' globally <@matches>";
+
+###################
+# Perl !~ Operator Tests for Partial Matches
+
+# Partial match where $1 matches but $2 does not
+$string = "Hello World";
+$pattern = qr/(Hello) (Universe)/;
+$match = $string !~ $pattern;
+print "not " if !$match; say "ok # 'Hello World' does not match '(Hello) (Universe)', so !~ should return true";
+
+# Ensure that $1 and $2 are both undefined after the non-match
+$captured1 = $1;
+$captured2 = $2;
+print "not " if defined $captured1; say "ok # Capture $1 should be undefined after a partial match";
+print "not " if defined $captured2; say "ok # Capture $2 should be undefined after a partial match";
+
+# Test with no captures at all
+$string = "Goodbye";
+$pattern = qr/(Hello) (World)/;
+$match = $string !~ $pattern;
+print "not " if !$match; say "ok # 'Goodbye' does not match '(Hello) (World)', so !~ should return true";
+print "not " if defined $1; say "ok # Capture $1 should be undefined after a complete non-match";
+print "not " if defined $2; say "ok # Capture $2 should be undefined after a complete non-match";
+
+# Test with $1 matching but $2 not existing in the string
+$string = "Hello";
+$pattern = qr/(Hello)( World)?/; # The second group is optional
+$match = $string !~ $pattern;
+print "not " if $match; say "ok # 'Hello' matches '(Hello) (World)?', so !~ should return false";
+print "not " if $1 ne 'Hello'; say "ok # Capture \$1 should be 'Hello' since it matched";
+print "not " if defined $2; say "ok # Capture \$2 should be undefined as it didn't match";
 
 
