@@ -1,9 +1,9 @@
 package org.perlonjava.runtime;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
 
 /**
  * RuntimeRegex class to implement Perl's qr// operator for regular expression handling,
@@ -36,7 +36,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
 
     /**
      * Creates a Perl "qr" object from a regex pattern string with optional modifiers.
-     *   `my $v = qr/abc/i;`
+     * `my $v = qr/abc/i;`
      *
      * @param patternString The regex pattern string with optional modifiers.
      * @param modifiers     Modifiers for the regex pattern (e.g., "i", "g").
@@ -47,20 +47,46 @@ public class RuntimeRegex implements RuntimeScalarReference {
     }
 
     /**
-     * Applies a Perl "qr" object on a string; returns true/false and produces side-effects
-     *   `my $v =~ qr/abc/i;`
+     * Applies a Perl "qr" object on a string; returns true/false or a list,
+     * and produces side-effects
+     * `my $v =~ /$qr/;`
      *
      * @param quotedRegex The regex pattern object, created by getQuotedRegex()
      * @param string      The string to be matched.
      * @param ctx         The context LIST, SCALAR, VOID
-     * @return A RuntimeScalar.
+     * @return A RuntimeScalar or RuntimeList
      */
-    public static RuntimeScalar matchRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
+    public static RuntimeBaseEntity matchRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
         String inputStr = string.toString();
         Pattern pattern = ((RuntimeRegex) quotedRegex.value).pattern;
-        Matcher match = pattern.matcher(inputStr);
-        // TODO
-        return new RuntimeScalar();
+        Matcher matcher = pattern.matcher(inputStr);
+
+        if (matcher.find()) {
+            // Set global variables for captured groups ($1, $2, etc.)
+            for (int i = 1; i <= matcher.groupCount(); i++) {
+                GlobalContext.setGlobalVariable("$" + i, matcher.group(i));
+            }
+
+            if (ctx == RuntimeContextType.LIST) {
+                // Return all matched groups as a list
+                RuntimeList result = new RuntimeList();
+                List<RuntimeBaseEntity> matchedGroups = result.elements;
+                for (int i = 0; i <= matcher.groupCount(); i++) {
+                    matchedGroups.add(new RuntimeScalar(matcher.group(i)));
+                }
+                return result;
+            }
+            // Return true
+            return new RuntimeScalar(1);
+        } else {
+            // No match found, clear global variables
+            GlobalContext.setGlobalVariable("$1", "");
+            // Return false
+            if (ctx == RuntimeContextType.LIST) {
+                return new RuntimeList();
+            }
+            return new RuntimeScalar();
+        }
     }
 
     @Override
