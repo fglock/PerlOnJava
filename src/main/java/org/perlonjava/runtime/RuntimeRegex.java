@@ -29,14 +29,14 @@ public class RuntimeRegex implements RuntimeScalarReference {
             int flags = regex.convertModifiers(modifiers);
             regex.pattern = Pattern.compile(patternString, flags);
         } catch (Exception e) {
-            getGlobalVariable("main::@").set("Regex compilation failed: " + e.getMessage());
-            regex = null;
+            throw new IllegalStateException("Regex compilation failed: " + e.getMessage());
         }
         return regex;
     }
 
     /**
      * Creates a Perl "qr" object from a regex pattern string with optional modifiers.
+     *   `my $v = qr/abc/i;`
      *
      * @param patternString The regex pattern string with optional modifiers.
      * @param modifiers     Modifiers for the regex pattern (e.g., "i", "g").
@@ -44,6 +44,23 @@ public class RuntimeRegex implements RuntimeScalarReference {
      */
     public static RuntimeScalar getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers) {
         return new RuntimeScalar(compile(patternString.toString(), modifiers.toString()));
+    }
+
+    /**
+     * Applies a Perl "qr" object on a string; returns true/false and produces side-effects
+     *   `my $v =~ qr/abc/i;`
+     *
+     * @param quotedRegex The regex pattern object, created by getQuotedRegex()
+     * @param string      The string to be matched.
+     * @param ctx         The context LIST, SCALAR, VOID
+     * @return A RuntimeScalar.
+     */
+    public static RuntimeScalar matchRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
+        String inputStr = string.toString();
+        Pattern pattern = ((RuntimeRegex) quotedRegex.value).pattern;
+        Matcher match = pattern.matcher(inputStr);
+        // TODO
+        return new RuntimeScalar();
     }
 
     @Override
