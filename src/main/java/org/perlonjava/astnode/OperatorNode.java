@@ -9,14 +9,13 @@ import org.perlonjava.codegen.Visitor;
  */
 public class OperatorNode extends AbstractNode {
     /**
-     * The operator represented by this node.
-     */
-    public String operator;
-
-    /**
      * The operand on which the operator is applied.
      */
     public final Node operand;
+    /**
+     * The operator represented by this node.
+     */
+    public String operator;
 
     /**
      * Constructs a new OperatorNode with the specified operator and operand.
