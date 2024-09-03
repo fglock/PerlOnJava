@@ -5,7 +5,6 @@ import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.runtime.ErrorMessageUtil;
 import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.ArrayList;
@@ -150,7 +149,27 @@ public class StringParser {
         return ast;
     }
 
-    static Node parseDoubleQuotedString(EmitterContext ctx, String input, ErrorMessageUtil errorUtil, int tokenIndex) {
+    static Node parseRegexString(EmitterContext ctx, ParsedString rawStr) {
+        Node parsed;
+        if (rawStr.startDelim == '\'') {
+            // single quote delimiter
+            parsed = new StringNode(rawStr.buffers.get(0), rawStr.index);
+        } else {
+            // XXX TODO keep the escape in backslash-dot
+            parsed = parseDoubleQuotedString(ctx, rawStr);
+        }
+        Node modifiers = new StringNode(rawStr.buffers.get(1), rawStr.index);
+        List<Node> elements = new ArrayList<>();
+        elements.add(parsed);
+        elements.add(modifiers);
+        ListNode list = new ListNode(elements, rawStr.index);
+        return new OperatorNode("quoteRegex", list, rawStr.index);
+    }
+
+    static Node parseDoubleQuotedString(EmitterContext ctx, ParsedString rawStr) {
+        String input = rawStr.buffers.get(0);
+        int tokenIndex = rawStr.next;
+
         StringBuilder str = new StringBuilder();  // Buffer to hold the parsed string
         List<Node> parts = new ArrayList<>();  // List to hold parts of the parsed string
 
@@ -251,7 +270,7 @@ public class StringParser {
                                 while (true) {
                                     token = tokens.get(parser.tokenIndex++);  // Get the current token
                                     if (token.type == LexerTokenType.EOF) {
-                                        throw new PerlCompilerException(tokenIndex, "Expected '}' after \\x{", errorUtil);
+                                        throw new PerlCompilerException(tokenIndex, "Expected '}' after \\x{", ctx.errorUtil);
                                     }
                                     if (token.text.equals("}")) {
                                         break;
@@ -260,7 +279,7 @@ public class StringParser {
                                 }
                                 str.append((char) Integer.parseInt(unicodeSeq.toString().trim(), 16));
                             } else {
-                                throw new PerlCompilerException(tokenIndex, "Expected '{' after \\x", errorUtil);
+                                throw new PerlCompilerException(tokenIndex, "Expected '{' after \\x", ctx.errorUtil);
                             }
                             break;
                         default:
@@ -281,13 +300,13 @@ public class StringParser {
                     if (parser.peek().text.equals("{")) {
                         // block-like
                         // extract the string between brackets
-                        StringParser.ParsedString rawStr = StringParser.parseRawStrings(ctx, parser.tokens, parser.tokenIndex, 1);
-                        String blockStr = rawStr.buffers.get(0);
+                        StringParser.ParsedString rawStr2 = StringParser.parseRawStrings(ctx, parser.tokens, parser.tokenIndex, 1);
+                        String blockStr = rawStr2.buffers.get(0);
                         ctx.logDebug("str block-like: " + blockStr);
                         blockStr = sigil + "{" + blockStr + "}";
                         Parser blockParser = new Parser(ctx, new Lexer(blockStr).tokenize());
                         operand = blockParser.parseBlock();
-                        parser.tokenIndex = rawStr.next;
+                        parser.tokenIndex = rawStr2.next;
                         ctx.logDebug("str operand " + operand);
                     } else {
                         String identifier = IdentifierParser.parseComplexIdentifier(parser);
@@ -301,14 +320,14 @@ public class StringParser {
                             if (dollarCount > 0) {
                                 identifier = IdentifierParser.parseComplexIdentifier(parser);
                                 if (identifier == null) {
-                                    throw new PerlCompilerException(tokenIndex, "Unexpected value after $ in string", errorUtil);
+                                    throw new PerlCompilerException(tokenIndex, "Unexpected value after $ in string", ctx.errorUtil);
                                 }
                                 operand = new IdentifierNode(identifier, tokenIndex);
                                 for (int i = 0; i < dollarCount; i++) {
                                     operand = new OperatorNode("$", operand, tokenIndex);
                                 }
                             } else {
-                                throw new PerlCompilerException(tokenIndex, "Unexpected value after " + text + " in string", errorUtil);
+                                throw new PerlCompilerException(tokenIndex, "Unexpected value after " + text + " in string", ctx.errorUtil);
                             }
                         } else {
                             operand = new IdentifierNode(identifier, tokenIndex);
@@ -378,7 +397,12 @@ public class StringParser {
         }
     }
 
-    static Node parseSingleQuotedString(String input, char startDelim, char endDelim, int tokenIndex) {
+    static Node parseSingleQuotedString(StringParser.ParsedString rawStr) {
+        String input = rawStr.buffers.get(0);
+        char startDelim = rawStr.startDelim;
+        char endDelim = rawStr.endDelim;
+        int tokenIndex = rawStr.index;
+
         StringBuilder str = new StringBuilder();  // Buffer to hold the parsed string
         char[] chars = input.toCharArray();  // Convert the input string to a character array
         int length = chars.length;  // Length of the character array
