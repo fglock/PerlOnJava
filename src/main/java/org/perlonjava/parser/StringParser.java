@@ -295,15 +295,11 @@ public class StringParser {
             if (result instanceof StringNode) {
                 return parts.get(0);
             }
-            // stringify using:  "" . $a
-            return new BinaryOperatorNode(".", new StringNode("", tokenIndex), parts.get(0), tokenIndex);
-        } else {
-            Node result = parts.get(0);
-            for (int i = 1; i < parts.size(); i++) {
-                result = new BinaryOperatorNode(".", result, parts.get(i), tokenIndex);
-            }
-            return result;
         }
+        return new BinaryOperatorNode("join",
+                new StringNode("", tokenIndex),
+                new ListNode(parts, tokenIndex),
+                tokenIndex);
     }
 
     private static void parseDoubleQuotedEscapes(EmitterContext ctx, List<LexerToken> tokens, Parser parser, StringBuilder str, int tokenIndex) {
