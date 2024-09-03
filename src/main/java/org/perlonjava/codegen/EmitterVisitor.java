@@ -229,7 +229,6 @@ public class EmitterVisitor implements Visitor {
                         ));
                 return;
             case "=~":
-                // static RuntimeDataProvider matchRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx)
                 //
                 //  BinaryOperatorNode: =~
                 //    OperatorNode: $
@@ -239,10 +238,7 @@ public class EmitterVisitor implements Visitor {
                 //        StringNode: 'abc'
                 //        StringNode: 'i'
                 //
-                // emit the matchRegex as a quoteRegex
-                if (node.right instanceof OperatorNode && ((OperatorNode) node.right).operator.equals("matchRegex")) {
-                    ((OperatorNode) node.right).operator = "quoteRegex";
-                }
+                // TODO `substituteRegex` case
                 node.right.accept(scalarVisitor);
                 node.left.accept(scalarVisitor);
                 pushCallContext();
@@ -852,12 +848,25 @@ public class EmitterVisitor implements Visitor {
             case "shift":
                 handleArrayUnaryBuiltin(node, operator);
                 break;
+            case "matchRegex":
             case "quoteRegex":
                 // RuntimeRegex.getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers) {
                 ((ListNode) node.operand).elements.get(0).accept(this);
                 ((ListNode) node.operand).elements.get(1).accept(this);
                 ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/RuntimeRegex", "getQuotedRegex",
+                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                if (ctx.contextType == RuntimeContextType.VOID) {
+                    ctx.mv.visitInsn(Opcodes.POP);
+                }
+                return;
+            case "substituteRegex":
+                // RuntimeRegex.getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers) {
+                ((ListNode) node.operand).elements.get(0).accept(this);
+                ((ListNode) node.operand).elements.get(1).accept(this);
+                ((ListNode) node.operand).elements.get(2).accept(this);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/RuntimeRegex", "substituteRegex",
                         "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                 if (ctx.contextType == RuntimeContextType.VOID) {
                     ctx.mv.visitInsn(Opcodes.POP);
