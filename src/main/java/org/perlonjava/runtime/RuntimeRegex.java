@@ -15,6 +15,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
     private static final int MULTILINE = Pattern.MULTILINE;
     private static final int DOTALL = Pattern.DOTALL;
     private Pattern pattern;
+    boolean isGlobalMatch;
 
     /**
      * Creates a RuntimeRegex object from a regex pattern string with optional modifiers.
@@ -27,6 +28,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
         RuntimeRegex regex = new RuntimeRegex();
         try {
             int flags = regex.convertModifiers(modifiers);
+            regex.isGlobalMatch = modifiers.contains("g");
             regex.pattern = Pattern.compile(patternString, flags);
         } catch (Exception e) {
             throw new IllegalStateException("Regex compilation failed: " + e.getMessage());
@@ -58,33 +60,38 @@ public class RuntimeRegex implements RuntimeScalarReference {
      */
     public static RuntimeBaseEntity matchRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
         String inputStr = string.toString();
-        Pattern pattern = ((RuntimeRegex) quotedRegex.value).pattern;
+        RuntimeRegex regex = (RuntimeRegex) quotedRegex.value;
+        Pattern pattern = regex.pattern;
         Matcher matcher = pattern.matcher(inputStr);
 
-        if (matcher.find()) {
-            // Set global variables for captured groups ($1, $2, etc.)
-            for (int i = 1; i <= matcher.groupCount(); i++) {
-                GlobalContext.setGlobalVariable("main::" + i, matcher.group(i));
-            }
+        boolean found = false;
+        RuntimeList result = new RuntimeList();
+        List<RuntimeBaseEntity> matchedGroups = result.elements;
 
-            if (ctx == RuntimeContextType.LIST) {
-                // Return all matched groups as a list
-                RuntimeList result = new RuntimeList();
-                List<RuntimeBaseEntity> matchedGroups = result.elements;
-                for (int i = 1; i <= matcher.groupCount(); i++) {
+        int capture = 0;
+        while (matcher.find()) {
+            found = true;
+            for (int i = 1; i <= matcher.groupCount(); i++) {
+                capture++;
+                GlobalContext.setGlobalVariable("main::" + capture, matcher.group(i));
+                if (ctx == RuntimeContextType.LIST) {
                     matchedGroups.add(new RuntimeScalar(matcher.group(i)));
                 }
-                return result;
             }
-            // Return true
-            return new RuntimeScalar(1);
-        } else {
-            // No match found, clear global variables
+            if (!regex.isGlobalMatch) {
+                break;
+            }
+        }
+
+        if (!found) {
             GlobalContext.setGlobalVariable("main::1", "");
-            // Return false
-            if (ctx == RuntimeContextType.LIST) {
-                return new RuntimeList();
-            }
+        }
+
+        if (ctx == RuntimeContextType.LIST) {
+            return result;
+        } else if (ctx == RuntimeContextType.SCALAR) {
+            return new RuntimeScalar(found ? 1 : 0);
+        } else {
             return new RuntimeScalar();
         }
     }

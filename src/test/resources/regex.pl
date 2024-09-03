@@ -35,7 +35,7 @@ print "not " if $3 ne 'baz'; say "ok # \$3 is 'baz'";
 ## $string = "abc abc abc";
 ## $pattern = qr/abc/;
 ## my @matches = $string =~ /$pattern/g;
-## print "not " if scalar(@matches) != 3; say "ok # 'abc abc abc' matches 'abc' 3 times";
+## print "not " if scalar(@matches) != 3; say "ok # 'abc abc abc' matches 'abc' 3 times <@matches>";
 
 # Match with case insensitive flag
 $string = "Hello World";
@@ -96,15 +96,15 @@ print "not " if $matches[0] ne 'foo'; say "ok # \$matches[0] is 'foo'";
 print "not " if $matches[1] ne 'bar'; say "ok # \$matches[1] is 'bar'";
 print "not " if $matches[2] ne 'baz'; say "ok # \$matches[2] is 'baz'";
 
-## # Global match in list context
-## $string = "abc abc abc";
-## $pattern = qr/(abc)/;
-## @matches = $string =~ /$pattern/g;
-## print "not " if scalar(@matches) != 3; say "ok # 'abc abc abc' matches 'abc' 3 times in list context";
-## print "not " if $matches[0] ne 'abc'; say "ok # \$matches[0] is 'abc'";
-## print "not " if $matches[1] ne 'abc'; say "ok # \$matches[1] is 'abc'";
-## print "not " if $matches[2] ne 'abc'; say "ok # \$matches[2] is 'abc'";
-## 
+# Global match in list context
+$string = "abc abc abc";
+$pattern = qr/(abc)/;
+@matches = $string =~ /$pattern/g;
+print "not " if scalar(@matches) != 3; say "ok # 'abc abc abc' matches 'abc' 3 times in list context";
+print "not " if $matches[0] ne 'abc'; say "ok # \$matches[0] is 'abc'";
+print "not " if $matches[1] ne 'abc'; say "ok # \$matches[1] is 'abc'";
+print "not " if $matches[2] ne 'abc'; say "ok # \$matches[2] is 'abc'";
+
 ## # Match with capture groups and global flag in list context
 ## $string = "foo1 bar2 baz3";
 ## $pattern = qr/(\w+)(\d)/;
@@ -135,20 +135,20 @@ print "not " if $matches[0] ne 'aaa'; say "ok # \$matches[0] is 'aaa'";
 print "not " if $matches[1] ne 'bbb'; say "ok # \$matches[1] is 'bbb'";
 print "not " if $matches[2] ne 'ccc'; say "ok # \$matches[2] is 'ccc'";
 
-## # Match with lookahead in list context
-## $string = "foo123 bar456";
-## $pattern = qr/(foo)(?=\d+)/;
-## @matches = $string =~ /$pattern/g;
-## print "not " if scalar(@matches) != 1; say "ok # 'foo123 bar456' matches 'foo' followed by digits in list context";
-## print "not " if $matches[0] ne 'foo'; say "ok # \$matches[0] is 'foo'";
-## 
-## # Match with lookbehind in list context
-## $string = "123foo 456bar";
-## $pattern = qr/(?<=\d{2})(foo|bar)/;
-## @matches = $string =~ /$pattern/g;
-## print "not " if scalar(@matches) != 2; say "ok # '123foo 456bar' matches 'foo' or 'bar' preceded by digits in list context";
-## print "not " if $matches[0] ne 'foo'; say "ok # \$matches[0] is 'foo'";
-## print "not " if $matches[1] ne 'bar'; say "ok # \$matches[1] is 'bar'";
+# Match with lookahead in list context
+$string = "foo123 bar456";
+$pattern = qr/(foo)(?=\d+)/;
+@matches = $string =~ /$pattern/g;
+print "not " if scalar(@matches) != 1; say "ok # 'foo123 bar456' matches 'foo' followed by digits in list context";
+print "not " if $matches[0] ne 'foo'; say "ok # \$matches[0] is 'foo'";
+
+# Match with lookbehind in list context
+$string = "123foo 456bar";
+$pattern = qr/(?<=\d{2})(foo|bar)/;
+@matches = $string =~ /$pattern/g;
+print "not " if scalar(@matches) != 2; say "ok # '123foo 456bar' matches 'foo' or 'bar' preceded by digits in list context";
+print "not " if $matches[0] ne 'foo'; say "ok # \$matches[0] is 'foo'";
+print "not " if $matches[1] ne 'bar'; say "ok # \$matches[1] is 'bar'";
 
 # Match with non-capturing group in list context
 $string = "foo bar baz";
