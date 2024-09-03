@@ -698,14 +698,9 @@ public class Parser {
             case "qr":
             case "/":
             case "//":
-                operator = operator.equals("qr") ? "quoteRegex" : "matchRegex";
-                Node parsed = StringParser.parseRegexString(ctx, rawStr);
-                Node modifiers = new StringNode(rawStr.buffers.get(1), rawStr.index);
-                List<Node> elements = new ArrayList<>();
-                elements.add(parsed);
-                elements.add(modifiers);
-                ListNode list = new ListNode(elements, rawStr.index);
-                return new OperatorNode(operator, list, rawStr.index);
+                return parseRegexMatch(operator, rawStr);
+            case "s":
+                return parseRegexReplace(rawStr);
             case "\"":
             case "qq":
                 return StringParser.parseDoubleQuotedString(ctx, rawStr, true);
@@ -718,6 +713,31 @@ public class Parser {
         for (int i = 0; i < size; i++) {
             list.elements.add(new StringNode(rawStr.buffers.get(i), rawStr.index));
         }
+        return new OperatorNode(operator, list, rawStr.index);
+    }
+
+    private OperatorNode parseRegexReplace(StringParser.ParsedString rawStr) {
+        String operator = "replaceRegex";
+        Node parsed = StringParser.parseRegexString(ctx, rawStr);
+        // TODO - if modifiers include `e`, then parse the `replace` code
+        Node replace = new StringNode(rawStr.buffers.get(1), rawStr.index);
+        Node modifiers = new StringNode(rawStr.buffers.get(2), rawStr.index);
+        List<Node> elements = new ArrayList<>();
+        elements.add(parsed);
+        elements.add(replace);
+        elements.add(modifiers);
+        ListNode list = new ListNode(elements, rawStr.index);
+        return new OperatorNode(operator, list, rawStr.index);
+    }
+
+    private OperatorNode parseRegexMatch(String operator, StringParser.ParsedString rawStr) {
+        operator = operator.equals("qr") ? "quoteRegex" : "matchRegex";
+        Node parsed = StringParser.parseRegexString(ctx, rawStr);
+        Node modifiers = new StringNode(rawStr.buffers.get(1), rawStr.index);
+        List<Node> elements = new ArrayList<>();
+        elements.add(parsed);
+        elements.add(modifiers);
+        ListNode list = new ListNode(elements, rawStr.index);
         return new OperatorNode(operator, list, rawStr.index);
     }
 
