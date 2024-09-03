@@ -456,6 +456,41 @@ public class StringParser {
         return list;
     }
 
+    public static OperatorNode parseRegexReplace(EmitterContext ctx, ParsedString rawStr) {
+        String operator = "replaceRegex";
+        Node parsed = parseRegexString(ctx, rawStr);
+        String replaceStr = rawStr.buffers.get(1);
+        String modifierStr = rawStr.buffers.get(2);
+
+        Node replace;
+        if (modifierStr.contains("e")) {
+            // if modifiers include `e`, then parse the `replace` code
+            ctx.logDebug("regex e-modifier: " + replaceStr);
+            Parser blockParser = new Parser(ctx, new Lexer(replaceStr).tokenize());
+            replace = blockParser.parseBlock();
+        } else {
+            replace = new StringNode(replaceStr, rawStr.index);
+        }
+        Node modifiers = new StringNode(modifierStr, rawStr.index);
+        List<Node> elements = new ArrayList<>();
+        elements.add(parsed);
+        elements.add(replace);
+        elements.add(modifiers);
+        ListNode list = new ListNode(elements, rawStr.index);
+        return new OperatorNode(operator, list, rawStr.index);
+    }
+
+    public static OperatorNode parseRegexMatch(EmitterContext ctx, String operator, ParsedString rawStr) {
+        operator = operator.equals("qr") ? "quoteRegex" : "matchRegex";
+        Node parsed = parseRegexString(ctx, rawStr);
+        Node modifiers = new StringNode(rawStr.buffers.get(1), rawStr.index);
+        List<Node> elements = new ArrayList<>();
+        elements.add(parsed);
+        elements.add(modifiers);
+        ListNode list = new ListNode(elements, rawStr.index);
+        return new OperatorNode(operator, list, rawStr.index);
+    }
+
     /**
      * Class to represent the parsed string and its position in the tokens list.
      */
