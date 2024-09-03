@@ -383,6 +383,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 return "";
             case GLOB:
                 return value.toString();
+            case REGEX:
+                return value.toString();
             default:
                 return ((RuntimeScalarReference) value).toStringRef();
         }
