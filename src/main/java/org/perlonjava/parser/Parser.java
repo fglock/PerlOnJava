@@ -694,8 +694,18 @@ public class Parser {
             case "'":
             case "q":
                 return StringParser.parseSingleQuotedString(rawStr);
+            case "m":
             case "qr":
-                return StringParser.parseRegexString(ctx, rawStr);
+            case "/":
+            case "//":
+                operator = operator.equals("qr") ? "quoteRegex" : "matchRegex";
+                Node parsed = StringParser.parseRegexString(ctx, rawStr);
+                Node modifiers = new StringNode(rawStr.buffers.get(1), rawStr.index);
+                List<Node> elements = new ArrayList<>();
+                elements.add(parsed);
+                elements.add(modifiers);
+                ListNode list = new ListNode(elements, rawStr.index);
+                return new OperatorNode(operator, list, rawStr.index);
             case "\"":
             case "qq":
                 return StringParser.parseDoubleQuotedString(ctx, rawStr, true);
