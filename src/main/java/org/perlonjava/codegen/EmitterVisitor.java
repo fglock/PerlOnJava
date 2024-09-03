@@ -216,10 +216,20 @@ public class EmitterVisitor implements Visitor {
                 handleJoinOperator(operator, node);
                 return;
             case "!~":
-                this.visit(new OperatorNode("not", node, node.tokenIndex));
+                this.visit(
+                        new OperatorNode("not",
+                                new OperatorNode("scalar",
+                                        new BinaryOperatorNode(
+                                                "=~",
+                                                node.left,
+                                                node.right,
+                                                node.tokenIndex
+                                        ), node.tokenIndex
+                                ), node.tokenIndex
+                        ));
                 return;
             case "=~":
-                // static RuntimeBaseEntity matchRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx)
+                // static RuntimeDataProvider matchRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx)
                 //
                 //  BinaryOperatorNode: =~
                 //    OperatorNode: $
@@ -238,7 +248,7 @@ public class EmitterVisitor implements Visitor {
                 pushCallContext();
                 ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/RuntimeRegex", "matchRegex",
-                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBaseEntity;", false);
+                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
                 if (ctx.contextType == RuntimeContextType.VOID) {
                     ctx.mv.visitInsn(Opcodes.POP);
                 }
@@ -797,10 +807,16 @@ public class EmitterVisitor implements Visitor {
             case "quotemeta":
             case "rand":
             case "ref":
-            case "scalar":
             case "undef":
             case "wantarray":
                 handleUnaryBuiltin(node, operator);
+                break;
+            case "scalar":
+                node.operand.accept(this.with(RuntimeContextType.SCALAR));
+                ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+                if (ctx.contextType == RuntimeContextType.VOID) {
+                    mv.visitInsn(Opcodes.POP);
+                }
                 break;
             case "int":
                 handleUnaryBuiltin(node, "integer");

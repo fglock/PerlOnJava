@@ -57,7 +57,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
      * @param ctx         The context LIST, SCALAR, VOID
      * @return A RuntimeScalar or RuntimeList
      */
-    public static RuntimeBaseEntity matchRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
+    public static RuntimeDataProvider matchRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
         String inputStr = string.toString();
         RuntimeRegex regex = (RuntimeRegex) quotedRegex.value;
         Pattern pattern = regex.pattern;
@@ -67,23 +67,25 @@ public class RuntimeRegex implements RuntimeScalarReference {
         RuntimeList result = new RuntimeList();
         List<RuntimeBaseEntity> matchedGroups = result.elements;
 
-        int capture = 0;
+        int capture = 1;
         while (matcher.find()) {
             found = true;
             int captureCount = matcher.groupCount();
             if (regex.isGlobalMatch && captureCount < 1 && ctx == RuntimeContextType.LIST) {
                 // global match and no captures, in list context return the matched string
-                capture++;
+                // capture++;
                 String matchedStr = matcher.group(0);
                 matchedGroups.add(new RuntimeScalar(matchedStr));
             } else {
                 // initialize $1, $2 are save captures in return list if needed
                 for (int i = 1; i <= captureCount; i++) {
-                    capture++;
                     String matchedStr = matcher.group(i);
-                    GlobalContext.setGlobalVariable("main::" + capture, matchedStr);
-                    if (ctx == RuntimeContextType.LIST) {
-                        matchedGroups.add(new RuntimeScalar(matchedStr));
+                    if (matchedStr != null) {
+                        // System.out.println("Set capture $" + capture + " to <" + matchedStr + ">");
+                        GlobalContext.setGlobalVariable("main::" + capture++, matchedStr);
+                        if (ctx == RuntimeContextType.LIST) {
+                            matchedGroups.add(new RuntimeScalar(matchedStr));
+                        }
                     }
                 }
             }
@@ -91,10 +93,8 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 break;
             }
         }
-
-        if (!found) {
-            GlobalContext.setGlobalVariable("main::1", "");
-        }
+        // System.out.println("Undefine capture $" + capture);
+        GlobalContext.getGlobalVariable("main::" + capture++).set(new RuntimeScalar());
 
         if (ctx == RuntimeContextType.LIST) {
             return result;
@@ -115,7 +115,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
      * @param ctx         The context LIST, SCALAR, VOID
      * @return A RuntimeScalar or RuntimeList
      */
-    public static RuntimeBaseEntity substituteRegex(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar replacement, int ctx) {
+    public static RuntimeDataProvider substituteRegex(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar replacement, int ctx) {
         String inputStr = string.toString();
         RuntimeRegex regex = (RuntimeRegex) quotedRegex.value;
         Pattern pattern = regex.pattern;
