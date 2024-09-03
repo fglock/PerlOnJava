@@ -105,26 +105,26 @@ print "not " if $matches[0] ne 'abc'; say "ok # \$matches[0] is 'abc'";
 print "not " if $matches[1] ne 'abc'; say "ok # \$matches[1] is 'abc'";
 print "not " if $matches[2] ne 'abc'; say "ok # \$matches[2] is 'abc'";
 
-## # Match with capture groups and global flag in list context
-## $string = "foo1 bar2 baz3";
-## $pattern = qr/(\w+)(\d)/;
-## @matches = $string =~ /$pattern/g;
-## print "not " if scalar(@matches) != 6; say "ok # 'foo1 bar2 baz3' matches '(\\w+)(\\d)' 3 times in list context";
-## print "not " if $matches[0] ne 'foo'; say "ok # \$matches[0] is 'foo'";
-## print "not " if $matches[1] ne '1'; say "ok # \$matches[1] is '1'";
-## print "not " if $matches[2] ne 'bar'; say "ok # \$matches[2] is 'bar'";
-## print "not " if $matches[3] ne '2'; say "ok # \$matches[3] is '2'";
-## print "not " if $matches[4] ne 'baz'; say "ok # \$matches[4] is 'baz'";
-## print "not " if $matches[5] ne '3'; say "ok # \$matches[5] is '3'";
-## 
-## # Match with alternation in list context
-## $string = "apple orange banana";
-## $pattern = qr/(apple|orange|banana)/;
-## @matches = $string =~ /$pattern/g;
-## print "not " if scalar(@matches) != 3; say "ok # 'apple orange banana' matches '(apple|orange|banana)' 3 times in list context";
-## print "not " if $matches[0] ne 'apple'; say "ok # \$matches[0] is 'apple'";
-## print "not " if $matches[1] ne 'orange'; say "ok # \$matches[1] is 'orange'";
-## print "not " if $matches[2] ne 'banana'; say "ok # \$matches[2] is 'banana'";
+# Match with capture groups and global flag in list context
+$string = "foo1 bar2 baz3";
+$pattern = qr/(\w+)(\d)/;
+@matches = $string =~ /$pattern/g;
+print "not " if scalar(@matches) != 6; say "ok # 'foo1 bar2 baz3' matches '(\\w+)(\\d)' 3 times in list context";
+print "not " if $matches[0] ne 'foo'; say "ok # \$matches[0] is 'foo'";
+print "not " if $matches[1] ne '1'; say "ok # \$matches[1] is '1'";
+print "not " if $matches[2] ne 'bar'; say "ok # \$matches[2] is 'bar'";
+print "not " if $matches[3] ne '2'; say "ok # \$matches[3] is '2'";
+print "not " if $matches[4] ne 'baz'; say "ok # \$matches[4] is 'baz'";
+print "not " if $matches[5] ne '3'; say "ok # \$matches[5] is '3'";
+
+# Match with alternation in list context
+$string = "apple orange banana";
+$pattern = qr/(apple|orange|banana)/;
+@matches = $string =~ /$pattern/g;
+print "not " if scalar(@matches) != 3; say "ok # 'apple orange banana' matches '(apple|orange|banana)' 3 times in list context";
+print "not " if $matches[0] ne 'apple'; say "ok # \$matches[0] is 'apple'";
+print "not " if $matches[1] ne 'orange'; say "ok # \$matches[1] is 'orange'";
+print "not " if $matches[2] ne 'banana'; say "ok # \$matches[2] is 'banana'";
 
 # Match with quantifiers in list context
 $string = "aaa bbb ccc";
