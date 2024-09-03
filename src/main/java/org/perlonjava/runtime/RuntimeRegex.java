@@ -108,6 +108,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
 
     @Override
     public String toString() {
+        // TODO add (?idmsux-idmsux:X) around the regex
         return pattern.toString();
     }
 
