@@ -215,6 +215,29 @@ public class EmitterVisitor implements Visitor {
             case "join":
                 handleJoinOperator(operator, node);
                 return;
+            case "=~":
+                // static RuntimeBaseEntity matchRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx)
+                //
+                //  BinaryOperatorNode: =~
+                //    OperatorNode: $
+                //      IdentifierNode: a
+                //    OperatorNode: matchRegex
+                //      ListNode:
+                //        StringNode: 'abc'
+                //        StringNode: 'i'
+                //
+                // emit the matchRegex as a quoteRegex
+                ((OperatorNode) node.right).operator = "quoteRegex";
+                node.right.accept(scalarVisitor);
+                node.left.accept(scalarVisitor);
+                pushCallContext();
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/RuntimeRegex", "matchRegex",
+                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBaseEntity;", false);
+                if (ctx.contextType == RuntimeContextType.VOID) {
+                    ctx.mv.visitInsn(Opcodes.POP);
+                }
+                return;
             case "**=":
             case "+=":
             case "*=":

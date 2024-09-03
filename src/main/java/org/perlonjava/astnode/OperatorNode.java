@@ -11,7 +11,7 @@ public class OperatorNode extends AbstractNode {
     /**
      * The operator represented by this node.
      */
-    public final String operator;
+    public String operator;
 
     /**
      * The operand on which the operator is applied.
