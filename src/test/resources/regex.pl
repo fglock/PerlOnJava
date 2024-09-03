@@ -31,11 +31,11 @@ print "not " if $1 ne 'foo'; say "ok # \$1 is 'foo'";
 print "not " if $2 ne 'bar'; say "ok # \$2 is 'bar'";
 print "not " if $3 ne 'baz'; say "ok # \$3 is 'baz'";
 
-## # Match with global flag
-## $string = "abc abc abc";
-## $pattern = qr/abc/;
-## my @matches = $string =~ /$pattern/g;
-## print "not " if scalar(@matches) != 3; say "ok # 'abc abc abc' matches 'abc' 3 times <@matches>";
+# Match with global flag
+$string = "abc abc abc";
+$pattern = qr/abc/;
+my @matches = $string =~ /$pattern/g;
+print "not " if scalar(@matches) != 3; say "ok # 'abc abc abc' matches 'abc' 3 times <@matches>";
 
 # Match with case insensitive flag
 $string = "Hello World";
@@ -82,7 +82,7 @@ print "not " if !$match; say "ok # 'aaa' matches 'a{3}'";
 # Simple match in list context
 $string = "Hello World";
 $pattern = qr/(Hello) (World)/;
-my @matches = $string =~ $pattern;
+@matches = $string =~ $pattern;
 print "not " if scalar(@matches) != 2; say "ok # 'Hello World' matches '(Hello) (World)' in list context <" . scalar(@matches) . ">";
 print "not " if $matches[0] ne 'Hello'; say "ok # \$matches[0] is 'Hello'";
 print "not " if $matches[1] ne 'World'; say "ok # \$matches[1] is 'World'";
