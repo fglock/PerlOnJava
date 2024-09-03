@@ -71,11 +71,21 @@ public class RuntimeRegex implements RuntimeScalarReference {
         int capture = 0;
         while (matcher.find()) {
             found = true;
-            for (int i = 1; i <= matcher.groupCount(); i++) {
+            int captureCount = matcher.groupCount();
+            if (regex.isGlobalMatch && captureCount < 1 && ctx == RuntimeContextType.LIST) {
+                // global match and no captures, in list context return the matched string
                 capture++;
-                GlobalContext.setGlobalVariable("main::" + capture, matcher.group(i));
-                if (ctx == RuntimeContextType.LIST) {
-                    matchedGroups.add(new RuntimeScalar(matcher.group(i)));
+                String matchedStr = matcher.group(0);
+                matchedGroups.add(new RuntimeScalar(matchedStr));
+            } else {
+                // initialize $1, $2 are save captures in return list if needed
+                for (int i = 1; i <= captureCount; i++) {
+                    capture++;
+                    String matchedStr = matcher.group(i);
+                    GlobalContext.setGlobalVariable("main::" + capture, matchedStr);
+                    if (ctx == RuntimeContextType.LIST) {
+                        matchedGroups.add(new RuntimeScalar(matchedStr));
+                    }
                 }
             }
             if (!regex.isGlobalMatch) {
