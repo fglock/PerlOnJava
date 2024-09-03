@@ -158,12 +158,7 @@ public class StringParser {
             // interpolate variables, but ignore the escapes
             parsed = parseDoubleQuotedString(ctx, rawStr, false);
         }
-        Node modifiers = new StringNode(rawStr.buffers.get(1), rawStr.index);
-        List<Node> elements = new ArrayList<>();
-        elements.add(parsed);
-        elements.add(modifiers);
-        ListNode list = new ListNode(elements, rawStr.index);
-        return new OperatorNode("quoteRegex", list, rawStr.index);
+        return parsed;
     }
 
     static Node parseDoubleQuotedString(EmitterContext ctx, ParsedString rawStr, boolean parseEscapes) {
