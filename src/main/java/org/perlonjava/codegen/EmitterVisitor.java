@@ -808,6 +808,17 @@ public class EmitterVisitor implements Visitor {
             case "shift":
                 handleArrayUnaryBuiltin(node, operator);
                 break;
+            case "quoteRegex":
+                // RuntimeRegex.getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers) {
+                ((ListNode) node.operand).elements.get(0).accept(this);
+                ((ListNode) node.operand).elements.get(1).accept(this);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/RuntimeScalar", "getQuotedRegex",
+                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false)
+                if (ctx.contextType == RuntimeContextType.VOID) {
+                    ctx.mv.visitInsn(Opcodes.POP);
+                }
+                return;
             default:
                 throw new UnsupportedOperationException("Unsupported operator: " + operator);
         }

@@ -35,6 +35,17 @@ public class RuntimeRegex implements RuntimeScalarReference {
         return regex;
     }
 
+    /**
+     * Creates a Perl "qr" object from a regex pattern string with optional modifiers.
+     *
+     * @param patternString The regex pattern string with optional modifiers.
+     * @param modifiers     Modifiers for the regex pattern (e.g., "i", "g").
+     * @return A RuntimeScalar.
+     */
+    public static RuntimeScalar getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers) {
+        return new RuntimeScalar(compile(patternString.toString(), modifiers.toString()));
+    }
+
     @Override
     public String toString() {
         return pattern.toString();
