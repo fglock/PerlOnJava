@@ -108,7 +108,9 @@
 - ❌  **CORE namespace**: `CORE` and `CORE::GLOBAL` are not implemented.
 
 ## Regular Expressions
-- ❌  **Basic Matching**: Basic regex matching is not yet implemented.
+- ✔️   **Basic Matching**: Operators `qr//` and `m//` are implemented.
+- ✔️   **Regex modifiers**: Modifiers `/i` `/m` `/s` `/g` are implemented.
+- ✔️   **Special variables**: The special variables `$1`, `$2`... are implemented.
 - ❌  **Advanced Regex Features**: Features like lookaheads, non-greedy matching, etc., are missing.
 
 ## Statements and Special Operators
