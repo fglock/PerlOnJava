@@ -48,8 +48,6 @@ public class EmitterVisitor implements Visitor {
         operatorHandlers.put("gt", "gt");
         operatorHandlers.put("ge", "ge");
         operatorHandlers.put("cmp", "cmp");
-        operatorHandlers.put("=~", "bindMatch");
-        operatorHandlers.put("!~", "bindNotMatch");
         operatorHandlers.put("bless", "bless");
     }
 
