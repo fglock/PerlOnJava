@@ -109,7 +109,7 @@
 
 ## Regular Expressions
 - ✔️   **Basic Matching**: Operators `qr//`, `m//`, `s///` are implemented.
-- ✔️   **Regex modifiers**: Modifiers `/i` `/m` `/s` `/g` `/r` are implemented.
+- ✔️   **Regex modifiers**: Modifiers `/i` `/m` `/s` `/g` `/r` `/e` are implemented.
 - ✔️   **Special variables**: The special variables `$1`, `$2`... are implemented.
 - ❌  **Perl-specific Regex Features**: Some features like `/x` (formatted regex) are missing.
 
