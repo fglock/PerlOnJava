@@ -211,6 +211,7 @@ public class EmitterVisitor implements Visitor {
             case "substr":
             case "sprintf":
             case "join":
+            case "split":
                 handleJoinOperator(operator, node);
                 return;
             case "!~":

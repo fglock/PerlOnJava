@@ -445,6 +445,11 @@ public class Parser {
                             className = new StringNode("main", tokenIndex);
                         }
                         return new BinaryOperatorNode("bless", ref, className, tokenIndex);
+                    case "split":
+                        // TODO Handle 'split' keyword
+                        operand = parseZeroOrMoreList(1, false, true, false);
+                        Node separator = ((ListNode) operand).elements.remove(0);
+                        return new BinaryOperatorNode(token.text, separator, operand, tokenIndex);
                     case "push":
                     case "unshift":
                     case "join":
@@ -452,7 +457,7 @@ public class Parser {
                     case "sprintf":
                         // Handle 'join' keyword as a Binary operator with a RuntimeList operand
                         operand = parseZeroOrMoreList(1, false, true, false);
-                        Node separator = ((ListNode) operand).elements.remove(0);
+                        separator = ((ListNode) operand).elements.remove(0);
                         return new BinaryOperatorNode(token.text, separator, operand, tokenIndex);
                     case "sort":
                     case "map":
