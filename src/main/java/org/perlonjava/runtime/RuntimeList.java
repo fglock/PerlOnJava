@@ -111,7 +111,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
                         // if (lastEnd == 0 && matchStr.isEmpty()) {
                         // A zero-width match at the beginning of EXPR never produces an empty field
                         // System.out.println("matcher skip first");
-                    } else  {
+                    } else {
                         splitElements.add(new RuntimeScalar(inputStr.substring(lastEnd, matcher.start())));
                     }
 
