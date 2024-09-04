@@ -65,7 +65,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
 
         // Special case: if the pattern is a single space character, treat it as /\s+/
         if (quotedRegex.type != RuntimeScalarType.REGEX && quotedRegex.toString().equals(" ")) {
-            quotedRegex = RuntimeRegex.getQuotedRegex(quotedRegex, new RuntimeScalar(""));
+            quotedRegex = RuntimeRegex.getQuotedRegex(new RuntimeScalar(" "), new RuntimeScalar(""));
         }
 
         if (quotedRegex.type == RuntimeScalarType.REGEX) {
@@ -105,7 +105,15 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
 
                 while (matcher.find() && (limit <= 0 || splitCount < limit - 1)) {
                     // Add the part before the match
-                    splitElements.add(new RuntimeScalar(inputStr.substring(lastEnd, matcher.start())));
+
+                    // System.out.println("matcher lastend " + lastEnd + " start " + matcher.start() + " end " + matcher.end() + " length " + inputStr.length());
+                    if (lastEnd == 0 && matcher.end() == 0) {
+                        // if (lastEnd == 0 && matchStr.isEmpty()) {
+                        // A zero-width match at the beginning of EXPR never produces an empty field
+                        // System.out.println("matcher skip first");
+                    } else  {
+                        splitElements.add(new RuntimeScalar(inputStr.substring(lastEnd, matcher.start())));
+                    }
 
                     // Add captured groups if any
                     for (int i = 1; i <= matcher.groupCount(); i++) {
@@ -118,7 +126,9 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
                 }
 
                 // Add the remaining part of the string
-                splitElements.add(new RuntimeScalar(inputStr.substring(lastEnd)));
+                if (lastEnd < inputStr.length()) {
+                    splitElements.add(new RuntimeScalar(inputStr.substring(lastEnd)));
+                }
 
                 // Handle trailing empty strings if no capturing groups and limit is zero or negative
                 if (matcher.groupCount() == 0 && limit <= 0) {

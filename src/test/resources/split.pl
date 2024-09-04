@@ -21,7 +21,7 @@ $pattern = '^';
 @expected = ("This\n", "is\n", "a\n", "test\n", "string");
 $match = "@result" eq "@expected";
 print "not " if scalar(@result) != 5; say "ok # Pattern /^/ with multiline modifier: " . scalar(@result);
-print "not " if !$match; say "ok # Pattern /^/ with multiline modifier"; # : <", join(",", @result), ">";
+print "not " if !$match; say "ok # Pattern /^/ with multiline modifier"; #  : <", join(",", @result), ">";
 
 # Test case 3: Pattern with capturing groups
 $string = 'a1b2c3';
@@ -29,7 +29,7 @@ $pattern = '(\d+)';
 @result = split(/$pattern/, $string);
 @expected = ('a', '1', 'b', '2', 'c', '3');
 $match = "@result" eq "@expected";
-print "not " if !$match; say "ok # Pattern with capturing groups <@result>";
+print "not " if !$match; say "ok # Pattern with capturing groups <", join(",", @result), ">";
 
 # Test case 4: Negative limit
 $string = 'This is a test string';

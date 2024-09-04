@@ -108,7 +108,7 @@
 - ❌  **CORE namespace**: `CORE` and `CORE::GLOBAL` are not implemented.
 
 ## Regular Expressions
-- ✔️   **Basic Matching**: Operators `qr//`, `m//`, `s///` are implemented.
+- ✔️   **Basic Matching**: Operators `qr//`, `m//`, `s///`, `split` are implemented.
 - ✔️   **Regex modifiers**: Modifiers `/i` `/m` `/s` `/g` `/r` `/e` are implemented.
 - ✔️   **Special variables**: The special variables `$1`, `$2`... are implemented.
 - ❌  **Perl-specific Regex Features**: Some features like `/x` (formatted regex) are missing.
