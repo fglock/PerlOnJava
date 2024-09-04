@@ -256,6 +256,16 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         throw new IllegalStateException("TODO - create reference of list not implemented");
     }
 
+    public RuntimeList createListReference() {
+        RuntimeList result = new RuntimeList();
+        List<RuntimeBaseEntity> resultList = result.elements;
+        Iterator<RuntimeScalar> iterator = this.iterator();
+        while (iterator.hasNext()) {
+            resultList.add(iterator.next().createReference());
+        }
+        return result;
+    }
+
     // Set the items in the list to the values in another list
     // (THIS LIST) = (ARG LIST)
     //
