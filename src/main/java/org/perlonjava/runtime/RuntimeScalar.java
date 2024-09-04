@@ -483,7 +483,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     // Method to apply (execute) a subroutine reference
-    public RuntimeList apply(RuntimeArray a, int callContext) throws Exception {
+    public RuntimeList apply(RuntimeArray a, int callContext) {
         // Check if the type of this RuntimeScalar is CODE
         if (this.type == RuntimeScalarType.CODE) {
             // Cast the value to RuntimeCode and call apply()
