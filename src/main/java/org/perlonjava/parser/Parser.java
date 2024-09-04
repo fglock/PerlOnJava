@@ -300,7 +300,7 @@ public class Parser {
         Node arguments = null;
         if (prototype == null) {
             // no prototype
-            arguments = parseZeroOrMoreList(0, false, true, false);
+            arguments = parseZeroOrMoreList(0, false, true, false, false);
         } else if (prototype.isEmpty()) {
             // prototype is empty string
             arguments = new ListNode(tokenIndex);
@@ -312,7 +312,7 @@ public class Parser {
             arguments = parseZeroOrOneList(0);
         } else {
             // XXX TODO: Handle more prototypes or parameter variables
-            arguments = parseZeroOrMoreList(0, false, true, false);
+            arguments = parseZeroOrMoreList(0, false, true, false, false);
         }
 
         // Rewrite and return the subroutine call as `&name(arguments)`
@@ -438,7 +438,7 @@ public class Parser {
                         }
                         return new OperatorNode(text, operand, tokenIndex);
                     case "bless":
-                        operand = parseZeroOrMoreList(1, false, true, false);
+                        operand = parseZeroOrMoreList(1, false, true, false, false);
                         Node ref = ((ListNode) operand).elements.get(0);
                         Node className = ((ListNode) operand).elements.get(1);
                         if (className == null) {
@@ -447,7 +447,8 @@ public class Parser {
                         return new BinaryOperatorNode("bless", ref, className, tokenIndex);
                     case "split":
                         // TODO Handle 'split' keyword
-                        operand = parseZeroOrMoreList(1, false, true, false);
+                        // RuntimeList split(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar limitArg)
+                        operand = parseZeroOrMoreList(1, false, true, false, true);
                         Node separator = ((ListNode) operand).elements.remove(0);
                         return new BinaryOperatorNode(token.text, separator, operand, tokenIndex);
                     case "push":
@@ -456,14 +457,14 @@ public class Parser {
                     case "substr":
                     case "sprintf":
                         // Handle 'join' keyword as a Binary operator with a RuntimeList operand
-                        operand = parseZeroOrMoreList(1, false, true, false);
+                        operand = parseZeroOrMoreList(1, false, true, false, false);
                         separator = ((ListNode) operand).elements.remove(0);
                         return new BinaryOperatorNode(token.text, separator, operand, tokenIndex);
                     case "sort":
                     case "map":
                     case "grep":
                         // Handle 'sort' keyword as a Binary operator with a Code and List operands
-                        operand = parseZeroOrMoreList(1, true, false, false);
+                        operand = parseZeroOrMoreList(1, true, false, false, false);
                         // transform:   { 123 }
                         // into:        sub { 123 }
                         Node block = ((ListNode) operand).handle;
@@ -473,7 +474,7 @@ public class Parser {
                         }
                         return new BinaryOperatorNode(token.text, block, operand, tokenIndex);
                     case "splice":
-                        operand = parseZeroOrMoreList(0, false, true, false);
+                        operand = parseZeroOrMoreList(0, false, true, false, false);
                         return new OperatorNode(token.text, operand, tokenIndex);
                     case "readline":
                     case "eof":
@@ -483,7 +484,7 @@ public class Parser {
                     case "close":
                     case "seek":
                         // Handle 'open' keyword as a Binary operator with a FileHandle and List operands
-                        operand = parseZeroOrMoreList(0, false, true, false);
+                        operand = parseZeroOrMoreList(0, false, true, false, false);
                         // Node handle = ((ListNode) operand).handle;
                         // ((ListNode) operand).handle = null;
                         Node handle = ((ListNode) operand).elements.remove(0);
@@ -495,7 +496,7 @@ public class Parser {
                     case "print":
                     case "say":
                         // Handle 'print' keyword as a Binary operator with a FileHandle and List operands
-                        operand = parseZeroOrMoreList(0, false, true, true);
+                        operand = parseZeroOrMoreList(0, false, true, true, false);
                         handle = ((ListNode) operand).handle;
                         ((ListNode) operand).handle = null;
                         if (handle == null) {
@@ -516,7 +517,7 @@ public class Parser {
                         // Handle 'return' keyword as a unary operator with an operand;
                         // Parentheses are ignored.
                         // operand = parseExpression(getPrecedence("print") + 1);
-                        operand = parseZeroOrMoreList(0, false, false, false);
+                        operand = parseZeroOrMoreList(0, false, false, false, false);
                         return new OperatorNode("return", operand, tokenIndex);
                     case "eval":
                         // Handle 'eval' keyword which can be followed by a block or an expression
@@ -911,13 +912,31 @@ public class Parser {
     //
     // wantFileHandle:  print STDOUT "this\n";
     //
-    private ListNode parseZeroOrMoreList(int minItems, boolean wantBlockNode, boolean obeyParentheses, boolean wantFileHandle) {
+    private ListNode parseZeroOrMoreList(int minItems, boolean wantBlockNode, boolean obeyParentheses, boolean wantFileHandle, boolean wantRegex) {
         ctx.logDebug("parseZeroOrMoreList start");
         ListNode expr = new ListNode(tokenIndex);
 
         int currentIndex = tokenIndex;
         boolean hasParen = false;
         LexerToken token;
+
+        if (wantRegex) {
+            if (peek().text.equals("(")) {
+                consume();
+                hasParen = true;
+            }
+            // TODO consume comma
+            if (peek().text.equals("/")) {
+                consume();
+                Node regex = parseRawString("/");
+                expr.handle = parseFileHandle();
+            }
+            if (expr.handle == null) {
+                // backtrack
+                tokenIndex = currentIndex;
+                hasParen = false;
+            }
+        }
 
         if (wantFileHandle) {
             if (peek().text.equals("(")) {
