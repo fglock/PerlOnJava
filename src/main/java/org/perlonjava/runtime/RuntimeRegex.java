@@ -150,13 +150,28 @@ public class RuntimeRegex implements RuntimeScalarReference {
         while (matcher.find()) {
             found++;
 
+            // Initialize $1, $2 if needed
+            int captureCount = matcher.groupCount();
+            if (captureCount > 0) {
+                int capture = 1;
+                for (int i = 1; i <= captureCount; i++) {
+                    String matchedStr = matcher.group(i);
+                    if (matchedStr != null) {
+                        // System.out.println("Set capture $" + capture + " to <" + matchedStr + ">");
+                        GlobalContext.setGlobalVariable("main::" + capture++, matchedStr);
+                    }
+                }
+                // System.out.println("Undefine capture $" + capture);
+                GlobalContext.getGlobalVariable("main::" + capture++).set(new RuntimeScalar());
+            }
+
             String replacementStr;
             if (replacementIsCode) {
                 // Evaluate the replacement as code
                 replacementStr = replacement.apply(new RuntimeArray(), RuntimeContextType.SCALAR).toString();
             } else {
                 // Replace the match with the replacement string
-                replacementStr = matcher.replaceAll(replacement.toString());
+                replacementStr = replacement.toString();
             }
 
             if (replacementStr != null) {
