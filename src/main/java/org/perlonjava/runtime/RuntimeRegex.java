@@ -13,9 +13,9 @@ public class RuntimeRegex implements RuntimeScalarReference {
     private static final int CASE_INSENSITIVE = Pattern.CASE_INSENSITIVE;
     private static final int MULTILINE = Pattern.MULTILINE;
     private static final int DOTALL = Pattern.DOTALL;
+    public Pattern pattern;  // first part of `m//` and `s///`
     boolean isGlobalMatch;
     boolean isNonDestructive;
-    public Pattern pattern;  // first part of `m//` and `s///`
     private RuntimeScalar replacement = null;  // second part of `s///`
 
     /**
