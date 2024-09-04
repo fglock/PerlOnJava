@@ -211,8 +211,10 @@ public class EmitterVisitor implements Visitor {
             case "substr":
             case "sprintf":
             case "join":
-            case "split":
                 handleJoinOperator(operator, node);
+                return;
+            case "split":
+                handleSplitOperator(operator, node);
                 return;
             case "!~":
                 this.visit(
@@ -323,6 +325,17 @@ public class EmitterVisitor implements Visitor {
         ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getList", "()Lorg/perlonjava/runtime/RuntimeList;", true);
         node.left.accept(this.with(RuntimeContextType.SCALAR)); // subroutine
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeList;", false);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
+    }
+
+    private void handleSplitOperator(String operator, BinaryOperatorNode node) {
+        node.left.accept(this.with(RuntimeContextType.SCALAR));
+        node.right.accept(this.with(RuntimeContextType.LIST));
+        // Transform the value in the stack to List
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getList", "()Lorg/perlonjava/runtime/RuntimeList;", true);
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeList", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
         if (ctx.contextType == RuntimeContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.POP);
         }

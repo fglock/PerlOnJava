@@ -912,6 +912,8 @@ public class Parser {
     //
     // wantFileHandle:  print STDOUT "this\n";
     //
+    // wantRegex:  split / /, "this";
+    //
     private ListNode parseZeroOrMoreList(int minItems, boolean wantBlockNode, boolean obeyParentheses, boolean wantFileHandle, boolean wantRegex) {
         ctx.logDebug("parseZeroOrMoreList start");
         ListNode expr = new ListNode(tokenIndex);
@@ -926,7 +928,7 @@ public class Parser {
                 consume();
                 hasParen = true;
             }
-            if (peek().text.equals("/")) {
+            if (peek().text.equals("/") || peek().text.equals("//")) {
                 consume();
                 Node regex = parseRawString("/");
                 if (regex != null) {

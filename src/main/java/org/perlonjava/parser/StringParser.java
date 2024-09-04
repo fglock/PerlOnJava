@@ -191,7 +191,7 @@ public class StringParser {
                             str.append(token.text);
                             parser.tokenIndex++;
                         } else {
-                            str.append(token.text.substring(0, 1));
+                            str.append(token.text.charAt(0));
                             token.text = token.text.substring(1);
                         }
                     }
@@ -472,7 +472,7 @@ public class StringParser {
 
         // If replace is not a plain string, make it an anonymous subroutine
         if (!(replace instanceof StringNode)) {
-            if (!(replace instanceof  BlockNode)) {
+            if (!(replace instanceof BlockNode)) {
                 List<Node> list = new ArrayList<>();
                 list.add(replace);
                 replace = new BlockNode(list, rawStr.index);
