@@ -50,11 +50,14 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
      * Splits a string based on a regex pattern, similar to Perl's split function.
      *
      * @param quotedRegex The regex pattern object, created by getQuotedRegex()
-     * @param string      The string to be split.
-     * @param limitArg    The maximum number of splits (optional).
+     * @param args        Argument list.
      * @return A RuntimeList containing the split parts of the string.
      */
-    public static RuntimeList split(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar limitArg) {
+    public static RuntimeList split(RuntimeScalar quotedRegex, RuntimeList args) {
+        int size = args.size();
+        RuntimeScalar string = size > 0 ? (RuntimeScalar) args.elements.get(0) : GlobalContext.getGlobalVariable("main::_");  // The string to be split.
+        RuntimeScalar limitArg = size > 1 ? (RuntimeScalar) args.elements.get(1) : new RuntimeScalar(0);   // The maximum number of splits (optional).
+
         RuntimeRegex regex = (RuntimeRegex) quotedRegex.value;
         Pattern pattern = regex.pattern;
 
