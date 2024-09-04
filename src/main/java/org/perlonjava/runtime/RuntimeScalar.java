@@ -1169,12 +1169,16 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         String delimiter = this.toString();
         // Join the list into a string
         StringBuilder sb = new StringBuilder();
-        int size = list.elements.size();
-        for (int i = 0; i < size; i++) {
-            if (i > 0) {
+
+        Iterator<RuntimeScalar> iterator = list.iterator();
+        boolean start = true;
+        while (iterator.hasNext()) {
+            if (start) {
+                start = false;
+            } else {
                 sb.append(delimiter);
             }
-            sb.append(list.elements.get(i).toString());
+            sb.append(iterator.next().toString());
         }
         return new RuntimeScalar(sb.toString());
     }
