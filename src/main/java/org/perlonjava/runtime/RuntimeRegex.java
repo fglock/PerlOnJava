@@ -14,7 +14,8 @@ public class RuntimeRegex implements RuntimeScalarReference {
     private static final int MULTILINE = Pattern.MULTILINE;
     private static final int DOTALL = Pattern.DOTALL;
     boolean isGlobalMatch;
-    private Pattern pattern;
+    private Pattern pattern;  // first part of `m//` and `s///`
+    private RuntimeScalar replacement = null;  // second part of `s///`
 
     /**
      * Creates a RuntimeRegex object from a regex pattern string with optional modifiers.
@@ -47,6 +48,15 @@ public class RuntimeRegex implements RuntimeScalarReference {
         return new RuntimeScalar(compile(patternString.toString(), modifiers.toString()));
     }
 
+    // Internal variant of qr// that includes a `replacement`
+    // This is the internal representation of the `s///` operation
+    public static RuntimeScalar getReplacementRegex(RuntimeScalar patternString, RuntimeScalar replacement, RuntimeScalar modifiers) {
+        RuntimeRegex regex = new RuntimeRegex();
+        regex = compile(patternString.toString(), modifiers.toString());
+        regex.replacement = replacement;
+        return new RuntimeScalar(regex);
+    }
+
     /**
      * Applies a Perl "qr" object on a string; returns true/false or a list,
      * and produces side-effects
@@ -58,9 +68,14 @@ public class RuntimeRegex implements RuntimeScalarReference {
      * @return A RuntimeScalar or RuntimeList
      */
     public static RuntimeDataProvider matchRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
-        String inputStr = string.toString();
         RuntimeRegex regex = (RuntimeRegex) quotedRegex.value;
+        if (regex.replacement != null) {
+            return replaceRegex(quotedRegex, string, ctx);
+        }
+
         Pattern pattern = regex.pattern;
+
+        String inputStr = string.toString();
         Matcher matcher = pattern.matcher(inputStr);
 
         boolean found = false;
@@ -109,19 +124,19 @@ public class RuntimeRegex implements RuntimeScalarReference {
      * Applies a Perl "s///" substitution on a string.
      * `my $v =~ s/$pattern/$replacement/;`
      *
-     * @param quotedRegex The regex pattern object, created by getQuotedRegex()
+     * @param quotedRegex The regex pattern object, created by getReplacementRegex()
      * @param string      The string to be modified.
-     * @param replacement The replacement string or code.
      * @param ctx         The context LIST, SCALAR, VOID
      * @return A RuntimeScalar or RuntimeList
      */
-    public static RuntimeBaseEntity replaceRegex(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar replacement, int ctx) {
+    public static RuntimeBaseEntity replaceRegex(RuntimeScalar quotedRegex, RuntimeScalar string,  int ctx) {
         // Convert the input string to a Java string
         String inputStr = string.toString();
 
         // Extract the regex pattern from the quotedRegex object
         RuntimeRegex regex = (RuntimeRegex) quotedRegex.value;
         Pattern pattern = regex.pattern;
+        RuntimeScalar replacement = regex.replacement;
         Matcher matcher = pattern.matcher(inputStr);
 
         // The result string after substitutions
