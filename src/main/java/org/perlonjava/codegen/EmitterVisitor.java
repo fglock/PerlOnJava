@@ -850,7 +850,7 @@ public class EmitterVisitor implements Visitor {
                 break;
             case "matchRegex":
             case "quoteRegex":
-                // RuntimeRegex.getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers) {
+                // RuntimeRegex.getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers)
                 ((ListNode) node.operand).elements.get(0).accept(this);
                 ((ListNode) node.operand).elements.get(1).accept(this);
                 ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -861,13 +861,13 @@ public class EmitterVisitor implements Visitor {
                 }
                 return;
             case "replaceRegex":
-                // RuntimeRegex.getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers) {
+                // RuntimeBaseEntity replaceRegex(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar replacement, int ctx)
                 ((ListNode) node.operand).elements.get(0).accept(this);
                 ((ListNode) node.operand).elements.get(1).accept(this);
                 ((ListNode) node.operand).elements.get(2).accept(this);
                 ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/RuntimeRegex", "replaceRegex",
-                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBaseEntity;", false);
                 if (ctx.contextType == RuntimeContextType.VOID) {
                     ctx.mv.visitInsn(Opcodes.POP);
                 }
