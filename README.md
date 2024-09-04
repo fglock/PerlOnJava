@@ -350,9 +350,30 @@ public class Main {
 - **v1.5.0**: Planned release date: 2024-12-10
     - regex operators
 
-- **v1.6.0**: Planned release date: 2025-01-10
-    - TBD
-    - Performance improvements
+- **v1.6.0**: Performance Improvements and Enhanced Regex Support
+    - Focus on optimizing the execution engine for better performance.
+    - Improve error handling and debugging tools to make development easier.
+
+- **v1.7.0**: Module System and Standard Library Enhancements
+    - Introduce a module system to allow better code organization and reuse.
+    - Enhance the standard library with additional utility functions and data structures.
+    - Improve documentation and provide more examples to help users get started.
+
+- **v1.8.0**: Concurrency and Security Features
+    - Add support for concurrency and parallelism, such as threads and async/await.
+    - Enhance security features, including sandboxing and input validation.
+    - Increase test coverage and introduce automated testing tools.
+
+- **v1.9.0**: External Integration and Advanced Data Manipulation
+    - Integrate with external libraries and APIs for tasks like HTTP requests and database access.
+    - Add advanced data manipulation features, such as JSON/XML parsing and data transformation.
+    - Allow users to define their own operators and macros for greater flexibility.
+
+- **v2.0.0**: Major Release with Breaking Changes
+    - Perform comprehensive refactoring and optimization.
+    - Introduce significant new features and improvements.
+    - Ensure full compliance with relevant standards and best practices.
+
 
 ## Benchmarks
 
