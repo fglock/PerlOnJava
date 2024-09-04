@@ -28,7 +28,8 @@ public class PerlExecutionTest {
                 {"operations.pl"},
                 {"wantarray.pl"},
                 {"typeglob.pl"},
-                {"regex.pl"}
+                {"regex.pl"},
+                {"regexreplace.pl"}
         });
     }
 
