@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
 
@@ -42,6 +44,83 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
             list.add(new RuntimeScalar(i));
         }
         return list;
+    }
+
+    /**
+     * Splits a string based on a regex pattern, similar to Perl's split function.
+     *
+     * @param quotedRegex The regex pattern object, created by getQuotedRegex()
+     * @param string      The string to be split.
+     * @param limitArg    The maximum number of splits (optional).
+     * @return A RuntimeList containing the split parts of the string.
+     */
+    public static RuntimeList split(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar limitArg) {
+        RuntimeRegex regex = (RuntimeRegex) quotedRegex.value;
+        Pattern pattern = regex.pattern;
+
+        int limit = limitArg.getInt();
+
+        // Special case: if the pattern is omitted or a single space character, treat it as /\s+/
+        if (pattern == null || pattern.pattern().equals(" ")) {
+            pattern = Pattern.compile("\\s+");
+            // Remove leading whitespace from the input string
+            string = new RuntimeScalar(string.toString().replaceAll("^\\s+", ""));
+        }
+
+        // Special case: if the pattern is "/^/", treat it as if it used the multiline modifier
+        if (pattern.pattern().equals("^")) {
+            pattern = Pattern.compile("^", Pattern.MULTILINE);
+        }
+
+        String inputStr = string.toString();
+        RuntimeList result = new RuntimeList();
+        List<RuntimeBaseEntity> splitElements = result.elements;
+
+        if (pattern.pattern().isEmpty()) {
+            // Special case: if the pattern matches the empty string, split between characters
+            if (limit > 0) {
+                for (int i = 0; i < inputStr.length() && splitElements.size() < limit - 1; i++) {
+                    splitElements.add(new RuntimeScalar(String.valueOf(inputStr.charAt(i))));
+                }
+                if (splitElements.size() < limit) {
+                    splitElements.add(new RuntimeScalar(inputStr.substring(splitElements.size())));
+                }
+            } else {
+                for (int i = 0; i < inputStr.length(); i++) {
+                    splitElements.add(new RuntimeScalar(String.valueOf(inputStr.charAt(i))));
+                }
+            }
+        } else {
+            Matcher matcher = pattern.matcher(inputStr);
+            int lastEnd = 0;
+            int splitCount = 0;
+
+            while (matcher.find() && (limit <= 0 || splitCount < limit - 1)) {
+                // Add the part before the match
+                splitElements.add(new RuntimeScalar(inputStr.substring(lastEnd, matcher.start())));
+
+                // Add captured groups if any
+                for (int i = 1; i <= matcher.groupCount(); i++) {
+                    String group = matcher.group(i);
+                    splitElements.add(new RuntimeScalar(group != null ? group : "undef"));
+                }
+
+                lastEnd = matcher.end();
+                splitCount++;
+            }
+
+            // Add the remaining part of the string
+            splitElements.add(new RuntimeScalar(inputStr.substring(lastEnd)));
+
+            // Handle trailing empty strings if no capturing groups and limit is zero or negative
+            if (matcher.groupCount() == 0 && limit <= 0) {
+                while (!splitElements.isEmpty() && splitElements.get(splitElements.size() - 1).toString().isEmpty()) {
+                    splitElements.remove(splitElements.size() - 1);
+                }
+            }
+        }
+
+        return result;
     }
 
     // Add itself to a RuntimeList.
