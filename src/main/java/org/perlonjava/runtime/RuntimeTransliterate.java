@@ -3,7 +3,7 @@ package org.perlonjava.runtime;
 /**
  * RuntimeTransliterate class to implement Perl's tr// operator
  */
-public class RuntimeTransliterate implements RuntimeScalarReference {
+public class RuntimeTransliterate {
 
     private boolean complement;
     private boolean deleteUnmatched;
@@ -21,25 +21,10 @@ public class RuntimeTransliterate implements RuntimeScalarReference {
      * @return A RuntimeTransliterate object.
      */
     public static RuntimeTransliterate compile(String search, String replace, String modifiers) {
+        // TODO cache the compilation
         RuntimeTransliterate transliterate = new RuntimeTransliterate();
         transliterate.compileTransliteration(search, replace, modifiers);
         return transliterate;
-    }
-
-    /**
-     * Creates a Perl "qr"-like object from a pattern string with optional modifiers.
-     *
-     * @param search    The  pattern string
-     * @param replace   The replacement string
-     * @param modifiers Modifiers for the pattern
-     * @return A RuntimeScalar.
-     */
-    public static RuntimeScalar getTransliterate(RuntimeScalar search, RuntimeScalar replace, RuntimeScalar modifiers) {
-        RuntimeTransliterate transliterate = new RuntimeTransliterate();
-        // TODO
-        // return new RuntimeScalar(
-        //        transliterate.compile(search.toString(), replace.toString(), modifiers.toString()));
-        return new RuntimeScalar();
     }
 
     /**
@@ -196,28 +181,5 @@ public class RuntimeTransliterate implements RuntimeScalarReference {
             usedChars[search.charAt(i)] = true;
         }
     }
-
-    @Override
-    public String toString() {
-        // placeholder
-        return "tr///";
-    }
-
-    public String toStringRef() {
-        return "REF(" + this.hashCode() + ")";
-    }
-
-    public int getIntRef() {
-        return this.hashCode();
-    }
-
-    public double getDoubleRef() {
-        return this.hashCode();
-    }
-
-    public boolean getBooleanRef() {
-        return true;
-    }
-
 }
 
