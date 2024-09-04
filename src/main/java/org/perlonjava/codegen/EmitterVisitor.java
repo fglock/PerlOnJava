@@ -238,7 +238,7 @@ public class EmitterVisitor implements Visitor {
                 //        StringNode: 'abc'
                 //        StringNode: 'i'
                 //
-                // TODO `substituteRegex` case
+                // TODO `replaceRegex` case
                 node.right.accept(scalarVisitor);
                 node.left.accept(scalarVisitor);
                 pushCallContext();
@@ -860,13 +860,13 @@ public class EmitterVisitor implements Visitor {
                     ctx.mv.visitInsn(Opcodes.POP);
                 }
                 return;
-            case "substituteRegex":
+            case "replaceRegex":
                 // RuntimeRegex.getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers) {
                 ((ListNode) node.operand).elements.get(0).accept(this);
                 ((ListNode) node.operand).elements.get(1).accept(this);
                 ((ListNode) node.operand).elements.get(2).accept(this);
                 ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/RuntimeRegex", "substituteRegex",
+                        "org/perlonjava/runtime/RuntimeRegex", "replaceRegex",
                         "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                 if (ctx.contextType == RuntimeContextType.VOID) {
                     ctx.mv.visitInsn(Opcodes.POP);

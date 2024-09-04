@@ -115,7 +115,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
      * @param ctx         The context LIST, SCALAR, VOID
      * @return A RuntimeScalar or RuntimeList
      */
-    public static RuntimeBaseEntity substituteRegex(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar replacement, int ctx) {
+    public static RuntimeBaseEntity replaceRegex(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar replacement, int ctx) {
         // Convert the input string to a Java string
         String inputStr = string.toString();
 
