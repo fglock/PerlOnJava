@@ -469,6 +469,17 @@ public class StringParser {
             rawStr.buffers.remove(0);   // shift replace to first position
             replace = parseDoubleQuotedString(ctx, rawStr, false);
         }
+
+        // If replace is not a plain string, make it an anonymous subroutine
+        if (!(replace instanceof StringNode)) {
+            if (!(replace instanceof  BlockNode)) {
+                List<Node> list = new ArrayList<>();
+                list.add(replace);
+                replace = new BlockNode(list, rawStr.index);
+            }
+            replace = new AnonSubNode(null, null, null, replace, false, rawStr.index);
+        }
+
         Node modifiers = new StringNode(modifierStr, rawStr.index);
         List<Node> elements = new ArrayList<>();
         elements.add(parsed);
