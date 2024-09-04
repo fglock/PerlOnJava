@@ -842,11 +842,22 @@ public class EmitterVisitor implements Visitor {
                 handleUnaryBuiltin(node, "postAutoDecrement");
                 break;
             case "\\":
-                // TODO operand can be a list
-                node.operand.accept(this.with(RuntimeContextType.SCALAR));
-                ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "createReference", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
-                if (ctx.contextType == RuntimeContextType.VOID) {
-                    mv.visitInsn(Opcodes.POP);
+                if (node.operand instanceof ListNode) {
+                    // operand is a list:  `\(1,2,3)`
+                    node.operand.accept(this.with(RuntimeContextType.LIST));
+                    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/RuntimeList",
+                            "createListReference",
+                            "()Lorg/perlonjava/runtime/RuntimeList;", false);
+                    if (ctx.contextType == RuntimeContextType.VOID) {
+                        mv.visitInsn(Opcodes.POP);
+                    }
+                } else {
+                    node.operand.accept(this.with(RuntimeContextType.SCALAR));
+                    ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "createReference", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+                    if (ctx.contextType == RuntimeContextType.VOID) {
+                        mv.visitInsn(Opcodes.POP);
+                    }
                 }
                 break;
             case "$#":
@@ -871,7 +882,7 @@ public class EmitterVisitor implements Visitor {
                 if (ctx.contextType == RuntimeContextType.VOID) {
                     ctx.mv.visitInsn(Opcodes.POP);
                 }
-                return;
+                break;
             case "replaceRegex":
                 // RuntimeBaseEntity replaceRegex(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar replacement, int ctx)
                 ((ListNode) node.operand).elements.get(0).accept(this);
@@ -883,7 +894,7 @@ public class EmitterVisitor implements Visitor {
                 if (ctx.contextType == RuntimeContextType.VOID) {
                     ctx.mv.visitInsn(Opcodes.POP);
                 }
-                return;
+                break;
             default:
                 throw new UnsupportedOperationException("Unsupported operator: " + operator);
         }

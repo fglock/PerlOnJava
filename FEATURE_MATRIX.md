@@ -68,7 +68,6 @@
 - ✔️   **`join`**: Join operator for combining array elements into a string is supported.
 - ✔️   **`sprintf`**: String formatting is supported.
 - ✔️   **`grep`, `map`, `sort`**: List processing functions are implemented.
-- ❌  **`split`**: Splitting strings into arrays is not yet implemented.
 - ✔️   **`substr`**: Substring extraction works.
 - ❌  **Lvalue `substr`**: Assignable Substring extraction is not yet implemented.
 - ❌  **Vectors**: `vec` is not yet implemented.
@@ -79,7 +78,8 @@
 - ✔️   **`my LIST`**: Declaration of lists using `my` is supported.
 - ✔️   **Autoquote before `=>`**: Autoquoting before `=>` is implemented.
 - ✔️   **Select an element from a list**: Indexing into lists is supported.
-- ✔️   **List subscripts**: like `(stat($file))[8]`
+- ✔️   **List subscripts**: like: `(stat($file))[8]`
+- ✔️   **Taking References of a List**: like: `\(1,2,3)`
 - ✔️   **List assignment in scalar context**: List assignment in scalar context returns the number of elements produced by the expression on the right side of the assignment
 - ✔️   **`$#array`**: Operator for array count is implemented.
 - ✔️   **`scalar`**: Operator to get scalar value is not implemented.
