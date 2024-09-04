@@ -111,12 +111,15 @@ public class RuntimeRegex implements RuntimeScalarReference {
      *
      * @param quotedRegex The regex pattern object, created by getQuotedRegex()
      * @param string      The string to be modified.
-     * @param replacement The replacement string.
+     * @param replacement The replacement string or code.
      * @param ctx         The context LIST, SCALAR, VOID
      * @return A RuntimeScalar or RuntimeList
      */
-    public static RuntimeDataProvider substituteRegex(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar replacement, int ctx) {
+    public static RuntimeBaseEntity substituteRegex(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar replacement, int ctx) {
+        // Convert the input string to a Java string
         String inputStr = string.toString();
+
+        // Extract the regex pattern from the quotedRegex object
         RuntimeRegex regex = (RuntimeRegex) quotedRegex.value;
         Pattern pattern = regex.pattern;
         Matcher matcher = pattern.matcher(inputStr);
@@ -125,33 +128,46 @@ public class RuntimeRegex implements RuntimeScalarReference {
         StringBuilder resultBuffer = new StringBuilder();
         int found = 0;
 
+        // Determine if the replacement is a code that needs to be evaluated
+        boolean replacementIsCode = (replacement.type == RuntimeScalarType.CODE);
+
         // Perform the substitution
         while (matcher.find()) {
             found++;
 
-            // Handle special replacement patterns (like $1, $2, etc.)
-            String replacementStr = replacement.toString();
-            String evaluatedReplacement = matcher.replaceAll(replacementStr);
+            String replacementStr;
+            if (replacementIsCode) {
+                // Evaluate the replacement as code
+                replacementStr = replacement.apply(new RuntimeArray(), RuntimeContextType.SCALAR).toString();
+            } else {
+                // Replace the match with the replacement string
+                replacementStr = matcher.replaceAll(replacement.toString());
+            }
 
-            matcher.appendReplacement(resultBuffer, evaluatedReplacement);
+            if (replacementStr != null) {
+                // Append the text before the match and the replacement to the result buffer
+                matcher.appendReplacement(resultBuffer, replacementStr);
+            }
 
+            // If not a global match, break after the first replacement
             if (!regex.isGlobalMatch) {
                 break;
             }
         }
+        // Append the remaining text after the last match to the result buffer
         matcher.appendTail(resultBuffer);
 
-        // Update the original string with the result
-        String resultStr = found > 0 ? resultBuffer.toString() : inputStr;
-
-        // Save the modified string back to the original scalar (if required)
         if (found > 0) {
-            string.set(resultStr);
+            // Save the modified string back to the original scalar (if required)
+            string.set(resultBuffer.toString());
+            // Return the number of substitutions made
+            return new RuntimeScalar(found);
+        } else {
+            // Return the number of substitutions made, or `undef`
+            return new RuntimeScalar();
         }
-
-        // return the number of substitutions made, or `undef`
-        return found > 0 ? new RuntimeScalar(found) : new RuntimeScalar();
     }
+
 
     @Override
     public String toString() {
