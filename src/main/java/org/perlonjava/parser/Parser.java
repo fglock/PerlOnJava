@@ -921,17 +921,25 @@ public class Parser {
         LexerToken token;
 
         if (wantRegex) {
+            boolean matched = false;
             if (peek().text.equals("(")) {
                 consume();
                 hasParen = true;
             }
-            // TODO consume comma
             if (peek().text.equals("/")) {
                 consume();
                 Node regex = parseRawString("/");
-                expr.handle = parseFileHandle();
+                if (regex != null) {
+                    matched = true;
+                    expr.elements.add(regex);
+                    token = peek();
+                    if (token.type != LexerTokenType.EOF && !LIST_TERMINATORS.contains(token.text)) {
+                        // consume comma
+                        consume(LexerTokenType.OPERATOR, ",");
+                    }
+                }
             }
-            if (expr.handle == null) {
+            if (!matched) {
                 // backtrack
                 tokenIndex = currentIndex;
                 hasParen = false;
