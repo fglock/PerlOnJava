@@ -14,6 +14,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
     private static final int MULTILINE = Pattern.MULTILINE;
     private static final int DOTALL = Pattern.DOTALL;
     boolean isGlobalMatch;
+    boolean isNonDestructive;
     private Pattern pattern;  // first part of `m//` and `s///`
     private RuntimeScalar replacement = null;  // second part of `s///`
 
@@ -29,6 +30,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
         try {
             int flags = regex.convertModifiers(modifiers);
             regex.isGlobalMatch = modifiers.contains("g");
+            regex.isNonDestructive = modifiers.contains("r");
             regex.pattern = Pattern.compile(patternString, flags);
         } catch (Exception e) {
             throw new IllegalStateException("Regex compilation failed: " + e.getMessage());
@@ -129,7 +131,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
      * @param ctx         The context LIST, SCALAR, VOID
      * @return A RuntimeScalar or RuntimeList
      */
-    public static RuntimeBaseEntity replaceRegex(RuntimeScalar quotedRegex, RuntimeScalar string,  int ctx) {
+    public static RuntimeBaseEntity replaceRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
         // Convert the input string to a Java string
         String inputStr = string.toString();
 
@@ -188,12 +190,18 @@ public class RuntimeRegex implements RuntimeScalarReference {
         matcher.appendTail(resultBuffer);
 
         if (found > 0) {
-            // Save the modified string back to the original scalar (if required)
+            if (regex.isNonDestructive) {
+                return new RuntimeScalar(resultBuffer.toString());
+            }
+            // Save the modified string back to the original scalar
             string.set(resultBuffer.toString());
             // Return the number of substitutions made
             return new RuntimeScalar(found);
         } else {
-            // Return the number of substitutions made, or `undef`
+            if (regex.isNonDestructive) {
+                return string;
+            }
+            // Return `undef`
             return new RuntimeScalar();
         }
     }
@@ -239,6 +247,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
             flags |= DOTALL;
         }
         // /g (global) is not an actual flag for Pattern, it's used for matching multiple occurrences.
+        // /r (non-destructive) is also not an actual flag for Pattern, it returns the replacement.
         return flags;
     }
 
