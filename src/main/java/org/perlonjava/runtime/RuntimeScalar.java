@@ -1242,6 +1242,50 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(formattedString);
     }
 
+    /**
+     * Transliterates the characters in the string according to the specified search and replacement lists.
+     *
+     * @param search The search string containing the characters to be replaced.
+     * @param replace The replacement string containing the characters to replace with.
+     * @return A RuntimeScalar containing the transliterated string.
+     */
+    public RuntimeScalar transliterate(String search, String replace) {
+        // Get the input string that will undergo transliteration
+        String input = this.toString();
+
+        // Create a mapping array for the transliteration
+        char[] translationMap = new char[256];
+
+        // Initialize the map to identity (i.e., each character maps to itself)
+        for (int i = 0; i < translationMap.length; i++) {
+            translationMap[i] = (char) i;
+        }
+
+        // Populate the translation map based on the search and replace strings
+        int searchLength = search.length();
+        int replaceLength = replace.length();
+        for (int i = 0; i < searchLength; i++) {
+            char searchChar = search.charAt(i);
+            char replaceChar = (i < replaceLength) ? replace.charAt(i) : '\0';  // '\0' if no replacement provided
+            translationMap[searchChar] = replaceChar;
+        }
+
+        // Create a StringBuilder to build the transliterated string
+        StringBuilder result = new StringBuilder(input.length());
+
+        // Apply the translation map to each character in the input string
+        for (int i = 0; i < input.length(); i++) {
+            char originalChar = input.charAt(i);
+            char translatedChar = translationMap[originalChar];
+            if (translatedChar != '\0') {  // Skip the character if it maps to '\0' (deletion)
+                result.append(translatedChar);
+            }
+        }
+
+        // Return the transliterated string wrapped in a RuntimeScalar
+        return new RuntimeScalar(result.toString());
+    }
+
     // keys() operator
     public RuntimeArray keys() {
         throw new IllegalStateException("Type of arg 1 to values must be hash or array");
