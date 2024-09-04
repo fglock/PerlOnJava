@@ -112,6 +112,7 @@
 - ✔️   **Regex modifiers**: Modifiers `/i` `/m` `/s` `/g` `/r` `/e` are implemented.
 - ✔️   **Special variables**: The special variables `$1`, `$2`... are implemented.
 - ❌  **Perl-specific Regex Features**: Some features like `/x` (formatted regex) are missing.
+- ❌  **Transliteration**: `tr` and `y` transliteration operators are not implemented yet.
 
 ## Statements and Special Operators
 - ✔️   **Context void, scalar, list**: Contexts for void, scalar, and list are supported.
