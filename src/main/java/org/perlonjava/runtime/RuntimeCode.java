@@ -106,10 +106,14 @@ public class RuntimeCode implements RuntimeScalarReference {
     }
 
     // Method to apply (execute) a subroutine reference
-    public RuntimeList apply(RuntimeArray a, int callContext) throws Exception {
+    public RuntimeList apply(RuntimeArray a, int callContext) {
         // Invoke the method associated with the code object, passing the RuntimeArray and RuntimeContextType as arguments
         // This executes the subroutine and returns the result, which is expected to be a RuntimeList
-        return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
+        try {
+            return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public String toStringRef() {
