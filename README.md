@@ -347,7 +347,10 @@ public class Main {
 
 ### Upcoming Milestones
 
-- **v1.5.0**: Planned release date: 2025-01-10
+- **v1.5.0**: Planned release date: 2024-12-10
+    - regex operators
+
+- **v1.6.0**: Planned release date: 2025-01-10
     - TBD
     - Performance improvements
 
