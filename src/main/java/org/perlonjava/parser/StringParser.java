@@ -465,7 +465,9 @@ public class StringParser {
             Parser blockParser = new Parser(ctx, new Lexer(replaceStr).tokenize());
             replace = blockParser.parseBlock();
         } else {
-            replace = new StringNode(replaceStr, rawStr.index);
+            // handle string interpolaton
+            rawStr.buffers.remove(0);   // shift replace to first position
+            replace = parseDoubleQuotedString(ctx, rawStr, false);
         }
         Node modifiers = new StringNode(modifierStr, rawStr.index);
         List<Node> elements = new ArrayList<>();
