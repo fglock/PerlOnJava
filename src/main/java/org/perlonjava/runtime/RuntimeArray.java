@@ -257,7 +257,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
 
     // keys() operator
     public RuntimeArray keys() {
-        return RuntimeList.generateList(0, this.size() - 1).getArrayOfAlias();
+        return RuntimeList.generateList(new RuntimeScalar(0), new RuntimeScalar(this.size() - 1)).getArrayOfAlias();
     }
 
     // values() operator
