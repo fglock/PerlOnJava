@@ -882,27 +882,39 @@ public class EmitterVisitor implements Visitor {
     }
 
     private void handleRegex(OperatorNode node) {
+        ListNode operand = (ListNode) node.operand;
+        EmitterVisitor scalarVisitor = this.with(RuntimeContextType.SCALAR);
+        Node variable = null;
         if (node.operator.equals("replaceRegex")) {
             // RuntimeBaseEntity replaceRegex(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar replacement, int ctx)
-            ((ListNode) node.operand).elements.get(0).accept(this);
-            ((ListNode) node.operand).elements.get(1).accept(this);
-            ((ListNode) node.operand).elements.get(2).accept(this);
+            operand.elements.get(0).accept(scalarVisitor);
+            operand.elements.get(1).accept(scalarVisitor);
+            operand.elements.get(2).accept(scalarVisitor);
+            if (operand.elements.size() > 3) {
+                variable = operand.elements.get(3);
+            }
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/RuntimeRegex", "getReplacementRegex",
                     "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-            if (ctx.contextType == RuntimeContextType.VOID) {
-                ctx.mv.visitInsn(Opcodes.POP);
-            }
+
         } else {
             // RuntimeRegex.getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers)
-            ((ListNode) node.operand).elements.get(0).accept(this);
-            ((ListNode) node.operand).elements.get(1).accept(this);
+            operand.elements.get(0).accept(scalarVisitor);
+            operand.elements.get(1).accept(scalarVisitor);
+            if (operand.elements.size() > 2) {
+                variable = operand.elements.get(2);
+            }
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/RuntimeRegex", "getQuotedRegex",
                     "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-            if (ctx.contextType == RuntimeContextType.VOID) {
-                ctx.mv.visitInsn(Opcodes.POP);
-            }
+        }
+
+        if (variable == null) {
+            // TODO use `$_`
+        }
+
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
         }
     }
 
