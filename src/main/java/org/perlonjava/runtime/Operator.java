@@ -92,7 +92,7 @@ public class Operator {
      * Opens a file and initialize a file handle.
      *
      * @param runtimeList
-     * @param fileHandle The file handle.
+     * @param fileHandle  The file handle.
      * @return A RuntimeScalar indicating the result of the open operation.
      */
     public static RuntimeScalar open(RuntimeList runtimeList, RuntimeScalar fileHandle) {
@@ -268,7 +268,7 @@ public class Operator {
      * Prints the elements to the specified file handle according to the format string.
      *
      * @param runtimeList
-     * @param fileHandle The file handle to write to.
+     * @param fileHandle  The file handle to write to.
      * @return A RuntimeScalar indicating the result of the write operation.
      */
     public static RuntimeScalar printf(RuntimeList runtimeList, RuntimeScalar fileHandle) {
@@ -286,7 +286,7 @@ public class Operator {
      * Prints the elements to the specified file handle with a separator and newline.
      *
      * @param runtimeList
-     * @param fileHandle The file handle to write to.
+     * @param fileHandle  The file handle to write to.
      * @return A RuntimeScalar indicating the result of the write operation.
      */
     public static RuntimeScalar print(RuntimeList runtimeList, RuntimeScalar fileHandle) {
@@ -316,7 +316,7 @@ public class Operator {
      * Prints the elements to the specified file handle with a separator and a newline at the end.
      *
      * @param runtimeList
-     * @param fileHandle The file handle to write to.
+     * @param fileHandle  The file handle to write to.
      * @return A RuntimeScalar indicating the result of the write operation.
      */
     public static RuntimeScalar say(RuntimeList runtimeList, RuntimeScalar fileHandle) {

@@ -181,7 +181,7 @@ public class EmitterVisitor implements Visitor {
                 handleArrayElementOperator(node);
                 return;
             case "{":
-                handleHashElementOperator(node);
+                handleHashElementOperator(node, "get");
                 return;
             case "(":
                 handleApplyOperator(node);
@@ -517,8 +517,10 @@ public class EmitterVisitor implements Visitor {
 
     /**
      * Handles the postfix `{}` node.
+     * <p>
+     * hashOperation is one of: "get", "delete", "exists"
      */
-    private void handleHashElementOperator(BinaryOperatorNode node) {
+    private void handleHashElementOperator(BinaryOperatorNode node, String hashOperation) {
         ctx.logDebug("handleHashElementOperator " + node + " in context " + ctx.contextType);
         EmitterVisitor scalarVisitor =
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
@@ -554,7 +556,7 @@ public class EmitterVisitor implements Visitor {
                 ctx.logDebug("visit(BinaryOperatorNode) $var{}  autoquote " + node.right);
                 nodeRight.accept(scalarVisitor);
 
-                ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash", "get", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash", hashOperation, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
                 if (ctx.contextType == RuntimeContextType.VOID) {
                     ctx.mv.visitInsn(Opcodes.POP);
@@ -589,7 +591,7 @@ public class EmitterVisitor implements Visitor {
                 ctx.logDebug("visit(BinaryOperatorNode) $var{}  autoquote " + node.right);
                 nodeRight.accept(this.with(RuntimeContextType.LIST));
 
-                ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash", "getSlice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash", hashOperation + "Slice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
 
                 if (ctx.contextType == RuntimeContextType.VOID) {
                     ctx.mv.visitInsn(Opcodes.POP);
@@ -844,6 +846,10 @@ public class EmitterVisitor implements Visitor {
                     mv.visitInsn(Opcodes.POP);
                 }
                 break;
+            case "delete":
+            case "exists":
+                handleDeleteExists(node, operator);
+                break;
             case "int":
                 handleUnaryBuiltin(node, "integer");
                 break;
@@ -902,12 +908,33 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
+    private void handleDeleteExists(OperatorNode node, String operator) {
+        //   OperatorNode: delete
+        //    ListNode:
+        //      BinaryOperatorNode: {
+        //        OperatorNode: $
+        //          IdentifierNode: a
+        //        HashLiteralNode:
+        //          NumberNode: 10
+        if (node.operand instanceof ListNode) {
+            ListNode operand = (ListNode) node.operand;
+            if (operand.elements.size() == 1) {
+                BinaryOperatorNode binop = (BinaryOperatorNode) operand.elements.get(0);
+                if (binop.operator.equals("{")) {
+                    handleHashElementOperator(binop, operator);
+                    return;
+                }
+            }
+        }
+        throw new UnsupportedOperationException("Unsupported operator: " + operator);
+    }
+
     private void handleRegex(OperatorNode node) {
         ListNode operand = (ListNode) node.operand;
         EmitterVisitor scalarVisitor = this.with(RuntimeContextType.SCALAR);
         Node variable = null;
 
-        if (node.operator.equals("qx")){
+        if (node.operator.equals("qx")) {
             // static RuntimeScalar systemCommand(RuntimeScalar command)
             operand.elements.get(0).accept(scalarVisitor);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,

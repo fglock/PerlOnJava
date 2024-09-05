@@ -8,7 +8,6 @@ package org.perlonjava.runtime;
     Implementing modes for read/write (+<, +>) operations.
  */
 
-import javax.management.RuntimeErrorException;
 import java.io.*;
 
 import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;

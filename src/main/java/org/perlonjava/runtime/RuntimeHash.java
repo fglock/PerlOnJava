@@ -95,14 +95,16 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         return elements.getOrDefault(key.toString(), new RuntimeScalar()); // Return undefined if key is not present
     }
 
-    // Check if a key exists in the hash
-    public boolean containsKey(String key) {
-        return elements.containsKey(key);
+    public RuntimeScalar exists(RuntimeScalar key) {
+        return new RuntimeScalar(elements.containsKey(key.toString()));
     }
 
-    // Remove a key-value pair by key
-    public void remove(String key) {
-        elements.remove(key);
+    public RuntimeScalar delete(RuntimeScalar key) {
+        String k = key.toString();
+        if (elements.containsKey(k)) {
+            return new RuntimeScalar(elements.remove(k));
+        }
+        return new RuntimeScalar();
     }
 
     // Create a reference to the Hash
