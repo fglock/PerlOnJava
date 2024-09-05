@@ -217,38 +217,8 @@ public class EmitterVisitor implements Visitor {
                 handleSplitOperator(operator, node);
                 return;
             case "!~":
-                this.visit(
-                        new OperatorNode("not",
-                                new OperatorNode("scalar",
-                                        new BinaryOperatorNode(
-                                                "=~",
-                                                node.left,
-                                                node.right,
-                                                node.tokenIndex
-                                        ), node.tokenIndex
-                                ), node.tokenIndex
-                        ));
-                return;
             case "=~":
-                //
-                //  BinaryOperatorNode: =~
-                //    OperatorNode: $
-                //      IdentifierNode: a
-                //    OperatorNode: matchRegex (or `qr` object)
-                //      ListNode:
-                //        StringNode: 'abc'
-                //        StringNode: 'i'
-                //
-                // TODO `replaceRegex` case
-                node.right.accept(scalarVisitor);
-                node.left.accept(scalarVisitor);
-                pushCallContext();
-                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/RuntimeRegex", "matchRegex",
-                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
-                if (ctx.contextType == RuntimeContextType.VOID) {
-                    ctx.mv.visitInsn(Opcodes.POP);
-                }
+                emitRegexBindOperator(node);
                 return;
             case "**=":
             case "+=":
@@ -281,6 +251,45 @@ public class EmitterVisitor implements Visitor {
             return;
         }
         throw new RuntimeException("Unexpected infix operator: " + operator);
+    }
+
+    private void emitRegexBindOperator(BinaryOperatorNode node ) {
+        //
+        //  BinaryOperatorNode: =~
+        //    OperatorNode: $
+        //      IdentifierNode: a
+        //    OperatorNode: matchRegex (or `qr` object)
+        //      ListNode:
+        //        StringNode: 'abc'
+        //        StringNode: 'i'
+        //
+
+        if (node.operator.equals("!~")) {
+            this.visit(
+                    new OperatorNode("not",
+                            new OperatorNode("scalar",
+                                    new BinaryOperatorNode(
+                                            "=~",
+                                            node.left,
+                                            node.right,
+                                            node.tokenIndex
+                                    ), node.tokenIndex
+                            ), node.tokenIndex
+                    ));
+            return;
+        }
+
+        // TODO `replaceRegex` case
+        EmitterVisitor scalarVisitor =
+                this.with(RuntimeContextType.SCALAR); // execute operands in scalar context        node.right.accept(scalarVisitor);
+        node.left.accept(scalarVisitor);
+        pushCallContext();
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/RuntimeRegex", "matchRegex",
+                "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
     }
 
     private void handleBinaryOperator(BinaryOperatorNode node, EmitterVisitor scalarVisitor, String methodStr) {
