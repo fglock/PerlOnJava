@@ -6,6 +6,13 @@ package org.perlonjava.runtime;
 public class RuntimeTransliterate {
 
 
+    private char[] translationMap;
+    private boolean[] usedChars;
+    private boolean[] deleteChars;
+    private boolean complement;
+    private boolean deleteUnmatched;
+    private boolean squashDuplicates;
+    private boolean returnOriginal;
 
     /**
      * Creates a RuntimeTransliterate object from a pattern string with optional modifiers.
@@ -22,13 +29,6 @@ public class RuntimeTransliterate {
         return transliterate;
     }
 
-    private char[] translationMap;
-    private boolean[] usedChars;
-    private boolean complement;
-    private boolean deleteUnmatched;
-    private boolean squashDuplicates;
-    private boolean returnOriginal;
-
     public RuntimeScalar transliterate(RuntimeScalar originalString) {
         String input = originalString.toString();
         StringBuilder result = new StringBuilder();
@@ -36,17 +36,20 @@ public class RuntimeTransliterate {
 
         for (int i = 0; i < input.length(); i++) {
             char ch = input.charAt(i);
-            if (ch < 256 && usedChars[ch]) {
+            if (deleteChars[ch]) {
+                lastCharAdded = false;
+            } else if (ch < 256 && usedChars[ch]) {
+                // System.out.println("used: " + ch);
                 char mappedChar = translationMap[ch];
                 if (!squashDuplicates || result.length() == 0 || result.charAt(result.length() - 1) != mappedChar) {
+                    // System.out.println("used append: " + ch);
                     result.append(mappedChar);
                     lastCharAdded = true;
                 }
-            } else if (!deleteUnmatched) {
+            } else {
+                // System.out.println("not used: " + ch);
                 result.append(ch);
                 lastCharAdded = false;
-            } else {
-                lastCharAdded = false; // Ensure lastCharAdded is reset if character is deleted
             }
         }
 
@@ -68,6 +71,7 @@ public class RuntimeTransliterate {
 
         translationMap = new char[256];
         usedChars = new boolean[256];
+        deleteChars = new boolean[256];
 
         for (int i = 0; i < 256; i++) {
             translationMap[i] = (char) i;
@@ -165,11 +169,14 @@ public class RuntimeTransliterate {
         }
 
         for (int i = minLength; i < search.length(); i++) {
-            if (replace.length() > 0) {
+            if (deleteUnmatched) {
+                deleteChars[search.charAt(i)] = true;
+            } else if (replace.length() > 0) {
                 translationMap[search.charAt(i)] = replace.charAt(replace.length() - 1);
                 usedChars[search.charAt(i)] = true;
             }
         }
+
     }
 }
 
