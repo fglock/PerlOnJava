@@ -1,11 +1,8 @@
 package org.perlonjava.runtime;
 
-import java.util.IllegalFormatException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * The RuntimeScalar class simulates Perl scalar variables.
@@ -1115,44 +1112,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(toString().length());
     }
 
-    public RuntimeScalar substr(RuntimeList list) {
-        String str = this.toString();
-        int strLength = str.length();
-
-        int size = list.elements.size();
-        int offset = Integer.parseInt(list.elements.get(0).toString());
-        int length = (size > 1) ? Integer.parseInt(list.elements.get(1).toString()) : strLength - offset;
-
-        // Handle negative offsets
-        if (offset < 0) {
-            offset = strLength + offset;
-        }
-
-        // Ensure offset is within bounds
-        if (offset < 0) {
-            offset = 0;
-        }
-        if (offset > strLength) {
-            offset = strLength;
-        }
-
-        // Handle negative lengths
-        if (length < 0) {
-            length = strLength + length - offset;
-        }
-
-        // Ensure length is non-negative and within bounds
-        if (length < 0) {
-            length = 0;
-        }
-        if (offset + length > strLength) {
-            length = strLength - offset;
-        }
-
-        String result = str.substring(offset, offset + length);
-        return new RuntimeScalar(result);
-    }
-
     public RuntimeScalar quotemeta() {
         StringBuilder quoted = new StringBuilder();
         for (char c : this.value.toString().toCharArray()) {
@@ -1163,83 +1122,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             }
         }
         return new RuntimeScalar(quoted.toString());
-    }
-
-    public RuntimeScalar join(RuntimeList list) {
-        String delimiter = this.toString();
-        // Join the list into a string
-        StringBuilder sb = new StringBuilder();
-
-        Iterator<RuntimeScalar> iterator = list.iterator();
-        boolean start = true;
-        while (iterator.hasNext()) {
-            if (start) {
-                start = false;
-            } else {
-                sb.append(delimiter);
-            }
-            sb.append(iterator.next().toString());
-        }
-        return new RuntimeScalar(sb.toString());
-    }
-
-    /**
-     * Formats the elements according to the specified format string.
-     *
-     * @param list The list of elements to be formatted.
-     * @return A RuntimeScalar containing the formatted string.
-     */
-    public RuntimeScalar sprintf(RuntimeList list) {
-        // The format string that specifies how the elements should be formatted
-        String format = this.toString();
-
-        // Create an array to hold the arguments for the format string
-        Object[] args = new Object[list.elements.size()];
-
-        // Regular expression to find format specifiers in the format string
-        // Example of format specifiers: %d, %f, %s, etc.
-        Pattern pattern = Pattern.compile("%[\\-\\+\\d\\s]*\\.?\\d*[a-zA-Z]");
-        Matcher matcher = pattern.matcher(format);
-
-        int index = 0;
-
-        // Iterate through the format string and map each format specifier
-        // to the corresponding element in the list
-        while (matcher.find() && index < list.elements.size()) {
-            // Get the current format specifier (e.g., %d, %f, %s)
-            String specifier = matcher.group();
-            // Get the corresponding element from the list
-            RuntimeScalar element = (RuntimeScalar) list.elements.get(index);
-            Object arg;
-
-            // Determine the type of argument based on the format specifier
-            if (specifier.endsWith("d") || specifier.endsWith("i")) {
-                // Integer specifiers: convert the element to an integer
-                arg = element.getInt();
-            } else if (specifier.endsWith("f") || specifier.endsWith("e") || specifier.endsWith("g")) {
-                // Floating-point specifiers: convert the element to a double
-                arg = element.getDouble();
-            } else {
-                // For other specifiers (e.g., %s), convert the element to a string
-                arg = element.toString();
-            }
-
-            // Store the converted argument in the args array
-            args[index] = arg;
-            index++;
-        }
-
-        // Format the string using the format string and the arguments array
-        String formattedString;
-        try {
-            formattedString = String.format(format, args);
-        } catch (IllegalFormatException e) {
-            // If the format string is invalid, throw a runtime exception
-            throw new RuntimeException("Invalid format string: " + format, e);
-        }
-
-        // Return the formatted string wrapped in a RuntimeScalar
-        return new RuntimeScalar(formattedString);
     }
 
     // keys() operator
