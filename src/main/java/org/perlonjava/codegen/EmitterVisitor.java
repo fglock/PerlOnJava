@@ -886,6 +886,7 @@ public class EmitterVisitor implements Visitor {
             case "replaceRegex":
             case "tr":
             case "y":
+            case "qx":
                 handleRegex(node);
                 break;
             default:
@@ -897,6 +898,20 @@ public class EmitterVisitor implements Visitor {
         ListNode operand = (ListNode) node.operand;
         EmitterVisitor scalarVisitor = this.with(RuntimeContextType.SCALAR);
         Node variable = null;
+
+        if (node.operator.equals("qx")){
+            // static RuntimeScalar systemCommand(RuntimeScalar command)
+            operand.elements.get(0).accept(scalarVisitor);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/RuntimeIO",
+                    "systemCommand",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            if (ctx.contextType == RuntimeContextType.VOID) {
+                ctx.mv.visitInsn(Opcodes.POP);
+            }
+            return;
+        }
+
         if (node.operator.equals("tr") || node.operator.equals("y")) {
             // static RuntimeTransliterate compile(RuntimeScalar search, RuntimeScalar replace, RuntimeScalar modifiers)
             operand.elements.get(0).accept(scalarVisitor);
