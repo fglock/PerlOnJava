@@ -595,6 +595,7 @@ public class Parser {
                     case "\"":
                     case "/":
                     case "//":
+                    case "`":
                         // Handle single and double-quoted strings
                         return parseRawString(token.text);
                     case "\\":
@@ -680,7 +681,8 @@ public class Parser {
 
     public Node parseRawString(String operator) {
         // handle special quotes for operators: q qq qx qw // s/// m//
-        if (operator.equals("'") || operator.equals("\"") || operator.equals("/") || operator.equals("//")) {
+        if (operator.equals("'") || operator.equals("\"") || operator.equals("/") || operator.equals("//")
+                || operator.equals("`")) {
             tokenIndex--;   // will reparse the quote
         }
         StringParser.ParsedString rawStr;
@@ -702,6 +704,9 @@ public class Parser {
         tokenIndex = rawStr.next;
 
         switch (operator) {
+            case "`":
+            case "qx":
+                return StringParser.parseSystemCommand(ctx, operator, rawStr);
             case "'":
             case "q":
                 return StringParser.parseSingleQuotedString(rawStr);

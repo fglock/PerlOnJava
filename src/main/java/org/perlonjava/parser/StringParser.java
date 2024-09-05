@@ -500,6 +500,16 @@ public class StringParser {
         return new OperatorNode(operator, list, rawStr.index);
     }
 
+    public static OperatorNode parseSystemCommand(EmitterContext ctx, String operator, ParsedString rawStr) {
+        operator = "qx";
+        // TODO when to interpolate variables?
+        Node parsed = new StringNode(rawStr.buffers.get(0), rawStr.index);
+        List<Node> elements = new ArrayList<>();
+        elements.add(parsed);
+        ListNode list = new ListNode(elements, rawStr.index);
+        return new OperatorNode(operator, list, rawStr.index);
+    }
+
     /**
      * Class to represent the parsed string and its position in the tokens list.
      */
