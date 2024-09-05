@@ -8,6 +8,7 @@ package org.perlonjava.runtime;
     Implementing modes for read/write (+<, +>) operations.
  */
 
+import javax.management.RuntimeErrorException;
 import java.io.*;
 
 import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
@@ -70,54 +71,56 @@ public class RuntimeIO implements RuntimeScalarReference {
         return fh;
     }
 
-    public static void main(String[] args) {
-        // Example usage of FileHandle
+    /**
+     * Executes a shell command and captures both standard output and standard error.
+     *
+     * @param command The command to execute.
+     * @return The output of the command as a string, including both stdout and stderr.
+     */
+    public static RuntimeScalar systemCommand(RuntimeScalar command) {
+        StringBuilder output = new StringBuilder();
+        Process process = null;
+        BufferedReader reader = null;
+        BufferedReader errorReader = null;
 
-        // Writing to a file
-        RuntimeIO fhWrite = RuntimeIO.open("output.txt", ">");
-        fhWrite.write("This line gets written into output.txt.\n");
-        fhWrite.close();
+        try {
+            // Execute the command
+            process = Runtime.getRuntime().exec(command.toString());
 
-        // Reading from a file
-        RuntimeIO fhRead = RuntimeIO.open("output.txt", "<");
-        byte[] buffer = new byte[128];
-        int bytesRead;
-        while ((bytesRead = fhRead.read(buffer)) != -1) {
-            System.out.print(new String(buffer, 0, bytesRead));
+            // Capture standard output
+            reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                output.append(line).append("\n");
+            }
+
+            // Capture standard error
+            errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+            while ((line = errorReader.readLine()) != null) {
+                output.append(line).append("\n");
+            }
+
+            // Wait for the process to finish
+            process.waitFor();
+        } catch (IOException | InterruptedException e) {
+            throw new RuntimeException("Error: " + e.getMessage());
+        } finally {
+            try {
+                if (reader != null) {
+                    reader.close();
+                }
+                if (errorReader != null) {
+                    errorReader.close();
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Error closing stream: " + e.getMessage());
+            }
+            if (process != null) {
+                process.destroy();
+            }
         }
-        fhRead.close();
 
-        // Example with getc and tell
-        RuntimeIO fhGetc = RuntimeIO.open("output.txt", "<");
-        int ch;
-        while ((ch = fhGetc.getc()) != -1) {
-            System.out.print((char) ch);
-            System.out.println(" at position: " + fhGetc.tell());
-        }
-        fhGetc.close();
-
-        // Fetching standard handles
-        RuntimeIO stdout = RuntimeIO.open(FileDescriptor.out, true);
-        RuntimeIO stderr = RuntimeIO.open(FileDescriptor.err, true);
-        RuntimeIO stdin = RuntimeIO.open(FileDescriptor.in, false);
-
-        // Writing to STDOUT
-        stdout.write("This goes to STDOUT.\n");
-
-        // Writing to STDERR
-        stderr.write("This goes to STDERR.\n");
-
-        // Reading from STDIN
-        System.out.println("Type something and press enter: ");
-        buffer = new byte[128];
-        bytesRead = stdin.read(buffer);
-        String input = new String(buffer, 0, bytesRead);
-        stdout.write("You typed: " + input);
-
-        // Closing handles (not usually necessary for standard streams)
-        stdout.close();
-        stderr.close();
-        stdin.close();
+        return new RuntimeScalar(output.toString());
     }
 
     public String toStringRef() {
@@ -296,5 +299,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             return new RuntimeScalar();
         }
     }
+
+
 }
 
