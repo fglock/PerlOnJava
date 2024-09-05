@@ -61,7 +61,7 @@
 - ✔️   **Numeric Comparison operators**: Comparison operators such as `==`, `!=`, `>`, `<`, etc., are implemented.
 - ✔️   **String concat**: Concatenation of strings using `.` is supported.
 - ✔️   **String Comparison operators**: String comparison operators such as `eq`, `ne`, `lt`, `gt`, etc., are implemented.
-- ✔️   **`q`, `qq`, `qw` String operators**: Various string quoting mechanisms are supported.
+- ✔️   **`q`, `qq`, `qw`, `qx` String operators**: Various string quoting mechanisms are supported.
 - ✔️   **Bitwise operators**: Bitwise operations like `&`, `|`, `^`, `<<`, and `>>` are supported.
 - ✔️   **Autoincrement, Autodecrement; String increment**: Increment and decrement operators, including for strings, are implemented.
 - ✔️   **Scalar string and math operators**: `quotemeta`, `ref`, `undef`, `log`, `rand`.
