@@ -239,7 +239,17 @@ public class EmitterVisitor implements Visitor {
                 //        StringNode: 'abc'
                 //        StringNode: 'i'
                 //
-                // TODO `replaceRegex` case
+                if (node.right instanceof OperatorNode) {
+                    OperatorNode right = (OperatorNode) node.right;
+                    if (right.operand instanceof ListNode) {
+                        // regex operator:  $v =~ /regex/;
+                        // bind the variable to the regex operation
+                        ((ListNode) right.operand).elements.add(node.left);
+                        right.accept(this);
+                        return;
+                    }
+                }
+                // not a regex operator:  $v =~ $qr;
                 node.right.accept(scalarVisitor);
                 node.left.accept(scalarVisitor);
                 pushCallContext();
@@ -908,10 +918,21 @@ public class EmitterVisitor implements Visitor {
                     "org/perlonjava/runtime/RuntimeRegex", "getQuotedRegex",
                     "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         }
+        if (node.operator.equals("quoteRegex")) {
+            // do not execute  `qr//`
+            return;
+        }
 
         if (variable == null) {
-            // TODO use `$_`
+            // use `$_`
+            variable = new OperatorNode("$", new IdentifierNode("_", node.tokenIndex), node.tokenIndex);
         }
+        variable.accept(scalarVisitor);
+
+        pushCallContext();
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/RuntimeRegex", "matchRegex",
+                "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
 
         if (ctx.contextType == RuntimeContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.POP);
