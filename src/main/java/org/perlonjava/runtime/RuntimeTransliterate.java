@@ -5,12 +5,7 @@ package org.perlonjava.runtime;
  */
 public class RuntimeTransliterate {
 
-    private boolean complement;
-    private boolean deleteUnmatched;
-    private boolean squashDuplicates;
-    private boolean returnOriginal;
-    private char[] translationMap;
-    private boolean[] usedChars;
+
 
     /**
      * Creates a RuntimeTransliterate object from a pattern string with optional modifiers.
@@ -20,68 +15,65 @@ public class RuntimeTransliterate {
      * @param modifiers Modifiers for the pattern
      * @return A RuntimeTransliterate object.
      */
-    public static RuntimeTransliterate compile(String search, String replace, String modifiers) {
+    public static RuntimeTransliterate compile(RuntimeScalar search, RuntimeScalar replace, RuntimeScalar modifiers) {
         // TODO cache the compilation
         RuntimeTransliterate transliterate = new RuntimeTransliterate();
-        transliterate.compileTransliteration(search, replace, modifiers);
+        transliterate.compileTransliteration(search.toString(), replace.toString(), modifiers.toString());
         return transliterate;
     }
 
-    /**
-     * Transliterates the characters in the string according to the specified search and replacement lists,
-     * with support for the /c, /d, /s, and /r modifiers.
-     *
-     * @param originalString The string containing to be transliterated
-     * @return A RuntimeScalar containing the transliterated string, or the original string if /r is used.
-     */
+    private char[] translationMap;
+    private boolean[] usedChars;
+    private boolean complement;
+    private boolean deleteUnmatched;
+    private boolean squashDuplicates;
+    private boolean returnOriginal;
+
     public RuntimeScalar transliterate(RuntimeScalar originalString) {
         String input = originalString.toString();
-
-        // Perform transliteration on the input string
         StringBuilder result = new StringBuilder();
         boolean lastCharAdded = false;
 
         for (int i = 0; i < input.length(); i++) {
             char ch = input.charAt(i);
-
-            if (usedChars[ch]) {
+            if (ch < 256 && usedChars[ch]) {
                 char mappedChar = translationMap[ch];
-
-                if (!squashDuplicates || !lastCharAdded || (result.length() > 0 && result.charAt(result.length() - 1) != mappedChar)) {
+                if (!squashDuplicates || result.length() == 0 || result.charAt(result.length() - 1) != mappedChar) {
                     result.append(mappedChar);
                     lastCharAdded = true;
                 }
             } else if (!deleteUnmatched) {
                 result.append(ch);
                 lastCharAdded = false;
+            } else {
+                lastCharAdded = false; // Ensure lastCharAdded is reset if character is deleted
             }
         }
 
-        // Return original or modified string based on /r modifier
-        return returnOriginal ? new RuntimeScalar(input) : new RuntimeScalar(result.toString());
+        String resultString = result.toString();
+        if (!returnOriginal) {
+            originalString.set(resultString);
+        }
+        return new RuntimeScalar(resultString);
     }
 
-    private void compileTransliteration(String search, String replace, String modifiers) {
+    public void compileTransliteration(String search, String replace, String modifiers) {
         complement = modifiers.contains("c");
         deleteUnmatched = modifiers.contains("d");
         squashDuplicates = modifiers.contains("s");
         returnOriginal = modifiers.contains("r");
 
-        // Expand search and replace lists
         String expandedSearch = expandRangesAndEscapes(search);
         String expandedReplace = expandRangesAndEscapes(replace);
 
-        // Create translation map
         translationMap = new char[256];
         usedChars = new boolean[256];
 
-        // Initialize translation map to identity mapping
         for (int i = 0; i < 256; i++) {
             translationMap[i] = (char) i;
             usedChars[i] = false;
         }
 
-        // Populate translation map based on expanded search and replace lists
         if (complement) {
             complementTranslationMap(translationMap, usedChars, expandedSearch, expandedReplace);
         } else {
@@ -91,15 +83,12 @@ public class RuntimeTransliterate {
 
     private String expandRangesAndEscapes(String input) {
         StringBuilder expanded = new StringBuilder();
-
         for (int i = 0; i < input.length(); i++) {
             char ch = input.charAt(i);
-
             if (i + 2 < input.length() && input.charAt(i + 1) == '-') {
                 char start = ch;
                 char end = input.charAt(i + 2);
                 i += 2;
-
                 if (start <= end) {
                     for (char c = start; c <= end; c++) {
                         expanded.append(c);
@@ -140,7 +129,6 @@ public class RuntimeTransliterate {
                 expanded.append(ch);
             }
         }
-
         return expanded.toString();
     }
 
@@ -150,7 +138,6 @@ public class RuntimeTransliterate {
 
     private void complementTranslationMap(char[] translationMap, boolean[] usedChars, String search, String replace) {
         boolean[] complementSet = new boolean[256];
-
         for (int i = 0; i < search.length(); i++) {
             complementSet[search.charAt(i)] = true;
         }
@@ -162,6 +149,9 @@ public class RuntimeTransliterate {
                     translationMap[i] = replace.charAt(replaceIndex);
                     usedChars[i] = true;
                     replaceIndex++;
+                } else if (replace.length() > 0) {
+                    translationMap[i] = replace.charAt(replace.length() - 1);
+                    usedChars[i] = true;
                 }
             }
         }
@@ -169,16 +159,16 @@ public class RuntimeTransliterate {
 
     private void populateTranslationMap(char[] translationMap, boolean[] usedChars, String search, String replace) {
         int minLength = Math.min(search.length(), replace.length());
-
         for (int i = 0; i < minLength; i++) {
             translationMap[search.charAt(i)] = replace.charAt(i);
             usedChars[search.charAt(i)] = true;
         }
 
-        // If search list is longer, map remaining search chars to last replace char
         for (int i = minLength; i < search.length(); i++) {
-            translationMap[search.charAt(i)] = replace.charAt(replace.length() - 1);
-            usedChars[search.charAt(i)] = true;
+            if (replace.length() > 0) {
+                translationMap[search.charAt(i)] = replace.charAt(replace.length() - 1);
+                usedChars[search.charAt(i)] = true;
+            }
         }
     }
 }
