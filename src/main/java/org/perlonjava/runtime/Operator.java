@@ -70,7 +70,7 @@ public class Operator {
         return new RuntimeScalar(formattedString);
     }
 
-    public static RuntimeScalar join(RuntimeScalar runtimeScalar, RuntimeList list) {
+    public static RuntimeScalar join(RuntimeScalar runtimeScalar, RuntimeDataProvider list) {
         String delimiter = runtimeScalar.toString();
         // Join the list into a string
         StringBuilder sb = new StringBuilder();
