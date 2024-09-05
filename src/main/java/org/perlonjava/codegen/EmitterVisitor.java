@@ -885,6 +885,7 @@ public class EmitterVisitor implements Visitor {
             case "quoteRegex":
             case "replaceRegex":
             case "tr":
+            case "y":
                 handleRegex(node);
                 break;
             default:
@@ -896,7 +897,7 @@ public class EmitterVisitor implements Visitor {
         ListNode operand = (ListNode) node.operand;
         EmitterVisitor scalarVisitor = this.with(RuntimeContextType.SCALAR);
         Node variable = null;
-        if (node.operator.equals("tr")) {
+        if (node.operator.equals("tr") || node.operator.equals("y")) {
             // static RuntimeTransliterate compile(RuntimeScalar search, RuntimeScalar replace, RuntimeScalar modifiers)
             operand.elements.get(0).accept(scalarVisitor);
             operand.elements.get(1).accept(scalarVisitor);
