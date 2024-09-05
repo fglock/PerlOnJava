@@ -253,7 +253,7 @@ public class EmitterVisitor implements Visitor {
         throw new RuntimeException("Unexpected infix operator: " + operator);
     }
 
-    private void emitRegexBindOperator(BinaryOperatorNode node) {
+    private void emitRegexBindOperator(BinaryOperatorNode node ) {
         //
         //  BinaryOperatorNode: =~
         //    OperatorNode: $
@@ -882,37 +882,30 @@ public class EmitterVisitor implements Visitor {
                 break;
             case "matchRegex":
             case "quoteRegex":
+                // RuntimeRegex.getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers)
+                ((ListNode) node.operand).elements.get(0).accept(this);
+                ((ListNode) node.operand).elements.get(1).accept(this);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/RuntimeRegex", "getQuotedRegex",
+                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                if (ctx.contextType == RuntimeContextType.VOID) {
+                    ctx.mv.visitInsn(Opcodes.POP);
+                }
+                break;
             case "replaceRegex":
-                handleRegex(node);
+                // RuntimeBaseEntity replaceRegex(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar replacement, int ctx)
+                ((ListNode) node.operand).elements.get(0).accept(this);
+                ((ListNode) node.operand).elements.get(1).accept(this);
+                ((ListNode) node.operand).elements.get(2).accept(this);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/RuntimeRegex", "getReplacementRegex",
+                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                if (ctx.contextType == RuntimeContextType.VOID) {
+                    ctx.mv.visitInsn(Opcodes.POP);
+                }
                 break;
             default:
                 throw new UnsupportedOperationException("Unsupported operator: " + operator);
-        }
-    }
-
-    private void handleRegex(OperatorNode node) {
-        if (node.operator.equals("replaceRegex")) {
-            // RuntimeBaseEntity replaceRegex(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar replacement, int ctx)
-            ((ListNode) node.operand).elements.get(0).accept(this);
-            ((ListNode) node.operand).elements.get(1).accept(this);
-            ((ListNode) node.operand).elements.get(2).accept(this);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/RuntimeRegex", "getReplacementRegex",
-                    "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-            if (ctx.contextType == RuntimeContextType.VOID) {
-                ctx.mv.visitInsn(Opcodes.POP);
-            }
-            return;
-        }
-
-        // RuntimeRegex.getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers)
-        ((ListNode) node.operand).elements.get(0).accept(this);
-        ((ListNode) node.operand).elements.get(1).accept(this);
-        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/RuntimeRegex", "getQuotedRegex",
-                "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
         }
     }
 
