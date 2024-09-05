@@ -283,6 +283,19 @@ public class EmitterVisitor implements Visitor {
                     handleCompoundAssignment(node, scalarVisitor, methodStr);
                     return;
                 }
+                break;
+            case "..":
+                node.left.accept(this.with(RuntimeContextType.SCALAR));
+                node.right.accept(this.with(RuntimeContextType.SCALAR));
+                // static RuntimeList generateList(int start, int end)
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/RuntimeList",
+                        "generateList",
+                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeList;", false);
+                if (ctx.contextType == RuntimeContextType.VOID) {
+                    ctx.mv.visitInsn(Opcodes.POP);
+                }
+                return;
         }
 
         String methodStr = operatorHandlers.get(operator);
