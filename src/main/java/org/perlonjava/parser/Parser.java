@@ -450,6 +450,11 @@ public class Parser {
                         // RuntimeList split(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar limitArg)
                         operand = parseZeroOrMoreList(1, false, true, false, true);
                         Node separator = ((ListNode) operand).elements.remove(0);
+                        if (separator instanceof OperatorNode) {
+                            if (((OperatorNode) separator).operator.equals("matchRegex")) {
+                                ((OperatorNode) separator).operator = "quoteRegex";
+                            }
+                        }
                         return new BinaryOperatorNode(token.text, separator, operand, tokenIndex);
                     case "push":
                     case "unshift":
