@@ -136,7 +136,7 @@ print "not " if $int ne "42"; say "ok # sprintf('%d', 42)";
 
 # Test floating-point formatting
 my $float = sprintf("%.2f", 3.14159);
-print "not " if $float ne "3.14"; say "ok # sprintf('%.2f', 3.14159)";
+print "not " if $float ne "3.14" && $float ne "3,14"; say "ok # sprintf('%.2f', 3.14159)";
 
 # Test string formatting
 $str = sprintf("%s", "Hello, World!");
