@@ -508,6 +508,10 @@ public class Parser {
                             handle = new IdentifierNode("main::STDOUT", tokenIndex);
                         }
                         return new BinaryOperatorNode(token.text, handle, operand, tokenIndex);
+                    case "delete":
+                    case "exists":
+                        operand = parseZeroOrOneList(1);
+                        return new OperatorNode(token.text, operand, tokenIndex);
                     case "scalar":
                     case "values":
                     case "keys":
