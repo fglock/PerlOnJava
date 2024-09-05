@@ -153,9 +153,13 @@ public class RuntimeTransliterate {
                     translationMap[i] = replace.charAt(replaceIndex);
                     usedChars[i] = true;
                     replaceIndex++;
-                } else if (replace.length() > 0) {
-                    translationMap[i] = replace.charAt(replace.length() - 1);
-                    usedChars[i] = true;
+                } else {
+                    if (deleteUnmatched) {
+                        deleteChars[i] = true;
+                    } else if (replace.length() > 0) {
+                        translationMap[i] = replace.charAt(replace.length() - 1);
+                        usedChars[i] = true;
+                    }
                 }
             }
         }
@@ -176,7 +180,6 @@ public class RuntimeTransliterate {
                 usedChars[search.charAt(i)] = true;
             }
         }
-
     }
 }
 

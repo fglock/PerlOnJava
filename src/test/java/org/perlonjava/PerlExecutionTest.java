@@ -30,7 +30,8 @@ public class PerlExecutionTest {
                 {"typeglob.pl"},
                 {"regex.pl"},
                 {"regexreplace.pl"},
-                {"split.pl"}
+                {"split.pl"},
+                {"transliterate.pl"}
         });
     }
 
