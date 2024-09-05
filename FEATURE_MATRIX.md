@@ -69,6 +69,7 @@
 - ✔️   **`sprintf`**: String formatting is supported.
 - ✔️   **`grep`, `map`, `sort`**: List processing functions are implemented.
 - ✔️   **`substr`**: Substring extraction works.
+- ❌  **Chained operators**: operations like `$x < $y <= $z` not yet implemented.
 - ❌  **Lvalue `substr`**: Assignable Substring extraction is not yet implemented.
 - ❌  **Vectors**: `vec` is not yet implemented.
 
