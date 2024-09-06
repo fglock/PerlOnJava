@@ -715,7 +715,7 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleArrowHashDeref(BinaryOperatorNode node, String hashOperation ) {
+    private void handleArrowHashDeref(BinaryOperatorNode node, String hashOperation) {
         ctx.logDebug("visit(BinaryOperatorNode) ->{} ");
         EmitterVisitor scalarVisitor =
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
@@ -796,6 +796,18 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
+    private void handleReverseBuiltin(OperatorNode node, String operator) {
+        // Handle:  reverse LIST
+        //   static RuntimeDataProvider reverse(RuntimeDataProvider value, int ctx)
+        ctx.logDebug("handleReverseBuiltin " + node);
+        node.operand.accept(this.with(RuntimeContextType.LIST));
+        pushCallContext();
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeDataProvider;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
+    }
+
     private void handleSpliceBuiltin(OperatorNode node, String operator) {
         // Handle:  splice @array, LIST
         ctx.logDebug("handleSpliceBuiltin " + node);
@@ -803,7 +815,7 @@ public class EmitterVisitor implements Visitor {
         Node operand = ((ListNode) args).elements.remove(0);
         operand.accept(this.with(RuntimeContextType.LIST));
         args.accept(this.with(RuntimeContextType.LIST));
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", operator, "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeArray;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
         if (ctx.contextType == RuntimeContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.POP);
         }
@@ -912,6 +924,9 @@ public class EmitterVisitor implements Visitor {
             case "$#":
                 node = new OperatorNode("$#", new OperatorNode("@", node.operand, node.tokenIndex), node.tokenIndex);
                 handleArrayUnaryBuiltin(node, "indexLastElem");
+                break;
+            case "reverse":
+                handleReverseBuiltin(node, operator);
                 break;
             case "splice":
                 handleSpliceBuiltin(node, operator);

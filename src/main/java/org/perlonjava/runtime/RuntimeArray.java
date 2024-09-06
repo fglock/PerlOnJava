@@ -1,7 +1,6 @@
 package org.perlonjava.runtime;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
@@ -168,107 +167,6 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
             outElements.add(this.get(iterator.next()));
         }
         return result;
-    }
-
-    public RuntimeDataProvider reverse(RuntimeList value, int ctx) {
-        if (ctx == RuntimeContextType.SCALAR) {
-            StringBuilder sb = new StringBuilder();
-            Iterator<RuntimeScalar> iterator = value.iterator();
-            while (iterator.hasNext()) {
-                sb.append(iterator.next().toString());
-            }
-            return new RuntimeScalar(sb.reverse().toString());
-        } else {
-            RuntimeList result = new RuntimeList();
-            List<RuntimeBaseEntity> outElements = result.elements;
-            Iterator<RuntimeScalar> iterator = value.iterator();
-
-            // First, collect all elements
-            List<RuntimeScalar> tempList = new ArrayList<>();
-            while (iterator.hasNext()) {
-                tempList.add(iterator.next());
-            }
-
-            // Then add them in reverse order
-            for (int i = tempList.size() - 1; i >= 0; i--) {
-                outElements.add(tempList.get(i));
-            }
-
-            return result;
-        }
-    }
-
-    /**
-     * Splices the array based on the parameters provided in the RuntimeList.
-     * The RuntimeList should contain the following elements in order:
-     * - OFFSET: The starting position for the splice operation (int).
-     * - LENGTH: The number of elements to be removed (int).
-     * - LIST: The list of elements to be inserted at the splice position (RuntimeList).
-     * <p>
-     * If OFFSET is not provided, it defaults to 0.
-     * If LENGTH is not provided, it defaults to the size of the array.
-     * If LIST is not provided, no elements are inserted.
-     *
-     * @param list the RuntimeList containing the splice parameters and elements
-     * @return a RuntimeList containing the elements that were removed
-     */
-    public RuntimeList splice(RuntimeList list) {
-        RuntimeList removedElements = new RuntimeList();
-
-        int size = this.elements.size();
-
-        int offset;
-        if (!list.elements.isEmpty()) {
-            RuntimeDataProvider value = list.elements.remove(0);
-            offset = value.scalar().getInt();
-        } else {
-            offset = 0;
-        }
-
-        int length;
-        if (!list.elements.isEmpty()) {
-            RuntimeDataProvider value = list.elements.remove(0);
-            length = value.scalar().getInt();
-        } else {
-            length = size;
-        }
-
-        // Handle negative offset
-        if (offset < 0) {
-            offset = size + offset;
-        }
-
-        // Ensure offset is within bounds
-        if (offset > size) {
-            offset = size;
-        }
-
-        // Handle negative length
-        if (length < 0) {
-            length = size - offset + length;
-        }
-
-        // Ensure length is within bounds
-        length = Math.min(length, size - offset);
-
-        // Remove elements
-        for (int i = 0; i < length && offset < elements.size(); i++) {
-            removedElements.elements.add(elements.remove(offset));
-        }
-
-        // Add new elements
-        if (!list.elements.isEmpty()) {
-            RuntimeArray arr = new RuntimeArray();
-            arr.push(list);
-            this.elements.addAll(offset, arr.elements);
-        }
-
-        return removedElements;
-    }
-
-    // Reverse the array
-    public void reverse() {
-        Collections.reverse(elements);
     }
 
     // Join the array into a string

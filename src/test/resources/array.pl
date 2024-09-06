@@ -76,10 +76,10 @@ my @sorted = sort { $a <=> $b } @array;
 print "not " if @sorted != 6 or $sorted[0] != 0 or $sorted[-1] != 11;
 say "ok # Sort operation";
 
-## # Reverse operation
-## my @reversed = reverse @array;
-## print "not " if @reversed != 6 or $reversed[0] != 5 or $reversed[-1] != 0;
-## say "ok # Reverse operation";
+# Reverse operation
+my @reversed = reverse @array;
+print "not " if @reversed != 6 or $reversed[0] != 5 or $reversed[-1] != 0;
+say "ok # Reverse operation";
 
 # Array of arrays
 my @matrix = ([1, 2], [3, 4], [5, 6]);
