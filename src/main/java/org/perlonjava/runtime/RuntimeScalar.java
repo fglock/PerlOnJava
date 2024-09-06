@@ -429,6 +429,30 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
     }
 
+    // Method to implement `delete $v->{key}`
+    public RuntimeScalar hashDerefDelete(RuntimeScalar index) {
+        switch (type) {
+            case UNDEF:
+                return new RuntimeScalar();
+            case HASHREFERENCE:
+                return ((RuntimeHash) value).delete(index);
+            default:
+                throw new IllegalStateException("Variable does not contain a hash reference");
+        }
+    }
+
+    // Method to implement `exists $v->{key}`
+    public RuntimeScalar hashDerefExists(RuntimeScalar index) {
+        switch (type) {
+            case UNDEF:
+                return new RuntimeScalar();
+            case HASHREFERENCE:
+                return ((RuntimeHash) value).exists(index);
+            default:
+                throw new IllegalStateException("Variable does not contain a hash reference");
+        }
+    }
+
     // Method to implement `$v->[10]`
     public RuntimeScalar arrayDerefGet(RuntimeScalar index) {
         switch (type) {

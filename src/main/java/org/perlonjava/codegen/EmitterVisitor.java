@@ -602,7 +602,7 @@ public class EmitterVisitor implements Visitor {
 
         // default: call `->{}`
         BinaryOperatorNode refNode = new BinaryOperatorNode("->", node.left, node.right, node.tokenIndex);
-        refNode.accept(this);
+        handleArrowHashDeref(refNode, hashOperation);
     }
 
     /**
@@ -659,22 +659,7 @@ public class EmitterVisitor implements Visitor {
             ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "arrayDerefGet", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
         } else if (node.right instanceof HashLiteralNode) { // ->{x}
-            ctx.logDebug("visit(BinaryOperatorNode) ->{} ");
-            node.left.accept(scalarVisitor); // target - left parameter
-
-            // emit the {0} as a RuntimeList
-            ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
-
-            Node nodeZero = nodeRight.elements.get(0);
-            if (nodeRight.elements.size() == 1 && nodeZero instanceof IdentifierNode) {
-                // Convert IdentifierNode to StringNode:  {a} to {"a"}
-                nodeRight.elements.set(0, new StringNode(((IdentifierNode) nodeZero).name, ((IdentifierNode) nodeZero).tokenIndex));
-            }
-
-            ctx.logDebug("visit -> (HashLiteralNode) autoquote " + node.right);
-            nodeRight.accept(this.with(RuntimeContextType.SCALAR));
-
-            ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "hashDerefGet", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            handleArrowHashDeref(node, "get");
 
         } else {
             // ->method()   ->$method()
@@ -725,6 +710,43 @@ public class EmitterVisitor implements Visitor {
                 ctx.mv.visitInsn(Opcodes.POP);
             }
         }
+    }
+
+    private void handleArrowHashDeref(BinaryOperatorNode node, String hashOperation ) {
+        ctx.logDebug("visit(BinaryOperatorNode) ->{} ");
+        EmitterVisitor scalarVisitor =
+                this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
+
+        node.left.accept(scalarVisitor); // target - left parameter
+
+        // emit the {0} as a RuntimeList
+        ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
+
+        Node nodeZero = nodeRight.elements.get(0);
+        if (nodeRight.elements.size() == 1 && nodeZero instanceof IdentifierNode) {
+            // Convert IdentifierNode to StringNode:  {a} to {"a"}
+            nodeRight.elements.set(0, new StringNode(((IdentifierNode) nodeZero).name, ((IdentifierNode) nodeZero).tokenIndex));
+        }
+
+        ctx.logDebug("visit -> (HashLiteralNode) autoquote " + node.right);
+        nodeRight.accept(this.with(RuntimeContextType.SCALAR));
+
+        String methodName;
+        switch (hashOperation) {
+            case "get":
+                methodName = "hashDerefGet";
+                break;
+            case "delete":
+                methodName = "hashDerefDelete";
+                break;
+            case "exists":
+                methodName = "hashDerefExists";
+                break;
+            default:
+                throw new IllegalArgumentException("Unexpected hash operation: " + hashOperation);
+        }
+
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", methodName, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
     }
 
     /**
@@ -923,6 +945,12 @@ public class EmitterVisitor implements Visitor {
                 if (binop.operator.equals("{")) {
                     handleHashElementOperator(binop, operator);
                     return;
+                }
+                if (binop.operator.equals("->")) {
+                    if (binop.right instanceof HashLiteralNode) { // ->{x}
+                        handleArrowHashDeref(binop, operator);
+                        return;
+                    }
                 }
             }
         }
