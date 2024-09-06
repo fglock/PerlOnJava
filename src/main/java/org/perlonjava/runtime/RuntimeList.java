@@ -167,7 +167,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
                 ((RuntimeArray) elem).elements = arr.elements;
                 arr.elements = new ArrayList<>();
             } else if (elem instanceof RuntimeHash) {
-                RuntimeHash hash = RuntimeHash.fromArray(arr);
+                RuntimeHash hash = RuntimeHash.createHash(arr);
                 ((RuntimeHash) elem).elements = hash.elements;
                 arr.elements = new ArrayList<>();
             }
