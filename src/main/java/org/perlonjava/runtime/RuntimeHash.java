@@ -173,6 +173,16 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         return result;
     }
 
+    public RuntimeList deleteSlice(RuntimeList value) {
+        RuntimeList result = new RuntimeList();
+        List<RuntimeBaseEntity> outElements = result.elements;
+        Iterator<RuntimeScalar> iterator = value.iterator();
+        while (iterator.hasNext()) {
+            outElements.add(this.delete(iterator.next()));
+        }
+        return result;
+    }
+
     // keys() operator
     public RuntimeArray keys() {
         RuntimeArray list = new RuntimeArray();
