@@ -46,23 +46,23 @@ my @slice = @hash{'key2', 'key3'};
 print "not " if @slice != 2 or $slice[0] ne 'value2' or $slice[1] ne 'value3';
 say "ok # Slice operation";
 
-## # Slice delete
-## delete @hash{'key2', 'key3'};
-## print "not " if exists $hash{key2} or exists $hash{key3};
-## say "ok # Slice delete operation";
+# Slice delete
+delete @hash{'key2', 'key3'};
+print "not " if exists $hash{key2} or exists $hash{key3};
+say "ok # Slice delete operation";
 
 # Autovivification
 $hash{outer}{inner} = 'nested';
 print "not " if $hash{outer}{inner} ne 'nested';
 say "ok # Autovivification";
 
-## # Complex nested structure
-## my %nested = (
-##     a => { b => { c => 1 } },
-##     x => [ { y => 2 }, { z => 3 } ]
-## );
-## print "not " if $nested{a}{b}{c} != 1 or $nested{x}[0]{y} != 2 or $nested{x}[1]{z} != 3;
-## say "ok # Complex nested structure";
+# Complex nested structure
+my %nested = (
+    a => { b => { c => 1 } },
+    x => [ { y => 2 }, { z => 3 } ]
+);
+print "not " if $nested{a}{b}{c} != 1 or $nested{x}[0]{y} != 2 or $nested{x}[1]{z} != 3;
+say "ok # Complex nested structure";
 
 # Hash of arrays
 my %hash_of_arrays = (
@@ -72,11 +72,11 @@ my %hash_of_arrays = (
 print "not " if $hash_of_arrays{fruits}[1] ne 'banana' or $hash_of_arrays{colors}[2] ne 'blue';
 say "ok # Hash of arrays";
 
-## # Array of hashes
-## my @array_of_hashes = (
-##     { name => 'Alice', age => 30 },
-##     { name => 'Bob', age => 25 }
-## );
-## print "not " if $array_of_hashes[0]{name} ne 'Alice' or $array_of_hashes[1]{age} != 25;
-## say "ok # Array of hashes";
-## 
+# Array of hashes
+my @array_of_hashes = (
+    { name => 'Alice', age => 30 },
+    { name => 'Bob', age => 25 }
+);
+print "not " if $array_of_hashes[0]{name} ne 'Alice' or $array_of_hashes[1]{age} != 25;
+say "ok # Array of hashes";
+
