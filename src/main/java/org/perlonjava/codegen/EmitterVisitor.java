@@ -891,6 +891,7 @@ public class EmitterVisitor implements Visitor {
             case "quotemeta":
             case "rand":
             case "ref":
+            case "oct":
             case "undef":
             case "wantarray":
                 handleUnaryBuiltin(node, operator);

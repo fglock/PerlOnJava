@@ -1148,6 +1148,55 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(quoted.toString());
     }
 
+    public RuntimeScalar oct() {
+        String expr = this.toString();
+        int result = 0;
+
+        // Remove leading and trailing whitespace
+        expr = expr.trim();
+
+        // Remove underscores as they are ignored in Perl's oct()
+        expr = expr.replace("_", "");
+
+        int length = expr.length();
+        int start;
+        if (expr.startsWith("0x") || expr.startsWith("x")) {
+            // Hexadecimal string
+            start = expr.startsWith("0x") ? 2 : 1;
+            for (int i = start; i < length; i++) {
+                char c = expr.charAt(i);
+                if (c >= '0' && c <= '9') {
+                    result = result * 16 + (c - '0');
+                } else if (c >= 'A' && c <= 'F') {
+                    result = result * 16 + (c - 'A' + 10);
+                } else {
+                    break;
+                }
+            }
+        } else if (expr.startsWith("0b") || expr.startsWith("b")) {
+            // Binary string
+            start = expr.startsWith("0b") ? 2 : 1;
+            for (int i = start; i < length; i++) {
+                char c = expr.charAt(i);
+                if (c < '0' || c > '1') {
+                    break;
+                }
+                result = result * 2 + (c - '0');
+            }
+        } else {
+            // Octal string
+            start = expr.startsWith("0o") ? 2 : expr.startsWith("o") ? 1 : 0;
+            for (int i = start; i < length; i++) {
+                char c = expr.charAt(i);
+                if (c < '0' || c > '7') {
+                    break;
+                }
+                result = result * 8 + (c - '0');
+            }
+        }
+        return new RuntimeScalar(result);
+    }
+
     // keys() operator
     public RuntimeArray keys() {
         throw new IllegalStateException("Type of arg 1 to values must be hash or array");

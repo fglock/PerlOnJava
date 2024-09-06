@@ -406,6 +406,7 @@ public class Parser {
                     case "undef":
                     case "quotemeta":
                     case "ref":
+                    case "oct":
                     case "pop":
                     case "shift":
                     case "int":
