@@ -433,7 +433,9 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     public RuntimeScalar hashDerefDelete(RuntimeScalar index) {
         switch (type) {
             case UNDEF:
-                return new RuntimeScalar();
+                // hash autovivification
+                type = RuntimeScalarType.HASHREFERENCE;
+                value = new RuntimeHash();
             case HASHREFERENCE:
                 return ((RuntimeHash) value).delete(index);
             default:
@@ -445,7 +447,9 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     public RuntimeScalar hashDerefExists(RuntimeScalar index) {
         switch (type) {
             case UNDEF:
-                return new RuntimeScalar();
+                // hash autovivification
+                type = RuntimeScalarType.HASHREFERENCE;
+                value = new RuntimeHash();
             case HASHREFERENCE:
                 return ((RuntimeHash) value).exists(index);
             default:
@@ -774,7 +778,16 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar defined() {
-        return new RuntimeScalar(type != RuntimeScalarType.UNDEF);
+        switch (type) {
+            case UNDEF:
+                return new RuntimeScalar();
+            case HASHPROXY:
+                return ((RuntimeHashProxy) value).defined();
+            case ARRAYPROXY:
+                return ((RuntimeArrayProxy) value).defined();
+            default:
+                return new RuntimeScalar(1);
+        }
     }
 
     public RuntimeScalar stringConcat(RuntimeScalar b) {
