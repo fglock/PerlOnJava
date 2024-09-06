@@ -15,13 +15,6 @@ print "not " if $integer != 4; say "ok # int(4.75) equals 4";
 $integer = int(-4.75);
 print "not " if $integer != -4; say "ok # int(-4.75) equals -4";
 
-# Test hex
-my $hex_value = hex('0xFF');
-print "not " if $hex_value != 255; say "ok # hex('0xFF') equals 255";
-
-$hex_value = hex('FF');
-print "not " if $hex_value != 255; say "ok # hex('FF') equals 255";
-
 # Test abs
 my $absolute = abs(-42);
 print "not " if $absolute != 42; say "ok # abs(-42) equals 42";

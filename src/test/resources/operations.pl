@@ -334,3 +334,11 @@ say "ok # Octal fallback: expected 8 (10 octal is 8 decimal)";
 print "not " if oct("128") != 10;
 say "ok # Octal fallback: expected 10 (12 octal is 10 decimal)";
 
+# Test hex
+my $hex_value = hex('0xFF');
+print "not " if $hex_value != 255; say "ok # hex('0xFF') equals 255";
+
+$hex_value = hex('FF');
+print "not " if $hex_value != 255; say "ok # hex('FF') equals 255";
+
+
