@@ -20,28 +20,30 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         this.elements = new HashMap<>();
     }
 
-    // Create hash reference with the elements of a list
-    public static RuntimeScalar createHashRef(RuntimeList value) {
-        RuntimeArray arr = new RuntimeArray();
-        value.addToArray(arr);
-        if (arr.size() % 2 != 0) {  // add an undef if the array size is odd
-            arr.push(new RuntimeScalar());
+    // Create hash with the elements of a list
+    public static RuntimeHash createHash(RuntimeDataProvider value) {
+        RuntimeHash result = new RuntimeHash();
+        Map<String, RuntimeScalar> resultHash = result.elements;
+        Iterator<RuntimeScalar> iterator = value.iterator();
+        while (iterator.hasNext()) {
+            String key = iterator.next().toString();
+            RuntimeScalar val = iterator.hasNext() ? iterator.next() : new RuntimeScalar();
+            resultHash.put(key, val);
         }
-        RuntimeScalar result = new RuntimeScalar();
-        result.type = RuntimeScalarType.HASHREFERENCE;
-        result.value = fromArray(arr);
         return result;
+    }
+
+    // Create hash reference with the elements of a list
+    public static RuntimeScalar createHashRef(RuntimeDataProvider value) {
+        RuntimeScalar ref = new RuntimeScalar();
+        ref.type = RuntimeScalarType.HASHREFERENCE;
+        ref.value = createHash(value);
+        return ref;
     }
 
     // Convert a RuntimeArray to a RuntimeHash
     public static RuntimeHash fromArray(RuntimeArray array) {
-        RuntimeHash hash = new RuntimeHash();
-        for (int i = 0; i < array.size(); i += 2) {
-            String key = array.get(i).toString();
-            RuntimeScalar value = array.get(i + 1);
-            hash.put(key, value);
-        }
-        return hash;
+        return createHash(array);
     }
 
     public int countElements() {
