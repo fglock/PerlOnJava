@@ -16,7 +16,7 @@ import java.util.NoSuchElementException;
  * to mimic this behavior by using an enum `RuntimeScalarType` to track the type of the value stored in the
  * scalar.
  */
-public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarReference {
+public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarBehavior {
 
     // Fields to store the type and value of the scalar variable
     // TODO add cache for integer/string values
