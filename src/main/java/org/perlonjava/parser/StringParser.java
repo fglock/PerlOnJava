@@ -346,6 +346,12 @@ public class StringParser {
             case "b":
                 str.append('\b');  // Append backspace
                 break;
+            case "a":
+                str.append((char) 7);  // Append alarm
+                break;
+            case "e":
+                str.append((char) 27);  // Append escape
+                break;
             case "E":
                 break;  // Marks the end of \Q sequence
             case "Q":
