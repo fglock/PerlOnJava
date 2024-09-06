@@ -11,6 +11,36 @@ public class RuntimeHashProxy extends RuntimeScalar {
         // Note: this.type is RuntimeScalarType.UNDEF
     }
 
+    // Setters
+    @Override
+    public RuntimeScalar set(RuntimeScalar value) {
+        if (parent.elements.containsKey(key)) {
+             parent.elements.get(key).set(value);
+        } else {
+             parent.elements.put(key, value.clone());
+        }
+        RuntimeScalar lvalue = (RuntimeScalar) parent.elements.get(key);
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return lvalue;
+    }
+
+    // Method to implement `$v->{key}`
+    public RuntimeScalar hashDerefGet(RuntimeScalar index) {
+        if (!parent.elements.containsKey(key)) {
+            parent.elements.put(key, new RuntimeScalar());
+        }
+        return (RuntimeScalar) parent.elements.get(key).hashDerefGet(index);
+    }
+
+    // Method to implement `$v->[key]`
+    public RuntimeScalar arrayDerefGet(RuntimeScalar index) {
+        if (!parent.elements.containsKey(key)) {
+            parent.elements.put(key, new RuntimeScalar());
+        }
+        return ((RuntimeScalar) parent.elements.get(key)).arrayDerefGet(index);
+    }
+
     /*
 
     @Override

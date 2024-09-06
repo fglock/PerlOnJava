@@ -11,6 +11,43 @@ public class RuntimeArrayProxy extends RuntimeScalar {
         // Note: this.type is RuntimeScalarType.UNDEF
     }
 
+    // Setters
+    @Override
+    public RuntimeScalar set(RuntimeScalar value) {
+        if (key < parent.elements.size()) {
+            ((RuntimeScalar) parent.elements.get(key)).set(value);
+        } else {
+            for (int i = parent.elements.size(); i < key; i++) {
+                parent.elements.add(i, new RuntimeScalar());
+            }
+            parent.elements.add(key, value.clone());
+        }
+        RuntimeScalar lvalue = (RuntimeScalar) parent.elements.get(key);
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return lvalue;
+    }
+
+    // Method to implement `$v->{key}`
+    public RuntimeScalar hashDerefGet(RuntimeScalar index) {
+        if (key >= parent.elements.size()) {
+            for (int i = parent.elements.size(); i <= key; i++) {
+                parent.elements.add(i, new RuntimeScalar());
+            }
+        }
+        return ((RuntimeScalar) parent.elements.get(key)).hashDerefGet(index);
+    }
+
+    // Method to implement `$v->[key]`
+    public RuntimeScalar arrayDerefGet(RuntimeScalar index) {
+        if (key >= parent.elements.size()) {
+            for (int i = parent.elements.size(); i <= key; i++) {
+                parent.elements.add(i, new RuntimeScalar());
+            }
+        }
+        return ((RuntimeScalar) parent.elements.get(key)).arrayDerefGet(index);
+    }
+
     /*
 
     @Override

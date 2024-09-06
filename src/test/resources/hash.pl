@@ -51,10 +51,10 @@ say "ok # Iterate operation";
 ## print "not " if exists $hash{key2} or exists $hash{key3};
 ## say "ok # Slice delete operation";
 
-## # Autovivification
-## $hash{outer}{inner} = 'nested';
-## print "not " if $hash{outer}{inner} ne 'nested';
-## say "ok # Autovivification";
+# Autovivification
+$hash{outer}{inner} = 'nested';
+print "not " if $hash{outer}{inner} ne 'nested';
+say "ok # Autovivification";
 
 ## # Complex nested structure
 ## my %nested = (
