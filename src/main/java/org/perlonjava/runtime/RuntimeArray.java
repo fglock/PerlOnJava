@@ -169,18 +169,6 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         return result;
     }
 
-    // Join the array into a string
-    public String join(String delimiter) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < elements.size(); i++) {
-            if (i > 0) {
-                sb.append(delimiter);
-            }
-            sb.append(elements.get(i).toString());
-        }
-        return sb.toString();
-    }
-
     // keys() operator
     public RuntimeArray keys() {
         return RuntimeList.generateList(new RuntimeScalar(0), new RuntimeScalar(this.size() - 1)).getArrayOfAlias();
