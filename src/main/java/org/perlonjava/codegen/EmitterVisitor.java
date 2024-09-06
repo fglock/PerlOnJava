@@ -652,14 +652,7 @@ public class EmitterVisitor implements Visitor {
             applyNode.accept(this);
 
         } else if (node.right instanceof ArrayLiteralNode) { // ->[0]
-            ctx.logDebug("visit(BinaryOperatorNode) ->[] ");
-            node.left.accept(scalarVisitor); // target - left parameter
-
-            // emit the [0] as a RuntimeList
-            ListNode nodeRight = ((ArrayLiteralNode) node.right).asListNode();
-            nodeRight.accept(this.with(RuntimeContextType.SCALAR));
-
-            ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "arrayDerefGet", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            handleArrowArrayDeref(node, "get");
 
         } else if (node.right instanceof HashLiteralNode) { // ->{x}
             handleArrowHashDeref(node, "get");
@@ -713,6 +706,32 @@ public class EmitterVisitor implements Visitor {
                 ctx.mv.visitInsn(Opcodes.POP);
             }
         }
+    }
+
+    private void handleArrowArrayDeref(BinaryOperatorNode node, String arrayOperation) {
+        ctx.logDebug("visit(BinaryOperatorNode) ->[] ");
+        EmitterVisitor scalarVisitor =
+                this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
+
+        node.left.accept(scalarVisitor); // target - left parameter
+
+        // emit the [0] as a RuntimeList
+        ListNode nodeRight = ((ArrayLiteralNode) node.right).asListNode();
+        nodeRight.accept(this.with(RuntimeContextType.SCALAR));
+
+        String methodName;
+        switch (arrayOperation) {
+            case "get":
+                methodName = "arrayDerefGet";
+                break;
+            case "delete":
+                methodName = "arrayDerefDelete";
+                break;
+            default:
+                throw new IllegalArgumentException("Unexpected hash operation: " + arrayOperation);
+        }
+
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "arrayDerefGet", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
     }
 
     private void handleArrowHashDeref(BinaryOperatorNode node, String hashOperation) {
