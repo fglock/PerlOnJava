@@ -410,6 +410,7 @@ public class Parser {
                     case "hex":
                     case "pop":
                     case "shift":
+                    case "sleep":
                     case "int":
                     case "length":
                     case "defined":
@@ -417,6 +418,9 @@ public class Parser {
                         operand = parseZeroOrOneList(0);
                         if (((ListNode) operand).elements.isEmpty()) {
                             switch (text) {
+                                case "sleep":
+                                    operand = new NumberNode(Long.toString(Long.MAX_VALUE), tokenIndex);
+                                    break;
                                 case "pop":
                                 case "shift":
                                     // create `@_` variable

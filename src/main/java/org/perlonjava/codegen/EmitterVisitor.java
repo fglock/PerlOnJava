@@ -890,6 +890,7 @@ public class EmitterVisitor implements Visitor {
             case "log":
             case "quotemeta":
             case "rand":
+            case "sleep":
             case "ref":
             case "oct":
             case "hex":
