@@ -3,6 +3,7 @@ package org.perlonjava.runtime;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.concurrent.TimeUnit;
 
 /**
  * The RuntimeScalar class simulates Perl scalar variables.
@@ -1230,6 +1231,16 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             result = result * 16 + digit;
         }
         return new RuntimeScalar(result);
+    }
+
+    public RuntimeScalar sleep() {
+        long s = (long) this.getDouble() * 1000;
+        try {
+            TimeUnit.MILLISECONDS.sleep(s);
+        } catch (InterruptedException e) {
+            // TODO
+        }
+        return new RuntimeScalar(s / 1000.0);
     }
 
     // keys() operator
