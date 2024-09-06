@@ -15,6 +15,14 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         return lvalue;
     }
 
+    public RuntimeScalar undefine() {
+        vivify();
+        RuntimeScalar ret = lvalue.undefine();
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return ret;
+    }
+
     // Method to implement `$v->{key}`
     @Override
     public RuntimeScalar hashDerefGet(RuntimeScalar index) {
