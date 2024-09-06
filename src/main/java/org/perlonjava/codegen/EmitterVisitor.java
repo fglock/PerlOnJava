@@ -937,10 +937,11 @@ public class EmitterVisitor implements Visitor {
         if (node.operator.equals("qx")) {
             // static RuntimeScalar systemCommand(RuntimeScalar command)
             operand.elements.get(0).accept(scalarVisitor);
+            pushCallContext();
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/RuntimeIO",
                     "systemCommand",
-                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
             if (ctx.contextType == RuntimeContextType.VOID) {
                 ctx.mv.visitInsn(Opcodes.POP);
             }

@@ -9,6 +9,7 @@ package org.perlonjava.runtime;
  */
 
 import java.io.*;
+import java.util.List;
 
 import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
 
@@ -76,7 +77,7 @@ public class RuntimeIO implements RuntimeScalarReference {
      * @param command The command to execute.
      * @return The output of the command as a string, including both stdout and stderr.
      */
-    public static RuntimeScalar systemCommand(RuntimeScalar command) {
+    public static RuntimeDataProvider systemCommand(RuntimeScalar command, int ctx) {
         StringBuilder output = new StringBuilder();
         Process process = null;
         BufferedReader reader = null;
@@ -119,7 +120,33 @@ public class RuntimeIO implements RuntimeScalarReference {
             }
         }
 
-        return new RuntimeScalar(output.toString());
+        String out = output.toString();
+        if (ctx == RuntimeContextType.LIST) {
+            RuntimeList list = new RuntimeList();
+            List<RuntimeBaseEntity> result = list.elements;
+            int index = 0;
+            String separator = getGlobalVariable("main::/").toString();
+            int separatorLength = separator.length();
+
+            if (separatorLength == 0) {
+                result.add(new RuntimeScalar(out));
+            } else {
+                while (index < out.length()) {
+                    int nextIndex = out.indexOf(separator, index);
+                    if (nextIndex == -1) {
+                        // Add the remaining part of the string
+                        result.add(new RuntimeScalar(out.substring(index)));
+                        break;
+                    }
+                    // Add the part including the separator
+                    result.add(new RuntimeScalar(out.substring(index, nextIndex + separatorLength)));
+                    index = nextIndex + separatorLength;
+                }
+            }
+            return list;
+        } else {
+            return new RuntimeScalar(out);
+        }
     }
 
     public String toStringRef() {
