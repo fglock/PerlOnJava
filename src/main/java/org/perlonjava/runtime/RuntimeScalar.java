@@ -1159,23 +1159,27 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         expr = expr.replace("_", "");
 
         int length = expr.length();
-        int start;
-        if (expr.startsWith("0x") || expr.startsWith("x")) {
+        int start = 0;
+        if (expr.startsWith("0")) {
+            start++;
+        }
+
+        if (expr.charAt(start) == 'x' || expr.charAt(start) == 'X') {
             // Hexadecimal string
-            start = expr.startsWith("0x") ? 2 : 1;
+            start++;
             for (int i = start; i < length; i++) {
                 char c = expr.charAt(i);
-                if (c >= '0' && c <= '9') {
-                    result = result * 16 + (c - '0');
-                } else if (c >= 'A' && c <= 'F') {
-                    result = result * 16 + (c - 'A' + 10);
-                } else {
+                int digit = Character.digit(c, 16); // Converts '0'-'9', 'A'-'F', 'a'-'f' to 0-15
+
+                // Stop if an invalid character is encountered
+                if (digit == -1) {
                     break;
                 }
+                result = result * 16 + digit;
             }
-        } else if (expr.startsWith("0b") || expr.startsWith("b")) {
+        } else if (expr.charAt(start) == 'b' || expr.charAt(start) == 'B') {
             // Binary string
-            start = expr.startsWith("0b") ? 2 : 1;
+            start++;
             for (int i = start; i < length; i++) {
                 char c = expr.charAt(i);
                 if (c < '0' || c > '1') {
@@ -1185,7 +1189,9 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             }
         } else {
             // Octal string
-            start = expr.startsWith("0o") ? 2 : expr.startsWith("o") ? 1 : 0;
+            if (expr.charAt(start) == 'o' || expr.charAt(start) == 'O') {
+                start++;
+            }
             for (int i = start; i < length; i++) {
                 char c = expr.charAt(i);
                 if (c < '0' || c > '7') {
@@ -1193,6 +1199,35 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 }
                 result = result * 8 + (c - '0');
             }
+        }
+        return new RuntimeScalar(result);
+    }
+
+    public RuntimeScalar hex() {
+        String expr = this.toString();
+        int result = 0;
+
+        // Remove underscores as they are ignored in Perl's hex()
+        expr = expr.replace("_", "");
+
+        int start = 0;
+        if (expr.startsWith("0")) {
+            start++;
+        }
+        if (expr.charAt(start) == 'x' || expr.charAt(start) == 'X') {
+            start++;
+        }
+        // Convert each valid hex character
+        for (int i = start; i < expr.length(); i++) {
+            char c = expr.charAt(i);
+            int digit = Character.digit(c, 16); // Converts '0'-'9', 'A'-'F', 'a'-'f' to 0-15
+
+            // Stop if an invalid character is encountered
+            if (digit == -1) {
+                break;
+            }
+
+            result = result * 16 + digit;
         }
         return new RuntimeScalar(result);
     }
