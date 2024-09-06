@@ -35,15 +35,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
 
     // Create hash reference with the elements of a list
     public static RuntimeScalar createHashRef(RuntimeDataProvider value) {
-        RuntimeScalar ref = new RuntimeScalar();
-        ref.type = RuntimeScalarType.HASHREFERENCE;
-        ref.value = createHash(value);
-        return ref;
-    }
-
-    // Convert a RuntimeArray to a RuntimeHash
-    public static RuntimeHash fromArray(RuntimeArray array) {
-        return createHash(array);
+        return createHash(value).createReference();
     }
 
     public int countElements() {
@@ -70,12 +62,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
 
     // Replace the whole hash with the elements of a list
     public RuntimeArray set(RuntimeList value) {
-        RuntimeArray arr = new RuntimeArray();
-        value.addToArray(arr);
-        if (arr.size() % 2 != 0) {  // add an undef if the array size is odd
-            arr.push(new RuntimeScalar());
-        }
-        RuntimeHash hash = fromArray(arr);
+        RuntimeHash hash = createHash(value);
         this.elements = hash.elements;
         return new RuntimeArray(new RuntimeList(this));
     }
@@ -127,21 +114,6 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
     // Get the size of the hash
     public int size() {
         return elements.size();
-    }
-
-    // Clear all key-value pairs in the hash
-    public void clear() {
-        elements.clear();
-    }
-
-    // Merge another RuntimeHash into this one
-    public void merge(RuntimeHash other) {
-        elements.putAll(other.elements);
-    }
-
-    // Check if the hash is empty
-    public boolean isEmpty() {
-        return elements.isEmpty();
     }
 
     // Get a list of key-value pairs as a RuntimeArray
