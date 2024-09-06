@@ -213,6 +213,9 @@ public class EmitterVisitor implements Visitor {
                     ctx.mv.visitInsn(Opcodes.POP);
                 }
                 return;
+            case "x":
+                handleRepeat(node);
+                return;
             case "join":
                 handleJoinOperator(operator, node);
                 return;
@@ -307,6 +310,23 @@ public class EmitterVisitor implements Visitor {
             return;
         }
         throw new RuntimeException("Unexpected infix operator: " + operator);
+    }
+
+    private void handleRepeat(BinaryOperatorNode node ) {
+        Node left = node.left;
+        if (node.left instanceof ListNode) {
+            node.left.accept(this.with(RuntimeContextType.LIST));
+        } else {
+            node.left.accept(this.with(RuntimeContextType.SCALAR));
+        }
+        node.right.accept(this.with(RuntimeContextType.SCALAR));
+        pushCallContext();
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Operator",
+                "repeat",
+                "(Lorg/perlonjava/runtime/RuntimeDataProvider;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
     }
 
     private void handleBinaryOperator(BinaryOperatorNode node, EmitterVisitor scalarVisitor, String methodStr) {
