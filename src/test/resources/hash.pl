@@ -29,17 +29,17 @@ say "ok # Delete operation";
 ## say "ok # Assign operation";
 ## 
 ## # Count
-## my $count = keys %hash;
+my $count = keys %hash;
 ## print "not " if $count != 2;
 ## say "ok # Count operation";
 
-## # Iterate
-## my $iterated_count = 0;
-## for my $key (keys %hash) {
-##     $iterated_count++;
-## }
-## print "not " if $iterated_count != $count;
-## say "ok # Iterate operation";
+# Iterate
+my $iterated_count = 0;
+for my $key (keys %hash) {
+    $iterated_count++;
+}
+print "not " if $iterated_count != $count;
+say "ok # Iterate operation";
 
 ## # Slice
 ## my @slice = @hash{'key2', 'key3'};
@@ -64,14 +64,14 @@ say "ok # Delete operation";
 ## print "not " if $nested{a}{b}{c} != 1 or $nested{x}[0]{y} != 2 or $nested{x}[1]{z} != 3;
 ## say "ok # Complex nested structure";
 
-## # Hash of arrays
-## my %hash_of_arrays = (
-##     fruits => ['apple', 'banana', 'cherry'],
-##     colors => ['red', 'green', 'blue']
-## );
-## print "not " if $hash_of_arrays{fruits}[1] ne 'banana' or $hash_of_arrays{colors}[2] ne 'blue';
-## say "ok # Hash of arrays";
-## 
+# Hash of arrays
+my %hash_of_arrays = (
+    fruits => ['apple', 'banana', 'cherry'],
+    colors => ['red', 'green', 'blue']
+);
+print "not " if $hash_of_arrays{fruits}[1] ne 'banana' or $hash_of_arrays{colors}[2] ne 'blue';
+say "ok # Hash of arrays";
+
 ## # Array of hashes
 ## my @array_of_hashes = (
 ##     { name => 'Alice', age => 30 },
