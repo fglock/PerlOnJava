@@ -23,7 +23,7 @@ public class PerlLanguageProviderTest {
             // For example, if the result should contain certain elements:
             // assertTrue(result.contains(expectedElement), "Result should contain the expected element");
 
-        } catch (Throwable t) {
+        } catch (Exception t) {
             fail("Exception should not be thrown: " + t.getMessage());
         }
     }
