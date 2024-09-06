@@ -53,13 +53,13 @@ my $scalar = @array;
 print "not " if $scalar != 6;
 say "ok # Array to scalar context";
 
-## # Foreach loop
-## my $sum = 0;
-## foreach my $elem (@array) {
-##     $sum += $elem;
-## }
-## print "not " if $sum != 32;  # 0 + 2 + 10 + 11 + 4 + 5
-## say "ok # Foreach loop";
+# Foreach loop
+my $sum = 0;
+foreach my $elem (@array) {
+    $sum += $elem;
+}
+print "not " if $sum != 32;  # 0 + 2 + 10 + 11 + 4 + 5
+say "ok # Foreach loop";
 
 # Map operation
 my @doubled = map { $_ * 2 } @array;
@@ -81,23 +81,23 @@ say "ok # Sort operation";
 ## print "not " if @reversed != 6 or $reversed[0] != 5 or $reversed[-1] != 0;
 ## say "ok # Reverse operation";
 
-## # Array of arrays
-## my @matrix = ([1, 2], [3, 4], [5, 6]);
-## print "not " if $matrix[1][0] != 3 or $matrix[2][1] != 6;
-## say "ok # Array of arrays";
-## 
+# Array of arrays
+my @matrix = ([1, 2], [3, 4], [5, 6]);
+print "not " if $matrix[1][0] != 3 or $matrix[2][1] != 6;
+say "ok # Array of arrays";
+
 ## # Autovivification
 ## $matrix[3][0] = 7;
 ## print "not " if $matrix[3][0] != 7;
 ## say "ok # Autovivification in arrays";
-## 
-## # Join operation
-## my $joined = join ", ", @array;
-## print "not " if $joined ne "0, 2, 10, 11, 4, 5";
-## say "ok # Join operation";
-## 
-## # Split operation
-## my @split = split ", ", $joined;
-## print "not " if @split != 6 or $split[0] != 0 or $split[-1] != 5;
-## say "ok # Split operation";
+
+# Join operation
+my $joined = join ", ", @array;
+print "not " if $joined ne "0, 2, 10, 11, 4, 5";
+say "ok # Join operation";
+
+# Split operation
+my @split = split ", ", $joined;
+print "not " if @split != 6 or $split[0] != 0 or $split[-1] != 5;
+say "ok # Split operation";
 
