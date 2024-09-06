@@ -86,10 +86,10 @@ my @matrix = ([1, 2], [3, 4], [5, 6]);
 print "not " if $matrix[1][0] != 3 or $matrix[2][1] != 6;
 say "ok # Array of arrays";
 
-## # Autovivification
-## $matrix[3][0] = 7;
-## print "not " if $matrix[3][0] != 7;
-## say "ok # Autovivification in arrays";
+# Autovivification
+$matrix[3][0] = 7;
+print "not " if $matrix[3][0] != 7;
+say "ok # Autovivification in arrays";
 
 # Join operation
 my $joined = join ", ", @array;
