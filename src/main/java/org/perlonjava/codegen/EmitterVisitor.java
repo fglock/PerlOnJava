@@ -332,6 +332,9 @@ public class EmitterVisitor implements Visitor {
                 Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", methodStr, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         // assign to the Lvalue
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
     }
 
     private void handlePushOperator(String operator, BinaryOperatorNode node) {
