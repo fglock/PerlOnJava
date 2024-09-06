@@ -9,10 +9,10 @@ my %hash = (key1 => 'value1', key2 => 'value2');
 print "not " if $hash{key1} ne 'value1' or $hash{key2} ne 'value2';
 say "ok # Hash creation and assignment";
 
-## # Hashref
-## my $hashref = \%hash;
-## print "not " if $hashref->{key1} ne 'value1' or $hashref->{key2} ne 'value2';
-## say "ok # Hashref dereference";
+# Hashref
+my $hashref = \%hash;
+print "not " if $hashref->{key1} ne 'value1' or $hashref->{key2} ne 'value2';
+say "ok # Hashref dereference";
 
 # Exists
 print "not " if !exists $hash{key1} or exists $hash{nonexistent};
@@ -23,15 +23,15 @@ delete $hash{key1};
 print "not " if exists $hash{key1} or !exists $hash{key2};
 say "ok # Delete operation";
 
-## # Assign
-## $hash{key3} = 'value3';
-## print "not " if $hash{key3} ne 'value3';
-## say "ok # Assign operation";
-## 
-## # Count
+# Assign
+$hash{key3} = 'value3';
+print "not " if $hash{key3} ne 'value3';
+say "ok # Assign operation";
+
+# Count
 my $count = keys %hash;
-## print "not " if $count != 2;
-## say "ok # Count operation";
+print "not " if $count != 2;
+say "ok # Count operation";
 
 # Iterate
 my $iterated_count = 0;
@@ -41,10 +41,10 @@ for my $key (keys %hash) {
 print "not " if $iterated_count != $count;
 say "ok # Iterate operation";
 
-## # Slice
-## my @slice = @hash{'key2', 'key3'};
-## print "not " if @slice != 2 or $slice[0] ne 'value2' or $slice[1] ne 'value3';
-## say "ok # Slice operation";
+# Slice
+my @slice = @hash{'key2', 'key3'};
+print "not " if @slice != 2 or $slice[0] ne 'value2' or $slice[1] ne 'value3';
+say "ok # Slice operation";
 
 ## # Slice delete
 ## delete @hash{'key2', 'key3'};
