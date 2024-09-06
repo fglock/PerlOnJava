@@ -478,6 +478,7 @@ public class Parser {
                             block = new AnonSubNode(null, null, null, block, false, tokenIndex);
                         }
                         return new BinaryOperatorNode(token.text, block, operand, tokenIndex);
+                    case "reverse":
                     case "splice":
                         operand = parseZeroOrMoreList(0, false, true, false, false);
                         return new OperatorNode(token.text, operand, tokenIndex);
