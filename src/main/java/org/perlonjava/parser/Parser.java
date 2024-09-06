@@ -775,7 +775,7 @@ public class Parser {
                         return new BinaryOperatorNode(token.text, left, right, tokenIndex);
                     case "{":
                         consume();
-                        right = new HashLiteralNode(parseList("}", 1), tokenIndex);
+                        right = new HashLiteralNode(parseHashSubscript(), tokenIndex);
                         return new BinaryOperatorNode(token.text, left, right, tokenIndex);
                     case "[":
                         consume();
@@ -798,7 +798,7 @@ public class Parser {
                 right = new ListNode(parseList(")", 0), tokenIndex);
                 return new BinaryOperatorNode(token.text, left, right, tokenIndex);
             case "{":
-                right = new HashLiteralNode(parseList("}", 1), tokenIndex);
+                right = new HashLiteralNode(parseHashSubscript(), tokenIndex);
                 return new BinaryOperatorNode(token.text, left, right, tokenIndex);
             case "[":
                 right = new ArrayLiteralNode(parseList("]", 1), tokenIndex);
@@ -1163,4 +1163,23 @@ public class Parser {
 
         return expr.elements;
     }
+
+    private List<Node> parseHashSubscript() {
+        ctx.logDebug("parseHashSubscript start");
+        int currentIndex = tokenIndex;
+
+        LexerToken ident = consume();
+        LexerToken close = consume();
+        if (ident.type == LexerTokenType.IDENTIFIER && close.text.equals("}")) {
+            // autoquote
+            List<Node> list = new ArrayList<Node>();
+            list.add( new IdentifierNode(ident.text, currentIndex));
+            return list;
+        }
+
+        // backtrack
+        tokenIndex = currentIndex;
+        return parseList("}", 1);
+    }
+
 }

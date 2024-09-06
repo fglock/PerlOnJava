@@ -2036,16 +2036,14 @@ public class EmitterVisitor implements Visitor {
         ctx.logDebug("visit(HashLiteralNode) in context " + ctx.contextType);
         MethodVisitor mv = ctx.mv;
 
-        // Create a new instance of RuntimeHash
-        mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeHash");
-        mv.visitInsn(Opcodes.DUP);
-        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeHash", "<init>", "()V", false);
-
         // Create a RuntimeList
         ListNode listNode = new ListNode(node.elements, node.tokenIndex);
         listNode.accept(this.with(RuntimeContextType.LIST));
 
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeHash", "createHashRef", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/RuntimeHash",
+                "createHashRef",
+                "(Lorg/perlonjava/runtime/RuntimeDataProvider;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
         if (ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP);
