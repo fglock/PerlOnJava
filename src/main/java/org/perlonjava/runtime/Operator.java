@@ -520,4 +520,101 @@ public class Operator {
         String result = str.substring(offset, offset + length);
         return new RuntimeScalar(result);
     }
+
+    /**
+     * Splices the array based on the parameters provided in the RuntimeList.
+     * The RuntimeList should contain the following elements in order:
+     * - OFFSET: The starting position for the splice operation (int).
+     * - LENGTH: The number of elements to be removed (int).
+     * - LIST: The list of elements to be inserted at the splice position (RuntimeList).
+     * <p>
+     * If OFFSET is not provided, it defaults to 0.
+     * If LENGTH is not provided, it defaults to the size of the array.
+     * If LIST is not provided, no elements are inserted.
+     *
+     * @param runtimeArray
+     * @param list         the RuntimeList containing the splice parameters and elements
+     * @return a RuntimeList containing the elements that were removed
+     */
+    public static RuntimeList splice(RuntimeArray runtimeArray, RuntimeList list) {
+        RuntimeList removedElements = new RuntimeList();
+
+        int size = runtimeArray.elements.size();
+
+        int offset;
+        if (!list.elements.isEmpty()) {
+            RuntimeDataProvider value = list.elements.remove(0);
+            offset = value.scalar().getInt();
+        } else {
+            offset = 0;
+        }
+
+        int length;
+        if (!list.elements.isEmpty()) {
+            RuntimeDataProvider value = list.elements.remove(0);
+            length = value.scalar().getInt();
+        } else {
+            length = size;
+        }
+
+        // Handle negative offset
+        if (offset < 0) {
+            offset = size + offset;
+        }
+
+        // Ensure offset is within bounds
+        if (offset > size) {
+            offset = size;
+        }
+
+        // Handle negative length
+        if (length < 0) {
+            length = size - offset + length;
+        }
+
+        // Ensure length is within bounds
+        length = Math.min(length, size - offset);
+
+        // Remove elements
+        for (int i = 0; i < length && offset < runtimeArray.elements.size(); i++) {
+            removedElements.elements.add(runtimeArray.elements.remove(offset));
+        }
+
+        // Add new elements
+        if (!list.elements.isEmpty()) {
+            RuntimeArray arr = new RuntimeArray();
+            arr.push(list);
+            runtimeArray.elements.addAll(offset, arr.elements);
+        }
+
+        return removedElements;
+    }
+
+    public static RuntimeDataProvider reverse(RuntimeDataProvider value, int ctx) {
+        if (ctx == RuntimeContextType.SCALAR) {
+            StringBuilder sb = new StringBuilder();
+            Iterator<RuntimeScalar> iterator = value.iterator();
+            while (iterator.hasNext()) {
+                sb.append(iterator.next().toString());
+            }
+            return new RuntimeScalar(sb.reverse().toString());
+        } else {
+            RuntimeList result = new RuntimeList();
+            List<RuntimeBaseEntity> outElements = result.elements;
+            Iterator<RuntimeScalar> iterator = value.iterator();
+
+            // First, collect all elements
+            List<RuntimeScalar> tempList = new ArrayList<>();
+            while (iterator.hasNext()) {
+                tempList.add(iterator.next());
+            }
+
+            // Then add them in reverse order
+            for (int i = tempList.size() - 1; i >= 0; i--) {
+                outElements.add(tempList.get(i));
+            }
+
+            return result;
+        }
+    }
 }
