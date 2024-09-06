@@ -170,6 +170,34 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         return result;
     }
 
+    public RuntimeDataProvider reverse(RuntimeList value, int ctx) {
+        if (ctx == RuntimeContextType.SCALAR) {
+            StringBuilder sb = new StringBuilder();
+            Iterator<RuntimeScalar> iterator = value.iterator();
+            while (iterator.hasNext()) {
+                sb.append(iterator.next().toString());
+            }
+            return new RuntimeScalar(sb.reverse().toString());
+        } else {
+            RuntimeList result = new RuntimeList();
+            List<RuntimeBaseEntity> outElements = result.elements;
+            Iterator<RuntimeScalar> iterator = value.iterator();
+
+            // First, collect all elements
+            List<RuntimeScalar> tempList = new ArrayList<>();
+            while (iterator.hasNext()) {
+                tempList.add(iterator.next());
+            }
+
+            // Then add them in reverse order
+            for (int i = tempList.size() - 1; i >= 0; i--) {
+                outElements.add(tempList.get(i));
+            }
+
+            return result;
+        }
+    }
+
     /**
      * Splices the array based on the parameters provided in the RuntimeList.
      * The RuntimeList should contain the following elements in order:
