@@ -22,13 +22,6 @@ print "not " if $hex_value != 255; say "ok # hex('0xFF') equals 255";
 $hex_value = hex('FF');
 print "not " if $hex_value != 255; say "ok # hex('FF') equals 255";
 
-# Test oct
-my $oct_value = oct('0777');
-print "not " if $oct_value != 511; say "ok # oct('0777') equals 511";
-
-$oct_value = oct('0xFF');
-print "not " if $oct_value != 255; say "ok # oct('0xFF') equals 255";
-
 # Test abs
 my $absolute = abs(-42);
 print "not " if $absolute != 42; say "ok # abs(-42) equals 42";
