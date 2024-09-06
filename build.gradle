@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'jvm-test-suite'
     id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
 
@@ -7,8 +8,9 @@ group = 'org.perlonjava'
 version = '1.0-SNAPSHOT'
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_11
-    targetCompatibility = JavaVersion.VERSION_11
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(11)
+    }
 }
 
 repositories {
@@ -18,12 +20,17 @@ repositories {
 dependencies {
     implementation 'org.ow2.asm:asm:9.7'
     implementation 'org.ow2.asm:asm-util:9.7'
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
-    testImplementation 'junit:junit:4.13.2'
-    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
 }
 
-tasks.withType(JavaCompile) {
+testing {
+    suites {
+        test {
+            useJUnitJupiter('5.9.2')
+        }
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
     options.compilerArgs << '-Xlint:-options'
 }
 
@@ -37,7 +44,6 @@ shadowJar {
     exclude 'META-INF/MANIFEST.MF'
 }
 
-tasks.build {
+tasks.named('build') {
     dependsOn shadowJar
 }
-

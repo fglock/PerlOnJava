@@ -1,90 +1,70 @@
 package org.perlonjava;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
 
-import java.io.*;
-import java.util.Arrays;
-import java.util.Collection;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.PrintStream;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
-
-@RunWith(Parameterized.class)
 public class PerlExecutionTest {
 
-    private final String filename;
+    private PrintStream originalOut;
+    private ByteArrayOutputStream outputStream;
 
-    public PerlExecutionTest(String filename) {
-        this.filename = filename;
+    @BeforeEach
+    void setUp() {
+        originalOut = System.out;
+        outputStream = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(outputStream));
     }
 
-    @Parameterized.Parameters(name = "{index}: testUsingResourceFile({0})")
-    public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][]{
-                {"demo.pl"},
-                {"operations.pl"},
-                {"wantarray.pl"},
-                {"typeglob.pl"},
-                {"regex.pl"},
-                {"regexreplace.pl"},
-                {"split.pl"},
-                {"transliterate.pl"}
-        });
+    @AfterEach
+    void tearDown() {
+        System.setOut(originalOut);
     }
 
-    @Test
-    public void testUsingResourceFile() throws Exception {
+    @ParameterizedTest(name = "Test using resource file: {0}")
+    @ValueSource(strings = {
+            "demo.pl",
+            "operations.pl",
+            "wantarray.pl",
+            "typeglob.pl",
+            "regex.pl",
+            "regexreplace.pl",
+            "split.pl",
+            "transliterate.pl"
+    })
+    void testUsingResourceFile(String filename) {
         // Load the file from the resources folder
         InputStream inputStream = getClass().getClassLoader().getResourceAsStream(filename);
         assertNotNull(inputStream);
 
-        // Read the file content
-        StringBuilder sb = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                sb.append(line).append("\n");
-            }
-        }
-
-        ArgumentParser.CompilerOptions options = new ArgumentParser.CompilerOptions();
-        options.code = sb.toString();
-        options.fileName = filename;
-
-        // Capture the output of the Perl execution
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        PrintStream originalOut = System.out;
-        System.setOut(new PrintStream(outputStream));
-
         try {
-            PerlLanguageProvider.executePerlCode(options);
+            // Read the file content
+            String content = new String(inputStream.readAllBytes());
+            ArgumentParser.CompilerOptions options = new ArgumentParser.CompilerOptions();
+            options.code = content;
+            options.fileName = filename;
 
-            // Restore the original System.out
-            System.setOut(originalOut);
+            // Execute Perl code
+            PerlLanguageProvider.executePerlCode(options);
 
             // Check the captured output for "not ok"
             String output = outputStream.toString();
-            boolean containsNotOk = false;
-            try (BufferedReader outputReader = new BufferedReader(new InputStreamReader(new ByteArrayInputStream(output.getBytes())))) {
-                String outputLine;
-                while ((outputLine = outputReader.readLine()) != null) {
-                    if (outputLine.contains("not ok")) {
-                        containsNotOk = true;
-                        System.out.println("Debug: Found 'not ok' in output line: " + outputLine);
-                        break;
-                    }
-                }
-            }
-            assertFalse("Output should not contain 'not ok'", containsNotOk);
+            assertFalse(output.lines().anyMatch(line -> line.contains("not ok")),
+                    "Output should not contain 'not ok'");
+        } catch (Exception e) {
+            // Log the exception for debugging purposes
+            e.printStackTrace();
 
-        } catch (Throwable t) {
-            // Restore the original System.out in case of an exception
-            System.setOut(originalOut);
-            fail("Exception should not be thrown: " + t.getMessage());
+            // Assert on the exception
+            fail("Execution of " + filename + " failed: " + e.getMessage());
         }
     }
 }
-

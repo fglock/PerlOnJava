@@ -46,7 +46,7 @@ public class PerlLanguageProvider {
      * @return The result of the Perl code execution.
      * @throws Throwable If an error occurs during execution.
      */
-    public static RuntimeList executePerlCode(ArgumentParser.CompilerOptions compilerOptions) throws Throwable {
+    public static RuntimeList executePerlCode(ArgumentParser.CompilerOptions compilerOptions) throws Exception {
 
         ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
         // Enter a new scope in the symbol table and add special Perl variables
@@ -128,7 +128,12 @@ public class PerlLanguageProvider {
         MethodHandle invoker = callSite.dynamicInvoker();
 
         // Invoke the method
-        RuntimeList result = (RuntimeList) invoker.invoke(instance, new RuntimeArray(), RuntimeContextType.SCALAR);
+        RuntimeList result;
+        try {
+            result = (RuntimeList) invoker.invoke(instance, new RuntimeArray(), RuntimeContextType.SCALAR);
+        } catch (Throwable t) {
+            throw new RuntimeException("Error executing Perl code for " + ctx.compilerOptions.fileName + ": " + t.getMessage(), t);
+        }
 
         // Print the result of the execution
         ctx.logDebug("Result of generatedMethod: " + result);
