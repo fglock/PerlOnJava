@@ -617,4 +617,26 @@ public class Operator {
             return result;
         }
     }
+
+    public static RuntimeDataProvider repeat(RuntimeDataProvider value, RuntimeScalar timesScalar, int ctx) {
+        int times = timesScalar.getInt();
+        if (ctx == RuntimeContextType.SCALAR || value instanceof RuntimeScalar) {
+            StringBuilder sb = new StringBuilder();
+            Iterator<RuntimeScalar> iterator = value.iterator();
+            while (iterator.hasNext()) {
+                sb.append(iterator.next().toString());
+            }
+            return new RuntimeScalar(sb.toString().repeat(Math.max(0, times)));
+        } else {
+            RuntimeList result = new RuntimeList();
+            List<RuntimeBaseEntity> outElements = result.elements;
+            for (int i = 0; i < times; i++) {
+                Iterator<RuntimeScalar> iterator = value.iterator();
+                while (iterator.hasNext()) {
+                    outElements.add(iterator.next());
+                }
+            }
+            return result;
+        }
+    }
 }
