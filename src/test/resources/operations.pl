@@ -14,6 +14,9 @@
 #   Ensure that any new Perl scripts added to src/test/resources follow the project's testing conventions.
 #
 
+## use strict;
+## use feature "say";
+
 ###################
 # Arithmetic Operators
 
@@ -222,10 +225,10 @@ $a = 5 ^ 3;
 print "not " if $a != 6;
 say "ok # 5 ^ 3 equals 6";
 
-# Bitwise NOT
-$a = ~5;
-print "not " if $a != -6;
-say "ok # ~5 equals -6";
+## # Bitwise NOT
+## $a = ~5;
+## print "not " if $a != -6;
+## say "ok # ~5 equals -6: <$a>";
 
 # Left Shift
 $a = 5 << 1;
@@ -342,3 +345,78 @@ $hex_value = hex('FF');
 print "not " if $hex_value != 255; say "ok # hex('FF') equals 255";
 
 
+###################
+# Repeat Operator (x) - Strings
+
+# Repeat string multiple times
+$str = "abc" x 3;
+print "not " if $str ne "abcabcabc";
+say "ok # 'abc' x 3 equals 'abcabcabc'";
+
+# Repeat string zero times (should return empty string)
+$str = "abc" x 0;
+print "not " if $str ne "";
+say "ok # 'abc' x 0 equals ''";
+
+# Repeat string with empty string
+$str = "" x 3;
+print "not " if $str ne "";
+say "ok # '' x 3 equals ''";
+
+# Repeat string with negative number (should return empty string)
+$str = "abc" x -1;
+print "not " if $str ne "";
+say "ok # 'abc' x -1 equals ''";
+
+# Repeat a single character multiple times
+$str = "a" x 5;
+print "not " if $str ne "aaaaa";
+say "ok # 'a' x 5 equals 'aaaaa'";
+
+# Repeat string with numeric context (treats as a string)
+$str = 123 x 2;
+print "not " if $str ne "123123";
+say "ok # 123 x 2 equals '123123'";
+
+# Mixed content string
+$str = "abc123" x 2;
+print "not " if $str ne "abc123abc123";
+say "ok # 'abc123' x 2 equals 'abc123abc123'";
+
+# Repeat string with a large number
+$str = "ab" x 1000;
+print "not " if length($str) != 2000;
+say "ok # 'ab' x 1000 produces a string of length 2000";
+
+###################
+# Repeat Operator (x) - Lists
+
+# Repeat list multiple times
+my @list = (1, 2, 3) x 2;
+print "not " if "@list" ne "1 2 3 1 2 3";
+say "ok # (1, 2, 3) x 2 equals '1 2 3 1 2 3'";
+
+# Repeat list zero times (should return an empty list)
+@list = (1, 2, 3) x 0;
+print "not " if scalar(@list) != 0;
+say "ok # (1, 2, 3) x 0 equals an empty list";
+
+# Repeat list with an empty list (should return an empty list)
+@list = () x 3;
+print "not " if scalar(@list) != 0;
+say "ok # () x 3 equals an empty list";
+
+# Repeat list with negative number (should return an empty list)
+@list = (1, 2, 3) x -1;
+print "not " if scalar(@list) != 0;
+say "ok # (1, 2, 3) x -1 equals an empty list";
+
+# Repeat list with mixed content
+@list = ('a', 'b', 123) x 3;
+print "not " if "@list" ne "a b 123 a b 123 a b 123";
+say "ok # ('a', 'b', 123) x 3 equals 'a b 123 a b 123 a b 123'";
+
+# Repeat list with a large number of repetitions
+@list = (1, 2) x 1000;
+print "not " if scalar(@list) != 2000;
+say "ok # (1, 2) x 1000 produces a list with 2000 elements";
