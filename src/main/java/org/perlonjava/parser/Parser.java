@@ -1054,7 +1054,8 @@ public class Parser {
             fileHandle = parsePrimary();
             if (!hasBracket) {
                 // assert that is not followed by infix
-                if (INFIX_OP.contains(peek().text)) {
+                String nextText = peek().text;
+                if (INFIX_OP.contains(nextText) || "{[".contains(nextText) || "->".equals(nextText)) {
                     // print $fh + 2;  # not a file handle
                     fileHandle = null;
                 }
