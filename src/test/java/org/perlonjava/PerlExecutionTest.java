@@ -38,7 +38,9 @@ public class PerlExecutionTest {
             "regex.pl",
             "regexreplace.pl",
             "split.pl",
-            "transliterate.pl"
+            "transliterate.pl",
+            "array.pl",
+            "hash.pl"
     })
     void testUsingResourceFile(String filename) {
         // Load the file from the resources folder
