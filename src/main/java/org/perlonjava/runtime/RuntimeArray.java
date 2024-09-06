@@ -84,8 +84,8 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
             index = elements.size() + index; // Handle negative indices
         }
         if (index < 0 || index >= elements.size()) {
-            // XXX TODO autovivification
-            return new RuntimeScalar(); // Return undefined if out of bounds
+            // lazy autovivification
+            return new RuntimeArrayProxy(this, index);
         }
         return (RuntimeScalar) elements.get(index);
     }
@@ -97,8 +97,8 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
             index = elements.size() + index; // Handle negative indices
         }
         if (index < 0 || index >= elements.size()) {
-            // XXX TODO autovivification
-            return new RuntimeScalar(); // Return undefined if out of bounds
+            // lazy autovivification
+            return new RuntimeArrayProxy(this, index);
         }
         return (RuntimeScalar) elements.get(index);
     }
