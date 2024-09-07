@@ -402,6 +402,10 @@ public class Parser {
                         return new OperatorNode(token.text, operand, tokenIndex);
                     case "abs":
                     case "log":
+                    case "sqrt":
+                    case "cos":
+                    case "sin":
+                    case "exp":
                     case "rand":
                     case "undef":
                     case "quotemeta":
@@ -445,6 +449,9 @@ public class Parser {
                             }
                         }
                         return new OperatorNode(text, operand, tokenIndex);
+                    case "atan2":
+                        operand = parseZeroOrMoreList(2, false, true, false, false);
+                        return new OperatorNode("atan2", operand, tokenIndex);
                     case "bless":
                         operand = parseZeroOrMoreList(1, false, true, false, false);
                         Node ref = ((ListNode) operand).elements.get(0);
