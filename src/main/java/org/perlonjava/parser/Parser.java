@@ -412,6 +412,8 @@ public class Parser {
                     case "shift":
                     case "sleep":
                     case "int":
+                    case "chr":
+                    case "ord":
                     case "length":
                     case "defined":
                         String text = token.text;
@@ -822,6 +824,23 @@ public class Parser {
             return new LexerToken(LexerTokenType.EOF, "");
         }
         return tokens.get(tokenIndex);
+    }
+
+    public String comsumeChar() {
+        String str;
+        if (tokenIndex >= tokens.size()) {
+            str = "";
+        } else {
+            LexerToken token = tokens.get(tokenIndex);
+            if (token.text.length() == 1) {
+                str = token.text;
+                tokenIndex++;
+            } else {
+                str = token.text.substring(0, 1);
+                token.text = token.text.substring(1);
+            }
+        }
+        return str;
     }
 
     public LexerToken consume() {

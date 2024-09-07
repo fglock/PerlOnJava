@@ -319,13 +319,7 @@ public class StringParser {
             str.append((char) Integer.parseInt(escape, 8));
             return;
         }
-        if (token.text.length() == 1) {
-            escape = token.text;
-            parser.tokenIndex++;
-        } else {
-            escape = token.text.substring(0, 1);
-            token.text = token.text.substring(1);
-        }
+        escape = parser.comsumeChar();
         switch (escape) {
             case "\\":
             case "\"":
@@ -351,6 +345,18 @@ public class StringParser {
                 break;
             case "e":
                 str.append((char) 27);  // Append escape
+                break;
+            case "c":
+                String ctl = parser.comsumeChar();
+                if (!ctl.isEmpty()) {
+                    //  \cA is control-A char(1)
+                    char chr = ctl.charAt(0);
+                    if (chr >= 'a' && chr <= 'z') {
+                        str.append((char) (chr - 'a' + 1));
+                    } else {
+                        str.append((char) (chr - 'A' + 1));
+                    }
+                }
                 break;
             case "E":
                 break;  // Marks the end of \Q sequence
