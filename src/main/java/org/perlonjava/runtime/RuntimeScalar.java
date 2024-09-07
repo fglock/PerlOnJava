@@ -1109,8 +1109,28 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(Math.log(this.getDouble()));
     }
 
+    public RuntimeScalar sqrt() {
+        return new RuntimeScalar(Math.sqrt(this.getDouble()));
+    }
+
+    public RuntimeScalar cos() {
+        return new RuntimeScalar(Math.cos(this.getDouble()));
+    }
+
+    public RuntimeScalar sin() {
+        return new RuntimeScalar(Math.sin(this.getDouble()));
+    }
+
+    public RuntimeScalar exp() {
+        return new RuntimeScalar(Math.exp(this.getDouble()));
+    }
+
     public RuntimeScalar pow(RuntimeScalar arg) {
         return new RuntimeScalar(Math.pow(this.getDouble(), arg.getDouble()));
+    }
+
+    public RuntimeScalar atan2(RuntimeScalar arg) {
+        return new RuntimeScalar(Math.atan2(this.getDouble(), arg.getDouble()));
     }
 
     public RuntimeScalar abs() {
