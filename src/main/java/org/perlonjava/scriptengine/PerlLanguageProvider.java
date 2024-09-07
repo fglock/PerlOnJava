@@ -69,6 +69,7 @@ public class PerlLanguageProvider {
 
 
         GlobalContext.initializeGlobals();
+        GlobalContext.getGlobalArray("main::ARGV").elements = compilerOptions.argumentList.elements;
 
         ctx.logDebug("parse code: " + compilerOptions.code);
         ctx.logDebug("  call context " + ctx.contextType);
