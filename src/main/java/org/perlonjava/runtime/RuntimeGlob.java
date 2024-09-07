@@ -98,6 +98,10 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
         return ret;
     }
 
+    public boolean getBoolean() {
+        return true;
+    }
+
     // Create a reference
     public RuntimeScalar createReference() {
         RuntimeScalar ret = new RuntimeScalar();
@@ -137,6 +141,10 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
     // values() operator
     public RuntimeArray values() {
         throw new IllegalStateException("Type of arg 1 to values must be hash or array");
+    }
+
+    public RuntimeList each() {
+        throw new IllegalStateException("Type of arg 1 to each must be hash or array");
     }
 
     // Method to return an iterator

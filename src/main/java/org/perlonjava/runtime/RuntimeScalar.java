@@ -1288,6 +1288,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         throw new IllegalStateException("Type of arg 1 to values must be hash or array");
     }
 
+    public RuntimeList each() {
+        throw new IllegalStateException("Type of arg 1 to each must be hash or array");
+    }
+
     // Method to return an iterator
     public Iterator<RuntimeScalar> iterator() {
         return new RuntimeScalarIterator(this);

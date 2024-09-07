@@ -406,7 +406,7 @@ public class EmitterVisitor implements Visitor {
         // stack is [left, left]
 
         // Convert the result to a boolean
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "getBoolean", "()Z", false);
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getBoolean", "()Z", true);
         // stack is [left, boolean]
 
         // If the boolean value is true, jump to endLabel (we keep the left operand)
@@ -445,7 +445,7 @@ public class EmitterVisitor implements Visitor {
         // stack is [left, left]
 
         // Convert the result to a boolean
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "getBoolean", "()Z", false);
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getBoolean", "()Z", true);
         // stack is [left, boolean]
 
         // If the left operand boolean value is true, return left operand
@@ -902,6 +902,9 @@ public class EmitterVisitor implements Visitor {
             case "values":
                 handleKeysOperator(node, operator);
                 break;
+            case "each":
+                handleEachOperator(node, operator);
+                break;
             case "our":
             case "my":
                 handleMyOperator(node, operator);
@@ -1141,6 +1144,14 @@ public class EmitterVisitor implements Visitor {
             // if context is not void, return an empty list
             ListNode listNode = new ListNode(node.tokenIndex);
             listNode.accept(this);
+        }
+    }
+
+    private void handleEachOperator(OperatorNode node, String operator) {
+        node.operand.accept(this.with(RuntimeContextType.LIST));
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", operator, "()Lorg/perlonjava/runtime/RuntimeList;", true);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
         }
     }
 
@@ -1885,7 +1896,7 @@ public class EmitterVisitor implements Visitor {
             node.condition.accept(this.with(RuntimeContextType.SCALAR));
 
             // Convert the result to a boolean
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "getBoolean", "()Z", false);
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getBoolean", "()Z", true);
 
             // Jump to the end label if the condition is false
             mv.visitJumpInsn(Opcodes.IFEQ, endLabel);
@@ -1925,7 +1936,7 @@ public class EmitterVisitor implements Visitor {
         node.condition.accept(this.with(RuntimeContextType.SCALAR));
 
         // Convert the result to a boolean
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "getBoolean", "()Z", false);
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getBoolean", "()Z", true);
 
         // Jump to the else label if the condition is false
         ctx.mv.visitJumpInsn(node.operator.equals("unless") ? Opcodes.IFNE : Opcodes.IFEQ, elseLabel);
@@ -1970,7 +1981,7 @@ public class EmitterVisitor implements Visitor {
         node.condition.accept(this.with(RuntimeContextType.SCALAR));
 
         // Convert the result to a boolean
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "getBoolean", "()Z", false);
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getBoolean", "()Z", true);
 
         // Jump to the else label if the condition is false
         ctx.mv.visitJumpInsn(Opcodes.IFEQ, elseLabel);
