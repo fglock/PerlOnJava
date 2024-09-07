@@ -1169,6 +1169,30 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(quoted.toString());
     }
 
+    public RuntimeScalar lc() {
+        return new RuntimeScalar(this.toString().toLowerCase());
+    }
+
+    public RuntimeScalar lcfirst() {
+        String str = this.toString();
+        if (str.isEmpty()) {
+            return new RuntimeScalar(str);
+        }
+        return new RuntimeScalar(str.substring(0, 1).toLowerCase() + str.substring(1));
+    }
+
+    public RuntimeScalar uc() {
+        return new RuntimeScalar(this.toString().toUpperCase());
+    }
+
+    public RuntimeScalar ucfirst() {
+        String str = this.toString();
+        if (str.isEmpty()) {
+            return new RuntimeScalar(str);
+        }
+        return new RuntimeScalar(str.substring(0, 1).toUpperCase() + str.substring(1));
+    }
+
     public RuntimeScalar oct() {
         String expr = this.toString();
         int result = 0;

@@ -409,6 +409,10 @@ public class Parser {
             case "int":
             case "chr":
             case "ord":
+            case "lc":
+            case "lcfirst":
+            case "uc":
+            case "ucfirst":
             case "length":
             case "defined":
                 String text = token.text;
