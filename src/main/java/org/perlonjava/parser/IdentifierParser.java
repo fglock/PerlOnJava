@@ -69,7 +69,7 @@ public class IdentifierParser {
                     // `$^` can be followed by an optional uppercase identifier: `$^A`
                     //  ^A is control-A char(1)
                     String str = nextToken.text;
-                    variableName.append( Character.toString( str.charAt(0) - 'A' + 1) ).append( str.substring(1));
+                    variableName.append(Character.toString(str.charAt(0) - 'A' + 1)).append(str.substring(1));
                     parser.tokenIndex += 2;
                     return variableName.toString();
                 }

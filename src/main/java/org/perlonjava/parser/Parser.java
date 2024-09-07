@@ -297,7 +297,7 @@ public class Parser {
         }
 
         // Handle the parameter list for the subroutine call
-        Node arguments = null;
+        Node arguments;
         if (prototype == null) {
             // no prototype
             arguments = parseZeroOrMoreList(0, false, true, false, false);
@@ -371,6 +371,215 @@ public class Parser {
         return left;
     }
 
+    public Node parseCoreOperator(LexerToken token) {
+        Node operand;
+
+        switch (token.text) {
+            case "__LINE__":
+                return new NumberNode(Integer.toString(ctx.errorUtil.getLineNumber(tokenIndex)), tokenIndex);
+            case "__FILE__":
+                return new StringNode(ctx.compilerOptions.fileName, tokenIndex);
+            case "__PACKAGE__":
+                return new StringNode(ctx.symbolTable.getCurrentPackage(), tokenIndex);
+            case "time":
+            case "fork":
+            case "wait":
+            case "wantarray":
+                // Handle operators with zero arguments
+                return new OperatorNode(token.text, null, tokenIndex);
+            case "not":
+                // Handle 'not' keyword as a unary operator with an operand
+                operand = parseExpression(getPrecedence(token.text) + 1);
+                return new OperatorNode(token.text, operand, tokenIndex);
+            case "abs":
+            case "log":
+            case "sqrt":
+            case "cos":
+            case "sin":
+            case "exp":
+            case "rand":
+            case "undef":
+            case "quotemeta":
+            case "ref":
+            case "oct":
+            case "hex":
+            case "pop":
+            case "shift":
+            case "sleep":
+            case "int":
+            case "chr":
+            case "ord":
+            case "length":
+            case "defined":
+                String text = token.text;
+                operand = parseZeroOrOneList(0);
+                if (((ListNode) operand).elements.isEmpty()) {
+                    switch (text) {
+                        case "sleep":
+                            operand = new NumberNode(Long.toString(Long.MAX_VALUE), tokenIndex);
+                            break;
+                        case "pop":
+                        case "shift":
+                            // create `@_` variable
+                            // XXX in main program, use `@ARGV`
+                            operand = new OperatorNode(
+                                    "@", new IdentifierNode("_", tokenIndex), tokenIndex);
+                            break;
+                        case "undef":
+                            operand = null;
+                            break;  // leave it empty
+                        case "rand":
+                            // create "1"
+                            operand = new NumberNode("1", tokenIndex);
+                            break;
+                        default:
+                            // create `$_` variable
+                            operand = new OperatorNode(
+                                    "$", new IdentifierNode("_", tokenIndex), tokenIndex);
+                            break;
+                    }
+                }
+                return new OperatorNode(text, operand, tokenIndex);
+            case "atan2":
+                operand = parseZeroOrMoreList(2, false, true, false, false);
+                return new OperatorNode("atan2", operand, tokenIndex);
+            case "bless":
+                operand = parseZeroOrMoreList(1, false, true, false, false);
+                Node ref = ((ListNode) operand).elements.get(0);
+                Node className = ((ListNode) operand).elements.get(1);
+                if (className == null) {
+                    className = new StringNode("main", tokenIndex);
+                }
+                return new BinaryOperatorNode("bless", ref, className, tokenIndex);
+            case "split":
+                // TODO Handle 'split' keyword
+                // RuntimeList split(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar limitArg)
+                operand = parseZeroOrMoreList(1, false, true, false, true);
+                Node separator = ((ListNode) operand).elements.remove(0);
+                if (separator instanceof OperatorNode) {
+                    if (((OperatorNode) separator).operator.equals("matchRegex")) {
+                        ((OperatorNode) separator).operator = "quoteRegex";
+                    }
+                }
+                return new BinaryOperatorNode(token.text, separator, operand, tokenIndex);
+            case "push":
+            case "unshift":
+            case "join":
+            case "substr":
+            case "sprintf":
+                // Handle 'join' keyword as a Binary operator with a RuntimeList operand
+                operand = parseZeroOrMoreList(1, false, true, false, false);
+                separator = ((ListNode) operand).elements.remove(0);
+                return new BinaryOperatorNode(token.text, separator, operand, tokenIndex);
+            case "sort":
+            case "map":
+            case "grep":
+                // Handle 'sort' keyword as a Binary operator with a Code and List operands
+                operand = parseZeroOrMoreList(1, true, false, false, false);
+                // transform:   { 123 }
+                // into:        sub { 123 }
+                Node block = ((ListNode) operand).handle;
+                ((ListNode) operand).handle = null;
+                if (block instanceof BlockNode) {
+                    block = new AnonSubNode(null, null, null, block, false, tokenIndex);
+                }
+                return new BinaryOperatorNode(token.text, block, operand, tokenIndex);
+            case "reverse":
+            case "splice":
+                operand = parseZeroOrMoreList(0, false, true, false, false);
+                return new OperatorNode(token.text, operand, tokenIndex);
+            case "readline":
+            case "eof":
+            case "tell":
+            case "getc":
+            case "open":
+            case "close":
+            case "seek":
+                // Handle 'open' keyword as a Binary operator with a FileHandle and List operands
+                operand = parseZeroOrMoreList(0, false, true, false, false);
+                // Node handle = ((ListNode) operand).handle;
+                // ((ListNode) operand).handle = null;
+                Node handle = ((ListNode) operand).elements.remove(0);
+                if (handle == null) {
+                    handle = new IdentifierNode("main::STDOUT", tokenIndex);
+                }
+                return new BinaryOperatorNode(token.text, handle, operand, tokenIndex);
+            case "printf":
+            case "print":
+            case "say":
+                // Handle 'print' keyword as a Binary operator with a FileHandle and List operands
+                operand = parseZeroOrMoreList(0, false, true, true, false);
+                handle = ((ListNode) operand).handle;
+                ((ListNode) operand).handle = null;
+                if (handle == null) {
+                    handle = new IdentifierNode("main::STDOUT", tokenIndex);
+                }
+                return new BinaryOperatorNode(token.text, handle, operand, tokenIndex);
+            case "delete":
+            case "exists":
+                operand = parseZeroOrOneList(1);
+                return new OperatorNode(token.text, operand, tokenIndex);
+            case "scalar":
+            case "values":
+            case "keys":
+                operand = parsePrimary();
+                return new OperatorNode(token.text, operand, tokenIndex);
+            case "our":
+            case "my":
+                // Handle 'my' keyword as a unary operator with an operand
+                operand = parsePrimary();
+                return new OperatorNode(token.text, operand, tokenIndex);
+            case "return":
+                // Handle 'return' keyword as a unary operator with an operand;
+                // Parentheses are ignored.
+                // operand = parseExpression(getPrecedence("print") + 1);
+                operand = parseZeroOrMoreList(0, false, false, false, false);
+                return new OperatorNode("return", operand, tokenIndex);
+            case "eval":
+                // Handle 'eval' keyword which can be followed by a block or an expression
+                token = peek();
+                if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
+                    // If the next token is '{', parse a block
+                    consume(LexerTokenType.OPERATOR, "{");
+                    block = parseBlock();
+                    consume(LexerTokenType.OPERATOR, "}");
+                    // transform:  eval { 123 }
+                    // into:  sub { 123 }->()  with useTryCatch flag
+                    return new BinaryOperatorNode("->",
+                            new AnonSubNode(null, null, null, block, true, tokenIndex), new ListNode(tokenIndex), tokenIndex);
+                } else {
+                    // Otherwise, parse a primary expression
+                    operand = parsePrimary();
+                }
+                return new OperatorNode("eval", operand, tokenIndex);
+            case "do":
+                // Handle 'do' keyword which can be followed by a block or filename
+                token = peek();
+                if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
+                    consume(LexerTokenType.OPERATOR, "{");
+                    block = parseBlock();
+                    consume(LexerTokenType.OPERATOR, "}");
+                    return block;
+                }
+                break;
+            case "sub":
+                // Handle 'sub' keyword to parse an anonymous subroutine
+                return StatementParser.parseSubroutineDefinition(this, false);
+            case "q":
+            case "qq":
+            case "qx":
+            case "qw":
+            case "qr":
+            case "tr":
+            case "y":
+            case "s":
+            case "m":
+                // Handle special-quoted domain-specific arguments
+                return parseRawString(token.text);
+        }
+        return null;
+    }
+
     public Node parsePrimary() {
         int startIndex = tokenIndex;
         LexerToken token = consume(); // Consume the next token from the input
@@ -383,214 +592,20 @@ public class Parser {
                     // Autoquote
                     return new StringNode(token.text, tokenIndex);
                 }
-                switch (token.text) {
-                    case "__LINE__":
-                        return new NumberNode(Integer.toString(ctx.errorUtil.getLineNumber(tokenIndex)), tokenIndex);
-                    case "__FILE__":
-                        return new StringNode(ctx.compilerOptions.fileName, tokenIndex);
-                    case "__PACKAGE__":
-                        return new StringNode(ctx.symbolTable.getCurrentPackage(), tokenIndex);
-                    case "time":
-                    case "fork":
-                    case "wait":
-                    case "wantarray":
-                        // Handle operators with zero arguments
-                        return new OperatorNode(token.text, null, tokenIndex);
-                    case "not":
-                        // Handle 'not' keyword as a unary operator with an operand
-                        operand = parseExpression(getPrecedence(token.text) + 1);
-                        return new OperatorNode(token.text, operand, tokenIndex);
-                    case "abs":
-                    case "log":
-                    case "sqrt":
-                    case "cos":
-                    case "sin":
-                    case "exp":
-                    case "rand":
-                    case "undef":
-                    case "quotemeta":
-                    case "ref":
-                    case "oct":
-                    case "hex":
-                    case "pop":
-                    case "shift":
-                    case "sleep":
-                    case "int":
-                    case "chr":
-                    case "ord":
-                    case "length":
-                    case "defined":
-                        String text = token.text;
-                        operand = parseZeroOrOneList(0);
-                        if (((ListNode) operand).elements.isEmpty()) {
-                            switch (text) {
-                                case "sleep":
-                                    operand = new NumberNode(Long.toString(Long.MAX_VALUE), tokenIndex);
-                                    break;
-                                case "pop":
-                                case "shift":
-                                    // create `@_` variable
-                                    // XXX in main program, use `@ARGV`
-                                    operand = new OperatorNode(
-                                            "@", new IdentifierNode("_", tokenIndex), tokenIndex);
-                                    break;
-                                case "undef":
-                                    operand = null;
-                                    break;  // leave it empty
-                                case "rand":
-                                    // create "1"
-                                    operand = new NumberNode("1", tokenIndex);
-                                    break;
-                                default:
-                                    // create `$_` variable
-                                    operand = new OperatorNode(
-                                            "$", new IdentifierNode("_", tokenIndex), tokenIndex);
-                                    break;
-                            }
-                        }
-                        return new OperatorNode(text, operand, tokenIndex);
-                    case "atan2":
-                        operand = parseZeroOrMoreList(2, false, true, false, false);
-                        return new OperatorNode("atan2", operand, tokenIndex);
-                    case "bless":
-                        operand = parseZeroOrMoreList(1, false, true, false, false);
-                        Node ref = ((ListNode) operand).elements.get(0);
-                        Node className = ((ListNode) operand).elements.get(1);
-                        if (className == null) {
-                            className = new StringNode("main", tokenIndex);
-                        }
-                        return new BinaryOperatorNode("bless", ref, className, tokenIndex);
-                    case "split":
-                        // TODO Handle 'split' keyword
-                        // RuntimeList split(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar limitArg)
-                        operand = parseZeroOrMoreList(1, false, true, false, true);
-                        Node separator = ((ListNode) operand).elements.remove(0);
-                        if (separator instanceof OperatorNode) {
-                            if (((OperatorNode) separator).operator.equals("matchRegex")) {
-                                ((OperatorNode) separator).operator = "quoteRegex";
-                            }
-                        }
-                        return new BinaryOperatorNode(token.text, separator, operand, tokenIndex);
-                    case "push":
-                    case "unshift":
-                    case "join":
-                    case "substr":
-                    case "sprintf":
-                        // Handle 'join' keyword as a Binary operator with a RuntimeList operand
-                        operand = parseZeroOrMoreList(1, false, true, false, false);
-                        separator = ((ListNode) operand).elements.remove(0);
-                        return new BinaryOperatorNode(token.text, separator, operand, tokenIndex);
-                    case "sort":
-                    case "map":
-                    case "grep":
-                        // Handle 'sort' keyword as a Binary operator with a Code and List operands
-                        operand = parseZeroOrMoreList(1, true, false, false, false);
-                        // transform:   { 123 }
-                        // into:        sub { 123 }
-                        Node block = ((ListNode) operand).handle;
-                        ((ListNode) operand).handle = null;
-                        if (block instanceof BlockNode) {
-                            block = new AnonSubNode(null, null, null, block, false, tokenIndex);
-                        }
-                        return new BinaryOperatorNode(token.text, block, operand, tokenIndex);
-                    case "reverse":
-                    case "splice":
-                        operand = parseZeroOrMoreList(0, false, true, false, false);
-                        return new OperatorNode(token.text, operand, tokenIndex);
-                    case "readline":
-                    case "eof":
-                    case "tell":
-                    case "getc":
-                    case "open":
-                    case "close":
-                    case "seek":
-                        // Handle 'open' keyword as a Binary operator with a FileHandle and List operands
-                        operand = parseZeroOrMoreList(0, false, true, false, false);
-                        // Node handle = ((ListNode) operand).handle;
-                        // ((ListNode) operand).handle = null;
-                        Node handle = ((ListNode) operand).elements.remove(0);
-                        if (handle == null) {
-                            handle = new IdentifierNode("main::STDOUT", tokenIndex);
-                        }
-                        return new BinaryOperatorNode(token.text, handle, operand, tokenIndex);
-                    case "printf":
-                    case "print":
-                    case "say":
-                        // Handle 'print' keyword as a Binary operator with a FileHandle and List operands
-                        operand = parseZeroOrMoreList(0, false, true, true, false);
-                        handle = ((ListNode) operand).handle;
-                        ((ListNode) operand).handle = null;
-                        if (handle == null) {
-                            handle = new IdentifierNode("main::STDOUT", tokenIndex);
-                        }
-                        return new BinaryOperatorNode(token.text, handle, operand, tokenIndex);
-                    case "delete":
-                    case "exists":
-                        operand = parseZeroOrOneList(1);
-                        return new OperatorNode(token.text, operand, tokenIndex);
-                    case "scalar":
-                    case "values":
-                    case "keys":
-                        operand = parsePrimary();
-                        return new OperatorNode(token.text, operand, tokenIndex);
-                    case "our":
-                    case "my":
-                        // Handle 'my' keyword as a unary operator with an operand
-                        operand = parsePrimary();
-                        return new OperatorNode(token.text, operand, tokenIndex);
-                    case "return":
-                        // Handle 'return' keyword as a unary operator with an operand;
-                        // Parentheses are ignored.
-                        // operand = parseExpression(getPrecedence("print") + 1);
-                        operand = parseZeroOrMoreList(0, false, false, false, false);
-                        return new OperatorNode("return", operand, tokenIndex);
-                    case "eval":
-                        // Handle 'eval' keyword which can be followed by a block or an expression
-                        token = peek();
-                        if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
-                            // If the next token is '{', parse a block
-                            consume(LexerTokenType.OPERATOR, "{");
-                            block = parseBlock();
-                            consume(LexerTokenType.OPERATOR, "}");
-                            // transform:  eval { 123 }
-                            // into:  sub { 123 }->()  with useTryCatch flag
-                            return new BinaryOperatorNode("->",
-                                    new AnonSubNode(null, null, null, block, true, tokenIndex), new ListNode(tokenIndex), tokenIndex);
-                        } else {
-                            // Otherwise, parse a primary expression
-                            operand = parsePrimary();
-                        }
-                        return new OperatorNode("eval", operand, tokenIndex);
-                    case "do":
-                        // Handle 'do' keyword which can be followed by a block or filename
-                        token = peek();
-                        if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
-                            consume(LexerTokenType.OPERATOR, "{");
-                            block = parseBlock();
-                            consume(LexerTokenType.OPERATOR, "}");
-                            return block;
-                        }
-                        break;
-                    case "sub":
-                        // Handle 'sub' keyword to parse an anonymous subroutine
-                        return StatementParser.parseSubroutineDefinition(this, false);
-                    case "q":
-                    case "qq":
-                    case "qx":
-                    case "qw":
-                    case "qr":
-                    case "tr":
-                    case "y":
-                    case "s":
-                    case "m":
-                        // Handle special-quoted domain-specific arguments
-                        return parseRawString(token.text);
-                    default:
-                        // Handle any other identifier as a subroutine call or identifier node
-                        tokenIndex = startIndex;   // re-parse
-                        return parseSubroutineCall();
+
+                // Try to parse a builtin operation; backtrack if it fails
+                if (token.text.equals("CORE") && nextToken.text.equals("::")) {
+                    consume();  // "::"
+                    token = consume(); // operator
                 }
-                break;
+                Node operation = parseCoreOperator(token);
+                if (operation != null) {
+                    return operation;
+                }
+
+                // Handle any other identifier as a subroutine call or identifier node
+                tokenIndex = startIndex;   // backtrack
+                return parseSubroutineCall();
             case NUMBER:
                 // Handle number literals
                 return NumberParser.parseNumber(this, token);
@@ -1204,8 +1219,8 @@ public class Parser {
         LexerToken close = consume();
         if (ident.type == LexerTokenType.IDENTIFIER && close.text.equals("}")) {
             // autoquote
-            List<Node> list = new ArrayList<Node>();
-            list.add( new IdentifierNode(ident.text, currentIndex));
+            List<Node> list = new ArrayList<>();
+            list.add(new IdentifierNode(ident.text, currentIndex));
             return list;
         }
 
