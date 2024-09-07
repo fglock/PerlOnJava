@@ -67,8 +67,9 @@ public class IdentifierParser {
                 }
                 if (token.text.equals("^") && nextToken.type == LexerTokenType.IDENTIFIER && Character.isUpperCase(nextToken.text.charAt(0))) {
                     // `$^` can be followed by an optional uppercase identifier: `$^A`
-                    variableName.append(token.text);
-                    variableName.append(nextToken.text);
+                    //  ^A is control-A char(1)
+                    String str = nextToken.text;
+                    variableName.append( Character.toString( str.charAt(0) - 'A' + 1) ).append( str.substring(1));
                     parser.tokenIndex += 2;
                     return variableName.toString();
                 }
