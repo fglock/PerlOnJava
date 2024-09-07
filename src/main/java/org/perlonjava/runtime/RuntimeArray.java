@@ -143,7 +143,11 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         return elements.size();
     }
 
-    // Get the list value of the list
+    public boolean getBoolean() {
+        return !elements.isEmpty();
+    }
+
+        // Get the list value of the list
     public RuntimeList getList() {
         return new RuntimeList(this);
     }
@@ -177,6 +181,10 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     // values() operator
     public RuntimeArray values() {
         return this;
+    }
+
+    public RuntimeList each() {
+        throw new RuntimeException("each not implemented for Array");
     }
 
     // Get Array aliases into an Array
