@@ -136,7 +136,7 @@
 - ✔️   **Short-circuit and, or**: Short-circuit logical operators are supported.
 - ✔️   **Low-precedence/high precedence operators**: Logical operators like `not`, `or`, `and` are supported.
 - ✔️   **Ternary operator**: The ternary conditional operator is implemented.
-- ❌  **Compound assignment operators**: Most compound assignment operators are implemented; specifics needed.
+- ✔️   **Compound assignment operators**: Compound assignment operators are implemented.
 - ✔️   **`package` declaration**: `package BLOCK` is also supported.
 - ❌  **`version` objects**: Version objects are not yet supported.
 - ✔️   **Typeglob operations**: Operations like `*x = sub {}` are supported.
