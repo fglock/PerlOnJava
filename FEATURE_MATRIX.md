@@ -38,8 +38,8 @@
 - ✔️   **Numbers with underscores**: Numbers with underscores (e.g., `1_000`) are supported.
 - ✔️   **Numbers in different bases**: Numbers in binary, hex, octal: `0b1010`, `0xAA`, `078`.
 - ✔️   **References**: References to variables and data structures are supported.
-- ❌  **Autovivification**: Some aspects of autovivification are supported, but not fully implemented.
-- ❌  **File handles**: Support for file handles is missing.
+- ✔️   **Autovivification**: Autovivification is implemented.
+- ✔️   **File handles**: Support for file handles is implemented.
 - ❌  **Tied Scalars**: Support for tying scalars to classes is missing.
 - ❌  **Cached string/numeric conversions; dualvars**: Caching and dual variable support are not implemented.
 - ❌  **Unicode**: Support for non-Unicode strings is not implemented.
@@ -91,7 +91,7 @@
 - ✔️   **Array literals**: Array literals are supported.
 - ❌  **List operator `..` and `...`**: List constructors are partially implemented.
 - ❌  **Tied Arrays**: Tied arrays are not yet implemented.
-- ❌  **Basic Hash Operations**: `keys`, `values` are implemented. `each`, `delete`, `exists` are missing.
+- ❌  **Basic Hash Operations**: `keys`, `values`, `delete`, `exists` are implemented. `each` is missing.
 - ✔️   **Hash literals**: Hash literals are supported.
 - ❌  **Tied Hashes**: Tied hashes are not yet implemented.
 
@@ -131,7 +131,7 @@
 - ✔️   **`do` block**: `do` blocks are supported.
 - ❌  **`do` file**: File execution using `do` is not yet implemented.
 - ✔️   **`print` operators**: `print`, `printf` and `say` statements are implemented, with support for file handles.
-- ❌  **`printf` and `sprintf`**: String formatting is not yet implemented.
+- ✔️   **`printf` and `sprintf`**: String formatting is implemented.
 - ✔️   **`I/O operators**: `open`, `readline`, `eof`, `close` are implemented.
 - ✔️   **Short-circuit and, or**: Short-circuit logical operators are supported.
 - ✔️   **Low-precedence/high precedence operators**: Logical operators like `not`, `or`, `and` are supported.
