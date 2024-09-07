@@ -312,7 +312,7 @@ public class EmitterVisitor implements Visitor {
         throw new RuntimeException("Unexpected infix operator: " + operator);
     }
 
-    private void handleRepeat(BinaryOperatorNode node ) {
+    private void handleRepeat(BinaryOperatorNode node) {
         Node left = node.left;
         if (node.left instanceof ListNode) {
             node.left.accept(this.with(RuntimeContextType.LIST));

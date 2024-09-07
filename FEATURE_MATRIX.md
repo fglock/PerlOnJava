@@ -107,7 +107,8 @@
 - ❌  **Subroutine attributes**: Subroutine attributes are not yet supported.
 - ❌  **`lvalue` subroutines**: Subroutines with attribute `:lvalue` are not yet supported.
 - ❌  **Lexical subroutines**: Subroutines declared `my`, `state`, or `our` are not yet supported.
-- ❌  **CORE namespace**: `CORE` and `CORE::GLOBAL` are not implemented.
+- ✔️   **CORE namespace**: `CORE` is implemented.
+- ❌  **CORE::GLOBAL namespace**: `CORE::GLOBAL` is not implemented.
 
 ## Regular Expressions
 - ✔️   **Basic Matching**: Operators `qr//`, `m//`, `s///`, `split` are implemented.
