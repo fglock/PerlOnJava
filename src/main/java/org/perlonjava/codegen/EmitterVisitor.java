@@ -1864,32 +1864,17 @@ public class EmitterVisitor implements Visitor {
             ctx.symbolTable.enterScope();
         }
 
-        // Create labels for the start of the loop, the condition check, and the end of the loop
+        // Create labels for the start of the loop and the end of the loop
         Label startLabel = new Label();
-        Label conditionLabel = new Label();
         Label endLabel = new Label();
 
-        // Visit the initialization node
+        // Visit the initialization node (executed once at the start)
         if (node.initialization != null) {
             node.initialization.accept(voidVisitor);
         }
 
-        // Jump to the condition check
-        mv.visitJumpInsn(Opcodes.GOTO, conditionLabel);
-
-        // Visit the start label
+        // Visit the start label (this is where the loop condition and body are)
         mv.visitLabel(startLabel);
-
-        // Visit the loop body
-        node.body.accept(voidVisitor);
-
-        // Visit the increment node
-        if (node.increment != null) {
-            node.increment.accept(voidVisitor);
-        }
-
-        // Visit the condition label
-        mv.visitLabel(conditionLabel);
 
         // Visit the condition node in scalar context
         if (node.condition != null) {
@@ -1898,14 +1883,22 @@ public class EmitterVisitor implements Visitor {
             // Convert the result to a boolean
             mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getBoolean", "()Z", true);
 
-            // Jump to the end label if the condition is false
+            // Jump to the end label if the condition is false (exit the loop)
             mv.visitJumpInsn(Opcodes.IFEQ, endLabel);
         }
 
-        // Jump to the start label to continue the loop
+        // Visit the loop body
+        node.body.accept(voidVisitor);
+
+        // Visit the increment node (executed after the loop body)
+        if (node.increment != null) {
+            node.increment.accept(voidVisitor);
+        }
+
+        // Jump back to the start label to continue the loop
         mv.visitJumpInsn(Opcodes.GOTO, startLabel);
 
-        // Visit the end label
+        // Visit the end label (this is where the loop ends)
         mv.visitLabel(endLabel);
 
         // Exit the scope in the symbol table
