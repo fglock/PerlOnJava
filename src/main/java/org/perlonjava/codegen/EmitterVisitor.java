@@ -914,6 +914,8 @@ public class EmitterVisitor implements Visitor {
             case "ref":
             case "oct":
             case "hex":
+            case "chr":
+            case "ord":
             case "undef":
             case "wantarray":
                 handleUnaryBuiltin(node, operator);
