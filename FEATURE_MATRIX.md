@@ -89,10 +89,10 @@
 - ✔️   **Basic Array Operations**: `push`, `unshift`, `pop`, `shift`, `splice`, `reverse` are implemented.
 - ✔️   **Slices**: Array and Hash slices like `@array[2, 3]` and `@hash{"a", "b"}` are implemented.
 - ✔️   **Array literals**: Array literals are supported.
+- ✔️   **Basic Hash Operations**: `keys`, `values`, `delete`, `exists`, `each` are implemented.
+- ✔️   **Hash literals**: Hash literals are supported.
 - ❌  **List operator `..` and `...`**: List constructors are partially implemented.
 - ❌  **Tied Arrays**: Tied arrays are not yet implemented.
-- ❌  **Basic Hash Operations**: `keys`, `values`, `delete`, `exists` are implemented. `each` is missing.
-- ✔️   **Hash literals**: Hash literals are supported.
 - ❌  **Tied Hashes**: Tied hashes are not yet implemented.
 
 ## Subroutines
