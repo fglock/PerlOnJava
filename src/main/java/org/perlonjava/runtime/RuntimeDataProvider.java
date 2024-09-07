@@ -39,6 +39,8 @@ public interface RuntimeDataProvider {
      */
     RuntimeScalar scalar();
 
+    boolean getBoolean();
+
     /**
      * Create a reference
      */
@@ -95,6 +97,13 @@ public interface RuntimeDataProvider {
      * @return a RuntimeArray object.
      */
     RuntimeArray values();
+
+    /**
+     * Retrives the result of each() as a RuntimeList instance.
+     *
+     * @return a RuntimeList object.
+     */
+    RuntimeList each();
 
     /**
      * Method to return an iterator.

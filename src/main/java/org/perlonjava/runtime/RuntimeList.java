@@ -110,6 +110,10 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         return this;
     }
 
+    public boolean getBoolean() {
+        return scalar().getBoolean();
+    }
+
     // keys() operator
     public RuntimeArray keys() {
         throw new IllegalStateException("Type of arg 1 to values must be hash or array");
@@ -118,6 +122,10 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
     // values() operator
     public RuntimeArray values() {
         throw new IllegalStateException("Type of arg 1 to values must be hash or array");
+    }
+
+    public RuntimeList each() {
+        throw new IllegalStateException("Type of arg 1 to each must be hash or array");
     }
 
     // Get the scalar value of the list

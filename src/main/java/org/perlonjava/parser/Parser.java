@@ -522,6 +522,7 @@ public class Parser {
             case "scalar":
             case "values":
             case "keys":
+            case "each":
                 operand = parsePrimary();
                 return new OperatorNode(token.text, operand, tokenIndex);
             case "our":

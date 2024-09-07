@@ -14,6 +14,7 @@ import java.util.Map;
  */
 public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarReference {
     public Map<String, RuntimeScalar> elements;
+    Iterator<RuntimeScalar> hashIterator;
 
     // Constructor
     public RuntimeHash() {
@@ -116,6 +117,10 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         return elements.size();
     }
 
+    public boolean getBoolean() {
+        return !elements.isEmpty();
+    }
+
     // Get a list of key-value pairs as a RuntimeArray
     public RuntimeArray entryArray() {
         RuntimeArray array = new RuntimeArray();
@@ -163,6 +168,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         for (String key : elements.keySet()) {
             list.push(new RuntimeScalar(key));
         }
+        hashIterator = null;    // keys resets the iterator
         return list;
     }
 
@@ -172,7 +178,22 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         for (RuntimeScalar value : elements.values()) {
             list.push(new RuntimeScalar(value));
         }
+        hashIterator = null;    // values resets the iterator
         return list;
+    }
+
+    public RuntimeList each() {
+        if (hashIterator == null) {
+            hashIterator = iterator();
+        }
+        if (hashIterator.hasNext()) {
+            RuntimeList list = new RuntimeList();
+            list.elements.add(hashIterator.next());
+            list.elements.add(hashIterator.next());
+            return list;
+        }
+        hashIterator = null;
+        return new RuntimeList();
     }
 
     // Method to return an iterator
