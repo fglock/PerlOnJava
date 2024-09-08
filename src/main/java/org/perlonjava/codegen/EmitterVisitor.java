@@ -944,6 +944,7 @@ public class EmitterVisitor implements Visitor {
             case "hex":
             case "chr":
             case "ord":
+            case "fc":
             case "lc":
             case "lcfirst":
             case "uc":
