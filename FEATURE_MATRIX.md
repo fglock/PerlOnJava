@@ -69,6 +69,7 @@
 - ✔️   **`sprintf`**: String formatting is supported.
 - ✔️   **`grep`, `map`, `sort`**: List processing functions are implemented.
 - ✔️   **`substr`**: Substring extraction works.
+- ❌  **Time-related functions**: `gmtime`, `localtime`, `time`, `times` are not implemented.
 - ❌  **`chomp`**: `chomp` is partially implemented.
 - ❌  **Missing operators**: `index`, `crypt`, `rindex`, `pack`, `study`, `srand`, `unpack` are not implemented.
 - ❌  **Chained operators**: operations like `$x < $y <= $z` not yet implemented.
@@ -167,6 +168,7 @@
 ## Non-strict and Obsolete Features
 - ❌  **Use string as a scalar reference**: Support for scalar references from strings is not yet implemented.
 - ❌  **`format` operator**: Format is not implemented.
+- ❌  **DBM file support**: `dbmclose`, `dbmopen` are not implemented.
 
 ## Features Probably Incompatible with JVM
 - ❌  **`DESTROY`**: Handling of object destruction may be incompatible with JVM garbage collection.
@@ -176,4 +178,4 @@
 - ❌  **System V interprocess communication functions**: msgctl, msgget, msgrcv, msgsnd, semctl, semget, semop, shmctl, shmget, shmread, shmwrite
 - ❌  **Fetching user and group info**: endgrent, endhostent, endnetent, endpwent, getgrent, getgrgid, getgrnam, getlogin, getpwent, getpwnam, getpwuid, setgrent, setpwent
 - ❌  **Fetching network info**: endprotoent, endservent, gethostbyaddr, gethostbyname, gethostent, getnetbyaddr, getnetbyname, getnetent, getprotobyname, getprotobynumber, getprotoent, getservbyname, getservbyport, getservent, sethostent, setnetent, setprotoent, setservent
-
+- ❌  **Keywords related to the control flow of the Perl program**: `dump`, `caller`.
