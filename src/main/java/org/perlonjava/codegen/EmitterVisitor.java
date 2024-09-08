@@ -750,9 +750,21 @@ public class EmitterVisitor implements Visitor {
 
         node.left.accept(scalarVisitor); // target - left parameter
 
-        // emit the [0] as a RuntimeList
-        ListNode nodeRight = ((ArrayLiteralNode) node.right).asListNode();
-        nodeRight.accept(this.with(RuntimeContextType.SCALAR));
+        ArrayLiteralNode right = (ArrayLiteralNode) node.right;
+        boolean emitIndexAsList = true;
+        if (right.elements.size() == 1) {
+            Node elem = right.elements.get(0);
+            if (elem instanceof NumberNode) {
+                // TODO more optimizations
+                elem.accept(this.with(RuntimeContextType.SCALAR));
+                emitIndexAsList = false;
+            }
+        }
+        if (emitIndexAsList) {
+            // emit the [0] as a RuntimeList
+            ListNode nodeRight = right.asListNode();
+            nodeRight.accept(this.with(RuntimeContextType.SCALAR));
+        }
 
         String methodName;
         switch (arrayOperation) {
