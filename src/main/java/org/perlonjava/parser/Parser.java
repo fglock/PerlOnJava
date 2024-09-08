@@ -413,6 +413,8 @@ public class Parser {
             case "lcfirst":
             case "uc":
             case "ucfirst":
+            case "chop":
+            case "chomp":
             case "length":
             case "defined":
                 String text = token.text;

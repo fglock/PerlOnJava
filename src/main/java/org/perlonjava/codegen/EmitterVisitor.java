@@ -948,6 +948,8 @@ public class EmitterVisitor implements Visitor {
             case "lcfirst":
             case "uc":
             case "ucfirst":
+            case "chop":
+            case "chomp":
             case "undef":
             case "wantarray":
                 handleUnaryBuiltin(node, operator);

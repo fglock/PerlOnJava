@@ -23,6 +23,22 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         return ret;
     }
 
+    public RuntimeScalar chop() {
+        vivify();
+        RuntimeScalar ret = lvalue.chop();
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return ret;
+    }
+
+    public RuntimeScalar chomp() {
+        vivify();
+        RuntimeScalar ret = lvalue.chomp();
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return ret;
+    }
+
     // Method to implement `$v->{key}`
     @Override
     public RuntimeScalar hashDerefGet(RuntimeScalar index) {

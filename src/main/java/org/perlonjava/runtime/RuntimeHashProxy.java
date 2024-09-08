@@ -16,7 +16,7 @@ public class RuntimeHashProxy extends RuntimeBaseProxy {
             if (!parent.elements.containsKey(key)) {
                 parent.elements.put(key, new RuntimeScalar());
             }
-            lvalue = (RuntimeScalar) parent.elements.get(key);
+            lvalue = parent.elements.get(key);
         }
     }
 }

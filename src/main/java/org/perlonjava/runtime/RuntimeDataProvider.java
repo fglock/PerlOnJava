@@ -105,6 +105,10 @@ public interface RuntimeDataProvider {
      */
     RuntimeList each();
 
+    RuntimeScalar chop();
+
+    RuntimeScalar chomp();
+
     /**
      * Method to return an iterator.
      *
