@@ -356,7 +356,8 @@ public class Main {
 ### Upcoming Milestones
 
 - **v1.5.0**: Planned release date: 2024-12-10
-    - regex operators
+    - Regex operators
+    - Added more operators
 
 - **v1.6.0**: Performance Improvements and Enhanced Regex Support
     - Focus on optimizing the execution engine for better performance.
@@ -400,9 +401,12 @@ The following benchmarks provide an order of magnitude comparison with Perl:
 - **v1.2.0** through **v1.4.0**:
     - No performance related changes
 
+- **v1.5.0**:
+    - Example file `life.pl` runs 3x slower than Perl
+
 ## License
 
-This project is licensed under the Perl License - see the [LICENSE](LICENSE.md) file for details.
+This project is licensed under the Perl Artistic License 2.0 - see the [LICENSE](LICENSE.md) file for details.
 
 ![Java CI with Maven](https://github.com/fglock/PerlOnJava/workflows/Java%20CI%20with%20Maven/badge.svg)
 
