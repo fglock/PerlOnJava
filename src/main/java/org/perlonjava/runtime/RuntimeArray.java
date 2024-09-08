@@ -147,7 +147,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         return !elements.isEmpty();
     }
 
-        // Get the list value of the list
+    // Get the list value of the list
     public RuntimeList getList() {
         return new RuntimeList(this);
     }
@@ -218,6 +218,14 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     public RuntimeArray undefine() {
         this.elements.clear();
         return this;
+    }
+
+    public RuntimeScalar chop() {
+        throw new IllegalStateException("chop array is not implemented");
+    }
+
+    public RuntimeScalar chomp() {
+        throw new IllegalStateException("chomp array is not implemented");
     }
 
     // Convert the array to a string, without separators

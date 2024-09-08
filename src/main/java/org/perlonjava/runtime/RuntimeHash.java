@@ -196,6 +196,14 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         return new RuntimeList();
     }
 
+    public RuntimeScalar chop() {
+        throw new IllegalStateException("chop hash is not implemented");
+    }
+
+    public RuntimeScalar chomp() {
+        throw new IllegalStateException("chomp hash is not implemented");
+    }
+
     // Method to return an iterator
     public Iterator<RuntimeScalar> iterator() {
         return new RuntimeHashIterator();

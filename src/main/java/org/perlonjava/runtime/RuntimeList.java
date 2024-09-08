@@ -128,6 +128,14 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         throw new IllegalStateException("Type of arg 1 to each must be hash or array");
     }
 
+    public RuntimeScalar chop() {
+        throw new IllegalStateException("chop list is not implemented");
+    }
+
+    public RuntimeScalar chomp() {
+        throw new IllegalStateException("chomp list is not implemented");
+    }
+
     // Get the scalar value of the list
     public RuntimeScalar scalar() {
         if (elements.isEmpty()) {

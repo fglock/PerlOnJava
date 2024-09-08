@@ -147,6 +147,14 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
         throw new IllegalStateException("Type of arg 1 to each must be hash or array");
     }
 
+    public RuntimeScalar chop() {
+        throw new IllegalStateException("chop glob is not implemented");
+    }
+
+    public RuntimeScalar chomp() {
+        throw new IllegalStateException("chomp glob is not implemented");
+    }
+
     // Method to return an iterator
     public Iterator<RuntimeScalar> iterator() {
         return this.scalar().iterator();
