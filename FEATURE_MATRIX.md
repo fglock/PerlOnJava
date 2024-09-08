@@ -150,12 +150,12 @@
 - ❌  **`use` and `no` statements**: Module imports and version changes via `use` and `no` are missing.
 - ❌  **`__SUB__`**: The `__SUB__` special variable is not yet supported.
 - ✔️   **Special literals**: `__PACKAGE__`, `__FILE__`, `__LINE__`
-- ❌  **`BEGIN` block**: `BEGIN` blocks are missing.
+- ❌  **`BEGIN` block**: `BEGIN`, `END` and other special blocks are missing.
 - ❌  **Labels**: Labels and their usage are not supported.
 - ❌  **Search for labels in call stack**: Label searching in the call stack is missing.
 - ❌  **Here-docs**: Here-docs for multiline string literals are not yet implemented.
 - ❌  **`<>` and `glob`**: support for the `glob` operator is missing.
-- ❌  **End of file markers** control characters `^D` and `^Z`, and the tokens `__END__` and `__DATA__`
+- ❌  **End of file markers** Source code control characters `^D` and `^Z`, and the tokens `__END__` and `__DATA__` are not implemented.
 
 ## Namespaces and Global Variables
 - ✔️   **Global variable infrastructure**: Support for global variables is implemented.
@@ -179,3 +179,4 @@
 - ❌  **Fetching user and group info**: endgrent, endhostent, endnetent, endpwent, getgrent, getgrgid, getgrnam, getlogin, getpwent, getpwnam, getpwuid, setgrent, setpwent
 - ❌  **Fetching network info**: endprotoent, endservent, gethostbyaddr, gethostbyname, gethostent, getnetbyaddr, getnetbyname, getnetent, getprotobyname, getprotobynumber, getprotoent, getservbyname, getservbyport, getservent, sethostent, setnetent, setprotoent, setservent
 - ❌  **Keywords related to the control flow of the Perl program**: `dump`, `caller`.
+
