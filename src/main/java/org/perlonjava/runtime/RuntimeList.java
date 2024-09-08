@@ -141,7 +141,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         int count = 0;
         Iterator<RuntimeScalar> iterator = this.iterator();
         while (iterator.hasNext()) {
-            count = count +iterator.next().chomp().getInt();
+            count = count + iterator.next().chomp().getInt();
         }
         return new RuntimeScalar(count);
     }
