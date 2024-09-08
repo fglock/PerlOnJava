@@ -5,6 +5,11 @@ import com.ibm.icu.text.Normalizer2;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -254,6 +259,60 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         res.elements.add(new RuntimeScalar(system / 1.0E9)); // System CPU time
         res.elements.add(new RuntimeScalar(0)); // we don't have this information
         res.elements.add(new RuntimeScalar(0)); // we don't have this information
+        return res;
+    }
+
+    public static RuntimeList localtime(RuntimeArray args, int ctx) {
+        RuntimeList res = new RuntimeList();
+        ZonedDateTime date;
+        if (args.elements.isEmpty()) {
+            date = ZonedDateTime.now();
+        } else {
+            long arg = ((RuntimeScalar) args.elements.get(0)).getInt();
+            date = Instant.ofEpochSecond(arg).atZone(ZoneId.systemDefault());
+        }
+        if (ctx == RuntimeContextType.SCALAR) {
+            res.add(date.format(DateTimeFormatter.RFC_1123_DATE_TIME));
+            return res;
+        }
+        //      0    1    2     3     4    5     6     7     8
+        //   ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)
+        res.add(date.getSecond());
+        res.add(date.getMinute());
+        res.add(date.getHour());
+        res.add(date.getDayOfMonth());
+        res.add(date.getMonth().getValue() - 1);
+        res.add(date.getYear() - 1900);
+        res.add(date.getDayOfWeek().getValue());
+        res.add(date.getDayOfYear() - 1);
+        res.add(date.getZone().getRules().isDaylightSavings(date.toInstant()) ? 1 : 0);
+        return res;
+    }
+
+    public static RuntimeList gmtime(RuntimeArray args, int ctx) {
+        RuntimeList res = new RuntimeList();
+        ZonedDateTime date;
+        if (args.elements.isEmpty()) {
+            date = ZonedDateTime.now(ZoneOffset.UTC);
+        } else {
+            long arg = ((RuntimeScalar) args.elements.get(0)).getInt();
+            date = Instant.ofEpochSecond(arg).atZone(ZoneId.of("UTC"));
+        }
+        if (ctx == RuntimeContextType.SCALAR) {
+            res.add(date.format(DateTimeFormatter.RFC_1123_DATE_TIME));
+            return res;
+        }
+        //      0    1    2     3     4    5     6     7     8
+        //   ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)
+        res.add(date.getSecond());
+        res.add(date.getMinute());
+        res.add(date.getHour());
+        res.add(date.getDayOfMonth());
+        res.add(date.getMonth().getValue() - 1);
+        res.add(date.getYear() - 1900);
+        res.add(date.getDayOfWeek().getValue());
+        res.add(date.getDayOfYear() - 1);
+        res.add(date.getZone().getRules().isDaylightSavings(date.toInstant()) ? 1 : 0);
         return res;
     }
 
