@@ -447,6 +447,10 @@ public class Parser {
                     }
                 }
                 return new OperatorNode(text, operand, tokenIndex);
+            case "rindex":
+            case "index":
+                operand = parseZeroOrMoreList(2, false, true, false, false);
+                return new OperatorNode(token.text, operand, tokenIndex);
             case "atan2":
                 operand = parseZeroOrMoreList(2, false, true, false, false);
                 return new OperatorNode("atan2", operand, tokenIndex);
