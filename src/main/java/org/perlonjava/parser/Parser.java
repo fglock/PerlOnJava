@@ -409,6 +409,7 @@ public class Parser {
             case "int":
             case "chr":
             case "ord":
+            case "fc":
             case "lc":
             case "lcfirst":
             case "uc":

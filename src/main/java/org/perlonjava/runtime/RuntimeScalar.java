@@ -1,11 +1,16 @@
 package org.perlonjava.runtime;
 
+import java.text.Normalizer;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.NoSuchElementException;
 import java.util.concurrent.TimeUnit;
 
 import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
+import com.ibm.icu.text.Normalizer2;
+import com.ibm.icu.text.CaseMap;
+import java.util.Locale;
 
 /**
  * The RuntimeScalar class simulates Perl scalar variables.
@@ -1196,6 +1201,18 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             }
         }
         return new RuntimeScalar(quoted.toString());
+    }
+
+    public RuntimeScalar fc() {
+        String str = this.toString();
+        // Step 1: Normalize the string to NFKC form (Compatibility Composition)
+        Normalizer2 normalizer = Normalizer2.getNFKCInstance();
+        String normalized = normalizer.normalize(str);
+
+        // Step 2: Perform full Unicode case folding using ICU4J CaseMap
+        str = CaseMap.fold().apply(normalized);
+
+        return new RuntimeScalar(str);
     }
 
     public RuntimeScalar lc() {
