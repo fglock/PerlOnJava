@@ -129,11 +129,21 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
     }
 
     public RuntimeScalar chop() {
-        throw new IllegalStateException("chop list is not implemented");
+        RuntimeScalar result = new RuntimeScalar("");
+        Iterator<RuntimeScalar> iterator = this.iterator();
+        while (iterator.hasNext()) {
+            result = iterator.next().chop();
+        }
+        return result;
     }
 
     public RuntimeScalar chomp() {
-        throw new IllegalStateException("chomp list is not implemented");
+        int count = 0;
+        Iterator<RuntimeScalar> iterator = this.iterator();
+        while (iterator.hasNext()) {
+            count = count +iterator.next().chomp().getInt();
+        }
+        return new RuntimeScalar(count);
     }
 
     // Get the scalar value of the list
