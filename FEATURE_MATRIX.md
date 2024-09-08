@@ -161,7 +161,7 @@
 - ✔️   **Global variable infrastructure**: Support for global variables is implemented.
 - ✔️   **Namespaces**: Namespace support is present.
 - ✔️   **`@_` and `$@` special variables**: Special variables like `@_` and `$@` are supported.
-- ✔️   **Special variables**: The special variables `@ARGV`, `$_`, `$"`, `$\\`, `$,`, `$/`, `$a`, `$b`, `$^O` are implemented.
+- ✔️   **Special variables**: The special variables `@ARGV`, `$_`, `$"`, `$\\`, `$,`, `$/`, `$$`, `$a`, `$b`, `$^O` are implemented.
 - ✔️   **I/O symbols**: `STDOUT`, `STDERR`, `STDIN` are implemented.
 - ❌  **Thread-safe `@_`, `$_`, and regex variables**: Thread safety for global special variables is missing.
 
