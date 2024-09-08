@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.concurrent.TimeUnit;
 
+import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
+
 /**
  * The RuntimeScalar class simulates Perl scalar variables.
  *
@@ -1105,6 +1107,33 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return old;
     }
 
+    public RuntimeScalar chop() {
+        String str = this.toString();
+        if (str.isEmpty()) {
+            return new RuntimeScalar();
+        }
+        String lastChar = str.substring(str.length() - 1);
+        this.type = RuntimeScalarType.STRING;
+        this.value = str.substring(0, str.length() - 1);
+        return new RuntimeScalar(lastChar);
+    }
+
+    public RuntimeScalar chomp() {
+        String str = this.toString();
+        if (str.isEmpty()) {
+            return new RuntimeScalar(0);
+        }
+        String newline = getGlobalVariable("main::/").toString();  // fetch $/
+        // TODO implement variations depending on `$/` type
+        String lastChar = str.substring(str.length() - newline.length());
+        if (lastChar.equals(newline)) {
+            this.type = RuntimeScalarType.STRING;
+            this.value = str.substring(0, str.length() - newline.length());
+            return new RuntimeScalar(lastChar.length());
+        }
+        return new RuntimeScalar(0);
+    }
+
     public RuntimeScalar log() {
         return new RuntimeScalar(Math.log(this.getDouble()));
     }
@@ -1254,7 +1283,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (str.isEmpty()) {
             i = 0;
         } else {
-            i = (int) str.charAt(0);
+            i = str.charAt(0);
         }
         return new RuntimeScalar(i);
     }
