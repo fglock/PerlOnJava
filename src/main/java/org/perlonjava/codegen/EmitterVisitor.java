@@ -799,13 +799,17 @@ public class EmitterVisitor implements Visitor {
     private void handleUnaryBuiltin(OperatorNode node, String operator) {
         MethodVisitor mv = ctx.mv;
         if (node.operand == null) {
-            // Unary operator with optional arguments, called without arguments
-            // example: undef()  wantarray()
+            // Unary operator with no arguments, or with optional arguments called without arguments
+            // example: undef()  wantarray()  time()  times()
             if (operator.equals("wantarray")) {
                 // Retrieve wantarray value from JVM local vars
                 mv.visitVarInsn(Opcodes.ILOAD, ctx.symbolTable.getVariableIndex("wantarray"));
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", operator, "(I)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            } else if (operator.equals("times")) {
+                // Call static RuntimeScalar method with no arguments; returns RuntimeList
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", operator, "()Lorg/perlonjava/runtime/RuntimeList;", false);
             } else {
+                // Call static RuntimeScalar method with no arguments
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
             }
         } else if (operator.equals("undef")) {
@@ -980,6 +984,7 @@ public class EmitterVisitor implements Visitor {
             case "undef":
             case "wantarray":
             case "time":
+            case "times":
                 handleUnaryBuiltin(node, operator);
                 break;
             case "rindex":

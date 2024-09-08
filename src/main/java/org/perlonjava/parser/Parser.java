@@ -382,6 +382,7 @@ public class Parser {
             case "__PACKAGE__":
                 return new StringNode(ctx.symbolTable.getCurrentPackage(), tokenIndex);
             case "time":
+            case "times":
             case "fork":
             case "wait":
             case "wantarray":

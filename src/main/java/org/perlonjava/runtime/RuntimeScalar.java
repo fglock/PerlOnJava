@@ -3,6 +3,8 @@ package org.perlonjava.runtime;
 import com.ibm.icu.text.CaseMap;
 import com.ibm.icu.text.Normalizer2;
 
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -232,6 +234,27 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             }
         }
         return new RuntimeScalar(false).getList();
+    }
+
+    public static RuntimeScalar time() {
+        return new RuntimeScalar(System.currentTimeMillis() / 1000L);
+    }
+
+    public static RuntimeList times() {
+        RuntimeList res = new RuntimeList();
+
+        ThreadMXBean bean = ManagementFactory.getThreadMXBean();
+        long cpu = bean.isCurrentThreadCpuTimeSupported() ?
+                bean.getCurrentThreadCpuTime() : 0L;
+        long user = bean.isCurrentThreadCpuTimeSupported() ?
+                bean.getCurrentThreadUserTime() : 0L;
+        long system = cpu - user;
+
+        res.elements.add(new RuntimeScalar(user / 1.0E9)); // user CPU time
+        res.elements.add(new RuntimeScalar(system / 1.0E9)); // System CPU time
+        res.elements.add(new RuntimeScalar(0)); // we don't have this information
+        res.elements.add(new RuntimeScalar(0)); // we don't have this information
+        return res;
     }
 
     public RuntimeScalar clone() {
@@ -566,6 +589,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(str);
     }
 
+    // Methods that implement Perl operators
+
     /**
      * Call a method in a Perl-like class hierarchy using the C3 linearization algorithm.
      *
@@ -684,8 +709,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         this.set(this.parseNumber()); // parseNumber parses the current string to a number
         return this.preAutoIncrement(); // preAutoIncrement handles the actual incrementing logic
     }
-
-    // Methods that implement Perl operators
 
     // Helper method to convert String to Integer or Double
     private RuntimeScalar parseNumber() {
@@ -992,45 +1015,45 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(this.toString().compareTo(arg2.toString()) <= 0);
     }
 
+// Bitwise AND (&)
+
     public RuntimeScalar gt(RuntimeScalar arg2) {
         return new RuntimeScalar(this.toString().compareTo(arg2.toString()) > 0);
     }
+
+// Bitwise OR (|)
 
     public RuntimeScalar ge(RuntimeScalar arg2) {
         return new RuntimeScalar(this.toString().compareTo(arg2.toString()) >= 0);
     }
 
-// Bitwise AND (&)
+// Bitwise XOR (^)
 
     public RuntimeScalar bitwiseAnd(RuntimeScalar arg2) {
         return new RuntimeScalar(this.getInt() & arg2.getInt());
     }
 
-// Bitwise OR (|)
+// Bitwise NOT (~)
 
     public RuntimeScalar bitwiseOr(RuntimeScalar arg2) {
         return new RuntimeScalar(this.getInt() | arg2.getInt());
     }
 
-// Bitwise XOR (^)
+// Shift Left (<<)
 
     public RuntimeScalar bitwiseXor(RuntimeScalar arg2) {
         return new RuntimeScalar(this.getInt() ^ arg2.getInt());
     }
 
-// Bitwise NOT (~)
+// Shift Right (>>)
 
     public RuntimeScalar bitwiseNot() {
         return new RuntimeScalar(~this.getInt());
     }
 
-// Shift Left (<<)
-
     public RuntimeScalar shiftLeft(RuntimeScalar arg2) {
         return new RuntimeScalar(this.getInt() << arg2.getInt());
     }
-
-// Shift Right (>>)
 
     public RuntimeScalar shiftRight(RuntimeScalar arg2) {
         return new RuntimeScalar(this.getInt() >> arg2.getInt());
@@ -1108,10 +1131,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 this.value = 1;
         }
         return old;
-    }
-
-    public static RuntimeScalar time() {
-        return new RuntimeScalar(System.currentTimeMillis() / 1000L);
     }
 
     public RuntimeScalar chop() {
