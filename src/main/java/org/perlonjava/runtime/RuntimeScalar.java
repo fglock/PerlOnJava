@@ -1110,6 +1110,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return old;
     }
 
+    public static RuntimeScalar time() {
+        return new RuntimeScalar(System.currentTimeMillis() / 1000L);
+    }
+
     public RuntimeScalar chop() {
         String str = this.toString();
         if (str.isEmpty()) {

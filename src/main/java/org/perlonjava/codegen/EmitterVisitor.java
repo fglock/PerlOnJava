@@ -979,6 +979,7 @@ public class EmitterVisitor implements Visitor {
             case "chomp":
             case "undef":
             case "wantarray":
+            case "time":
                 handleUnaryBuiltin(node, operator);
                 break;
             case "rindex":
