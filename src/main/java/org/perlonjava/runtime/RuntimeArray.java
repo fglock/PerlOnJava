@@ -221,11 +221,11 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     }
 
     public RuntimeScalar chop() {
-        throw new IllegalStateException("chop array is not implemented");
+        return this.getList().chop();
     }
 
     public RuntimeScalar chomp() {
-        throw new IllegalStateException("chomp array is not implemented");
+        return this.getList().chomp();
     }
 
     // Convert the array to a string, without separators

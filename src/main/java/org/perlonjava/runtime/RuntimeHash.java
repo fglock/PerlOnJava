@@ -176,7 +176,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
     public RuntimeArray values() {
         RuntimeArray list = new RuntimeArray();
         for (RuntimeScalar value : elements.values()) {
-            list.push(new RuntimeScalar(value));
+            list.push(value);   // push an alias to the value
         }
         hashIterator = null;    // values resets the iterator
         return list;
@@ -197,11 +197,11 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
     }
 
     public RuntimeScalar chop() {
-        throw new IllegalStateException("chop hash is not implemented");
+        return this.values().chop();
     }
 
     public RuntimeScalar chomp() {
-        throw new IllegalStateException("chomp hash is not implemented");
+        return this.values().chop();
     }
 
     // Method to return an iterator
