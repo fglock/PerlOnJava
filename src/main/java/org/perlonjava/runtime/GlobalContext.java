@@ -59,6 +59,7 @@ public class GlobalContext {
         getGlobalVariable("main::,").set("");    // initialize $, to ""
         getGlobalVariable("main::\\").set("");    // initialize $\ to ""
         getGlobalVariable("main::/").set("\n"); // initialize $/ to newline
+        getGlobalVariable("main::$").set(ProcessHandle.current().pid()); // initialize $$ to process id
         getGlobalArray("main::INC");
         getGlobalHash("main::INC");
 
