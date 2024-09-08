@@ -419,6 +419,8 @@ public class Parser {
             case "chomp":
             case "length":
             case "defined":
+            case "localtime":
+            case "gmtime":
                 String text = token.text;
                 operand = parseZeroOrOneList(0);
                 if (((ListNode) operand).elements.isEmpty()) {
@@ -432,6 +434,10 @@ public class Parser {
                             // XXX in main program, use `@ARGV`
                             operand = new OperatorNode(
                                     "@", new IdentifierNode("_", tokenIndex), tokenIndex);
+                            break;
+                        case "localtime":
+                        case "gmtime":
+                            // empty list
                             break;
                         case "undef":
                             operand = null;
