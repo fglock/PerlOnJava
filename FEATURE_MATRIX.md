@@ -70,6 +70,7 @@
 - ✔️   **`grep`, `map`, `sort`**: List processing functions are implemented.
 - ✔️   **`substr`**: Substring extraction works.
 - ❌  **`chomp`**: `chomp` is partially implemented.
+- ❌  **Missing operators**: `index`, `crypt`, `fc`, `rindex`, `pack`, `study`, `srand`, `unpack` are not implemented.
 - ❌  **Chained operators**: operations like `$x < $y <= $z` not yet implemented.
 - ❌  **Lvalue `substr`**: Assignable Substring extraction is not yet implemented.
 - ❌  **Vectors**: `vec` is not yet implemented.
@@ -116,6 +117,7 @@
 - ✔️   **Regex modifiers**: Modifiers `/i` `/m` `/s` `/g` `/r` `/e` are implemented.
 - ✔️   **Special variables**: The special variables `$1`, `$2`... are implemented.
 - ✔️   **Transliteration**: `tr` and `y` transliteration operators are implemented.
+- ❌  **`pos`**: `pos` operator is not implemented.
 - ❌  **Perl-specific Regex Features**: Some features like `/x` (formatted regex) are missing.
 
 ## Statements and Special Operators
