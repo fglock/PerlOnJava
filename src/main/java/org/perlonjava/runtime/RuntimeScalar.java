@@ -255,14 +255,14 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 bean.getCurrentThreadUserTime() : 0L;
         long system = cpu - user;
 
-        res.elements.add(new RuntimeScalar(user / 1.0E9)); // user CPU time
-        res.elements.add(new RuntimeScalar(system / 1.0E9)); // System CPU time
-        res.elements.add(new RuntimeScalar(0)); // we don't have this information
-        res.elements.add(new RuntimeScalar(0)); // we don't have this information
+        res.add(user / 1.0E9); // user CPU time
+        res.add(system / 1.0E9); // System CPU time
+        res.add(0); // we don't have this information
+        res.add(0); // we don't have this information
         return res;
     }
 
-    public static RuntimeList localtime(RuntimeArray args, int ctx) {
+    public static RuntimeList localtime(RuntimeList args, int ctx) {
         RuntimeList res = new RuntimeList();
         ZonedDateTime date;
         if (args.elements.isEmpty()) {
@@ -289,7 +289,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return res;
     }
 
-    public static RuntimeList gmtime(RuntimeArray args, int ctx) {
+    public static RuntimeList gmtime(RuntimeList args, int ctx) {
         RuntimeList res = new RuntimeList();
         ZonedDateTime date;
         if (args.elements.isEmpty()) {
@@ -865,8 +865,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(type != RuntimeScalarType.UNDEF);
     }
 
-    public RuntimeScalar stringConcat(RuntimeScalar b) {
-        return new RuntimeScalar(this + b.toString());
+    public RuntimeScalar stringConcat(RuntimeDataProvider b) {
+        return new RuntimeScalar(this + b.scalar().toString());
     }
 
     public RuntimeScalar unaryMinus() {

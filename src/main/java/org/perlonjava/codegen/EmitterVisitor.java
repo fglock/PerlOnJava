@@ -20,7 +20,6 @@ public class EmitterVisitor implements Visitor {
         operatorHandlers.put("*", "multiply");
         operatorHandlers.put("/", "divide");
         operatorHandlers.put("%", "modulus");
-        operatorHandlers.put(".", "stringConcat");
         operatorHandlers.put("&", "bitwiseAnd");
         operatorHandlers.put("|", "bitwiseOr");
         operatorHandlers.put("^", "bitwiseXor");
@@ -174,6 +173,9 @@ public class EmitterVisitor implements Visitor {
             case "=":
                 handleAssignOperator(node);
                 return;
+            case ".":
+                handleConcatOperator(node, scalarVisitor);
+                return;
             case "->":
                 handleArrowOperator(node);
                 return;
@@ -324,6 +326,19 @@ public class EmitterVisitor implements Visitor {
         ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Operator",
                 "repeat",
                 "(Lorg/perlonjava/runtime/RuntimeDataProvider;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
+    }
+
+    private void handleConcatOperator(BinaryOperatorNode node, EmitterVisitor scalarVisitor) {
+        node.left.accept(scalarVisitor); // target - left parameter
+        node.right.accept(scalarVisitor); // right parameter
+        ctx.mv.visitMethodInsn(
+                Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/RuntimeScalar",
+                "stringConcat",
+                "(Lorg/perlonjava/runtime/RuntimeDataProvider;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         if (ctx.contextType == RuntimeContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.POP);
         }
@@ -816,6 +831,13 @@ public class EmitterVisitor implements Visitor {
             operator = "undefine";
             node.operand.accept(this.with(RuntimeContextType.RUNTIME));
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", operator, "()Lorg/perlonjava/runtime/RuntimeList;", false);
+        } else if (operator.equals("gmtime") || operator.equals("localtime")) {
+            node.operand.accept(this.with(RuntimeContextType.LIST));
+            pushCallContext();
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/RuntimeScalar",
+                    operator,
+                    "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;", false);
         } else {
             node.operand.accept(this.with(RuntimeContextType.SCALAR));
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
@@ -985,6 +1007,8 @@ public class EmitterVisitor implements Visitor {
             case "wantarray":
             case "time":
             case "times":
+            case "localtime":
+            case "gmtime":
                 handleUnaryBuiltin(node, operator);
                 break;
             case "rindex":

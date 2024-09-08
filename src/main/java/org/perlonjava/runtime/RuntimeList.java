@@ -84,6 +84,10 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         this.elements.add(new RuntimeScalar(value));
     }
 
+    public void add(Double value) {
+        this.elements.add(new RuntimeScalar(value));
+    }
+
     // When adding a List into a List they are merged
     public void add(RuntimeList value) {
         int size = value.size();
