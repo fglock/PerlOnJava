@@ -1137,6 +1137,46 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(0);
     }
 
+    public RuntimeScalar index(RuntimeScalar substr, RuntimeScalar position) {
+        String str = this.toString();
+        String sub = substr.toString();
+        int pos = position.type == RuntimeScalarType.UNDEF
+                ? 0 : position.getInt(); // if position is not provided, start from 0
+
+        // Bound the position to be within the valid range of the string
+        if (pos < 0) {
+            pos = 0;
+        } else if (pos >= str.length()) {
+            return new RuntimeScalar(-1);
+        }
+
+        // Find the index of the substring starting from the specified position
+        int result = str.indexOf(sub, pos);
+
+        // Return the index or -1 if not found
+        return new RuntimeScalar(result);
+    }
+
+    public RuntimeScalar rindex(RuntimeScalar substr, RuntimeScalar position) {
+        String str = this.toString();
+        String sub = substr.toString();
+        int pos = position.type == RuntimeScalarType.UNDEF
+                ? str.length() : position.getInt(); // Default to search from the end of the string
+
+        // Bound the position to be within the valid range of the string
+        if (pos >= str.length()) {
+            pos = str.length() - 1;
+        } else if (pos < 0) {
+            return new RuntimeScalar(-1);
+        }
+
+        // Find the last index of the substring before or at the specified position
+        int result = str.lastIndexOf(sub, pos);
+
+        // Return the index or -1 if not found
+        return new RuntimeScalar(result);
+    }
+
     public RuntimeScalar log() {
         return new RuntimeScalar(Math.log(this.getDouble()));
     }

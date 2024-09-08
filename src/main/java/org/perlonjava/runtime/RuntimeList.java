@@ -211,11 +211,6 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         return sb.toString();
     }
 
-    // Method to return an iterator
-    public Iterator<RuntimeScalar> iterator() {
-        return new RuntimeListIterator(elements);
-    }
-
     // undefine the elements of the list
     public RuntimeList undefine() {
         for (RuntimeBaseEntity elem : elements) {
@@ -224,7 +219,10 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         return this;
     }
 
-    // Operators
+    // Method to return an iterator
+    public Iterator<RuntimeScalar> iterator() {
+        return new RuntimeListIterator(elements);
+    }
 
     private static class RuntimeListIterator implements Iterator<RuntimeScalar> {
         private final List<RuntimeBaseEntity> elements;

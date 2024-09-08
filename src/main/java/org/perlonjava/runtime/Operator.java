@@ -13,7 +13,7 @@ public class Operator {
     /**
      * Formats the elements according to the specified format string.
      *
-     * @param runtimeScalar
+     * @param runtimeScalar The format string
      * @param list          The list of elements to be formatted.
      * @return A RuntimeScalar containing the formatted string.
      */
