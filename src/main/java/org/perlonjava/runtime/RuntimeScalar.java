@@ -1,16 +1,14 @@
 package org.perlonjava.runtime;
 
-import java.text.Normalizer;
+import com.ibm.icu.text.CaseMap;
+import com.ibm.icu.text.Normalizer2;
+
 import java.util.Iterator;
 import java.util.List;
-import java.util.Locale;
 import java.util.NoSuchElementException;
 import java.util.concurrent.TimeUnit;
 
 import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
-import com.ibm.icu.text.Normalizer2;
-import com.ibm.icu.text.CaseMap;
-import java.util.Locale;
 
 /**
  * The RuntimeScalar class simulates Perl scalar variables.
