@@ -69,8 +69,7 @@
 - ✔️   **`sprintf`**: String formatting is supported.
 - ✔️   **`grep`, `map`, `sort`**: List processing functions are implemented.
 - ✔️   **`substr`**: Substring extraction works.
-- ✔️   **Time-related functions**: `time`, `times` work.
-- ❌  **Time-related functions**: `gmtime`, `localtime` are not implemented.
+- ✔️   **Time-related functions**: `time`, `times`, `gmtime`, `localtime` are implemented.
 - ❌  **`chomp`**: `chomp` is partially implemented.
 - ❌  **Missing operators**: `crypt`, `pack`, `study`, `srand`, `unpack` are not implemented.
 - ❌  **Chained operators**: operations like `$x < $y <= $z` not yet implemented.
