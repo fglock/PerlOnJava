@@ -821,6 +821,32 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
+    private void handleIndexBuiltin(OperatorNode node) {
+        MethodVisitor mv = ctx.mv;
+        EmitterVisitor scalarVisitor = this.with(RuntimeContextType.SCALAR);
+        if (node.operand instanceof ListNode) {
+            ListNode operand = (ListNode) node.operand;
+            if (!operand.elements.isEmpty()) {
+                operand.elements.get(0).accept(scalarVisitor);
+                operand.elements.get(1).accept(scalarVisitor);
+                if (operand.elements.size() == 3) {
+                    operand.elements.get(2).accept(scalarVisitor);
+                } else {
+                    new OperatorNode("undef", null, node.tokenIndex).accept(scalarVisitor);
+                }
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/RuntimeScalar",
+                        node.operator,
+                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                if (ctx.contextType == RuntimeContextType.VOID) {
+                    mv.visitInsn(Opcodes.POP);
+                }
+                return;
+            }
+        }
+        throw new UnsupportedOperationException("Unsupported operator: " + node.operator);
+    }
+
     private void handleAtan2(OperatorNode node) {
         MethodVisitor mv = ctx.mv;
         EmitterVisitor scalarVisitor = this.with(RuntimeContextType.SCALAR);
@@ -954,6 +980,10 @@ public class EmitterVisitor implements Visitor {
             case "undef":
             case "wantarray":
                 handleUnaryBuiltin(node, operator);
+                break;
+            case "rindex":
+            case "index":
+                handleIndexBuiltin(node);
                 break;
             case "atan2":
                 handleAtan2(node);
