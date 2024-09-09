@@ -309,14 +309,13 @@ public class StringParser {
         token = tokens.get(parser.tokenIndex);
         if (token.type == LexerTokenType.NUMBER) {
             //  octal like `\200`
-            if (token.text.length() <= 3) {
-                escape = token.text;
-                parser.tokenIndex++;
-            } else {
-                escape = token.text.substring(0, 3);
-                token.text = token.text.substring(3);
+            StringBuilder octalStr = new StringBuilder(parser.comsumeChar());
+            char chr = token.text.charAt(0);
+            while (octalStr.length() < 3 && chr >= '0' && chr <= '7') {
+                octalStr.append(parser.comsumeChar());
+                chr = token.text.charAt(0);
             }
-            str.append((char) Integer.parseInt(escape, 8));
+            str.append((char) Integer.parseInt(octalStr.toString(), 8));
             return;
         }
         escape = parser.comsumeChar();
