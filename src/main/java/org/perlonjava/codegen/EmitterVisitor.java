@@ -776,7 +776,7 @@ public class EmitterVisitor implements Visitor {
                 methodName = "arrayDerefDelete";
                 break;
             default:
-                throw new IllegalArgumentException("Unexpected hash operation: " + arrayOperation);
+                throw new IllegalArgumentException("Unexpected array operation: " + arrayOperation);
         }
 
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "arrayDerefGet", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
