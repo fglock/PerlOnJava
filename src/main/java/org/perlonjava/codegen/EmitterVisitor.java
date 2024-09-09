@@ -750,6 +750,7 @@ public class EmitterVisitor implements Visitor {
 
         node.left.accept(scalarVisitor); // target - left parameter
 
+        // Optimization: Extract the single element if the list has only one item
         ArrayLiteralNode right = (ArrayLiteralNode) node.right;
         boolean emitIndexAsList = true;
         if (right.elements.size() == 1) {
