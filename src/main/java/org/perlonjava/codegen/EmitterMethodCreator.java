@@ -85,8 +85,6 @@ public class EmitterMethodCreator implements Opcodes {
      * syntax tree (AST).
      *
      * @param ctx         The emitter context containing information for code generation.
-     * @param env         An array of environment variable names to be included as instance fields in the
-     *                    class.
      * @param ast         The abstract syntax tree representing the method body.
      * @param useTryCatch Flag to enable try-catch in the generated class. This is used in `eval` operator.
      * @return The generated class.
@@ -221,17 +219,26 @@ public class EmitterMethodCreator implements Opcodes {
             //      Opcodes.INVOKEVIRTUAL, "java/lang/Exception", "printStackTrace", "()V", false);
 
             // Convert the exception to a string
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/ErrorMessageUtil", "stringifyException", "(Ljava/lang/Exception;)Ljava/lang/String;", false);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/ErrorMessageUtil",
+                    "stringifyException",
+                    "(Ljava/lang/Exception;)Ljava/lang/String;", false);
 
             // Set the global error variable "$@" using GlobalContext.setGlobalVariable(key, value)
             mv.visitLdcInsn("$main::@");
             mv.visitInsn(Opcodes.SWAP);
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/GlobalContext", "setGlobalVariable", "(Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/GlobalContext",
+                    "setGlobalVariable",
+                    "(Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
             mv.visitInsn(Opcodes.POP);    // throw away the RuntimeScalar result
 
             // Restore the stack state to match the end of the try block if needed
             // Return "undef"
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", "undef", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/RuntimeScalar",
+                    "undef",
+                    "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
             // End of the catch block
             mv.visitLabel(endCatch);
