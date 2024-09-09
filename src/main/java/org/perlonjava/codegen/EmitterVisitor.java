@@ -4,9 +4,11 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.RuntimeContextType;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class EmitterVisitor implements Visitor {
     private static final Map<String, String> operatorHandlers = new HashMap<>();
@@ -600,7 +602,7 @@ public class EmitterVisitor implements Visitor {
         if (right.elements.size() == 1) {
             Node elem = right.elements.get(0);
             if (elem instanceof NumberNode || elem instanceof OperatorNode
-                || elem instanceof BinaryOperatorNode) {
+                    || elem instanceof BinaryOperatorNode) {
                 // TODO more optimizations
                 elem.accept(this.with(RuntimeContextType.SCALAR));
                 emitIndexAsList = false;
