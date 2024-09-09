@@ -112,9 +112,7 @@ public class EmitterVisitor implements Visitor {
 
     @Override
     public void visit(IdentifierNode node) {
-        // Emit code for identifier
-        throw new PerlCompilerException(
-                node.tokenIndex, "Not implemented: bare word " + node.name, ctx.errorUtil);
+        EmitLiteral.emitIdentifier(ctx, node);
     }
 
     @Override
@@ -177,12 +175,7 @@ public class EmitterVisitor implements Visitor {
                 return;
             case "sprintf":
             case "substr":
-                node.left.accept(this.with(RuntimeContextType.SCALAR));
-                node.right.accept(this.with(RuntimeContextType.LIST));
-                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-                if (ctx.contextType == RuntimeContextType.VOID) {
-                    ctx.mv.visitInsn(Opcodes.POP);
-                }
+                handleSubstr(node, operator);
                 return;
             case "x":
                 handleRepeat(node);
@@ -194,48 +187,10 @@ public class EmitterVisitor implements Visitor {
                 handleSplitOperator(operator, node);
                 return;
             case "!~":
-                this.visit(
-                        new OperatorNode("not",
-                                new OperatorNode("scalar",
-                                        new BinaryOperatorNode(
-                                                "=~",
-                                                node.left,
-                                                node.right,
-                                                node.tokenIndex
-                                        ), node.tokenIndex
-                                ), node.tokenIndex
-                        ));
+                EmitRegex.handleNotBindRegex(this, node);
                 return;
             case "=~":
-                //
-                //  BinaryOperatorNode: =~
-                //    OperatorNode: $
-                //      IdentifierNode: a
-                //    OperatorNode: matchRegex (or `qr` object)
-                //      ListNode:
-                //        StringNode: 'abc'
-                //        StringNode: 'i'
-                //
-                if (node.right instanceof OperatorNode) {
-                    OperatorNode right = (OperatorNode) node.right;
-                    if (right.operand instanceof ListNode) {
-                        // regex operator:  $v =~ /regex/;
-                        // bind the variable to the regex operation
-                        ((ListNode) right.operand).elements.add(node.left);
-                        right.accept(this);
-                        return;
-                    }
-                }
-                // not a regex operator:  $v =~ $qr;
-                node.right.accept(scalarVisitor);
-                node.left.accept(scalarVisitor);
-                pushCallContext();
-                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/RuntimeRegex", "matchRegex",
-                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
-                if (ctx.contextType == RuntimeContextType.VOID) {
-                    ctx.mv.visitInsn(Opcodes.POP);
-                }
+                EmitRegex.handleBindRegex(this, node, scalarVisitor);
                 return;
             case "**=":
             case "+=":
@@ -281,6 +236,15 @@ public class EmitterVisitor implements Visitor {
             return;
         }
         throw new RuntimeException("Unexpected infix operator: " + operator);
+    }
+
+    private void handleSubstr(BinaryOperatorNode node, String operator) {
+        node.left.accept(this.with(RuntimeContextType.SCALAR));
+        node.right.accept(this.with(RuntimeContextType.LIST));
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
     }
 
     private void handleRepeat(BinaryOperatorNode node) {
@@ -378,71 +342,11 @@ public class EmitterVisitor implements Visitor {
     }
 
     private void handleOrEqualOperator(BinaryOperatorNode node, int compareOpcode) {
-        // Implements `||=` `&&=`, depending on compareOpcode
-
-        MethodVisitor mv = ctx.mv;
-        Label endLabel = new Label(); // Label for the end of the operation
-
-        node.left.accept(this.with(RuntimeContextType.SCALAR)); // target - left parameter
-        // the left parameter is in the stack
-
-        mv.visitInsn(Opcodes.DUP);
-        // stack is [left, left]
-
-        // Convert the result to a boolean
-        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getBoolean", "()Z", true);
-        // stack is [left, boolean]
-
-        // If the boolean value is true, jump to endLabel (we keep the left operand)
-        mv.visitJumpInsn(compareOpcode, endLabel);
-
-        node.right.accept(this.with(RuntimeContextType.SCALAR)); // Evaluate right operand in scalar context
-        // stack is [left, right]
-
-        mv.visitInsn(Opcodes.DUP_X1); // Stack becomes [right, left, right]
-        mv.visitInsn(Opcodes.SWAP);   // Stack becomes [right, right, left]
-
-        // Assign right to left
-        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "addToScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", true);
-        mv.visitInsn(Opcodes.POP);
-        // stack is [right]
-
-        // At this point, the stack either has the left (if it was true) or the right (if left was false)
-        mv.visitLabel(endLabel);
-
-        // If the context is VOID, we need to pop the result from the stack
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-        }
+        EmitLogicalOperator.emitLogicalAssign(this, node, compareOpcode);
     }
 
     private void handleOrOperator(BinaryOperatorNode node, int compareOpcode) {
-        // Implements `||` `&&`, depending on compareOpcode
-
-        MethodVisitor mv = ctx.mv;
-        Label endLabel = new Label(); // Label for the end of the operation
-
-        node.left.accept(this.with(RuntimeContextType.SCALAR)); // target - left parameter
-        // the left parameter is in the stack
-
-        mv.visitInsn(Opcodes.DUP);
-        // stack is [left, left]
-
-        // Convert the result to a boolean
-        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getBoolean", "()Z", true);
-        // stack is [left, boolean]
-
-        // If the left operand boolean value is true, return left operand
-        mv.visitJumpInsn(compareOpcode, endLabel);
-
-        mv.visitInsn(Opcodes.POP); // remove left operand
-        node.right.accept(this.with(RuntimeContextType.SCALAR)); // right operand in scalar context
-        // stack is [right]
-
-        mv.visitLabel(endLabel);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-        }
+        EmitLogicalOperator.emitLogicalOperator(this, node, compareOpcode);
     }
 
     /**
@@ -973,11 +877,7 @@ public class EmitterVisitor implements Visitor {
                 handleAtan2(node);
                 break;
             case "scalar":
-                node.operand.accept(this.with(RuntimeContextType.SCALAR));
-                ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
-                if (ctx.contextType == RuntimeContextType.VOID) {
-                    mv.visitInsn(Opcodes.POP);
-                }
+                handleScalar(node, mv);
                 break;
             case "delete":
             case "exists":
@@ -1037,10 +937,18 @@ public class EmitterVisitor implements Visitor {
             case "tr":
             case "y":
             case "qx":
-                handleRegex(node);
+                EmitRegex.handleRegex(this, node);
                 break;
             default:
                 throw new UnsupportedOperationException("Unsupported operator: " + operator);
+        }
+    }
+
+    private void handleScalar(OperatorNode node, MethodVisitor mv) {
+        node.operand.accept(this.with(RuntimeContextType.SCALAR));
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            mv.visitInsn(Opcodes.POP);
         }
     }
 
@@ -1069,93 +977,6 @@ public class EmitterVisitor implements Visitor {
             }
         }
         throw new UnsupportedOperationException("Unsupported operator: " + operator);
-    }
-
-    private void handleRegex(OperatorNode node) {
-        ListNode operand = (ListNode) node.operand;
-        EmitterVisitor scalarVisitor = this.with(RuntimeContextType.SCALAR);
-        Node variable = null;
-
-        if (node.operator.equals("qx")) {
-            // static RuntimeScalar systemCommand(RuntimeScalar command)
-            operand.elements.get(0).accept(scalarVisitor);
-            pushCallContext();
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/RuntimeIO",
-                    "systemCommand",
-                    "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
-            if (ctx.contextType == RuntimeContextType.VOID) {
-                ctx.mv.visitInsn(Opcodes.POP);
-            }
-            return;
-        }
-
-        if (node.operator.equals("tr") || node.operator.equals("y")) {
-            // static RuntimeTransliterate compile(RuntimeScalar search, RuntimeScalar replace, RuntimeScalar modifiers)
-            operand.elements.get(0).accept(scalarVisitor);
-            operand.elements.get(1).accept(scalarVisitor);
-            operand.elements.get(2).accept(scalarVisitor);
-            if (operand.elements.size() > 3) {
-                variable = operand.elements.get(3);
-            }
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/RuntimeTransliterate", "compile",
-                    "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeTransliterate;", false);
-
-            // RuntimeScalar transliterate(RuntimeScalar originalString)
-            if (variable == null) {
-                // use `$_`
-                variable = new OperatorNode("$", new IdentifierNode("_", node.tokenIndex), node.tokenIndex);
-            }
-            variable.accept(scalarVisitor);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeTransliterate", "transliterate", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-            if (ctx.contextType == RuntimeContextType.VOID) {
-                ctx.mv.visitInsn(Opcodes.POP);
-            }
-            return;
-
-        } else if (node.operator.equals("replaceRegex")) {
-            // RuntimeBaseEntity replaceRegex(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar replacement, int ctx)
-            operand.elements.get(0).accept(scalarVisitor);
-            operand.elements.get(1).accept(scalarVisitor);
-            operand.elements.get(2).accept(scalarVisitor);
-            if (operand.elements.size() > 3) {
-                variable = operand.elements.get(3);
-            }
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/RuntimeRegex", "getReplacementRegex",
-                    "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-
-        } else {
-            // RuntimeRegex.getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers)
-            operand.elements.get(0).accept(scalarVisitor);
-            operand.elements.get(1).accept(scalarVisitor);
-            if (operand.elements.size() > 2) {
-                variable = operand.elements.get(2);
-            }
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/RuntimeRegex", "getQuotedRegex",
-                    "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        }
-        if (node.operator.equals("quoteRegex")) {
-            // do not execute  `qr//`
-            return;
-        }
-
-        if (variable == null) {
-            // use `$_`
-            variable = new OperatorNode("$", new IdentifierNode("_", node.tokenIndex), node.tokenIndex);
-        }
-        variable.accept(scalarVisitor);
-
-        pushCallContext();
-        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/RuntimeRegex", "matchRegex",
-                "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
-
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
     }
 
     private void handlePackageOperator(OperatorNode node) {
@@ -1525,37 +1346,7 @@ public class EmitterVisitor implements Visitor {
 
     @Override
     public void visit(TernaryOperatorNode node) {
-        ctx.logDebug("TERNARY_OP start");
-
-        // Create labels for the else and end branches
-        Label elseLabel = new Label();
-        Label endLabel = new Label();
-
-        // Visit the condition node in scalar context
-        node.condition.accept(this.with(RuntimeContextType.SCALAR));
-
-        // Convert the result to a boolean
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getBoolean", "()Z", true);
-
-        // Jump to the else label if the condition is false
-        ctx.mv.visitJumpInsn(Opcodes.IFEQ, elseLabel);
-
-        // Visit the then branch
-        node.trueExpr.accept(this);
-
-        // Jump to the end label after executing the then branch
-        ctx.mv.visitJumpInsn(Opcodes.GOTO, endLabel);
-
-        // Visit the else label
-        ctx.mv.visitLabel(elseLabel);
-
-        // Visit the else branch
-        node.falseExpr.accept(this);
-
-        // Visit the end label
-        ctx.mv.visitLabel(endLabel);
-
-        ctx.logDebug("TERNARY_OP end");
+        EmitLogicalOperator.emitTernaryOperator(this, node);
     }
 
     @Override

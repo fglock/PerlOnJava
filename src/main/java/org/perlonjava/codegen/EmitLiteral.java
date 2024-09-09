@@ -3,6 +3,7 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
+import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 
 public class EmitLiteral {
@@ -149,5 +150,11 @@ public class EmitLiteral {
                 mv.visitLdcInsn(Double.parseDouble(value)); // emit native double
             }
         }
+    }
+
+    static void emitIdentifier(EmitterContext ctx, IdentifierNode node) {
+        // Emit code for identifier
+        throw new PerlCompilerException(
+                node.tokenIndex, "Not implemented: bare word " + node.name, ctx.errorUtil);
     }
 }
