@@ -555,32 +555,9 @@ public class Parser {
                 operand = parseZeroOrMoreList(0, false, false, false, false);
                 return new OperatorNode("return", operand, tokenIndex);
             case "eval":
-                // Handle 'eval' keyword which can be followed by a block or an expression
-                token = peek();
-                if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
-                    // If the next token is '{', parse a block
-                    consume(LexerTokenType.OPERATOR, "{");
-                    block = parseBlock();
-                    consume(LexerTokenType.OPERATOR, "}");
-                    // transform:  eval { 123 }
-                    // into:  sub { 123 }->()  with useTryCatch flag
-                    return new BinaryOperatorNode("->",
-                            new AnonSubNode(null, null, null, block, true, tokenIndex), new ListNode(tokenIndex), tokenIndex);
-                } else {
-                    // Otherwise, parse a primary expression
-                    operand = parsePrimary();
-                }
-                return new OperatorNode("eval", operand, tokenIndex);
+                return parseEval();
             case "do":
-                // Handle 'do' keyword which can be followed by a block or filename
-                token = peek();
-                if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
-                    consume(LexerTokenType.OPERATOR, "{");
-                    block = parseBlock();
-                    consume(LexerTokenType.OPERATOR, "}");
-                    return block;
-                }
-                break;
+                return parseDoOperator();
             case "sub":
                 // Handle 'sub' keyword to parse an anonymous subroutine
                 return StatementParser.parseSubroutineDefinition(this, false);
@@ -594,9 +571,45 @@ public class Parser {
             case "s":
             case "m":
                 // Handle special-quoted domain-specific arguments
-                return parseRawString(token.text);
+                return StringParser.parseRawString(this, token.text);
         }
         return null;
+    }
+
+    private Node parseDoOperator() {
+        LexerToken token;
+        Node block;
+        // Handle 'do' keyword which can be followed by a block or filename
+        token = peek();
+        if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
+            consume(LexerTokenType.OPERATOR, "{");
+            block = parseBlock();
+            consume(LexerTokenType.OPERATOR, "}");
+            return block;
+        }
+        return null;
+    }
+
+    private AbstractNode parseEval() {
+        Node block;
+        Node operand;
+        LexerToken token;
+        // Handle 'eval' keyword which can be followed by a block or an expression
+        token = peek();
+        if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
+            // If the next token is '{', parse a block
+            consume(LexerTokenType.OPERATOR, "{");
+            block = parseBlock();
+            consume(LexerTokenType.OPERATOR, "}");
+            // transform:  eval { 123 }
+            // into:  sub { 123 }->()  with useTryCatch flag
+            return new BinaryOperatorNode("->",
+                    new AnonSubNode(null, null, null, block, true, tokenIndex), new ListNode(tokenIndex), tokenIndex);
+        } else {
+            // Otherwise, parse a primary expression
+            operand = parsePrimary();
+        }
+        return new OperatorNode("eval", operand, tokenIndex);
     }
 
     public Node parsePrimary() {
@@ -651,7 +664,7 @@ public class Parser {
                     case "//":
                     case "`":
                         // Handle single and double-quoted strings
-                        return parseRawString(token.text);
+                        return StringParser.parseRawString(this, token.text);
                     case "\\":
                         // Take reference
                         parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
@@ -731,59 +744,6 @@ public class Parser {
         // Parse the expression with the appropriate precedence
         operand = parseExpression(getPrecedence(sigil) + 1);
         return new OperatorNode(sigil, operand, tokenIndex);
-    }
-
-    public Node parseRawString(String operator) {
-        // handle special quotes for operators: q qq qx qw // s/// m//
-        if (operator.equals("'") || operator.equals("\"") || operator.equals("/") || operator.equals("//")
-                || operator.equals("`")) {
-            tokenIndex--;   // will reparse the quote
-        }
-        StringParser.ParsedString rawStr;
-        int stringParts = 1;
-        switch (operator) {
-            case "s":
-            case "tr":
-            case "y":
-                stringParts = 3;    // s{str}{str}modifier
-                break;
-            case "m":
-            case "qr":
-            case "/":
-            case "//":
-                stringParts = 2;    // m{str}modifier
-                break;
-        }
-        rawStr = StringParser.parseRawStrings(ctx, tokens, tokenIndex, stringParts);
-        tokenIndex = rawStr.next;
-
-        switch (operator) {
-            case "`":
-            case "qx":
-                return StringParser.parseSystemCommand(ctx, operator, rawStr);
-            case "'":
-            case "q":
-                return StringParser.parseSingleQuotedString(rawStr);
-            case "m":
-            case "qr":
-            case "/":
-            case "//":
-                return StringParser.parseRegexMatch(ctx, operator, rawStr);
-            case "s":
-                return StringParser.parseRegexReplace(ctx, rawStr);
-            case "\"":
-            case "qq":
-                return StringParser.parseDoubleQuotedString(ctx, rawStr, true);
-            case "qw":
-                return StringParser.parseWordsString(rawStr);
-        }
-
-        ListNode list = new ListNode(rawStr.index);
-        int size = rawStr.buffers.size();
-        for (int i = 0; i < size; i++) {
-            list.elements.add(new StringNode(rawStr.buffers.get(i), rawStr.index));
-        }
-        return new OperatorNode(operator, list, rawStr.index);
     }
 
     public Node parseInfix(Node left, int precedence) {
@@ -1011,7 +971,7 @@ public class Parser {
             }
             if (peek().text.equals("/") || peek().text.equals("//")) {
                 consume();
-                Node regex = parseRawString("/");
+                Node regex = StringParser.parseRawString(this, "/");
                 if (regex != null) {
                     matched = true;
                     expr.elements.add(regex);
