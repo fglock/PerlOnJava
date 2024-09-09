@@ -54,7 +54,6 @@
 - ❌  **Version check**: Method `VERSION ( [ REQUIRE ] )` is not yet implemented.
 - ❌  **Inheritance**: `SUPER` is not yet implemented.
 - ❌  **Autoload**: `AUTOLOAD` is not yet implemented.
-- ❌  **`DESTROY`**: Handling of object destruction may be incompatible with JVM garbage collection.
 
 ## Operators
 - ✔️   **Simple arithmetic**: Operators like `+`, `-`, `*`, and `%` are supported.
