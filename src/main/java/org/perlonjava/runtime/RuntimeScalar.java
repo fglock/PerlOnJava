@@ -1074,37 +1074,31 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(this.toString().compareTo(arg2.toString()) <= 0);
     }
 
-// Bitwise AND (&)
 
     public RuntimeScalar gt(RuntimeScalar arg2) {
         return new RuntimeScalar(this.toString().compareTo(arg2.toString()) > 0);
     }
 
-// Bitwise OR (|)
 
     public RuntimeScalar ge(RuntimeScalar arg2) {
         return new RuntimeScalar(this.toString().compareTo(arg2.toString()) >= 0);
     }
 
-// Bitwise XOR (^)
 
     public RuntimeScalar bitwiseAnd(RuntimeScalar arg2) {
         return new RuntimeScalar(this.getInt() & arg2.getInt());
     }
 
-// Bitwise NOT (~)
 
     public RuntimeScalar bitwiseOr(RuntimeScalar arg2) {
         return new RuntimeScalar(this.getInt() | arg2.getInt());
     }
 
-// Shift Left (<<)
 
     public RuntimeScalar bitwiseXor(RuntimeScalar arg2) {
         return new RuntimeScalar(this.getInt() ^ arg2.getInt());
     }
 
-// Shift Right (>>)
 
     public RuntimeScalar bitwiseNot() {
         return new RuntimeScalar(~this.getInt());
