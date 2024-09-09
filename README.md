@@ -352,14 +352,16 @@ public class Main {
 - **v1.4.0**: I/O operators
     - File i/o operators, STDOUT, STDERR, STDIN
     - TAP (Perl standard) tests
+- **v1.5.0**: Regex operators
+    - Added Regular expressions and pattern matching: m//, pos, qr//, quotemeta, s///, split
+    - More complete set of operations on strings, numbers, arrays, hashes, lists
+    - More special variables
+    - More tests and various bug fixes
 
 ### Upcoming Milestones
 
-- **v1.5.0**: Planned release date: 2024-12-10
-    - Regex operators
-    - Added more operators
-
-- **v1.6.0**: Performance Improvements and Enhanced Regex Support
+- **v1.6.0**: Performance Improvements
+    - Planned release date: 2024-12-10
     - Focus on optimizing the execution engine for better performance.
     - Improve error handling and debugging tools to make development easier.
 
