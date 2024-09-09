@@ -1,0 +1,186 @@
+package org.perlonjava.codegen;
+
+import org.objectweb.asm.Label;
+import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.Opcodes;
+import org.perlonjava.astnode.For1Node;
+import org.perlonjava.astnode.For3Node;
+import org.perlonjava.astnode.IfNode;
+import org.perlonjava.runtime.RuntimeContextType;
+
+public class EmitStatement {
+    static void emitIf(EmitterVisitor emitterVisitor, IfNode node) {
+        emitterVisitor.ctx.logDebug("IF start: " + node.operator);
+
+        // Enter a new scope in the symbol table
+        emitterVisitor.ctx.symbolTable.enterScope();
+
+        // Create labels for the else and end branches
+        Label elseLabel = new Label();
+        Label endLabel = new Label();
+
+        // Visit the condition node in scalar context
+        node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+        // Convert the result to a boolean
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getBoolean", "()Z", true);
+
+        // Jump to the else label if the condition is false
+        emitterVisitor.ctx.mv.visitJumpInsn(node.operator.equals("unless") ? Opcodes.IFNE : Opcodes.IFEQ, elseLabel);
+
+        // Visit the then branch
+        node.thenBranch.accept(emitterVisitor);
+
+        // Jump to the end label after executing the then branch
+        emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.GOTO, endLabel);
+
+        // Visit the else label
+        emitterVisitor.ctx.mv.visitLabel(elseLabel);
+
+        // Visit the else branch if it exists
+        if (node.elseBranch != null) {
+            node.elseBranch.accept(emitterVisitor);
+        } else {
+            // If the context is not VOID, push "undef" to the stack
+            if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", "undef", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            }
+        }
+
+        // Visit the end label
+        emitterVisitor.ctx.mv.visitLabel(endLabel);
+
+        // Exit the scope in the symbol table
+        emitterVisitor.ctx.symbolTable.exitScope();
+
+        emitterVisitor.ctx.logDebug("IF end");
+    }
+
+    static void emitFor3(EmitterVisitor emitterVisitor, For3Node node) {
+        emitterVisitor.ctx.logDebug("FOR3 start");
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+
+        EmitterVisitor voidVisitor = emitterVisitor.with(RuntimeContextType.VOID); // some parts have context VOID
+
+        // Enter a new scope in the symbol table
+        if (node.useNewScope) {
+            emitterVisitor.ctx.symbolTable.enterScope();
+        }
+
+        // Create labels for the start of the loop and the end of the loop
+        Label startLabel = new Label();
+        Label endLabel = new Label();
+
+        // Visit the initialization node (executed once at the start)
+        if (node.initialization != null) {
+            node.initialization.accept(voidVisitor);
+        }
+
+        // Visit the start label (this is where the loop condition and body are)
+        mv.visitLabel(startLabel);
+
+        // Visit the condition node in scalar context
+        if (node.condition != null) {
+            node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+            // Convert the result to a boolean
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getBoolean", "()Z", true);
+
+            // Jump to the end label if the condition is false (exit the loop)
+            mv.visitJumpInsn(Opcodes.IFEQ, endLabel);
+        }
+
+        // Visit the loop body
+        node.body.accept(voidVisitor);
+
+        // Visit the increment node (executed after the loop body)
+        if (node.increment != null) {
+            node.increment.accept(voidVisitor);
+        }
+
+        // Jump back to the start label to continue the loop
+        mv.visitJumpInsn(Opcodes.GOTO, startLabel);
+
+        // Visit the end label (this is where the loop ends)
+        mv.visitLabel(endLabel);
+
+        // Exit the scope in the symbol table
+        if (node.useNewScope) {
+            emitterVisitor.ctx.symbolTable.exitScope();
+        }
+
+        // If the context is not VOID, push "undef" to the stack
+        if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", "undef", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        }
+
+        emitterVisitor.ctx.logDebug("FOR end");
+    }
+
+    static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
+        emitterVisitor.ctx.logDebug("FOR1 start");
+
+        // Enter a new scope in the symbol table
+        if (node.useNewScope) {
+            emitterVisitor.ctx.symbolTable.enterScope();
+        }
+
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+
+        // For1Node fields:
+        //  variable
+        //  list
+        //  body
+
+        // Create labels for the loop
+        Label loopStart = new Label();
+        Label loopEnd = new Label();
+
+        // Emit the list and create an Iterator<Runtime>
+        node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "iterator", "()Ljava/util/Iterator;", true);
+
+        // Start of the loop
+        mv.visitLabel(loopStart);
+
+        // Check if the iterator has more elements
+        mv.visitInsn(Opcodes.DUP); // Duplicate the iterator on the stack to use it for hasNext and next
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "hasNext", "()Z", true);
+        mv.visitJumpInsn(Opcodes.IFEQ, loopEnd);
+
+        // Retrieve the next element from the iterator
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
+        mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeScalar"); // Cast the object to the appropriate type
+
+        // Assign it to the loop variable
+        node.variable.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        mv.visitInsn(Opcodes.SWAP); // move the target first
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        mv.visitInsn(Opcodes.POP);  // we don't need the variable in the stack
+
+        // Visit the body of the loop
+        node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
+
+        // Jump back to the start of the loop
+        mv.visitJumpInsn(Opcodes.GOTO, loopStart);
+
+        // End of the loop
+        mv.visitLabel(loopEnd);
+
+        // Pop the iterator from the stack
+        mv.visitInsn(Opcodes.POP);
+
+        // If the context is not VOID, push "undef" to the stack
+        if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", "undef", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        }
+
+        // Exit the scope in the symbol table
+        if (node.useNewScope) {
+            emitterVisitor.ctx.symbolTable.exitScope();
+        }
+
+        emitterVisitor.ctx.logDebug("FOR1 end");
+    }
+}
