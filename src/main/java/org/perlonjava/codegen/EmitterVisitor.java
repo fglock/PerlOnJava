@@ -754,7 +754,8 @@ public class EmitterVisitor implements Visitor {
         boolean emitIndexAsList = true;
         if (right.elements.size() == 1) {
             Node elem = right.elements.get(0);
-            if (elem instanceof NumberNode) {
+            if (elem instanceof NumberNode || elem instanceof OperatorNode
+                || elem instanceof BinaryOperatorNode) {
                 // TODO more optimizations
                 elem.accept(this.with(RuntimeContextType.SCALAR));
                 emitIndexAsList = false;
