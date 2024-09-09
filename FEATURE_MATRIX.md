@@ -41,6 +41,7 @@
 - ✔️   **Autovivification**: Autovivification is implemented.
 - ✔️   **File handles**: Support for file handles is implemented.
 - ❌  **Tied Scalars**: Support for tying scalars to classes is missing.
+- ❌  **Overload**: overloading Perl operations is missing.
 - ❌  **Cached string/numeric conversions; dualvars**: Caching and dual variable support are not implemented.
 - ❌  **Unicode**: Support for non-Unicode strings is not implemented.
 - ❌  **Taint checks**: Support for taint checks is not implemented.
