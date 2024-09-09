@@ -144,7 +144,7 @@ public class Parser {
                     // Must be followed by an identifier
                     tokenIndex++;
                     if (peek().type == LexerTokenType.IDENTIFIER) {
-                        return StatementParser.parseSubroutineDefinition(this, true);
+                        return SubroutineParser.parseSubroutineDefinition(this, true);
                     }
                     // otherwise backtrack
                     tokenIndex = currentIndex;
@@ -494,7 +494,7 @@ public class Parser {
                 return parseDoOperator();
             case "sub":
                 // Handle 'sub' keyword to parse an anonymous subroutine
-                return StatementParser.parseSubroutineDefinition(this, false);
+                return SubroutineParser.parseSubroutineDefinition(this, false);
             case "q":
             case "qq":
             case "qx":

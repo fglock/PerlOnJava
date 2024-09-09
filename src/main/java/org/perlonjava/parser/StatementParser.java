@@ -3,13 +3,7 @@ package org.perlonjava.parser;
 import org.perlonjava.astnode.*;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.runtime.GlobalContext;
 import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.RuntimeCode;
-import org.perlonjava.runtime.RuntimeScalar;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public class StatementParser {
 
@@ -192,82 +186,4 @@ public class StatementParser {
         }
     }
 
-    public static Node parseSubroutineDefinition(Parser parser, boolean wantName) {
-        // This method is responsible for parsing an anonymous subroutine (a subroutine without a name)
-        // or a named subroutine based on the 'wantName' flag.
-
-        // Initialize the subroutine name to null. This will store the name of the subroutine if 'wantName' is true.
-        String subName = null;
-
-        // If the 'wantName' flag is true and the next token is an identifier, we parse the subroutine name.
-        if (wantName && parser.peek().type == LexerTokenType.IDENTIFIER) {
-            // 'parseSubroutineIdentifier' is called to handle cases where the subroutine name might be complex
-            // (e.g., namespaced, fully qualified names). It may return null if no valid name is found.
-            subName = IdentifierParser.parseSubroutineIdentifier(parser);
-        }
-
-        // Initialize the prototype node to null. This will store the prototype of the subroutine if it exists.
-        String prototype = null;
-
-        // Check if the next token is an opening parenthesis '(' indicating a prototype.
-        if (parser.peek().text.equals("(")) {
-            // If a prototype exists, we parse it using 'parseRawString' method which handles it like the 'q()' operator.
-            // This means it will take everything inside the parentheses as a literal string.
-            prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
-        }
-
-        // Initialize a list to store any attributes the subroutine might have.
-        List<String> attributes = new ArrayList<>();
-
-        // While there are attributes (denoted by a colon ':'), we keep parsing them.
-        while (parser.peek().text.equals(":")) {
-            // Consume the colon operator.
-            parser.consume(LexerTokenType.OPERATOR, ":");
-            // Consume the attribute name (an identifier) and add it to the attributes list.
-            attributes.add(parser.consume(LexerTokenType.IDENTIFIER).text);
-        }
-
-        // After parsing name, prototype, and attributes, we expect an opening curly brace '{' to denote the start of the subroutine block.
-        parser.consume(LexerTokenType.OPERATOR, "{");
-
-        // Parse the block of the subroutine, which contains the actual code.
-        Node block = parser.parseBlock();
-
-        // After the block, we expect a closing curly brace '}' to denote the end of the subroutine.
-        parser.consume(LexerTokenType.OPERATOR, "}");
-
-        // Now we check if the next token is one of the illegal characters that cannot follow a subroutine.
-        // These are '(', '{', and '['. If any of these follow, we throw a syntax error.
-        LexerToken token = parser.peek();
-        if (token.text.equals("(") || token.text.equals("{") || token.text.equals("[")) {
-            // Throw an exception indicating a syntax error.
-            throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
-        }
-
-        // Finally, we create a new 'AnonSubNode' object with the parsed data: the name, prototype, attributes, block,
-        // `useTryCatch` flag, and token position.
-        AnonSubNode anonSubNode = new AnonSubNode(subName, prototype, attributes, block, false, parser.tokenIndex);
-
-        if (subName != null) {
-            // Additional steps for named subroutine:
-            // - register the subroutine in the namespace
-            // - add the typeglob assignment:  *name = sub () :attr {...}
-
-            // register the named subroutine
-            String fullName = GlobalContext.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
-            RuntimeCode codeRef = new RuntimeCode(prototype);
-            GlobalContext.getGlobalCodeRef(fullName).set(new RuntimeScalar(codeRef));
-
-            // return typeglob assignment
-            return new BinaryOperatorNode("=",
-                    new OperatorNode("*",
-                            new IdentifierNode(fullName, parser.tokenIndex),
-                            parser.tokenIndex),
-                    anonSubNode,
-                    parser.tokenIndex);
-        }
-
-        // return anonymous subroutine
-        return anonSubNode;
-    }
 }
