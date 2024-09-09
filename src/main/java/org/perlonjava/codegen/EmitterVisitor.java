@@ -1,13 +1,11 @@
 package org.perlonjava.codegen;
 
-import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.runtime.RuntimeContextType;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class EmitterVisitor implements Visitor {
@@ -1102,33 +1100,7 @@ public class EmitterVisitor implements Visitor {
 
     @Override
     public void visit(BlockNode node) {
-        ctx.logDebug("generateCodeBlock start");
-        ctx.symbolTable.enterScope();
-        EmitterVisitor voidVisitor =
-                this.with(RuntimeContextType.VOID); // statements in the middle of the block have context VOID
-        List<Node> list = node.elements;
-        for (int i = 0; i < list.size(); i++) {
-            Node element = list.get(i);
-
-            // Annotate the bytecode with Perl source code line numbers
-            int lineNumber = ctx.errorUtil.getLineNumber(element.getIndex());
-            Label thisLabel = new Label();
-            ctx.mv.visitLabel(thisLabel);
-            ctx.mv.visitLineNumber(lineNumber, thisLabel); // Associate line number with thisLabel
-
-            // Emit the statement with current context
-            if (i == list.size() - 1) {
-                // Special case for the last element
-                ctx.logDebug("Last element: " + element);
-                element.accept(this);
-            } else {
-                // General case for all other elements
-                ctx.logDebug("Element: " + element);
-                element.accept(voidVisitor);
-            }
-        }
-        ctx.symbolTable.exitScope();
-        ctx.logDebug("generateCodeBlock end");
+        EmitStatement.emitBlock(this, node);
     }
 
     @Override

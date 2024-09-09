@@ -6,15 +6,13 @@ import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.GlobalContext;
 import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.RuntimeCode;
-import org.perlonjava.runtime.RuntimeScalar;
 
 import java.util.*;
 
 public class Parser {
-    private static final Set<String> TERMINATORS =
+    public static final Set<String> TERMINATORS =
             Set.of(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when");
-    private static final Set<String> LIST_TERMINATORS =
+    public static final Set<String> LIST_TERMINATORS =
             Set.of(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when", "not", "and", "or");
     private static final Set<String> INFIX_OP = Set.of(
             "or", "xor", "and", "||", "//", "&&", "|", "^", "&",
@@ -96,7 +94,7 @@ public class Parser {
         return tokenIndex;
     }
 
-    private int getPrecedence(String operator) {
+    public int getPrecedence(String operator) {
         return precedenceMap.getOrDefault(operator, 24);
     }
 
@@ -259,70 +257,6 @@ public class Parser {
     }
 
     /**
-     * Parses a subroutine call.
-     *
-     * @return A Node representing the parsed subroutine call.
-     */
-    private Node parseSubroutineCall() {
-        // Parse the subroutine name as a complex identifier
-        // Alternately, this could be a v-string like v10.20.30   XXX TODO
-
-        String subName = IdentifierParser.parseSubroutineIdentifier(this);
-        ctx.logDebug("SubroutineCall subName `" + subName + "` package " + ctx.symbolTable.getCurrentPackage());
-        if (subName == null) {
-            throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
-        }
-
-        // Normalize the subroutine name to include the current package
-        String fullName = GlobalContext.normalizeVariableName(subName, ctx.symbolTable.getCurrentPackage());
-
-        // Create an identifier node for the subroutine name
-        IdentifierNode nameNode = new IdentifierNode(subName, tokenIndex);
-
-        // Check if the subroutine exists in the global namespace
-        boolean subExists = GlobalContext.existsGlobalCodeRef(fullName);
-        String prototype = null;
-        if (subExists) {
-            // Fetch the subroutine reference
-            RuntimeScalar codeRef = GlobalContext.getGlobalCodeRef(fullName);
-            prototype = ((RuntimeCode) codeRef.value).prototype;
-        }
-        ctx.logDebug("SubroutineCall exists " + subExists + " prototype `" + prototype + "`");
-
-        // Check if the subroutine call has parentheses
-        boolean hasParentheses = peek().text.equals("(");
-        if (!subExists && !hasParentheses) {
-            // If the subroutine does not exist and there are no parentheses, it is not a subroutine call
-            return nameNode;
-        }
-
-        // Handle the parameter list for the subroutine call
-        Node arguments;
-        if (prototype == null) {
-            // no prototype
-            arguments = parseZeroOrMoreList(0, false, true, false, false);
-        } else if (prototype.isEmpty()) {
-            // prototype is empty string
-            arguments = new ListNode(tokenIndex);
-        } else if (prototype.equals("$")) {
-            // prototype is `$`
-            arguments = parseZeroOrOneList(1);
-        } else if (prototype.equals(";$")) {
-            // prototype is `;$`
-            arguments = parseZeroOrOneList(0);
-        } else {
-            // XXX TODO: Handle more prototypes or parameter variables
-            arguments = parseZeroOrMoreList(0, false, true, false, false);
-        }
-
-        // Rewrite and return the subroutine call as `&name(arguments)`
-        return new BinaryOperatorNode("(",
-                new OperatorNode("&", nameNode, nameNode.tokenIndex),
-                arguments,
-                tokenIndex);
-    }
-
-    /**
      * Parses an expression based on operator precedence.
      * <p>
      * Higher precedence means tighter: `*` has higher precedence than `+`
@@ -422,7 +356,7 @@ public class Parser {
             case "localtime":
             case "gmtime":
                 String text = token.text;
-                operand = parseZeroOrOneList(0);
+                operand = ListParser.parseZeroOrOneList(this, 0);
                 if (((ListNode) operand).elements.isEmpty()) {
                     switch (text) {
                         case "sleep":
@@ -456,13 +390,13 @@ public class Parser {
                 return new OperatorNode(text, operand, tokenIndex);
             case "rindex":
             case "index":
-                operand = parseZeroOrMoreList(2, false, true, false, false);
+                operand = ListParser.parseZeroOrMoreList(this, 2, false, true, false, false);
                 return new OperatorNode(token.text, operand, tokenIndex);
             case "atan2":
-                operand = parseZeroOrMoreList(2, false, true, false, false);
+                operand = ListParser.parseZeroOrMoreList(this, 2, false, true, false, false);
                 return new OperatorNode("atan2", operand, tokenIndex);
             case "bless":
-                operand = parseZeroOrMoreList(1, false, true, false, false);
+                operand = ListParser.parseZeroOrMoreList(this, 1, false, true, false, false);
                 Node ref = ((ListNode) operand).elements.get(0);
                 Node className = ((ListNode) operand).elements.get(1);
                 if (className == null) {
@@ -472,7 +406,7 @@ public class Parser {
             case "split":
                 // TODO Handle 'split' keyword
                 // RuntimeList split(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar limitArg)
-                operand = parseZeroOrMoreList(1, false, true, false, true);
+                operand = ListParser.parseZeroOrMoreList(this, 1, false, true, false, true);
                 Node separator = ((ListNode) operand).elements.remove(0);
                 if (separator instanceof OperatorNode) {
                     if (((OperatorNode) separator).operator.equals("matchRegex")) {
@@ -486,14 +420,14 @@ public class Parser {
             case "substr":
             case "sprintf":
                 // Handle 'join' keyword as a Binary operator with a RuntimeList operand
-                operand = parseZeroOrMoreList(1, false, true, false, false);
+                operand = ListParser.parseZeroOrMoreList(this, 1, false, true, false, false);
                 separator = ((ListNode) operand).elements.remove(0);
                 return new BinaryOperatorNode(token.text, separator, operand, tokenIndex);
             case "sort":
             case "map":
             case "grep":
                 // Handle 'sort' keyword as a Binary operator with a Code and List operands
-                operand = parseZeroOrMoreList(1, true, false, false, false);
+                operand = ListParser.parseZeroOrMoreList(this, 1, true, false, false, false);
                 // transform:   { 123 }
                 // into:        sub { 123 }
                 Node block = ((ListNode) operand).handle;
@@ -504,7 +438,7 @@ public class Parser {
                 return new BinaryOperatorNode(token.text, block, operand, tokenIndex);
             case "reverse":
             case "splice":
-                operand = parseZeroOrMoreList(0, false, true, false, false);
+                operand = ListParser.parseZeroOrMoreList(this, 0, false, true, false, false);
                 return new OperatorNode(token.text, operand, tokenIndex);
             case "readline":
             case "eof":
@@ -514,7 +448,7 @@ public class Parser {
             case "close":
             case "seek":
                 // Handle 'open' keyword as a Binary operator with a FileHandle and List operands
-                operand = parseZeroOrMoreList(0, false, true, false, false);
+                operand = ListParser.parseZeroOrMoreList(this, 0, false, true, false, false);
                 // Node handle = ((ListNode) operand).handle;
                 // ((ListNode) operand).handle = null;
                 Node handle = ((ListNode) operand).elements.remove(0);
@@ -526,7 +460,7 @@ public class Parser {
             case "print":
             case "say":
                 // Handle 'print' keyword as a Binary operator with a FileHandle and List operands
-                operand = parseZeroOrMoreList(0, false, true, true, false);
+                operand = ListParser.parseZeroOrMoreList(this, 0, false, true, true, false);
                 handle = ((ListNode) operand).handle;
                 ((ListNode) operand).handle = null;
                 if (handle == null) {
@@ -535,7 +469,7 @@ public class Parser {
                 return new BinaryOperatorNode(token.text, handle, operand, tokenIndex);
             case "delete":
             case "exists":
-                operand = parseZeroOrOneList(1);
+                operand = ListParser.parseZeroOrOneList(this, 1);
                 return new OperatorNode(token.text, operand, tokenIndex);
             case "scalar":
             case "values":
@@ -552,7 +486,7 @@ public class Parser {
                 // Handle 'return' keyword as a unary operator with an operand;
                 // Parentheses are ignored.
                 // operand = parseExpression(getPrecedence("print") + 1);
-                operand = parseZeroOrMoreList(0, false, false, false, false);
+                operand = ListParser.parseZeroOrMoreList(this, 0, false, false, false, false);
                 return new OperatorNode("return", operand, tokenIndex);
             case "eval":
                 return parseEval();
@@ -637,7 +571,7 @@ public class Parser {
 
                 // Handle any other identifier as a subroutine call or identifier node
                 tokenIndex = startIndex;   // backtrack
-                return parseSubroutineCall();
+                return SubroutineParser.parseSubroutineCall(this);
             case NUMBER:
                 // Handle number literals
                 return NumberParser.parseNumber(this, token);
@@ -648,13 +582,13 @@ public class Parser {
                 switch (token.text) {
                     case "(":
                         // Handle parentheses to parse a nested expression or to construct a list
-                        return new ListNode(parseList(")", 0), tokenIndex);
+                        return new ListNode(ListParser.parseList(this, ")", 0), tokenIndex);
                     case "{":
                         // Handle curly brackets to parse a nested expression
-                        return new HashLiteralNode(parseList("}", 0), tokenIndex);
+                        return new HashLiteralNode(ListParser.parseList(this, "}", 0), tokenIndex);
                     case "[":
                         // Handle square brackets to parse a nested expression
-                        return new ArrayLiteralNode(parseList("]", 0), tokenIndex);
+                        return new ArrayLiteralNode(ListParser.parseList(this, "]", 0), tokenIndex);
                     case ".":
                         // Handle fractional numbers
                         return NumberParser.parseFractionalNumber(this);
@@ -780,7 +714,7 @@ public class Parser {
                 switch (nextText) {
                     case "(":
                         consume();
-                        right = new ListNode(parseList(")", 0), tokenIndex);
+                        right = new ListNode(ListParser.parseList(this, ")", 0), tokenIndex);
                         return new BinaryOperatorNode(token.text, left, right, tokenIndex);
                     case "{":
                         consume();
@@ -788,7 +722,7 @@ public class Parser {
                         return new BinaryOperatorNode(token.text, left, right, tokenIndex);
                     case "[":
                         consume();
-                        right = new ArrayLiteralNode(parseList("]", 1), tokenIndex);
+                        right = new ArrayLiteralNode(ListParser.parseList(this, "]", 1), tokenIndex);
                         return new BinaryOperatorNode(token.text, left, right, tokenIndex);
                 }
                 parsingForLoopVariable = true;
@@ -804,13 +738,13 @@ public class Parser {
 
                 return new BinaryOperatorNode(token.text, left, right, tokenIndex);
             case "(":
-                right = new ListNode(parseList(")", 0), tokenIndex);
+                right = new ListNode(ListParser.parseList(this, ")", 0), tokenIndex);
                 return new BinaryOperatorNode(token.text, left, right, tokenIndex);
             case "{":
                 right = new HashLiteralNode(parseHashSubscript(), tokenIndex);
                 return new BinaryOperatorNode(token.text, left, right, tokenIndex);
             case "[":
-                right = new ArrayLiteralNode(parseList("]", 1), tokenIndex);
+                right = new ArrayLiteralNode(ListParser.parseList(this, "]", 1), tokenIndex);
                 return new BinaryOperatorNode(token.text, left, right, tokenIndex);
             case "--":
             case "++":
@@ -873,44 +807,7 @@ public class Parser {
 
     // List parsers
 
-    // List parser for predeclared function calls with One optional argument,
-    // accepts a list with Parentheses or without.
-    //
-    // Comma is allowed after the argument:   rand, rand 10,
-    //
-    private ListNode parseZeroOrOneList(int minItems) {
-        if (looksLikeEmptyList()) {
-            // return an empty list
-            if (minItems > 0) {
-                throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
-            }
-            return new ListNode(tokenIndex);
-        }
-
-        ListNode expr;
-        LexerToken token = peek();
-        if (token.text.equals("(")) {
-            // argument in parentheses, can be 0 or 1 argument:    rand(), rand(10)
-            // Commas are allowed after the single argument:       rand(10,)
-            consume();
-            expr = new ListNode(parseList(")", 0), tokenIndex);
-            if (expr.elements.size() > 1) {
-                throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
-            }
-        } else if (token.type == LexerTokenType.EOF || LIST_TERMINATORS.contains(token.text) || token.text.equals(",")) {
-            // no argument
-            expr = new ListNode(tokenIndex);
-        } else {
-            // argument without parentheses
-            expr = ListNode.makeList(parseExpression(getPrecedence("isa") + 1));
-        }
-        if (expr.elements.size() < minItems) {
-            throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
-        }
-        return expr;
-    }
-
-    private boolean looksLikeEmptyList() {
+    public boolean looksLikeEmptyList() {
         boolean isEmptyList = false;
         int previousIndex = tokenIndex;
         LexerToken token = consume();
@@ -941,119 +838,7 @@ public class Parser {
         return isEmptyList;
     }
 
-    // List parser for predeclared function calls, accepts a list with Parentheses or without
-    //
-    // The Minimum number of arguments can be set.
-    //
-    // wantBlockNode:   sort { $a <=> $b } @array
-    //
-    // obeyParentheses: print ("this", "that"), "not printed"
-    //
-    // not obeyParentheses:  return ("this", "that"), "this too"
-    //
-    // wantFileHandle:  print STDOUT "this\n";
-    //
-    // wantRegex:  split / /, "this";
-    //
-    private ListNode parseZeroOrMoreList(int minItems, boolean wantBlockNode, boolean obeyParentheses, boolean wantFileHandle, boolean wantRegex) {
-        ctx.logDebug("parseZeroOrMoreList start");
-        ListNode expr = new ListNode(tokenIndex);
-
-        int currentIndex = tokenIndex;
-        boolean hasParen = false;
-        LexerToken token;
-
-        if (wantRegex) {
-            boolean matched = false;
-            if (peek().text.equals("(")) {
-                consume();
-                hasParen = true;
-            }
-            if (peek().text.equals("/") || peek().text.equals("//")) {
-                consume();
-                Node regex = StringParser.parseRawString(this, "/");
-                if (regex != null) {
-                    matched = true;
-                    expr.elements.add(regex);
-                    token = peek();
-                    if (token.type != LexerTokenType.EOF && !LIST_TERMINATORS.contains(token.text)) {
-                        // consume comma
-                        consume(LexerTokenType.OPERATOR, ",");
-                    }
-                }
-            }
-            if (!matched) {
-                // backtrack
-                tokenIndex = currentIndex;
-                hasParen = false;
-            }
-        }
-
-        if (wantFileHandle) {
-            if (peek().text.equals("(")) {
-                consume();
-                hasParen = true;
-            }
-            expr.handle = parseFileHandle();
-            if (expr.handle == null || !isSpaceAfterPrintBlock()) {
-                // backtrack
-                tokenIndex = currentIndex;
-                hasParen = false;
-            }
-        }
-
-        if (wantBlockNode) {
-            if (peek().text.equals("(")) {
-                consume();
-                hasParen = true;
-            }
-            if (peek().text.equals("{")) {
-                consume();
-                expr.handle = parseBlock();
-                consume(LexerTokenType.OPERATOR, "}");
-            }
-            if (!isSpaceAfterPrintBlock() || looksLikeEmptyList()) {
-                throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
-            }
-        }
-
-        if (!looksLikeEmptyList()) {
-            // it doesn't look like an empty list
-            token = peek();
-            if (obeyParentheses && token.text.equals("(")) {
-                // arguments in parentheses, can be 0 or more arguments:    print(), print(10)
-                // Commas are allowed after the arguments:       print(10,)
-                consume();
-                expr.elements.addAll(parseList(")", 0));
-            } else {
-                while (token.type != LexerTokenType.EOF && !LIST_TERMINATORS.contains(token.text)) {
-                    // Argument without parentheses
-                    expr.elements.add(parseExpression(getPrecedence(",")));
-                    token = peek();
-                    if (token.text.equals(",") || token.text.equals("=>")) {
-                        while (token.text.equals(",") || token.text.equals("=>")) {
-                            consume();
-                            token = peek();
-                        }
-                    } else {
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (hasParen) {
-            consume(LexerTokenType.OPERATOR, ")");
-        }
-        ctx.logDebug("parseZeroOrMoreList end: " + expr);
-
-        if (expr.elements.size() < minItems) {
-            throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
-        }
-        return expr;
-    }
-
-    private Node parseFileHandle() {
+    public Node parseFileHandle() {
         boolean hasBracket = false;
         if (peek().text.equals("{")) {
             consume();
@@ -1099,7 +884,7 @@ public class Parser {
         return fileHandle;
     }
 
-    private boolean isSpaceAfterPrintBlock() {
+    public boolean isSpaceAfterPrintBlock() {
         int currentIndex = tokenIndex;
         LexerToken token = peek();
         boolean isSpace = false;
@@ -1155,41 +940,6 @@ public class Parser {
         return isSpace;
     }
 
-    // Generic List parser for Parentheses, Hash literal, Array literal,
-    // function arguments, get Array element, get Hash element.
-    //
-    // The Minimum number of arguments can be set.
-    //
-    // Example usage:
-    //
-    //    new ListNode(parseList(")", 0), tokenIndex);
-    //    new HashLiteralNode(parseList("}", 1), tokenIndex);
-    //    new ArrayLiteralNode(parseList("]", 1), tokenIndex);
-    //
-    private List<Node> parseList(String close, int minItems) {
-        ctx.logDebug("parseList start");
-        ListNode expr;
-
-        LexerToken token = peek();
-        ctx.logDebug("parseList start at " + token);
-        if (token.text.equals(close)) {
-            // empty list
-            consume();
-            expr = new ListNode(tokenIndex);
-        } else {
-            expr = ListNode.makeList(parseExpression(0));
-            ctx.logDebug("parseList end at " + peek());
-            consume(LexerTokenType.OPERATOR, close);
-        }
-
-        if (expr.elements.size() < minItems) {
-            throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
-        }
-        ctx.logDebug("parseList end");
-
-        return expr.elements;
-    }
-
     private List<Node> parseHashSubscript() {
         ctx.logDebug("parseHashSubscript start");
         int currentIndex = tokenIndex;
@@ -1205,7 +955,7 @@ public class Parser {
 
         // backtrack
         tokenIndex = currentIndex;
-        return parseList("}", 1);
+        return ListParser.parseList(this, "}", 1);
     }
 
 }

@@ -3,10 +3,10 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
-import org.perlonjava.astnode.For1Node;
-import org.perlonjava.astnode.For3Node;
-import org.perlonjava.astnode.IfNode;
+import org.perlonjava.astnode.*;
 import org.perlonjava.runtime.RuntimeContextType;
+
+import java.util.List;
 
 public class EmitStatement {
     static void emitIf(EmitterVisitor emitterVisitor, IfNode node) {
@@ -182,5 +182,35 @@ public class EmitStatement {
         }
 
         emitterVisitor.ctx.logDebug("FOR1 end");
+    }
+
+    static void emitBlock(EmitterVisitor emitterVisitor, BlockNode node) {
+        emitterVisitor.ctx.logDebug("generateCodeBlock start");
+        emitterVisitor.ctx.symbolTable.enterScope();
+        EmitterVisitor voidVisitor =
+                emitterVisitor.with(RuntimeContextType.VOID); // statements in the middle of the block have context VOID
+        List<Node> list = node.elements;
+        for (int i = 0; i < list.size(); i++) {
+            Node element = list.get(i);
+
+            // Annotate the bytecode with Perl source code line numbers
+            int lineNumber = emitterVisitor.ctx.errorUtil.getLineNumber(element.getIndex());
+            Label thisLabel = new Label();
+            emitterVisitor.ctx.mv.visitLabel(thisLabel);
+            emitterVisitor.ctx.mv.visitLineNumber(lineNumber, thisLabel); // Associate line number with thisLabel
+
+            // Emit the statement with current context
+            if (i == list.size() - 1) {
+                // Special case for the last element
+                emitterVisitor.ctx.logDebug("Last element: " + element);
+                element.accept(emitterVisitor);
+            } else {
+                // General case for all other elements
+                emitterVisitor.ctx.logDebug("Element: " + element);
+                element.accept(voidVisitor);
+            }
+        }
+        emitterVisitor.ctx.symbolTable.exitScope();
+        emitterVisitor.ctx.logDebug("generateCodeBlock end");
     }
 }
