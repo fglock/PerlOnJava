@@ -63,6 +63,10 @@ public class GlobalContext {
         getGlobalArray("main::INC");
         getGlobalHash("main::INC");
 
+        // Initialize %ENV
+        Map<String, RuntimeScalar> env = getGlobalHash("main::ENV").elements;
+        System.getenv().forEach((k, v) -> { env.put(k, new RuntimeScalar(v)); });
+
         // Initialize STDOUT, STDERR, STDIN
         getGlobalIO("main::STDOUT").set(RuntimeIO.open(FileDescriptor.out, true));
         getGlobalIO("main::STDERR").set(RuntimeIO.open(FileDescriptor.err, true));

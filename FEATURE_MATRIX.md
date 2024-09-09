@@ -43,6 +43,7 @@
 - ❌  **Tied Scalars**: Support for tying scalars to classes is missing.
 - ❌  **Cached string/numeric conversions; dualvars**: Caching and dual variable support are not implemented.
 - ❌  **Unicode**: Support for non-Unicode strings is not implemented.
+- ❌  **Taint checks**: Support for taint checks is not implemented.
 
 ## Objects
 - ✔️   **Objects**: Creating classes, method call syntax works.
@@ -160,7 +161,7 @@
 - ✔️   **Global variable infrastructure**: Support for global variables is implemented.
 - ✔️   **Namespaces**: Namespace support is present.
 - ✔️   **`@_` and `$@` special variables**: Special variables like `@_` and `$@` are supported.
-- ✔️   **Special variables**: The special variables `@ARGV`, `$_`, `$"`, `$\\`, `$,`, `$/`, `$$`, `$a`, `$b`, `$^O` are implemented.
+- ✔️   **Special variables**: The special variables `%ENV`, `@ARGV`, `$_`, `$"`, `$\\`, `$,`, `$/`, `$$`, `$a`, `$b`, `$^O` are implemented.
 - ✔️   **I/O symbols**: `STDOUT`, `STDERR`, `STDIN` are implemented.
 - ❌  **Thread-safe `@_`, `$_`, and regex variables**: Thread safety for global special variables is missing.
 
