@@ -899,23 +899,7 @@ public class EmitterVisitor implements Visitor {
                 handleUnaryBuiltin(node, "postAutoDecrement");
                 break;
             case "\\":
-                if (node.operand instanceof ListNode) {
-                    // operand is a list:  `\(1,2,3)`
-                    node.operand.accept(this.with(RuntimeContextType.LIST));
-                    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                            "org/perlonjava/runtime/RuntimeList",
-                            "createListReference",
-                            "()Lorg/perlonjava/runtime/RuntimeList;", false);
-                    if (ctx.contextType == RuntimeContextType.VOID) {
-                        mv.visitInsn(Opcodes.POP);
-                    }
-                } else {
-                    node.operand.accept(this.with(RuntimeContextType.LIST));
-                    ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "createReference", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
-                    if (ctx.contextType == RuntimeContextType.VOID) {
-                        mv.visitInsn(Opcodes.POP);
-                    }
-                }
+                handleCreateReference(node, mv);
                 break;
             case "$#":
                 node = new OperatorNode("$#", new OperatorNode("@", node.operand, node.tokenIndex), node.tokenIndex);
@@ -941,6 +925,26 @@ public class EmitterVisitor implements Visitor {
                 break;
             default:
                 throw new UnsupportedOperationException("Unsupported operator: " + operator);
+        }
+    }
+
+    private void handleCreateReference(OperatorNode node, MethodVisitor mv) {
+        if (node.operand instanceof ListNode) {
+            // operand is a list:  `\(1,2,3)`
+            node.operand.accept(this.with(RuntimeContextType.LIST));
+            ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/RuntimeList",
+                    "createListReference",
+                    "()Lorg/perlonjava/runtime/RuntimeList;", false);
+            if (ctx.contextType == RuntimeContextType.VOID) {
+                mv.visitInsn(Opcodes.POP);
+            }
+        } else {
+            node.operand.accept(this.with(RuntimeContextType.LIST));
+            ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "createReference", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+            if (ctx.contextType == RuntimeContextType.VOID) {
+                mv.visitInsn(Opcodes.POP);
+            }
         }
     }
 
