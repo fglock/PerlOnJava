@@ -44,7 +44,6 @@ public class PerlLanguageProvider {
      *
      * @param compilerOptions Compiler flags, file name and source code
      * @return The result of the Perl code execution.
-     * @throws Throwable If an error occurs during execution.
      */
     public static RuntimeList executePerlCode(ArgumentParser.CompilerOptions compilerOptions) throws Exception {
 
@@ -68,9 +67,7 @@ public class PerlLanguageProvider {
         );
 
 
-        GlobalContext.initializeGlobals();
-        GlobalContext.getGlobalArray("main::ARGV").elements = compilerOptions.argumentList.elements;
-        GlobalContext.getGlobalVariable("main::0").set(compilerOptions.fileName);
+        GlobalContext.initializeGlobals(compilerOptions);
 
         ctx.logDebug("parse code: " + compilerOptions.code);
         ctx.logDebug("  call context " + ctx.contextType);
