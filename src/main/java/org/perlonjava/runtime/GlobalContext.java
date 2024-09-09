@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.ArgumentParser;
+
 import java.io.FileDescriptor;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -48,7 +50,7 @@ public class GlobalContext {
         return blessStrCache.get(id);
     }
 
-    public static void initializeGlobals() {
+    public static void initializeGlobals(ArgumentParser.CompilerOptions compilerOptions) {
         getGlobalVariable("main::" + Character.toString('O' - 'A' + 1)).set("jvm");    // initialize $^O to "jvm"
         getGlobalVariable("main::@");    // initialize $@ to "undef"
         getGlobalVariable("main::_");    // initialize $_ to "undef"
@@ -60,7 +62,11 @@ public class GlobalContext {
         getGlobalVariable("main::\\").set("");    // initialize $\ to ""
         getGlobalVariable("main::/").set("\n"); // initialize $/ to newline
         getGlobalVariable("main::$").set(ProcessHandle.current().pid()); // initialize $$ to process id
+        getGlobalVariable("main::0").set(compilerOptions.fileName);
+
+        getGlobalArray("main::ARGV").elements = compilerOptions.argumentList.elements;
         getGlobalArray("main::INC");
+
         getGlobalHash("main::INC");
 
         // Initialize %ENV
