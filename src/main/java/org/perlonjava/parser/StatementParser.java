@@ -213,7 +213,7 @@ public class StatementParser {
         if (parser.peek().text.equals("(")) {
             // If a prototype exists, we parse it using 'parseRawString' method which handles it like the 'q()' operator.
             // This means it will take everything inside the parentheses as a literal string.
-            prototype = ((StringNode) parser.parseRawString("q")).value;
+            prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
         }
 
         // Initialize a list to store any attributes the subroutine might have.

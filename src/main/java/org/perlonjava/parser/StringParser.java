@@ -521,6 +521,59 @@ public class StringParser {
         return new OperatorNode(operator, list, rawStr.index);
     }
 
+    public static Node parseRawString(Parser parser, String operator) {
+        // handle special quotes for operators: q qq qx qw // s/// m//
+        if (operator.equals("'") || operator.equals("\"") || operator.equals("/") || operator.equals("//")
+                || operator.equals("`")) {
+            parser.tokenIndex--;   // will reparse the quote
+        }
+        ParsedString rawStr;
+        int stringParts = 1;
+        switch (operator) {
+            case "s":
+            case "tr":
+            case "y":
+                stringParts = 3;    // s{str}{str}modifier
+                break;
+            case "m":
+            case "qr":
+            case "/":
+            case "//":
+                stringParts = 2;    // m{str}modifier
+                break;
+        }
+        rawStr = parseRawStrings(parser.ctx, parser.tokens, parser.tokenIndex, stringParts);
+        parser.tokenIndex = rawStr.next;
+
+        switch (operator) {
+            case "`":
+            case "qx":
+                return parseSystemCommand(parser.ctx, operator, rawStr);
+            case "'":
+            case "q":
+                return parseSingleQuotedString(rawStr);
+            case "m":
+            case "qr":
+            case "/":
+            case "//":
+                return parseRegexMatch(parser.ctx, operator, rawStr);
+            case "s":
+                return parseRegexReplace(parser.ctx, rawStr);
+            case "\"":
+            case "qq":
+                return parseDoubleQuotedString(parser.ctx, rawStr, true);
+            case "qw":
+                return parseWordsString(rawStr);
+        }
+
+        ListNode list = new ListNode(rawStr.index);
+        int size = rawStr.buffers.size();
+        for (int i = 0; i < size; i++) {
+            list.elements.add(new StringNode(rawStr.buffers.get(i), rawStr.index));
+        }
+        return new OperatorNode(operator, list, rawStr.index);
+    }
+
     /**
      * Class to represent the parsed string and its position in the tokens list.
      */
