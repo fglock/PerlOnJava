@@ -1476,7 +1476,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             GlobalContext.setGlobalVariable("main::!", "No such file or directory");
             return new RuntimeScalar();
         }
-        System.out.println("doFile path: " + fullName);
 
         ArgumentParser.CompilerOptions parsedArgs = new ArgumentParser.CompilerOptions();
         parsedArgs.fileName = fullName.toString();
