@@ -3,7 +3,9 @@ package org.perlonjava.parser;
 import org.perlonjava.astnode.*;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.runtime.ModuleLoader;
 import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.RuntimeScalar;
 
 public class StatementParser {
 
@@ -107,6 +109,31 @@ public class StatementParser {
             elseBranch = parseIfStatement(parser);
         }
         return new IfNode(operator.text, condition, thenBranch, elseBranch, parser.tokenIndex);
+    }
+
+    public static Node parseUseDeclaration(Parser parser, LexerToken token) {
+        boolean isNoDeclaration = token.text.equals("no");
+
+        parser.consume();
+        String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
+        if (packageName == null) {
+            throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+        }
+        String fullName = ModuleLoader.moduleToFilename(packageName);
+        IdentifierNode nameNode = new IdentifierNode(fullName, parser.tokenIndex);
+
+        // Parse Version string; throw away the result
+        // XXX use the Version string
+        parseOptionalPackageVersion(parser);
+
+        parser.parseStatementTerminator();
+
+        // execute the statement immediately
+        parser.ctx.logDebug("Use statement: " + nameNode);
+        RuntimeScalar ret = new RuntimeScalar(nameNode.name).require();
+        parser.ctx.logDebug("Use statement return: " + ret);
+
+        return new ListNode(parser.tokenIndex);
     }
 
     public static Node parsePackageDeclaration(Parser parser, LexerToken token) {
