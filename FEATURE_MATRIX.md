@@ -149,7 +149,7 @@
 - ✔️   **Special literals**: `__PACKAGE__`, `__FILE__`, `__LINE__`
 - ❌  **`version` objects**: Version objects are not yet supported.
 - ❌  **`require` operator**: The `require` operator is partially implemented.
-- ❌  **`use` and `no` statements**: Module imports and version changes via `use` and `no` are missing.
+- ❌  **`use` and `no` statements**: Module imports and version changes via `use` and `no` are partially implemented.
 - ❌  **`__SUB__`**: The `__SUB__` special variable is not yet supported.
 - ❌  **`BEGIN` block**: `BEGIN`, `END` and other special blocks are missing.
 - ❌  **Labels**: Labels and their usage are not supported.
