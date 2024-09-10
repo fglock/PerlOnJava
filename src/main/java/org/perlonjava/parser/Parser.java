@@ -532,7 +532,7 @@ public class Parser {
                 throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
             }
             String fileName = ModuleLoader.moduleToFilename(moduleName);
-            operand = ListNode.makeList(new StringNode(fileName,tokenIndex));
+            operand = ListNode.makeList(new StringNode(fileName, tokenIndex));
         } else {
             // `require` file
             operand = ListParser.parseZeroOrOneList(this, 1);
