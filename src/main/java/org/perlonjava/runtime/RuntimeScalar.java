@@ -170,7 +170,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 if (blessId == 0) {
                     return new RuntimeScalar(false).getList();
                 }
-                perlClassName = GlobalContext.getBlessStr(blessId);
+                perlClassName = NameCache.getBlessStr(blessId);
                 break;
             case UNDEF:
                 return new RuntimeScalar(false).getList();
@@ -209,7 +209,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 if (blessId == 0) {
                     return new RuntimeScalar(false).getList();
                 }
-                perlClassName = GlobalContext.getBlessStr(blessId);
+                perlClassName = NameCache.getBlessStr(blessId);
                 break;
             case UNDEF:
                 return new RuntimeScalar(false).getList();
@@ -224,7 +224,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
 
         // Check the method cache
-        String normalizedMethodName = GlobalContext.normalizeVariableName(methodName, perlClassName);
+        String normalizedMethodName = NameCache.normalizeVariableName(methodName, perlClassName);
         RuntimeScalar cachedMethod = InheritanceResolver.getCachedMethod(normalizedMethodName);
         if (cachedMethod != null) {
             return cachedMethod.getList();
@@ -232,7 +232,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
         // Get the linearized inheritance hierarchy using C3
         for (String className : InheritanceResolver.linearizeC3(perlClassName)) {
-            String normalizedClassMethodName = GlobalContext.normalizeVariableName(methodName, className);
+            String normalizedClassMethodName = NameCache.normalizeVariableName(methodName, className);
             if (GlobalContext.existsGlobalCodeRef(normalizedClassMethodName)) {
                 // If the method is found, return it
                 return GlobalContext.getGlobalCodeRef(normalizedClassMethodName).getList();
@@ -613,7 +613,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 if (str.isEmpty()) {
                     str = "main";
                 }
-                ((RuntimeBaseEntity) value).blessId = GlobalContext.getBlessId(str);
+                ((RuntimeBaseEntity) value).blessId = NameCache.getBlessId(str);
                 break;
             default:
                 throw new IllegalStateException("Can't bless non-reference value");
@@ -632,15 +632,15 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 break;
             case REFERENCE:
                 int blessId = ((RuntimeBaseEntity) value).blessId;
-                str = blessId == 0 ? "REF" : GlobalContext.getBlessStr(blessId);
+                str = blessId == 0 ? "REF" : NameCache.getBlessStr(blessId);
                 break;
             case ARRAYREFERENCE:
                 blessId = ((RuntimeBaseEntity) value).blessId;
-                str = blessId == 0 ? "ARRAY" : GlobalContext.getBlessStr(blessId);
+                str = blessId == 0 ? "ARRAY" : NameCache.getBlessStr(blessId);
                 break;
             case HASHREFERENCE:
                 blessId = ((RuntimeBaseEntity) value).blessId;
-                str = blessId == 0 ? "HASH" : GlobalContext.getBlessStr(blessId);
+                str = blessId == 0 ? "HASH" : NameCache.getBlessStr(blessId);
                 break;
             default:
                 str = "";
@@ -679,7 +679,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 if (blessId == 0) {
                     throw new IllegalStateException("Can't call method \"" + methodName + "\" on unblessed reference");
                 }
-                perlClassName = GlobalContext.getBlessStr(blessId);
+                perlClassName = NameCache.getBlessStr(blessId);
                 break;
             case UNDEF:
                 throw new IllegalStateException("Can't call method \"" + methodName + "\" on an undefined value");
@@ -704,7 +704,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         // - Class::->new() is the same as Class->new()
 
         // Check the method cache
-        String normalizedMethodName = GlobalContext.normalizeVariableName(methodName, perlClassName);
+        String normalizedMethodName = NameCache.normalizeVariableName(methodName, perlClassName);
         RuntimeScalar cachedMethod = InheritanceResolver.getCachedMethod(normalizedMethodName);
         if (cachedMethod != null) {
             return cachedMethod.apply(args, callContext);
@@ -715,7 +715,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
         // Iterate over the linearized classes to find the method
         for (String className : linearizedClasses) {
-            String normalizedClassMethodName = GlobalContext.normalizeVariableName(methodName, className);
+            String normalizedClassMethodName = NameCache.normalizeVariableName(methodName, className);
             if (GlobalContext.existsGlobalCodeRef(normalizedClassMethodName)) {
                 // If the method is found, retrieve and apply it
                 RuntimeScalar codeRef = GlobalContext.getGlobalCodeRef(normalizedClassMethodName);
