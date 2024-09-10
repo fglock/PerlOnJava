@@ -5,6 +5,7 @@ import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.GlobalContext;
+import org.perlonjava.runtime.ModuleLoader;
 import org.perlonjava.runtime.NameCache;
 import org.perlonjava.runtime.PerlCompilerException;
 
@@ -517,11 +518,22 @@ public class Parser {
         LexerToken token;
         // Handle 'require' keyword which can be followed by a version, bareword or filename
         token = peek();
+        Node operand;
         if (token.type == LexerTokenType.IDENTIFIER) {
-            // TODO version or bareword
+            // TODO `require` version
+
+            // `require` module
+            String moduleName = IdentifierParser.parseSubroutineIdentifier(this);
+            ctx.logDebug("name `" + moduleName + "`");
+            if (moduleName == null) {
+                throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
+            }
+            String fileName = ModuleLoader.moduleToFilename(moduleName);
+            operand = ListNode.makeList(new StringNode(fileName,tokenIndex));
+        } else {
+            // `require` file
+            operand = ListParser.parseZeroOrOneList(this, 1);
         }
-        // `require` file
-        Node operand = ListParser.parseZeroOrOneList(this, 1);
         return new OperatorNode("require", operand, tokenIndex);
     }
 
