@@ -1468,6 +1468,23 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(s / 1000.0);
     }
 
+    public RuntimeScalar require() {
+        // https://perldoc.perl.org/functions/require
+        String fileName = this.toString();
+        if (GlobalContext.getGlobalHash("main::INC").elements.containsKey(fileName)) {
+            // module was already loaded
+            return new RuntimeScalar(1);
+        }
+        RuntimeScalar result = this.doFile();
+        if (!result.defined().getBoolean()) {
+            // `do FILE` returned undef
+            String err = GlobalContext.getGlobalHash("main::@").toString();
+            String ioErr = GlobalContext.getGlobalHash("main::!").toString();
+            throw new RuntimeException(err.isEmpty() ? "Can't locate " + fileName + ": " + ioErr : "Compilation failed in require: " + err);
+        }
+        return result;
+    }
+
     public RuntimeScalar doFile() {
         // `do` file
         String fileName = this.toString();
@@ -1494,7 +1511,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             result = PerlLanguageProvider.executePerlCode(parsedArgs);
         } catch (Throwable t) {
             GlobalContext.setGlobalVariable("main::@", "Error in file " + parsedArgs.fileName +
-                    "\n" + t.toString());
+                    "\n" + t);
             return new RuntimeScalar();
         }
 
