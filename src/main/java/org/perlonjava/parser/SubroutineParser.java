@@ -3,10 +3,7 @@ package org.perlonjava.parser;
 import org.perlonjava.astnode.*;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.runtime.GlobalContext;
-import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.RuntimeCode;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -29,7 +26,7 @@ public class SubroutineParser {
         }
 
         // Normalize the subroutine name to include the current package
-        String fullName = GlobalContext.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+        String fullName = NameCache.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
 
         // Create an identifier node for the subroutine name
         IdentifierNode nameNode = new IdentifierNode(subName, parser.tokenIndex);
@@ -139,7 +136,7 @@ public class SubroutineParser {
             // - add the typeglob assignment:  *name = sub () :attr {...}
 
             // register the named subroutine
-            String fullName = GlobalContext.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+            String fullName = NameCache.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
             RuntimeCode codeRef = new RuntimeCode(prototype);
             GlobalContext.getGlobalCodeRef(fullName).set(new RuntimeScalar(codeRef));
 

@@ -4,6 +4,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.runtime.GlobalContext;
+import org.perlonjava.runtime.NameCache;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 
@@ -13,7 +14,7 @@ import java.util.List;
 public class EmitVariable {
     private static void fetchGlobalVariable(EmitterContext ctx, boolean createIfNotExists, String sigil, String varName, int tokenIndex) {
 
-        String var = GlobalContext.normalizeVariableName(varName, ctx.symbolTable.getCurrentPackage());
+        String var = NameCache.normalizeVariableName(varName, ctx.symbolTable.getCurrentPackage());
         ctx.logDebug("GETVAR lookup global " + sigil + varName + " normalized to " + var + " createIfNotExists:" + createIfNotExists);
 
         if (sigil.equals("$") && (createIfNotExists || GlobalContext.existsGlobalVariable(var))) {
@@ -66,7 +67,7 @@ public class EmitVariable {
 
             if (sigil.equals("*")) {
                 // typeglob
-                String fullName = GlobalContext.normalizeVariableName(name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
+                String fullName = NameCache.normalizeVariableName(name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
                 mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeGlob");
                 mv.visitInsn(Opcodes.DUP);
                 mv.visitLdcInsn(fullName); // emit string
@@ -81,7 +82,7 @@ public class EmitVariable {
 
             if (sigil.equals("&")) {
                 // Code
-                String fullName = GlobalContext.normalizeVariableName(name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
+                String fullName = NameCache.normalizeVariableName(name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
                 mv.visitLdcInsn(fullName); // emit string
                 emitterVisitor.ctx.mv.visitMethodInsn(
                         Opcodes.INVOKESTATIC,
