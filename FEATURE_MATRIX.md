@@ -144,13 +144,13 @@
 - ✔️   **Ternary operator**: The ternary conditional operator is implemented.
 - ✔️   **Compound assignment operators**: Compound assignment operators are implemented.
 - ✔️   **`package` declaration**: `package BLOCK` is also supported.
-- ❌  **`version` objects**: Version objects are not yet supported.
 - ✔️   **Typeglob operations**: Operations like `*x = sub {}` are supported.
 - ✔️   **Code references**: Code references like `&subr` are implemented.
-- ❌  **`require` operator**: The `require` operator is not yet implemented.
+- ✔️   **Special literals**: `__PACKAGE__`, `__FILE__`, `__LINE__`
+- ❌  **`version` objects**: Version objects are not yet supported.
+- ❌  **`require` operator**: The `require` operator is partially implemented.
 - ❌  **`use` and `no` statements**: Module imports and version changes via `use` and `no` are missing.
 - ❌  **`__SUB__`**: The `__SUB__` special variable is not yet supported.
-- ✔️   **Special literals**: `__PACKAGE__`, `__FILE__`, `__LINE__`
 - ❌  **`BEGIN` block**: `BEGIN`, `END` and other special blocks are missing.
 - ❌  **Labels**: Labels and their usage are not supported.
 - ❌  **Search for labels in call stack**: Label searching in the call stack is missing.
