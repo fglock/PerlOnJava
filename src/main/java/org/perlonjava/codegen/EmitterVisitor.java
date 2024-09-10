@@ -840,6 +840,7 @@ public class EmitterVisitor implements Visitor {
                 break;
             case "abs":
             case "defined":
+            case "doFile":
             case "length":
             case "log":
             case "sqrt":

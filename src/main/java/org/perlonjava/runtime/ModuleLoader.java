@@ -8,7 +8,7 @@ import java.util.List;
 
 public class ModuleLoader {
 
-    public Path findFile(List<String> inc, String filename) {
+    public static Path findFile(String filename) {
         Path filePath = Paths.get(filename);
 
         // If the filename is an absolute path or starts with ./ or ../, use it directly
@@ -17,8 +17,11 @@ public class ModuleLoader {
         }
 
         // Otherwise, search in INC directories
-        for (String dir : inc) {
-            Path fullPath = Paths.get(dir, filename);
+
+        List<RuntimeBaseEntity> inc = GlobalContext.getGlobalArray("main::INC").elements;
+
+        for (RuntimeBaseEntity dir : inc) {
+            Path fullPath = Paths.get(dir.toString(), filename);
             if (Files.exists(fullPath)) {
                 return fullPath;
             }

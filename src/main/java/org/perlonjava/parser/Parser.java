@@ -522,7 +522,9 @@ public class Parser {
             consume(LexerTokenType.OPERATOR, "}");
             return block;
         }
-        return null;
+        // `do` file
+        Node operand = ListParser.parseZeroOrOneList(this, 1);
+        return new OperatorNode("doFile", operand, tokenIndex);
     }
 
     private AbstractNode parseEval() {
