@@ -120,20 +120,22 @@ public class StatementParser {
             throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
         }
         String fullName = ModuleLoader.moduleToFilename(packageName);
-        IdentifierNode nameNode = new IdentifierNode(fullName, parser.tokenIndex);
 
         // Parse Version string; throw away the result
-        // XXX use the Version string
+        // TODO use the Version string
+        // TODO call Module->VERSION(12.34)
         parseOptionalPackageVersion(parser);
+
+        // TODO parse parameter list
 
         parser.parseStatementTerminator();
 
-        // execute the statement immediately
-        parser.ctx.logDebug("Use statement: " + nameNode);
-        RuntimeScalar ret = new RuntimeScalar(nameNode.name).require();
+        // execute the statement immediately, using:
+        // `require "fullName.pm"`
+        parser.ctx.logDebug("Use statement: " + fullName);
+        RuntimeScalar ret = new RuntimeScalar(fullName).require();
         parser.ctx.logDebug("Use statement return: " + ret);
 
-        // TODO call Module->VERSION(12.34)
         // TODO call Module->import( LIST )
         // TODO call Module->unimport( LIST )
 
