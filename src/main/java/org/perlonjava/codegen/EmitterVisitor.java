@@ -841,6 +841,7 @@ public class EmitterVisitor implements Visitor {
             case "abs":
             case "defined":
             case "doFile":
+            case "require":
             case "length":
             case "log":
             case "sqrt":

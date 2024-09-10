@@ -493,6 +493,8 @@ public class Parser {
                 return parseEval();
             case "do":
                 return parseDoOperator();
+            case "require":
+                return parseRequire();
             case "sub":
                 // Handle 'sub' keyword to parse an anonymous subroutine
                 return SubroutineParser.parseSubroutineDefinition(this, false);
@@ -509,6 +511,18 @@ public class Parser {
                 return StringParser.parseRawString(this, token.text);
         }
         return null;
+    }
+
+    private Node parseRequire() {
+        LexerToken token;
+        // Handle 'require' keyword which can be followed by a version, bareword or filename
+        token = peek();
+        if (token.type == LexerTokenType.IDENTIFIER) {
+            // TODO version or bareword
+        }
+        // `require` file
+        Node operand = ListParser.parseZeroOrOneList(this, 1);
+        return new OperatorNode("require", operand, tokenIndex);
     }
 
     private Node parseDoOperator() {
