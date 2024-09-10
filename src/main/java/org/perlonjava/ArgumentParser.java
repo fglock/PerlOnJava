@@ -66,13 +66,20 @@ public class ArgumentParser {
                         System.exit(0);
                         break;
                     default:
-                        parsedArgs.fileName = args[i];
-                        try {
-                            parsedArgs.code = new String(Files.readAllBytes(Paths.get(parsedArgs.fileName)));
-                            readingArgv = true;
-                        } catch (IOException e) {
-                            System.err.println("Error: Unable to read file " + parsedArgs.fileName);
-                            System.exit(1);
+                        if (args[i].startsWith("-I")) {
+                            String path = args[i].substring("-I".length());
+                            if (!path.isEmpty()) {
+                                parsedArgs.inc.push(new RuntimeScalar(path));
+                            }
+                        } else {
+                            parsedArgs.fileName = args[i];
+                            try {
+                                parsedArgs.code = new String(Files.readAllBytes(Paths.get(parsedArgs.fileName)));
+                                readingArgv = true;
+                            } catch (IOException e) {
+                                System.err.println("Error: Unable to read file " + parsedArgs.fileName);
+                                System.exit(1);
+                            }
                         }
                         break;
                 }
@@ -91,6 +98,7 @@ public class ArgumentParser {
         System.out.println("  --parse         Parses the input code.");
         System.out.println("  --disassemble   Disassemble the generated code.");
         System.out.println("  -c              Compiles the input code only.");
+        System.out.println("  -Idirectory     Specify @INC/#include directory (several -I's allowed)");
         System.out.println("  -h, --help      Displays this help message.");
     }
 
@@ -119,6 +127,7 @@ public class ArgumentParser {
         public String code = null;
         public String fileName = null;
         public RuntimeArray argumentList = new RuntimeArray();
+        public RuntimeArray inc = new RuntimeArray();
 
         @Override
         public CompilerOptions clone() {
