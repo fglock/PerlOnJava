@@ -46,6 +46,7 @@ public class GlobalContext {
         getGlobalArray("main::ARGV").elements = compilerOptions.argumentList.elements;
 
         // Initialize @INC
+        // https://stackoverflow.com/questions/2526804/how-is-perls-inc-constructed
         List<RuntimeBaseEntity> inc = getGlobalArray("main::INC").elements;
 
         inc.addAll(compilerOptions.inc.elements);   // add from `-I`
