@@ -133,6 +133,10 @@ public class StatementParser {
         RuntimeScalar ret = new RuntimeScalar(nameNode.name).require();
         parser.ctx.logDebug("Use statement return: " + ret);
 
+        // TODO call Module->VERSION(12.34)
+        // TODO call Module->import( LIST )
+        // TODO call Module->unimport( LIST )
+
         return new ListNode(parser.tokenIndex);
     }
 
