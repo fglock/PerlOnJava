@@ -142,6 +142,9 @@ public class Parser {
                     return StatementParser.parseWhileStatement(this);
                 case "package":
                     return StatementParser.parsePackageDeclaration(this, token);
+                case "use":
+                case "no":
+                    return StatementParser.parseUseDeclaration(this, token);
                 case "sub":
                     // Must be followed by an identifier
                     tokenIndex++;
