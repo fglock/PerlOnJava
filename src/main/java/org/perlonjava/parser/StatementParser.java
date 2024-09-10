@@ -126,7 +126,10 @@ public class StatementParser {
         // TODO call Module->VERSION(12.34)
         parseOptionalPackageVersion(parser);
 
-        // TODO parse parameter list
+        // Parse the parameter list
+        boolean hasParentheses = parser.peek().text.equals("(");
+        Node list = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
+        parser.ctx.logDebug("Use statement list hasParentheses:" + hasParentheses + " ast:" + list);
 
         parser.parseStatementTerminator();
 
@@ -138,7 +141,9 @@ public class StatementParser {
 
         // TODO call Module->import( LIST )
         // TODO call Module->unimport( LIST )
+        String importMethod = isNoDeclaration ? "unimport" : "import";
 
+        // return an empty list
         return new ListNode(parser.tokenIndex);
     }
 
