@@ -8,6 +8,17 @@ import java.util.List;
 
 public class ModuleLoader {
 
+    public static String moduleToFilename(String moduleName) {
+        if (moduleName == null || moduleName.isEmpty()) {
+            throw new IllegalArgumentException("Module name cannot be null or empty");
+        }
+
+        // Replace '::' with '/' and append '.pm'
+        String filename = moduleName.replace("::", "/") + ".pm";
+
+        return filename;
+    }
+
     public static Path findFile(String filename) {
         Path filePath = Paths.get(filename);
 
