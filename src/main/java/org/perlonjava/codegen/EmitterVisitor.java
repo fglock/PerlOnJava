@@ -766,9 +766,10 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleReverseBuiltin(OperatorNode node, String operator) {
+    private void handleReverseBuiltin(OperatorNode node) {
         // Handle:  reverse LIST
         //   static RuntimeDataProvider reverse(RuntimeDataProvider value, int ctx)
+        String operator = node.operator;
         ctx.logDebug("handleReverseBuiltin " + node);
         node.operand.accept(this.with(RuntimeContextType.LIST));
         pushCallContext();
@@ -778,8 +779,9 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleSpliceBuiltin(OperatorNode node, String operator) {
+    private void handleSpliceBuiltin(OperatorNode node) {
         // Handle:  splice @array, LIST
+        String operator = node.operator;
         ctx.logDebug("handleSpliceBuiltin " + node);
         Node args = node.operand;
         Node operand = ((ListNode) args).elements.remove(0);
@@ -793,7 +795,6 @@ public class EmitterVisitor implements Visitor {
 
     @Override
     public void visit(OperatorNode node) {
-        MethodVisitor mv = ctx.mv;
         String operator = node.operator;
         ctx.logDebug("visit(OperatorNode) " + operator + " in context " + ctx.contextType);
 
@@ -806,18 +807,18 @@ public class EmitterVisitor implements Visitor {
             case "%":
             case "*":
             case "&":
-                EmitVariable.handleVariableOperator(this, node, operator);
+                EmitVariable.handleVariableOperator(this, node);
                 break;
             case "keys":
             case "values":
-                handleKeysOperator(node, operator);
+                handleKeysOperator(node);
                 break;
             case "each":
-                handleEachOperator(node, operator);
+                handleEachOperator(node);
                 break;
             case "our":
             case "my":
-                EmitVariable.handleMyOperator(this, node, operator);
+                EmitVariable.handleMyOperator(this, node);
                 break;
             case "return":
                 handleReturnOperator(node);
@@ -879,11 +880,11 @@ public class EmitterVisitor implements Visitor {
                 handleAtan2(node);
                 break;
             case "scalar":
-                handleScalar(node, mv);
+                handleScalar(node);
                 break;
             case "delete":
             case "exists":
-                handleDeleteExists(node, operator);
+                handleDeleteExists(node);
                 break;
             case "int":
                 handleUnaryBuiltin(node, "integer");
@@ -901,17 +902,17 @@ public class EmitterVisitor implements Visitor {
                 handleUnaryBuiltin(node, "postAutoDecrement");
                 break;
             case "\\":
-                handleCreateReference(node, mv);
+                handleCreateReference(node);
                 break;
             case "$#":
                 node = new OperatorNode("$#", new OperatorNode("@", node.operand, node.tokenIndex), node.tokenIndex);
                 handleArrayUnaryBuiltin(node, "indexLastElem");
                 break;
             case "reverse":
-                handleReverseBuiltin(node, operator);
+                handleReverseBuiltin(node);
                 break;
             case "splice":
-                handleSpliceBuiltin(node, operator);
+                handleSpliceBuiltin(node);
                 break;
             case "pop":
             case "shift":
@@ -930,7 +931,8 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleCreateReference(OperatorNode node, MethodVisitor mv) {
+    private void handleCreateReference(OperatorNode node) {
+        MethodVisitor mv = ctx.mv;
         if (node.operand instanceof ListNode) {
             // operand is a list:  `\(1,2,3)`
             node.operand.accept(this.with(RuntimeContextType.LIST));
@@ -950,15 +952,16 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleScalar(OperatorNode node, MethodVisitor mv) {
+    private void handleScalar(OperatorNode node) {
+        MethodVisitor mv = ctx.mv;
         node.operand.accept(this.with(RuntimeContextType.SCALAR));
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
         if (ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP);
         }
     }
 
-    private void handleDeleteExists(OperatorNode node, String operator) {
+    private void handleDeleteExists(OperatorNode node) {
         //   OperatorNode: delete
         //    ListNode:
         //      BinaryOperatorNode: {
@@ -966,6 +969,7 @@ public class EmitterVisitor implements Visitor {
         //          IdentifierNode: a
         //        HashLiteralNode:
         //          NumberNode: 10
+        String operator = node.operator;
         if (node.operand instanceof ListNode) {
             ListNode operand = (ListNode) node.operand;
             if (operand.elements.size() == 1) {
@@ -995,7 +999,8 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleEachOperator(OperatorNode node, String operator) {
+    private void handleEachOperator(OperatorNode node) {
+        String operator = node.operator;
         node.operand.accept(this.with(RuntimeContextType.LIST));
         ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", operator, "()Lorg/perlonjava/runtime/RuntimeList;", true);
         if (ctx.contextType == RuntimeContextType.VOID) {
@@ -1003,7 +1008,8 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleKeysOperator(OperatorNode node, String operator) {
+    private void handleKeysOperator(OperatorNode node) {
+        String operator = node.operator;
         node.operand.accept(this.with(RuntimeContextType.LIST));
         ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", operator, "()Lorg/perlonjava/runtime/RuntimeArray;", true);
         if (ctx.contextType == RuntimeContextType.LIST) {

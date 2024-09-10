@@ -56,10 +56,11 @@ public class EmitVariable {
         }
     }
 
-    static void handleVariableOperator(EmitterVisitor emitterVisitor, OperatorNode node, String sigil) {
+    static void handleVariableOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             return;
         }
+        String sigil = node.operator;
         MethodVisitor mv = emitterVisitor.ctx.mv;
         if (node.operand instanceof IdentifierNode) { // $a @a %a
             String name = ((IdentifierNode) node.operand).name;
@@ -193,7 +194,8 @@ public class EmitVariable {
         emitterVisitor.ctx.logDebug("SET end");
     }
 
-    static void handleMyOperator(EmitterVisitor emitterVisitor, OperatorNode node, String operator) {
+    static void handleMyOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
+        String operator = node.operator;
         if (node.operand instanceof ListNode) { // my ($a, $b)  our ($a, $b)
             // process each item of the list; then returns the list
             ListNode listNode = (ListNode) node.operand;
