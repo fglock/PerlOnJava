@@ -2,9 +2,15 @@ package org.perlonjava.runtime;
 
 import com.ibm.icu.text.CaseMap;
 import com.ibm.icu.text.Normalizer2;
+import org.perlonjava.ArgumentParser;
+import org.perlonjava.scriptengine.PerlLanguageProvider;
 
+import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -1460,6 +1466,37 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             // TODO
         }
         return new RuntimeScalar(s / 1000.0);
+    }
+
+    public RuntimeScalar doFile() {
+        // `do` file
+        String fileName = this.toString();
+        Path fullName = ModuleLoader.findFile(fileName);
+        if (fullName == null) {
+            GlobalContext.setGlobalVariable("main::!", "No such file or directory");
+            return new RuntimeScalar();
+        }
+        System.out.println("doFile path: " + fullName);
+
+        ArgumentParser.CompilerOptions parsedArgs = new ArgumentParser.CompilerOptions();
+        parsedArgs.fileName = fullName.toString();
+        try {
+            parsedArgs.code = new String(Files.readAllBytes(Paths.get(parsedArgs.fileName)));
+        } catch (IOException e) {
+            GlobalContext.setGlobalVariable("main::!", "Unable to read file " + parsedArgs.fileName);
+            return new RuntimeScalar();
+        }
+
+        RuntimeList result = new RuntimeList();
+        try {
+            result = PerlLanguageProvider.executePerlCode(parsedArgs);
+        } catch (Throwable t) {
+            GlobalContext.setGlobalVariable("main::@", "Error in file " + parsedArgs.fileName +
+                    "\n" + t.toString());
+            return new RuntimeScalar();
+        }
+
+        return result == null ? new RuntimeScalar() : result.scalar();
     }
 
     // keys() operator

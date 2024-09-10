@@ -135,7 +135,7 @@
 - ✔️   **`eval` string sets `$@` on error; returns `undef`**: `eval` sets `$@` on error and returns `undef`.
 - ✔️   **`eval` block**: `eval` blocks are implemented.
 - ✔️   **`do` block**: `do` blocks are supported.
-- ❌  **`do` file**: File execution using `do` is not yet implemented.
+- ✔️   **`do` file**: File execution using `do` is implemented.
 - ✔️   **`print` operators**: `print`, `printf` and `say` statements are implemented, with support for file handles.
 - ✔️   **`printf` and `sprintf`**: String formatting is implemented.
 - ✔️   **`I/O operators**: `open`, `readline`, `eof`, `close` are implemented.
