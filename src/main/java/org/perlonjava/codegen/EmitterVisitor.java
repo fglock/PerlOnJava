@@ -119,8 +119,6 @@ public class EmitterVisitor implements Visitor {
     public void visit(BinaryOperatorNode node) {
         String operator = node.operator;
         ctx.logDebug("visit(BinaryOperatorNode) " + operator + " in context " + ctx.contextType);
-        EmitterVisitor scalarVisitor =
-                this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
 
         switch (operator) { // handle operators that support short-circuit or other special cases
             case "||":
@@ -141,7 +139,7 @@ public class EmitterVisitor implements Visitor {
                 EmitVariable.handleAssignOperator(this, node);
                 return;
             case ".":
-                handleConcatOperator(node, scalarVisitor);
+                handleConcatOperator(node);
                 return;
             case "->":
                 handleArrowOperator(node);
@@ -157,12 +155,12 @@ public class EmitterVisitor implements Visitor {
                 return;
             case "push":
             case "unshift":
-                handlePushOperator(operator, node);
+                handlePushOperator(node);
                 return;
             case "map":
             case "sort":
             case "grep":
-                handleMapOperator(operator, node);
+                handleMapOperator(node);
                 return;
             case "eof":
             case "close":
@@ -171,26 +169,26 @@ public class EmitterVisitor implements Visitor {
             case "printf":
             case "print":
             case "say":
-                handleSayOperator(operator, node);
+                handleSayOperator(node);
                 return;
             case "sprintf":
             case "substr":
-                handleSubstr(node, operator);
+                handleSubstr(node);
                 return;
             case "x":
                 handleRepeat(node);
                 return;
             case "join":
-                handleJoinOperator(operator, node);
+                handleJoinOperator(node);
                 return;
             case "split":
-                handleSplitOperator(operator, node);
+                handleSplitOperator(node);
                 return;
             case "!~":
                 EmitRegex.handleNotBindRegex(this, node);
                 return;
             case "=~":
-                EmitRegex.handleBindRegex(this, node, scalarVisitor);
+                EmitRegex.handleBindRegex(this, node);
                 return;
             case "**=":
             case "+=":
@@ -212,33 +210,38 @@ public class EmitterVisitor implements Visitor {
                 String newOp = operator.substring(0, operator.length() - 1);
                 String methodStr = operatorHandlers.get(newOp);
                 if (methodStr != null) {
-                    handleCompoundAssignment(node, scalarVisitor, methodStr);
+                    handleCompoundAssignment(node, methodStr);
                     return;
                 }
                 break;
             case "..":
-                node.left.accept(this.with(RuntimeContextType.SCALAR));
-                node.right.accept(this.with(RuntimeContextType.SCALAR));
-                // static RuntimeList generateList(int start, int end)
-                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/RuntimeList",
-                        "generateList",
-                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeList;", false);
-                if (ctx.contextType == RuntimeContextType.VOID) {
-                    ctx.mv.visitInsn(Opcodes.POP);
-                }
+                handleRangeOperator(node);
                 return;
         }
 
         String methodStr = operatorHandlers.get(operator);
         if (methodStr != null) {
-            handleBinaryOperator(node, scalarVisitor, methodStr);
+            handleBinaryOperator(node, methodStr);
             return;
         }
         throw new RuntimeException("Unexpected infix operator: " + operator);
     }
 
-    private void handleSubstr(BinaryOperatorNode node, String operator) {
+    private void handleRangeOperator(BinaryOperatorNode node) {
+        node.left.accept(this.with(RuntimeContextType.SCALAR));
+        node.right.accept(this.with(RuntimeContextType.SCALAR));
+        // static RuntimeList generateList(int start, int end)
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/RuntimeList",
+                "generateList",
+                "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeList;", false);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
+    }
+
+    private void handleSubstr(BinaryOperatorNode node) {
+        String operator = node.operator;
         node.left.accept(this.with(RuntimeContextType.SCALAR));
         node.right.accept(this.with(RuntimeContextType.LIST));
         ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
@@ -264,7 +267,9 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleConcatOperator(BinaryOperatorNode node, EmitterVisitor scalarVisitor) {
+    private void handleConcatOperator(BinaryOperatorNode node) {
+        EmitterVisitor scalarVisitor =
+                this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
         node.left.accept(scalarVisitor); // target - left parameter
         node.right.accept(scalarVisitor); // right parameter
         ctx.mv.visitMethodInsn(
@@ -277,7 +282,9 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleBinaryOperator(BinaryOperatorNode node, EmitterVisitor scalarVisitor, String methodStr) {
+    private void handleBinaryOperator(BinaryOperatorNode node, String methodStr) {
+        EmitterVisitor scalarVisitor =
+                this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
         node.left.accept(scalarVisitor); // target - left parameter
         node.right.accept(scalarVisitor); // right parameter
         // stack: [left, right]
@@ -289,8 +296,10 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleCompoundAssignment(BinaryOperatorNode node, EmitterVisitor scalarVisitor, String methodStr) {
+    private void handleCompoundAssignment(BinaryOperatorNode node, String methodStr) {
         // compound assignment operators like `+=`
+        EmitterVisitor scalarVisitor =
+                this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
         node.left.accept(scalarVisitor); // target - left parameter
         ctx.mv.visitInsn(Opcodes.DUP);
         node.right.accept(scalarVisitor); // right parameter
@@ -305,7 +314,8 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handlePushOperator(String operator, BinaryOperatorNode node) {
+    private void handlePushOperator(BinaryOperatorNode node) {
+        String operator = node.operator;
         node.left.accept(this.with(RuntimeContextType.LIST));
         node.right.accept(this.with(RuntimeContextType.LIST));
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", operator, "(Lorg/perlonjava/runtime/RuntimeDataProvider;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
@@ -314,7 +324,8 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleMapOperator(String operator, BinaryOperatorNode node) {
+    private void handleMapOperator(BinaryOperatorNode node) {
+        String operator = node.operator;
         node.right.accept(this.with(RuntimeContextType.LIST));  // list
         node.left.accept(this.with(RuntimeContextType.SCALAR)); // subroutine
         ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeList;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeList;", false);
@@ -323,7 +334,8 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleSplitOperator(String operator, BinaryOperatorNode node) {
+    private void handleSplitOperator(BinaryOperatorNode node) {
+        String operator = node.operator;
         node.left.accept(this.with(RuntimeContextType.SCALAR));
         node.right.accept(this.with(RuntimeContextType.LIST));
         ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
@@ -332,7 +344,8 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleJoinOperator(String operator, BinaryOperatorNode node) {
+    private void handleJoinOperator(BinaryOperatorNode node) {
+        String operator = node.operator;
         node.left.accept(this.with(RuntimeContextType.SCALAR));
         node.right.accept(this.with(RuntimeContextType.LIST));
         ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeDataProvider;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
@@ -1020,7 +1033,8 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleSayOperator(String operator, BinaryOperatorNode node) {
+    private void handleSayOperator(BinaryOperatorNode node) {
+        String operator = node.operator;
         // Emit the argument list
         node.right.accept(this.with(RuntimeContextType.LIST));
 

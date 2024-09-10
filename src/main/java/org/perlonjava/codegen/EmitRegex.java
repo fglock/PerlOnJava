@@ -5,7 +5,7 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.runtime.RuntimeContextType;
 
 public class EmitRegex {
-    static void handleBindRegex(EmitterVisitor emitterVisitor, BinaryOperatorNode node, EmitterVisitor scalarVisitor) {
+    static void handleBindRegex(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         //
         //  BinaryOperatorNode: =~
         //    OperatorNode: $
@@ -15,6 +15,8 @@ public class EmitRegex {
         //        StringNode: 'abc'
         //        StringNode: 'i'
         //
+        EmitterVisitor scalarVisitor =
+                emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
         if (node.right instanceof OperatorNode) {
             OperatorNode right = (OperatorNode) node.right;
             if (right.operand instanceof ListNode) {
