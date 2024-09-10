@@ -5,6 +5,7 @@ import org.perlonjava.ArgumentParser;
 import java.io.FileDescriptor;
 import java.lang.reflect.Method;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -20,6 +21,8 @@ public class GlobalContext {
     private static final Map<String, RuntimeScalar> globalIORefs = new HashMap<>();
 
     public static void initializeGlobals(ArgumentParser.CompilerOptions compilerOptions) {
+
+        // Initialize scalar variables
         getGlobalVariable("main::" + Character.toString('O' - 'A' + 1)).set("jvm");    // initialize $^O to "jvm"
         getGlobalVariable("main::@");    // initialize $@ to "undef"
         getGlobalVariable("main::_");    // initialize $_ to "undef"
@@ -33,16 +36,29 @@ public class GlobalContext {
         getGlobalVariable("main::$").set(ProcessHandle.current().pid()); // initialize $$ to process id
         getGlobalVariable("main::0").set(compilerOptions.fileName);
 
-        getGlobalArray("main::ARGV").elements = compilerOptions.argumentList.elements;
-        getGlobalArray("main::INC");
-
-        getGlobalHash("main::INC");
-
         // Initialize %ENV
         Map<String, RuntimeScalar> env = getGlobalHash("main::ENV").elements;
         System.getenv().forEach((k, v) -> {
             env.put(k, new RuntimeScalar(v));
         });
+
+        // Initialize @ARGV
+        getGlobalArray("main::ARGV").elements = compilerOptions.argumentList.elements;
+
+        // Initialize @INC
+        List<RuntimeBaseEntity> inc = getGlobalArray("main::INC").elements;
+
+        inc.addAll(compilerOptions.inc.elements);   // add from `-I`
+
+        String[] directories = env.getOrDefault("PERL5LIB", new RuntimeScalar("")).toString().split(":");
+        for (int i = 0; i < directories.length; i++) {
+            if (!directories[i].isEmpty()) {
+                inc.add(new RuntimeScalar(directories[i])); // add from env PERL5LIB
+            }
+        }
+
+        // Initialize %INC
+        getGlobalHash("main::INC");
 
         // Initialize STDOUT, STDERR, STDIN
         getGlobalIO("main::STDOUT").set(RuntimeIO.open(FileDescriptor.out, true));
