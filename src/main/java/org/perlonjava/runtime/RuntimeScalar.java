@@ -1470,16 +1470,21 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar require() {
         // https://perldoc.perl.org/functions/require
+
+        // Look up the file name in %INC
         String fileName = this.toString();
         if (GlobalContext.getGlobalHash("main::INC").elements.containsKey(fileName)) {
             // module was already loaded
             return new RuntimeScalar(1);
         }
-        RuntimeScalar result = this.doFile();
+
+        // Call `do` operator
+        RuntimeScalar result = this.doFile(); // `do "fileName"`
+        // Check if `do` returned a true value
         if (!result.defined().getBoolean()) {
             // `do FILE` returned undef
-            String err = GlobalContext.getGlobalHash("main::@").toString();
-            String ioErr = GlobalContext.getGlobalHash("main::!").toString();
+            String err = GlobalContext.getGlobalVariable("main::@").toString();
+            String ioErr = GlobalContext.getGlobalVariable("main::!").toString();
             throw new RuntimeException(err.isEmpty() ? "Can't locate " + fileName + ": " + ioErr : "Compilation failed in require: " + err);
         }
         return result;
