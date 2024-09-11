@@ -590,6 +590,23 @@ public class Operator {
         return removedElements;
     }
 
+    public static RuntimeDataProvider die(RuntimeDataProvider value, RuntimeScalar message) {
+            String out = value.toString();
+            if (!out.endsWith("\n")) {
+                out += message.toString();
+            }
+            throw new RuntimeException(out);
+    }
+
+    public static RuntimeDataProvider warn(RuntimeDataProvider value, RuntimeScalar message) {
+        String out = value.toString();
+        if (!out.endsWith("\n")) {
+            out += message.toString();
+        }
+        System.err.print(out);
+        return new RuntimeScalar();
+    }
+
     public static RuntimeDataProvider reverse(RuntimeDataProvider value, int ctx) {
         if (ctx == RuntimeContextType.SCALAR) {
             StringBuilder sb = new StringBuilder();
