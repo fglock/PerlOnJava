@@ -9,7 +9,7 @@ This is a Perl compiler under development. It compiles Perl into Java bytecode a
 2. [Build](#build)
 3. [Running the jar file](#running-the-jar-file)
 4. [Debugging Tools](#debugging-tools)
-5. [Modules](#modules)
+5. [Internal Modules](#internal-modules)
 6. [Using Java Scripting API](#using-java-scripting-api)
 7. [Milestones](#milestones)
 8. [Benchmarks](#benchmarks)
@@ -229,7 +229,7 @@ file.
     java -jar target/perlonjava-1.0-SNAPSHOT.jar --parse -e ' print 123 '
     ```
 
-## Modules
+## Internal Modules
 
 ### Lexer and Parser
 
