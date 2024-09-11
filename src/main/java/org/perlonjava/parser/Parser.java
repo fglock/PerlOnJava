@@ -5,7 +5,6 @@ import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.GlobalContext;
-import org.perlonjava.runtime.ModuleLoader;
 import org.perlonjava.runtime.NameCache;
 import org.perlonjava.runtime.PerlCompilerException;
 
@@ -430,7 +429,7 @@ public class Parser {
             case "sort":
             case "map":
             case "grep":
-                return parseMapGrepSort(token);
+                return OperatorParser.parseMapGrepSort(this, token);
             case "reverse":
             case "splice":
             case "die":
@@ -486,11 +485,11 @@ public class Parser {
                 operand = ListParser.parseZeroOrMoreList(this, 0, false, false, false, false);
                 return new OperatorNode("return", operand, tokenIndex);
             case "eval":
-                return parseEval();
+                return OperatorParser.parseEval(this);
             case "do":
-                return parseDoOperator();
+                return OperatorParser.parseDoOperator(this);
             case "require":
-                return parseRequire();
+                return OperatorParser.parseRequire(this);
             case "sub":
                 // Handle 'sub' keyword to parse an anonymous subroutine
                 return SubroutineParser.parseSubroutineDefinition(this, false);
@@ -507,85 +506,6 @@ public class Parser {
                 return StringParser.parseRawString(this, token.text);
         }
         return null;
-    }
-
-    private BinaryOperatorNode parseMapGrepSort(LexerToken token) {
-        Node operand;
-        // Handle 'sort' keyword as a Binary operator with a Code and List operands
-        operand = ListParser.parseZeroOrMoreList(this, 1, true, false, false, false);
-        // transform:   { 123 }
-        // into:        sub { 123 }
-        Node block = ((ListNode) operand).handle;
-        ((ListNode) operand).handle = null;
-        if (block == null && token.text.equals("sort")) {
-            // create default block for `sort`: { $a cmp $b }
-            block = new BlockNode(List.of(new BinaryOperatorNode("cmp", new OperatorNode("$", new IdentifierNode("main::a", tokenIndex), tokenIndex), new OperatorNode("$", new IdentifierNode("main::b", tokenIndex), tokenIndex), tokenIndex)), tokenIndex);
-        }
-        if (block instanceof BlockNode) {
-            block = new AnonSubNode(null, null, null, block, false, tokenIndex);
-        }
-        return new BinaryOperatorNode(token.text, block, operand, tokenIndex);
-    }
-
-    private Node parseRequire() {
-        LexerToken token;
-        // Handle 'require' keyword which can be followed by a version, bareword or filename
-        token = peek();
-        Node operand;
-        if (token.type == LexerTokenType.IDENTIFIER) {
-            // TODO `require` version
-
-            // `require` module
-            String moduleName = IdentifierParser.parseSubroutineIdentifier(this);
-            ctx.logDebug("name `" + moduleName + "`");
-            if (moduleName == null) {
-                throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
-            }
-            String fileName = ModuleLoader.moduleToFilename(moduleName);
-            operand = ListNode.makeList(new StringNode(fileName, tokenIndex));
-        } else {
-            // `require` file
-            operand = ListParser.parseZeroOrOneList(this, 1);
-        }
-        return new OperatorNode("require", operand, tokenIndex);
-    }
-
-    private Node parseDoOperator() {
-        LexerToken token;
-        Node block;
-        // Handle 'do' keyword which can be followed by a block or filename
-        token = peek();
-        if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
-            consume(LexerTokenType.OPERATOR, "{");
-            block = parseBlock();
-            consume(LexerTokenType.OPERATOR, "}");
-            return block;
-        }
-        // `do` file
-        Node operand = ListParser.parseZeroOrOneList(this, 1);
-        return new OperatorNode("doFile", operand, tokenIndex);
-    }
-
-    private AbstractNode parseEval() {
-        Node block;
-        Node operand;
-        LexerToken token;
-        // Handle 'eval' keyword which can be followed by a block or an expression
-        token = peek();
-        if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
-            // If the next token is '{', parse a block
-            consume(LexerTokenType.OPERATOR, "{");
-            block = parseBlock();
-            consume(LexerTokenType.OPERATOR, "}");
-            // transform:  eval { 123 }
-            // into:  sub { 123 }->()  with useTryCatch flag
-            return new BinaryOperatorNode("->",
-                    new AnonSubNode(null, null, null, block, true, tokenIndex), new ListNode(tokenIndex), tokenIndex);
-        } else {
-            // Otherwise, parse a primary expression
-            operand = parsePrimary();
-        }
-        return new OperatorNode("eval", operand, tokenIndex);
     }
 
     public Node parsePrimary() {
