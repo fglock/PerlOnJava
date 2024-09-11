@@ -89,17 +89,26 @@ public class EmitLiteral {
         mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
         mv.visitInsn(Opcodes.DUP);
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
-
-        // The stack now has the new RuntimeList instance
+        // stack: [RuntimeList]
 
         for (Node element : node.elements) {
             // Visit each element to generate code for it
 
             // Duplicate the RuntimeList instance to keep it on the stack
             mv.visitInsn(Opcodes.DUP);
+            // stack: [RuntimeList] [RuntimeList]
 
             // emit the list element
-            element.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            if (element instanceof OperatorNode && ((OperatorNode) element).operator.equals("return")) {
+                // Special case for return operator: it inserts a `goto` instruction
+                emitterVisitor.ctx.logDebug("visit(ListNode) return");
+                emitterVisitor.ctx.mv.visitInsn(Opcodes.POP); // stop construction of RuntimeList instance
+                emitterVisitor.ctx.mv.visitInsn(Opcodes.POP); 
+                element.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                return;
+            } else {
+                element.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            }
 
             // Call the add method to add the element to the RuntimeList
             // This calls RuntimeDataProvider.addToList() in order to allow (1, 2, $x, @x, %x)
