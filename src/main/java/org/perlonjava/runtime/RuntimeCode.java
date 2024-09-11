@@ -30,6 +30,12 @@ public class RuntimeCode implements RuntimeScalarReference {
         this.codeObject = codeObject;
     }
 
+    public RuntimeCode(Method methodObject, Object codeObject, String prototype) {
+        this.methodObject = methodObject;
+        this.codeObject = codeObject;
+        this.prototype = prototype;
+    }
+
     // Method to compile the text of eval string into a Class that
     // represents an anonymous subroutine.
     //
