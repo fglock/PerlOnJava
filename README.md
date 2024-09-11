@@ -157,6 +157,9 @@ file.
 │   │               ├── parser/
 │   │               │   ├── Parser.java
 │   │               │   └── other parser classes
+│   │               ├── perlmodule/
+│   │               │   ├── Universal.java
+│   │               │   └── other Perl module classes
 │   │               └── runtime/
 │   │                   ├── RuntimeScalar.java
 │   │                   └── other runtime classes
@@ -180,6 +183,7 @@ file.
 
 - **JUnit**: For testing.
 - **ASM**: For bytecode manipulation.
+- **ICU4J**: For Unicode support.
 
 ### Notes
 
@@ -265,6 +269,10 @@ file.
 ### Runtime classes: Runtime*
 
 - **Runtime**: Provides the implementation of the behavior of a Perl scalar variable, Code, Array, Hash.
+
+### Perl Module classes
+
+- **perlmodule**: Provides ports of Perl classes implemented in Java, such as `UNIVERSAL` and `Symbol`.
 
 ### Main Method
 
@@ -360,15 +368,15 @@ public class Main {
 
 ### Upcoming Milestones
 
-- **v1.6.0**: Performance Improvements
+- **v1.6.0**: Module System and Standard Library Enhancements
     - Planned release date: 2024-12-10
-    - Focus on optimizing the execution engine for better performance.
-    - Improve error handling and debugging tools to make development easier.
-
-- **v1.7.0**: Module System and Standard Library Enhancements
     - Introduce a module system to allow better code organization and reuse.
     - Enhance the standard library with additional utility functions and data structures.
     - Improve documentation and provide more examples to help users get started.
+
+- **v1.7.0**: Performance Improvements
+    - Focus on optimizing the execution engine for better performance.
+    - Improve error handling and debugging tools to make development easier.
 
 - **v1.8.0**: Concurrency and Security Features
     - Add support for concurrency and parallelism, such as threads and async/await.
