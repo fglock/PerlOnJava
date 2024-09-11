@@ -46,6 +46,9 @@ public class IdentifierParser {
         }
 
         // Return the parsed identifier, or null if no valid identifier was found
+        if (identifier == null) {
+            parser.tokenIndex = saveIndex;
+        }
         return identifier;
     }
 
