@@ -233,6 +233,9 @@ print "not " if "@filtered" ne "4 5"; say "ok # grep filtered elements greater t
     
     @sorted = sort { $a cmp $b } qw(zebra apple monkey);
     print "not " if "@sorted" ne "apple monkey zebra"; say "ok # sort in alphabetical order";
+
+    @sorted = sort qw(zebra apple monkey);
+    print "not " if "@sorted" ne "apple monkey zebra"; say "ok # sort without block";
 }
 
 
