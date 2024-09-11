@@ -111,19 +111,36 @@ public class StatementParser {
     }
 
     public static Node parseUseDeclaration(Parser parser, LexerToken token) {
+        parser.ctx.logDebug("use: " + token.text);
         boolean isNoDeclaration = token.text.equals("no");
 
-        parser.consume();
-        String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
-        if (packageName == null) {
-            throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+        parser.consume();   // "use"
+        token = parser.peek();
+
+        String fullName = null;
+        String packageName = null;
+        if (token.type != LexerTokenType.NUMBER && !token.text.matches("^v\\d+")) {
+            parser.ctx.logDebug("use module: " + token);
+            packageName = IdentifierParser.parseSubroutineIdentifier(parser);
+            if (packageName == null) {
+                throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+            }
+            fullName = ModuleLoader.moduleToFilename(packageName);
+            parser.ctx.logDebug("use fullName: " + fullName);
         }
-        String fullName = ModuleLoader.moduleToFilename(packageName);
 
         // Parse Version string; throw away the result
         // TODO use the Version string
         // TODO call Module->VERSION(12.34)
-        parseOptionalPackageVersion(parser);
+        String version = parseOptionalPackageVersion(parser);
+        parser.ctx.logDebug("use version: " + version);
+        if (version != null) {
+            // `use` statement can terminate after Version
+            token = parser.peek();
+            if (token.type == LexerTokenType.EOF || token.text.equals("}") || token.text.equals(";")) {
+                return new ListNode(parser.tokenIndex);
+            }
+        }
 
         // Parse the parameter list
         boolean hasParentheses = parser.peek().text.equals("(");
@@ -175,9 +192,9 @@ public class StatementParser {
         IdentifierNode nameNode = new IdentifierNode(packageName, parser.tokenIndex);
         OperatorNode packageNode = new OperatorNode(token.text, nameNode, parser.tokenIndex);
 
-        // Parse Version string; throw away the result
+        // Parse Version string
         // XXX use the Version string
-        parseOptionalPackageVersion(parser);
+        String version = parseOptionalPackageVersion(parser);
 
         BlockNode block = parseOptionalPackageBlock(parser, nameNode, packageNode);
         if (block != null) return block;
@@ -207,11 +224,11 @@ public class StatementParser {
         return null;
     }
 
-    public static void parseOptionalPackageVersion(Parser parser) {
+    public static String parseOptionalPackageVersion(Parser parser) {
         LexerToken token;
         token = parser.peek();
         if (token.type == LexerTokenType.NUMBER) {
-            NumberParser.parseNumber(parser, parser.consume());
+            return NumberParser.parseNumber(parser, parser.consume()).value;
         } else if (token.text.startsWith("v")) {
             // parseDottedDecimalVersion
             StringBuilder version = new StringBuilder(token.text); // start with 'v'
@@ -240,7 +257,9 @@ public class StatementParser {
             }
 
             parser.ctx.logDebug("Dotted-decimal Version: " + version);
+            return version.toString();
         }
+        return null;
     }
 
 }
