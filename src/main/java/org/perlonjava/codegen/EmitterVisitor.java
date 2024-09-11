@@ -779,6 +779,26 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
+    private void handleDieBuiltin(OperatorNode node) {
+        // Handle:  die LIST
+        //   static RuntimeDataProvider die(RuntimeDataProvider value, int ctx)
+        String operator = node.operator;
+        ctx.logDebug("handleDieBuiltin " + node);
+        node.operand.accept(this.with(RuntimeContextType.LIST));
+
+        // push the formatted line number
+        Node message = new StringNode( ctx.errorUtil.errorMessage(node.tokenIndex, ""), node.tokenIndex);
+        message.accept(this.with(RuntimeContextType.SCALAR));
+
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/Operator",
+                operator,
+                "(Lorg/perlonjava/runtime/RuntimeDataProvider;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
+    }
+
     private void handleReverseBuiltin(OperatorNode node) {
         // Handle:  reverse LIST
         //   static RuntimeDataProvider reverse(RuntimeDataProvider value, int ctx)
@@ -920,6 +940,10 @@ public class EmitterVisitor implements Visitor {
             case "$#":
                 node = new OperatorNode("$#", new OperatorNode("@", node.operand, node.tokenIndex), node.tokenIndex);
                 handleArrayUnaryBuiltin(node, "indexLastElem");
+                break;
+            case "die":
+            case "warn":
+                handleDieBuiltin(node);
                 break;
             case "reverse":
                 handleReverseBuiltin(node);
