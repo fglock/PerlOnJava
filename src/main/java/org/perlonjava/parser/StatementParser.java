@@ -1,11 +1,10 @@
 package org.perlonjava.parser;
 
 import org.perlonjava.astnode.*;
+import org.perlonjava.codegen.ExtractValueVisitor;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.runtime.ModuleLoader;
-import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.*;
 
 public class StatementParser {
 
@@ -139,9 +138,29 @@ public class StatementParser {
         RuntimeScalar ret = new RuntimeScalar(fullName).require();
         parser.ctx.logDebug("Use statement return: " + ret);
 
-        // TODO call Module->import( LIST )
-        // TODO call Module->unimport( LIST )
-        String importMethod = isNoDeclaration ? "unimport" : "import";
+        // call Module->import( LIST )
+        // or Module->unimport( LIST )
+        RuntimeList args = ExtractValueVisitor.getValues(list);
+        parser.ctx.logDebug("Use statement list: " + args);
+        if (hasParentheses && args.size() == 0) {
+            // do not import
+        } else {
+            // fetch the method using `can` operator
+            String importMethod = isNoDeclaration ? "unimport" : "import";
+            RuntimeArray canArgs = new RuntimeArray();
+            canArgs.push(new RuntimeScalar(packageName));
+            canArgs.push(new RuntimeScalar(importMethod));
+            RuntimeList codeList = RuntimeScalar.can(canArgs, RuntimeContextType.SCALAR);
+            parser.ctx.logDebug("Use can(" + packageName + ", " + importMethod + "): " + codeList);
+            if (codeList.size() == 1) {
+                RuntimeScalar code = (RuntimeScalar) codeList.elements.get(0);
+                if (code.getBoolean()) {
+                    // call the method
+                    parser.ctx.logDebug("Use call : " + importMethod + "(" + args + ")");
+                    code.apply(args.getArrayOfAlias(), RuntimeContextType.SCALAR);
+                }
+            }
+        }
 
         // return an empty list
         return new ListNode(parser.tokenIndex);
