@@ -14,6 +14,7 @@
 9. [Perl Modules](#perl-modules)
 10. [Non-strict Features](#non-strict-features)
 11. [Features Probably Incompatible with JVM](#features-probably-incompatible-with-jvm)
+12. [Language Differences and Workarounds](#language-differences-and-workarounds)
 
 ## Compiler Usability
 - ✔️   **Perl-like compile-time error messages**: Error messages mimic those in Perl for consistency.
@@ -187,4 +188,48 @@
 - ❌  **Fetching user and group info**: endgrent, endhostent, endnetent, endpwent, getgrent, getgrgid, getgrnam, getlogin, getpwent, getpwnam, getpwuid, setgrent, setpwent
 - ❌  **Fetching network info**: endprotoent, endservent, gethostbyaddr, gethostbyname, gethostent, getnetbyaddr, getnetbyname, getnetent, getprotobyname, getprotobynumber, getprotoent, getservbyname, getservbyport, getservent, sethostent, setnetent, setprotoent, setservent
 - ❌  **Keywords related to the control flow of the Perl program**: `dump`, `caller`.
+
+
+## Language Differences and Workarounds
+
+
+### Using `strict` mode everywhere
+
+To ensure Perl strict is used everywhere and avoid disabling it with `no strict 'refs'`, 
+you can refactor the code using Perl's `Symbol` module, 
+which allows for dynamic symbol table manipulation in a safer way. 
+
+The goal here is to avoid symbolic references (`*{ $callpkg . "::Dumper" }`) while keeping `strict` mode enabled.
+
+```perl
+    sub import {
+        no strict 'refs';
+        my $pkg     = shift;
+        my $callpkg = caller(0);
+        *{ $callpkg . "::Dumper" } = \&Dumper;
+        return;
+    }
+```
+
+Here’s an alternative approach using the Symbol module:
+
+```perl
+    use Symbol 'qualify_to_ref';
+    
+    sub import {
+        my $pkg     = shift;
+        my $callpkg = caller(0);
+    
+        # Dynamically assign the Dumper function to the caller's namespace
+        my $sym_ref = qualify_to_ref('Dumper', $callpkg);
+        *$sym_ref = \&Dumper;
+    
+        return;
+    }
+```
+
+`qualify_to_ref` from the `Symbol` module returns a reference to the fully qualified symbol in the caller’s package.
+This avoids having to use the symbolic reference (`no strict 'refs'`), so you can keep strict and warnings enabled.
+
+This approach is safer and aligns with the practice of using strict mode throughout the codebase.
 
