@@ -22,11 +22,14 @@ public class Universal {
             RuntimeScalar instance = new RuntimeScalar();
 
             Method mm = clazz.getMethod("can", RuntimeArray.class, int.class);
-            getGlobalCodeRef("UNIVERSAL::can").set(new RuntimeScalar(new RuntimeCode(mm, instance)));
+            getGlobalCodeRef("UNIVERSAL::can").set(new RuntimeScalar(
+                    new RuntimeCode(mm, instance, null)));
 
             mm = clazz.getMethod("isa", RuntimeArray.class, int.class);
-            getGlobalCodeRef("UNIVERSAL::isa").set(new RuntimeScalar(new RuntimeCode(mm, instance)));
-            getGlobalCodeRef("UNIVERSAL::DOES").set(new RuntimeScalar(new RuntimeCode(mm, instance)));
+            getGlobalCodeRef("UNIVERSAL::isa").set(new RuntimeScalar(
+                    new RuntimeCode(mm, instance, null)));
+            getGlobalCodeRef("UNIVERSAL::DOES").set(new RuntimeScalar(
+                    new RuntimeCode(mm, instance, null)));
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing UNIVERSAL method: " + e.getMessage());
         }
