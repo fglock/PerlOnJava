@@ -11,8 +11,9 @@
 6. [Regular Expressions](#regular-expressions)
 7. [Statements and Special Operators](#statements-and-special-operators)
 8. [Namespaces and Global Variables](#namespaces-and-global-variables)
-9. [Non-strict Features](#non-strict-features)
-10. [Features Probably Incompatible with JVM](#features-probably-incompatible-with-jvm)
+9. [Perl Modules](#perl-modules)
+10. [Non-strict Features](#non-strict-features)
+11. [Features Probably Incompatible with JVM](#features-probably-incompatible-with-jvm)
 
 ## Compiler Usability
 - ✔️   **Perl-like compile-time error messages**: Error messages mimic those in Perl for consistency.
@@ -51,7 +52,6 @@
 - ✔️   **Object operators**: `ref` and `bless`
 - ✔️   **Special variables**: `@ISA` is implemented.
 - ✔️   **Multiple Inheritance**: C3 method resolution is implemented.
-- ✔️   **UNIVERSAL class**: `isa`, `can`, `DOES` are implemented.
 - ✔️   **Method caching**: Method resolution is cached.
 - ❌  **Version check**: Method `VERSION ( [ REQUIRE ] )` is not yet implemented.
 - ❌  **Inheritance**: `SUPER` is not yet implemented.
@@ -169,6 +169,9 @@
 - ✔️   **Special variables**: The special variables `%ENV`, `@ARGV`, `@INC`, `$0`, `$_`, `$"`, `$\\`, `$,`, `$/`, `$$`, `$a`, `$b`, `$^O` are implemented.
 - ✔️   **I/O symbols**: `STDOUT`, `STDERR`, `STDIN` are implemented.
 - ❌  **Thread-safe `@_`, `$_`, and regex variables**: Thread safety for global special variables is missing.
+
+## Perl Modules
+- ✔️   **UNIVERSAL class**: `isa`, `can`, `DOES` are implemented.
 
 ## Non-strict and Obsolete Features
 - ❌  **Use string as a scalar reference**: Support for scalar references from strings is not yet implemented.
