@@ -103,7 +103,7 @@ public class EmitLiteral {
                 // Special case for return operator: it inserts a `goto` instruction
                 emitterVisitor.ctx.logDebug("visit(ListNode) return");
                 emitterVisitor.ctx.mv.visitInsn(Opcodes.POP); // stop construction of RuntimeList instance
-                emitterVisitor.ctx.mv.visitInsn(Opcodes.POP); 
+                emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
                 element.accept(emitterVisitor.with(RuntimeContextType.LIST));
                 return;
             } else {
