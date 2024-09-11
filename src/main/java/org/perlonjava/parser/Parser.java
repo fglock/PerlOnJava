@@ -409,7 +409,6 @@ public class Parser {
                 }
                 return new BinaryOperatorNode("bless", ref, className, tokenIndex);
             case "split":
-                // TODO Handle 'split' keyword
                 // RuntimeList split(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar limitArg)
                 operand = ListParser.parseZeroOrMoreList(this, 1, false, true, false, true);
                 Node separator = ((ListNode) operand).elements.remove(0);
@@ -443,6 +442,8 @@ public class Parser {
                 return new BinaryOperatorNode(token.text, block, operand, tokenIndex);
             case "reverse":
             case "splice":
+            case "die":
+            case "warn":
                 operand = ListParser.parseZeroOrMoreList(this, 0, false, true, false, false);
                 return new OperatorNode(token.text, operand, tokenIndex);
             case "readline":
