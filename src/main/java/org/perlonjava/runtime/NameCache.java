@@ -11,7 +11,7 @@ public class NameCache {
     private static final Map<String, Integer> blessIdCache = new HashMap<>();
     private static final ArrayList<String> blessStrCache = new ArrayList<>();
     private static final Set<String> SPECIAL_VARIABLES = Set.of(
-            "ARGV", "ENV", "INC", "SIG", "STDOUT", "STDERR", "STDIN"
+            "ARGV", "ARGVOUT", "ENV", "INC", "SIG", "STDOUT", "STDERR", "STDIN"
     );
     // Cache to store blessed class lookups
     private static int currentBlessId = 0;

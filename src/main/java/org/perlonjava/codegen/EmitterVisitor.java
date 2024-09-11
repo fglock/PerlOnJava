@@ -981,8 +981,15 @@ public class EmitterVisitor implements Visitor {
                 mv.visitInsn(Opcodes.POP);
             }
         } else {
-            node.operand.accept(this.with(RuntimeContextType.LIST));
-            ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "createReference", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+            if (node.operand instanceof OperatorNode && ((OperatorNode) node.operand).operator.equals("&")) {
+                // System.out.println("handleCreateReference of &var");
+                //  &var is already a reference
+                node.operand.accept(this.with(RuntimeContextType.LIST));
+            }
+            else {
+                node.operand.accept(this.with(RuntimeContextType.LIST));
+                ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "createReference", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+            }
             if (ctx.contextType == RuntimeContextType.VOID) {
                 mv.visitInsn(Opcodes.POP);
             }
