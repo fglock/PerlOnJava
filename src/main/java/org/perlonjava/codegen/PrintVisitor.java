@@ -41,7 +41,12 @@ public class PrintVisitor implements Visitor {
         appendIndent();
         sb.append("BinaryOperatorNode: ").append(node.operator).append("\n");
         indentLevel++;
-        node.left.accept(this);
+        if (node.left == null) {
+            appendIndent();
+            sb.append("null\n");
+        } else {
+            node.left.accept(this);
+        }
         node.right.accept(this);
         indentLevel--;
     }

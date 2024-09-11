@@ -436,6 +436,20 @@ public class Parser {
                 // into:        sub { 123 }
                 Node block = ((ListNode) operand).handle;
                 ((ListNode) operand).handle = null;
+                if (block == null && token.text.equals("sort")) {
+                    // create default block for `sort`: { $a cmp $b }
+                    block = new BlockNode(
+                            List.of(
+                                    new BinaryOperatorNode("cmp",
+                                            new OperatorNode("$",
+                                                    new IdentifierNode("main::a", tokenIndex),
+                                                    tokenIndex),
+                                            new OperatorNode("$",
+                                                    new IdentifierNode("main::b", tokenIndex), tokenIndex),
+                                            tokenIndex)
+                                    ),
+                            tokenIndex);
+                }
                 if (block instanceof BlockNode) {
                     block = new AnonSubNode(null, null, null, block, false, tokenIndex);
                 }
