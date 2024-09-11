@@ -198,6 +198,11 @@ public class StringParser {
                     break;
                 case "$":
                 case "@":
+                    if (tokens.get(parser.tokenIndex).type == LexerTokenType.EOF) {
+                        // final $ or @
+                        str.append(text);
+                        break;
+                    }
                     if (str.length() > 0) {
                         parts.add(new StringNode(str.toString(), tokenIndex));  // Add the string so far to parts
                         str = new StringBuilder();  // Reset the buffer
