@@ -787,7 +787,7 @@ public class EmitterVisitor implements Visitor {
         node.operand.accept(this.with(RuntimeContextType.LIST));
 
         // push the formatted line number
-        Node message = new StringNode( ctx.errorUtil.errorMessage(node.tokenIndex, ""), node.tokenIndex);
+        Node message = new StringNode(ctx.errorUtil.errorMessage(node.tokenIndex, ""), node.tokenIndex);
         message.accept(this.with(RuntimeContextType.SCALAR));
 
         ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
