@@ -4,6 +4,7 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.ExtractValueVisitor;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 
 public class StatementParser {
@@ -167,7 +168,7 @@ public class StatementParser {
             RuntimeArray canArgs = new RuntimeArray();
             canArgs.push(new RuntimeScalar(packageName));
             canArgs.push(new RuntimeScalar(importMethod));
-            RuntimeList codeList = RuntimeScalar.can(canArgs, RuntimeContextType.SCALAR);
+            RuntimeList codeList = Universal.can(canArgs, RuntimeContextType.SCALAR);
             parser.ctx.logDebug("Use can(" + packageName + ", " + importMethod + "): " + codeList);
             if (codeList.size() == 1) {
                 RuntimeScalar code = (RuntimeScalar) codeList.elements.get(0);

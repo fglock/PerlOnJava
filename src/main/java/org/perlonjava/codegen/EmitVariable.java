@@ -132,6 +132,12 @@ public class EmitVariable {
                 node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "scalarDeref", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
                 return;
+            case "*":
+                // `*$a`
+                emitterVisitor.ctx.logDebug("GETVAR `*$a`");
+                node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "globDeref", "()Lorg/perlonjava/runtime/RuntimeGlob;", false);
+                return;
         }
 
         // TODO ${a} ${[ 123 ]}

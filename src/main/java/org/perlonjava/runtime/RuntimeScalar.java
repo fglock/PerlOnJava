@@ -3,6 +3,7 @@ package org.perlonjava.runtime;
 import com.ibm.icu.text.CaseMap;
 import com.ibm.icu.text.Normalizer2;
 import org.perlonjava.ArgumentParser;
+import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
 
 import java.io.IOException;
@@ -157,96 +158,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 new RuntimeScalar(ctx == RuntimeContextType.LIST ? 1 : 0);
     }
 
-    // Checks if the object is of a given class or a subclass
-    // Note this is a Perl method, it expects `this` to be the first argument
-    public static RuntimeList isa(RuntimeArray args, int ctx) {
-        if (args.size() != 2) {
-            throw new IllegalStateException("Bad number of arguments for isa() method");
-        }
-        RuntimeScalar object = args.get(0);
-        String argString = args.get(1).toString();
-
-        // Retrieve Perl class name
-        String perlClassName;
-        switch (object.type) {
-            case REFERENCE:
-            case ARRAYREFERENCE:
-            case HASHREFERENCE:
-                int blessId = ((RuntimeBaseEntity) object.value).blessId;
-                if (blessId == 0) {
-                    return new RuntimeScalar(false).getList();
-                }
-                perlClassName = NameCache.getBlessStr(blessId);
-                break;
-            case UNDEF:
-                return new RuntimeScalar(false).getList();
-            default:
-                perlClassName = object.toString();
-                if (perlClassName.isEmpty()) {
-                    return new RuntimeScalar(false).getList();
-                }
-                if (perlClassName.endsWith("::")) {
-                    perlClassName = perlClassName.substring(0, perlClassName.length() - 2);
-                }
-        }
-
-        // Get the linearized inheritance hierarchy using C3
-        List<String> linearizedClasses = InheritanceResolver.linearizeC3(perlClassName);
-
-        return new RuntimeScalar(linearizedClasses.contains(argString)).getList();
-    }
-
-    // Checks if the object can perform a given method
-    // Note this is a Perl method, it expects `this` to be the first argument
-    public static RuntimeList can(RuntimeArray args, int ctx) {
-        if (args.size() != 2) {
-            throw new IllegalStateException("Bad number of arguments for can() method");
-        }
-        RuntimeScalar object = args.get(0);
-        String methodName = args.get(1).toString();
-
-        // Retrieve Perl class name
-        String perlClassName;
-        switch (object.type) {
-            case REFERENCE:
-            case ARRAYREFERENCE:
-            case HASHREFERENCE:
-                int blessId = ((RuntimeBaseEntity) object.value).blessId;
-                if (blessId == 0) {
-                    return new RuntimeScalar(false).getList();
-                }
-                perlClassName = NameCache.getBlessStr(blessId);
-                break;
-            case UNDEF:
-                return new RuntimeScalar(false).getList();
-            default:
-                perlClassName = object.toString();
-                if (perlClassName.isEmpty()) {
-                    return new RuntimeScalar(false).getList();
-                }
-                if (perlClassName.endsWith("::")) {
-                    perlClassName = perlClassName.substring(0, perlClassName.length() - 2);
-                }
-        }
-
-        // Check the method cache
-        String normalizedMethodName = NameCache.normalizeVariableName(methodName, perlClassName);
-        RuntimeScalar cachedMethod = InheritanceResolver.getCachedMethod(normalizedMethodName);
-        if (cachedMethod != null) {
-            return cachedMethod.getList();
-        }
-
-        // Get the linearized inheritance hierarchy using C3
-        for (String className : InheritanceResolver.linearizeC3(perlClassName)) {
-            String normalizedClassMethodName = NameCache.normalizeVariableName(methodName, className);
-            if (GlobalContext.existsGlobalCodeRef(normalizedClassMethodName)) {
-                // If the method is found, return it
-                return GlobalContext.getGlobalCodeRef(normalizedClassMethodName).getList();
-            }
-        }
-        return new RuntimeScalar(false).getList();
-    }
-
     public static RuntimeScalar time() {
         return new RuntimeScalar(System.currentTimeMillis() / 1000L);
     }
@@ -335,7 +246,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         RuntimeArray args = new RuntimeArray();
         args.push(this);
         args.push(className);
-        return isa(args, RuntimeContextType.SCALAR).scalar();
+        return Universal.isa(args, RuntimeContextType.SCALAR).scalar();
     }
 
     // Getters
@@ -594,6 +505,19 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 return (RuntimeScalar) value;
             default:
                 throw new IllegalStateException("Variable does not contain a scalar reference");
+        }
+    }
+
+    // Method to implement `*$v`
+    public RuntimeGlob globDeref() {
+        switch (type) {
+            case UNDEF:
+                throw new IllegalStateException("Can't use an undefined value as a GLOB reference");
+            case GLOB:
+            case GLOBREFERENCE:
+                return (RuntimeGlob) value;
+            default:
+                throw new IllegalStateException("Variable does not contain a glob reference");
         }
     }
 

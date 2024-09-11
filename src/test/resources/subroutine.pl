@@ -1,4 +1,5 @@
 use v5.38.0;
+use Symbol;
 
 ############################
 #  Subroutines
@@ -17,6 +18,18 @@ print "not " if $result ne "<345>"; say "ok # named subroutine with typeglob, no
 
 @_ = (456, "ABC");
 &x;
+
+# named subroutine with Symbol assignment
+
+my $sym_ref = Symbol::qualify_to_ref("A", "B");
+say "# x is " . \&x;    # x is CODE
+say "# sym_ref is " . $sym_ref;  # sym_ref is GLOB
+*$sym_ref = \&x;
+
+$result = "not called";
+eval ' $result = B::A(123) ';
+print "not " if $result ne "<123>"; say "ok # named subroutine with Symbol returned '$result'";
+
 
 # named subroutine
 
