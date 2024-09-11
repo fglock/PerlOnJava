@@ -591,11 +591,11 @@ public class Operator {
     }
 
     public static RuntimeDataProvider die(RuntimeDataProvider value, RuntimeScalar message) {
-            String out = value.toString();
-            if (!out.endsWith("\n")) {
-                out += message.toString();
-            }
-            throw new RuntimeException(out);
+        String out = value.toString();
+        if (!out.endsWith("\n")) {
+            out += message.toString();
+        }
+        throw new RuntimeException(out);
     }
 
     public static RuntimeDataProvider warn(RuntimeDataProvider value, RuntimeScalar message) {
