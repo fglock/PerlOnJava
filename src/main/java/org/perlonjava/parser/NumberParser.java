@@ -7,7 +7,7 @@ import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
 public class NumberParser {
-    public static Node parseNumber(Parser parser, LexerToken token) {
+    public static NumberNode parseNumber(Parser parser, LexerToken token) {
         StringBuilder number = new StringBuilder(token.text);
 
         // Check for binary, octal, or hexadecimal prefixes
