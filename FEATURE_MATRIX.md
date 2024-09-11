@@ -172,7 +172,8 @@
 - ❌  **Thread-safe `@_`, `$_`, and regex variables**: Thread safety for global special variables is missing.
 
 ## Perl Modules
-- ✔️   **UNIVERSAL class**: `isa`, `can`, `DOES` are implemented.
+- ✔️   **UNIVERSAL module**: `isa`, `can`, `DOES` are implemented.
+- ✔️   **Symbol module**: `qualify` and `qualify_to_ref` are implemented.
 
 ## Non-strict and Obsolete Features
 - ❌  **Use string as a scalar reference**: Support for scalar references from strings is not yet implemented.

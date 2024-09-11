@@ -1,9 +1,10 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.ArgumentParser;
+import org.perlonjava.perlmodule.Symbol;
+import org.perlonjava.perlmodule.Universal;
 
 import java.io.FileDescriptor;
-import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -71,21 +72,9 @@ public class GlobalContext {
         getGlobalIO("main::STDERR").set(RuntimeIO.open(FileDescriptor.err, true));
         getGlobalIO("main::STDIN").set(RuntimeIO.open(FileDescriptor.in, false));
 
-        // Initialize UNIVERSAL class
-        try {
-            // UNIVERSAL methods are defined in RuntimeScalar class
-            Class<?> clazz = RuntimeScalar.class;
-            RuntimeScalar instance = new RuntimeScalar();
-
-            Method mm = clazz.getMethod("can", RuntimeArray.class, int.class);
-            getGlobalCodeRef("UNIVERSAL::can").set(new RuntimeScalar(new RuntimeCode(mm, instance)));
-
-            mm = clazz.getMethod("isa", RuntimeArray.class, int.class);
-            getGlobalCodeRef("UNIVERSAL::isa").set(new RuntimeScalar(new RuntimeCode(mm, instance)));
-            getGlobalCodeRef("UNIVERSAL::DOES").set(new RuntimeScalar(new RuntimeCode(mm, instance)));
-        } catch (NoSuchMethodException e) {
-            System.err.println("Warning: Missing UNIVERSAL method: " + e.getMessage());
-        }
+        // Initialize built-in Perl classes
+        Universal.initialize();
+        Symbol.initialize();
 
         // Reset method cache after initializing UNIVERSAL
         InheritanceResolver.invalidateCache();
