@@ -22,10 +22,12 @@ public class Symbol {
             Method mm;
 
             mm = clazz.getMethod("qualify_to_ref", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Symbol::qualify_to_ref").set(new RuntimeScalar(new RuntimeCode(mm, instance)));
+            getGlobalCodeRef("Symbol::qualify_to_ref").set(new RuntimeScalar(
+                    new RuntimeCode(mm, instance, "$;$")));
 
             mm = clazz.getMethod("qualify", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Symbol::qualify").set(new RuntimeScalar(new RuntimeCode(mm, instance)));
+            getGlobalCodeRef("Symbol::qualify").set(new RuntimeScalar(
+                    new RuntimeCode(mm, instance, "$;$")));
 
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Symbol method: " + e.getMessage());
@@ -67,7 +69,7 @@ public class Symbol {
         return list;
     }
 
-//    "Symbol::qualify_to_ref" is just like "Symbol::qualify" except that it
+    //    "Symbol::qualify_to_ref" is just like "Symbol::qualify" except that it
 //    returns a glob ref rather than a symbol name, so you can use the result
 //    even if "use strict 'refs'" is in effect.
     //

@@ -985,8 +985,7 @@ public class EmitterVisitor implements Visitor {
                 // System.out.println("handleCreateReference of &var");
                 //  &var is already a reference
                 node.operand.accept(this.with(RuntimeContextType.LIST));
-            }
-            else {
+            } else {
                 node.operand.accept(this.with(RuntimeContextType.LIST));
                 ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "createReference", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
             }
