@@ -101,6 +101,40 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         this.value = value;
     }
 
+    public boolean looksLikeNumber() {
+        switch (this.type) {
+            case INTEGER:
+            case DOUBLE:
+                return true;
+            case STRING:
+                String str = this.toString().trim();
+                if (str.isEmpty()) {
+                    return false;
+                }
+                // Check for Inf and NaN
+                if (str.equalsIgnoreCase("Inf") || str.equalsIgnoreCase("Infinity") || str.equalsIgnoreCase("NaN")) {
+                    return true;
+                }
+                // Check for decimal (integer or float)
+                try {
+                    Double.parseDouble(str);
+                    return true;
+                } catch (NumberFormatException e) {
+                    return false;
+                }
+            case UNDEF:
+                return false;
+            case GLOB:
+            case ARRAYREFERENCE:
+            case HASHREFERENCE:
+            case CODE:
+                // These types don't look like numbers in Perl
+                return false;
+            default:
+                throw new IllegalStateException("Unexpected value: " + this.type);
+        }
+    }
+
     // Helper method to autoincrement a String variable
     private static String _string_increment(String s) {
         // Check if the string length is less than 2
