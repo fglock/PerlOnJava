@@ -1,6 +1,7 @@
 package org.perlonjava.parser;
 
 import org.perlonjava.astnode.*;
+import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.codegen.ExtractValueVisitor;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
@@ -112,7 +113,8 @@ public class StatementParser {
     }
 
     public static Node parseUseDeclaration(Parser parser, LexerToken token) {
-        parser.ctx.logDebug("use: " + token.text);
+        EmitterContext ctx = parser.ctx;
+        ctx.logDebug("use: " + token.text);
         boolean isNoDeclaration = token.text.equals("no");
 
         parser.consume();   // "use"
@@ -121,13 +123,13 @@ public class StatementParser {
         String fullName = null;
         String packageName = null;
         if (token.type != LexerTokenType.NUMBER && !token.text.matches("^v\\d+")) {
-            parser.ctx.logDebug("use module: " + token);
+            ctx.logDebug("use module: " + token);
             packageName = IdentifierParser.parseSubroutineIdentifier(parser);
             if (packageName == null) {
                 throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
             }
             fullName = ModuleLoader.moduleToFilename(packageName);
-            parser.ctx.logDebug("use fullName: " + fullName);
+            ctx.logDebug("use fullName: " + fullName);
         }
 
         // Parse Version string; throw away the result
@@ -146,20 +148,27 @@ public class StatementParser {
         // Parse the parameter list
         boolean hasParentheses = parser.peek().text.equals("(");
         Node list = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
-        parser.ctx.logDebug("Use statement list hasParentheses:" + hasParentheses + " ast:" + list);
+        ctx.logDebug("Use statement list hasParentheses:" + hasParentheses + " ast:" + list);
 
         parser.parseStatementTerminator();
 
         // execute the statement immediately, using:
         // `require "fullName.pm"`
-        parser.ctx.logDebug("Use statement: " + fullName);
+
+        // Setup the caller stack
+        CallerStack.push(
+                ctx.symbolTable.getCurrentPackage(),
+                ctx.compilerOptions.fileName,
+                ctx.errorUtil.getLineNumber(parser.tokenIndex));
+
+        ctx.logDebug("Use statement: " + fullName + " called from " + CallerStack.peek());
         RuntimeScalar ret = new RuntimeScalar(fullName).require();
-        parser.ctx.logDebug("Use statement return: " + ret);
+        ctx.logDebug("Use statement return: " + ret);
 
         // call Module->import( LIST )
         // or Module->unimport( LIST )
         RuntimeList args = ExtractValueVisitor.getValues(list);
-        parser.ctx.logDebug("Use statement list: " + args);
+        ctx.logDebug("Use statement list: " + args);
         if (hasParentheses && args.size() == 0) {
             // do not import
         } else {
@@ -169,16 +178,19 @@ public class StatementParser {
             canArgs.push(new RuntimeScalar(packageName));
             canArgs.push(new RuntimeScalar(importMethod));
             RuntimeList codeList = Universal.can(canArgs, RuntimeContextType.SCALAR);
-            parser.ctx.logDebug("Use can(" + packageName + ", " + importMethod + "): " + codeList);
+            ctx.logDebug("Use can(" + packageName + ", " + importMethod + "): " + codeList);
             if (codeList.size() == 1) {
                 RuntimeScalar code = (RuntimeScalar) codeList.elements.get(0);
                 if (code.getBoolean()) {
                     // call the method
-                    parser.ctx.logDebug("Use call : " + importMethod + "(" + args + ")");
+                    ctx.logDebug("Use call : " + importMethod + "(" + args + ")");
                     code.apply(args.getArrayOfAlias(), RuntimeContextType.SCALAR);
                 }
             }
         }
+
+        // restore the caller stack
+        CallerStack.pop();
 
         // return an empty list
         return new ListNode(parser.tokenIndex);
