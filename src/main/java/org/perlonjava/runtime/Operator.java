@@ -41,15 +41,33 @@ public class Operator {
             Object arg;
 
             // Determine the type of argument based on the format specifier
-            if (specifier.endsWith("d") || specifier.endsWith("i")) {
-                // Integer specifiers: convert the element to an integer
-                arg = element.getInt();
-            } else if (specifier.endsWith("f") || specifier.endsWith("e") || specifier.endsWith("g")) {
-                // Floating-point specifiers: convert the element to a double
-                arg = element.getDouble();
-            } else {
-                // For other specifiers (e.g., %s), convert the element to a string
-                arg = element.toString();
+            char formatChar = specifier.charAt(specifier.length() - 1);
+            switch (Character.toLowerCase(formatChar)) {
+                case 'd':
+                case 'i':
+                case 'u':
+                case 'x':
+                case 'o':
+                case 'b':
+                    arg = element.getInt();
+                    break;
+                case 'f':
+                case 'e':
+                case 'g':
+                case 'a':
+                    arg = element.getDouble();
+                    break;
+                case 'c':
+                    arg = (char) element.getInt();
+                    break;
+                case 'p':
+                    arg = String.format("%x", element.getInt());
+                    break;
+                case 'n':
+                    // Special case: need to handle this separately
+                    throw new UnsupportedOperationException("%n specifier not supported");
+                default:
+                    arg = element.toString();
             }
 
             // Store the converted argument in the args array
