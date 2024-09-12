@@ -52,7 +52,7 @@ public class Parser {
         addOperatorsToMap(14, "<", ">", "<=", ">=", "lt", "gt", "le", "ge");
         addOperatorsToMap(15, "isa");
         addOperatorsToMap(17, ">>", "<<");
-        addOperatorsToMap(18, "+", "-");
+        addOperatorsToMap(18, "+", "-", ".");
         addOperatorsToMap(19, "*", "/", "%", "x");
         addOperatorsToMap(20, "=~", "!~");
         addOperatorsToMap(21, "!", "~", "\\");
