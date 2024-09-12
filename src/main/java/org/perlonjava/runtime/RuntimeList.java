@@ -45,9 +45,13 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         } else {
             RuntimeScalar start = new RuntimeScalar(startValue.toString());
             String end = endValue.toString();
-            while (((String)start.value).compareTo(end) <= 0) {
-                list.add(start.clone());
+            String current = start.toString();
+
+            while (current.length() < end.length() ||
+                    (current.length() == end.length() && current.compareTo(end) <= 0)) {
+                list.add(current);
                 start.preAutoIncrement();
+                current = start.toString();
             }
         }
         return list;
