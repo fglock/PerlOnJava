@@ -702,7 +702,7 @@ public class EmitterVisitor implements Visitor {
             operator = "undefine";
             node.operand.accept(this.with(RuntimeContextType.RUNTIME));
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", operator, "()Lorg/perlonjava/runtime/RuntimeList;", false);
-        } else if (operator.equals("gmtime") || operator.equals("localtime")) {
+        } else if (operator.equals("gmtime") || operator.equals("localtime") || operator.equals("caller")) {
             node.operand.accept(this.with(RuntimeContextType.LIST));
             pushCallContext();
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -903,6 +903,7 @@ public class EmitterVisitor implements Visitor {
             case "times":
             case "localtime":
             case "gmtime":
+            case "caller":
                 handleUnaryBuiltin(node, operator);
                 break;
             case "rindex":
