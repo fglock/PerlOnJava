@@ -389,9 +389,16 @@ public class EmitterVisitor implements Visitor {
                 ctx.logDebug("visit(BinaryOperatorNode) $var[] ");
                 varNode.accept(this.with(RuntimeContextType.LIST)); // target - left parameter
 
-                // emit the [0] as a RuntimeList
-                ListNode nodeRight = ((ArrayLiteralNode) node.right).asListNode();
-                nodeRight.accept(scalarVisitor);
+                ArrayLiteralNode right = (ArrayLiteralNode) node.right;
+                if (right.elements.size() == 1) {
+                    // Optimization: Extract the single element if the list has only one item
+                    Node elem = right.elements.get(0);
+                    elem.accept(this.with(RuntimeContextType.SCALAR));
+                } else {
+                    // emit the [0] as a RuntimeList
+                    ListNode nodeRight = right.asListNode();
+                    nodeRight.accept(this.with(RuntimeContextType.SCALAR));
+                }
 
                 ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", "get", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
@@ -607,19 +614,12 @@ public class EmitterVisitor implements Visitor {
 
         node.left.accept(scalarVisitor); // target - left parameter
 
-        // Optimization: Extract the single element if the list has only one item
         ArrayLiteralNode right = (ArrayLiteralNode) node.right;
-        boolean emitIndexAsList = true;
         if (right.elements.size() == 1) {
+            // Optimization: Extract the single element if the list has only one item
             Node elem = right.elements.get(0);
-            if (elem instanceof NumberNode || elem instanceof OperatorNode
-                    || elem instanceof BinaryOperatorNode) {
-                // TODO more optimizations
-                elem.accept(this.with(RuntimeContextType.SCALAR));
-                emitIndexAsList = false;
-            }
-        }
-        if (emitIndexAsList) {
+            elem.accept(this.with(RuntimeContextType.SCALAR));
+        } else {
             // emit the [0] as a RuntimeList
             ListNode nodeRight = right.asListNode();
             nodeRight.accept(this.with(RuntimeContextType.SCALAR));
