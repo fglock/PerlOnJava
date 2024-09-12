@@ -126,7 +126,7 @@ public class StringParser {
         if (stringCount == 3) { // fetch the second of 3 strings: s{aaa}{SECOND}ig
             char delim = ast.startDelim; // / or {
             if (QUOTE_PAIR.containsKey(delim)) {
-                pos = Parser.skipWhitespace(pos, tokens);
+                pos = Whitespace.skipWhitespace(pos, tokens);
                 ParsedString ast2 = parseRawStringWithDelimiter(ctx, tokens, pos, false);
                 ast.buffers.add(ast2.buffers.get(0));
                 ast.next = ast2.next;
