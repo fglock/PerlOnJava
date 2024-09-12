@@ -4,7 +4,7 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.runtime.RuntimeList;
 
 public class ExtractValueVisitor implements Visitor {
-    private RuntimeList values = new RuntimeList();
+    private final RuntimeList values = new RuntimeList();
 
     public static RuntimeList getValues(Node node) {
         ExtractValueVisitor visitor = new ExtractValueVisitor();
