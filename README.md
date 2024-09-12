@@ -410,21 +410,25 @@ public class Main {
 
 ### Performance Benchmarks
 
-The following benchmarks provide an order of magnitude comparison with Perl:
+These benchmarks provide an order-of-magnitude comparison with Perl:
 
-- **v1.0.0**:
-    - Lexer and Parser: Processes 50k lines per second; direct comparison with Perl is not applicable.
+| Version | Feature | Performance Relative to Perl |
+|---------|---------|------------------------------|
+| v1.0.0  | Lexer and Parser | 50k lines/second (N/A) |
+| v1.1.0  | Numeric operations | 2x faster |
+|         | String operations | Comparable |
+|         | Eval-string | 10x slower |
+| v1.5.0  | Example: `life.pl` | 3x slower |
+| v1.6.0  | Module compilation | 5x slower |
 
-- **v1.1.0**:
-    - Numeric operations: 2x faster than Perl
-    - String operations: Comparable to Perl
-    - Eval-string: 10x slower than Perl
+Notes:
+- v1.2.0 through v1.4.0: No significant performance changes.
+- Module compilation benchmark: Repeatedly loading `Data::Dumper` (80 times).
 
-- **v1.2.0** through **v1.4.0**:
-    - No performance related changes
-
-- **v1.5.0**:
-    - Example file `life.pl` runs 3x slower than Perl
+Perl equivalent for module compilation benchmark:
+```perl
+perl -Ilib -e 'for (1..80) { eval "use Data::Dumper;"; delete $INC{"Data/Dumper.pm"}; }'
+```
 
 ## License
 
