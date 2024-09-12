@@ -373,11 +373,7 @@ public class Main {
     - More complete set of operations on strings, numbers, arrays, hashes, lists
     - More special variables
     - More tests and various bug fixes
-
-### Upcoming Milestones
-
 - **v1.6.0**: Module System and Standard Library Enhancements
-    - Planned release date: 2024-12-10
     - Module system for improved code organization and reuse
     - Core Perl module operators: `do FILE`, `require`, `caller`, `use`, `no`
     - Module special subroutines: `import`, `unimport`
@@ -386,7 +382,10 @@ public class Main {
     - Standard library ported modules: `Data::Dumper`, `Symbol`, `strict`
     - Expanded documentation and usage examples
 
+### Upcoming Milestones
+
 - **v1.7.0**: Performance Improvements
+    - Planned release date: 2024-12-10
     - Focus on optimizing the execution engine for better performance.
     - Improve error handling and debugging tools to make development easier.
 
@@ -423,12 +422,12 @@ These benchmarks provide an order-of-magnitude comparison with Perl:
 
 Notes:
 - v1.2.0 through v1.4.0: No significant performance changes.
-- Module compilation benchmark: Repeatedly loading `Data::Dumper` (80 times).
+- Script `life.pl` run without `sleep` between iterations.
+- Module compilation benchmark: Repeatedly loading `Data::Dumper`:
 
-Perl equivalent for module compilation benchmark:
-```perl
-perl -Ilib -e 'for (1..80) { eval "use Data::Dumper;"; delete $INC{"Data/Dumper.pm"}; }'
-```
+  ```perl
+  perl -Ilib -e 'for (1..80) { eval "use Data::Dumper;"; delete $INC{"Data/Dumper.pm"}; }'
+  ```
 
 ## License
 
