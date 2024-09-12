@@ -173,8 +173,10 @@
 - ❌  **Thread-safe `@_`, `$_`, and regex variables**: Thread safety for global special variables is missing.
 
 ## Perl Modules
-- ✔️   **UNIVERSAL module**: `isa`, `can`, `DOES` are implemented.
-- ✔️   **Symbol module**: `qualify` and `qualify_to_ref` are implemented.
+- ✔️   **UNIVERSAL**: `isa`, `can`, `DOES` are implemented. `VERSION` is not implemented yet.
+- ✔️   **Symbol**: `qualify` and `qualify_to_ref` are implemented. `Symbol::import` is not implemented yet.
+- ✔️   **Data::Dumper**: Data::Dumper is ported with small adjustments, to work in `strict` mode.
+- ✔️   **strict**: `strict` is set to ignore `no strict`, to work always in `strict` mode. `no strict` might work in a future version.
 
 ## Non-strict and Obsolete Features
 - ❌  **Use string as a scalar reference**: Support for scalar references from strings is not yet implemented.

@@ -175,6 +175,8 @@ file.
 ├── settings.gradle
 ├── examples/
 │   └── Perl example files
+├── lib/
+│   └── Perl modules (strict.pm, etc)
 └── misc/
     └── project notes
 ```
@@ -201,6 +203,12 @@ file.
 2. **Execute Something**:
     ```sh
     java -jar target/perlonjava-1.0-SNAPSHOT.jar -e ' print 123 '
+    ```
+
+Setting `lib` path to access Perl modules:
+
+    ```sh
+    java -jar target/perlonjava-1.0-SNAPSHOT.jar -Ilib -e ' use Data::Dumper; print Dumper [123] '
     ```
 
 ## Debugging Tools
