@@ -378,9 +378,13 @@ public class Main {
 
 - **v1.6.0**: Module System and Standard Library Enhancements
     - Planned release date: 2024-12-10
-    - Introduce a module system to allow better code organization and reuse.
-    - Enhance the standard library with additional utility functions and data structures.
-    - Improve documentation and provide more examples to help users get started.
+    - Module system for improved code organization and reuse
+    - Core Perl module operators: `do FILE`, `require`, `caller`, `use`, `no`
+    - Module special subroutines: `import`, `unimport`
+    - Environment and special variables: `PERL5LIB`, `@INC`, `%INC`, `@ARGV`, `%ENV`, `$0`, `$$`
+    - Additional operators: `die`, `warn`, `time`, `times`, `localtime`, `gmtime`, `index`, `rindex`
+    - Standard library ported modules: `Data::Dumper`, `Symbol`, `strict`
+    - Expanded documentation and usage examples
 
 - **v1.7.0**: Performance Improvements
     - Focus on optimizing the execution engine for better performance.
