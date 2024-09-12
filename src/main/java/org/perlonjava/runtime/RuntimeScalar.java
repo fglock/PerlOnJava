@@ -179,6 +179,26 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return res;
     }
 
+    public static RuntimeList caller(RuntimeList args, int ctx) {
+        RuntimeList res = new RuntimeList();
+        int frame = 0;
+        if (!args.elements.isEmpty()) {
+            // TODO use frame number
+            frame = ((RuntimeScalar) args.elements.get(0)).getInt();
+        }
+        CallerStack.CallerInfo info = CallerStack.peek();
+        if (info != null) {
+            if (ctx == RuntimeContextType.SCALAR) {
+                res.add(new RuntimeScalar(info.packageName));
+            } else {
+                res.add(new RuntimeScalar(info.packageName));
+                res.add(new RuntimeScalar(info.filename));
+                res.add(new RuntimeScalar(info.line));
+            }
+        }
+        return res;
+    }
+
     public static RuntimeList localtime(RuntimeList args, int ctx) {
         RuntimeList res = new RuntimeList();
         ZonedDateTime date;

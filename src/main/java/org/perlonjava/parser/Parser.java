@@ -359,6 +359,7 @@ public class Parser {
             case "defined":
             case "localtime":
             case "gmtime":
+            case "caller":
                 String text = token.text;
                 operand = ListParser.parseZeroOrOneList(this, 0);
                 if (((ListNode) operand).elements.isEmpty()) {
@@ -375,6 +376,7 @@ public class Parser {
                             break;
                         case "localtime":
                         case "gmtime":
+                        case "caller":
                             // empty list
                             break;
                         case "undef":

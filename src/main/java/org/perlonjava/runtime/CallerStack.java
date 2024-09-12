@@ -12,6 +12,7 @@ public class CallerStack {
 
     public static CallerInfo peek() {
         if (callerStack.isEmpty()) {
+            System.out.println("CallerStack peek isEmpty");
             return null;
         }
         return callerStack.get(callerStack.size() - 1);
