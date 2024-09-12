@@ -186,8 +186,9 @@ say "ok # sprintf('|%-10s|', 'test') |$negative_width|";
 # Test invalid format string
 my $invalid_format;
 eval { $invalid_format = sprintf( "%z", "data" ) };
-print "not " if $@;    # Expecting an error
-print "ok # sprintf with invalid format string causes an error\n";
+my $error = $@;
+print "not " if !$error;    # Expecting an error
+say "ok # sprintf with invalid format string causes an error";
 
 ###################
 # Logical Operators

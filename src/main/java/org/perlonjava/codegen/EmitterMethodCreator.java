@@ -225,7 +225,7 @@ public class EmitterMethodCreator implements Opcodes {
                     "(Ljava/lang/Exception;)Ljava/lang/String;", false);
 
             // Set the global error variable "$@" using GlobalContext.setGlobalVariable(key, value)
-            mv.visitLdcInsn("$main::@");
+            mv.visitLdcInsn("main::@");
             mv.visitInsn(Opcodes.SWAP);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/GlobalContext",
