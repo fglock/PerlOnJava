@@ -9,36 +9,63 @@ package org.perlonjava.runtime;
  */
 
 import java.io.*;
-import java.util.List;
+import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
+import java.nio.channels.WritableByteChannel;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.util.*;
 
 import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
 
 public class RuntimeIO implements RuntimeScalarReference {
 
-    private RandomAccessFile file;
+    private static final int BUFFER_SIZE = 8192;
+    private static final Map<String, Set<StandardOpenOption>> MODE_OPTIONS = new HashMap<>();
+
+    static {
+        MODE_OPTIONS.put("<", EnumSet.of(StandardOpenOption.READ));
+        MODE_OPTIONS.put(">", EnumSet.of(StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING));
+        MODE_OPTIONS.put(">>", EnumSet.of(StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.APPEND));
+        MODE_OPTIONS.put("+<", EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE));
+    }
+
     private InputStream inputStream;
     private OutputStream outputStream;
     private BufferedReader bufferedReader;
     private boolean isEOF;
+    private ByteBuffer buffer;
+    private ByteBuffer readBuffer;
+    private ByteBuffer singleCharBuffer;
+    private FileChannel fileChannel;
+    private WritableByteChannel channel;
 
     public RuntimeIO() {
+        this.buffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
+        this.readBuffer = ByteBuffer.allocate(BUFFER_SIZE);
+        this.singleCharBuffer = ByteBuffer.allocate(1);
     }
 
     // Constructor to open the file with a specific mode
     public static RuntimeIO open(String fileName, String mode) {
         RuntimeIO fh = new RuntimeIO();
         try {
-            String javaMode = fh.convertMode(mode);
-            fh.file = new RandomAccessFile(fileName, javaMode);
-            fh.bufferedReader = new BufferedReader(new FileReader(fh.file.getFD()));
+            Set<StandardOpenOption> options = fh.convertMode(mode);
+            fh.fileChannel = FileChannel.open(Paths.get(fileName), options);
+
+            if (options.contains(StandardOpenOption.READ)) {
+                fh.bufferedReader = new BufferedReader(Channels.newReader(fh.fileChannel, "UTF-8"));
+            }
+
             fh.isEOF = false;
 
             // Truncate the file if mode is '>'
             if (">".equals(mode)) {
-                fh.file.setLength(0);
+                fh.fileChannel.truncate(0);
             }
             if (">>".equals(mode)) {
-                fh.file.seek(fh.file.length()); // Move to end for appending
+                fh.fileChannel.position(fh.fileChannel.size()); // Move to end for appending
             }
         } catch (IOException e) {
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
@@ -52,16 +79,19 @@ public class RuntimeIO implements RuntimeScalarReference {
         RuntimeIO fh = new RuntimeIO();
         try {
             if (isOutput) {
-                if (fd == FileDescriptor.out) {
-                    fh.outputStream = System.out;
-                } else if (fd == FileDescriptor.err) {
-                    fh.outputStream = System.err;
+                if (fd == FileDescriptor.out || fd == FileDescriptor.err) {
+                    // For standard output and error, we can't use FileChannel
+                    OutputStream out = (fd == FileDescriptor.out) ? System.out : System.err;
+                    fh.outputStream = new BufferedOutputStream(out, BUFFER_SIZE);
+                    fh.channel = Channels.newChannel(fh.outputStream);
                 } else {
-                    fh.outputStream = new FileOutputStream(fd);
+                    // For other output file descriptors, use FileChannel
+                    fh.fileChannel = new FileOutputStream(fd).getChannel();
                 }
             } else {
-                fh.inputStream = new FileInputStream(fd);
-                fh.bufferedReader = new BufferedReader(new InputStreamReader(fh.inputStream));
+                // For input, use FileChannel
+                fh.fileChannel = new FileInputStream(fd).getChannel();
+                fh.bufferedReader = new BufferedReader(Channels.newReader(fh.fileChannel, "UTF-8"));
             }
             fh.isEOF = false;
         } catch (Exception e) {
@@ -149,6 +179,14 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
     }
 
+    private Set<StandardOpenOption> convertMode(String mode) {
+        Set<StandardOpenOption> options = MODE_OPTIONS.get(mode);
+        if (options == null) {
+            throw new IllegalArgumentException("Unsupported file mode: " + mode);
+        }
+        return new HashSet<>(options);
+    }
+
     public String toStringRef() {
         return "IO(" + this.hashCode() + ")";
     }
@@ -165,60 +203,68 @@ public class RuntimeIO implements RuntimeScalarReference {
         return true;
     }
 
-    // Convert Perl mode to Java mode
-    private String convertMode(String mode) {
-        switch (mode) {
-            case "<":
-                return "r";
-            case ">":
-                return "rw";
-            case ">>":
-                return "rw";
-            case "+<":
-                return "rw";
-            case "+>":
-                return "rw";
-            default:
-                throw new IllegalArgumentException("Unsupported mode: " + mode);
-        }
-    }
-
     // Method to read a single character (getc equivalent)
     public int getc() {
         try {
-            int result = file.read();
-            if (result == -1) {
-                isEOF = true;
+            if (fileChannel != null) {
+                singleCharBuffer.clear();
+                int bytesRead = fileChannel.read(singleCharBuffer);
+                if (bytesRead == -1) {
+                    isEOF = true;
+                    return -1;
+                }
+                singleCharBuffer.flip();
+                return singleCharBuffer.get() & 0xFF;
+            } else if (bufferedReader != null) {
+                int result = bufferedReader.read();
+                if (result == -1) {
+                    isEOF = true;
+                }
+                return result;
+            } else if (inputStream != null) {
+                int result = inputStream.read();
+                if (result == -1) {
+                    isEOF = true;
+                }
+                return result;
             }
-            return result;
+            throw new IllegalStateException("No input source available");
         } catch (Exception e) {
             System.err.println("File operation failed: " + e.getMessage());
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
         }
-        // TODO return false
-        return 0;
+        return -1; // Indicating an error or EOF
     }
 
     // Method to read into a byte array
     public int read(byte[] buffer) {
         try {
-            int bytesRead = file.read(buffer);
-            if (bytesRead == -1) {
-                isEOF = true;
+            if (fileChannel != null) {
+                ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
+                int bytesRead = fileChannel.read(byteBuffer);
+                if (bytesRead == -1) {
+                    isEOF = true;
+                }
+                return bytesRead;
+            } else if (inputStream != null) {
+                int bytesRead = inputStream.read(buffer);
+                if (bytesRead == -1) {
+                    isEOF = true;
+                }
+                return bytesRead;
+            } else {
+                throw new IllegalStateException("No input source available");
             }
-            return bytesRead;
         } catch (Exception e) {
             System.err.println("File operation failed: " + e.getMessage());
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
         }
-        // TODO return false
-        return 0;
+        return -1; // Indicating an error or EOF
     }
 
-    // Method to read a line from a file or input stream
     public RuntimeScalar readline() {
         try {
-            if (bufferedReader == null) {
+            if (fileChannel == null && bufferedReader == null) {
                 throw new UnsupportedOperationException("Readline is not supported for output streams");
             }
 
@@ -228,25 +274,49 @@ public class RuntimeIO implements RuntimeScalarReference {
 
             String sep = getGlobalVariable("main::/").toString();  // fetch $/
             boolean hasSeparator = !sep.isEmpty();
-            int separator = hasSeparator ? sep.charAt(0) : 0;
+            int separator = hasSeparator ? sep.charAt(0) : '\n';
 
             StringBuilder line = new StringBuilder();
-            int c;
+            boolean foundSeparator = false;
 
-            while ((c = bufferedReader.read()) != -1) {
-                line.append((char) c);
-                if (hasSeparator && c == separator) {
-                    break;
+            if (fileChannel != null) {
+                while (!foundSeparator) {
+                    readBuffer.clear();
+                    int bytesRead = fileChannel.read(readBuffer);
+                    if (bytesRead == -1) {
+                        if (line.length() == 0) {
+                            this.isEOF = true;
+                            return new RuntimeScalar();
+                        }
+                        break;
+                    }
+
+                    readBuffer.flip();
+                    while (readBuffer.hasRemaining() && !foundSeparator) {
+                        char c = (char) readBuffer.get();
+                        line.append(c);
+                        if (hasSeparator && c == separator) {
+                            foundSeparator = true;
+                        }
+                    }
+                }
+            } else {
+                // Use existing bufferedReader implementation
+                int c;
+                while ((c = bufferedReader.read()) != -1) {
+                    line.append((char) c);
+                    if (hasSeparator && c == separator) {
+                        foundSeparator = true;
+                        break;
+                    }
+                }
+                if (c == -1) {
+                    this.isEOF = true;
                 }
             }
 
-            if (c == -1 && line.length() == 0) {
-                this.isEOF = true; // Set EOF flag when end of stream is reached
-                return new RuntimeScalar();
-            }
-
-            if (c == -1) {
-                this.isEOF = true; // Set EOF flag if the last line does not end with a newline
+            if (!foundSeparator) {
+                this.isEOF = true;
             }
 
             return new RuntimeScalar(line.toString());
@@ -258,14 +328,27 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     // Method to check for end-of-file (eof equivalent)
     public RuntimeScalar eof() {
+        try {
+            if (fileChannel != null) {
+                this.isEOF = (fileChannel.position() >= fileChannel.size());
+            } else if (bufferedReader != null) {
+                this.isEOF = !bufferedReader.ready();
+            } else if (inputStream != null) {
+                this.isEOF = (inputStream.available() == 0);
+            }
+            // For output streams, EOF is not applicable
+        } catch (IOException e) {
+            System.err.println("File operation failed: " + e.getMessage());
+            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+        }
         return new RuntimeScalar(this.isEOF);
     }
 
     // Method to get the current file pointer position (tell equivalent)
     public long tell() {
         try {
-            if (file != null) {
-                return file.getFilePointer();
+            if (fileChannel != null) {
+                return fileChannel.position();
             } else {
                 throw new UnsupportedOperationException("Tell operation is not supported for standard streams");
             }
@@ -279,9 +362,9 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     // Method to move the file pointer (seek equivalent)
     public void seek(long pos) {
-        if (file != null) {
+        if (fileChannel != null) {
             try {
-                file.seek(pos);
+                fileChannel.position(pos);
                 isEOF = false;
             } catch (Exception e) {
                 System.err.println("File operation failed: " + e.getMessage());
@@ -292,17 +375,45 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
     }
 
+    public RuntimeScalar flush() {
+        try {
+            if (fileChannel != null) {
+                fileChannel.force(false);  // Force any updates to the file (false means don't force metadata updates)
+            } else if (channel != null && channel instanceof FileChannel) {
+                ((FileChannel) channel).force(false);
+            } else if (outputStream != null) {
+                outputStream.flush();
+            }
+            return new RuntimeScalar(1);  // Return 1 to indicate success, consistent with other methods
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+            return new RuntimeScalar();  // Return undef to indicate failure
+        }
+    }
+
     // Method to close the filehandle
     public RuntimeScalar close() {
         try {
-            if (file != null) {
-                file.close();
+            if (fileChannel != null) {
+                fileChannel.force(true);  // Ensure all data is written to the file
+                fileChannel.close();
+                fileChannel = null;
             }
-            if (inputStream != null) {
-                inputStream.close();
+            if (channel != null) {
+                if (channel instanceof FileChannel) {
+                    ((FileChannel) channel).force(true);
+                }
+                channel.close();
+                channel = null;
+            }
+            if (bufferedReader != null) {
+                bufferedReader.close();
+                bufferedReader = null;
             }
             if (outputStream != null) {
+                outputStream.flush();
                 outputStream.close();
+                outputStream = null;
             }
             return new RuntimeScalar(1);
         } catch (Exception e) {
@@ -311,13 +422,31 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
     }
 
+
     // Method to append data to a file
     public RuntimeScalar write(String data) {
         try {
-            if (outputStream != null) {
-                outputStream.write(data.getBytes());
+            byte[] bytes = data.getBytes();
+            if (channel != null) {
+                // For standard output and error streams
+                ByteBuffer buf = ByteBuffer.wrap(bytes);
+                while (buf.hasRemaining()) {
+                    channel.write(buf);
+                }
+                // // Flush the outputStream if it's available
+                // if (outputStream != null) {
+                //     outputStream.flush();
+                // }
+            } else if (fileChannel != null) {
+                // For file output using FileChannel
+                int totalWritten = 0;
+                while (totalWritten < bytes.length) {
+                    int bytesWritten = fileChannel.write(ByteBuffer.wrap(bytes, totalWritten, bytes.length - totalWritten));
+                    if (bytesWritten == 0) break; // Shouldn't happen, but just in case
+                    totalWritten += bytesWritten;
+                }
             } else {
-                file.write(data.getBytes());
+                throw new IllegalStateException("No output channel available");
             }
             return new RuntimeScalar(1);
         } catch (Exception e) {
