@@ -1,5 +1,5 @@
 package Data::Dumper;
-use 5.34;
+use 5.34.0;
 use strict;
 use Symbol; # 'qualify_to_ref';
 
