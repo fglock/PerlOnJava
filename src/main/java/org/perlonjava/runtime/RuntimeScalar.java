@@ -23,6 +23,7 @@ import java.util.NoSuchElementException;
 import java.util.concurrent.TimeUnit;
 
 import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
+import static org.perlonjava.runtime.RuntimeScalarCache.getIntegerScalar;
 
 /**
  * The RuntimeScalar class simulates Perl scalar variables.
@@ -873,7 +874,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (arg1.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2);
         } else {
-            return new RuntimeScalar(arg1.getInt() + arg2);
+            return getIntegerScalar(arg1.getInt() + arg2);
         }
     }
 
@@ -888,7 +889,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2.getDouble());
         } else {
-            return new RuntimeScalar(arg1.getInt() + arg2.getInt());
+            return getIntegerScalar(arg1.getInt() + arg2.getInt());
         }
     }
 
@@ -901,7 +902,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (arg1.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2);
         } else {
-            return new RuntimeScalar(arg1.getInt() - arg2);
+            return getIntegerScalar(arg1.getInt() - arg2);
         }
     }
 
@@ -916,7 +917,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2.getDouble());
         } else {
-            return new RuntimeScalar(arg1.getInt() - arg2.getInt());
+            return getIntegerScalar(arg1.getInt() - arg2.getInt());
         }
     }
 
@@ -931,7 +932,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() * arg2.getDouble());
         } else {
-            return new RuntimeScalar((long) arg1.getInt() * (long) arg2.getInt());
+            return getIntegerScalar((long) arg1.getInt() * (long) arg2.getInt());
         }
     }
 
@@ -943,11 +944,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (arg2.type == RuntimeScalarType.STRING) {
             arg2 = arg2.parseNumber();
         }
-        if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
-            return new RuntimeScalar(arg1.getDouble() / arg2.getDouble());
-        } else {
-            return new RuntimeScalar(arg1.getInt() / arg2.getInt());
-        }
+        return new RuntimeScalar(arg1.getDouble() / arg2.getDouble());
     }
 
     public RuntimeScalar modulus(RuntimeScalar arg2) {
