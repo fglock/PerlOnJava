@@ -13,7 +13,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
  * using a list of RuntimeScalar objects, which can hold any type of Perl scalar value.
  */
 public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarReference {
-    public List<RuntimeBaseEntity> elements;
+    public List<RuntimeScalar> elements;
 
     // Constructor
     public RuntimeArray() {
@@ -21,7 +21,11 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     }
 
     public RuntimeArray(RuntimeList a) {
-        this.elements = a.elements;
+        this.elements = new ArrayList<>();
+        Iterator<RuntimeScalar> iterator = a.iterator();
+        while (iterator.hasNext()) {
+            this.elements.add(iterator.next());
+        }
     }
 
     public RuntimeArray(RuntimeScalar value) {
@@ -31,9 +35,9 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
 
     // Add itself to a RuntimeArray.
     public void addToArray(RuntimeArray array) {
-        List<RuntimeBaseEntity> elements = array.elements;
-        for (RuntimeBaseEntity arrElem : this.elements) {
-            elements.add(new RuntimeScalar((RuntimeScalar) arrElem));
+        List<RuntimeScalar> elements = array.elements;
+        for (RuntimeScalar arrElem : this.elements) {
+            elements.add(new RuntimeScalar(arrElem));
         }
     }
 
@@ -69,7 +73,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         if (elements.isEmpty()) {
             return new RuntimeScalar(); // Return undefined if empty
         }
-        return (RuntimeScalar) elements.remove(elements.size() - 1);
+        return elements.remove(elements.size() - 1);
     }
 
     // Remove and return the first value of the array
@@ -77,7 +81,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         if (elements.isEmpty()) {
             return new RuntimeScalar(); // Return undefined if empty
         }
-        return (RuntimeScalar) elements.remove(0);
+        return elements.remove(0);
     }
 
     // Get a value at a specific index
@@ -89,7 +93,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
             // lazy autovivification
             return new RuntimeArrayProxy(this, index);
         }
-        return (RuntimeScalar) elements.get(index);
+        return elements.get(index);
     }
 
     // Get a value at a specific index
@@ -102,7 +106,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
             // lazy autovivification
             return new RuntimeArrayProxy(this, index);
         }
-        return (RuntimeScalar) elements.get(index);
+        return elements.get(index);
     }
 
     // Set the whole array to a Scalar
@@ -191,7 +195,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
 
     // Get Array aliases into an Array
     public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
-        List<RuntimeBaseEntity> arrElements = arr.elements;
+        List<RuntimeScalar> arrElements = arr.elements;
         arrElements.addAll(this.elements);
         return arr;
     }
@@ -254,7 +258,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
             if (!hasNext()) {
                 throw new IllegalStateException("No such element in iterator.next()");
             }
-            return (RuntimeScalar) elements.get(currentIndex++);
+            return elements.get(currentIndex++);
         }
 
         @Override

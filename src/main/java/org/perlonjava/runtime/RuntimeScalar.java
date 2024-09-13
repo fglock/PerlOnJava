@@ -1517,7 +1517,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         // set %INC
         GlobalContext.getGlobalHash("main::INC").put(fileName, new RuntimeScalar(parsedArgs.fileName));
 
-        RuntimeList result = new RuntimeList();
+        RuntimeList result;
         try {
             result = PerlLanguageProvider.executePerlCode(parsedArgs);
         } catch (Throwable t) {
@@ -1526,7 +1526,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             return new RuntimeScalar();
         }
 
-        return result == null ? new RuntimeScalar() : result.scalar();
+        return result == null ? scalarUndef : result.scalar();
     }
 
     // keys() operator

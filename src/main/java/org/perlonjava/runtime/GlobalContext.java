@@ -54,7 +54,7 @@ public class GlobalContext {
 
         // Initialize @INC
         // https://stackoverflow.com/questions/2526804/how-is-perls-inc-constructed
-        List<RuntimeBaseEntity> inc = getGlobalArray("main::INC").elements;
+        List<RuntimeScalar> inc = getGlobalArray("main::INC").elements;
 
         inc.addAll(compilerOptions.inc.elements);   // add from `-I`
 

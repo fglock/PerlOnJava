@@ -45,7 +45,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
 
     // Add itself to a RuntimeArray.
     public void addToArray(RuntimeArray array) {
-        List<RuntimeBaseEntity> elements = array.elements;
+        List<RuntimeScalar> elements = array.elements;
         for (Map.Entry<String, RuntimeScalar> entry : this.elements.entrySet()) {
             elements.add(new RuntimeScalar(entry.getKey()));
             elements.add(new RuntimeScalar(entry.getValue()));
@@ -257,7 +257,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
 
     // Get Hash aliases into an Array
     public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
-        List<RuntimeBaseEntity> arrElements = arr.elements;
+        List<RuntimeScalar> arrElements = arr.elements;
         for (Map.Entry<String, RuntimeScalar> entry : this.elements.entrySet()) {
             arrElements.add(new RuntimeScalar(entry.getKey()));
             arrElements.add(entry.getValue());

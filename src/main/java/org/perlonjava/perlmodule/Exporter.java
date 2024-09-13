@@ -51,7 +51,7 @@ public class Exporter {
         }
 
         RuntimeArray tagArray = new RuntimeArray();
-        for (RuntimeBaseEntity symbolObj : args.elements) {
+        for (RuntimeScalar symbolObj : args.elements) {
             String symbolString = symbolObj.toString();
 
             if (symbolString.startsWith(":")) {
