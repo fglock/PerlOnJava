@@ -129,8 +129,8 @@ public class Lexer {
     public LexerToken consumeWhitespace() {
         int start = position;
         while (position < length
-                && Character.isWhitespace(input[position])
-                && input[position] != '\n') {
+                && input[position] != '\n'
+                && (input[position] == ' ' || Character.isWhitespace(input[position]))) {
             position++;
         }
         return new LexerToken(LexerTokenType.WHITESPACE, new String(input, start, position - start));
