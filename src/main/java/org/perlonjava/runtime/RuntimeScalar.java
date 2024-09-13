@@ -624,7 +624,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 str = blessId == 0 ? "HASH" : NameCache.getBlessStr(blessId);
                 break;
             default:
-                str = "";
+                return scalarEmptyString;
         }
         return new RuntimeScalar(str);
     }
@@ -751,7 +751,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     // Helper method to convert String to Integer or Double
-    private RuntimeScalar parseNumber() {
+    public RuntimeScalar parseNumber() {
         String str = (String) this.value;
 
         // Remove leading and trailing spaces from the input string
@@ -821,11 +821,11 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 return new RuntimeScalar(parsedValue);
             } else {
                 int parsedValue = Integer.parseInt(numberStr);
-                return new RuntimeScalar(parsedValue);
+                return getScalarInt(parsedValue);
             }
         } catch (NumberFormatException e) {
             // Return a RuntimeScalar object with value of 0 if parsing fails
-            return new RuntimeScalar(0);
+            return getScalarInt(0);
         }
     }
 
