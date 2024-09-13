@@ -130,7 +130,7 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
         return scalar.set(this);
     }
 
-    public RuntimeArray set(RuntimeList value) {
+    public RuntimeArray setFromList(RuntimeList value) {
         return new RuntimeArray(this.set(value.scalar()));
     }
 

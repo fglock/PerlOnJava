@@ -14,9 +14,7 @@ public class ModuleLoader {
         }
 
         // Replace '::' with '/' and append '.pm'
-        String filename = moduleName.replace("::", "/") + ".pm";
-
-        return filename;
+        return moduleName.replace("::", "/") + ".pm";
     }
 
     public static Path findFile(String filename) {
