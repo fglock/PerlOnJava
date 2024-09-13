@@ -177,7 +177,7 @@
 - ✔️   **Symbol**: `qualify` and `qualify_to_ref` are implemented. `Symbol::import` is not implemented yet.
 - ✔️   **Data::Dumper**: Data::Dumper is ported with small adjustments, to work in `strict` mode.
 - ✔️   **strict**: `strict` is set to ignore `no strict`, to work always in `strict` mode. `no strict` might work in a future version.
-- ✔️   **Exporter**: `@EXPORT_OK` and `@EXPORT` are implemented; only subroutines can be exported.
+- ✔️   **Exporter**: `@EXPORT_OK`, `@EXPORT`, `%EXPORT_TAGS` are implemented; only subroutines can be exported.
 
 ## Non-strict and Obsolete Features
 - ❌  **Use string as a scalar reference**: Support for scalar references from strings is not yet implemented.
