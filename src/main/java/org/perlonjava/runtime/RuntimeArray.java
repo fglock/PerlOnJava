@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
+
 /**
  * The RuntimeArray class simulates Perl arrays.
  *
@@ -51,7 +53,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     // Add values to the end of the array
     public RuntimeScalar push(RuntimeDataProvider value) {
         value.addToArray(this);
-        return new RuntimeScalar(elements.size());
+        return getScalarInt(elements.size());
     }
 
     // Add values to the beginning of the array
@@ -59,7 +61,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         RuntimeArray arr = new RuntimeArray();
         arr.push(value);
         this.elements.addAll(0, arr.elements);
-        return new RuntimeScalar(this.elements.size());
+        return getScalarInt(this.elements.size());
     }
 
     // Remove and return the last value of the array
@@ -154,12 +156,12 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
 
     // Get the index of the last element
     public RuntimeScalar indexLastElem() {
-        return new RuntimeScalar(elements.size() - 1);
+        return getScalarInt(elements.size() - 1);
     }
 
     // Get the scalar value of the list
     public RuntimeScalar scalar() {
-        return new RuntimeScalar(elements.size());
+        return getScalarInt(elements.size());
     }
 
     // Slice the array:  @x[10, 20]
