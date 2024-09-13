@@ -5,26 +5,27 @@ use warnings;
 use Symbol;
 
 sub import {
-    my $package = shift;               # The package that called 'use'
-    my $caller  = caller;              # The package that imported us
+    my $package = shift;
+    my $caller  = caller;
     my @symbols = @_;
 
-    # Look for @EXPORT and @EXPORT_OK in the caller package
-    my @export    = @{ Symbol::qualify_to_ref('EXPORT', $package)    || [] };  # Subroutines exported by default
-    my @export_ok = @{ Symbol::qualify_to_ref('EXPORT_OK', $package) || [] };  # Subroutines exported on request
+    print "caller $caller\n";
 
-    # If no specific symbols were requested, default to @EXPORT
+    # Get the EXPORT and EXPORT_OK arrays
+    my $export_ref    = Symbol::qualify_to_ref('EXPORT', $caller);
+    my $export_ok_ref = Symbol::qualify_to_ref('EXPORT_OK', $caller);
+
+    my @export    = $export_ref    ? @{$export_ref}    : ();
+    my @export_ok = $export_ok_ref ? @{$export_ok_ref} : ();
+
     @symbols = @export if !@symbols;
 
     for my $symbol (@symbols) {
-        # Check if the symbol is in @EXPORT or @EXPORT_OK
         if (grep { $_ eq $symbol } (@export, @export_ok)) {
-            # Check if the subroutine exists in the package
             my $symbol_ref = Symbol::qualify_to_ref($symbol, $package);
-            if (defined &$symbol_ref) {
-                # Export the subroutine to the caller package using Symbol::geniosym
+            if ($symbol_ref && $symbol_ref->type eq 'CODE') {
                 my $caller_ref = Symbol::qualify_to_ref($symbol, $caller);
-                *$caller_ref = *$symbol_ref;
+                Symbol::setGlobalCodeRef($caller . '::' . $symbol, $symbol_ref);
             } else {
                 warn "Subroutine $symbol not found in package $package";
             }
@@ -34,7 +35,5 @@ sub import {
     }
 }
 
-1;  # End of the module
-
-__END__
+1;
 
