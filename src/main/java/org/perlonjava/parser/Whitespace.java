@@ -6,7 +6,7 @@ import org.perlonjava.lexer.LexerTokenType;
 import java.util.List;
 
 public class Whitespace {
-    
+
     public static int skipWhitespace(int tokenIndex, List<LexerToken> tokens) {
         while (tokenIndex < tokens.size()) {
             LexerToken token = tokens.get(tokenIndex);
@@ -53,7 +53,7 @@ public class Whitespace {
                     break;
 
                 case STRING:
-                    if (token.text.equals(String.valueOf((char)4)) || token.text.equals(String.valueOf((char)26))) {
+                    if (token.text.equals(String.valueOf((char) 4)) || token.text.equals(String.valueOf((char) 26))) {
                         // Handle ^D (EOT, ASCII 4) or ^Z (SUB, ASCII 26)
                         tokenIndex = tokens.size();
                     }
