@@ -8,6 +8,7 @@ public class RuntimeScalarCache {
     static RuntimeScalarReadOnly scalarTrue;
     static RuntimeScalarReadOnly scalarFalse;
     static RuntimeScalarReadOnly scalarUndef;
+    static RuntimeScalarReadOnly scalarEmptyString;
 
     static {
         for (int i = minInt; i <= maxInt; i++) {
@@ -16,6 +17,7 @@ public class RuntimeScalarCache {
         scalarFalse = new RuntimeScalarReadOnly(false);
         scalarTrue = new RuntimeScalarReadOnly(true);
         scalarUndef = new RuntimeScalarReadOnly();
+        scalarEmptyString = new RuntimeScalarReadOnly("");
     }
 
     static RuntimeScalar getScalarBoolean(boolean b) {

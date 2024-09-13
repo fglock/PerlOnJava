@@ -5,12 +5,14 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
     final boolean b;
     final int i;
     final String s;
+    final double d;
 
     public RuntimeScalarReadOnly() {
         super();
         this.b = false;
         this.i = 0;
         this.s = "";
+        this.d = 0;
         this.value = null;
         this.type = RuntimeScalarType.UNDEF;
     }
@@ -20,6 +22,7 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
         this.b = (i != 0);
         this.i = i;
         this.s = Integer.toString(i);
+        this.d = i;
         this.value = i;
         this.type = RuntimeScalarType.INTEGER;
     }
@@ -29,8 +32,20 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
         this.b = b;
         this.i = b ? 1 : 0;
         this.s = b ? "1" : "";
+        this.d = b ? 1 : 0;
         this.value = i;
         this.type = RuntimeScalarType.INTEGER;
+    }
+
+    public RuntimeScalarReadOnly(String s) {
+        super();
+        RuntimeScalar temp = new RuntimeScalar(s);
+        this.b = "".equals(s);
+        this.i = temp.getInt();
+        this.s = s;
+        this.d = temp.getDouble();
+        this.value = s;
+        this.type = RuntimeScalarType.STRING;
     }
 
     @Override
@@ -45,7 +60,7 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
 
     @Override
     public double getDouble() {
-        return i;
+        return d;
     }
 
     @Override
