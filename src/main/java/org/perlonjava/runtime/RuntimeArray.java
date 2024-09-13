@@ -113,7 +113,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     }
 
     // Replace the whole array with the elements of a list
-    public RuntimeArray set(RuntimeList value) {
+    public RuntimeArray setFromList(RuntimeList value) {
         this.elements.clear();
         value.addToArray(this);
         return this;

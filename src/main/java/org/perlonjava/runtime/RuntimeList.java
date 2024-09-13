@@ -200,7 +200,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
     // In LIST context returns the ARG LIST
     // In SCALAR context returns the number of elements in ARG LIST
     //
-    public RuntimeArray set(RuntimeList value) {
+    public RuntimeArray setFromList(RuntimeList value) {
 
         // flatten the right side
         RuntimeArray original = new RuntimeArray();

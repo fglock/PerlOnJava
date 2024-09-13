@@ -62,7 +62,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
     }
 
     // Replace the whole hash with the elements of a list
-    public RuntimeArray set(RuntimeList value) {
+    public RuntimeArray setFromList(RuntimeList value) {
         RuntimeHash hash = createHash(value);
         this.elements = hash.elements;
         return new RuntimeArray(new RuntimeList(this));
