@@ -147,6 +147,8 @@ The `RuntimeScalar` class represents Perl-like scalar variables with multiple ty
 - For arithmetic operations, avoid creating new `RuntimeScalar` instances when possible. Implement in-place operations for mutable scenarios.
 - Use primitive operations when types are known to be numeric, avoiding object creation.
 
+- Cache immutable constants to avoid recreating boxed integers as result of add, subtract operations.
+
 #### 11.4 String Interning
 - For string values, consider using `String.intern()` for frequently occurring strings to reduce memory usage.
 
