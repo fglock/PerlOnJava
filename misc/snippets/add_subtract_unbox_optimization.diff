@@ -1,0 +1,76 @@
+diff --git a/src/main/java/org/perlonjava/codegen/EmitterVisitor.java b/src/main/java/org/perlonjava/codegen/EmitterVisitor.java
+index 0958744..27ee8d2 100644
+--- a/src/main/java/org/perlonjava/codegen/EmitterVisitor.java
++++ b/src/main/java/org/perlonjava/codegen/EmitterVisitor.java
+@@ -286,6 +286,27 @@ public class EmitterVisitor implements Visitor {
+         EmitterVisitor scalarVisitor =
+                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
+         node.left.accept(scalarVisitor); // target - left parameter
++
++        // Optimization
++        if ((node.operator.equals("add") || node.operator.equals("subtract")) && node.right instanceof NumberNode) {
++            NumberNode right = (NumberNode) node.right;
++            String value = right.value;
++            boolean isInteger = !value.contains(".");
++            if (isInteger) {
++                int intValue = Integer.parseInt(value);
++                ctx.mv.visitLdcInsn(intValue);
++                ctx.mv.visitMethodInsn(
++                        Opcodes.INVOKEVIRTUAL,
++                        "org/perlonjava/runtime/RuntimeScalar",
++                        methodStr,
++                        "(I)Lorg/perlonjava/runtime/RuntimeScalar;", false);
++                if (ctx.contextType == RuntimeContextType.VOID) {
++                    ctx.mv.visitInsn(Opcodes.POP);
++                }
++                return;
++            }
++        }
++
+         node.right.accept(scalarVisitor); // right parameter
+         // stack: [left, right]
+         // perform the operation
+diff --git a/src/main/java/org/perlonjava/runtime/RuntimeScalar.java b/src/main/java/org/perlonjava/runtime/RuntimeScalar.java
+index 76b4f3e..820629b 100644
+--- a/src/main/java/org/perlonjava/runtime/RuntimeScalar.java
++++ b/src/main/java/org/perlonjava/runtime/RuntimeScalar.java
+@@ -864,6 +864,19 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
+         return new RuntimeScalar(1);
+     }
+ 
++    // Optimization: add `int` instead of RuntimeScalar
++    public RuntimeScalar add(int arg2) {
++        RuntimeScalar arg1 = this;
++        if (arg1.type == RuntimeScalarType.STRING) {
++            arg1 = arg1.parseNumber();
++        }
++        if (arg1.type == RuntimeScalarType.DOUBLE) {
++            return new RuntimeScalar(arg1.getDouble() + arg2);
++        } else {
++            return new RuntimeScalar(arg1.getInt() + arg2);
++        }
++    }
++
+     public RuntimeScalar add(RuntimeScalar arg2) {
+         RuntimeScalar arg1 = this;
+         if (arg1.type == RuntimeScalarType.STRING) {
+@@ -879,6 +892,19 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
+         }
+     }
+ 
++    // Optimization: add `int` instead of RuntimeScalar
++    public RuntimeScalar subtract(int arg2) {
++        RuntimeScalar arg1 = this;
++        if (arg1.type == RuntimeScalarType.STRING) {
++            arg1 = arg1.parseNumber();
++        }
++        if (arg1.type == RuntimeScalarType.DOUBLE) {
++            return new RuntimeScalar(arg1.getDouble() - arg2);
++        } else {
++            return new RuntimeScalar(arg1.getInt() - arg2);
++        }
++    }
++
+     public RuntimeScalar subtract(RuntimeScalar arg2) {
+         RuntimeScalar arg1 = this;
+         if (arg1.type == RuntimeScalarType.STRING) {
