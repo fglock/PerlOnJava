@@ -19,6 +19,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.*;
 
 import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
+import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 public class RuntimeIO implements RuntimeScalarReference {
 
@@ -287,7 +288,7 @@ public class RuntimeIO implements RuntimeScalarReference {
                     if (bytesRead == -1) {
                         if (line.length() == 0) {
                             this.isEOF = true;
-                            return new RuntimeScalar();
+                            return scalarUndef;
                         }
                         break;
                     }
@@ -323,7 +324,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             return new RuntimeScalar(line.toString());
         } catch (Exception e) {
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
-            return new RuntimeScalar();
+            return scalarUndef;
         }
     }
 
@@ -342,7 +343,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             System.err.println("File operation failed: " + e.getMessage());
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
         }
-        return new RuntimeScalar(this.isEOF);
+        return getScalarBoolean(this.isEOF);
     }
 
     // Method to get the current file pointer position (tell equivalent)
@@ -385,10 +386,10 @@ public class RuntimeIO implements RuntimeScalarReference {
             } else if (outputStream != null) {
                 outputStream.flush();
             }
-            return new RuntimeScalar(1);  // Return 1 to indicate success, consistent with other methods
+            return scalarTrue;  // Return 1 to indicate success, consistent with other methods
         } catch (Exception e) {
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
-            return new RuntimeScalar();  // Return undef to indicate failure
+            return scalarFalse;  // Return undef to indicate failure
         }
     }
 
@@ -416,10 +417,10 @@ public class RuntimeIO implements RuntimeScalarReference {
                 outputStream.close();
                 outputStream = null;
             }
-            return new RuntimeScalar(1);
+            return scalarTrue;
         } catch (Exception e) {
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
-            return new RuntimeScalar();
+            return scalarFalse;
         }
     }
 
@@ -449,13 +450,11 @@ public class RuntimeIO implements RuntimeScalarReference {
             } else {
                 throw new IllegalStateException("No output channel available");
             }
-            return new RuntimeScalar(1);
+            return scalarTrue;
         } catch (Exception e) {
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
-            return new RuntimeScalar();
+            return scalarFalse;
         }
     }
-
-
 }
 
