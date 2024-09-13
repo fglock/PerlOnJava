@@ -16,7 +16,7 @@ public class Symbol {
         getGlobalHash("main::INC").put("Symbol.pm", new RuntimeScalar("Symbol.pm"));
 
         try {
-            // UNIVERSAL methods are defined in RuntimeScalar class
+            // load UNIVERSAL methods into Perl namespace
             Class<?> clazz = Symbol.class;
             RuntimeScalar instance = new RuntimeScalar();
             Method mm;

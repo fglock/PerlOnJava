@@ -184,7 +184,9 @@ public class StatementParser {
                 if (code.getBoolean()) {
                     // call the method
                     ctx.logDebug("Use call : " + importMethod + "(" + args + ")");
-                    code.apply(args.getArrayOfAlias(), RuntimeContextType.SCALAR);
+                    RuntimeArray importArgs = args.getArrayOfAlias();
+                    importArgs.unshift(new RuntimeScalar(packageName));
+                    code.apply(importArgs, RuntimeContextType.SCALAR);
                 }
             }
         }

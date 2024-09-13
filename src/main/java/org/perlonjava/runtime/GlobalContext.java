@@ -1,6 +1,7 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.ArgumentParser;
+import org.perlonjava.perlmodule.Exporter;
 import org.perlonjava.perlmodule.Symbol;
 import org.perlonjava.perlmodule.Universal;
 
@@ -75,6 +76,7 @@ public class GlobalContext {
         // Initialize built-in Perl classes
         Universal.initialize();
         Symbol.initialize();
+        Exporter.initialize();
 
         // Reset method cache after initializing UNIVERSAL
         InheritanceResolver.invalidateCache();
