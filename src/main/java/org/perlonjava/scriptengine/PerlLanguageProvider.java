@@ -14,6 +14,8 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.List;
 
+import static org.perlonjava.runtime.GlobalContext.getGlobalIO;
+
 /**
  * The PerlLanguageProvider class is responsible for executing Perl code within the Java environment.
  * It provides methods to execute, tokenize, compile, and parse Perl code.
@@ -136,6 +138,10 @@ public class PerlLanguageProvider {
 
         // Print the result of the execution
         ctx.logDebug("Result of generatedMethod: " + result);
+
+        // Flush STDOUT, STDERR, STDIN
+        getGlobalIO("main::STDOUT").getRuntimeIO().flush();
+        getGlobalIO("main::STDERR").getRuntimeIO().flush();
 
         return result;
     }
