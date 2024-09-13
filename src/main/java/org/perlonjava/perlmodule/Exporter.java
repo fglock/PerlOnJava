@@ -42,6 +42,7 @@ public class Exporter {
 
         RuntimeArray export = GlobalContext.getGlobalArray(packageScalar + "::EXPORT");
         RuntimeArray exportOk = GlobalContext.getGlobalArray(packageScalar + "::EXPORT_OK");
+        RuntimeHash exportTags = GlobalContext.getGlobalHash(packageScalar + "::EXPORT_TAGS");
         // System.out.println("export: " + packageScalar + "::EXPORT " + export);
         // System.out.println("exportOk: " + exportOk);
 
@@ -49,7 +50,25 @@ public class Exporter {
             args = export;
         }
 
+        RuntimeArray tagArray = new RuntimeArray();
         for (RuntimeBaseEntity symbolObj : args.elements) {
+            String symbolString = symbolObj.toString();
+
+            if (symbolString.startsWith(":")) {
+                // This is a tag
+                String tagName = symbolString.substring(1);
+                RuntimeArray tagSymbols = exportTags.get(tagName).arrayDeref();
+                if (tagSymbols != null) {
+                    tagArray.elements.addAll(tagSymbols.elements);
+                } else {
+                    throw new IllegalArgumentException("Unknown export tag: " + tagName);
+                }
+            } else {
+                tagArray.elements.add(symbolObj);
+            }
+        }
+
+        for (RuntimeBaseEntity symbolObj : tagArray.elements) {
             String symbolString = symbolObj.toString();
             // System.out.println("Importing symbol " + symbolString);
 
