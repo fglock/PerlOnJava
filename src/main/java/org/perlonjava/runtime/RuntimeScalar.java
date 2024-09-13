@@ -1016,6 +1016,18 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
     }
 
+    public RuntimeScalar equalTo(int arg2) {
+        RuntimeScalar arg1 = this;
+        if (arg1.type == RuntimeScalarType.STRING) {
+            arg1 = arg1.parseNumber();
+        }
+        if (arg1.type == RuntimeScalarType.DOUBLE) {
+            return new RuntimeScalar(arg1.getDouble() == (double) arg2);
+        } else {
+            return new RuntimeScalar(arg1.getInt() == arg2);
+        }
+    }
+
     public RuntimeScalar equalTo(RuntimeScalar arg2) {
         RuntimeScalar arg1 = this;
         if (arg1.type == RuntimeScalarType.STRING) {

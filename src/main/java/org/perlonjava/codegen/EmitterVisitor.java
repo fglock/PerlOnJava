@@ -288,7 +288,10 @@ public class EmitterVisitor implements Visitor {
         node.left.accept(scalarVisitor); // target - left parameter
 
         // Optimization
-        if ((node.operator.equals("+") || node.operator.equals("-")) && node.right instanceof NumberNode) {
+        if ((node.operator.equals("+")
+                || node.operator.equals("-")
+                || node.operator.equals("=="))
+                && node.right instanceof NumberNode) {
             NumberNode right = (NumberNode) node.right;
             String value = right.value;
             boolean isInteger = !value.contains(".");
