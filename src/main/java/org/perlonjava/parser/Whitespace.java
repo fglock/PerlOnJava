@@ -48,9 +48,22 @@ public class Whitespace {
                             tokenIndex++;
                         }
                     } else {
-                        return tokenIndex; // Stop processing and return current index for non-comment operator
+                        return tokenIndex; // Stop processing and return current index
                     }
                     break;
+
+                case STRING:
+                    if (token.text.equals(String.valueOf((char)4)) || token.text.equals(String.valueOf((char)26))) {
+                        // Handle ^D (EOT, ASCII 4) or ^Z (SUB, ASCII 26)
+                        tokenIndex = tokens.size();
+                    }
+                    return tokenIndex; // Stop processing and return current index
+
+                case IDENTIFIER:
+                    if (token.text.equals("__END__") || token.text.equals("__DATA__")) {
+                        tokenIndex = tokens.size();
+                    }
+                    return tokenIndex; // Stop processing and return current index
 
                 default:
                     return tokenIndex; // Stop processing when a non-whitespace/non-comment token is found
