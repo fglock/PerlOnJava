@@ -33,13 +33,13 @@ public class RuntimeIO implements RuntimeScalarReference {
         MODE_OPTIONS.put("+<", EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE));
     }
 
+    private final ByteBuffer buffer;
+    private final ByteBuffer readBuffer;
+    private final ByteBuffer singleCharBuffer;
     private InputStream inputStream;
     private OutputStream outputStream;
     private BufferedReader bufferedReader;
     private boolean isEOF;
-    private final ByteBuffer buffer;
-    private final ByteBuffer readBuffer;
-    private final ByteBuffer singleCharBuffer;
     private FileChannel fileChannel;
     private WritableByteChannel channel;
 

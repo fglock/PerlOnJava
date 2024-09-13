@@ -26,11 +26,13 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
     }
 
     public RuntimeList(RuntimeArray value) {
-        this.elements = value.elements;
+        this.elements = new ArrayList<>();
+        this.elements.add(value);
     }
 
     public RuntimeList(RuntimeHash value) {
-        this.elements = value.entryArray().elements;
+        this.elements = new ArrayList<>();
+        this.elements.add(value);
     }
 
     // Method to generate a list of RuntimeScalar objects

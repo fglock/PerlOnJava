@@ -169,8 +169,7 @@ public class Operator {
         });
 
         // Create a new RuntimeList to hold the sorted elements
-        RuntimeList sortedList = new RuntimeList();
-        sortedList.elements = array.elements;
+        RuntimeList sortedList = new RuntimeList(array);
 
         // Return the sorted RuntimeList
         return sortedList;
