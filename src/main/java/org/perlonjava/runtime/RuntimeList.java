@@ -5,6 +5,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 
+import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
+
 /**
  * The RuntimeList class simulates a Perl list.
  */
@@ -42,7 +44,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
             int start = startValue.getInt();
             int end = endValue.getInt();
             for (int i = start; i <= end; i++) {
-                list.add(new RuntimeScalar(i));
+                list.add(getScalarInt(i));
             }
         } else {
             RuntimeScalar start = new RuntimeScalar(startValue.toString());
