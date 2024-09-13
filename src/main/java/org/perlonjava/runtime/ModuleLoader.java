@@ -27,7 +27,7 @@ public class ModuleLoader {
 
         // Otherwise, search in INC directories
 
-        List<RuntimeBaseEntity> inc = GlobalContext.getGlobalArray("main::INC").elements;
+        List<RuntimeScalar> inc = GlobalContext.getGlobalArray("main::INC").elements;
 
         for (RuntimeBaseEntity dir : inc) {
             Path fullPath = Paths.get(dir.toString(), filename);
