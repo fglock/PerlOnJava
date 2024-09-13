@@ -23,7 +23,7 @@ import java.util.NoSuchElementException;
 import java.util.concurrent.TimeUnit;
 
 import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeScalarCache.getIntegerScalar;
+import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 /**
  * The RuntimeScalar class simulates Perl scalar variables.
@@ -43,10 +43,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     // TODO add cache for integer/string values
     public RuntimeScalarType type;
     public Object value;
-
-    // Note: possible optimization, but this is not safe, because the values are mutable - need to create an immutable version
-    //    public static zero = new RuntimeScalar(0);
-    //    public static one = new RuntimeScalar(1);
 
     // Constructors
     public RuntimeScalar() {
@@ -151,7 +147,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public static RuntimeScalar undef() {
-        return new RuntimeScalar();
+        return scalarUndef;
     }
 
     public static RuntimeScalar wantarray(int ctx) {
@@ -847,7 +843,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar defined() {
-        return new RuntimeScalar(type != RuntimeScalarType.UNDEF);
+        return getScalarBoolean(type != RuntimeScalarType.UNDEF);
     }
 
     public RuntimeScalar stringConcat(RuntimeDataProvider b) {
@@ -855,14 +851,11 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar unaryMinus() {
-        return new RuntimeScalar(0).subtract(this);
+        return getScalarInt(0).subtract(this);
     }
 
     public RuntimeScalar not() {
-        if (this.getBoolean()) {
-            return new RuntimeScalar(0);
-        }
-        return new RuntimeScalar(1);
+        return getScalarBoolean(!this.getBoolean());
     }
 
     // Optimization: add `int` instead of RuntimeScalar
@@ -874,7 +867,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (arg1.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2);
         } else {
-            return getIntegerScalar(arg1.getInt() + arg2);
+            return RuntimeScalarCache.getScalarInt(arg1.getInt() + arg2);
         }
     }
 
@@ -889,7 +882,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2.getDouble());
         } else {
-            return getIntegerScalar(arg1.getInt() + arg2.getInt());
+            return RuntimeScalarCache.getScalarInt(arg1.getInt() + arg2.getInt());
         }
     }
 
@@ -902,7 +895,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (arg1.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2);
         } else {
-            return getIntegerScalar(arg1.getInt() - arg2);
+            return RuntimeScalarCache.getScalarInt(arg1.getInt() - arg2);
         }
     }
 
@@ -917,7 +910,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2.getDouble());
         } else {
-            return getIntegerScalar(arg1.getInt() - arg2.getInt());
+            return RuntimeScalarCache.getScalarInt(arg1.getInt() - arg2.getInt());
         }
     }
 
@@ -932,7 +925,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() * arg2.getDouble());
         } else {
-            return getIntegerScalar((long) arg1.getInt() * (long) arg2.getInt());
+            return getScalarInt((long) arg1.getInt() * (long) arg2.getInt());
         }
     }
 
@@ -965,9 +958,9 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             arg2 = arg2.parseNumber();
         }
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
-            return new RuntimeScalar(arg1.getDouble() < arg2.getDouble());
+            return getScalarBoolean(arg1.getDouble() < arg2.getDouble());
         } else {
-            return new RuntimeScalar(arg1.getInt() < arg2.getInt());
+            return getScalarBoolean(arg1.getInt() < arg2.getInt());
         }
     }
 
@@ -980,9 +973,9 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             arg2 = arg2.parseNumber();
         }
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
-            return new RuntimeScalar(arg1.getDouble() <= arg2.getDouble());
+            return getScalarBoolean(arg1.getDouble() <= arg2.getDouble());
         } else {
-            return new RuntimeScalar(arg1.getInt() <= arg2.getInt());
+            return getScalarBoolean(arg1.getInt() <= arg2.getInt());
         }
     }
 
@@ -995,9 +988,9 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             arg2 = arg2.parseNumber();
         }
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
-            return new RuntimeScalar(arg1.getDouble() > arg2.getDouble());
+            return getScalarBoolean(arg1.getDouble() > arg2.getDouble());
         } else {
-            return new RuntimeScalar(arg1.getInt() > arg2.getInt());
+            return getScalarBoolean(arg1.getInt() > arg2.getInt());
         }
     }
 
@@ -1010,9 +1003,9 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             arg2 = arg2.parseNumber();
         }
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
-            return new RuntimeScalar(arg1.getDouble() >= arg2.getDouble());
+            return getScalarBoolean(arg1.getDouble() >= arg2.getDouble());
         } else {
-            return new RuntimeScalar(arg1.getInt() >= arg2.getInt());
+            return getScalarBoolean(arg1.getInt() >= arg2.getInt());
         }
     }
 
@@ -1022,9 +1015,9 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             arg1 = arg1.parseNumber();
         }
         if (arg1.type == RuntimeScalarType.DOUBLE) {
-            return new RuntimeScalar(arg1.getDouble() == (double) arg2);
+            return getScalarBoolean(arg1.getDouble() == (double) arg2);
         } else {
-            return new RuntimeScalar(arg1.getInt() == arg2);
+            return getScalarBoolean(arg1.getInt() == arg2);
         }
     }
 
@@ -1037,9 +1030,9 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             arg2 = arg2.parseNumber();
         }
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
-            return new RuntimeScalar(arg1.getDouble() == arg2.getDouble());
+            return getScalarBoolean(arg1.getDouble() == arg2.getDouble());
         } else {
-            return new RuntimeScalar(arg1.getInt() == arg2.getInt());
+            return getScalarBoolean(arg1.getInt() == arg2.getInt());
         }
     }
 
@@ -1052,9 +1045,9 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             arg2 = arg2.parseNumber();
         }
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
-            return new RuntimeScalar(arg1.getDouble() != arg2.getDouble());
+            return getScalarBoolean(arg1.getDouble() != arg2.getDouble());
         } else {
-            return new RuntimeScalar(arg1.getInt() != arg2.getInt());
+            return getScalarBoolean(arg1.getInt() != arg2.getInt());
         }
     }
 
@@ -1067,40 +1060,40 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             arg2 = arg2.parseNumber();
         }
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
-            return new RuntimeScalar(Double.compare(arg1.getDouble(), arg2.getDouble()));
+            return getScalarInt(Double.compare(arg1.getDouble(), arg2.getDouble()));
         } else {
-            return new RuntimeScalar(Integer.compare(arg1.getInt(), arg2.getInt()));
+            return getScalarInt(Integer.compare(arg1.getInt(), arg2.getInt()));
         }
     }
 
     public RuntimeScalar cmp(RuntimeScalar arg2) {
-        return new RuntimeScalar(this.toString().compareTo(arg2.toString()));
+        return getScalarInt(this.toString().compareTo(arg2.toString()));
     }
 
     public RuntimeScalar eq(RuntimeScalar arg2) {
-        return new RuntimeScalar(this.toString().equals(arg2.toString()));
+        return getScalarBoolean(this.toString().equals(arg2.toString()));
     }
 
     public RuntimeScalar ne(RuntimeScalar arg2) {
-        return new RuntimeScalar(!this.toString().equals(arg2.toString()));
+        return getScalarBoolean(!this.toString().equals(arg2.toString()));
     }
 
     public RuntimeScalar lt(RuntimeScalar arg2) {
-        return new RuntimeScalar(this.toString().compareTo(arg2.toString()) < 0);
+        return getScalarBoolean(this.toString().compareTo(arg2.toString()) < 0);
     }
 
     public RuntimeScalar le(RuntimeScalar arg2) {
-        return new RuntimeScalar(this.toString().compareTo(arg2.toString()) <= 0);
+        return getScalarBoolean(this.toString().compareTo(arg2.toString()) <= 0);
     }
 
 
     public RuntimeScalar gt(RuntimeScalar arg2) {
-        return new RuntimeScalar(this.toString().compareTo(arg2.toString()) > 0);
+        return getScalarBoolean(this.toString().compareTo(arg2.toString()) > 0);
     }
 
 
     public RuntimeScalar ge(RuntimeScalar arg2) {
-        return new RuntimeScalar(this.toString().compareTo(arg2.toString()) >= 0);
+        return getScalarBoolean(this.toString().compareTo(arg2.toString()) >= 0);
     }
 
 
@@ -1317,11 +1310,11 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar integer() {
-        return new RuntimeScalar(getInt());
+        return getScalarInt(getInt());
     }
 
     public RuntimeScalar length() {
-        return new RuntimeScalar(toString().length());
+        return getScalarInt(toString().length());
     }
 
     public RuntimeScalar quotemeta() {
@@ -1424,7 +1417,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 result = result * 8 + (c - '0');
             }
         }
-        return new RuntimeScalar(result);
+        return getScalarInt(result);
     }
 
     public RuntimeScalar ord() {
@@ -1468,7 +1461,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
             result = result * 16 + digit;
         }
-        return new RuntimeScalar(result);
+        return getScalarInt(result);
     }
 
     public RuntimeScalar sleep() {

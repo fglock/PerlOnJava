@@ -13,6 +13,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
@@ -35,9 +36,9 @@ public class RuntimeIO implements RuntimeScalarReference {
     private OutputStream outputStream;
     private BufferedReader bufferedReader;
     private boolean isEOF;
-    private ByteBuffer buffer;
-    private ByteBuffer readBuffer;
-    private ByteBuffer singleCharBuffer;
+    private final ByteBuffer buffer;
+    private final ByteBuffer readBuffer;
+    private final ByteBuffer singleCharBuffer;
     private FileChannel fileChannel;
     private WritableByteChannel channel;
 
@@ -55,7 +56,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             fh.fileChannel = FileChannel.open(Paths.get(fileName), options);
 
             if (options.contains(StandardOpenOption.READ)) {
-                fh.bufferedReader = new BufferedReader(Channels.newReader(fh.fileChannel, "UTF-8"));
+                fh.bufferedReader = new BufferedReader(Channels.newReader(fh.fileChannel, StandardCharsets.UTF_8));
             }
 
             fh.isEOF = false;
@@ -91,7 +92,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             } else {
                 // For input, use FileChannel
                 fh.fileChannel = new FileInputStream(fd).getChannel();
-                fh.bufferedReader = new BufferedReader(Channels.newReader(fh.fileChannel, "UTF-8"));
+                fh.bufferedReader = new BufferedReader(Channels.newReader(fh.fileChannel, StandardCharsets.UTF_8));
             }
             fh.isEOF = false;
         } catch (Exception e) {
