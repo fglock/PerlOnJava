@@ -286,6 +286,27 @@ public class EmitterVisitor implements Visitor {
         EmitterVisitor scalarVisitor =
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
         node.left.accept(scalarVisitor); // target - left parameter
+
+        // Optimization
+        if ((node.operator.equals("+") || node.operator.equals("-")) && node.right instanceof NumberNode) {
+            NumberNode right = (NumberNode) node.right;
+            String value = right.value;
+            boolean isInteger = !value.contains(".");
+            if (isInteger) {
+                int intValue = Integer.parseInt(value);
+                ctx.mv.visitLdcInsn(intValue);
+                ctx.mv.visitMethodInsn(
+                        Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/RuntimeScalar",
+                        methodStr,
+                        "(I)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                if (ctx.contextType == RuntimeContextType.VOID) {
+                    ctx.mv.visitInsn(Opcodes.POP);
+                }
+                return;
+            }
+        }
+
         node.right.accept(scalarVisitor); // right parameter
         // stack: [left, right]
         // perform the operation
