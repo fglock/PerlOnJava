@@ -24,5 +24,11 @@ public class RuntimeScalarReadOnlyInteger extends RuntimeScalarReadOnly {
     public String toString() {
         return s;
     }
+
+    @Override
+    public boolean getBoolean() {
+        return i != 0;
+    }
+
 }
 
