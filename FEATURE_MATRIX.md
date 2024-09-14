@@ -117,11 +117,11 @@
 
 ## Regular Expressions
 - ✔️   **Basic Matching**: Operators `qr//`, `m//`, `s///`, `split` are implemented.
-- ✔️   **Regex modifiers**: Modifiers `/i` `/m` `/s` `/g` `/r` `/e` are implemented.
+- ✔️   **Regex modifiers**: Modifiers `/i` `/m` `/s` `/g` `/r` `/e` `/x` are implemented.
 - ✔️   **Special variables**: The special variables `$1`, `$2`... are implemented.
 - ✔️   **Transliteration**: `tr` and `y` transliteration operators are implemented.
 - ❌  **`pos`**: `pos` operator is not implemented.
-- ❌  **Perl-specific Regex Features**: Some features like `/x` (formatted regex) are missing.
+- ❌  **Perl-specific Regex Features**: Some features like `/xx` `/ee` are missing.
 
 ## Statements and Special Operators
 - ✔️   **Context void, scalar, list**: Contexts for void, scalar, and list are supported.
@@ -215,6 +215,13 @@ The goal here is to avoid symbolic references (`*{ $callpkg . "::Dumper" }`) whi
         *{ $callpkg . "::Dumper" } = \&Dumper;
         return;
     }
+```
+
+Here’s an alternative approach using the Exporter module:
+
+```perl
+    use Exporter 'import';
+    our @EXPORT = qw(Dumper);
 ```
 
 Here’s an alternative approach using the Symbol module:
