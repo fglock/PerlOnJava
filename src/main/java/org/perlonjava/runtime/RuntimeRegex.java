@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static java.util.regex.Pattern.COMMENTS;
+
 /**
  * RuntimeRegex class to implement Perl's qr// operator for regular expression handling,
  * including support for regex modifiers like /i, /g, and /e.
@@ -244,6 +246,9 @@ public class RuntimeRegex implements RuntimeScalarReference {
         }
         if (modifiers.contains("s")) {
             flags |= DOTALL;
+        }
+        if (modifiers.contains("x")) {
+            flags |= COMMENTS;
         }
         // /g (global) is not an actual flag for Pattern, it's used for matching multiple occurrences.
         // /r (non-destructive) is also not an actual flag for Pattern, it returns the replacement.

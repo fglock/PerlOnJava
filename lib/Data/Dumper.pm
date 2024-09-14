@@ -1,15 +1,8 @@
 package Data::Dumper;
 use 5.34.0;
 use strict;
-use Symbol; # 'qualify_to_ref';
-
-sub import {
-    my $pkg     = shift;
-    my $callpkg = caller(0);
-    my $sym_ref = Symbol::qualify_to_ref('Dumper', $callpkg);
-    *$sym_ref = \&Dumper;
-    return;
-}
+use Exporter 'import';
+our @EXPORT = qw(Dumper);
 
 our $Indent;
 our $Purity;
