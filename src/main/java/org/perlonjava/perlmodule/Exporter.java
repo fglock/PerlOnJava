@@ -4,8 +4,7 @@ import org.perlonjava.runtime.*;
 
 import java.lang.reflect.Method;
 
-import static org.perlonjava.runtime.GlobalContext.getGlobalCodeRef;
-import static org.perlonjava.runtime.GlobalContext.getGlobalHash;
+import static org.perlonjava.runtime.GlobalContext.*;
 
 public class Exporter {
 
@@ -22,6 +21,9 @@ public class Exporter {
             mm = clazz.getMethod("importSymbols", RuntimeArray.class, int.class);
             getGlobalCodeRef("Exporter::import").set(new RuntimeScalar(
                     new RuntimeCode(mm, instance, null)));
+
+            // set up @EXPORTER::EXPORT_OK = ("import");
+            getGlobalArray("Exporter::EXPORT_OK").push(new RuntimeScalar("import"));
         } catch (Exception e) {
             System.err.println("Warning: Failed to initialize Exporter: " + e.getMessage());
         }

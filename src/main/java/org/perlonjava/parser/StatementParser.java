@@ -152,47 +152,49 @@ public class StatementParser {
 
         parser.parseStatementTerminator();
 
-        // execute the statement immediately, using:
-        // `require "fullName.pm"`
+        if (fullName != null) {
+            // execute the statement immediately, using:
+            // `require "fullName.pm"`
 
-        // Setup the caller stack
-        CallerStack.push(
-                ctx.symbolTable.getCurrentPackage(),
-                ctx.compilerOptions.fileName,
-                ctx.errorUtil.getLineNumber(parser.tokenIndex));
+            // Setup the caller stack
+            CallerStack.push(
+                    ctx.symbolTable.getCurrentPackage(),
+                    ctx.compilerOptions.fileName,
+                    ctx.errorUtil.getLineNumber(parser.tokenIndex));
 
-        ctx.logDebug("Use statement: " + fullName + " called from " + CallerStack.peek());
-        RuntimeScalar ret = new RuntimeScalar(fullName).require();
-        ctx.logDebug("Use statement return: " + ret);
+            ctx.logDebug("Use statement: " + fullName + " called from " + CallerStack.peek());
+            RuntimeScalar ret = new RuntimeScalar(fullName).require();
+            ctx.logDebug("Use statement return: " + ret);
 
-        // call Module->import( LIST )
-        // or Module->unimport( LIST )
-        RuntimeList args = ExtractValueVisitor.getValues(list);
-        ctx.logDebug("Use statement list: " + args);
-        if (hasParentheses && args.size() == 0) {
-            // do not import
-        } else {
-            // fetch the method using `can` operator
-            String importMethod = isNoDeclaration ? "unimport" : "import";
-            RuntimeArray canArgs = new RuntimeArray();
-            canArgs.push(new RuntimeScalar(packageName));
-            canArgs.push(new RuntimeScalar(importMethod));
-            RuntimeList codeList = Universal.can(canArgs, RuntimeContextType.SCALAR);
-            ctx.logDebug("Use can(" + packageName + ", " + importMethod + "): " + codeList);
-            if (codeList.size() == 1) {
-                RuntimeScalar code = (RuntimeScalar) codeList.elements.get(0);
-                if (code.getBoolean()) {
-                    // call the method
-                    ctx.logDebug("Use call : " + importMethod + "(" + args + ")");
-                    RuntimeArray importArgs = args.getArrayOfAlias();
-                    importArgs.unshift(new RuntimeScalar(packageName));
-                    code.apply(importArgs, RuntimeContextType.SCALAR);
+            // call Module->import( LIST )
+            // or Module->unimport( LIST )
+            RuntimeList args = ExtractValueVisitor.getValues(list);
+            ctx.logDebug("Use statement list: " + args);
+            if (hasParentheses && args.size() == 0) {
+                // do not import
+            } else {
+                // fetch the method using `can` operator
+                String importMethod = isNoDeclaration ? "unimport" : "import";
+                RuntimeArray canArgs = new RuntimeArray();
+                canArgs.push(new RuntimeScalar(packageName));
+                canArgs.push(new RuntimeScalar(importMethod));
+                RuntimeList codeList = Universal.can(canArgs, RuntimeContextType.SCALAR);
+                ctx.logDebug("Use can(" + packageName + ", " + importMethod + "): " + codeList);
+                if (codeList.size() == 1) {
+                    RuntimeScalar code = (RuntimeScalar) codeList.elements.get(0);
+                    if (code.getBoolean()) {
+                        // call the method
+                        ctx.logDebug("Use call : " + importMethod + "(" + args + ")");
+                        RuntimeArray importArgs = args.getArrayOfAlias();
+                        importArgs.unshift(new RuntimeScalar(packageName));
+                        code.apply(importArgs, RuntimeContextType.SCALAR);
+                    }
                 }
             }
-        }
 
-        // restore the caller stack
-        CallerStack.pop();
+            // restore the caller stack
+            CallerStack.pop();
+        }
 
         // return an empty list
         return new ListNode(parser.tokenIndex);

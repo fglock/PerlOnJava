@@ -133,15 +133,18 @@ public class PerlLanguageProvider {
         try {
             result = (RuntimeList) invoker.invoke(instance, new RuntimeArray(), RuntimeContextType.SCALAR);
         } catch (Throwable t) {
+            // Flush STDOUT, STDERR, STDIN
+            getGlobalIO("main::STDOUT").getRuntimeIO().flush();
+            getGlobalIO("main::STDERR").getRuntimeIO().flush();
+
             throw new RuntimeException("Error executing Perl code for " + ctx.compilerOptions.fileName + ": " + t.getMessage(), t);
         }
-
-        // Print the result of the execution
-        ctx.logDebug("Result of generatedMethod: " + result);
-
         // Flush STDOUT, STDERR, STDIN
         getGlobalIO("main::STDOUT").getRuntimeIO().flush();
         getGlobalIO("main::STDERR").getRuntimeIO().flush();
+        
+        // Print the result of the execution
+        ctx.logDebug("Result of generatedMethod: " + result);
 
         return result;
     }
