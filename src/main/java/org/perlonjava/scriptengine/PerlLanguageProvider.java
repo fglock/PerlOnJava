@@ -137,7 +137,7 @@ public class PerlLanguageProvider {
             getGlobalIO("main::STDOUT").getRuntimeIO().flush();
             getGlobalIO("main::STDERR").getRuntimeIO().flush();
 
-            throw new RuntimeException("Error executing Perl code for " + ctx.compilerOptions.fileName + ": " + t.getMessage(), t);
+            throw new RuntimeException(t);
         }
         // Flush STDOUT, STDERR, STDIN
         getGlobalIO("main::STDOUT").getRuntimeIO().flush();
