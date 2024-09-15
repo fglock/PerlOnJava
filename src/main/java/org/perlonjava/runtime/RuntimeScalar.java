@@ -941,7 +941,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (divisor == 0.0) {
             throw new RuntimeException("Illegal division by zero");
         }
-        return new RuntimeScalar(arg1.getDouble() / arg2.getDouble());
+        return new RuntimeScalar(arg1.getDouble() / divisor);
     }
 
     public RuntimeScalar modulus(RuntimeScalar arg2) {
