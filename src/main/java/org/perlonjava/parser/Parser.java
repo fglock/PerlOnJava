@@ -91,6 +91,7 @@ public class Parser {
     }
 
     public BlockNode parseBlock() {
+        int currentIndex = tokenIndex;
         ctx.symbolTable.enterScope();
         List<Node> statements = new ArrayList<>();
         LexerToken token = peek();
@@ -107,7 +108,7 @@ public class Parser {
             statements.add(new ListNode(tokenIndex));
         }
         ctx.symbolTable.exitScope();
-        return new BlockNode(statements, tokenIndex);
+        return new BlockNode(statements, currentIndex);
     }
 
     public Node parseStatement() {
@@ -298,6 +299,7 @@ public class Parser {
 
     public Node parseCoreOperator(LexerToken token) {
         Node operand;
+        int currentIndex = tokenIndex;
 
         switch (token.text) {
             case "__LINE__":
@@ -424,7 +426,7 @@ public class Parser {
             case "die":
             case "warn":
                 operand = ListParser.parseZeroOrMoreList(this, 0, false, true, false, false);
-                return new OperatorNode(token.text, operand, tokenIndex);
+                return new OperatorNode(token.text, operand, currentIndex);
             case "readline":
             case "eof":
             case "tell":

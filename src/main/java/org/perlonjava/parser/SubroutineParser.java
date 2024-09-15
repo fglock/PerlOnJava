@@ -18,6 +18,7 @@ public class SubroutineParser {
     static Node parseSubroutineCall(Parser parser) {
         // Parse the subroutine name as a complex identifier
         // Alternately, this could be a v-string like v10.20.30   XXX TODO
+        int currentIndex = parser.tokenIndex;
 
         String subName = IdentifierParser.parseSubroutineIdentifier(parser);
         parser.ctx.logDebug("SubroutineCall subName `" + subName + "` package " + parser.ctx.symbolTable.getCurrentPackage());
@@ -69,14 +70,15 @@ public class SubroutineParser {
 
         // Rewrite and return the subroutine call as `&name(arguments)`
         return new BinaryOperatorNode("(",
-                new OperatorNode("&", nameNode, nameNode.tokenIndex),
+                new OperatorNode("&", nameNode, currentIndex),
                 arguments,
-                parser.tokenIndex);
+                currentIndex);
     }
 
     public static Node parseSubroutineDefinition(Parser parser, boolean wantName) {
         // This method is responsible for parsing an anonymous subroutine (a subroutine without a name)
         // or a named subroutine based on the 'wantName' flag.
+        int currentIndex = parser.tokenIndex;
 
         // Initialize the subroutine name to null. This will store the name of the subroutine if 'wantName' is true.
         String subName = null;
@@ -128,7 +130,7 @@ public class SubroutineParser {
 
         // Finally, we create a new 'AnonSubNode' object with the parsed data: the name, prototype, attributes, block,
         // `useTryCatch` flag, and token position.
-        AnonSubNode anonSubNode = new AnonSubNode(subName, prototype, attributes, block, false, parser.tokenIndex);
+        AnonSubNode anonSubNode = new AnonSubNode(subName, prototype, attributes, block, false, currentIndex);
 
         if (subName != null) {
             // Additional steps for named subroutine:
@@ -143,10 +145,10 @@ public class SubroutineParser {
             // return typeglob assignment
             return new BinaryOperatorNode("=",
                     new OperatorNode("*",
-                            new IdentifierNode(fullName, parser.tokenIndex),
-                            parser.tokenIndex),
+                            new IdentifierNode(fullName, currentIndex),
+                            currentIndex),
                     anonSubNode,
-                    parser.tokenIndex);
+                    currentIndex);
         }
 
         // return anonymous subroutine
