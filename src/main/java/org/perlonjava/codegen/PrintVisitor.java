@@ -39,7 +39,7 @@ public class PrintVisitor implements Visitor {
     @Override
     public void visit(BinaryOperatorNode node) {
         appendIndent();
-        sb.append("BinaryOperatorNode: ").append(node.operator).append("\n");
+        sb.append("BinaryOperatorNode: ").append(node.operator).append("  pos:" + node.tokenIndex + "\n");
         indentLevel++;
         if (node.left == null) {
             appendIndent();
@@ -54,7 +54,7 @@ public class PrintVisitor implements Visitor {
     @Override
     public void visit(OperatorNode node) {
         appendIndent();
-        sb.append("OperatorNode: ").append(node.operator).append("\n");
+        sb.append("OperatorNode: ").append(node.operator).append("  pos:" + node.tokenIndex + "\n");
         if (node.operand != null) {
             indentLevel++;
             node.operand.accept(this);
@@ -165,7 +165,7 @@ public class PrintVisitor implements Visitor {
     @Override
     public void visit(AnonSubNode node) {
         appendIndent();
-        sb.append("AnonSubNode:\n");
+        sb.append("AnonSubNode:  pos:" + node.tokenIndex + "\n");
         indentLevel++;
 
         appendIndent();

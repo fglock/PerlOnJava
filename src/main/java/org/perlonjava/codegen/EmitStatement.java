@@ -195,6 +195,7 @@ public class EmitStatement {
 
             // Annotate the bytecode with Perl source code line numbers
             int lineNumber = emitterVisitor.ctx.errorUtil.getLineNumber(element.getIndex());
+            emitterVisitor.ctx.logDebug("Line number " + lineNumber);
             Label thisLabel = new Label();
             emitterVisitor.ctx.mv.visitLabel(thisLabel);
             emitterVisitor.ctx.mv.visitLineNumber(lineNumber, thisLabel); // Associate line number with thisLabel
