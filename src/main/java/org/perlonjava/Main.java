@@ -1,6 +1,9 @@
 package org.perlonjava;
 
+import org.perlonjava.runtime.ExceptionFormatter;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
+
+import static org.perlonjava.runtime.GlobalContext.getGlobalIO;
 
 /**
  * The Main class serves as the entry point for the Perl-to-Java bytecode compiler and runtime
@@ -25,7 +28,13 @@ public class Main {
         try {
             PerlLanguageProvider.executePerlCode(parsedArgs);
         } catch (Throwable t) {
+            // Print full JVM stack
             t.printStackTrace();
+
+            // Use the custom formatter to print a shorter message
+            System.out.println();
+            System.out.println("Error executing Perl code: " + ExceptionFormatter.formatException(t));
+
             System.exit(1);
         }
     }
