@@ -188,6 +188,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             // Runtime stack trace
             Throwable t = new Throwable();
             ArrayList<ArrayList<String>> stackTrace = ExceptionFormatter.formatException(t);
+            frame++;  // frame 0 is the current method, so we need to increment it
             if (frame >= 0 && frame < stackTrace.size()) {
                 if (ctx == RuntimeContextType.SCALAR) {
                     res.add(new RuntimeScalar(stackTrace.get(frame).get(0)));
