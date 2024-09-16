@@ -12,7 +12,7 @@ public class ExceptionFormatter {
     }
 
     // Find the innermost cause in the exception chain
-    private static Throwable findInnermostCause(Throwable t) {
+    public static Throwable findInnermostCause(Throwable t) {
         Throwable cause = t;
         while (cause.getCause() != null) {
             cause = cause.getCause();
