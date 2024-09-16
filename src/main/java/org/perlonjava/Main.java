@@ -3,8 +3,6 @@ package org.perlonjava;
 import org.perlonjava.runtime.ExceptionFormatter;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
 
-import static org.perlonjava.runtime.GlobalContext.getGlobalIO;
-
 /**
  * The Main class serves as the entry point for the Perl-to-Java bytecode compiler and runtime
  * evaluator. It accepts the command-line arguments, parses Perl code, generates corresponding Java bytecode using ASM, and executes the
