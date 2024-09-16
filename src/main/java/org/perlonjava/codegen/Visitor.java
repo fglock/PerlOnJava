@@ -112,11 +112,11 @@ public interface Visitor {
     void visit(OperatorNode node);
 
     /**
-     * Visit a AnonSubNode.
+     * Visit a SubroutineNode.
      *
-     * @param node the AnonSubNode to visit
+     * @param node the SubroutineNode to visit
      */
-    void visit(AnonSubNode node);
+    void visit(SubroutineNode node);
 
     // Add other node types as needed
 }

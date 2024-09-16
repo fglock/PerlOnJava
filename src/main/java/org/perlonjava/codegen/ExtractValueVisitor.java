@@ -79,7 +79,7 @@ public class ExtractValueVisitor implements Visitor {
     }
 
     @Override
-    public void visit(AnonSubNode node) {
+    public void visit(SubroutineNode node) {
         if (node.name != null) {
             values.add(node.name);
         }

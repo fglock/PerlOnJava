@@ -3,7 +3,7 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
-import org.perlonjava.astnode.AnonSubNode;
+import org.perlonjava.astnode.SubroutineNode;
 import org.perlonjava.astnode.BinaryOperatorNode;
 import org.perlonjava.runtime.RuntimeCode;
 import org.perlonjava.runtime.RuntimeContextType;
@@ -13,7 +13,7 @@ import java.util.Arrays;
 import java.util.Map;
 
 public class EmitSubroutine {
-    static void emitSubroutine(EmitterContext ctx, AnonSubNode node) {
+    static void emitSubroutine(EmitterContext ctx, SubroutineNode node) {
         ctx.logDebug("SUB start");
         if (ctx.contextType == RuntimeContextType.VOID) {
             return;

@@ -1156,7 +1156,7 @@ public class EmitterVisitor implements Visitor {
     }
 
     @Override
-    public void visit(AnonSubNode node) {
+    public void visit(SubroutineNode node) {
         EmitSubroutine.emitSubroutine(ctx, node);
     }
 

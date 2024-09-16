@@ -5,11 +5,11 @@ import org.perlonjava.codegen.Visitor;
 import java.util.List;
 
 /**
- * The AnonSubNode class represents a node in the abstract syntax tree (AST) that holds an anonymous sub.
+ * The SubroutineNode class represents a node in the abstract syntax tree (AST) that holds an anonymous sub.
  * The parts of the node are: "block".
  * This class implements the Node interface, allowing it to be visited by a Visitor.
  */
-public class AnonSubNode extends AbstractNode {
+public class SubroutineNode extends AbstractNode {
     // Optional name
     public final String name;
 
@@ -30,11 +30,11 @@ public class AnonSubNode extends AbstractNode {
     public final boolean useTryCatch;
 
     /**
-     * Constructs a new AnonSubNode with the specified parts.
+     * Constructs a new SubroutineNode with the specified parts.
      *
      * @param block the block of the subroutine
      */
-    public AnonSubNode(String name, String prototype, List<String> attributes, Node block, boolean useTryCatch, int tokenIndex) {
+    public SubroutineNode(String name, String prototype, List<String> attributes, Node block, boolean useTryCatch, int tokenIndex) {
         this.name = name;
         this.prototype = prototype;
         this.attributes = attributes;
