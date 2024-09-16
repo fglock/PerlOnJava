@@ -41,6 +41,7 @@ public class EmitSubroutine {
                         newSymbolTable.clone(), // closure symbolTable
                         null, // return label
                         null, // method visitor
+                        null, // class writer
                         RuntimeContextType.RUNTIME, // call context
                         true, // is boxed
                         ctx.errorUtil, // error message utility
