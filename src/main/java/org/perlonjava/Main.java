@@ -3,6 +3,8 @@ package org.perlonjava;
 import org.perlonjava.runtime.ExceptionFormatter;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
 
+import java.util.ArrayList;
+
 /**
  * The Main class serves as the entry point for the Perl-to-Java bytecode compiler and runtime
  * evaluator. It accepts the command-line arguments, parses Perl code, generates corresponding Java bytecode using ASM, and executes the
@@ -31,7 +33,12 @@ public class Main {
 
             // Use the custom formatter to print a shorter message
             System.out.println();
-            System.out.println("Error executing Perl code: " + ExceptionFormatter.formatException(t));
+            StringBuilder sb = new StringBuilder();
+            sb.append(t.getClass().getName()).append(": ").append(t.getMessage()).append("\n");
+            for (ArrayList<String> line : ExceptionFormatter.formatException(t)) {
+                sb.append(line.get(0)).append(" at ").append(line.get(1)).append(" line ").append(line.get(2));
+            }
+            System.out.println(sb.toString());
 
             System.exit(1);
         }
