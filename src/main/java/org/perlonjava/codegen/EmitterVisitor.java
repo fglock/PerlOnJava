@@ -18,6 +18,7 @@ public class EmitterVisitor implements Visitor {
         operatorHandlers.put("*", "multiply");
         operatorHandlers.put("/", "divide");
         operatorHandlers.put("%", "modulus");
+        operatorHandlers.put(".", "stringConcat");
         operatorHandlers.put("&", "bitwiseAnd");
         operatorHandlers.put("|", "bitwiseOr");
         operatorHandlers.put("^", "bitwiseXor");
