@@ -17,6 +17,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -180,11 +181,24 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         RuntimeList res = new RuntimeList();
         int frame = 0;
         if (!args.elements.isEmpty()) {
-            // TODO use frame number
             frame = ((RuntimeScalar) args.elements.get(0)).getInt();
         }
         CallerStack.CallerInfo info = CallerStack.peek();
-        if (info != null) {
+        if (info == null) {
+            // Runtime stack trace
+            Throwable t = new Throwable();
+            ArrayList<ArrayList<String>> stackTrace = ExceptionFormatter.formatException(t);
+            if (frame >= 0 && frame < stackTrace.size()) {
+                if (ctx == RuntimeContextType.SCALAR) {
+                    res.add(new RuntimeScalar(stackTrace.get(frame).get(0)));
+                } else {
+                    res.add(new RuntimeScalar(stackTrace.get(frame).get(0)));
+                    res.add(new RuntimeScalar(stackTrace.get(frame).get(1)));
+                    res.add(new RuntimeScalar(stackTrace.get(frame).get(2)));
+                }
+            }
+        } else  {
+            // Compile-time stack trace
             if (ctx == RuntimeContextType.SCALAR) {
                 res.add(new RuntimeScalar(info.packageName));
             } else {

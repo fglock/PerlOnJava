@@ -1,14 +1,14 @@
 package org.perlonjava.runtime;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 
 public class ExceptionFormatter {
 
-    public static String formatException(Throwable t) {
+    public static ArrayList<ArrayList<String>> formatException(Throwable t) {
         StringBuilder sb = new StringBuilder();
         Throwable innermostCause = findInnermostCause(t);
-        formatThrowable(innermostCause, sb, false);
-        return sb.toString();
+        return formatThrowable(innermostCause);
     }
 
     // Find the innermost cause in the exception chain
@@ -20,13 +20,12 @@ public class ExceptionFormatter {
         return cause;
     }
 
-    private static void formatThrowable(Throwable t, StringBuilder sb, boolean isTopLevel) {
-        if (!isTopLevel) {
-            sb.append("Caused by: ");
-        }
+    private static ArrayList<ArrayList<String>> formatThrowable(Throwable t) {
+
+        ArrayList<ArrayList<String>> stackTrace = new ArrayList<>();
 
         // Append the main message of the exception
-        sb.append(t.getClass().getName()).append(": ").append(t.getMessage()).append("\n");
+        // sb.append(t.getClass().getName()).append(": ").append(t.getMessage()).append("\n");
 
         // Note: filename is formatted in codegen.DebugInfo like:
         // sourceFileName + " @ " + packageName
@@ -37,17 +36,23 @@ public class ExceptionFormatter {
                         element.getMethodName().contains("apply")
                                 && !element.getFileName().contains(".java")
                 )
-                .forEach(element -> sb.append("\tat ")
-                        .append(element.getFileName())
-                        .append(" line ")
-                        .append(element.getLineNumber())
-                        .append("\n"));
+                .forEach(element -> {
+                    String fileName = element.getFileName();
+                    String[] fileNameParts = fileName.split(" @ ", 2); // Split into at most 2 parts
+                    String sourceFileName = fileNameParts[0];
+                    String packageName = fileNameParts.length > 1 ? fileNameParts[1] : "";
 
-        // Recursively handle the cause (if any)
-        Throwable cause = t.getCause();
-        if (cause != null) {
-            formatThrowable(cause, sb, false);  // Recursive call for the cause
-        }
+                    stackTrace.add(
+                            new ArrayList<>(
+                                    Arrays.asList(
+                                            packageName,
+                                            sourceFileName,
+                                            String.valueOf(element.getLineNumber())
+                                    )
+                            )
+                    );
+                });
+        return stackTrace;
     }
 }
 
