@@ -23,7 +23,7 @@ public class OperatorParser {
             block = new BlockNode(List.of(new BinaryOperatorNode("cmp", new OperatorNode("$", new IdentifierNode("main::a", parser.tokenIndex), parser.tokenIndex), new OperatorNode("$", new IdentifierNode("main::b", parser.tokenIndex), parser.tokenIndex), parser.tokenIndex)), parser.tokenIndex);
         }
         if (block instanceof BlockNode) {
-            block = new AnonSubNode(null, null, null, block, false, parser.tokenIndex);
+            block = new SubroutineNode(null, null, null, block, false, parser.tokenIndex);
         }
         return new BinaryOperatorNode(token.text, block, operand, parser.tokenIndex);
     }
@@ -81,7 +81,7 @@ public class OperatorParser {
             // transform:  eval { 123 }
             // into:  sub { 123 }->()  with useTryCatch flag
             return new BinaryOperatorNode("->",
-                    new AnonSubNode(null, null, null, block, true, parser.tokenIndex), new ListNode(parser.tokenIndex), parser.tokenIndex);
+                    new SubroutineNode(null, null, null, block, true, parser.tokenIndex), new ListNode(parser.tokenIndex), parser.tokenIndex);
         } else {
             // Otherwise, parse a primary expression
             operand = parser.parsePrimary();

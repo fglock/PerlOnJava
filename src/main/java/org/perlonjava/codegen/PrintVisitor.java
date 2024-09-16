@@ -163,9 +163,9 @@ public class PrintVisitor implements Visitor {
     }
 
     @Override
-    public void visit(AnonSubNode node) {
+    public void visit(SubroutineNode node) {
         appendIndent();
-        sb.append("AnonSubNode:  pos:" + node.tokenIndex + "\n");
+        sb.append("SubroutineNode:  pos:" + node.tokenIndex + "\n");
         indentLevel++;
 
         appendIndent();

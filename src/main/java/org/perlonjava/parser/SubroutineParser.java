@@ -128,9 +128,9 @@ public class SubroutineParser {
             throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
         }
 
-        // Finally, we create a new 'AnonSubNode' object with the parsed data: the name, prototype, attributes, block,
+        // Finally, we create a new 'SubroutineNode' object with the parsed data: the name, prototype, attributes, block,
         // `useTryCatch` flag, and token position.
-        AnonSubNode anonSubNode = new AnonSubNode(subName, prototype, attributes, block, false, currentIndex);
+        SubroutineNode subroutineNode = new SubroutineNode(subName, prototype, attributes, block, false, currentIndex);
 
         if (subName != null) {
             // Additional steps for named subroutine:
@@ -147,11 +147,11 @@ public class SubroutineParser {
                     new OperatorNode("*",
                             new IdentifierNode(fullName, currentIndex),
                             currentIndex),
-                    anonSubNode,
+                    subroutineNode,
                     currentIndex);
         }
 
         // return anonymous subroutine
-        return anonSubNode;
+        return subroutineNode;
     }
 }
