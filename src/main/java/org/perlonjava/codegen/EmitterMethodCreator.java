@@ -96,12 +96,12 @@ public class EmitterMethodCreator implements Opcodes {
         // Create a ClassWriter with COMPUTE_FRAMES and COMPUTE_MAXS options for automatic frame and max
         // stack size calculation
         ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
+        ctx.cw = cw;
 
         // The context type is determined by the caller.
         ctx.contextType = RuntimeContextType.RUNTIME;
 
-        // Set the source file name. This is used for runtime error messages
-        cw.visitSource(ctx.compilerOptions.fileName, null);
+        DebugInfo.setDebugInfoFileName(ctx);
 
         // Define the class with version, access flags, name, signature, superclass, and interfaces
         cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, ctx.javaClassName, null, "java/lang/Object", null);
@@ -293,4 +293,5 @@ public class EmitterMethodCreator implements Opcodes {
         // Define the class using the custom class loader
         return loader.defineClass(javaClassNameDot, classData);
     }
+
 }

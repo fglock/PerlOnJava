@@ -62,6 +62,7 @@ public class PerlLanguageProvider {
                 globalSymbolTable.clone(), // Top-level symbol table
                 null, // Return label
                 null, // Method visitor
+                null, // Class writer
                 RuntimeContextType.VOID, // Call context
                 true, // Is boxed
                 null,  // errorUtil
@@ -142,7 +143,7 @@ public class PerlLanguageProvider {
         // Flush STDOUT, STDERR, STDIN
         getGlobalIO("main::STDOUT").getRuntimeIO().flush();
         getGlobalIO("main::STDERR").getRuntimeIO().flush();
-        
+
         // Print the result of the execution
         ctx.logDebug("Result of generatedMethod: " + result);
 

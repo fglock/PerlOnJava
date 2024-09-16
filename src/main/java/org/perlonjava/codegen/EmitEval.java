@@ -42,6 +42,7 @@ public class EmitEval {
                         newSymbolTable.clone(), // clone the symbolTable
                         null, // return label
                         null, // method visitor
+                        null, // class writer
                         emitterVisitor.ctx.contextType, // call context
                         true, // is boxed
                         emitterVisitor.ctx.errorUtil, // error message utility

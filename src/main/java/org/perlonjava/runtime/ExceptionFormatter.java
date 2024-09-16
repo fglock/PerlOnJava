@@ -28,11 +28,14 @@ public class ExceptionFormatter {
         // Append the main message of the exception
         sb.append(t.getClass().getName()).append(": ").append(t.getMessage()).append("\n");
 
+        // Note: filename is formatted in codegen.DebugInfo like:
+        // sourceFileName + " @ " + packageName
+
         // Filter and append the stack trace
         Arrays.stream(t.getStackTrace())
                 .filter(element ->
                         element.getMethodName().contains("apply")
-                        && !element.getFileName().contains(".java")
+                                && !element.getFileName().contains(".java")
                 )
                 .forEach(element -> sb.append("\tat ")
                         .append(element.getFileName())

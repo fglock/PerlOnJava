@@ -193,12 +193,7 @@ public class EmitStatement {
         for (int i = 0; i < list.size(); i++) {
             Node element = list.get(i);
 
-            // Annotate the bytecode with Perl source code line numbers
-            int lineNumber = emitterVisitor.ctx.errorUtil.getLineNumber(element.getIndex());
-            emitterVisitor.ctx.logDebug("Line number " + lineNumber);
-            Label thisLabel = new Label();
-            emitterVisitor.ctx.mv.visitLabel(thisLabel);
-            emitterVisitor.ctx.mv.visitLineNumber(lineNumber, thisLabel); // Associate line number with thisLabel
+            DebugInfo.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
 
             // Emit the statement with current context
             if (i == list.size() - 1) {
@@ -214,4 +209,5 @@ public class EmitStatement {
         emitterVisitor.ctx.symbolTable.exitScope();
         emitterVisitor.ctx.logDebug("generateCodeBlock end");
     }
+
 }

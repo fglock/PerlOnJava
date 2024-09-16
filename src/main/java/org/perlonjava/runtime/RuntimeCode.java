@@ -55,6 +55,7 @@ public class RuntimeCode implements RuntimeScalarReference {
                 ctx.symbolTable.clone(), // symbolTable
                 null, // return label
                 null, // method visitor
+                null, // class writer
                 ctx.contextType, // call context
                 true, // is boxed
                 ctx.errorUtil, // error message utility

@@ -1060,6 +1060,7 @@ public class EmitterVisitor implements Visitor {
     private void handlePackageOperator(OperatorNode node) {
         String name = ((IdentifierNode) node.operand).name;
         ctx.symbolTable.setCurrentPackage(name);
+        DebugInfo.setDebugInfoFileName(ctx);
         if (ctx.contextType != RuntimeContextType.VOID) {
             // if context is not void, return an empty list
             ListNode listNode = new ListNode(node.tokenIndex);

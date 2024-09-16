@@ -1,5 +1,6 @@
 package org.perlonjava.codegen;
 
+import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.perlonjava.ArgumentParser;
@@ -40,6 +41,10 @@ public class EmitterContext {
      */
     public Label returnLabel;
     /**
+     * The ClassWriter instance used to visit the method instructions.
+     */
+    public ClassWriter cw;
+    /**
      * The MethodVisitor instance used to visit the method instructions.
      */
     public MethodVisitor mv;
@@ -63,6 +68,7 @@ public class EmitterContext {
      * @param symbolTable     the symbol table used for scoping symbols within the context
      * @param returnLabel     the label to which the method should return
      * @param mv              the MethodVisitor instance used to visit the method instructions
+     * @param cw              the ClassWriter instance used to visit the method instructions
      * @param contextType     the type of the context, defined by the RuntimeContextType int value
      * @param isBoxed         indicates whether the context is for a boxed object (true) or a native object (false)
      * @param errorUtil       formats error messages with source code context
@@ -73,6 +79,7 @@ public class EmitterContext {
             ScopedSymbolTable symbolTable,
             Label returnLabel,
             MethodVisitor mv,
+            ClassWriter cw,
             int contextType,
             boolean isBoxed,
             ErrorMessageUtil errorUtil,
@@ -81,6 +88,7 @@ public class EmitterContext {
         this.symbolTable = symbolTable;
         this.returnLabel = returnLabel;
         this.mv = mv;
+        this.cw = cw;
         this.contextType = contextType;
         this.isBoxed = isBoxed;
         this.errorUtil = errorUtil;
@@ -104,7 +112,7 @@ public class EmitterContext {
         // Create a new context and cache it
         EmitterContext newContext = new EmitterContext(
                 this.javaClassName, this.symbolTable, this.returnLabel,
-                this.mv, contextType, this.isBoxed, this.errorUtil, this.compilerOptions);
+                this.mv, this.cw, contextType, this.isBoxed, this.errorUtil, this.compilerOptions);
         contextCache.put(contextType, newContext);
         return newContext;
     }
