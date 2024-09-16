@@ -154,7 +154,7 @@
 - ❌  **`version` objects**: Version objects are not yet supported.
 - ❌  **`require` operator**: The `require` operator is partially implemented.
 - ❌  **`use` and `no` statements**: Module imports and version check via `use` and `no` are partially implemented.
-- ❌  **`caller` operator**: `caller` returns ($package, $filename, $line). The remaining results are undef. This means we don't include subroutine names in error messages.
+- ❌  **`caller` operator**: `caller` returns ($package, $filename, $line). The remaining results are undef. This means we don't include subroutine names in error messages. The parameter list is also not included.
 - ✔️   **Import methods**: `import`, `unimport` works.
 - ❌  **`__SUB__`**: The `__SUB__` special variable is not yet supported.
 - ❌  **`BEGIN` block**: `BEGIN`, `END` and other special blocks are missing.
