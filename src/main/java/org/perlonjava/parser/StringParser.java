@@ -493,7 +493,7 @@ public class StringParser {
                 list.add(replace);
                 replace = new BlockNode(list, rawStr.index);
             }
-            replace = new AnonSubNode(null, null, null, replace, false, rawStr.index);
+            replace = new SubroutineNode(null, null, null, replace, false, rawStr.index);
         }
 
         Node modifiers = new StringNode(modifierStr, rawStr.index);

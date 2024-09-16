@@ -86,7 +86,7 @@ public class LValueVisitor implements Visitor {
     }
 
     @Override
-    public void visit(AnonSubNode node) {
+    public void visit(SubroutineNode node) {
         context = RuntimeContextType.VOID;
     }
 
