@@ -5,6 +5,8 @@ import org.perlonjava.scriptengine.PerlLanguageProvider;
 
 import java.util.ArrayList;
 
+import static org.perlonjava.runtime.ExceptionFormatter.findInnermostCause;
+
 /**
  * The Main class serves as the entry point for the Perl-to-Java bytecode compiler and runtime
  * evaluator. It accepts the command-line arguments, parses Perl code, generates corresponding Java bytecode using ASM, and executes the
@@ -31,12 +33,19 @@ public class Main {
             // Print full JVM stack
             t.printStackTrace();
 
-            // Use the custom formatter to print a shorter message
+            // Use the custom formatter to print the Perl message and stack trace
             System.out.println();
             StringBuilder sb = new StringBuilder();
-            sb.append(t.getClass().getName()).append(": ").append(t.getMessage()).append("\n");
+
+            Throwable innermostCause = findInnermostCause(t);
+            String message = innermostCause.getMessage();
+            sb.append(message);
+            if (!message.endsWith("\n")) {
+                sb.append("\n");
+            }
+
             for (ArrayList<String> line : ExceptionFormatter.formatException(t)) {
-                sb.append(line.get(0)).append(" at ").append(line.get(1)).append(" line ").append(line.get(2));
+                sb.append("        ").append(line.get(0)).append(" at ").append(line.get(1)).append(" line ").append(line.get(2)).append("\n");
             }
             System.out.println(sb.toString());
 
