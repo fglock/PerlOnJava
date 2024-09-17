@@ -154,7 +154,7 @@
 - ❌  **`version` objects**: Version objects are not yet supported.
 - ❌  **`require` operator**: The `require` operator is partially implemented.
 - ❌  **`use` and `no` statements**: Module imports and version check via `use` and `no` are partially implemented.
-- ❌  **`caller` operator**: `caller` returns ($package, $filename, $line). The remaining results are undef. This means we don't include subroutine names in error messages. The parameter list is also not included.
+- ✔️   **`caller` operator**: `caller` returns ($package, $filename, $line). The remaining results are undef. This means we don't include subroutine names in error messages yet.
 - ✔️   **Import methods**: `import`, `unimport` works.
 - ❌  **`__SUB__`**: The `__SUB__` special variable is not yet supported.
 - ❌  **`BEGIN` block**: `BEGIN`, `END` and other special blocks are missing.
@@ -194,7 +194,7 @@
 - ❌  **System V interprocess communication functions**: msgctl, msgget, msgrcv, msgsnd, semctl, semget, semop, shmctl, shmget, shmread, shmwrite
 - ❌  **Fetching user and group info**: endgrent, endhostent, endnetent, endpwent, getgrent, getgrgid, getgrnam, getlogin, getpwent, getpwnam, getpwuid, setgrent, setpwent
 - ❌  **Fetching network info**: endprotoent, endservent, gethostbyaddr, gethostbyname, gethostent, getnetbyaddr, getnetbyname, getnetent, getprotobyname, getprotobynumber, getprotoent, getservbyname, getservbyport, getservent, sethostent, setnetent, setprotoent, setservent
-- ❌  **Keywords related to the control flow of the Perl program**: `dump`, `caller`. Note that `caller` actually works inside `import` and `unimport`.
+- ❌  **Keywords related to the control flow of the Perl program**: `dump` operator.
 - ❌  **Bitwise operators return unsigned**: JVM doesn't have unsigned integers. This could be emulated, but with a high cost.
 
 
