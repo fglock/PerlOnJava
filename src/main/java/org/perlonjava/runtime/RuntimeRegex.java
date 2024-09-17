@@ -122,14 +122,14 @@ public class RuntimeRegex implements RuntimeScalarReference {
             }
         }
         // System.out.println("Undefine capture $" + capture);
-        GlobalContext.getGlobalVariable("main::" + capture++).set(new RuntimeScalar());
+        GlobalContext.getGlobalVariable("main::" + capture++).set(RuntimeScalarCache.scalarUndef);
 
         if (ctx == RuntimeContextType.LIST) {
             return result;
         } else if (ctx == RuntimeContextType.SCALAR) {
-            return new RuntimeScalar(found ? 1 : 0);
+            return RuntimeScalarCache.getScalarBoolean(found);
         } else {
-            return new RuntimeScalar();
+            return RuntimeScalarCache.scalarUndef;
         }
     }
 
@@ -175,7 +175,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
                     }
                 }
                 // System.out.println("Undefine capture $" + capture);
-                GlobalContext.getGlobalVariable("main::" + capture++).set(new RuntimeScalar());
+                GlobalContext.getGlobalVariable("main::" + capture++).set(RuntimeScalarCache.scalarUndef);
             }
 
             String replacementStr;
@@ -207,13 +207,13 @@ public class RuntimeRegex implements RuntimeScalarReference {
             // Save the modified string back to the original scalar
             string.set(resultBuffer.toString());
             // Return the number of substitutions made
-            return new RuntimeScalar(found);
+            return RuntimeScalarCache.getScalarInt(found);
         } else {
             if (regex.isNonDestructive) {
                 return string;
             }
             // Return `undef`
-            return new RuntimeScalar();
+            return RuntimeScalarCache.scalarUndef;
         }
     }
 
