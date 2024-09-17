@@ -870,6 +870,25 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar unaryMinus() {
+        if (this.type == RuntimeScalarType.STRING) {
+            String input = this.toString();
+            if (input.length() < 2) {
+                if (input.isEmpty()) { return getScalarInt(0); }
+                if (input.equals("-")) { return new RuntimeScalar("+"); }
+                if (input.equals("+")) { return new RuntimeScalar("-"); }
+            }
+            if (input.matches("^[-+]?[_A-Za-z].*")) {
+                if (input.startsWith("-")) {
+                    // Handle case where string starts with "-"
+                    return new RuntimeScalar("+" + input.substring(1));
+                } else if (input.startsWith("+")) {
+                    // Handle case where string starts with "+"
+                    return new RuntimeScalar("-" + input.substring(1));
+                } else {
+                    return new RuntimeScalar("-" + input);
+                }
+            }
+        }
         return getScalarInt(0).subtract(this);
     }
 

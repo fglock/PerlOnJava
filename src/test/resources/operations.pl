@@ -421,3 +421,44 @@ say "ok # ('a', 'b', 123) x 3 equals 'a b 123 a b 123 a b 123'";
 @list = (1, 2) x 1000;
 print "not " if scalar(@list) != 2000;
 say "ok # (1, 2) x 1000 produces a list with 2000 elements";
+
+# Unary minus
+
+# Test unary minus with plain strings and numbers
+
+# Test with plain strings
+my $result = -("+");
+print "not " if $result ne "-"; say "ok # unary minus on + results in -";
+
+$result = -("-");
+print "not " if $result ne "+"; say "ok # unary minus on - results in +";
+
+$result = -("-aa");
+print "not " if $result ne "+aa"; say "ok # unary minus on -aa results in +aa <$result>";
+
+$result = -("a");
+print "not " if $result ne "-a"; say "ok # unary minus on a results in -a";
+
+$result = -("aa");
+print "not " if $result ne "-aa"; say "ok # unary minus on aa results in -aa";
+
+# Test with strings starting with numbers
+$result = -("0aa");
+print "not " if $result ne "0"; say "ok # unary minus on 0aa results in 0 <$result>";
+
+$result = -("12aa");
+print "not " if $result ne "-12"; say "ok # unary minus on 12aa results in -12";
+
+# Test with non-numeric strings
+$result = -("abc");
+print "not " if $result ne "-abc"; say "ok # unary minus on abc results in -abc";
+
+$result = -("-abc");
+print "not " if $result ne "+abc"; say "ok # unary minus on -abc results in +abc";
+
+# Test with edge cases and invalid formats
+$result = -("");
+print "not " if $result ne "0"; say "ok # unary minus on  results in 0";
+
+$result = -("123");
+print "not " if $result ne "-123"; say "ok # unary minus on 123 results in -123";
