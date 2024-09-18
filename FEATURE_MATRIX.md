@@ -188,7 +188,7 @@
 - ❌  **version** pragma
 - ❌  **experimental** pragma
 - ❌  **constant** pragma
-- ❌  **parent** pragma (although inheritance is mentioned)
+- ❌  **parent** pragma
 - ❌  **mro** (Method Resolution Order) pragma. The compiler always use `C3` to linearize the inheritance hierarchy.
 - ❌  **attributes** pragma
 - ❌  **bignum, bigint, and bigrat** pragmas
