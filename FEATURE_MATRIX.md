@@ -16,6 +16,7 @@
 11. [Features Probably Incompatible with JVM](#features-probably-incompatible-with-jvm)
 12. [Language Differences and Workarounds](#language-differences-and-workarounds)
 
+
 ## Compiler Usability
 - ✔️   **Perl-like compile-time error messages**: Error messages mimic those in Perl for consistency.
 - ✔️   **Perl line numbers in bytecode**: Bytecode includes line numbers for better debugging.
@@ -57,11 +58,12 @@
 - ✔️   **Method caching**: Method resolution is cached.
 - ❌  **Version check**: Method `VERSION ( [ REQUIRE ] )` is not yet implemented.
 - ❌  **Inheritance**: `SUPER` is not yet implemented.
-- ❌  **Autoload**: `AUTOLOAD` is not yet implemented.
+- ❌  **Autoload**: `AUTOLOAD` mechanism is not yet implemented.
 
 ## Operators
 - ✔️   **Simple arithmetic**: Operators like `+`, `-`, `*`, and `%` are supported.
 - ✔️   **Numeric Comparison operators**: Comparison operators such as `==`, `!=`, `>`, `<`, etc., are implemented.
+- ✔️   **defined-or**: `//` operator.
 - ✔️   **String concat**: Concatenation of strings using `.` is supported.
 - ✔️   **String Comparison operators**: String comparison operators such as `eq`, `ne`, `lt`, `gt`, etc., are implemented.
 - ✔️   **`q`, `qq`, `qw`, `qx` String operators**: Various string quoting mechanisms are supported.
@@ -97,7 +99,7 @@
 - ✔️   **Array literals**: Array literals are supported.
 - ✔️   **Basic Hash Operations**: `keys`, `values`, `delete`, `exists`, `each` are implemented.
 - ✔️   **Hash literals**: Hash literals are supported.
-- ❌  **List operator `..` and `...`**: List constructors are partially implemented.
+- ❌  **List operator `..` and `...`**: List constructors are partially implemented. The flip-flop operator is not implemented.
 - ❌  **Tied Arrays**: Tied arrays are not yet implemented.
 - ❌  **Tied Hashes**: Tied hashes are not yet implemented.
 
@@ -109,6 +111,7 @@
 - ✔️   **Named subroutines**: Support for named subroutines is implemented.
 - ✔️   **Calling context**: `wantarray` is implemented.
 - ❌  **Subroutine prototypes**: Partial implementation of prototypes; some features are supported.
+- ❌  **Subroutine signatures**: Formal parameters are not implemented.
 - ❌  **Inline "constant" subroutines optimization**: Optimization for inline constants is not yet implemented.
 - ❌  **Subroutine attributes**: Subroutine attributes are not yet supported.
 - ❌  **`lvalue` subroutines**: Subroutines with attribute `:lvalue` are not yet supported.
@@ -162,8 +165,9 @@
 - ❌  **Search for labels in call stack**: Label searching in the call stack is missing.
 - ❌  **Here-docs**: Here-docs for multiline string literals are not yet implemented.
 - ❌  **`<>` and `glob`**: support for the `glob` operator is missing.
-- ✔️   **End of file markers**: Source code control characters `^D` and `^Z`, and the tokens `__END__` and `__DATA__` are implemented.
+- ✔️   **End of file markers**: Source code control characters `^D` and `^Z`, and the tokens `__END__` and `__DATA__` are implemented. There is no `DATA` file handle yet.
 - ❌  **Startup processing**: processing `$sitelib/sitecustomize.pl` at startup is not enabled.
+- ❌  **Smartmatch operator**: `~~` and `given`/`when` construct
 
 ## Namespaces and Global Variables
 - ✔️   **Global variable infrastructure**: Support for global variables is implemented.
@@ -174,12 +178,26 @@
 - ✔️   **I/O symbols**: `STDOUT`, `STDERR`, `STDIN` are implemented.
 - ❌  **Thread-safe `@_`, `$_`, and regex variables**: Thread safety for global special variables is missing.
 
-## Perl Modules
+## Perl Modules and Pragmas
 - ✔️   **UNIVERSAL**: `isa`, `can`, `DOES` are implemented. `VERSION` is not implemented yet.
 - ✔️   **Symbol**: `qualify` and `qualify_to_ref` are implemented. `Symbol::import` is not implemented yet.
 - ✔️   **Data::Dumper**: Data::Dumper is ported with small adjustments, to work in `strict` mode.
-- ✔️   **strict**: `strict` is set to ignore `no strict`, to work always in `strict` mode. `no strict` might work in a future version.
 - ✔️   **Exporter**: `@EXPORT_OK`, `@EXPORT`, `%EXPORT_TAGS` are implemented; only subroutines can be exported.
+- ✔️   **strict**: `strict` pragma is set to ignore `no strict`, the compiler works always in `strict` mode. `no strict` might work in a future version.
+- ❌  **feature** pragma
+- ❌  **version** pragma
+- ❌  **experimental** pragma
+- ❌  **constant** pragma
+- ❌  **parent** pragma (although inheritance is mentioned)
+- ❌  **mro** (Method Resolution Order) pragma. The compiler always use `C3` to linearize the inheritance hierarchy.
+- ❌  **attributes** pragma
+- ❌  **bignum, bigint, and bigrat** pragmas
+- ❌  **encoding** pragma
+- ❌  **integer** pragma
+- ❌  **lib** pragma
+- ❌  **re** pragma for regular expression options
+- ❌  **subs** pragma
+
 
 ## Non-strict and Obsolete Features
 - ❌  **Use string as a scalar reference**: Support for scalar references from strings is not yet implemented.
