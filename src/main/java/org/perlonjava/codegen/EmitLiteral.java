@@ -139,12 +139,12 @@ public class EmitLiteral {
         if (ctx.isBoxed) { // expect a RuntimeScalar object
             if (isInteger) {
                 ctx.logDebug("visit(NumberNode) emit boxed integer");
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
-                mv.visitInsn(Opcodes.DUP);
                 mv.visitLdcInsn(
                         Integer.valueOf(value)); // Push the integer argument onto the stack
-                mv.visitMethodInsn(
-                        Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeScalar", "<init>", "(I)V", false); // Call new RuntimeScalar(int)
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/RuntimeScalarCache",
+                        "getScalarInt",
+                        "(I)Lorg/perlonjava/runtime/RuntimeScalar;", false); // Call new getScalarInt(int)
             } else {
                 mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
                 mv.visitInsn(Opcodes.DUP);
