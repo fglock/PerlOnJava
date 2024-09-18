@@ -24,7 +24,7 @@ public class RuntimeScalarCache {
         return b ? scalarTrue : scalarFalse;
     }
 
-    static RuntimeScalar getScalarInt(int i) {
+    public static RuntimeScalar getScalarInt(int i) {
         if (i >= minInt && i <= maxInt) {
             return scalarInt[i - minInt];
         }
