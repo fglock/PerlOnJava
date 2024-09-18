@@ -178,8 +178,8 @@
 - ✔️   **I/O symbols**: `STDOUT`, `STDERR`, `STDIN` are implemented.
 - ❌  **Thread-safe `@_`, `$_`, and regex variables**: Thread safety for global special variables is missing.
 
-## Perl Modules and Pragmas
-- ✔️   **UNIVERSAL**: `isa`, `can`, `DOES` are implemented. `VERSION` is not implemented yet.
+## Perl Modules, Pragmas, Features
+- ✔️   **UNIVERSAL**: `isa`, `can`, `DOES` are implemented. `VERSION` is not implemented yet. `isa` operator is implemented.
 - ✔️   **Symbol**: `qualify` and `qualify_to_ref` are implemented. `Symbol::import` is not implemented yet.
 - ✔️   **Data::Dumper**: Data::Dumper is ported with small adjustments, to work in `strict` mode.
 - ✔️   **Exporter**: `@EXPORT_OK`, `@EXPORT`, `%EXPORT_TAGS` are implemented; only subroutines can be exported.
@@ -197,6 +197,9 @@
 - ❌  **lib** pragma
 - ❌  **re** pragma for regular expression options
 - ❌  **subs** pragma
+- ❌  **defer** feature
+- ❌  **postderef** feature
+- ❌  **try/catch** syntax feature
 
 
 ## Non-strict and Obsolete Features
