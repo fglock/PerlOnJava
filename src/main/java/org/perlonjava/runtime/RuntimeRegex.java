@@ -19,9 +19,9 @@ public class RuntimeRegex implements RuntimeScalarReference {
     private static final int DOTALL = Pattern.DOTALL;
 
     private static final int MAX_REGEX_CACHE_SIZE = 1000;
-    private static final Map<String, RuntimeRegex> regexCache = new LinkedHashMap<String, RuntimeRegex>(MAX_REGEX_CACHE_SIZE, 0.75f, true) {
+    private static final Map<String, RuntimeScalar> regexCache = new LinkedHashMap<String, RuntimeScalar>(MAX_REGEX_CACHE_SIZE, 0.75f, true) {
         @Override
-        protected boolean removeEldestEntry(Map.Entry<String, RuntimeRegex> eldest) {
+        protected boolean removeEldestEntry(Map.Entry<String, RuntimeScalar> eldest) {
             return size() > MAX_REGEX_CACHE_SIZE;
         }
     };
@@ -38,26 +38,15 @@ public class RuntimeRegex implements RuntimeScalarReference {
      * @param modifiers     Modifiers for the regex pattern (e.g., "i", "g").
      * @return A RuntimeRegex object.
      */
-    public static RuntimeRegex compile(String patternString, String modifiers) {
-        String cacheKey = patternString + "/" + modifiers;
-
-        RuntimeRegex regex = regexCache.get(cacheKey);
-        if (regex == null) {
-            regex = new RuntimeRegex();
-            try {
-                int flags = regex.convertModifiers(modifiers);
-                regex.isGlobalMatch = modifiers.contains("g");
-                regex.isNonDestructive = modifiers.contains("r");
-                regex.pattern = Pattern.compile(patternString, flags);
-            } catch (Exception e) {
-                throw new IllegalStateException("Regex compilation failed: " + e.getMessage());
-            }
-
-            // Cache the result if the cache is not full
-            if (regexCache.size() < MAX_REGEX_CACHE_SIZE) {
-                regexCache.put(cacheKey, regex);
-            }
-
+    public static RuntimeRegex compileRegex(String patternString, String modifiers) {
+        RuntimeRegex regex = new RuntimeRegex();
+        try {
+            int flags = regex.convertModifiers(modifiers);
+            regex.isGlobalMatch = modifiers.contains("g");
+            regex.isNonDestructive = modifiers.contains("r");
+            regex.pattern = Pattern.compile(patternString, flags);
+        } catch (Exception e) {
+            throw new IllegalStateException("Regex compilation failed: " + e.getMessage());
         }
         return regex;
     }
@@ -71,16 +60,27 @@ public class RuntimeRegex implements RuntimeScalarReference {
      * @return A RuntimeScalar.
      */
     public static RuntimeScalar getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers) {
-        return new RuntimeScalar(compile(patternString.toString(), modifiers.toString()));
+        String pattern = patternString.toString();
+        String modifiersString = modifiers.toString();
+        String cacheKey = pattern + "/" + modifiersString;
+        RuntimeScalar regex = regexCache.get(cacheKey);
+        if (regex == null) {
+            regex = new RuntimeScalar(compileRegex(pattern, modifiersString));
+
+            // Cache the result if the cache is not full
+            if (regexCache.size() < MAX_REGEX_CACHE_SIZE) {
+                regexCache.put(cacheKey, regex);
+            }
+        }
+        return regex;
     }
 
     // Internal variant of qr// that includes a `replacement`
     // This is the internal representation of the `s///` operation
     public static RuntimeScalar getReplacementRegex(RuntimeScalar patternString, RuntimeScalar replacement, RuntimeScalar modifiers) {
-        RuntimeRegex regex = new RuntimeRegex();
-        regex = compile(patternString.toString(), modifiers.toString());
-        regex.replacement = replacement;
-        return new RuntimeScalar(regex);
+        RuntimeScalar regexScalar = getQuotedRegex(patternString, modifiers);
+        ((RuntimeRegex) regexScalar.value).replacement = replacement;
+        return regexScalar;
     }
 
     /**
