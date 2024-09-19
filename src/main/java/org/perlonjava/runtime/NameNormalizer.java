@@ -5,7 +5,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
-public class NameCache {
+public class NameNormalizer {
     // Cache to store previously normalized variables for faster lookup
     private static final Map<String, String> nameCache = new HashMap<>();
     private static final Map<String, Integer> blessIdCache = new HashMap<>();
@@ -79,5 +79,14 @@ public class NameCache {
         nameCache.put(cacheKey, normalizedStr);
 
         return normalizedStr;
+    }
+
+    public static String moduleToFilename(String moduleName) {
+        if (moduleName == null || moduleName.isEmpty()) {
+            throw new IllegalArgumentException("Module name cannot be null or empty");
+        }
+
+        // Replace '::' with '/' and append '.pm'
+        return moduleName.replace("::", "/") + ".pm";
     }
 }

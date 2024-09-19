@@ -3,7 +3,7 @@ package org.perlonjava.parser;
 import org.perlonjava.astnode.*;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.runtime.ModuleLoader;
+import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.List;
@@ -42,7 +42,7 @@ public class OperatorParser {
             if (moduleName == null) {
                 throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
             }
-            String fileName = ModuleLoader.moduleToFilename(moduleName);
+            String fileName = NameNormalizer.moduleToFilename(moduleName);
             operand = ListNode.makeList(new StringNode(fileName, parser.tokenIndex));
         } else {
             // `require` file

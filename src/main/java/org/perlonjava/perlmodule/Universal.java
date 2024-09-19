@@ -54,7 +54,7 @@ public class Universal {
                 if (blessId == 0) {
                     return new RuntimeScalar(false).getList();
                 }
-                perlClassName = NameCache.getBlessStr(blessId);
+                perlClassName = NameNormalizer.getBlessStr(blessId);
                 break;
             case UNDEF:
                 return new RuntimeScalar(false).getList();
@@ -69,7 +69,7 @@ public class Universal {
         }
 
         // Check the method cache
-        String normalizedMethodName = NameCache.normalizeVariableName(methodName, perlClassName);
+        String normalizedMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
         RuntimeScalar cachedMethod = InheritanceResolver.getCachedMethod(normalizedMethodName);
         if (cachedMethod != null) {
             return cachedMethod.getList();
@@ -77,7 +77,7 @@ public class Universal {
 
         // Get the linearized inheritance hierarchy using C3
         for (String className : InheritanceResolver.linearizeC3(perlClassName)) {
-            String normalizedClassMethodName = NameCache.normalizeVariableName(methodName, className);
+            String normalizedClassMethodName = NameNormalizer.normalizeVariableName(methodName, className);
             if (GlobalContext.existsGlobalCodeRef(normalizedClassMethodName)) {
                 // If the method is found, return it
                 return getGlobalCodeRef(normalizedClassMethodName).getList();
@@ -105,7 +105,7 @@ public class Universal {
                 if (blessId == 0) {
                     return new RuntimeScalar(false).getList();
                 }
-                perlClassName = NameCache.getBlessStr(blessId);
+                perlClassName = NameNormalizer.getBlessStr(blessId);
                 break;
             case UNDEF:
                 return new RuntimeScalar(false).getList();
