@@ -3,72 +3,50 @@ package org.perlonjava.runtime;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
+import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarEmptyString;
+
 public class PerlRange extends RuntimeBaseEntity implements RuntimeDataProvider, Iterable<RuntimeScalar> {
-
-// XXX TODO (pseudocode)
-//
-// Create a flip-flop range
-//    RuntimeScalar start = new RuntimeScalar("$_ =~ /start/");
-//    RuntimeScalar end = new RuntimeScalar("$_ =~ /end/");
-//    PerlRange flipFlop = PerlRange.createFlipFlop(start, end);
-//
-//    // Simulate processing lines of text
-//    String[] lines = {
-//            "before start",
-//            "start",
-//            "in between",
-//            "still in between",
-//            "end",
-//            "after end",
-//            "start again",
-//            "middle",
-//            "end again",
-//            "final line"
-//    };
-//
-//        for (String line : lines) {
-//        // Set the current line in a global context (simulating Perl's $_)
-//        GlobalContext.set("_", new RuntimeScalar(line));
-//
-//        // Evaluate the flip-flop condition
-//        boolean isActive = flipFlop.iterator().next().getBoolean();
-//
-//        System.out.println(line + " : " + (isActive ? "ACTIVE" : "inactive"));
-//    }
-
-
     private final RuntimeScalar start;
     private final RuntimeScalar end;
-    private boolean isFlipFlop;
-    private boolean flipFlopState;
-    private final boolean isNumeric;
 
     public PerlRange(RuntimeScalar start, RuntimeScalar end) {
         this.start = start;
         this.end = end;
-        this.isFlipFlop = false;
-        this.flipFlopState = false;
-
-        // TODO - more rules for String behaviour:
-        // If left-hand string begins with 0 and is longer than one character,
-        // If the initial value specified isn't part of a magical increment sequence (that is, a non-empty string matching /^[a-zA-Z]*[0-9]*\z/), only the initial value will be returned.
-        // For example, "ax".."az" produces "ax", "ay", "az", but "*x".."az" produces only "*x".
-        this.isNumeric = start.looksLikeNumber() && end.looksLikeNumber();
     }
 
     public static PerlRange createRange(RuntimeScalar start, RuntimeScalar end) {
         return new PerlRange(start, end);
     }
 
-    public static PerlRange createFlipFlop(RuntimeScalar start, RuntimeScalar end) {
-        PerlRange range = new PerlRange(start, end);
-        range.isFlipFlop = true;
-        return range;
-    }
-
     @Override
     public Iterator<RuntimeScalar> iterator() {
-        return new PerlRangeIterator();
+        if (start.type == RuntimeScalarType.INTEGER) {
+            // most common case
+            return new PerlRangeIntegerIterator();
+        }
+        String startString = start.toString();
+        if (start.looksLikeNumber() && end.looksLikeNumber()) {
+            if (startString.length() > 1 && startString.startsWith("0")) {
+                // "01" is String-like
+            } else {
+                return new PerlRangeIntegerIterator();
+            }
+        }
+        // more rules for String behaviour:
+        // If left-hand string begins with 0 and is longer than one character,
+        // If the initial value specified isn't part of a magical increment sequence (that is, a non-empty string matching /^[a-zA-Z]*[0-9]*\z/), only the initial value will be returned.
+        // For example, "ax".."az" produces "ax", "ay", "az", but "*x".."az" produces only "*x".
+        String endString = end.toString();
+        if (startString.isEmpty()) {
+            return scalarEmptyString.iterator();
+        } else if (!startString.matches("^[a-zA-Z]*[0-9]*\\z")) {
+            return start.iterator();
+        } else if (startString.length() > endString.length()
+                || startString.compareTo(endString) >= 0) {
+            return start.iterator();
+        }
+        return new PerlRangeStringIterator();
     }
 
     /**
@@ -77,81 +55,6 @@ public class PerlRange extends RuntimeBaseEntity implements RuntimeDataProvider,
     @Override
     public RuntimeDataProvider undefine() {
         return toList().undefine();
-    }
-
-    private class PerlRangeIterator implements Iterator<RuntimeScalar> {
-        private RuntimeScalar current;
-        private boolean hasNext;
-        private String endString;
-
-        PerlRangeIterator() {
-            if (isFlipFlop) {
-                hasNext = true;
-                current = null;
-            } else {
-                current = new RuntimeScalar(start);
-                if (isNumeric) {
-                    hasNext = current.getInt() <= end.getInt();
-                } else {
-                    endString = end.toString();
-                    String currentString = current.toString();
-                    hasNext = currentString.length() < endString.length() ||
-                              (currentString.length() == endString.length() &&
-                               currentString.compareTo(endString) <= 0);
-                }
-            }
-        }
-
-        @Override
-        public boolean hasNext() {
-            return hasNext;
-        }
-
-        @Override
-        public RuntimeScalar next() {
-            if (!hasNext) {
-                throw new NoSuchElementException();
-            }
-
-            return isFlipFlop ? handleFlipFlop() : handleRange();
-        }
-
-        private RuntimeScalar handleFlipFlop() {
-            RuntimeScalar result = current;
-            if (start.getBoolean()) {
-                flipFlopState = true;
-            }
-            if (flipFlopState) {
-                current = new RuntimeScalar(true);
-                if (end.getBoolean()) {
-                    flipFlopState = false;
-                }
-            } else {
-                current = new RuntimeScalar(false);
-            }
-            return result != null ? result : current;
-        }
-
-        private RuntimeScalar handleRange() {
-            RuntimeScalar result = current;
-            if (isNumeric) {
-                if (current.getInt() < end.getInt()) {
-                    current = current.clone().preAutoIncrement();
-                } else {
-                    hasNext = false;
-                }
-            } else {
-                String currentString = current.toString();
-                if (currentString.length() < endString.length() ||
-                    (currentString.length() == endString.length() &&
-                     currentString.compareTo(endString) < 0)) {
-                    current = current.clone().preAutoIncrement();
-                } else {
-                    hasNext = false;
-                }
-            }
-            return result;
-        }
     }
 
     @Override
@@ -278,5 +181,71 @@ public class PerlRange extends RuntimeBaseEntity implements RuntimeDataProvider,
             list.add(it.next());
         }
         return list;
+    }
+
+    private class PerlRangeStringIterator implements Iterator<RuntimeScalar> {
+        private final String endString;
+        private String current;
+        private boolean hasNext;
+
+        PerlRangeStringIterator() {
+            current = start.toString();
+            endString = end.toString();
+            hasNext = current.length() < endString.length() ||
+                    (current.length() == endString.length() &&
+                            current.compareTo(endString) <= 0);
+        }
+
+        @Override
+        public boolean hasNext() {
+            return hasNext;
+        }
+
+        @Override
+        public RuntimeScalar next() {
+            if (!hasNext) {
+                throw new NoSuchElementException();
+            }
+            RuntimeScalar res = new RuntimeScalar(current);
+            if (current.length() < endString.length() ||
+                    (current.length() == endString.length() &&
+                            current.compareTo(endString) < 0)) {
+                current = RuntimeScalar.incrementPlainString(current);
+            } else {
+                hasNext = false;
+            }
+            return res;
+        }
+    }
+
+    private class PerlRangeIntegerIterator implements Iterator<RuntimeScalar> {
+        private final int endInt;
+        private int current;
+        private boolean hasNext;
+
+        PerlRangeIntegerIterator() {
+            current = start.getInt();
+            endInt = end.getInt();
+            hasNext = current <= endInt;
+        }
+
+        @Override
+        public boolean hasNext() {
+            return hasNext;
+        }
+
+        @Override
+        public RuntimeScalar next() {
+            if (!hasNext) {
+                throw new NoSuchElementException();
+            }
+            RuntimeScalar result = getScalarInt(current);
+            if (current < endInt) {
+                current++;
+            } else {
+                hasNext = false;
+            }
+            return result;
+        }
     }
 }
