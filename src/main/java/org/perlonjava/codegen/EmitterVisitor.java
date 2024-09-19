@@ -295,7 +295,7 @@ public class EmitterVisitor implements Visitor {
                 && node.right instanceof NumberNode) {
             NumberNode right = (NumberNode) node.right;
             String value = right.value;
-            boolean isInteger = !value.contains(".");
+            boolean isInteger = isInteger(value);
             if (isInteger) {
                 int intValue = Integer.parseInt(value);
                 ctx.mv.visitLdcInsn(intValue);

@@ -769,82 +769,72 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return this.preAutoIncrement(); // preAutoIncrement handles the actual incrementing logic
     }
 
-    // Helper method to convert String to Integer or Double
     public RuntimeScalar parseNumber() {
         String str = (String) this.value;
+        int length = str.length();
+        int start = 0, end = length;
 
-        // Remove leading and trailing spaces from the input string
-        str = str.trim();
+        // Trim leading and trailing whitespace
+        while (start < length && Character.isWhitespace(str.charAt(start))) start++;
+        while (end > start && Character.isWhitespace(str.charAt(end - 1))) end--;
 
-        // StringBuilder to accumulate the numeric part of the string
-        StringBuilder number = new StringBuilder();
+        if (start == end) return getScalarInt(0);
+
         boolean hasDecimal = false;
         boolean hasExponent = false;
-        boolean hasSign = false;
-        boolean inExponent = false;
-        boolean validExponent = false;
+        boolean isNegative = false;
+        int exponentPos = -1;
+        int numberEnd = start;
 
-        // Iterate through each character in the string
-        for (char c : str.toCharArray()) {
-            // Check if the character is a digit, decimal point, exponent, or sign
-            if (Character.isDigit(c)
-                    || (c == '.' && !hasDecimal)
-                    || ((c == 'e' || c == 'E') && !hasExponent)
-                    || (c == '-' && !hasSign)) {
-                number.append(c);
+        char firstChar = str.charAt(start);
+        if (firstChar == '-' || firstChar == '+') {
+            isNegative = (firstChar == '-');
+            start++;
+        }
 
-                // Update flags based on the character
-                if (c == '.') {
-                    hasDecimal = true; // Mark that a decimal point has been encountered
-                } else if (c == 'e' || c == 'E') {
-                    hasExponent = true; // Mark that an exponent has been encountered
-                    hasSign = false; // Reset the sign flag for the exponent part
-                    inExponent = true; // Mark that we are now in the exponent part
-                } else if (c == '-') {
-                    if (!inExponent) {
-                        hasSign = true; // Mark that a sign has been encountered
-                    }
-                } else if (Character.isDigit(c) && inExponent) {
-                    validExponent = true; // Mark that the exponent part has valid digits
+        for (int i = start; i < end; i++) {
+            char c = str.charAt(i);
+            if (Character.isDigit(c)) {
+                numberEnd = i + 1;
+            } else if (c == '.' && !hasDecimal && !hasExponent) {
+                hasDecimal = true;
+                numberEnd = i + 1;
+            } else if ((c == 'e' || c == 'E') && !hasExponent) {
+                hasExponent = true;
+                exponentPos = i;
+                if (i + 1 < end && (str.charAt(i + 1) == '-' || str.charAt(i + 1) == '+')) {
+                    i++;
                 }
             } else {
-                // Stop parsing at the first invalid character in the exponent part
-                if (inExponent && !Character.isDigit(c) && c != '-') {
-                    break;
-                }
-                // Stop parsing at the first non-numeric character
-                if (!inExponent) {
-                    break;
-                }
+                break;
             }
         }
 
-        // If the exponent part is invalid, remove it
-        if (hasExponent && !validExponent) {
-            int exponentIndex = number.indexOf("e");
-            if (exponentIndex == -1) {
-                exponentIndex = number.indexOf("E");
-            }
-            if (exponentIndex != -1) {
-                number.setLength(exponentIndex); // Truncate the string at the exponent
-            }
+        if (hasExponent && exponentPos == numberEnd - 1) {
+            // Invalid exponent, remove it
+            hasExponent = false;
+            numberEnd = exponentPos;
         }
+
+        if (numberEnd == start) return getScalarInt(0);
 
         try {
-            // Convert the accumulated numeric part to a string
-            String numberStr = number.toString();
-
-            // Determine if the number should be parsed as a double or int
+            String numberStr = str.substring(start, numberEnd);
             if (hasDecimal || hasExponent) {
-                double parsedValue = Double.parseDouble(numberStr);
-                return new RuntimeScalar(parsedValue);
+                double value = Double.parseDouble(numberStr);
+                return new RuntimeScalar(isNegative ? -value : value);
             } else {
-                int parsedValue = Integer.parseInt(numberStr);
-                return getScalarInt(parsedValue);
+                int value = Integer.parseInt(numberStr);
+                return getScalarInt(isNegative ? -value : value);
             }
         } catch (NumberFormatException e) {
-            // Return a RuntimeScalar object with value of 0 if parsing fails
-            return getScalarInt(0);
+            // If integer parsing fails, try parsing as double
+            try {
+                double value = Double.parseDouble(str.substring(start, numberEnd));
+                return new RuntimeScalar(isNegative ? -value : value);
+            } catch (NumberFormatException e2) {
+                return getScalarInt(0);
+            }
         }
     }
 
