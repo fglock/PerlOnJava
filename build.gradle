@@ -52,7 +52,7 @@ tasks.named('build') {
 sourceSets {
     main {
         resources {
-            srcDirs = ['src/main/perl/lib']
+            srcDirs = ['src/main/perl']
             include '**/*.pm'
         }
     }
