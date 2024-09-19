@@ -1,0 +1,72 @@
+# Adding Perl "pm" files to the jar and accessing them from @INC
+
+## Adding Perl "pm" files to the jar:
+
+For Maven (pom.xml): Add the following to the <build> section:
+
+    <resources>
+        <resource>
+            <directory>src/main/perl/lib</directory>
+            <includes>
+                <include>**/*.pm</include>
+            </includes>
+        </resource>
+    </resources>
+
+For Gradle (build.gradle): Add the following to the build script:
+
+    sourceSets {
+        main {
+            resources {
+                srcDirs = ['src/main/perl/lib']
+                include '**/*.pm'
+            }
+        }
+    }
+
+## Accessing the files from @INC:
+
+In ModuleLoader.java, you can modify the findFile method to look inside the jar file if the file is not found in the regular file system. Here's an example of how you might do this:
+
+    public static Path findFile(String filename) {
+        Path filePath = Paths.get(filename);
+    
+        // If the filename is an absolute path or starts with ./ or ../, use it directly
+        if (filePath.isAbsolute() || filename.startsWith("./") || filename.startsWith("../")) {
+            return Files.exists(filePath) ? filePath : null;
+        }
+    
+        // Otherwise, search in INC directories
+        List<RuntimeScalar> inc = GlobalContext.getGlobalArray("main::INC").elements;
+    
+        for (RuntimeBaseEntity dir : inc) {
+            Path fullPath = Paths.get(dir.toString(), filename);
+            if (Files.exists(fullPath)) {
+                return fullPath;
+            }
+        }
+    
+        // If not found in file system, try to find in jar
+        String resourcePath = "/" + filename;
+        URL resource = ModuleLoader.class.getResource(resourcePath);
+        if (resource != null) {
+            try {
+                return Paths.get(resource.toURI());
+            } catch (URISyntaxException e) {
+                // Handle exception
+            }
+        }
+    
+        // File not found
+        return null;
+    }
+
+## Ensure @INC includes the jar:
+
+In the main Java code, when initializing @INC, include a path that represents the root of the jar:
+
+
+    GlobalContext.getGlobalArray("main::INC").push(new RuntimeScalar("/"));
+
+
+
