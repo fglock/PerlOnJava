@@ -27,7 +27,7 @@ public class SubroutineParser {
         }
 
         // Normalize the subroutine name to include the current package
-        String fullName = NameCache.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+        String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
 
         // Create an identifier node for the subroutine name
         IdentifierNode nameNode = new IdentifierNode(subName, parser.tokenIndex);
@@ -138,7 +138,7 @@ public class SubroutineParser {
             // - add the typeglob assignment:  *name = sub () :attr {...}
 
             // register the named subroutine
-            String fullName = NameCache.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+            String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
             RuntimeCode codeRef = new RuntimeCode(prototype);
             GlobalContext.getGlobalCodeRef(fullName).set(new RuntimeScalar(codeRef));
 

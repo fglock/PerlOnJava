@@ -62,7 +62,7 @@ public class Symbol {
             result = object;
         } else {
             // System.out.println("qualify normalizeVariableName");
-            result = new RuntimeScalar(NameCache.normalizeVariableName(object.toString(), packageName.toString()));
+            result = new RuntimeScalar(NameNormalizer.normalizeVariableName(object.toString(), packageName.toString()));
         }
         RuntimeList list = new RuntimeList();
         list.elements.add(result);

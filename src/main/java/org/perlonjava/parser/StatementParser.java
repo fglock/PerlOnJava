@@ -128,7 +128,7 @@ public class StatementParser {
             if (packageName == null) {
                 throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
             }
-            fullName = ModuleLoader.moduleToFilename(packageName);
+            fullName = NameNormalizer.moduleToFilename(packageName);
             ctx.logDebug("use fullName: " + fullName);
         }
 
