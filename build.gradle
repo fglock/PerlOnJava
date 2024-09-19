@@ -48,3 +48,12 @@ shadowJar {
 tasks.named('build') {
     dependsOn shadowJar
 }
+
+sourceSets {
+    main {
+        resources {
+            srcDirs = ['src/main/perl/lib']
+            include '**/*.pm'
+        }
+    }
+}

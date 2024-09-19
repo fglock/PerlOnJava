@@ -140,6 +140,9 @@ file.
 /
 ├── src/
 │   ├── main/
+│   │   └── perl/
+│   │   │   └── lib/
+│   │   │       └── Perl modules (strict.pm, etc)
 │   │   └── java/
 │   │       └── org/
 │   │           └── perlonjava/
@@ -159,7 +162,7 @@ file.
 │   │               │   └── other parser classes
 │   │               ├── perlmodule/
 │   │               │   ├── Universal.java
-│   │               │   └── other Perl module classes
+│   │               │   └── other internalized Perl module classes
 │   │               └── runtime/
 │   │                   ├── RuntimeScalar.java
 │   │                   └── other runtime classes
@@ -175,8 +178,6 @@ file.
 ├── settings.gradle
 ├── examples/
 │   └── Perl example files
-├── lib/
-│   └── Perl modules (strict.pm, etc)
 └── misc/
     └── project notes
 ```
