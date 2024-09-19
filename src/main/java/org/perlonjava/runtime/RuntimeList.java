@@ -37,30 +37,6 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         this.elements.add(value);
     }
 
-    // Method to generate a list of RuntimeScalar objects
-    public static RuntimeList generateList(RuntimeScalar startValue, RuntimeScalar endValue) {
-        RuntimeList list = new RuntimeList();
-        if (startValue.looksLikeNumber() && endValue.looksLikeNumber()) {
-            int start = startValue.getInt();
-            int end = endValue.getInt();
-            for (int i = start; i <= end; i++) {
-                list.add(getScalarInt(i));
-            }
-        } else {
-            RuntimeScalar start = new RuntimeScalar(startValue.toString());
-            String end = endValue.toString();
-            String current = start.toString();
-
-            while (current.length() < end.length() ||
-                    (current.length() == end.length() && current.compareTo(end) <= 0)) {
-                list.add(current);
-                start.preAutoIncrement();
-                current = start.toString();
-            }
-        }
-        return list;
-    }
-
     // Add itself to a RuntimeList.
     public void addToList(RuntimeList list) {
         for (RuntimeBaseEntity elem : elements) {

@@ -231,11 +231,11 @@ public class EmitterVisitor implements Visitor {
     private void handleRangeOperator(BinaryOperatorNode node) {
         node.left.accept(this.with(RuntimeContextType.SCALAR));
         node.right.accept(this.with(RuntimeContextType.SCALAR));
-        // static RuntimeList generateList(int start, int end)
+        // static PerlRange generateList(int start, int end)
         ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/RuntimeList",
-                "generateList",
-                "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeList;", false);
+                "org/perlonjava/runtime/PerlRange",
+                "createRange",
+                "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/PerlRange;", false);
         if (ctx.contextType == RuntimeContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.POP);
         }

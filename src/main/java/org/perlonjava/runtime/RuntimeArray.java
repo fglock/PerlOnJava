@@ -181,7 +181,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
 
     // keys() operator
     public RuntimeArray keys() {
-        return RuntimeList.generateList(new RuntimeScalar(0), new RuntimeScalar(this.size() - 1)).getArrayOfAlias();
+        return new PerlRange(getScalarInt(0), getScalarInt(this.countElements())).getArrayOfAlias();
     }
 
     // values() operator
