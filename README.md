@@ -371,8 +371,8 @@ public class Main {
 - **v1.7.0**: Performance Improvements
     - Planned release date: 2024-12-10
     - Focus on optimizing the execution engine for better performance.
-    - Improve error handling and debugging tools to make development easier. More detailed debugging symbols added to the bytecode.
-    - Adding Perl standard library modules to the jar file.
+    - Improve error handling and debugging tools to make development easier. More detailed debugging symbols added to the bytecode. Added `Carp` module.
+    - Moved Perl standard library modules into the jar file.
 
 - **v1.8.0**: Concurrency and Security Features
     - Add support for concurrency and parallelism, such as threads and async/await.

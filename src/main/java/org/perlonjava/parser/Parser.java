@@ -5,7 +5,7 @@ import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.GlobalContext;
-import org.perlonjava.runtime.NameCache;
+import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.*;
@@ -808,7 +808,7 @@ public class Parser {
                 if (name.equals("STDOUT") || name.equals("STDERR") || name.equals("STDIN")) {
                     packageName = "main";
                 }
-                name = NameCache.normalizeVariableName(name, packageName);
+                name = NameNormalizer.normalizeVariableName(name, packageName);
                 if (GlobalContext.existsGlobalIO(name)) {
                     // FileHandle name exists
                     fileHandle = new IdentifierNode(name, tokenIndex);

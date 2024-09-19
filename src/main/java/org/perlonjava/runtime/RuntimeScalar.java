@@ -613,7 +613,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 if (str.isEmpty()) {
                     str = "main";
                 }
-                ((RuntimeBaseEntity) value).blessId = NameCache.getBlessId(str);
+                ((RuntimeBaseEntity) value).blessId = NameNormalizer.getBlessId(str);
                 break;
             default:
                 throw new IllegalStateException("Can't bless non-reference value");
@@ -632,15 +632,15 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 break;
             case REFERENCE:
                 int blessId = ((RuntimeBaseEntity) value).blessId;
-                str = blessId == 0 ? "REF" : NameCache.getBlessStr(blessId);
+                str = blessId == 0 ? "REF" : NameNormalizer.getBlessStr(blessId);
                 break;
             case ARRAYREFERENCE:
                 blessId = ((RuntimeBaseEntity) value).blessId;
-                str = blessId == 0 ? "ARRAY" : NameCache.getBlessStr(blessId);
+                str = blessId == 0 ? "ARRAY" : NameNormalizer.getBlessStr(blessId);
                 break;
             case HASHREFERENCE:
                 blessId = ((RuntimeBaseEntity) value).blessId;
-                str = blessId == 0 ? "HASH" : NameCache.getBlessStr(blessId);
+                str = blessId == 0 ? "HASH" : NameNormalizer.getBlessStr(blessId);
                 break;
             default:
                 return scalarEmptyString;
@@ -679,7 +679,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 if (blessId == 0) {
                     throw new IllegalStateException("Can't call method \"" + methodName + "\" on unblessed reference");
                 }
-                perlClassName = NameCache.getBlessStr(blessId);
+                perlClassName = NameNormalizer.getBlessStr(blessId);
                 break;
             case UNDEF:
                 throw new IllegalStateException("Can't call method \"" + methodName + "\" on an undefined value");
@@ -704,7 +704,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         // - Class::->new() is the same as Class->new()
 
         // Check the method cache
-        String normalizedMethodName = NameCache.normalizeVariableName(methodName, perlClassName);
+        String normalizedMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
         RuntimeScalar cachedMethod = InheritanceResolver.getCachedMethod(normalizedMethodName);
         if (cachedMethod != null) {
             return cachedMethod.apply(args, callContext);
@@ -715,7 +715,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
         // Iterate over the linearized classes to find the method
         for (String className : linearizedClasses) {
-            String normalizedClassMethodName = NameCache.normalizeVariableName(methodName, className);
+            String normalizedClassMethodName = NameNormalizer.normalizeVariableName(methodName, className);
             if (GlobalContext.existsGlobalCodeRef(normalizedClassMethodName)) {
                 // If the method is found, retrieve and apply it
                 RuntimeScalar codeRef = GlobalContext.getGlobalCodeRef(normalizedClassMethodName);
@@ -1572,7 +1572,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (fullName == null) {
             // If not found in file system, try to find in jar at "src/main/perl/lib"
             String resourcePath = "/lib/" + fileName;
-            URL resource = ModuleLoader.class.getResource(resourcePath);
+            URL resource = RuntimeScalar.class.getResource(resourcePath);
             // System.out.println("Found resource " + resource);
             if (resource != null) {
                 fullName = Paths.get(resource.getPath());
