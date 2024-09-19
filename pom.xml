@@ -56,7 +56,7 @@
         <resources>
             <!-- Add the Perl modules to the build -->
             <resource>
-                <directory>src/main/perl/lib</directory>
+                <directory>src/main/perl</directory>
                 <includes>
                     <include>**/*.pm</include>
                 </includes>
