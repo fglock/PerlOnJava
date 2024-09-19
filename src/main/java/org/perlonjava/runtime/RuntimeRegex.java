@@ -1,7 +1,8 @@
 package org.perlonjava.runtime;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -16,7 +17,15 @@ public class RuntimeRegex implements RuntimeScalarReference {
     private static final int CASE_INSENSITIVE = Pattern.CASE_INSENSITIVE;
     private static final int MULTILINE = Pattern.MULTILINE;
     private static final int DOTALL = Pattern.DOTALL;
-    private static final HashMap<String, RuntimeRegex> regexCache = new HashMap<>();
+
+    private static final int MAX_REGEX_CACHE_SIZE = 1000;
+    private static final Map<String, RuntimeRegex> regexCache = new LinkedHashMap<String, RuntimeRegex>(MAX_REGEX_CACHE_SIZE, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, RuntimeRegex> eldest) {
+            return size() > MAX_REGEX_CACHE_SIZE;
+        }
+    };
+
     public Pattern pattern;  // first part of `m//` and `s///`
     boolean isGlobalMatch;
     boolean isNonDestructive;
@@ -43,7 +52,12 @@ public class RuntimeRegex implements RuntimeScalarReference {
             } catch (Exception e) {
                 throw new IllegalStateException("Regex compilation failed: " + e.getMessage());
             }
-            regexCache.put(cacheKey, regex);
+
+            // Cache the result if the cache is not full
+            if (regexCache.size() < MAX_REGEX_CACHE_SIZE) {
+                regexCache.put(cacheKey, regex);
+            }
+
         }
         return regex;
     }
