@@ -21,10 +21,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.NoSuchElementException;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
@@ -44,6 +41,13 @@ import static org.perlonjava.runtime.RuntimeScalarCache.*;
  */
 public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarReference {
 
+    private static final int MAX_NUMIFICATION_CACHE_SIZE = 1000;
+    private static final Map<String, RuntimeScalar> numificationCache = new LinkedHashMap<String, RuntimeScalar>(MAX_NUMIFICATION_CACHE_SIZE, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, RuntimeScalar> eldest) {
+            return size() > MAX_NUMIFICATION_CACHE_SIZE;
+        }
+    };
     // Fields to store the type and value of the scalar variable
     // TODO add cache for integer/string values
     public RuntimeScalarType type;
@@ -648,8 +652,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(str);
     }
 
-    // Methods that implement Perl operators
-
     /**
      * Call a method in a Perl-like class hierarchy using the C3 linearization algorithm.
      *
@@ -771,6 +773,13 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar parseNumber() {
         String str = (String) this.value;
+
+        // Check cache first
+        RuntimeScalar result = numificationCache.get(str);
+        if (result != null) {
+            return result;
+        }
+
         int length = str.length();
         int start = 0, end = length;
 
@@ -778,64 +787,74 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         while (start < length && Character.isWhitespace(str.charAt(start))) start++;
         while (end > start && Character.isWhitespace(str.charAt(end - 1))) end--;
 
-        if (start == end) return getScalarInt(0);
+        if (start == end) {
+            result = getScalarInt(0);
+        } else {
 
-        boolean hasDecimal = false;
-        boolean hasExponent = false;
-        boolean isNegative = false;
-        int exponentPos = -1;
-        int numberEnd = start;
+            boolean hasDecimal = false;
+            boolean hasExponent = false;
+            boolean isNegative = false;
+            int exponentPos = -1;
+            int numberEnd = start;
 
-        char firstChar = str.charAt(start);
-        if (firstChar == '-' || firstChar == '+') {
-            isNegative = (firstChar == '-');
-            start++;
-        }
+            char firstChar = str.charAt(start);
+            if (firstChar == '-' || firstChar == '+') {
+                isNegative = (firstChar == '-');
+                start++;
+            }
 
-        for (int i = start; i < end; i++) {
-            char c = str.charAt(i);
-            if (Character.isDigit(c)) {
-                numberEnd = i + 1;
-            } else if (c == '.' && !hasDecimal && !hasExponent) {
-                hasDecimal = true;
-                numberEnd = i + 1;
-            } else if ((c == 'e' || c == 'E') && !hasExponent) {
-                hasExponent = true;
-                exponentPos = i;
-                if (i + 1 < end && (str.charAt(i + 1) == '-' || str.charAt(i + 1) == '+')) {
-                    i++;
+            for (int i = start; i < end; i++) {
+                char c = str.charAt(i);
+                if (Character.isDigit(c)) {
+                    numberEnd = i + 1;
+                } else if (c == '.' && !hasDecimal && !hasExponent) {
+                    hasDecimal = true;
+                    numberEnd = i + 1;
+                } else if ((c == 'e' || c == 'E') && !hasExponent) {
+                    hasExponent = true;
+                    exponentPos = i;
+                    if (i + 1 < end && (str.charAt(i + 1) == '-' || str.charAt(i + 1) == '+')) {
+                        i++;
+                    }
+                } else {
+                    break;
                 }
-            } else {
-                break;
             }
-        }
 
-        if (hasExponent && exponentPos == numberEnd - 1) {
-            // Invalid exponent, remove it
-            hasExponent = false;
-            numberEnd = exponentPos;
-        }
-
-        if (numberEnd == start) return getScalarInt(0);
-
-        try {
-            String numberStr = str.substring(start, numberEnd);
-            if (hasDecimal || hasExponent) {
-                double value = Double.parseDouble(numberStr);
-                return new RuntimeScalar(isNegative ? -value : value);
-            } else {
-                int value = Integer.parseInt(numberStr);
-                return getScalarInt(isNegative ? -value : value);
+            if (hasExponent && exponentPos == numberEnd - 1) {
+                // Invalid exponent, remove it
+                hasExponent = false;
+                numberEnd = exponentPos;
             }
-        } catch (NumberFormatException e) {
-            // If integer parsing fails, try parsing as double
+
+            if (numberEnd == start) return getScalarInt(0);
+
             try {
-                double value = Double.parseDouble(str.substring(start, numberEnd));
-                return new RuntimeScalar(isNegative ? -value : value);
-            } catch (NumberFormatException e2) {
-                return getScalarInt(0);
+                String numberStr = str.substring(start, numberEnd);
+                if (hasDecimal || hasExponent) {
+                    double value = Double.parseDouble(numberStr);
+                    result = new RuntimeScalar(isNegative ? -value : value);
+                } else {
+                    int value = Integer.parseInt(numberStr);
+                    result = getScalarInt(isNegative ? -value : value);
+                }
+            } catch (NumberFormatException e) {
+                // If integer parsing fails, try parsing as double
+                try {
+                    double value = Double.parseDouble(str.substring(start, numberEnd));
+                    result = new RuntimeScalar(isNegative ? -value : value);
+                } catch (NumberFormatException e2) {
+                    result = getScalarInt(0);
+                }
             }
         }
+
+        // Cache the result if the cache is not full
+        if (numificationCache.size() < MAX_NUMIFICATION_CACHE_SIZE) {
+            numificationCache.put(str, result);
+        }
+
+        return result;
     }
 
     // Return a reference to this
