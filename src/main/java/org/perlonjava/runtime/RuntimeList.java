@@ -5,8 +5,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
-
 /**
  * The RuntimeList class simulates a Perl list.
  */

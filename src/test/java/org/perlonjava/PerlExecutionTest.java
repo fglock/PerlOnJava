@@ -36,6 +36,7 @@ public class PerlExecutionTest {
             "operations.pl",
             "wantarray.pl",
             "typeglob.pl",
+            "range.pl",
             "regex.pl",
             "regexreplace.pl",
             "split.pl",
