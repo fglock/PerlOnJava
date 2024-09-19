@@ -6,6 +6,8 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 
+import static org.perlonjava.codegen.EmitterVisitor.isInteger;
+
 public class EmitLiteral {
     static void emitArrayLiteral(EmitterVisitor emitterVisitor, ArrayLiteralNode node) {
         emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) in context " + emitterVisitor.ctx.contextType);
@@ -135,7 +137,7 @@ public class EmitLiteral {
         }
         MethodVisitor mv = ctx.mv;
         String value = node.value.replace("_", "");
-        boolean isInteger = !value.contains(".");
+        boolean isInteger = isInteger(value);
         if (ctx.isBoxed) { // expect a RuntimeScalar object
             if (isInteger) {
                 ctx.logDebug("visit(NumberNode) emit boxed integer");
