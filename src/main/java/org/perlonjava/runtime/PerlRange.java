@@ -39,30 +39,24 @@ public class PerlRange extends RuntimeBaseEntity implements RuntimeDataProvider,
 
     private final RuntimeScalar start;
     private final RuntimeScalar end;
-    private final boolean isLazy;
     private boolean isFlipFlop;
     private boolean flipFlopState;
     private final boolean isNumeric;
 
-    public PerlRange(RuntimeScalar start, RuntimeScalar end, boolean isLazy) {
+    public PerlRange(RuntimeScalar start, RuntimeScalar end) {
         this.start = start;
         this.end = end;
-        this.isLazy = isLazy;
         this.isFlipFlop = false;
         this.flipFlopState = false;
         this.isNumeric = start.looksLikeNumber() && end.looksLikeNumber();
     }
 
-    public static PerlRange createLazyRange(RuntimeScalar start, RuntimeScalar end) {
-        return new PerlRange(start, end, true);
-    }
-
-    public static PerlRange createEagerRange(RuntimeScalar start, RuntimeScalar end) {
-        return new PerlRange(start, end, false);
+    public static PerlRange createRange(RuntimeScalar start, RuntimeScalar end) {
+        return new PerlRange(start, end);
     }
 
     public static PerlRange createFlipFlop(RuntimeScalar start, RuntimeScalar end) {
-        PerlRange range = new PerlRange(start, end, true);
+        PerlRange range = new PerlRange(start, end);
         range.isFlipFlop = true;
         return range;
     }
@@ -137,7 +131,7 @@ public class PerlRange extends RuntimeBaseEntity implements RuntimeDataProvider,
             RuntimeScalar result = current;
             if (isNumeric) {
                 if (current.getInt() < end.getInt()) {
-                    current = current.preAutoIncrement();
+                    current = current.clone().preAutoIncrement();
                 } else {
                     hasNext = false;
                 }
@@ -146,7 +140,7 @@ public class PerlRange extends RuntimeBaseEntity implements RuntimeDataProvider,
                 if (currentString.length() < endString.length() ||
                     (currentString.length() == endString.length() &&
                      currentString.compareTo(endString) < 0)) {
-                    current = current.preAutoIncrement();
+                    current = current.clone().preAutoIncrement();
                 } else {
                     hasNext = false;
                 }
