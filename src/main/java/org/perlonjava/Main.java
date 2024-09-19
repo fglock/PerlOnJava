@@ -47,7 +47,7 @@ public class Main {
             for (ArrayList<String> line : ExceptionFormatter.formatException(t)) {
                 sb.append("        ").append(line.get(0)).append(" at ").append(line.get(1)).append(" line ").append(line.get(2)).append("\n");
             }
-            System.out.println(sb.toString());
+            System.out.println(sb);
 
             System.exit(1);
         }

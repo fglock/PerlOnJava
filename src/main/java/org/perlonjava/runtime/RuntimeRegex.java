@@ -16,12 +16,11 @@ public class RuntimeRegex implements RuntimeScalarReference {
     private static final int CASE_INSENSITIVE = Pattern.CASE_INSENSITIVE;
     private static final int MULTILINE = Pattern.MULTILINE;
     private static final int DOTALL = Pattern.DOTALL;
+    private static final HashMap<String, RuntimeRegex> regexCache = new HashMap<>();
     public Pattern pattern;  // first part of `m//` and `s///`
     boolean isGlobalMatch;
     boolean isNonDestructive;
     private RuntimeScalar replacement = null;  // second part of `s///`
-
-    private static final HashMap<String, RuntimeRegex> regexCache = new HashMap<>();
 
     /**
      * Creates a RuntimeRegex object from a regex pattern string with optional modifiers.
