@@ -273,6 +273,22 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return res;
     }
 
+    public static String incrementPlainString(String str) {
+        char c;
+        // Handle non-numeric increment for alphabetical characters
+        int length = str.length(); // Get the length of the string
+        c = str.charAt(length - 1); // Get the last character of the string
+
+        // Check if the last character is a valid character for incrementing
+        if ((c >= '0' && c <= '8') || (c >= 'A' && c <= 'Y') || (c >= 'a' && c <= 'y')) {
+            // If valid, increment the last character and update the value
+            return str.substring(0, length - 1) + (char) (c + 1);
+        } else {
+            // If not valid (like '9', 'Z', or 'z'), use a helper function to handle incrementing
+            return _string_increment(str);
+        }
+    }
+
     public boolean looksLikeNumber() {
         switch (this.type) {
             case INTEGER:
@@ -751,18 +767,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
         // Check if the first character is a letter (either uppercase or lowercase)
         if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
-            // Handle non-numeric increment for alphabetical characters
-            int length = str.length(); // Get the length of the string
-            c = str.charAt(length - 1); // Get the last character of the string
-
-            // Check if the last character is a valid character for incrementing
-            if ((c >= '0' && c <= '8') || (c >= 'A' && c <= 'Y') || (c >= 'a' && c <= 'y')) {
-                // If valid, increment the last character and update the value
-                this.value = str.substring(0, length - 1) + (char) (c + 1);
-            } else {
-                // If not valid (like '9', 'Z', or 'z'), use a helper function to handle incrementing
-                this.value = _string_increment(str);
-            }
+            this.value = incrementPlainString(str);
             return this; // Return the current instance after increment
         }
 
