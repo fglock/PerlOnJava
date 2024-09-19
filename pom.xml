@@ -53,6 +53,16 @@
     </dependencies>
 
     <build>
+        <resources>
+            <!-- Add the Perl modules to the build -->
+            <resource>
+                <directory>src/main/perl/lib</directory>
+                <includes>
+                    <include>**/*.pm</include>
+                </includes>
+            </resource>
+        </resources>
+
         <plugins>
             <!-- Compiler Plugin -->
             <plugin>
