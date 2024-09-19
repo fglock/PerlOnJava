@@ -206,11 +206,7 @@ file.
     java -jar target/perlonjava-1.0-SNAPSHOT.jar -e ' print 123 '
     ```
 
-    Setting `lib` path to access Perl modules:
-
-    ```sh
-    java -jar target/perlonjava-1.0-SNAPSHOT.jar -Ilib -e ' use Data::Dumper; print Dumper [123] '
-    ```
+    Setting `lib` path with `-I` to access Perl modules is optional. Standard modules are included in the jar file.
 
 ## Debugging Tools
 
