@@ -99,7 +99,8 @@
 - ✔️   **Array literals**: Array literals are supported.
 - ✔️   **Basic Hash Operations**: `keys`, `values`, `delete`, `exists`, `each` are implemented.
 - ✔️   **Hash literals**: Hash literals are supported.
-- ❌  **List operator `..` and `...`**: List constructors are partially implemented. The flip-flop operator is not implemented.
+- ✔️   **List operator `..`**: List constructors are implemented.
+- ❌  **Flip-flop operator `..` and `...`**: The flip-flop operators are not implemented.
 - ❌  **Tied Arrays**: Tied arrays are not yet implemented.
 - ❌  **Tied Hashes**: Tied hashes are not yet implemented.
 
