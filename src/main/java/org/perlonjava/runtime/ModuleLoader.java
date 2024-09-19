@@ -1,10 +1,12 @@
 package org.perlonjava.runtime;
 
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.io.IOException;
+import java.net.URISyntaxException;
+import java.nio.file.*;
+import java.util.Collections;
 import java.util.List;
+import java.net.URL;
 
 public class ModuleLoader {
 
@@ -33,6 +35,26 @@ public class ModuleLoader {
             Path fullPath = Paths.get(dir.toString(), filename);
             if (Files.exists(fullPath)) {
                 return fullPath;
+            }
+        }
+
+        // If not found in file system, try to find in jar
+        // at "src/main/perl/lib"
+        String resourcePath = "/lib/" + filename;
+        URL resource = ModuleLoader.class.getResource(resourcePath);
+        if (resource != null) {
+            try {
+                if (resource.getProtocol().equals("jar")) {
+                    // Handle JAR resources
+                    try (FileSystem fileSystem = FileSystems.newFileSystem(resource.toURI(), Collections.emptyMap())) {
+                        return fileSystem.getPath(resourcePath);
+                    }
+                } else {
+                    // Handle file system resources
+                    return Paths.get(resource.toURI());
+                }
+            } catch (URISyntaxException | IOException e) {
+                throw new IllegalArgumentException("Invalid resource path '" + resource + "': " + e.getMessage());
             }
         }
 
