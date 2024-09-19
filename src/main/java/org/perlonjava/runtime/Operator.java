@@ -154,8 +154,8 @@ public class Operator {
         array.elements.sort((a, b) -> {
             try {
                 // Create $a, $b arguments for the comparator
-                varA.set((RuntimeScalar) a);
-                varB.set((RuntimeScalar) b);
+                varA.set(a);
+                varB.set(b);
 
                 // Apply the Perl comparator subroutine with the arguments
                 RuntimeList result = perlComparatorClosure.apply(comparatorArgs, RuntimeContextType.SCALAR);

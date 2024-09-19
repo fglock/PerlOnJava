@@ -6,9 +6,13 @@ import org.perlonjava.ArgumentParser;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -198,7 +202,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                     res.add(new RuntimeScalar(stackTrace.get(frame).get(2)));
                 }
             }
-        } else  {
+        } else {
             // Compile-time stack trace
             if (ctx == RuntimeContextType.SCALAR) {
                 res.add(new RuntimeScalar(info.packageName));
@@ -873,9 +877,15 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (this.type == RuntimeScalarType.STRING) {
             String input = this.toString();
             if (input.length() < 2) {
-                if (input.isEmpty()) { return getScalarInt(0); }
-                if (input.equals("-")) { return new RuntimeScalar("+"); }
-                if (input.equals("+")) { return new RuntimeScalar("-"); }
+                if (input.isEmpty()) {
+                    return getScalarInt(0);
+                }
+                if (input.equals("-")) {
+                    return new RuntimeScalar("+");
+                }
+                if (input.equals("+")) {
+                    return new RuntimeScalar("-");
+                }
             }
             if (input.matches("^[-+]?[_A-Za-z].*")) {
                 if (input.startsWith("-")) {
@@ -905,7 +915,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (arg1.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2);
         } else {
-            return RuntimeScalarCache.getScalarInt(arg1.getInt() + arg2);
+            return getScalarInt(arg1.getInt() + arg2);
         }
     }
 
@@ -920,7 +930,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2.getDouble());
         } else {
-            return RuntimeScalarCache.getScalarInt(arg1.getInt() + arg2.getInt());
+            return getScalarInt(arg1.getInt() + arg2.getInt());
         }
     }
 
@@ -933,7 +943,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (arg1.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2);
         } else {
-            return RuntimeScalarCache.getScalarInt(arg1.getInt() - arg2);
+            return getScalarInt(arg1.getInt() - arg2);
         }
     }
 
@@ -948,7 +958,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2.getDouble());
         } else {
-            return RuntimeScalarCache.getScalarInt(arg1.getInt() - arg2.getInt());
+            return getScalarInt(arg1.getInt() - arg2.getInt());
         }
     }
 
@@ -1531,8 +1541,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         // Check if `do` returned a true value
         if (!result.defined().getBoolean()) {
             // `do FILE` returned undef
-            String err = GlobalContext.getGlobalVariable("main::@").toString();
-            String ioErr = GlobalContext.getGlobalVariable("main::!").toString();
+            String err = getGlobalVariable("main::@").toString();
+            String ioErr = getGlobalVariable("main::!").toString();
             throw new RuntimeException(err.isEmpty() ? "Can't locate " + fileName + ": " + ioErr : "Compilation failed in require: " + err);
         }
         return result;
@@ -1541,7 +1551,46 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     public RuntimeScalar doFile() {
         // `do` file
         String fileName = this.toString();
-        Path fullName = ModuleLoader.findFile(fileName);
+        Path fullName = null;
+        Path filePath = Paths.get(fileName);
+        String code = null;
+
+        // If the filename is an absolute path or starts with ./ or ../, use it directly
+        if (filePath.isAbsolute() || fileName.startsWith("./") || fileName.startsWith("../")) {
+            fullName = Files.exists(filePath) ? filePath : null;
+        } else {
+            // Otherwise, search in INC directories
+            List<RuntimeScalar> inc = GlobalContext.getGlobalArray("main::INC").elements;
+            for (RuntimeBaseEntity dir : inc) {
+                Path fullPath = Paths.get(dir.toString(), fileName);
+                if (Files.exists(fullPath)) {
+                    fullName = fullPath;
+                    break;
+                }
+            }
+        }
+        if (fullName == null) {
+            // If not found in file system, try to find in jar at "src/main/perl/lib"
+            String resourcePath = "/lib/" + fileName;
+            URL resource = ModuleLoader.class.getResource(resourcePath);
+            // System.out.println("Found resource " + resource);
+            if (resource != null) {
+                fullName = Paths.get(resource.getPath());
+                try (InputStream is = resource.openStream();
+                     BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
+                    StringBuilder content = new StringBuilder();
+                    String line = null;
+                    while ((line = reader.readLine()) != null) {
+                        content.append(line).append("\n");
+                    }
+                    // System.out.println("Content of " + resourcePath + ": " + content.toString());
+                    code = content.toString();
+                } catch (IOException e1) {
+                    GlobalContext.setGlobalVariable("main::!", "No such file or directory");
+                    return new RuntimeScalar();
+                }
+            }
+        }
         if (fullName == null) {
             GlobalContext.setGlobalVariable("main::!", "No such file or directory");
             return new RuntimeScalar();
@@ -1549,12 +1598,15 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
         ArgumentParser.CompilerOptions parsedArgs = new ArgumentParser.CompilerOptions();
         parsedArgs.fileName = fullName.toString();
-        try {
-            parsedArgs.code = new String(Files.readAllBytes(Paths.get(parsedArgs.fileName)));
-        } catch (IOException e) {
-            GlobalContext.setGlobalVariable("main::!", "Unable to read file " + parsedArgs.fileName);
-            return new RuntimeScalar();
+        if (code == null) {
+            try {
+                code = new String(Files.readAllBytes(Paths.get(parsedArgs.fileName)));
+            } catch (IOException e) {
+                GlobalContext.setGlobalVariable("main::!", "Unable to read file " + parsedArgs.fileName);
+                return new RuntimeScalar();
+            }
         }
+        parsedArgs.code = code;
 
         // set %INC
         GlobalContext.getGlobalHash("main::INC").put(fileName, new RuntimeScalar(parsedArgs.fileName));
