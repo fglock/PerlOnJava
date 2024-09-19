@@ -48,6 +48,11 @@ public class PerlRange extends RuntimeBaseEntity implements RuntimeDataProvider,
         this.end = end;
         this.isFlipFlop = false;
         this.flipFlopState = false;
+
+        // TODO - more rules for String behaviour:
+        // If left-hand string begins with 0 and is longer than one character,
+        // If the initial value specified isn't part of a magical increment sequence (that is, a non-empty string matching /^[a-zA-Z]*[0-9]*\z/), only the initial value will be returned.
+        // For example, "ax".."az" produces "ax", "ay", "az", but "*x".."az" produces only "*x".
         this.isNumeric = start.looksLikeNumber() && end.looksLikeNumber();
     }
 
