@@ -18,7 +18,7 @@ public class RuntimeArrayProxy extends RuntimeBaseProxy {
                     parent.elements.add(i, new RuntimeScalar());
                 }
             }
-            lvalue = (RuntimeScalar) parent.elements.get(key);
+            lvalue = parent.elements.get(key);
         }
     }
 }

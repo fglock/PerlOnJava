@@ -17,7 +17,7 @@ public class EmitEval {
      * This method compiles the eval string at runtime and executes it.
      *
      * @param emitterVisitor The visitor that traverses the AST
-     * @param node The OperatorNode representing the eval operation
+     * @param node           The OperatorNode representing the eval operation
      */
     static void handleEvalOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Retrieve all visible variables for the closure
