@@ -6,8 +6,35 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.BinaryOperatorNode;
 import org.perlonjava.astnode.TernaryOperatorNode;
 import org.perlonjava.runtime.RuntimeContextType;
+import org.perlonjava.runtime.ScalarFlipFlopOperator;
+
+import static org.perlonjava.runtime.ScalarFlipFlopOperator.flipFlops;
 
 public class EmitLogicalOperator {
+
+    static void emitFlipFlopOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
+        EmitterContext ctx = emitterVisitor.ctx;
+        MethodVisitor mv = ctx.mv;
+
+        // Generate unique IDs for this flip-flop instance
+        int flipFlopId = ScalarFlipFlopOperator.currentId++;
+
+        // Constructor to initialize the flip-flop operator with a unique identifier
+        ScalarFlipFlopOperator op = new ScalarFlipFlopOperator(node.operator.equals("..."));
+        flipFlops.putIfAbsent(flipFlopId, op);   // Initialize to false state
+
+        //     public static String evaluate(int id, boolean leftOperand, boolean rightOperand) {
+        mv.visitLdcInsn(flipFlopId);
+        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/ScalarFlipFlopOperator", "evaluate", "(ILorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+
+        // If the context is VOID, we need to pop the result from the stack
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+            mv.visitInsn(Opcodes.POP);
+        }
+    }
+
     static void emitLogicalAssign(EmitterVisitor emitterVisitor, BinaryOperatorNode node, int compareOpcode) {
         // Implements `||=` `&&=`, depending on compareOpcode
 
