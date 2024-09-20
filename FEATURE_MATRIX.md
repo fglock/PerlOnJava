@@ -100,7 +100,7 @@
 - ✔️   **Basic Hash Operations**: `keys`, `values`, `delete`, `exists`, `each` are implemented.
 - ✔️   **Hash literals**: Hash literals are supported.
 - ✔️   **List operator `..`**: List constructors are implemented.
-- ❌  **Flip-flop operator `..` and `...`**: The flip-flop operators are not implemented.
+- ✔️   **Flip-flop operator `..` and `...`**: The flip-flop operators are implemented.
 - ❌  **Tied Arrays**: Tied arrays are not yet implemented.
 - ❌  **Tied Hashes**: Tied hashes are not yet implemented.
 
