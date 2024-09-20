@@ -13,9 +13,7 @@ import java.io.InputStreamReader;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
 import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.*;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -271,6 +269,27 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         res.add(date.getDayOfYear() - 1);
         res.add(date.getZone().getRules().isDaylightSavings(date.toInstant()) ? 1 : 0);
         return res;
+    }
+
+    public static RuntimeList glob(RuntimeList args, int ctx) {
+        RuntimeScalar pattern = (RuntimeScalar) args.elements.get(0);
+        RuntimeList resultList = new RuntimeList();
+        try {
+            // Get the current directory
+            Path currentDir = Paths.get("").toAbsolutePath();
+
+            // Create a PathMatcher for the glob pattern
+            PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + pattern.toString());
+
+            // Walk the file tree starting from the current directory
+            Files.walk(currentDir)
+                    .filter(path -> matcher.matches(currentDir.relativize(path))) // Match relative to current directory
+                    .map(currentDir::relativize) // Convert to relative path
+                    .forEach(path -> resultList.elements.add(new RuntimeScalar(path.toString())));
+        } catch (IOException e) {
+            getGlobalVariable("main::!").set("Glob operation failed: " + e.getMessage());
+        }
+        return resultList;
     }
 
     public static String incrementPlainString(String str) {
