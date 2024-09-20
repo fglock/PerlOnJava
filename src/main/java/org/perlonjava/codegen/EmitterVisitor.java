@@ -215,7 +215,14 @@ public class EmitterVisitor implements Visitor {
                     return;
                 }
                 break;
+            case "...":
+                EmitLogicalOperator.emitFlipFlopOperator(this, node);
+                return;
             case "..":
+                if (ctx.contextType == RuntimeContextType.SCALAR) {
+                    EmitLogicalOperator.emitFlipFlopOperator(this, node);
+                    return;
+                }
                 handleRangeOperator(node);
                 return;
         }
