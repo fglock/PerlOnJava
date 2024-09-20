@@ -165,7 +165,8 @@
 - ❌  **Labels**: Labels and their usage are not supported.
 - ❌  **Search for labels in call stack**: Label searching in the call stack is missing.
 - ❌  **Here-docs**: Here-docs for multiline string literals are not yet implemented.
-- ❌  **`<>` and `glob`**: support for the `glob` operator is missing.
+- ❌  **`glob`**: `glob` is implemented for list context only.
+- ❌  **`<>`**: support for the `<>` operator is missing.
 - ✔️   **End of file markers**: Source code control characters `^D` and `^Z`, and the tokens `__END__` and `__DATA__` are implemented. There is no `DATA` file handle yet.
 - ❌  **Startup processing**: processing `$sitelib/sitecustomize.pl` at startup is not enabled.
 - ❌  **Smartmatch operator**: `~~` and `given`/`when` construct

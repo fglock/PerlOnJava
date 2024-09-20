@@ -348,6 +348,7 @@ public class Parser {
             case "defined":
             case "localtime":
             case "gmtime":
+            case "glob":
             case "caller":
                 String text = token.text;
                 operand = ListParser.parseZeroOrOneList(this, 0);
