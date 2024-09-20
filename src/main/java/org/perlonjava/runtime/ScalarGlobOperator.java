@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
+import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 public class ScalarGlobOperator {
@@ -14,9 +15,15 @@ public class ScalarGlobOperator {
     public static final Map<Integer, ScalarGlobOperator> globOperators = new HashMap<>();
     public static Integer currentId = 0;
 
-    private final Iterator<Path> iterator;
+    private Iterator<Path> iterator;
+    private String currentPattern;
 
     public ScalarGlobOperator(String pattern) throws IOException {
+        this.currentPattern = pattern;
+        initializeIterator(pattern);
+    }
+
+    private void initializeIterator(String pattern) throws IOException {
         Path currentDir = Paths.get("").toAbsolutePath();
         PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + pattern);
         this.iterator = Files.walk(currentDir)
@@ -25,11 +32,41 @@ public class ScalarGlobOperator {
                 .iterator();
     }
 
-    public static RuntimeScalar evaluate(int id) {
-        ScalarGlobOperator globOperator = globOperators.get(id);
-        if (globOperator != null && globOperator.iterator.hasNext()) {
-            return new RuntimeScalar(globOperator.iterator.next().toString());
+    public static RuntimeDataProvider evaluate(int id, RuntimeScalar patternArg, int ctx) {
+        String pattern = patternArg.toString();
+        if (ctx == RuntimeContextType.SCALAR) {
+            ScalarGlobOperator globOperator = globOperators.get(id);
+            if (globOperator == null) {
+                try {
+                    globOperator = new ScalarGlobOperator(pattern);
+                    globOperators.put(id, globOperator);
+                } catch (IOException e) {
+                    getGlobalVariable("main::!").set("Glob operation failed: " + e.getMessage());
+                    return scalarUndef;
+                }
+            } else if (!globOperator.currentPattern.equals(pattern)) {
+                try {
+                    globOperator.initializeIterator(pattern);
+                    globOperator.currentPattern = pattern;
+                } catch (IOException e) {
+                    getGlobalVariable("main::!").set("Glob operation failed: " + e.getMessage());
+                    return scalarUndef;
+                }
+            }
+
+            if (globOperator.iterator.hasNext()) {
+                return new RuntimeScalar(globOperator.iterator.next().toString());
+            }
+            return scalarUndef;
+        } else {
+            RuntimeList resultList = new RuntimeList();
+            try {
+                ScalarGlobOperator globOperator = new ScalarGlobOperator(pattern);
+                globOperator.iterator.forEachRemaining(path -> resultList.elements.add(new RuntimeScalar(path.toString())));
+            } catch (IOException e) {
+                getGlobalVariable("main::!").set("Glob operation failed: " + e.getMessage());
+            }
+            return resultList;
         }
-        return scalarUndef;
     }
 }
