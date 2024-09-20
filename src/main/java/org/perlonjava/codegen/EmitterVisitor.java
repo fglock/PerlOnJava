@@ -4,6 +4,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.runtime.RuntimeContextType;
+import org.perlonjava.runtime.ScalarGlobOperator;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -734,7 +735,7 @@ public class EmitterVisitor implements Visitor {
             operator = "undefine";
             node.operand.accept(this.with(RuntimeContextType.RUNTIME));
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", operator, "()Lorg/perlonjava/runtime/RuntimeList;", false);
-        } else if (operator.equals("gmtime") || operator.equals("localtime") || operator.equals("caller") || operator.equals("glob")) {
+        } else if (operator.equals("gmtime") || operator.equals("localtime") || operator.equals("caller")) {
             node.operand.accept(this.with(RuntimeContextType.LIST));
             pushCallContext();
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -745,6 +746,24 @@ public class EmitterVisitor implements Visitor {
             node.operand.accept(this.with(RuntimeContextType.SCALAR));
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
         }
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            mv.visitInsn(Opcodes.POP);
+        }
+    }
+
+    void handleGlobBuiltin(OperatorNode node) {
+        MethodVisitor mv = ctx.mv;
+
+        // Generate unique IDs for this glob instance
+        int globId = ScalarGlobOperator.currentId++;
+
+        // public static RuntimeDataProvider evaluate(id, patternArg, ctx)
+        mv.visitLdcInsn(globId);
+        node.operand.accept(this.with(RuntimeContextType.SCALAR));
+        pushCallContext();
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/ScalarGlobOperator", "evaluate", "(ILorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
+
+        // If the context is VOID, we need to pop the result from the stack
         if (ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP);
         }
@@ -935,9 +954,11 @@ public class EmitterVisitor implements Visitor {
             case "times":
             case "localtime":
             case "gmtime":
-            case "glob":
             case "caller":
                 handleUnaryBuiltin(node, operator);
+                break;
+            case "glob":
+                handleGlobBuiltin(node);
                 break;
             case "rindex":
             case "index":
