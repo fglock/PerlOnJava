@@ -23,15 +23,6 @@ public class ScalarGlobOperator {
         initializeIterator(pattern);
     }
 
-    private void initializeIterator(String pattern) throws IOException {
-        Path currentDir = Paths.get("").toAbsolutePath();
-        PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + pattern);
-        this.iterator = Files.walk(currentDir)
-                .filter(path -> matcher.matches(currentDir.relativize(path)))
-                .map(currentDir::relativize)
-                .iterator();
-    }
-
     public static RuntimeDataProvider evaluate(int id, RuntimeScalar patternArg, int ctx) {
         String pattern = patternArg.toString();
         if (ctx == RuntimeContextType.SCALAR) {
@@ -68,5 +59,14 @@ public class ScalarGlobOperator {
             }
             return resultList;
         }
+    }
+
+    private void initializeIterator(String pattern) throws IOException {
+        Path currentDir = Paths.get("").toAbsolutePath();
+        PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + pattern);
+        this.iterator = Files.walk(currentDir)
+                .filter(path -> matcher.matches(currentDir.relativize(path)))
+                .map(currentDir::relativize)
+                .iterator();
     }
 }
