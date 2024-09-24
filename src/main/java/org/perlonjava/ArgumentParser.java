@@ -139,6 +139,21 @@ public class ArgumentParser {
                 throw new AssertionError();
             }
         }
+
+        @Override
+        public String toString() {
+            return "CompilerOptions{\n" +
+                    "    debugEnabled=" + debugEnabled + ",\n" +
+                    "    disassembleEnabled=" + disassembleEnabled + ",\n" +
+                    "    tokenizeOnly=" + tokenizeOnly + ",\n" +
+                    "    parseOnly=" + parseOnly + ",\n" +
+                    "    compileOnly=" + compileOnly + ",\n" +
+                    "    code='" + (code != null ? code : "null") + "',\n" +
+                    "    fileName='" + (fileName != null ? fileName : "null") + "',\n" +
+                    "    argumentList=" + argumentList + ",\n" +
+                    "    inc=" + inc + "\n" +
+                    "}";
+        }
     }
 }
 
