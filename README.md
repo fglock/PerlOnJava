@@ -365,16 +365,16 @@ public class Main {
     - Additional operators: `die`, `warn`, `time`, `times`, `localtime`, `gmtime`, `index`, `rindex`
     - Standard library ported modules: `Data::Dumper`, `Symbol`, `strict`
     - Expanded documentation and usage examples
-
-### Upcoming Milestones
-
 - **v1.7.0**: Performance Improvements
-    - Planned release date: 2024-12-10
     - Focus on optimizing the execution engine for better performance.
     - Improve error handling and debugging tools to make development easier. More detailed debugging symbols added to the bytecode. Added `Carp` module.
     - Moved Perl standard library modules into the jar file.
+    - More tests and various bug fixes
+
+### Upcoming Milestones
 
 - **v1.8.0**: Concurrency and Security Features
+    - Planned release date: 2024-12-10
     - Add support for concurrency and parallelism, such as threads and async/await.
     - Enhance security features, including sandboxing and input validation.
     - Increase test coverage and introduce automated testing tools.
@@ -404,6 +404,9 @@ These benchmarks provide an order-of-magnitude comparison with Perl:
 |         | Eval-string | 10x slower |
 | v1.5.0  | Example: `life.pl` | 3x slower |
 | v1.6.0  | Module compilation | 5x slower |
+| v1.7.0  | Module compilation | 5x slower  |
+|         | Example: `life.pl` | Comparable |
+|         | Eval-string        | 7x slower  |
 
 Notes:
 - v1.2.0 through v1.4.0: No significant performance changes.
