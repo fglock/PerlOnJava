@@ -166,13 +166,13 @@ public class EmitterVisitor implements Visitor {
                 handleMapOperator(node);
                 return;
             case "eof":
-            case "close":
             case "open":
             case "printf":
             case "print":
             case "say":
                 handleSayOperator(node);
                 return;
+            case "close":
             case "readline":
                 handleReadlineOperator(node);
                 return;
