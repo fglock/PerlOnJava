@@ -40,7 +40,7 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
     public RuntimeScalarReadOnly(String s) {
         super();
         RuntimeScalar temp = new RuntimeScalar(s);
-        this.b = !s.isEmpty();
+        this.b = temp.getBoolean();
         this.i = temp.getInt();
         this.s = s;
         this.d = temp.getDouble();
