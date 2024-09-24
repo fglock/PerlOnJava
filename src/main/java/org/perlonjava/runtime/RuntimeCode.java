@@ -60,6 +60,8 @@ public class RuntimeCode implements RuntimeScalarReference {
                 true, // is boxed
                 ctx.errorUtil, // error message utility
                 ctx.compilerOptions);
+        // evalCtx.logDebug("evalStringHelper EmitterContext: " + evalCtx);
+        // evalCtx.logDebug("evalStringHelper Code: " + code);
 
         // Process the string source code to create the LexerToken list
         Lexer lexer = new Lexer(code.toString());
