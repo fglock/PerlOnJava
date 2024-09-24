@@ -1,5 +1,6 @@
 package org.perlonjava;
 
+import org.perlonjava.runtime.GlobalContext;
 import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeScalar;
 
@@ -126,7 +127,10 @@ public class ArgumentParser {
         public boolean compileOnly = false;
         public String code = null;
         public String fileName = null;
-        public RuntimeArray argumentList = new RuntimeArray();
+
+        // Initialize @ARGV
+        public RuntimeArray argumentList = GlobalContext.getGlobalArray("main::ARGV");
+
         public RuntimeArray inc = new RuntimeArray();
 
         @Override
