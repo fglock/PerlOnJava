@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
+import org.perlonjava.runtime.RuntimeIO;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -22,11 +23,13 @@ public class PerlExecutionTest {
         originalOut = System.out;
         outputStream = new ByteArrayOutputStream();
         System.setOut(new PrintStream(outputStream));
+        RuntimeIO.setCustomOutputStream(outputStream); // Set custom OutputStream in RuntimeIO
     }
 
     @AfterEach
     void tearDown() {
         System.setOut(originalOut);
+        RuntimeIO.setCustomOutputStream(System.out); // Reset to original System.out
     }
 
     @ParameterizedTest(name = "Test using resource file: {0}")
