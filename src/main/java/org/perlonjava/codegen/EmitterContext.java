@@ -122,5 +122,18 @@ public class EmitterContext {
             System.out.println(message);
         }
     }
+
+    @Override
+    public String toString() {
+        return "EmitterContext{\n" +
+                "    javaClassName='" + javaClassName + "',\n" +
+                "    symbolTable=" + symbolTable + ",\n" +
+                "    returnLabel=" + (returnLabel != null ? returnLabel.toString() : "null") + ",\n" +
+                "    contextType=" + contextType + ",\n" +
+                "    isBoxed=" + isBoxed + ",\n" +
+                "    errorUtil=" + (errorUtil != null ? errorUtil.toString() : "null") + ",\n" +
+                "    compilerOptions=" + (compilerOptions != null ? compilerOptions.toString() : "null") + "\n" +
+                "}";
+    }
 }
 
