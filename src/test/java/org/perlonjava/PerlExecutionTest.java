@@ -4,8 +4,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.perlonjava.scriptengine.PerlLanguageProvider;
 import org.perlonjava.runtime.RuntimeIO;
+import org.perlonjava.scriptengine.PerlLanguageProvider;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
