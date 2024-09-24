@@ -8,6 +8,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
+import static org.perlonjava.runtime.RuntimeScalarCache.getScalarBoolean;
 
 public class Operator {
     /**
@@ -622,6 +623,35 @@ public class Operator {
         }
         System.err.print(out);
         return new RuntimeScalar();
+    }
+
+    /**
+     * Deletes a list of files specified in the RuntimeList.
+     *
+     * @param value The list of files to be deleted.
+     * @return A RuntimeScalar indicating the result of the unlink operation.
+     */
+    public static RuntimeDataProvider unlink(RuntimeDataProvider value, int ctx) {
+
+        boolean allDeleted = true;
+        RuntimeList fileList = value.getList();
+        if (fileList.elements.isEmpty()) {
+            fileList.elements.add(GlobalContext.getGlobalVariable("main::_"));
+        }
+        Iterator<RuntimeScalar> iterator = fileList.iterator();
+
+        while (iterator.hasNext()) {
+            RuntimeScalar fileScalar = iterator.next();
+            String fileName = fileScalar.toString();
+            java.io.File file = new java.io.File(fileName);
+
+            if (!file.delete()) {
+                allDeleted = false;
+                getGlobalVariable("main::!").set("Failed to delete file: " + fileName);
+            }
+        }
+
+        return getScalarBoolean(allDeleted);
     }
 
     public static RuntimeDataProvider reverse(RuntimeDataProvider value, int ctx) {
