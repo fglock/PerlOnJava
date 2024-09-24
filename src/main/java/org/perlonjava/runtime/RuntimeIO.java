@@ -24,30 +24,42 @@ import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 public class RuntimeIO implements RuntimeScalarReference {
 
+    // Buffer size for I/O operations
     private static final int BUFFER_SIZE = 8192;
+
+    // Mapping of file modes to their corresponding StandardOpenOption sets
     private static final Map<String, Set<StandardOpenOption>> MODE_OPTIONS = new HashMap<>();
+
+    // Standard I/O streams
     public static RuntimeIO stdout = RuntimeIO.open(FileDescriptor.out, true);
     public static RuntimeIO stderr = RuntimeIO.open(FileDescriptor.err, true);
     public static RuntimeIO stdin = RuntimeIO.open(FileDescriptor.in, false);
 
     static {
+        // Initialize mode options
         MODE_OPTIONS.put("<", EnumSet.of(StandardOpenOption.READ));
         MODE_OPTIONS.put(">", EnumSet.of(StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING));
         MODE_OPTIONS.put(">>", EnumSet.of(StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.APPEND));
         MODE_OPTIONS.put("+<", EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE));
     }
 
+    // Buffers for various I/O operations
     private final ByteBuffer buffer;
     private final ByteBuffer readBuffer;
     private final ByteBuffer singleCharBuffer;
+
+    // Streams and channels for I/O operations
     private InputStream inputStream;
     private OutputStream outputStream;
     private BufferedReader bufferedReader;
-    private boolean isEOF;
     private FileChannel fileChannel;
     private WritableByteChannel channel;
+
+    // State flags
+    private boolean isEOF;
     private boolean needFlush;
 
+    // Constructor to initialize buffers
     public RuntimeIO() {
         this.buffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
         this.readBuffer = ByteBuffer.allocate(BUFFER_SIZE);
