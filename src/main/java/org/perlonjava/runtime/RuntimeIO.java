@@ -18,6 +18,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
 
+import static org.perlonjava.runtime.GlobalContext.getGlobalIO;
 import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
@@ -25,6 +26,9 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     private static final int BUFFER_SIZE = 8192;
     private static final Map<String, Set<StandardOpenOption>> MODE_OPTIONS = new HashMap<>();
+    public static RuntimeIO stdout = RuntimeIO.open(FileDescriptor.out, true);
+    public static RuntimeIO stderr = RuntimeIO.open(FileDescriptor.err, true);
+    public static RuntimeIO stdin = RuntimeIO.open(FileDescriptor.in, false);
 
     static {
         MODE_OPTIONS.put("<", EnumSet.of(StandardOpenOption.READ));
@@ -42,11 +46,19 @@ public class RuntimeIO implements RuntimeScalarReference {
     private boolean isEOF;
     private FileChannel fileChannel;
     private WritableByteChannel channel;
+    private boolean needFlush;
 
     public RuntimeIO() {
         this.buffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
         this.readBuffer = ByteBuffer.allocate(BUFFER_SIZE);
         this.singleCharBuffer = ByteBuffer.allocate(1);
+    }
+
+    public static void initStdHandles() {
+        // Initialize STDOUT, STDERR, STDIN
+        getGlobalIO("main::STDOUT").set(stdout);
+        getGlobalIO("main::STDERR").set(stderr);
+        getGlobalIO("main::STDIN").set(stdin);
     }
 
     // Constructor to open the file with a specific mode
@@ -266,6 +278,14 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     public RuntimeScalar readline() {
         try {
+            // flush stdout and stderr, in case we are displaying a prompt
+            if (stdout.needFlush) {
+                stdout.flush();
+            }
+            if (stderr.needFlush) {
+                stderr.flush();
+            }
+
             if (fileChannel == null && bufferedReader == null) {
                 throw new UnsupportedOperationException("Readline is not supported for output streams");
             }
@@ -379,6 +399,7 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     public RuntimeScalar flush() {
         try {
+            needFlush = false;
             if (fileChannel != null) {
                 fileChannel.force(false);  // Force any updates to the file (false means don't force metadata updates)
             } else if (channel != null && channel instanceof FileChannel) {
@@ -428,6 +449,7 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Method to append data to a file
     public RuntimeScalar write(String data) {
         try {
+            needFlush = true;
             byte[] bytes = data.getBytes();
             if (channel != null) {
                 // For standard output and error streams

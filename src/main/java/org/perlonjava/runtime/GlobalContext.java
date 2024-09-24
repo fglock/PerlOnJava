@@ -5,10 +5,11 @@ import org.perlonjava.perlmodule.Exporter;
 import org.perlonjava.perlmodule.Symbol;
 import org.perlonjava.perlmodule.Universal;
 
-import java.io.FileDescriptor;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static org.perlonjava.runtime.RuntimeIO.initStdHandles;
 
 /**
  * The RuntimeScalar class simulates Perl namespaces.
@@ -69,9 +70,7 @@ public class GlobalContext {
         getGlobalHash("main::INC");
 
         // Initialize STDOUT, STDERR, STDIN
-        getGlobalIO("main::STDOUT").set(RuntimeIO.open(FileDescriptor.out, true));
-        getGlobalIO("main::STDERR").set(RuntimeIO.open(FileDescriptor.err, true));
-        getGlobalIO("main::STDIN").set(RuntimeIO.open(FileDescriptor.in, false));
+        initStdHandles();
 
         // Initialize built-in Perl classes
         Universal.initialize();
