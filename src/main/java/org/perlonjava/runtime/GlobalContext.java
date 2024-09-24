@@ -50,9 +50,6 @@ public class GlobalContext {
             env.put(k, new RuntimeScalar(v));
         });
 
-        // Initialize @ARGV
-        getGlobalArray("main::ARGV").elements = compilerOptions.argumentList.elements;
-
         // Initialize @INC
         // https://stackoverflow.com/questions/2526804/how-is-perls-inc-constructed
         List<RuntimeScalar> inc = getGlobalArray("main::INC").elements;
