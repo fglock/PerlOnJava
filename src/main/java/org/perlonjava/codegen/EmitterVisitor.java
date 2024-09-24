@@ -3,6 +3,7 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
+import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.ScalarGlobOperator;
 
@@ -166,12 +167,14 @@ public class EmitterVisitor implements Visitor {
                 return;
             case "eof":
             case "close":
-            case "readline":
             case "open":
             case "printf":
             case "print":
             case "say":
                 handleSayOperator(node);
+                return;
+            case "readline":
+                handleReadlineOperator(node);
                 return;
             case "sprintf":
             case "substr":
@@ -1119,6 +1122,24 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
+    private void handleReadlineOperator(BinaryOperatorNode node) {
+        String operator = node.operator;
+
+        // Emit the File Handle
+        if (node.left instanceof OperatorNode) {
+            // my $fh  $fh
+            node.left.accept(this.with(RuntimeContextType.SCALAR));
+        } else {
+            emitFileHandle(node.left);
+        }
+
+        // Call the operator, return Scalar
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
+    }
+
     private void handleSayOperator(BinaryOperatorNode node) {
         String operator = node.operator;
         // Emit the argument list
@@ -1145,7 +1166,12 @@ public class EmitterVisitor implements Visitor {
             // `print FILE 123`
             // retrieve STDOUT, STDERR from GlobalIORef
             // fetch a global fileHandle by name
-            ctx.mv.visitLdcInsn(((IdentifierNode) node).name);
+
+            // resolve the full name of the file handle
+            String name = ((IdentifierNode) node).name;
+            name = NameNormalizer.normalizeVariableName(name, ctx.symbolTable.getCurrentPackage());
+
+            ctx.mv.visitLdcInsn(name);
             ctx.mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/GlobalContext",
