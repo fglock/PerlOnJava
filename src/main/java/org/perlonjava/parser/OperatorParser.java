@@ -83,8 +83,13 @@ public class OperatorParser {
             return new BinaryOperatorNode("->",
                     new SubroutineNode(null, null, null, block, true, parser.tokenIndex), new ListNode(parser.tokenIndex), parser.tokenIndex);
         } else {
-            // Otherwise, parse a primary expression
-            operand = parser.parsePrimary();
+            // Otherwise, parse an expression, and default to $_
+            operand = ListParser.parseZeroOrOneList(parser, 0);
+            if (((ListNode) operand).elements.isEmpty()) {
+                // create `$_` variable
+                operand = new OperatorNode(
+                        "$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
+            }
         }
         return new OperatorNode("eval", operand, parser.tokenIndex);
     }
