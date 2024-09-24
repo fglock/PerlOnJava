@@ -424,6 +424,7 @@ public class Parser {
                 return OperatorParser.parseMapGrepSort(this, token);
             case "reverse":
             case "splice":
+            case "unlink":
             case "die":
             case "warn":
                 operand = ListParser.parseZeroOrMoreList(this, 0, false, true, false, false);

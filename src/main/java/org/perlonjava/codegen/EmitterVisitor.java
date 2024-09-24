@@ -1004,6 +1004,7 @@ public class EmitterVisitor implements Visitor {
                 handleDieBuiltin(node);
                 break;
             case "reverse":
+            case "unlink":
                 handleReverseBuiltin(node);
                 break;
             case "splice":
