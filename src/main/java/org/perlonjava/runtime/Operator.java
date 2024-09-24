@@ -657,7 +657,13 @@ public class Operator {
     public static RuntimeDataProvider reverse(RuntimeDataProvider value, int ctx) {
         if (ctx == RuntimeContextType.SCALAR) {
             StringBuilder sb = new StringBuilder();
-            Iterator<RuntimeScalar> iterator = value.iterator();
+
+            RuntimeList list = value.getList();
+            if (list.elements.isEmpty()) {
+                list.elements.add(GlobalContext.getGlobalVariable("main::_"));
+            }
+
+            Iterator<RuntimeScalar> iterator = list.iterator();
             while (iterator.hasNext()) {
                 sb.append(iterator.next().toString());
             }
