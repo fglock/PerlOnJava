@@ -54,6 +54,18 @@ public class RuntimeIO implements RuntimeScalarReference {
         this.singleCharBuffer = ByteBuffer.allocate(1);
     }
 
+    // Method to set custom OutputStream
+    public static void setCustomOutputStream(OutputStream out) {
+        stdout.outputStream = new BufferedOutputStream(out, BUFFER_SIZE);
+        stdout.channel = Channels.newChannel(stdout.outputStream);
+    }
+
+    // Method to set custom ErrorStream
+    public static void setCustomErrorStream(OutputStream err) {
+        stderr.outputStream = new BufferedOutputStream(err, BUFFER_SIZE);
+        stderr.channel = Channels.newChannel(stderr.outputStream);
+    }
+
     public static void initStdHandles() {
         // Initialize STDOUT, STDERR, STDIN
         getGlobalIO("main::STDOUT").set(stdout);
