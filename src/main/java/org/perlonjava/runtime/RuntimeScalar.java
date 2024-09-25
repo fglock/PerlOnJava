@@ -49,7 +49,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
     };
     // Fields to store the type and value of the scalar variable
-    // TODO add cache for integer/string values
     public RuntimeScalarType type;
     public Object value;
 
