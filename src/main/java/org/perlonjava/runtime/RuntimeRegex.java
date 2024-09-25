@@ -305,8 +305,6 @@ public class RuntimeRegex implements RuntimeScalarReference {
         return matches.toString().split("\n");
     }
 
-    // Getters and setters for the pattern can be added as needed
-
     /**
      * Gets the compiled pattern.
      *
