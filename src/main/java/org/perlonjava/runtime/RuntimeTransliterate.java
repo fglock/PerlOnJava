@@ -156,7 +156,7 @@ public class RuntimeTransliterate {
                 } else {
                     if (deleteUnmatched) {
                         deleteChars[i] = true;
-                    } else if (replace.length() > 0) {
+                    } else if (!replace.isEmpty()) {
                         translationMap[i] = replace.charAt(replace.length() - 1);
                         usedChars[i] = true;
                     }
@@ -175,7 +175,7 @@ public class RuntimeTransliterate {
         for (int i = minLength; i < search.length(); i++) {
             if (deleteUnmatched) {
                 deleteChars[search.charAt(i)] = true;
-            } else if (replace.length() > 0) {
+            } else if (!replace.isEmpty()) {
                 translationMap[search.charAt(i)] = replace.charAt(replace.length() - 1);
                 usedChars[search.charAt(i)] = true;
             }
