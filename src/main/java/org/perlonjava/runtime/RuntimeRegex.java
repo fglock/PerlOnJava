@@ -276,51 +276,5 @@ public class RuntimeRegex implements RuntimeScalarReference {
         // /r (non-destructive) is also not an actual flag for Pattern, it returns the replacement.
         return flags;
     }
-
-    /**
-     * Matches the given input against the compiled regex pattern.
-     *
-     * @param input The input string to match.
-     * @return A Matcher object containing the result of the match operation.
-     */
-    public Matcher match(String input) {
-        if (pattern == null) {
-            throw new IllegalStateException("Pattern not compiled");
-        }
-        return pattern.matcher(input);
-    }
-
-    /**
-     * Finds all matches in the given input.
-     *
-     * @param input The input string to search.
-     * @return A String array containing all matches.
-     */
-    public String[] findAll(String input) {
-        Matcher matcher = match(input);
-        StringBuilder matches = new StringBuilder();
-        while (matcher.find()) {
-            matches.append(matcher.group()).append("\n");
-        }
-        return matches.toString().split("\n");
-    }
-
-    /**
-     * Gets the compiled pattern.
-     *
-     * @return The compiled Pattern.
-     */
-    public Pattern getPattern() {
-        return pattern;
-    }
-
-    /**
-     * Sets a new pattern.
-     *
-     * @param pattern The new Pattern to set.
-     */
-    public void setPattern(Pattern pattern) {
-        this.pattern = pattern;
-    }
 }
 
