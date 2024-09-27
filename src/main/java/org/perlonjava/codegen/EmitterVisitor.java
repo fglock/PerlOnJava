@@ -4,6 +4,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.runtime.NameNormalizer;
+import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.ScalarGlobOperator;
 
@@ -237,7 +238,7 @@ public class EmitterVisitor implements Visitor {
             return;
         }
 
-        throw new RuntimeException("Unexpected infix operator: " + operator);
+        throw new PerlCompilerException(node.tokenIndex, "Unexpected infix operator: " + operator, ctx.errorUtil);
     }
 
     private void handleRangeOperator(BinaryOperatorNode node) {
@@ -671,7 +672,7 @@ public class EmitterVisitor implements Visitor {
                 methodName = "arrayDerefDelete";
                 break;
             default:
-                throw new IllegalArgumentException("Unexpected array operation: " + arrayOperation);
+                throw new PerlCompilerException(node.tokenIndex, "Not implemented: array operation: " + arrayOperation, ctx.errorUtil);
         }
 
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "arrayDerefGet", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
@@ -708,7 +709,7 @@ public class EmitterVisitor implements Visitor {
                 methodName = "hashDerefExists";
                 break;
             default:
-                throw new IllegalArgumentException("Unexpected hash operation: " + hashOperation);
+                throw new PerlCompilerException(node.tokenIndex, "Not implemented: hash operation: " + hashOperation, ctx.errorUtil);
         }
 
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", methodName, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
@@ -796,7 +797,7 @@ public class EmitterVisitor implements Visitor {
                 return;
             }
         }
-        throw new UnsupportedOperationException("Unsupported operator: " + node.operator);
+        throw new PerlCompilerException(node.tokenIndex, "Not implemented: operator: " + node.operator, ctx.errorUtil);
     }
 
     private void handleAtan2(OperatorNode node) {
@@ -817,7 +818,7 @@ public class EmitterVisitor implements Visitor {
                 return;
             }
         }
-        throw new UnsupportedOperationException("Unsupported operator: " + node.operator);
+        throw new PerlCompilerException(node.tokenIndex, "Not implemented: operator: " + node.operator, ctx.errorUtil);
     }
 
     private void handleArrayUnaryBuiltin(OperatorNode node, String operator) {
@@ -1061,7 +1062,7 @@ public class EmitterVisitor implements Visitor {
                     handleFileTestBuiltin(node);
                     return;
                 }
-                throw new UnsupportedOperationException("Unsupported operator: " + operator);
+                throw new PerlCompilerException(node.tokenIndex, "Not implemented: operator: " + operator, ctx.errorUtil);
         }
     }
 
@@ -1126,7 +1127,7 @@ public class EmitterVisitor implements Visitor {
                 }
             }
         }
-        throw new UnsupportedOperationException("Unsupported operator: " + operator);
+        throw new PerlCompilerException(node.tokenIndex, "Not implemented: operator: " + operator, ctx.errorUtil);
     }
 
     private void handlePackageOperator(OperatorNode node) {
