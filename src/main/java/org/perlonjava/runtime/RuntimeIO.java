@@ -57,8 +57,11 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Stream for directory operations
     private DirectoryStream<Path> directoryStream;
     // List to keep track of directory stream positions
-    private List<DirectoryStream<Path>> directoryStreamPositions = new ArrayList<>();
+    private final List<DirectoryStream<Path>> directoryStreamPositions = new ArrayList<>();
     private int currentDirPosition = 0;
+    private String directoryPath;
+    private Iterator<Path> directoryIterator;
+
 
     // State flags
     private boolean isEOF;
@@ -230,6 +233,51 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
     }
 
+    static RuntimeScalar openDir(RuntimeList args) {
+        RuntimeScalar dirHandle = (RuntimeScalar) args.elements.get(0);
+        String dirPath = args.elements.get(1).toString();
+
+        try {
+            DirectoryStream<Path> stream = Files.newDirectoryStream(Paths.get(dirPath));
+            RuntimeIO dirIO = new RuntimeIO(stream);
+            dirIO.directoryPath = dirPath;
+            dirHandle.type = RuntimeScalarType.GLOB;
+            dirHandle.value = dirIO;
+            return scalarTrue;
+        } catch (IOException e) {
+            getGlobalVariable("main::!").set(e.getMessage());
+            return scalarFalse;
+        }
+    }
+
+    static RuntimeBaseEntity readdir(RuntimeScalar dirHandle, int ctx) {
+        if (dirHandle.type != RuntimeScalarType.GLOB) {
+            throw new RuntimeException("Invalid directory handle");
+        }
+
+        RuntimeIO dirIO = (RuntimeIO) dirHandle.value;
+        DirectoryStream<Path> stream = dirIO.getDirectoryStream();
+        if (dirIO.directoryIterator == null) {
+            dirIO.directoryIterator = stream.iterator();
+        }
+
+        if (ctx == RuntimeContextType.SCALAR) {
+            if (dirIO.directoryIterator.hasNext()) {
+                Path entry = dirIO.directoryIterator.next();
+                return new RuntimeScalar(entry.getFileName().toString());
+            } else {
+                return scalarFalse;
+            }
+        } else {
+            RuntimeList result = new RuntimeList();
+            while (dirIO.directoryIterator.hasNext()) {
+                Path entry = dirIO.directoryIterator.next();
+                result.elements.add(new RuntimeScalar(entry.getFileName().toString()));
+            }
+            return result;
+        }
+    }
+
     // Method to get the directory stream
     public DirectoryStream<Path> getDirectoryStream() {
         if (directoryStream != null && !directoryStreamPositions.contains(directoryStream)) {
@@ -267,10 +315,10 @@ public class RuntimeIO implements RuntimeScalarReference {
         // Reset the directory stream
         try {
             directoryStream.close();
-            directoryStream = Files.newDirectoryStream(Paths.get(directoryStreamPositions.get(0).iterator().next().toString()));
-            Iterator<Path> iterator = directoryStream.iterator();
-            for (int i = 0; i < position && iterator.hasNext(); i++) {
-                iterator.next();
+            directoryStream = Files.newDirectoryStream(Paths.get(directoryPath));
+            directoryIterator = directoryStream.iterator();
+            for (int i = 0; i < position && directoryIterator.hasNext(); i++) {
+                directoryIterator.next();
             }
             currentDirPosition = position;
         } catch (IOException e) {
