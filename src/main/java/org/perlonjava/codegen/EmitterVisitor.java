@@ -236,6 +236,7 @@ public class EmitterVisitor implements Visitor {
             handleBinaryOperator(node, methodStr);
             return;
         }
+
         throw new RuntimeException("Unexpected infix operator: " + operator);
     }
 
@@ -866,6 +867,25 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
+    private void handleFileTestBuiltin(OperatorNode node) {
+        // Handle:  -d FILE
+        String operator = node.operator;
+        ctx.logDebug("handleFileTestBuiltin " + node);
+
+        // push the operator string to the JVM stack
+        ctx.mv.visitLdcInsn(node.operator);
+        // push the file name to the JVM stack
+        node.operand.accept(this.with(RuntimeContextType.SCALAR));
+        ctx.mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/FileTestOperator",
+                "fileTest",
+                "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
+    }
+
     private void handleSpliceBuiltin(OperatorNode node) {
         // Handle:  splice @array, LIST
         String operator = node.operator;
@@ -1023,6 +1043,11 @@ public class EmitterVisitor implements Visitor {
                 EmitRegex.handleRegex(this, node);
                 break;
             default:
+                if (operator.length() == 2 && operator.charAt(0) == '-') {
+                    // -d -e -f
+                    handleFileTestBuiltin(node);
+                    return;
+                }
                 throw new UnsupportedOperationException("Unsupported operator: " + operator);
         }
     }

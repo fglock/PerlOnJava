@@ -795,6 +795,11 @@ public class Parser {
 
         if (token.type == LexerTokenType.EOF || LIST_TERMINATORS.contains(token.text)) {
             isEmptyList = true;
+        } else if (token.text.equals("-")
+                && token1.type == LexerTokenType.IDENTIFIER
+                && token1.text.length() == 1) {
+            // -d, -e, -f, -l, -p, -x
+            isEmptyList = false;
         } else if (INFIX_OP.contains(token.text) || token.text.equals(",")) {
             // tokenIndex++;
             ctx.logDebug("parseZeroOrMoreList infix `" + token.text + "` followed by `" + nextToken.text + "`");
