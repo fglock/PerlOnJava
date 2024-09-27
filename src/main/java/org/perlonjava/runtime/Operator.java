@@ -66,6 +66,35 @@ public class Operator {
         return dirIO.closedir();
     }
 
+    public static RuntimeScalar telldir(RuntimeScalar dirHandle) {
+        if (dirHandle.type != RuntimeScalarType.GLOB) {
+            throw new RuntimeException("Invalid directory handle");
+        }
+
+        RuntimeIO dirIO = (RuntimeIO) dirHandle.value;
+        return new RuntimeScalar(dirIO.telldir());
+    }
+
+    public static RuntimeScalar seekdir(RuntimeScalar dirHandle, RuntimeScalar position) {
+        if (dirHandle.type != RuntimeScalarType.GLOB) {
+            throw new RuntimeException("Invalid directory handle");
+        }
+
+        RuntimeIO dirIO = (RuntimeIO) dirHandle.value;
+        dirIO.seekdir(position.getInt());
+        return scalarTrue;
+    }
+
+    public static RuntimeScalar rewinddir(RuntimeScalar dirHandle) {
+        if (dirHandle.type != RuntimeScalarType.GLOB) {
+            throw new RuntimeException("Invalid directory handle");
+        }
+
+        RuntimeIO dirIO = (RuntimeIO) dirHandle.value;
+        dirIO.rewinddir();
+        return scalarTrue;
+    }
+
     /**
      * Formats the elements according to the specified format string.
      *
