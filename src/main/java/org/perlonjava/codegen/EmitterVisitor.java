@@ -978,6 +978,10 @@ public class EmitterVisitor implements Visitor {
             case "localtime":
             case "gmtime":
             case "caller":
+            case "rewinddir":
+            case "telldir":
+            case "closedir":
+            case "rmdir":
                 handleUnaryBuiltin(node, operator);
                 break;
             case "glob":
