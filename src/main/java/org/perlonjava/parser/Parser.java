@@ -51,6 +51,7 @@ public class Parser {
         addOperatorsToMap(13, "==", "!=", "<=>", "eq", "ne", "cmp");
         addOperatorsToMap(14, "<", ">", "<=", ">=", "lt", "gt", "le", "ge");
         addOperatorsToMap(15, "isa");
+        addOperatorsToMap(16, "-d");
         addOperatorsToMap(17, ">>", "<<");
         addOperatorsToMap(18, "+", "-", ".");
         addOperatorsToMap(19, "*", "/", "%", "x");
@@ -580,11 +581,22 @@ public class Parser {
                         return parseVariable(token.text);
                     case "!":
                     case "~":
-                    case "-":
                     case "+":
                     case "--":
                     case "++":
                         // Handle unary operators like `! + ++`
+                        operand = parseExpression(getPrecedence(token.text) + 1);
+                        return new OperatorNode(token.text, operand, tokenIndex);
+                    case "-":
+                        // Handle unary operators like `- -d`
+                        nextToken = tokens.get(tokenIndex + 1);
+                        if (nextToken.type == LexerTokenType.IDENTIFIER && nextToken.text.length() == 1) {
+                            // Handle `-d`
+                            tokenIndex++;
+                            operand = parseExpression(getPrecedence("-d") + 1);
+                            return new OperatorNode("-" + token.text, operand, tokenIndex);
+                        }
+                        // Unary minus
                         operand = parseExpression(getPrecedence(token.text) + 1);
                         return new OperatorNode(token.text, operand, tokenIndex);
                 }
