@@ -54,12 +54,13 @@ public class RuntimeIO implements RuntimeScalarReference {
     private BufferedReader bufferedReader;
     private FileChannel fileChannel;
     private WritableByteChannel channel;
+
     // Stream for directory operations
     private DirectoryStream<Path> directoryStream;
     private int currentDirPosition = 0;
     private String directoryPath;
     private Iterator<Path> directoryIterator;
-
+    private ArrayList<RuntimeScalar> directorySpecialEntries = new ArrayList<>();
 
     // State flags
     private boolean isEOF;
@@ -255,23 +256,44 @@ public class RuntimeIO implements RuntimeScalarReference {
 
         RuntimeIO dirIO = (RuntimeIO) dirHandle.value;
         DirectoryStream<Path> stream = dirIO.getDirectoryStream();
+
+        // If the iterator is null, initialize it
         if (dirIO.directoryIterator == null) {
             dirIO.directoryIterator = stream.iterator();
+            // Add special directories '.' and '..' only on the first iteration
+            dirIO.directorySpecialEntries = new ArrayList<>();
+            dirIO.directorySpecialEntries.add(new RuntimeScalar("."));
+            dirIO.directorySpecialEntries.add(new RuntimeScalar(".."));
         }
 
+        // Scalar context: return one entry at a time
         if (ctx == RuntimeContextType.SCALAR) {
+            // Handle special entries first ('.' and '..')
+            if (!dirIO.directorySpecialEntries.isEmpty()) {
+                return dirIO.directorySpecialEntries.remove(0);  // return '.' or '..'
+            }
+
+            // Now handle actual directory contents
             if (dirIO.directoryIterator.hasNext()) {
                 Path entry = dirIO.directoryIterator.next();
                 return new RuntimeScalar(entry.getFileName().toString());
             } else {
-                return scalarFalse;
+                return scalarFalse;  // No more entries
             }
         } else {
+            // List context: return all entries at once
             RuntimeList result = new RuntimeList();
+
+            // Add special entries ('.' and '..') first
+            result.elements.addAll(dirIO.directorySpecialEntries);
+            dirIO.directorySpecialEntries.clear();
+
+            // Add remaining directory contents
             while (dirIO.directoryIterator.hasNext()) {
                 Path entry = dirIO.directoryIterator.next();
                 result.elements.add(new RuntimeScalar(entry.getFileName().toString()));
             }
+
             return result;
         }
     }
