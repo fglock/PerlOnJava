@@ -94,15 +94,6 @@ public class Operator {
         return RuntimeIO.readdir(dirHandle, ctx);
     }
 
-    public static RuntimeScalar closedir(RuntimeScalar dirHandle) {
-        if (dirHandle.type != RuntimeScalarType.GLOB) {
-            throw new RuntimeException("Invalid directory handle");
-        }
-
-        RuntimeIO dirIO = (RuntimeIO) dirHandle.value;
-        return dirIO.closedir();
-    }
-
     public static RuntimeScalar seekdir(RuntimeScalar dirHandle, RuntimeScalar position) {
         if (dirHandle.type != RuntimeScalarType.GLOB) {
             throw new RuntimeException("Invalid directory handle");
