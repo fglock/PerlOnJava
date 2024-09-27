@@ -1,12 +1,10 @@
 package org.perlonjava.runtime;
 
 import java.io.IOException;
-import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.PosixFilePermission;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -89,45 +87,11 @@ public class Operator {
     }
 
     public static RuntimeScalar opendir(RuntimeList args) {
-        RuntimeScalar dirHandle = (RuntimeScalar) args.elements.get(0);
-        String dirPath = args.elements.get(1).toString();
-
-        try {
-            DirectoryStream<Path> stream = Files.newDirectoryStream(Paths.get(dirPath));
-            RuntimeIO dirIO = new RuntimeIO(stream);
-            dirHandle.type = RuntimeScalarType.GLOB;
-            dirHandle.value = dirIO;
-            return scalarTrue; // success
-        } catch (IOException e) {
-            getGlobalVariable("main::!").set(e.getMessage());
-            return scalarFalse; // failure
-        }
+        return RuntimeIO.openDir(args);
     }
 
     public static RuntimeDataProvider readdir(RuntimeScalar dirHandle, int ctx) {
-        if (dirHandle.type != RuntimeScalarType.GLOB) {
-            throw new RuntimeException("Invalid directory handle");
-        }
-
-        RuntimeIO dirIO = (RuntimeIO) dirHandle.value;
-        DirectoryStream<Path> stream = dirIO.getDirectoryStream();
-        Iterator<Path> iterator = stream.iterator();
-
-        if (ctx == RuntimeContextType.SCALAR) {
-            if (iterator.hasNext()) {
-                Path entry = iterator.next();
-                return new RuntimeScalar(entry.getFileName().toString());
-            } else {
-                return scalarFalse; // undef
-            }
-        } else {
-            RuntimeList result = new RuntimeList();
-            while (iterator.hasNext()) {
-                Path entry = iterator.next();
-                result.elements.add(new RuntimeScalar(entry.getFileName().toString()));
-            }
-            return result;
-        }
+        return RuntimeIO.readdir(dirHandle, ctx);
     }
 
     public static RuntimeScalar closedir(RuntimeScalar dirHandle) {
@@ -139,15 +103,6 @@ public class Operator {
         return dirIO.closedir();
     }
 
-    public static RuntimeScalar telldir(RuntimeScalar dirHandle) {
-        if (dirHandle.type != RuntimeScalarType.GLOB) {
-            throw new RuntimeException("Invalid directory handle");
-        }
-
-        RuntimeIO dirIO = (RuntimeIO) dirHandle.value;
-        return new RuntimeScalar(dirIO.telldir());
-    }
-
     public static RuntimeScalar seekdir(RuntimeScalar dirHandle, RuntimeScalar position) {
         if (dirHandle.type != RuntimeScalarType.GLOB) {
             throw new RuntimeException("Invalid directory handle");
@@ -155,16 +110,6 @@ public class Operator {
 
         RuntimeIO dirIO = (RuntimeIO) dirHandle.value;
         dirIO.seekdir(position.getInt());
-        return scalarTrue;
-    }
-
-    public static RuntimeScalar rewinddir(RuntimeScalar dirHandle) {
-        if (dirHandle.type != RuntimeScalarType.GLOB) {
-            throw new RuntimeException("Invalid directory handle");
-        }
-
-        RuntimeIO dirIO = (RuntimeIO) dirHandle.value;
-        dirIO.rewinddir();
         return scalarTrue;
     }
 
