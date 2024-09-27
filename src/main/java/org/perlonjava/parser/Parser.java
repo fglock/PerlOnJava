@@ -315,11 +315,11 @@ public class Parser {
             case "wait":
             case "wantarray":
                 // Handle operators with zero arguments
-                return new OperatorNode(token.text, null, tokenIndex);
+                return new OperatorNode(token.text, null, currentIndex);
             case "not":
                 // Handle 'not' keyword as a unary operator with an operand
                 operand = parseExpression(getPrecedence(token.text) + 1);
-                return new OperatorNode(token.text, operand, tokenIndex);
+                return new OperatorNode(token.text, operand, currentIndex);
             case "abs":
             case "log":
             case "sqrt":
@@ -393,7 +393,7 @@ public class Parser {
             case "rewinddir":
                 // Handle operators with one mandatory argument
                 operand = ListParser.parseZeroOrMoreList(this, 1, false, true, false, false);
-                return new OperatorNode(token.text, operand, tokenIndex);
+                return new OperatorNode(token.text, operand, currentIndex);
             case "rindex":
             case "index":
             case "atan2":
@@ -401,15 +401,15 @@ public class Parser {
             case "seekdir":
                 // Handle operators with two mandatory arguments
                 operand = ListParser.parseZeroOrMoreList(this, 2, false, true, false, false);
-                return new OperatorNode(token.text, operand, tokenIndex);
+                return new OperatorNode(token.text, operand, currentIndex);
             case "bless":
                 operand = ListParser.parseZeroOrMoreList(this, 1, false, true, false, false);
                 Node ref = ((ListNode) operand).elements.get(0);
                 Node className = ((ListNode) operand).elements.get(1);
                 if (className == null) {
-                    className = new StringNode("main", tokenIndex);
+                    className = new StringNode("main", currentIndex);
                 }
-                return new BinaryOperatorNode("bless", ref, className, tokenIndex);
+                return new BinaryOperatorNode("bless", ref, className, currentIndex);
             case "split":
                 // RuntimeList split(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar limitArg)
                 operand = ListParser.parseZeroOrMoreList(this, 1, false, true, false, true);
@@ -419,7 +419,7 @@ public class Parser {
                         ((OperatorNode) separator).operator = "quoteRegex";
                     }
                 }
-                return new BinaryOperatorNode(token.text, separator, operand, tokenIndex);
+                return new BinaryOperatorNode(token.text, separator, operand, currentIndex);
             case "push":
             case "unshift":
             case "join":
@@ -428,7 +428,7 @@ public class Parser {
                 // Handle 'join' keyword as a Binary operator with a RuntimeList operand
                 operand = ListParser.parseZeroOrMoreList(this, 1, false, true, false, false);
                 separator = ((ListNode) operand).elements.remove(0);
-                return new BinaryOperatorNode(token.text, separator, operand, tokenIndex);
+                return new BinaryOperatorNode(token.text, separator, operand, currentIndex);
             case "sort":
             case "map":
             case "grep":
@@ -455,9 +455,9 @@ public class Parser {
                 // ((ListNode) operand).handle = null;
                 Node handle = ((ListNode) operand).elements.remove(0);
                 if (handle == null) {
-                    handle = new IdentifierNode("main::STDOUT", tokenIndex);
+                    handle = new IdentifierNode("main::STDOUT", currentIndex);
                 }
-                return new BinaryOperatorNode(token.text, handle, operand, tokenIndex);
+                return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
             case "printf":
             case "print":
             case "say":
@@ -466,30 +466,30 @@ public class Parser {
                 handle = ((ListNode) operand).handle;
                 ((ListNode) operand).handle = null;
                 if (handle == null) {
-                    handle = new IdentifierNode("main::STDOUT", tokenIndex);
+                    handle = new IdentifierNode("main::STDOUT", currentIndex);
                 }
-                return new BinaryOperatorNode(token.text, handle, operand, tokenIndex);
+                return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
             case "delete":
             case "exists":
                 operand = ListParser.parseZeroOrOneList(this, 1);
-                return new OperatorNode(token.text, operand, tokenIndex);
+                return new OperatorNode(token.text, operand, currentIndex);
             case "scalar":
             case "values":
             case "keys":
             case "each":
                 operand = parsePrimary();
-                return new OperatorNode(token.text, operand, tokenIndex);
+                return new OperatorNode(token.text, operand, currentIndex);
             case "our":
             case "my":
                 // Handle 'my' keyword as a unary operator with an operand
                 operand = parsePrimary();
-                return new OperatorNode(token.text, operand, tokenIndex);
+                return new OperatorNode(token.text, operand, currentIndex);
             case "return":
                 // Handle 'return' keyword as a unary operator with an operand;
                 // Parentheses are ignored.
                 // operand = parseExpression(getPrecedence("print") + 1);
                 operand = ListParser.parseZeroOrMoreList(this, 0, false, false, false, false);
-                return new OperatorNode("return", operand, tokenIndex);
+                return new OperatorNode("return", operand, currentIndex);
             case "eval":
                 return OperatorParser.parseEval(this);
             case "do":
