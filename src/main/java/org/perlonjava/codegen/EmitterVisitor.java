@@ -994,6 +994,9 @@ public class EmitterVisitor implements Visitor {
             case "rmdir":
                 handleUnaryBuiltin(node, operator);
                 break;
+            case "mkdir":
+                handleMkdirOperator(node);
+                break;
             case "glob":
                 handleGlobBuiltin(node);
                 break;
@@ -1138,6 +1141,18 @@ public class EmitterVisitor implements Visitor {
             // if context is not void, return an empty list
             ListNode listNode = new ListNode(node.tokenIndex);
             listNode.accept(this);
+        }
+    }
+
+    private void handleMkdirOperator(OperatorNode node) {
+        String operator = node.operator;
+        node.operand.accept(this.with(RuntimeContextType.LIST));
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE,
+                "org/perlonjava/runtime/Operator",
+                operator,
+                "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeList;", true);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
         }
     }
 
