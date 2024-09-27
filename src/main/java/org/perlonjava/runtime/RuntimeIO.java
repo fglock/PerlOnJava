@@ -46,18 +46,16 @@ public class RuntimeIO implements RuntimeScalarReference {
     private final ByteBuffer buffer;
     private final ByteBuffer readBuffer;
     private final ByteBuffer singleCharBuffer;
-
+    // List to keep track of directory stream positions
+    private final List<DirectoryStream<Path>> directoryStreamPositions = new ArrayList<>();
     // Streams and channels for I/O operations
     private InputStream inputStream;
     private OutputStream outputStream;
     private BufferedReader bufferedReader;
     private FileChannel fileChannel;
     private WritableByteChannel channel;
-
     // Stream for directory operations
     private DirectoryStream<Path> directoryStream;
-    // List to keep track of directory stream positions
-    private final List<DirectoryStream<Path>> directoryStreamPositions = new ArrayList<>();
     private int currentDirPosition = 0;
     private String directoryPath;
     private Iterator<Path> directoryIterator;
