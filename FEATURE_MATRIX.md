@@ -179,6 +179,7 @@
 - ✔️   **File test operators**: Using `_` as the argument reuses the last stat result.
 - ❌  **File test operators**: The current implementation only works with file paths, not filehandles or dirhandles.
 - ❌  **File test operators**: Add support for stacked file test operators.
+- ✔️   **Directory operators**: `readdir`, `opendir`, `closedir`, `telldir`, `seekdir`, `rewinddir`, `mkdir`, `rmdir`.
 
 ## Namespaces and Global Variables
 - ✔️   **Global variable infrastructure**: Support for global variables is implemented.
