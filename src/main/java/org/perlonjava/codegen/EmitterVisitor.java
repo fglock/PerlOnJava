@@ -998,6 +998,9 @@ public class EmitterVisitor implements Visitor {
             case "opendir":
                 handleMkdirOperator(node);
                 break;
+            case "readdir":
+                handleReaddirOperator(node);
+                break;
             case "glob":
                 handleGlobBuiltin(node);
                 break;
@@ -1145,13 +1148,26 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
+    private void handleReaddirOperator(OperatorNode node) {
+        String operator = node.operator;
+        node.operand.accept(this.with(RuntimeContextType.SCALAR));
+        pushCallContext();
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/Operator",
+                operator,
+                "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
+    }
+
     private void handleMkdirOperator(OperatorNode node) {
         String operator = node.operator;
         node.operand.accept(this.with(RuntimeContextType.LIST));
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE,
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/Operator",
                 operator,
-                "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeList;", true);
+                "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         if (ctx.contextType == RuntimeContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.POP);
         }
