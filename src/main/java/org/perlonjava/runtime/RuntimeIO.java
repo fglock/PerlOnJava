@@ -14,10 +14,7 @@ import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
+import java.nio.file.*;
 import java.util.*;
 
 import static org.perlonjava.runtime.GlobalContext.getGlobalIO;
@@ -59,6 +56,9 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     // Stream for directory operations
     private DirectoryStream<Path> directoryStream;
+    // List to keep track of directory stream positions
+    private List<DirectoryStream<Path>> directoryStreamPositions = new ArrayList<>();
+    private int currentDirPosition = 0;
 
     // State flags
     private boolean isEOF;
@@ -232,7 +232,10 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     // Method to get the directory stream
     public DirectoryStream<Path> getDirectoryStream() {
-        return this.directoryStream;
+        if (directoryStream != null && !directoryStreamPositions.contains(directoryStream)) {
+            directoryStreamPositions.add(directoryStream);
+        }
+        return directoryStream;
     }
 
     // Method for closing directory streams
@@ -248,6 +251,36 @@ public class RuntimeIO implements RuntimeScalarReference {
             getGlobalVariable("main::!").set("Directory operation failed: " + e.getMessage());
             return scalarFalse;
         }
+    }
+
+    // Method to get the current position in the directory stream (telldir equivalent)
+    public int telldir() {
+        return currentDirPosition;
+    }
+
+    // Method to seek to a specific position in the directory stream (seekdir equivalent)
+    public void seekdir(int position) {
+        if (directoryStream == null) {
+            throw new UnsupportedOperationException("seekdir is not supported for non-directory streams");
+        }
+
+        // Reset the directory stream
+        try {
+            directoryStream.close();
+            directoryStream = Files.newDirectoryStream(Paths.get(directoryStreamPositions.get(0).iterator().next().toString()));
+            Iterator<Path> iterator = directoryStream.iterator();
+            for (int i = 0; i < position && iterator.hasNext(); i++) {
+                iterator.next();
+            }
+            currentDirPosition = position;
+        } catch (IOException e) {
+            throw new RuntimeException("Directory operation failed: " + e.getMessage());
+        }
+    }
+
+    // Method to rewind the directory stream to the beginning (rewinddir equivalent)
+    public void rewinddir() {
+        seekdir(0);
     }
 
     private Set<StandardOpenOption> convertMode(String mode) {
