@@ -995,6 +995,7 @@ public class EmitterVisitor implements Visitor {
                 handleUnaryBuiltin(node, operator);
                 break;
             case "mkdir":
+            case "opendir":
                 handleMkdirOperator(node);
                 break;
             case "glob":
