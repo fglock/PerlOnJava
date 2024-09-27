@@ -1,5 +1,10 @@
 package org.perlonjava.runtime;
 
+import java.io.IOException;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.IllegalFormatException;
 import java.util.Iterator;
@@ -8,9 +13,59 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeScalarCache.getScalarBoolean;
+import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 public class Operator {
+
+    public static RuntimeScalar opendir(RuntimeScalar dirName, RuntimeScalar dirHandle) {
+        String dirPath = dirName.toString();
+        try {
+            DirectoryStream<Path> stream = Files.newDirectoryStream(Paths.get(dirPath));
+            RuntimeIO dirIO = new RuntimeIO(stream);
+            dirHandle.type = RuntimeScalarType.GLOB;
+            dirHandle.value = dirIO;
+            return scalarTrue; // success
+        } catch (IOException e) {
+            getGlobalVariable("main::!").set(e.getMessage());
+            return scalarFalse; // failure
+        }
+    }
+
+    public static RuntimeDataProvider readdir(RuntimeScalar dirHandle, int ctx) {
+        if (dirHandle.type != RuntimeScalarType.GLOB) {
+            throw new RuntimeException("Invalid directory handle");
+        }
+
+        RuntimeIO dirIO = (RuntimeIO) dirHandle.value;
+        DirectoryStream<Path> stream = dirIO.getDirectoryStream();
+        Iterator<Path> iterator = stream.iterator();
+
+        if (ctx == RuntimeContextType.SCALAR) {
+            if (iterator.hasNext()) {
+                Path entry = iterator.next();
+                return new RuntimeScalar(entry.getFileName().toString());
+            } else {
+                return scalarFalse; // undef
+            }
+        } else {
+            RuntimeList result = new RuntimeList();
+            while (iterator.hasNext()) {
+                Path entry = iterator.next();
+                result.elements.add(new RuntimeScalar(entry.getFileName().toString()));
+            }
+            return result;
+        }
+    }
+
+    public static RuntimeScalar closedir(RuntimeScalar dirHandle) {
+        if (dirHandle.type != RuntimeScalarType.GLOB) {
+            throw new RuntimeException("Invalid directory handle");
+        }
+
+        RuntimeIO dirIO = (RuntimeIO) dirHandle.value;
+        return dirIO.closedir();
+    }
+
     /**
      * Formats the elements according to the specified format string.
      *
