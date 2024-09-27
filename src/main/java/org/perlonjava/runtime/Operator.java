@@ -16,15 +16,8 @@ import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 public class Operator {
 
-    public static RuntimeScalar rmdir(RuntimeDataProvider value) {
-        String dirName;
-
-        if (value instanceof RuntimeList && ((RuntimeList) value).elements.isEmpty()) {
-            // If no arguments are provided, use $_
-            dirName = getGlobalVariable("main::_").toString();
-        } else {
-            dirName = value.toString();
-        }
+    public static RuntimeScalar rmdir(RuntimeScalar value) {
+        String dirName = value.toString();
 
         try {
             Path path = Paths.get(dirName);
