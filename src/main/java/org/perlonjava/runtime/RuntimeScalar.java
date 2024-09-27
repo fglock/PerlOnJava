@@ -288,6 +288,25 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
     }
 
+    public RuntimeScalar rewinddir() {
+        if (type != RuntimeScalarType.GLOB) {
+            throw new RuntimeException("Invalid directory handle");
+        }
+
+        RuntimeIO dirIO = (RuntimeIO) value;
+        dirIO.rewinddir();
+        return scalarTrue;
+    }
+
+    public RuntimeScalar telldir() {
+        if (type != RuntimeScalarType.GLOB) {
+            throw new RuntimeException("Invalid directory handle");
+        }
+
+        RuntimeIO dirIO = (RuntimeIO) value;
+        return new RuntimeScalar(dirIO.telldir());
+    }
+
     public boolean looksLikeNumber() {
         switch (this.type) {
             case INTEGER:
