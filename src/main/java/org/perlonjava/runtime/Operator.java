@@ -56,7 +56,7 @@ public class Operator {
             Files.createDirectories(path);
 
             // Set permissions
-            Set<PosixFilePermission> permissions = PosixFilePermissions.fromString(String.format("%03o", mode));
+            Set<PosixFilePermission> permissions = getPosixFilePermissions(mode);
             Files.setPosixFilePermissions(path, permissions);
 
             return scalarTrue;
@@ -65,6 +65,27 @@ public class Operator {
             getGlobalVariable("main::!").set(e.getMessage());
             return scalarFalse;
         }
+    }
+
+    public static Set<PosixFilePermission> getPosixFilePermissions(int mode) {
+        Set<PosixFilePermission> permissions = new HashSet<>();
+
+        // Owner permissions
+        if ((mode & 0400) != 0) permissions.add(PosixFilePermission.OWNER_READ);
+        if ((mode & 0200) != 0) permissions.add(PosixFilePermission.OWNER_WRITE);
+        if ((mode & 0100) != 0) permissions.add(PosixFilePermission.OWNER_EXECUTE);
+
+        // Group permissions
+        if ((mode & 0040) != 0) permissions.add(PosixFilePermission.GROUP_READ);
+        if ((mode & 0020) != 0) permissions.add(PosixFilePermission.GROUP_WRITE);
+        if ((mode & 0010) != 0) permissions.add(PosixFilePermission.GROUP_EXECUTE);
+
+        // Others permissions
+        if ((mode & 0004) != 0) permissions.add(PosixFilePermission.OTHERS_READ);
+        if ((mode & 0002) != 0) permissions.add(PosixFilePermission.OTHERS_WRITE);
+        if ((mode & 0001) != 0) permissions.add(PosixFilePermission.OTHERS_EXECUTE);
+
+        return permissions;
     }
 
     public static RuntimeScalar opendir(RuntimeList args) {
