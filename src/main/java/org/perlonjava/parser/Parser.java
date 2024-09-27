@@ -350,6 +350,7 @@ public class Parser {
             case "gmtime":
             case "glob":
             case "caller":
+                // Handle operators with one optional argument
                 String text = token.text;
                 operand = ListParser.parseZeroOrOneList(this, 0);
                 if (((ListNode) operand).elements.isEmpty()) {
@@ -384,13 +385,21 @@ public class Parser {
                     }
                 }
                 return new OperatorNode(text, operand, tokenIndex);
+            case "readdir":
+            case "closedir":
+            case "telldir":
+            case "rewinddir":
+                // Handle operators with one mandatory argument
+                operand = ListParser.parseZeroOrMoreList(this, 1, false, true, false, false);
+                return new OperatorNode(token.text, operand, tokenIndex);
             case "rindex":
             case "index":
+            case "atan2":
+            case "opendir":
+            case "seekdir":
+                // Handle operators with two mandatory arguments
                 operand = ListParser.parseZeroOrMoreList(this, 2, false, true, false, false);
                 return new OperatorNode(token.text, operand, tokenIndex);
-            case "atan2":
-                operand = ListParser.parseZeroOrMoreList(this, 2, false, true, false, false);
-                return new OperatorNode("atan2", operand, tokenIndex);
             case "bless":
                 operand = ListParser.parseZeroOrMoreList(this, 1, false, true, false, false);
                 Node ref = ((ListNode) operand).elements.get(0);
