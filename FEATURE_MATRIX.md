@@ -170,6 +170,13 @@
 - ✔️   **End of file markers**: Source code control characters `^D` and `^Z`, and the tokens `__END__` and `__DATA__` are implemented. There is no `DATA` file handle yet.
 - ❌  **Startup processing**: processing `$sitelib/sitecustomize.pl` at startup is not enabled.
 - ❌  **Smartmatch operator**: `~~` and `given`/`when` construct
+- ❌  **File test operators**: `-R`, `-W`, `-X`, `-O` (for real uid/gid) are not implemented due to lack of straightforward Java equivalents.
+- ❌  **File test operators**: `-t` (tty check) is not implemented.
+- ✔️   **File test operators**: `-p`, `-S`, `-b`, and `-c` are approximated using file names or paths, as Java doesn't provide direct equivalents.
+- ✔️   **File test operators**: `-k` (sticky bit) is approximated using the "others execute" permission, as Java doesn't have a direct equivalent.
+- ✔️   **File test operators**: `-T` and `-B` (text/binary check) are implemented using a heuristic similar to Perl's approach.
+- ✔️   **File test operators**: Time-based operators (`-M`, `-A`, `-C`) return the difference in days as a floating-point number.
+- ❌  **File test operators**: The current implementation only works with file paths, not filehandles; Implement the special '_' filehandle behavior: In Perl, using '_' as the argument reuses the last stat result; Add support for stacked file test operators.
 
 ## Namespaces and Global Variables
 - ✔️   **Global variable infrastructure**: Support for global variables is implemented.
