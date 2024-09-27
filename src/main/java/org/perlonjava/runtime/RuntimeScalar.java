@@ -288,6 +288,20 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
     }
 
+    public RuntimeScalar rmdir() {
+        String dirName = value.toString();
+
+        try {
+            Path path = Paths.get(dirName);
+            Files.delete(path);
+            return scalarTrue;
+        } catch (IOException e) {
+            // Set $! (errno) in case of failure
+            getGlobalVariable("main::!").set(e.getMessage());
+            return scalarFalse;
+        }
+    }
+
     public RuntimeScalar closedir() {
         if (type != RuntimeScalarType.GLOB) {
             throw new RuntimeException("Invalid directory handle");

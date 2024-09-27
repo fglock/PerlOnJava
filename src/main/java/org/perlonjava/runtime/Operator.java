@@ -14,20 +14,6 @@ import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 public class Operator {
 
-    public static RuntimeScalar rmdir(RuntimeScalar value) {
-        String dirName = value.toString();
-
-        try {
-            Path path = Paths.get(dirName);
-            Files.delete(path);
-            return scalarTrue;
-        } catch (IOException e) {
-            // Set $! (errno) in case of failure
-            getGlobalVariable("main::!").set(e.getMessage());
-            return scalarFalse;
-        }
-    }
-
     public static RuntimeScalar mkdir(RuntimeList args) {
         String fileName;
         int mode;
