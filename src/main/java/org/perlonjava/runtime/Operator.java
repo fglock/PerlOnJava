@@ -5,10 +5,9 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.IllegalFormatException;
-import java.util.Iterator;
-import java.util.List;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -16,6 +15,43 @@ import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 public class Operator {
+
+    public static RuntimeScalar mkdir(RuntimeList args) {
+        String fileName;
+        int mode;
+
+        if (args.elements.isEmpty()) {
+            // If no arguments are provided, use $_
+            fileName = getGlobalVariable("main::_").toString();
+            mode = 0777;
+        } else if (args.elements.size() == 1) {
+            // If only filename is provided
+            fileName = args.elements.get(0).toString();
+            mode = 0777;
+        } else {
+            // If both filename and mode are provided
+            fileName = args.elements.get(0).toString();
+            mode = ((RuntimeScalar) args.elements.get(1)).getInt();
+        }
+
+        // Remove trailing slashes
+        fileName = fileName.replaceAll("/+$", "");
+
+        try {
+            Path path = Paths.get(fileName);
+            Files.createDirectories(path);
+
+            // Set permissions
+            Set<PosixFilePermission> permissions = PosixFilePermissions.fromString(String.format("%03o", mode));
+            Files.setPosixFilePermissions(path, permissions);
+
+            return scalarTrue;
+        } catch (IOException e) {
+            // Set $! (errno) in case of failure
+            getGlobalVariable("main::!").set(e.getMessage());
+            return scalarFalse;
+        }
+    }
 
     public static RuntimeScalar opendir(RuntimeScalar dirName, RuntimeScalar dirHandle) {
         String dirPath = dirName.toString();

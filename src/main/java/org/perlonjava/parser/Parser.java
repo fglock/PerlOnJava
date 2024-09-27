@@ -434,8 +434,10 @@ public class Parser {
             case "reverse":
             case "splice":
             case "unlink":
+            case "mkdir":
             case "die":
             case "warn":
+                // Handle operators with any number of arguments
                 operand = ListParser.parseZeroOrMoreList(this, 0, false, true, false, false);
                 return new OperatorNode(token.text, operand, currentIndex);
             case "readline":
