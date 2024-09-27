@@ -14,28 +14,34 @@ import static org.perlonjava.runtime.RuntimeScalarCache.*;
 /**
  * FileTestOperator class implements Perl-like file test operators in Java.
  * This class provides methods to perform various file tests similar to Perl's -X operators.
- *
+ * <p>
  * Implementation notes for Perl file test operators:
- *
+ * <p>
  * 1. -R, -W, -X, -O (for real uid/gid) are not implemented due to lack of
- *    straightforward Java equivalents.
- *
+ * straightforward Java equivalents.
+ * <p>
  * 2. -t (tty check) is not implemented as it's specific to file handles
- *    rather than file paths.
- *
+ * rather than file paths.
+ * <p>
  * 3. -p, -S, -b, and -c are approximated using file names or paths, as Java
- *    doesn't provide direct equivalents.
- *
+ * doesn't provide direct equivalents.
+ * <p>
  * 4. -k (sticky bit) is approximated using the "others execute" permission,
- *    as Java doesn't have a direct equivalent.
- *
+ * as Java doesn't have a direct equivalent.
+ * <p>
  * 5. -T and -B (text/binary check) are implemented using a heuristic similar
- *    to Perl's approach.
- *
+ * to Perl's approach.
+ * <p>
  * 6. Time-based operators (-M, -A, -C) return the difference in days as a
- *    floating-point number.
+ * floating-point number.
  */
 public class FileTestOperator {
+
+    static RuntimeScalar lastFileHandle = new RuntimeScalar();
+
+    public static RuntimeScalar fileTestLastHandle(String operator) {
+        return fileTest(operator, lastFileHandle);
+    }
 
     /**
      * Performs a file test based on the given operator and file handle.
@@ -45,6 +51,7 @@ public class FileTestOperator {
      * @return A RuntimeScalar containing the result of the file test
      */
     public static RuntimeScalar fileTest(String operator, RuntimeScalar fileHandle) {
+        lastFileHandle.set(fileHandle);
         String filePath = fileHandle.toString();
         Path path = Paths.get(filePath);
 

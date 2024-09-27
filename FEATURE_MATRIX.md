@@ -176,7 +176,9 @@
 - ✔️   **File test operators**: `-k` (sticky bit) is approximated using the "others execute" permission, as Java doesn't have a direct equivalent.
 - ✔️   **File test operators**: `-T` and `-B` (text/binary check) are implemented using a heuristic similar to Perl's approach.
 - ✔️   **File test operators**: Time-based operators (`-M`, `-A`, `-C`) return the difference in days as a floating-point number.
-- ❌  **File test operators**: The current implementation only works with file paths, not filehandles; Implement the special '_' filehandle behavior: In Perl, using '_' as the argument reuses the last stat result; Add support for stacked file test operators.
+- ✔️   **File test operators**: Using `_` as the argument reuses the last stat result.
+- ❌  **File test operators**: The current implementation only works with file paths, not filehandles or dirhandles.
+- ❌  **File test operators**: Add support for stacked file test operators.
 
 ## Namespaces and Global Variables
 - ✔️   **Global variable infrastructure**: Support for global variables is implemented.

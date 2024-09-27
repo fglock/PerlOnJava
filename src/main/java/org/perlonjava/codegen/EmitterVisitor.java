@@ -874,13 +874,22 @@ public class EmitterVisitor implements Visitor {
 
         // push the operator string to the JVM stack
         ctx.mv.visitLdcInsn(node.operator);
-        // push the file name to the JVM stack
-        node.operand.accept(this.with(RuntimeContextType.SCALAR));
-        ctx.mv.visitMethodInsn(
-                Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/FileTestOperator",
-                "fileTest",
-                "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        if (node.operand instanceof IdentifierNode && ((IdentifierNode) node.operand).name.equals("_")) {
+            // use the `_` file handle
+            ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/FileTestOperator",
+                    "fileTestLastHandle",
+                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        } else {
+            // push the file name to the JVM stack
+            node.operand.accept(this.with(RuntimeContextType.SCALAR));
+            ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/FileTestOperator",
+                    "fileTest",
+                    "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        }
         if (ctx.contextType == RuntimeContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.POP);
         }

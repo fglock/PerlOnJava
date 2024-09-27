@@ -593,9 +593,17 @@ public class Parser {
                         nextToken = tokens.get(tokenIndex);
                         if (nextToken.type == LexerTokenType.IDENTIFIER && nextToken.text.length() == 1) {
                             // Handle `-d`
+                            String operator = "-" + nextToken.text;
                             tokenIndex++;
-                            operand = parseExpression(getPrecedence("-d") + 1);
-                            return new OperatorNode("-" + nextToken.text, operand, tokenIndex);
+                            nextToken = peek();
+                            if (nextToken.text.equals("_")) {
+                                // Handle `-f _`
+                                consume();
+                                operand = new IdentifierNode("_", tokenIndex);
+                            } else {
+                                operand = parseExpression(getPrecedence("-d") + 1);
+                            }
+                            return new OperatorNode(operator, operand, tokenIndex);
                         }
                         // Unary minus
                         operand = parseExpression(getPrecedence(token.text) + 1);
