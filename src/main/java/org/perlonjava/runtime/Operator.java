@@ -67,8 +67,10 @@ public class Operator {
         }
     }
 
-    public static RuntimeScalar opendir(RuntimeScalar dirName, RuntimeScalar dirHandle) {
-        String dirPath = dirName.toString();
+    public static RuntimeScalar opendir(RuntimeList args) {
+        RuntimeScalar dirHandle = (RuntimeScalar) args.elements.get(0);
+        String dirPath = args.elements.get(1).toString();
+
         try {
             DirectoryStream<Path> stream = Files.newDirectoryStream(Paths.get(dirPath));
             RuntimeIO dirIO = new RuntimeIO(stream);
