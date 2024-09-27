@@ -349,6 +349,7 @@ public class Parser {
             case "defined":
             case "localtime":
             case "gmtime":
+            case "rmdir":
             case "glob":
             case "caller":
                 // Handle operators with one optional argument
@@ -589,12 +590,12 @@ public class Parser {
                         return new OperatorNode(token.text, operand, tokenIndex);
                     case "-":
                         // Handle unary operators like `- -d`
-                        nextToken = tokens.get(tokenIndex + 1);
+                        nextToken = tokens.get(tokenIndex);
                         if (nextToken.type == LexerTokenType.IDENTIFIER && nextToken.text.length() == 1) {
                             // Handle `-d`
                             tokenIndex++;
                             operand = parseExpression(getPrecedence("-d") + 1);
-                            return new OperatorNode("-" + token.text, operand, tokenIndex);
+                            return new OperatorNode("-" + nextToken.text, operand, tokenIndex);
                         }
                         // Unary minus
                         operand = parseExpression(getPrecedence(token.text) + 1);
