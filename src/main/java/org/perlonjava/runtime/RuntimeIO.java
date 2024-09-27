@@ -14,6 +14,8 @@ import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
@@ -55,12 +57,23 @@ public class RuntimeIO implements RuntimeScalarReference {
     private FileChannel fileChannel;
     private WritableByteChannel channel;
 
+    // Stream for directory operations
+    private DirectoryStream<Path> directoryStream;
+
     // State flags
     private boolean isEOF;
     private boolean needFlush;
 
     // Constructor to initialize buffers
     public RuntimeIO() {
+        this.buffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
+        this.readBuffer = ByteBuffer.allocate(BUFFER_SIZE);
+        this.singleCharBuffer = ByteBuffer.allocate(1);
+    }
+
+    // Constructor for directory streams
+    public RuntimeIO(DirectoryStream<Path> directoryStream) {
+        this.directoryStream = directoryStream;
         this.buffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
         this.readBuffer = ByteBuffer.allocate(BUFFER_SIZE);
         this.singleCharBuffer = ByteBuffer.allocate(1);
@@ -214,6 +227,26 @@ public class RuntimeIO implements RuntimeScalarReference {
             return list;
         } else {
             return new RuntimeScalar(out);
+        }
+    }
+
+    // Method to get the directory stream
+    public DirectoryStream<Path> getDirectoryStream() {
+        return this.directoryStream;
+    }
+
+    // Method for closing directory streams
+    public RuntimeScalar closedir() {
+        try {
+            if (directoryStream != null) {
+                directoryStream.close();
+                directoryStream = null;
+                return scalarTrue;
+            }
+            return scalarFalse; // Not a directory handle
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("Directory operation failed: " + e.getMessage());
+            return scalarFalse;
         }
     }
 
