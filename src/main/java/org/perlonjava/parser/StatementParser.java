@@ -104,15 +104,9 @@ public class StatementParser {
         Node body = parser.parseBlock();
         parser.consume(LexerTokenType.OPERATOR, "}");
 
-        Node continueNode = null;
-        if (parser.peek().text.equals("continue")) {
-            parser.consume();
-            parser.consume(LexerTokenType.OPERATOR, "{");
-            continueNode = parser.parseBlock();
-            parser.consume(LexerTokenType.OPERATOR, "}");
-        }
+        // 3-argument for doesn't have a continue block
 
-        return new For3Node(true, initialization, condition, increment, body, continueNode, parser.tokenIndex);
+        return new For3Node(true, initialization, condition, increment, body, null, parser.tokenIndex);
     }
 
     public static Node parseIfStatement(Parser parser) {
