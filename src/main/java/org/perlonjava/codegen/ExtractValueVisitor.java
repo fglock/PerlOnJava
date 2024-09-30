@@ -102,6 +102,7 @@ public class ExtractValueVisitor implements Visitor {
         if (node.variable != null) node.variable.accept(this);
         if (node.list != null) node.list.accept(this);
         if (node.body != null) node.body.accept(this);
+        if (node.continueBlock != null) node.continueBlock.accept(this);
     }
 
     @Override
@@ -110,6 +111,7 @@ public class ExtractValueVisitor implements Visitor {
         if (node.condition != null) node.condition.accept(this);
         if (node.increment != null) node.increment.accept(this);
         if (node.body != null) node.body.accept(this);
+        if (node.continueBlock != null) node.continueBlock.accept(this);
     }
 
     @Override

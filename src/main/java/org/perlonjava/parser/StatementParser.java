@@ -22,10 +22,18 @@ public class StatementParser {
         Node body = parser.parseBlock();
         parser.consume(LexerTokenType.OPERATOR, "}");
 
+        Node continueNode = null;
+        if (parser.peek().text.equals("continue")) {
+            parser.consume();
+            parser.consume(LexerTokenType.OPERATOR, "{");
+            continueNode = parser.parseBlock();
+            parser.consume(LexerTokenType.OPERATOR, "}");
+        }
+
         if (operator.text.equals("until")) {
             condition = new OperatorNode("not", condition, condition.getIndex());
         }
-        return new For3Node(true, null, condition, null, body, parser.tokenIndex);
+        return new For3Node(true, null, condition, null, body, continueNode, parser.tokenIndex);
     }
 
     public static Node parseForStatement(Parser parser) {
@@ -56,11 +64,19 @@ public class StatementParser {
                 Node body = parser.parseBlock();
                 parser.consume(LexerTokenType.OPERATOR, "}");
 
+                Node continueNode = null;
+                if (parser.peek().text.equals("continue")) {
+                    parser.consume();
+                    parser.consume(LexerTokenType.OPERATOR, "{");
+                    continueNode = parser.parseBlock();
+                    parser.consume(LexerTokenType.OPERATOR, "}");
+                }
+
                 if (varNode == null) {
                     varNode = new OperatorNode(
                             "$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);  // $_
                 }
-                return new For1Node(true, varNode, initialization, body, parser.tokenIndex);
+                return new For1Node(true, varNode, initialization, body, continueNode, parser.tokenIndex);
             }
         }
         // 3-argument for
@@ -88,7 +104,15 @@ public class StatementParser {
         Node body = parser.parseBlock();
         parser.consume(LexerTokenType.OPERATOR, "}");
 
-        return new For3Node(true, initialization, condition, increment, body, parser.tokenIndex);
+        Node continueNode = null;
+        if (parser.peek().text.equals("continue")) {
+            parser.consume();
+            parser.consume(LexerTokenType.OPERATOR, "{");
+            continueNode = parser.parseBlock();
+            parser.consume(LexerTokenType.OPERATOR, "}");
+        }
+
+        return new For3Node(true, initialization, condition, increment, body, continueNode, parser.tokenIndex);
     }
 
     public static Node parseIfStatement(Parser parser) {

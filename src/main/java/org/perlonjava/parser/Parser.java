@@ -176,6 +176,7 @@ public class Parser {
                             new OperatorNode("$", new IdentifierNode("_", tokenIndex), tokenIndex),  // $_
                             modifierExpression,
                             expression,
+                            null,
                             tokenIndex);
                 case "while":
                 case "until":
@@ -185,7 +186,10 @@ public class Parser {
                     if (token.text.equals("until")) {
                         modifierExpression = new OperatorNode("not", modifierExpression, modifierExpression.getIndex());
                     }
-                    return new For3Node(false, null, modifierExpression, null, expression, tokenIndex);
+                    return new For3Node(false,
+                            null, modifierExpression,
+                            null, expression, null,
+                            tokenIndex);
             }
             throw new PerlCompilerException(tokenIndex, "Not implemented: " + token, ctx.errorUtil);
         }

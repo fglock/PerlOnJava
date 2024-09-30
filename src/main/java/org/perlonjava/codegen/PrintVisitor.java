@@ -98,6 +98,15 @@ public class PrintVisitor implements Visitor {
             indentLevel--;
         }
 
+        // Visit the continueBlock
+        if (node.continueBlock != null) {
+            appendIndent();
+            sb.append("Continue:\n");
+            indentLevel++;
+            node.continueBlock.accept(this);
+            indentLevel--;
+        }
+
         indentLevel--;
     }
 
@@ -143,6 +152,15 @@ public class PrintVisitor implements Visitor {
             sb.append("Body:\n");
             indentLevel++;
             node.body.accept(this);
+            indentLevel--;
+        }
+
+        // Visit the continueBlock
+        if (node.continueBlock != null) {
+            appendIndent();
+            sb.append("Continue:\n");
+            indentLevel++;
+            node.continueBlock.accept(this);
             indentLevel--;
         }
 
