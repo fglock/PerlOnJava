@@ -137,6 +137,7 @@
 - ✔️   **`if` `unless` Statement modifiers**: Conditional modifiers for `if` and `unless` are implemented.
 - ✔️   **`while` `until` Statement modifiers**: Loop modifiers for `while` and `until` are supported.
 - ✔️   **`for` `foreach` Statement modifiers**: Loop modifiers for `for` and `foreach` are implemented.
+- ✔️   **`continue` blocks**: `continue` blocks in looks are implemented.
 - ✔️   **`eval` string with closure variables**: `eval` in string context with closures is supported.
 - ✔️   **`eval` string sets `$@` on error; returns `undef`**: `eval` sets `$@` on error and returns `undef`.
 - ✔️   **`eval` block**: `eval` blocks are implemented.
