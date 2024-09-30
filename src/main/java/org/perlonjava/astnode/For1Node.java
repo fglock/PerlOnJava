@@ -28,6 +28,8 @@ public class For1Node extends AbstractNode {
      */
     public final Node body;
 
+    public final Node continueBlock;
+
     /**
      * Constructs a new For1Node with the specified parts of the for loop.
      *
@@ -37,11 +39,12 @@ public class For1Node extends AbstractNode {
      * @param body        the body of the for loop
      * @param tokenIndex  the index of the token in the source code
      */
-    public For1Node(boolean useNewScope, Node variable, Node list, Node body, int tokenIndex) {
+    public For1Node(boolean useNewScope, Node variable, Node list, Node body, Node continueBlock, int tokenIndex) {
         this.useNewScope = useNewScope;
         this.variable = variable;
         this.list = list;
         this.body = body;
+        this.continueBlock = continueBlock;
         this.tokenIndex = tokenIndex;
     }
 

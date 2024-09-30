@@ -33,6 +33,8 @@ public class For3Node extends AbstractNode {
      */
     public final Node body;
 
+    public final Node continueBlock;
+
     /**
      * Constructs a new For3Node with the specified parts of the for loop.
      *
@@ -43,12 +45,13 @@ public class For3Node extends AbstractNode {
      * @param body           the body of the for loop
      * @param tokenIndex     the index of the token in the source code
      */
-    public For3Node(boolean useNewScope, Node initialization, Node condition, Node increment, Node body, int tokenIndex) {
+    public For3Node(boolean useNewScope, Node initialization, Node condition, Node increment, Node body, Node continueBlock, int tokenIndex) {
         this.useNewScope = useNewScope;
         this.initialization = initialization;
         this.condition = condition;
         this.increment = increment;
         this.body = body;
+        this.continueBlock = continueBlock;
         this.tokenIndex = tokenIndex;
     }
 
