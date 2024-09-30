@@ -70,6 +70,7 @@ public class EmitStatement {
         // Create labels for the start of the loop and the end of the loop
         Label startLabel = new Label();
         Label endLabel = new Label();
+        Label continueLabel = new Label();
 
         // Visit the initialization node (executed once at the start)
         if (node.initialization != null) {
@@ -92,6 +93,14 @@ public class EmitStatement {
 
         // Visit the loop body
         node.body.accept(voidVisitor);
+
+        // Add continue label
+        mv.visitLabel(continueLabel);
+
+        // Execute continue block if it exists
+        if (node.continueBlock != null) {
+            node.continueBlock.accept(voidVisitor);
+        }
 
         // Visit the increment node (executed after the loop body)
         if (node.increment != null) {
@@ -135,6 +144,7 @@ public class EmitStatement {
         // Create labels for the loop
         Label loopStart = new Label();
         Label loopEnd = new Label();
+        Label continueLabel = new Label();
 
         // Emit the list and create an Iterator<Runtime>
         node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
@@ -161,6 +171,14 @@ public class EmitStatement {
 
         // Visit the body of the loop
         node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
+
+        // Add continue label
+        mv.visitLabel(continueLabel);
+
+        // Execute continue block if it exists
+        if (node.continueBlock != null) {
+            node.continueBlock.accept(emitterVisitor.with(RuntimeContextType.VOID));
+        }
 
         // Jump back to the start of the loop
         mv.visitJumpInsn(Opcodes.GOTO, loopStart);
