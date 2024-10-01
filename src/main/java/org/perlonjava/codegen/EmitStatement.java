@@ -92,7 +92,7 @@ public class EmitStatement {
         }
 
         emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
-                null,
+                node.labelName,
                 null,
                 null,
                 null);
@@ -178,7 +178,7 @@ public class EmitStatement {
         mv.visitInsn(Opcodes.POP);  // we don't need the variable in the stack
 
         emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
-                null,
+                node.labelName,
                 null,
                 null,
                 null);
