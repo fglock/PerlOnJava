@@ -57,10 +57,10 @@ public class Pack {
                             writeLong(output, (long) value.getDouble());
                             break;
                         case 'N':
-                            writeIntBigEndian(output, value.getInt());
+                            writeIntBigEndian(output, (long) value.getDouble());
                             break;
                         case 'V':
-                            writeIntLittleEndian(output, value.getInt());
+                            writeIntLittleEndian(output, (long) value.getDouble());
                             break;
                         case 'n':
                             writeShortBigEndian(output, value.getInt());
@@ -113,18 +113,18 @@ public class Pack {
         output.write((value >> 24) & 0xFF);
     }
 
-    private static void writeIntBigEndian(ByteArrayOutputStream output, int value) {
-        output.write((value >> 24) & 0xFF);
-        output.write((value >> 16) & 0xFF);
-        output.write((value >> 8) & 0xFF);
-        output.write(value & 0xFF);
+    private static void writeIntBigEndian(ByteArrayOutputStream output, long value) {
+        output.write((int) ((value >> 24) & 0xFF));
+        output.write((int) ((value >> 16) & 0xFF));
+        output.write((int) ((value >> 8) & 0xFF));
+        output.write((int) (value & 0xFF));
     }
 
-    private static void writeIntLittleEndian(ByteArrayOutputStream output, int value) {
-        output.write(value & 0xFF);
-        output.write((value >> 8) & 0xFF);
-        output.write((value >> 16) & 0xFF);
-        output.write((value >> 24) & 0xFF);
+    private static void writeIntLittleEndian(ByteArrayOutputStream output, long value) {
+        output.write((int) (value & 0xFF));
+        output.write((int) ((value >> 8) & 0xFF));
+        output.write((int) ((value >> 16) & 0xFF));
+        output.write((int) ((value >> 24) & 0xFF));
     }
 
     private static void writeLong(ByteArrayOutputStream output, long value) {
