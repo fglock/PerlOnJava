@@ -896,6 +896,19 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
+    private void handleCryptBuiltin(OperatorNode node) {
+        // Handle:  crypt PLAINTEXT,SALT
+        ctx.logDebug("handleCryptBuiltin " + node);
+        node.operand.accept(this.with(RuntimeContextType.LIST));
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Crypt",
+                node.operator,
+                "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                false);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
+    }
+
     private void handleUnpackBuiltin(OperatorNode node) {
         // Handle:  unpack TEMPLATE, EXPR
         ctx.logDebug("handleUnpackBuiltin " + node);
@@ -1032,6 +1045,9 @@ public class EmitterVisitor implements Visitor {
                 break;
             case "unpack":
                 handleUnpackBuiltin(node);
+                break;
+            case "crypt":
+                handleCryptBuiltin(node);
                 break;
             case "glob":
                 handleGlobBuiltin(node);
