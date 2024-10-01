@@ -412,6 +412,7 @@ public class Parser {
             case "rindex":
             case "index":
             case "atan2":
+            case "crypt":
             case "opendir":
             case "seekdir":
                 // Handle operators with two mandatory arguments
