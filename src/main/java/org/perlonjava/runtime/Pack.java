@@ -2,7 +2,6 @@ package org.perlonjava.runtime;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.List;
 
 public class Pack {
@@ -33,59 +32,63 @@ public class Pack {
                 i = j - 1;
             }
 
-            for (int j = 0; j < count; j++) {
+            if (format == 'b' || format == 'B') {
                 if (valueIndex >= values.size()) {
                     throw new RuntimeException("pack: not enough arguments");
                 }
-
                 RuntimeScalar value = (RuntimeScalar) values.get(valueIndex++);
+                writeBitString(output, value.toString(), count, format);
+            } else {
+                for (int j = 0; j < count; j++) {
+                    if (valueIndex >= values.size()) {
+                        throw new RuntimeException("pack: not enough arguments");
+                    }
 
-                switch (format) {
-                    case 'C':
-                        output.write(value.getInt() & 0xFF);
-                        break;
-                    case 'S':
-                        writeShort(output, value.getInt());
-                        break;
-                    case 'L':
-                        writeInt(output, value.getInt());
-                        break;
-                    case 'N':
-                        writeIntBigEndian(output, value.getInt());
-                        break;
-                    case 'V':
-                        writeIntLittleEndian(output, value.getInt());
-                        break;
-                    case 'n':
-                        writeShortBigEndian(output, value.getInt());
-                        break;
-                    case 'v':
-                        writeShortLittleEndian(output, value.getInt());
-                        break;
-                    case 'f':
-                        writeFloat(output, (float) value.getDouble());
-                        break;
-                    case 'd':
-                        writeDouble(output, value.getDouble());
-                        break;
-                    case 'a':
-                    case 'A':
-                    case 'Z':
-                        writeString(output, value.toString(), count, format);
-                        j = count; // Exit the inner loop
-                        break;
-                    case 'b':
-                    case 'B':
-                        writeBitString(output, value.toString(), count, format);
-                        break;
-                    default:
-                        throw new RuntimeException("pack: unsupported format character: " + format);
+                    RuntimeScalar value = (RuntimeScalar) values.get(valueIndex++);
+
+                    switch (format) {
+                        case 'C':
+                            output.write(value.getInt() & 0xFF);
+                            break;
+                        case 'S':
+                            writeShort(output, value.getInt());
+                            break;
+                        case 'L':
+                            writeInt(output, value.getInt());
+                            break;
+                        case 'N':
+                            writeIntBigEndian(output, value.getInt());
+                            break;
+                        case 'V':
+                            writeIntLittleEndian(output, value.getInt());
+                            break;
+                        case 'n':
+                            writeShortBigEndian(output, value.getInt());
+                            break;
+                        case 'v':
+                            writeShortLittleEndian(output, value.getInt());
+                            break;
+                        case 'f':
+                            writeFloat(output, (float) value.getDouble());
+                            break;
+                        case 'd':
+                            writeDouble(output, value.getDouble());
+                            break;
+                        case 'a':
+                        case 'A':
+                        case 'Z':
+                            writeString(output, value.toString(), count, format);
+                            j = count; // Exit the inner loop
+                            break;
+                        default:
+                            throw new RuntimeException("pack: unsupported format character: " + format);
+                    }
                 }
             }
         }
 
         // Convert the byte array to a string using ISO-8859-1 encoding
-        return new RuntimeScalar(new String(output.toByteArray(), StandardCharsets.ISO_8859_1));
+        return new RuntimeScalar(output.toString(StandardCharsets.ISO_8859_1));
     }
 
     private static void writeShort(ByteArrayOutputStream output, int value) {
@@ -179,5 +182,4 @@ public class Pack {
             output.write(byteValue);
         }
     }
-
 }
