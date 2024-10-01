@@ -20,6 +20,7 @@ public class JavaClassInfo {
     public JavaClassInfo() {
         this.javaClassName = EmitterMethodCreator.generateClassName();
         this.returnLabel = null;
+        this.asmStackLevel = 0;
     }
 
     public String toString() {
