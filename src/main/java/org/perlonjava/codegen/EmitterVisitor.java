@@ -756,6 +756,18 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
+    void handleChompBuiltin(OperatorNode node) {
+        MethodVisitor mv = ctx.mv;
+        node.operand.accept(this.with(RuntimeContextType.LIST));
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE,
+                "org/perlonjava/runtime/RuntimeDataProvider",
+                node.operator,
+                "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            mv.visitInsn(Opcodes.POP);
+        }
+    }
+
     void handleGlobBuiltin(OperatorNode node) {
         MethodVisitor mv = ctx.mv;
 
@@ -1020,8 +1032,6 @@ public class EmitterVisitor implements Visitor {
             case "lcfirst":
             case "uc":
             case "ucfirst":
-            case "chop":
-            case "chomp":
             case "undef":
             case "wantarray":
             case "time":
@@ -1034,6 +1044,10 @@ public class EmitterVisitor implements Visitor {
             case "closedir":
             case "rmdir":
                 handleUnaryBuiltin(node, operator);
+                break;
+            case "chop":
+            case "chomp":
+                handleChompBuiltin(node);
                 break;
             case "mkdir":
             case "opendir":
