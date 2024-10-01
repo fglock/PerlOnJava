@@ -756,18 +756,37 @@ public class Parser {
         return tokens.get(tokenIndex);
     }
 
-    public String comsumeChar() {
+    public String consumeChar() {
         String str;
         if (tokenIndex >= tokens.size()) {
             str = "";
         } else {
             LexerToken token = tokens.get(tokenIndex);
-            if (token.text.length() == 1) {
+            if (token.type == LexerTokenType.EOF) {
+                str = "";
+            } else if (token.text.length() == 1) {
                 str = token.text;
                 tokenIndex++;
             } else {
                 str = token.text.substring(0, 1);
                 token.text = token.text.substring(1);
+            }
+        }
+        return str;
+    }
+
+    public String peekChar() {
+        String str;
+        if (tokenIndex >= tokens.size()) {
+            str = "";
+        } else {
+            LexerToken token = tokens.get(tokenIndex);
+            if (token.type == LexerTokenType.EOF) {
+                str = "";
+            } else if (token.text.length() == 1) {
+                str = token.text;
+            } else {
+                str = token.text.substring(0, 1);
             }
         }
         return str;
