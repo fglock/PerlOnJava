@@ -91,8 +91,16 @@ public class EmitStatement {
             mv.visitJumpInsn(Opcodes.IFEQ, endLabel);
         }
 
+        emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
+                null,
+                null,
+                null,
+                null);
+
         // Visit the loop body
         node.body.accept(voidVisitor);
+
+        emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 
         // Add continue label
         mv.visitLabel(continueLabel);
@@ -169,10 +177,18 @@ public class EmitStatement {
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         mv.visitInsn(Opcodes.POP);  // we don't need the variable in the stack
 
+        emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
+                null,
+                null,
+                null,
+                null);
+
         // Visit the body of the loop
         node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
 
-        // Add continue label
+        emitterVisitor.ctx.javaClassInfo.popLoopLabels();
+
+                // Add continue label
         mv.visitLabel(continueLabel);
 
         // Execute continue block if it exists
