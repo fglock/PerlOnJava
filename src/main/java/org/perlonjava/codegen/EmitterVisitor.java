@@ -1007,7 +1007,9 @@ public class EmitterVisitor implements Visitor {
             case "exp":
             case "quotemeta":
             case "rand":
+            case "srand":
             case "sleep":
+            case "study":
             case "ref":
             case "oct":
             case "hex":

@@ -77,8 +77,8 @@
 - ✔️   **Time-related functions**: `time`, `times`, `gmtime`, `localtime` are implemented.
 - ✔️   **`pack` and `unpack` operators**: `pack` and `unpack` are implemented.
 - ✔️   **`crypt` operator**: `crypt` is implemented.
+- ✔️   **`study`, `srand`**: `study`, `srand` are implemented.
 - ❌  **`chomp`**: `chomp` is partially implemented.
-- ❌  **Missing operators**: `study`, `srand` are not implemented.
 - ❌  **Chained operators**: operations like `$x < $y <= $z` not yet implemented.
 - ❌  **Lvalue `substr`**: Assignable Substring extraction is not yet implemented.
 - ❌  **Vectors**: `vec` is not yet implemented.

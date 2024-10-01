@@ -331,6 +331,8 @@ public class Parser {
             case "sin":
             case "exp":
             case "rand":
+            case "srand":
+            case "study":
             case "undef":
             case "quotemeta":
             case "ref":
@@ -375,6 +377,9 @@ public class Parser {
                         case "gmtime":
                         case "caller":
                             // empty list
+                            break;
+                        case "srand":
+                            operand = new OperatorNode("undef", null, tokenIndex);
                             break;
                         case "undef":
                             operand = null;
