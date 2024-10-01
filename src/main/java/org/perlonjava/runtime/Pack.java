@@ -20,6 +20,12 @@ public class Pack {
 
         for (int i = 0; i < template.length(); i++) {
             char format = template.charAt(i);
+
+            // Skip spaces
+            if (Character.isWhitespace(format)) {
+                continue;
+            }
+
             int count = 1;
 
             // Check for repeat count
