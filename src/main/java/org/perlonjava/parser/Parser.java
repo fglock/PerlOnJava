@@ -524,6 +524,13 @@ public class Parser {
                 // Handle 'my' keyword as a unary operator with an operand
                 operand = parsePrimary();
                 return new OperatorNode(token.text, operand, currentIndex);
+            case "last":
+            case "next":
+            case "redo":
+                // Handle 'next' with same precedence as '='
+                // operand = parseExpression(getPrecedence("=") + 1);
+                operand = ListParser.parseZeroOrMoreList(this, 0, false, false, false, false);
+                return new OperatorNode(token.text, operand, currentIndex);
             case "return":
                 // Handle 'return' keyword as a unary operator with an operand;
                 // Parentheses are ignored.
