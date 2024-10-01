@@ -1335,15 +1335,34 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (str.isEmpty()) {
             return new RuntimeScalar(0);
         }
-        String newline = getGlobalVariable("main::/").toString();  // fetch $/
-        // TODO implement variations depending on `$/` type
-        String lastChar = str.substring(str.length() - newline.length());
-        if (lastChar.equals(newline)) {
-            this.type = RuntimeScalarType.STRING;
-            this.value = str.substring(0, str.length() - newline.length());
-            return new RuntimeScalar(lastChar.length());
+
+        String separator = getGlobalVariable("main::/").toString();
+        int charsRemoved = 0;
+
+        if (separator.isEmpty()) {
+            // Paragraph mode: remove all trailing newlines
+            int endIndex = str.length();
+            while (endIndex > 0 && str.charAt(endIndex - 1) == '\n') {
+                endIndex--;
+                charsRemoved++;
+            }
+            if (charsRemoved > 0) {
+                str = str.substring(0, endIndex);
+            }
+        } else if (!separator.equals("\0")) {
+            // Normal mode: remove trailing separator
+            if (str.endsWith(separator)) {
+                str = str.substring(0, str.length() - separator.length());
+                charsRemoved = separator.length();
+            }
         }
-        return new RuntimeScalar(0);
+        // Note: In slurp mode ($/ = undef) or fixed-length record mode, we don't remove anything
+
+        if (charsRemoved > 0) {
+            this.type = RuntimeScalarType.STRING;
+            this.value = str;
+        }
+        return new RuntimeScalar(charsRemoved);
     }
 
     public RuntimeScalar index(RuntimeScalar substr, RuntimeScalar position) {
