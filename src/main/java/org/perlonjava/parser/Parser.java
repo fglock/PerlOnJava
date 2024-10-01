@@ -391,6 +391,17 @@ public class Parser {
                     }
                 }
                 return new OperatorNode(text, operand, tokenIndex);
+            case "unpack":
+                // Handle operators with one mandatory, one optional argument
+                operand = ListParser.parseZeroOrMoreList(this, 1, false, true, false, false);
+                if (((ListNode) operand).elements.size() == 1) {
+                    // create `$_` variable
+                    ((ListNode) operand).elements.add(
+                            new OperatorNode(
+                                    "$", new IdentifierNode("_", tokenIndex), tokenIndex)
+                    );
+                }
+                return new OperatorNode(token.text, operand, tokenIndex);
             case "readdir":
             case "closedir":
             case "telldir":
