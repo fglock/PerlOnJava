@@ -8,7 +8,7 @@ import java.util.List;
 public class Unpack {
 
     public static RuntimeList unpack(RuntimeList args) {
-        if (args.elements.isEmpty()) {
+        if (args.elements.size() < 2) {
             throw new RuntimeException("unpack: not enough arguments");
         }
         RuntimeScalar templateScalar = (RuntimeScalar) args.elements.get(0);
@@ -35,15 +35,19 @@ public class Unpack {
             }
 
             for (int j = 0; j < count; j++) {
+                if (buffer.remaining() < getFormatSize(format)) {
+                    throw new RuntimeException("unpack: not enough data");
+                }
+
                 switch (format) {
                     case 'C':
                         values.add(new RuntimeScalar(buffer.get() & 0xFF));
                         break;
                     case 'S':
-                        values.add(new RuntimeScalar(readShort(buffer)));
+                        values.add(new RuntimeScalar(buffer.getShort() & 0xFFFF));
                         break;
                     case 'L':
-                        values.add(new RuntimeScalar(readLong(buffer)));
+                        values.add(new RuntimeScalar(buffer.getInt() & 0xFFFFFFFFL));
                         break;
                     case 'N':
                         values.add(new RuntimeScalar(readIntBigEndian(buffer)));
@@ -58,10 +62,10 @@ public class Unpack {
                         values.add(new RuntimeScalar(readShortLittleEndian(buffer)));
                         break;
                     case 'f':
-                        values.add(new RuntimeScalar(readFloat(buffer)));
+                        values.add(new RuntimeScalar(buffer.getFloat()));
                         break;
                     case 'd':
-                        values.add(new RuntimeScalar(readDouble(buffer)));
+                        values.add(new RuntimeScalar(buffer.getDouble()));
                         break;
                     case 'a':
                     case 'A':
@@ -72,6 +76,7 @@ public class Unpack {
                     case 'b':
                     case 'B':
                         values.add(new RuntimeScalar(readBitString(buffer, count, format)));
+                        j = count; // Exit the inner loop
                         break;
                     default:
                         throw new RuntimeException("unpack: unsupported format character: " + format);
@@ -80,6 +85,16 @@ public class Unpack {
         }
 
         return out;
+    }
+
+    private static int getFormatSize(char format) {
+        switch (format) {
+            case 'C': return 1;
+            case 'S': case 'n': case 'v': return 2;
+            case 'L': case 'N': case 'V': case 'f': return 4;
+            case 'd': return 8;
+            default: return 1; // For string and bit formats, we'll check in their respective methods
+        }
     }
 
     private static int readShort(ByteBuffer buffer) {
@@ -124,25 +139,26 @@ public class Unpack {
                 nullIndex++;
             }
             return new String(bytes, 0, nullIndex, StandardCharsets.UTF_8);
+        } else if (format == 'a') {
+            return new String(bytes, StandardCharsets.UTF_8);
+        } else { // 'A'
+            return new String(bytes, StandardCharsets.UTF_8).trim();
         }
-
-        return new String(bytes, StandardCharsets.UTF_8).trim();
     }
 
     private static String readBitString(ByteBuffer buffer, int count, char format) {
         StringBuilder bitString = new StringBuilder();
-        int bitsRead = 0;
-        while (bitsRead < count) {
-            int byteValue = buffer.get() & 0xFF;
-            for (int i = 0; i < 8 && bitsRead < count; i++) {
-                if (format == 'b') {
-                    bitString.append((byteValue & (1 << i)) != 0 ? '1' : '0');
-                } else {
-                    bitString.append((byteValue & (1 << (7 - i))) != 0 ? '1' : '0');
-                }
-                bitsRead++;
-            }
+        int bytesToRead = (count + 7) / 8;
+        byte[] bytes = new byte[bytesToRead];
+        buffer.get(bytes);
+
+        for (int i = 0; i < count; i++) {
+            int byteIndex = i / 8;
+            int bitIndex = i % 8;
+            boolean bit = (bytes[byteIndex] & (1 << (format == 'b' ? bitIndex : 7 - bitIndex))) != 0;
+            bitString.append(bit ? '1' : '0');
         }
+
         return bitString.toString();
     }
 }
