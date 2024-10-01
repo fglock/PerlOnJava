@@ -1,5 +1,6 @@
 package org.perlonjava.codegen;
 
+import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
@@ -1333,8 +1334,7 @@ public class EmitterVisitor implements Visitor {
     }
 
     private void handleNextOperator(OperatorNode node) {
-        ctx.logDebug("visit(next) in context " + ctx.contextType);
-        ctx.logDebug("visit(next) will visit " + node.operand + " in context " + ctx.with(RuntimeContextType.RUNTIME).contextType);
+        ctx.logDebug("visit(next)");
 
         while (ctx.javaClassInfo.asmStackLevel > 0) {
             // consume the JVM stack - in case we are in a List literal
@@ -1342,9 +1342,31 @@ public class EmitterVisitor implements Visitor {
             ctx.javaClassInfo.asmStackLevel--;
         }
 
-        node.operand.accept(this.with(RuntimeContextType.RUNTIME));
-        ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
-        throw new RuntimeException("todo");
+        String labelStr = null;
+        ListNode labelNode = (ListNode) node.operand;
+        if (labelNode.elements.isEmpty()) {
+            // next
+        } else {
+            // next LABEL
+            Node arg = labelNode.elements.get(0);
+            if (arg instanceof IdentifierNode) {
+                // L1
+                labelStr = ((IdentifierNode) arg).name;
+            } else {
+                throw new RuntimeException("Not implemented: " + node);
+            }
+        }
+
+        String operator = node.operator;
+        LoopLabels loopLabels = ctx.javaClassInfo.findLoopLabelsByName(labelStr);
+        ctx.logDebug("visit(next) operator: " + operator + " label: " + labelStr + " labels: " + loopLabels);
+        if (loopLabels == null) {
+            throw new RuntimeException("Label not found: " + node);
+        }
+        Label label = operator.equals("next") ? loopLabels.nextLabel
+                : operator.equals("last") ? loopLabels.lastLabel
+                : loopLabels.redoLabel;
+        ctx.mv.visitJumpInsn(Opcodes.GOTO, label);
     }
 
     private void handleReturnOperator(OperatorNode node) {

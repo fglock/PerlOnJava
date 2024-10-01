@@ -55,6 +55,18 @@ public class JavaClassInfo {
         return loopLabelStack.peek();
     }
 
+    public LoopLabels findLoopLabelsByName(String labelName) {
+        if (labelName == null) {
+            return loopLabelStack.peek();
+        }
+        for (LoopLabels loopLabels : loopLabelStack) {
+            if (loopLabels.labelName.equals(labelName)) {
+                return loopLabels;  // Found the matching label
+            }
+        }
+        return null;  // Label not found
+    }
+
     @Override
     public String toString() {
         return "JavaClassInfo{\n" +
