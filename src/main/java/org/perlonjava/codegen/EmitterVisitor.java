@@ -896,6 +896,19 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
+    private void handlePackBuiltin(OperatorNode node) {
+        // Handle:  pack TEMPLATE, LIST
+        ctx.logDebug("handlePackBuiltin " + node);
+        node.operand.accept(this.with(RuntimeContextType.LIST));
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Pack",
+                node.operator,
+                "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                false);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
+    }
+
     private void handleSpliceBuiltin(OperatorNode node) {
         // Handle:  splice @array, LIST
         String operator = node.operator;
@@ -1000,6 +1013,9 @@ public class EmitterVisitor implements Visitor {
                 break;
             case "readdir":
                 handleReaddirOperator(node);
+                break;
+            case "pack":
+                handlePackBuiltin(node);
                 break;
             case "glob":
                 handleGlobBuiltin(node);

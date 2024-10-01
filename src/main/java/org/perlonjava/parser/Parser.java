@@ -437,6 +437,10 @@ public class Parser {
             case "map":
             case "grep":
                 return OperatorParser.parseMapGrepSort(this, token);
+            case "pack":
+                // Handle operators with one or more arguments
+                operand = ListParser.parseZeroOrMoreList(this, 1, false, true, false, false);
+                return new OperatorNode(token.text, operand, currentIndex);
             case "reverse":
             case "splice":
             case "unlink":
