@@ -188,7 +188,7 @@ public class EmitStatement {
 
         emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 
-                // Add continue label
+        // Add continue label
         mv.visitLabel(continueLabel);
 
         // Execute continue block if it exists

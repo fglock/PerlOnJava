@@ -1,8 +1,9 @@
 package org.perlonjava.codegen;
 
+import org.objectweb.asm.Label;
+
 import java.util.ArrayDeque;
 import java.util.Deque;
-import org.objectweb.asm.Label;
 
 public class JavaClassInfo {
 

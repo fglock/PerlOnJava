@@ -68,6 +68,11 @@ public class PrintVisitor implements Visitor {
         sb.append("For1Node:\n");
         indentLevel++;
 
+        if (node.labelName != null) {
+            appendIndent();
+            sb.append("label: " + node.labelName + "\n");
+        }
+
         appendIndent();
         sb.append(node.useNewScope ? "useNewScope\n" : "no useNewScope\n");
 
@@ -115,6 +120,11 @@ public class PrintVisitor implements Visitor {
         appendIndent();
         sb.append("For3Node:\n");
         indentLevel++;
+
+        if (node.labelName != null) {
+            appendIndent();
+            sb.append("label: " + node.labelName + "\n");
+        }
 
         appendIndent();
         sb.append(node.useNewScope ? "useNewScope\n" : "no useNewScope\n");
