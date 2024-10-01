@@ -7,7 +7,13 @@ import java.util.List;
 
 public class Unpack {
 
-    public static RuntimeList unpack(RuntimeScalar packedData, RuntimeScalar templateScalar) {
+    public static RuntimeList unpack(RuntimeList args) {
+        if (args.elements.isEmpty()) {
+            throw new RuntimeException("unpack: not enough arguments");
+        }
+        RuntimeScalar templateScalar = (RuntimeScalar) args.elements.get(0);
+        RuntimeScalar packedData = (RuntimeScalar) args.elements.get(1);
+
         String template = templateScalar.toString();
         byte[] data = packedData.toString().getBytes(StandardCharsets.ISO_8859_1);
         ByteBuffer buffer = ByteBuffer.wrap(data);
