@@ -1,8 +1,8 @@
 package org.perlonjava.runtime;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 
 public class Unpack {
@@ -16,7 +16,9 @@ public class Unpack {
 
         String template = templateScalar.toString();
         byte[] data = packedData.toString().getBytes(StandardCharsets.ISO_8859_1);
-        ByteBuffer buffer = ByteBuffer.wrap(data);
+
+        ByteBuffer buffer = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN); // Ensure consistent byte order
+
         RuntimeList out = new RuntimeList();
         List<RuntimeBaseEntity> values = out.elements;
 
@@ -61,17 +63,19 @@ public class Unpack {
                     case 'V':
                         values.add(new RuntimeScalar(readIntLittleEndian(buffer) & 0xFFFFFFFFL));
                         break;
-                        case 'n':
+                    case 'n':
                         values.add(new RuntimeScalar(readShortBigEndian(buffer)));
                         break;
                     case 'v':
                         values.add(new RuntimeScalar(readShortLittleEndian(buffer)));
                         break;
                     case 'f':
-                        values.add(new RuntimeScalar(buffer.getFloat()));
+                        float floatValue = buffer.getFloat();
+                        values.add(new RuntimeScalar(floatValue));
                         break;
                     case 'd':
-                        values.add(new RuntimeScalar(buffer.getDouble()));
+                        double doubleValue = buffer.getDouble();
+                        values.add(new RuntimeScalar(doubleValue));
                         break;
                     case 'a':
                     case 'A':
@@ -95,11 +99,21 @@ public class Unpack {
 
     private static int getFormatSize(char format) {
         switch (format) {
-            case 'C': return 1;
-            case 'S': case 'n': case 'v': return 2;
-            case 'L': case 'N': case 'V': case 'f': return 4;
-            case 'd': return 8;
-            default: return 1; // For string and bit formats, we'll check in their respective methods
+            case 'C':
+                return 1;
+            case 'S':
+            case 'n':
+            case 'v':
+                return 2;
+            case 'L':
+            case 'N':
+            case 'V':
+            case 'f':
+                return 4;
+            case 'd':
+                return 8;
+            default:
+                return 1; // For string and bit formats, we'll check in their respective methods
         }
     }
 
