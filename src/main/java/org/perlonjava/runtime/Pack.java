@@ -147,6 +147,7 @@ public class Pack {
     private static void writeString(ByteArrayOutputStream output, String str, int count, char format) {
         byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
         int length = Math.min(bytes.length, count);
+
         output.write(bytes, 0, length);
 
         // Pad with nulls or spaces
@@ -156,10 +157,18 @@ public class Pack {
         }
 
         // Add null terminator for 'Z' format if not already present
-        if (format == 'Z' && length < count && (length == 0 || bytes[length - 1] != 0)) {
-            output.write(0);
+        if (format == 'Z') {
+            byte[] currentOutput = output.toByteArray();
+            boolean needsNullTerminator = currentOutput.length <= 0 || currentOutput[currentOutput.length - 1] != 0;
+
+            // Check if the last byte written is a null byte
+
+            if (needsNullTerminator) {
+                output.write(0);
+            }
         }
     }
+
 
     private static void writeBitString(ByteArrayOutputStream output, String str, int count, char format) {
         int bitIndex = 0;
