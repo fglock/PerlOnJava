@@ -988,6 +988,11 @@ public class EmitterVisitor implements Visitor {
             case "my":
                 EmitVariable.handleMyOperator(this, node);
                 break;
+            case "next":
+            case "redo":
+            case "last":
+                handleNextOperator(node);
+                break;
             case "return":
                 handleReturnOperator(node);
                 break;
@@ -1325,6 +1330,21 @@ public class EmitterVisitor implements Visitor {
         if (ctx.contextType == RuntimeContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.POP);
         }
+    }
+
+    private void handleNextOperator(OperatorNode node) {
+        ctx.logDebug("visit(next) in context " + ctx.contextType);
+        ctx.logDebug("visit(next) will visit " + node.operand + " in context " + ctx.with(RuntimeContextType.RUNTIME).contextType);
+
+        while (ctx.javaClassInfo.asmStackLevel > 0) {
+            // consume the JVM stack - in case we are in a List literal
+            ctx.mv.visitInsn(Opcodes.POP);
+            ctx.javaClassInfo.asmStackLevel--;
+        }
+
+        node.operand.accept(this.with(RuntimeContextType.RUNTIME));
+        ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+        throw new RuntimeException("todo");
     }
 
     private void handleReturnOperator(OperatorNode node) {
