@@ -10,7 +10,7 @@ import org.perlonjava.runtime.*;
 
 public class StatementParser {
 
-    public static Node parseWhileStatement(Parser parser) {
+    public static Node parseWhileStatement(Parser parser, String label) {
         LexerToken operator = parser.consume(LexerTokenType.IDENTIFIER); // "while" "until"
 
         parser.consume(LexerTokenType.OPERATOR, "(");
@@ -33,10 +33,10 @@ public class StatementParser {
         if (operator.text.equals("until")) {
             condition = new OperatorNode("not", condition, condition.getIndex());
         }
-        return new For3Node(true, null, condition, null, body, continueNode, parser.tokenIndex);
+        return new For3Node(label, true, null, condition, null, body, continueNode, parser.tokenIndex);
     }
 
-    public static Node parseForStatement(Parser parser) {
+    public static Node parseForStatement(Parser parser, String label) {
         parser.consume(LexerTokenType.IDENTIFIER); // "for" "foreach"
 
         Node varNode = null;
@@ -76,7 +76,7 @@ public class StatementParser {
                     varNode = new OperatorNode(
                             "$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);  // $_
                 }
-                return new For1Node(true, varNode, initialization, body, continueNode, parser.tokenIndex);
+                return new For1Node(label, true, varNode, initialization, body, continueNode, parser.tokenIndex);
             }
         }
         // 3-argument for
@@ -106,7 +106,7 @@ public class StatementParser {
 
         // 3-argument for doesn't have a continue block
 
-        return new For3Node(true, initialization, condition, increment, body, null, parser.tokenIndex);
+        return new For3Node(label, true, initialization, condition, increment, body, null, parser.tokenIndex);
     }
 
     public static Node parseIfStatement(Parser parser) {

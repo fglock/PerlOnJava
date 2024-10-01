@@ -12,23 +12,23 @@ public class For1Node extends AbstractNode {
      * This loop creates a new variable scope
      */
     public final boolean useNewScope;
-
     /**
      * The list part of the for loop.
      */
     public final Node variable;
-
     /**
      * The variable part of the for loop.
      */
     public final Node list;
-
     /**
      * The body of the for loop.
      */
     public final Node body;
-
     public final Node continueBlock;
+    /**
+     * the label name for this loop
+     */
+    public String labelName;
 
     /**
      * Constructs a new For1Node with the specified parts of the for loop.
@@ -39,7 +39,8 @@ public class For1Node extends AbstractNode {
      * @param body        the body of the for loop
      * @param tokenIndex  the index of the token in the source code
      */
-    public For1Node(boolean useNewScope, Node variable, Node list, Node body, Node continueBlock, int tokenIndex) {
+    public For1Node(String labelName, boolean useNewScope, Node variable, Node list, Node body, Node continueBlock, int tokenIndex) {
+        this.labelName = labelName;
         this.useNewScope = useNewScope;
         this.variable = variable;
         this.list = list;

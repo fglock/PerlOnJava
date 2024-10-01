@@ -117,6 +117,19 @@ public class Parser {
         LexerToken token = peek();
         ctx.logDebug("parseStatement `" + token.text + "`");
 
+        // check for label:
+        String label = null;
+        if (token.type == LexerTokenType.IDENTIFIER) {
+            String id = consume().text;
+            if (peek().text.equals(":")) {
+                label = id;
+                consume();
+                token = peek();
+            } else {
+                tokenIndex = currentIndex;  // backtrack
+            }
+        }
+
         if (token.type == LexerTokenType.IDENTIFIER) {
             switch (token.text) {
                 case "if":
@@ -124,10 +137,10 @@ public class Parser {
                     return StatementParser.parseIfStatement(this);
                 case "for":
                 case "foreach":
-                    return StatementParser.parseForStatement(this);
+                    return StatementParser.parseForStatement(this, label);
                 case "while":
                 case "until":
-                    return StatementParser.parseWhileStatement(this);
+                    return StatementParser.parseWhileStatement(this, label);
                 case "package":
                     return StatementParser.parsePackageDeclaration(this, token);
                 case "use":
@@ -172,6 +185,7 @@ public class Parser {
                     modifierExpression = parseExpression(0);
                     parseStatementTerminator();
                     return new For1Node(
+                            null,
                             false,
                             new OperatorNode("$", new IdentifierNode("_", tokenIndex), tokenIndex),  // $_
                             modifierExpression,
@@ -186,7 +200,8 @@ public class Parser {
                     if (token.text.equals("until")) {
                         modifierExpression = new OperatorNode("not", modifierExpression, modifierExpression.getIndex());
                     }
-                    return new For3Node(false,
+                    return new For3Node(null,
+                            false,
                             null, modifierExpression,
                             null, expression, null,
                             tokenIndex);
