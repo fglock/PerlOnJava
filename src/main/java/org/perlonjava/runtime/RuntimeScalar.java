@@ -1336,7 +1336,13 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             return new RuntimeScalar(0);
         }
 
-        String separator = getGlobalVariable("main::/").toString();
+        RuntimeScalar separatorScalar = getGlobalVariable("main::/");
+        if (separatorScalar.type == RuntimeScalarType.UNDEF) {
+            // Slurp mode: don't remove anything
+            return new RuntimeScalar(0);
+        }
+
+        String separator = separatorScalar.toString();
         int charsRemoved = 0;
 
         if (separator.isEmpty()) {
