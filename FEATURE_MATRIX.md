@@ -75,9 +75,9 @@
 - ✔️   **`grep`, `map`, `sort`**: List processing functions are implemented.
 - ✔️   **`substr`**: Substring extraction works.
 - ✔️   **Time-related functions**: `time`, `times`, `gmtime`, `localtime` are implemented.
-- ✔️   **`pack` operator**: `pack` is implemented.
+- ✔️   **`pack` and `unpack` operators**: `pack` and `unpack` are implemented.
 - ❌  **`chomp`**: `chomp` is partially implemented.
-- ❌  **Missing operators**: `crypt`, `study`, `srand`, `unpack` are not implemented.
+- ❌  **Missing operators**: `crypt`, `study`, `srand` are not implemented.
 - ❌  **Chained operators**: operations like `$x < $y <= $z` not yet implemented.
 - ❌  **Lvalue `substr`**: Assignable Substring extraction is not yet implemented.
 - ❌  **Vectors**: `vec` is not yet implemented.

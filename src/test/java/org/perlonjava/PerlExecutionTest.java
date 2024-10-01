@@ -47,7 +47,8 @@ public class PerlExecutionTest {
             "transliterate.pl",
             "array.pl",
             "hash.pl",
-            "pack.pl"
+            "pack.pl",
+            "unpack.pl"
     })
     void testUsingResourceFile(String filename) {
         // Load the file from the resources folder
