@@ -54,7 +54,7 @@ public class Pack {
                             writeShort(output, value.getInt());
                             break;
                         case 'L':
-                            writeInt(output, value.getInt());
+                            writeLong(output, (long) value.getDouble());
                             break;
                         case 'N':
                             writeIntBigEndian(output, value.getInt());
@@ -125,6 +125,13 @@ public class Pack {
         output.write((value >> 8) & 0xFF);
         output.write((value >> 16) & 0xFF);
         output.write((value >> 24) & 0xFF);
+    }
+
+    private static void writeLong(ByteArrayOutputStream output, long value) {
+        output.write((int) (value & 0xFF));
+        output.write((int) ((value >> 8) & 0xFF));
+        output.write((int) ((value >> 16) & 0xFF));
+        output.write((int) ((value >> 24) & 0xFF));
     }
 
     private static void writeFloat(ByteArrayOutputStream output, float value) {
