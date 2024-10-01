@@ -184,6 +184,10 @@
 - ❌  **File test operators**: Add support for stacked file test operators.
 - ✔️   **Directory operators**: `readdir`, `opendir`, `closedir`, `telldir`, `seekdir`, `rewinddir`, `mkdir`, `rmdir`.
 - ❌  **`for` loop variable**: The `for` loop variable is not an alias to a list element.
+- ✔️   **loop control operators**: `next`, `last`, `redo` with labels are implemented.
+- ❌  **loop control operators**: `next`, `last`, `redo` with expression are not implemented.
+- ❌  **loop control operators**: `next`, `last`, `redo` going to a different place in the call stack are not implemented.
+- ❌  **`goto` operator**: `goto` is not implemented.
 
 ## Namespaces and Global Variables
 - ✔️   **Global variable infrastructure**: Support for global variables is implemented.
@@ -233,7 +237,7 @@
 - ❌  **Fetching network info**: endprotoent, endservent, gethostbyaddr, gethostbyname, gethostent, getnetbyaddr, getnetbyname, getnetent, getprotobyname, getprotobynumber, getprotoent, getservbyname, getservbyport, getservent, sethostent, setnetent, setprotoent, setservent
 - ❌  **Keywords related to the control flow of the Perl program**: `dump` operator.
 - ❌  **Bitwise operators return unsigned**: JVM doesn't have unsigned integers. This could be emulated, but with a high cost.
-
+- ❌  **Tail calls**: `goto` going to a different subroutine as a tail call is not supported.
 
 ## Language Differences and Workarounds
 
