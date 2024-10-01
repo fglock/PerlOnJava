@@ -314,16 +314,17 @@ public class StringParser {
         token = tokens.get(parser.tokenIndex);
         if (token.type == LexerTokenType.NUMBER) {
             //  octal like `\200`
-            StringBuilder octalStr = new StringBuilder(parser.comsumeChar());
-            char chr = token.text.charAt(0);
-            while (octalStr.length() < 3 && chr >= '0' && chr <= '7') {
-                octalStr.append(parser.comsumeChar());
-                chr = token.text.charAt(0);
+            StringBuilder octalStr = new StringBuilder(parser.consumeChar());
+            String chr = parser.peekChar();
+            while (octalStr.length() < 3 && chr.compareTo("0") >= 0 && chr.compareTo("7") <= 0) {
+                octalStr.append(parser.consumeChar());
+                chr = parser.peekChar();
             }
+            ctx.logDebug("octalStr: " + octalStr);
             str.append((char) Integer.parseInt(octalStr.toString(), 8));
             return;
         }
-        escape = parser.comsumeChar();
+        escape = parser.consumeChar();
         switch (escape) {
             case "\\":
             case "\"":
@@ -351,7 +352,7 @@ public class StringParser {
                 str.append((char) 27);  // Append escape
                 break;
             case "c":
-                String ctl = parser.comsumeChar();
+                String ctl = parser.consumeChar();
                 if (!ctl.isEmpty()) {
                     //  \cA is control-A char(1)
                     char chr = ctl.charAt(0);

@@ -84,7 +84,8 @@ public class Pack {
             }
         }
 
-        return new RuntimeScalar(Arrays.toString(output.toByteArray()));
+        // Convert the byte array to a string using ISO-8859-1 encoding
+        return new RuntimeScalar(new String(output.toByteArray(), StandardCharsets.ISO_8859_1));
     }
 
     private static void writeShort(ByteArrayOutputStream output, int value) {
