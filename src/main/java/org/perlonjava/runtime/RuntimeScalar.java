@@ -48,6 +48,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             return size() > MAX_NUMIFICATION_CACHE_SIZE;
         }
     };
+
+    private static long currentSeed = System.currentTimeMillis();
+    private static final Random random = new Random(currentSeed);
+
     // Fields to store the type and value of the scalar variable
     public RuntimeScalarType type;
     public Object value;
@@ -286,6 +290,22 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             // If not valid (like '9', 'Z', or 'z'), use a helper function to handle incrementing
             return _string_increment(str);
         }
+    }
+
+    public RuntimeScalar study() {
+        return scalarUndef;
+    }
+
+    public RuntimeScalar srand() {
+        long oldSeed = currentSeed;
+        if (this.type != RuntimeScalarType.UNDEF) {
+            currentSeed = this.getInt();
+        } else {
+            // Semi-randomly choose a seed if no argument is provided
+            currentSeed = System.nanoTime() ^ System.identityHashCode(Thread.currentThread());
+        }
+        random.setSeed(currentSeed);
+        return new RuntimeScalar(oldSeed);
     }
 
     public RuntimeScalar rmdir() {
@@ -1193,31 +1213,25 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return getScalarBoolean(this.toString().compareTo(arg2.toString()) <= 0);
     }
 
-
     public RuntimeScalar gt(RuntimeScalar arg2) {
         return getScalarBoolean(this.toString().compareTo(arg2.toString()) > 0);
     }
-
 
     public RuntimeScalar ge(RuntimeScalar arg2) {
         return getScalarBoolean(this.toString().compareTo(arg2.toString()) >= 0);
     }
 
-
     public RuntimeScalar bitwiseAnd(RuntimeScalar arg2) {
         return new RuntimeScalar(this.getInt() & arg2.getInt());
     }
-
 
     public RuntimeScalar bitwiseOr(RuntimeScalar arg2) {
         return new RuntimeScalar(this.getInt() | arg2.getInt());
     }
 
-
     public RuntimeScalar bitwiseXor(RuntimeScalar arg2) {
         return new RuntimeScalar(this.getInt() ^ arg2.getInt());
     }
-
 
     public RuntimeScalar bitwiseNot() {
         return new RuntimeScalar(~this.getInt());
@@ -1413,7 +1427,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar rand() {
-        return new RuntimeScalar(Math.random() * this.getDouble());
+        return new RuntimeScalar(random.nextDouble() * this.getDouble());
     }
 
     public RuntimeScalar integer() {
