@@ -1331,18 +1331,24 @@ public class EmitterVisitor implements Visitor {
         ctx.logDebug("visit(return) in context " + ctx.contextType);
         ctx.logDebug("visit(return) will visit " + node.operand + " in context " + ctx.with(RuntimeContextType.RUNTIME).contextType);
 
+        while (ctx.javaClassInfo.asmStackLevel > 0) {
+            // consume the JVM stack - in case we are in a List literal
+            ctx.mv.visitInsn(Opcodes.POP);
+            ctx.javaClassInfo.asmStackLevel--;
+        }
+
         if (node.operand instanceof ListNode) {
             ListNode list = (ListNode) node.operand;
             if (list.elements.size() == 1) {
                 // special case for a list with 1 element
                 list.elements.get(0).accept(this.with(RuntimeContextType.RUNTIME));
-                ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.returnLabel);
+                ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
                 return;
             }
         }
 
         node.operand.accept(this.with(RuntimeContextType.RUNTIME));
-        ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.returnLabel);
+        ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
         // TODO return (1,2), 3
     }
 

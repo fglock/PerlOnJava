@@ -100,17 +100,12 @@ public class EmitLiteral {
             mv.visitInsn(Opcodes.DUP);
             // stack: [RuntimeList] [RuntimeList]
 
+            emitterVisitor.ctx.javaClassInfo.asmStackLevel += 2;
+
             // emit the list element
-            if (element instanceof OperatorNode && ((OperatorNode) element).operator.equals("return")) {
-                // Special case for return operator: it inserts a `goto` instruction
-                emitterVisitor.ctx.logDebug("visit(ListNode) return");
-                emitterVisitor.ctx.mv.visitInsn(Opcodes.POP); // stop construction of RuntimeList instance
-                emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-                element.accept(emitterVisitor.with(RuntimeContextType.LIST));
-                return;
-            } else {
-                element.accept(emitterVisitor.with(RuntimeContextType.LIST));
-            }
+            element.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+            emitterVisitor.ctx.javaClassInfo.asmStackLevel -= 2;
 
             // Call the add method to add the element to the RuntimeList
             // This calls RuntimeDataProvider.addToList() in order to allow (1, 2, $x, @x, %x)

@@ -37,9 +37,8 @@ public class EmitSubroutine {
         // create the new method
         EmitterContext subCtx =
                 new EmitterContext(
-                        EmitterMethodCreator.generateClassName(), // internal java class name
+                        new JavaClassInfo(), // internal java class name
                         newSymbolTable.clone(), // closure symbolTable
-                        null, // return label
                         null, // method visitor
                         null, // class writer
                         RuntimeContextType.RUNTIME, // call context
@@ -50,10 +49,10 @@ public class EmitSubroutine {
                 EmitterMethodCreator.createClassWithMethod(
                         subCtx, node.block, node.useTryCatch
                 );
-        String newClassNameDot = subCtx.javaClassName.replace('/', '.');
-        ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + subCtx.javaClassName);
+        String newClassNameDot = subCtx.javaClassInfo.javaClassName.replace('/', '.');
+        ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + subCtx.javaClassInfo.javaClassName);
         ctx.logDebug("Generated class env:  " + Arrays.toString(newEnv));
-        RuntimeCode.anonSubs.put(subCtx.javaClassName, generatedClass); // cache the class
+        RuntimeCode.anonSubs.put(subCtx.javaClassInfo.javaClassName, generatedClass); // cache the class
 
         /* The following ASM code is equivalent to:
          *  // get the class:
@@ -72,7 +71,7 @@ public class EmitSubroutine {
 
         // 1. Get the class from RuntimeCode.anonSubs
         mv.visitFieldInsn(Opcodes.GETSTATIC, "org/perlonjava/runtime/RuntimeCode", "anonSubs", "Ljava/util/HashMap;");
-        mv.visitLdcInsn(subCtx.javaClassName);
+        mv.visitLdcInsn(subCtx.javaClassInfo.javaClassName);
         mv.visitMethodInsn(
                 Opcodes.INVOKEVIRTUAL,
                 "java/util/HashMap",

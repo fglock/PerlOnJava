@@ -4,6 +4,7 @@ import org.perlonjava.astnode.Node;
 import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.codegen.EmitterMethodCreator;
+import org.perlonjava.codegen.JavaClassInfo;
 import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.parser.Parser;
@@ -51,9 +52,8 @@ public class RuntimeCode implements RuntimeScalarReference {
         ScopedSymbolTable symbolTable = ctx.symbolTable.clone();
 
         EmitterContext evalCtx = new EmitterContext(
-                EmitterMethodCreator.generateClassName(), // internal java class name
+                new JavaClassInfo(),  // internal java class name
                 ctx.symbolTable.clone(), // symbolTable
-                null, // return label
                 null, // method visitor
                 null, // class writer
                 ctx.contextType, // call context

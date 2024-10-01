@@ -54,7 +54,6 @@ public class EmitEval {
         EmitterContext evalCtx = new EmitterContext(
                 null, // internal java class name will be created at runtime
                 newSymbolTable.clone(),
-                null, // return label
                 null, // method visitor
                 null, // class writer
                 emitterVisitor.ctx.contextType,

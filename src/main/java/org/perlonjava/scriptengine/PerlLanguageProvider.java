@@ -4,6 +4,7 @@ import org.perlonjava.ArgumentParser;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.codegen.EmitterMethodCreator;
+import org.perlonjava.codegen.JavaClassInfo;
 import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.parser.Parser;
@@ -58,9 +59,8 @@ public class PerlLanguageProvider {
 
         // Create the compiler context
         EmitterContext ctx = new EmitterContext(
-                EmitterMethodCreator.generateClassName(), // internal java class name
+                new JavaClassInfo(), // internal java class name
                 globalSymbolTable.clone(), // Top-level symbol table
-                null, // Return label
                 null, // Method visitor
                 null, // Class writer
                 RuntimeContextType.VOID, // Call context
