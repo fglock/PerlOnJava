@@ -78,7 +78,7 @@
 - ✔️   **`pack` and `unpack` operators**: `pack` and `unpack` are implemented.
 - ✔️   **`crypt` operator**: `crypt` is implemented.
 - ✔️   **`study`, `srand`**: `study`, `srand` are implemented.
-- ❌  **`chomp`**: `chomp` is partially implemented.
+- ✔️   **`chomp`**: `chomp` is implemented.
 - ❌  **Chained operators**: operations like `$x < $y <= $z` not yet implemented.
 - ❌  **Lvalue `substr`**: Assignable Substring extraction is not yet implemented.
 - ❌  **Vectors**: `vec` is not yet implemented.
@@ -183,6 +183,7 @@
 - ❌  **File test operators**: The current implementation only works with file paths, not filehandles or dirhandles.
 - ❌  **File test operators**: Add support for stacked file test operators.
 - ✔️   **Directory operators**: `readdir`, `opendir`, `closedir`, `telldir`, `seekdir`, `rewinddir`, `mkdir`, `rmdir`.
+- ❌  **`for` loop variable**: The `for` loop variable is not an alias to a list element.
 
 ## Namespaces and Global Variables
 - ✔️   **Global variable infrastructure**: Support for global variables is implemented.

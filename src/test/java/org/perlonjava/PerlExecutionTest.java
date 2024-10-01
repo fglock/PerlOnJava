@@ -47,6 +47,7 @@ public class PerlExecutionTest {
             "transliterate.pl",
             "array.pl",
             "hash.pl",
+            "chomp.pl",
             "pack.pl",
             "unpack.pl"
     })
