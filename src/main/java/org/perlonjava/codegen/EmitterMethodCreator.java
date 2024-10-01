@@ -104,8 +104,8 @@ public class EmitterMethodCreator implements Opcodes {
         DebugInfo.setDebugInfoFileName(ctx);
 
         // Define the class with version, access flags, name, signature, superclass, and interfaces
-        cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, ctx.javaClassName, null, "java/lang/Object", null);
-        ctx.logDebug("Create class: " + ctx.javaClassName);
+        cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, ctx.javaClassInfo.javaClassName, null, "java/lang/Object", null);
+        ctx.logDebug("Create class: " + ctx.javaClassInfo.javaClassName);
 
         // Add instance fields to the class for closure variables
         for (String fieldName : env) {
@@ -139,7 +139,7 @@ public class EmitterMethodCreator implements Opcodes {
             mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
             mv.visitVarInsn(Opcodes.ALOAD, i - 2); // Load the constructor argument
             mv.visitFieldInsn(
-                    Opcodes.PUTFIELD, ctx.javaClassName, env[i], descriptor); // Set the instance field
+                    Opcodes.PUTFIELD, ctx.javaClassInfo.javaClassName, env[i], descriptor); // Set the instance field
         }
         mv.visitInsn(Opcodes.RETURN); // Return void
         mv.visitMaxs(0, 0); // Automatically computed
@@ -166,12 +166,12 @@ public class EmitterMethodCreator implements Opcodes {
             String descriptor = getVariableDescriptor(env[i]);
             mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
             ctx.logDebug("Init closure variable: " + descriptor);
-            mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassName, env[i], descriptor);
+            mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName, env[i], descriptor);
             mv.visitVarInsn(Opcodes.ASTORE, i);
         }
 
         // Create a label for the return point
-        ctx.returnLabel = new Label();
+        ctx.javaClassInfo.returnLabel = new Label();
 
         // Prepare to visit the AST to generate bytecode
         EmitterVisitor visitor = new EmitterVisitor(ctx);
@@ -200,7 +200,7 @@ public class EmitterMethodCreator implements Opcodes {
 
             // Handle the return value
             ctx.logDebug("Return the last value");
-            mv.visitLabel(ctx.returnLabel); // "return" from other places arrive here
+            mv.visitLabel(ctx.javaClassInfo.returnLabel); // "return" from other places arrive here
 
             // --------------------------------
             // End of the try block
@@ -253,7 +253,7 @@ public class EmitterMethodCreator implements Opcodes {
 
             // Handle the return value
             ctx.logDebug("Return the last value");
-            mv.visitLabel(ctx.returnLabel); // "return" from other places arrive here
+            mv.visitLabel(ctx.javaClassInfo.returnLabel); // "return" from other places arrive here
         }
 
         // Transform the value in the stack to RuntimeList
@@ -288,7 +288,7 @@ public class EmitterMethodCreator implements Opcodes {
         CustomClassLoader loader = new CustomClassLoader(EmitterMethodCreator.class.getClassLoader());
 
         // Create a "Java" class name with dots instead of slashes
-        String javaClassNameDot = ctx.javaClassName.replace('/', '.');
+        String javaClassNameDot = ctx.javaClassInfo.javaClassName.replace('/', '.');
 
         // Define the class using the custom class loader
         return loader.defineClass(javaClassNameDot, classData);
