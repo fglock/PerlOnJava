@@ -1,7 +1,6 @@
 package org.perlonjava.codegen;
 
 import org.objectweb.asm.ClassWriter;
-import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.perlonjava.ArgumentParser;
 import org.perlonjava.runtime.ErrorMessageUtil;
@@ -29,17 +28,14 @@ public class EmitterContext {
     public ArgumentParser.CompilerOptions compilerOptions;
 
     /**
-     * The name of the Java class being generated.
+     * The information on the Java class being generated.
      */
-    public String javaClassName;
+    public JavaClassInfo javaClassInfo;
     /**
      * The symbol table used for scoping symbols within the context.
      */
     public ScopedSymbolTable symbolTable;
-    /**
-     * The label to which the current method should return.
-     */
-    public Label returnLabel;
+
     /**
      * The ClassWriter instance used to visit the method instructions.
      */
@@ -64,9 +60,8 @@ public class EmitterContext {
     /**
      * Constructs a new EmitterContext with the specified parameters.
      *
-     * @param javaClassName   the name of the Java class being generated
+     * @param javaClassInfo   the name of the Java class being generated
      * @param symbolTable     the symbol table used for scoping symbols within the context
-     * @param returnLabel     the label to which the method should return
      * @param mv              the MethodVisitor instance used to visit the method instructions
      * @param cw              the ClassWriter instance used to visit the method instructions
      * @param contextType     the type of the context, defined by the RuntimeContextType int value
@@ -75,18 +70,16 @@ public class EmitterContext {
      * @param compilerOptions compiler flags, file name and source code
      */
     public EmitterContext(
-            String javaClassName,
+            JavaClassInfo javaClassInfo,
             ScopedSymbolTable symbolTable,
-            Label returnLabel,
             MethodVisitor mv,
             ClassWriter cw,
             int contextType,
             boolean isBoxed,
             ErrorMessageUtil errorUtil,
             ArgumentParser.CompilerOptions compilerOptions) {
-        this.javaClassName = javaClassName;
+        this.javaClassInfo = javaClassInfo;
         this.symbolTable = symbolTable;
-        this.returnLabel = returnLabel;
         this.mv = mv;
         this.cw = cw;
         this.contextType = contextType;
@@ -111,7 +104,7 @@ public class EmitterContext {
         }
         // Create a new context and cache it
         EmitterContext newContext = new EmitterContext(
-                this.javaClassName, this.symbolTable, this.returnLabel,
+                this.javaClassInfo, this.symbolTable,
                 this.mv, this.cw, contextType, this.isBoxed, this.errorUtil, this.compilerOptions);
         contextCache.put(contextType, newContext);
         return newContext;
@@ -126,9 +119,8 @@ public class EmitterContext {
     @Override
     public String toString() {
         return "EmitterContext{\n" +
-                "    javaClassName='" + javaClassName + "',\n" +
+                "    JavaClassInfo='" + javaClassInfo + "',\n" +
                 "    symbolTable=" + symbolTable + ",\n" +
-                "    returnLabel=" + (returnLabel != null ? returnLabel.toString() : "null") + ",\n" +
                 "    contextType=" + contextType + ",\n" +
                 "    isBoxed=" + isBoxed + ",\n" +
                 "    errorUtil=" + (errorUtil != null ? errorUtil.toString() : "null") + ",\n" +
