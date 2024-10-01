@@ -27,7 +27,7 @@ public class Unpack {
             if (Character.isWhitespace(format)) {
                 continue;
             }
-            
+
             int count = 1;
 
             // Check for repeat count
@@ -56,12 +56,12 @@ public class Unpack {
                         values.add(new RuntimeScalar(buffer.getInt() & 0xFFFFFFFFL));
                         break;
                     case 'N':
-                        values.add(new RuntimeScalar(readIntBigEndian(buffer)));
+                        values.add(new RuntimeScalar(readIntBigEndian(buffer) & 0xFFFFFFFFL));
                         break;
                     case 'V':
-                        values.add(new RuntimeScalar(readIntLittleEndian(buffer)));
+                        values.add(new RuntimeScalar(readIntLittleEndian(buffer) & 0xFFFFFFFFL));
                         break;
-                    case 'n':
+                        case 'n':
                         values.add(new RuntimeScalar(readShortBigEndian(buffer)));
                         break;
                     case 'v':
