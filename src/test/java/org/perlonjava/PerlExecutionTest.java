@@ -50,7 +50,8 @@ public class PerlExecutionTest {
             "hash.pl",
             "chomp.pl",
             "pack.pl",
-            "unpack.pl"
+            "unpack.pl",
+            "vec.pl"
     })
     void testUsingResourceFile(String filename) {
         // Load the file from the resources folder
