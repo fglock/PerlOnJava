@@ -1,15 +1,23 @@
 package org.perlonjava.runtime;
 
-import java.nio.charset.StandardCharsets;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 public class Vec {
 
-    public static RuntimeScalar vec(RuntimeList args) {
+    public static RuntimeScalar vec(RuntimeList args) throws IllegalArgumentException {
         String str = args.elements.get(0).toString();
         int offset = ((RuntimeScalar) args.elements.get(1)).getInt();
         int bits = ((RuntimeScalar) args.elements.get(2)).getInt();
 
-        byte[] data = str.getBytes(StandardCharsets.UTF_8);
+        byte[] data = new byte[str.length()];
+        for (int i = 0; i < str.length(); i++) {
+            char c = str.charAt(i);
+            if (c > 0xFF) {
+                throw new IllegalArgumentException("Use of strings with code points over 0xFF as arguments to vec is forbidden");
+            }
+            data[i] = (byte) c;
+        }
 
         if (bits <= 0 || bits > 32) {
             throw new IllegalArgumentException("BITS must be between 1 and 32");
@@ -22,22 +30,41 @@ public class Vec {
             return new RuntimeScalar(0);
         }
 
-        long value = 0;
-        int bytesToRead = (bits + bitOffset + 7) / 8;
-        for (int i = 0; i < bytesToRead && byteOffset + i < data.length; i++) {
-            value |= ((long) (data[byteOffset + i] & 0xFF)) << (i * 8);
+        ByteBuffer buffer = ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN);
+        int value = 0;
+
+        if (bits == 32 && byteOffset + 3 < data.length) {
+            value = buffer.getInt(byteOffset);
+        } else if (bits == 16 && byteOffset + 1 < data.length) {
+            value = buffer.getShort(byteOffset) & 0xFFFF;
+        } else if (bits == 8 && byteOffset < data.length) {
+            value = buffer.get(byteOffset) & 0xFF;
+        } else {
+            for (int i = 0; i < bits; i++) {
+                int byteIndex = byteOffset + (bitOffset + i) / 8;
+                int bitIndex = (bitOffset + i) % 8;
+                if (byteIndex < data.length) {
+                    value |= ((data[byteIndex] >> (7 - bitIndex)) & 1) << i;
+                }
+            }
         }
 
-        value >>= bitOffset;
-        return new RuntimeScalar((int) (value & ((1L << bits) - 1)));
+        return new RuntimeScalar(value);
     }
 
-    public static RuntimeScalar set(RuntimeList args, RuntimeScalar value) {
+    public static RuntimeScalar set(RuntimeList args, RuntimeScalar value) throws IllegalArgumentException {
         String str = args.elements.get(0).toString();
         int offset = ((RuntimeScalar) args.elements.get(1)).getInt();
         int bits = ((RuntimeScalar) args.elements.get(2)).getInt();
 
-        byte[] data = str.getBytes(StandardCharsets.UTF_8);
+        byte[] data = new byte[str.length()];
+        for (int i = 0; i < str.length(); i++) {
+            char c = str.charAt(i);
+            if (c > 0xFF) {
+                throw new IllegalArgumentException("Use of strings with code points over 0xFF as arguments to vec is forbidden");
+            }
+            data[i] = (byte) c;
+        }
 
         if (bits <= 0 || bits > 32) {
             throw new IllegalArgumentException("BITS must be between 1 and 32");
@@ -53,17 +80,30 @@ public class Vec {
             data = newData;
         }
 
-        long mask = (1L << bits) - 1;
-        long val = value.getInt() & mask;
+        int val = value.getInt();
+        ByteBuffer buffer = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
 
-        for (int i = 0; i < bytesToWrite; i++) {
-            int byteValue = data[byteOffset + i] & 0xFF;
-            byteValue &= ~((int)((mask << bitOffset) >>> (i * 8)));
-            byteValue |= (int)((val << bitOffset) >>> (i * 8));
-            data[byteOffset + i] = (byte) byteValue;
+        if (bits == 32 && byteOffset + 3 < data.length) {
+            buffer.putInt(byteOffset, val);
+        } else if (bits == 16 && byteOffset + 1 < data.length) {
+            buffer.putShort(byteOffset, (short) val);
+        } else if (bits == 8 && byteOffset < data.length) {
+            buffer.put(byteOffset, (byte) val);
+        } else {
+            for (int i = 0; i < bits; i++) {
+                int byteIndex = byteOffset + (bitOffset + i) / 8;
+                int bitIndex = (bitOffset + i) % 8;
+                if (byteIndex < data.length) {
+                    if ((val & (1 << i)) != 0) {
+                        data[byteIndex] |= (1 << bitIndex);
+                    } else {
+                        data[byteIndex] &= ~(1 << bitIndex);
+                    }
+                }
+            }
         }
 
-        ((RuntimeScalar) args.elements.get(0)).set(new String(data, StandardCharsets.UTF_8));
+        ((RuntimeScalar) args.elements.get(0)).set(new String(data));
         return value;
     }
 }
