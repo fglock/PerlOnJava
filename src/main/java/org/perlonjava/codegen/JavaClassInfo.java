@@ -38,7 +38,7 @@ public class JavaClassInfo {
      * Push a new LoopLabels object onto the stack.
      */
     public void pushLoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel) {
-        loopLabelStack.push(new LoopLabels(labelName, nextLabel, redoLabel, lastLabel));
+        loopLabelStack.push(new LoopLabels(labelName, nextLabel, redoLabel, lastLabel, asmStackLevel));
     }
 
     /**
