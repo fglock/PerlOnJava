@@ -7,12 +7,14 @@ public class LoopLabels {
     public Label nextLabel;
     public Label redoLabel;
     public Label lastLabel;
+    public int asmStackLevel;
 
-    public LoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel) {
+    public LoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int asmStackLevel) {
         this.labelName = labelName;
         this.nextLabel = nextLabel;
         this.redoLabel = redoLabel;
         this.lastLabel = lastLabel;
+        this.asmStackLevel = asmStackLevel;
     }
 
     @Override
@@ -22,6 +24,7 @@ public class LoopLabels {
                 ", nextLabel=" + nextLabel +
                 ", redoLabel=" + redoLabel +
                 ", lastLabel=" + lastLabel +
+                ", asmStackLevel=" + asmStackLevel +
                 '}';
     }
 }

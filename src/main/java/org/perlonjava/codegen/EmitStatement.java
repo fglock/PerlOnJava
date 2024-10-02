@@ -180,6 +180,9 @@ public class EmitStatement {
         mv.visitInsn(Opcodes.SWAP); // move the target first
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         mv.visitInsn(Opcodes.POP);  // we don't need the variable in the stack
+        // Stack: [iterator]
+
+        emitterVisitor.ctx.javaClassInfo.asmStackLevel += 1;
 
         // Add redo label
         Label redoLabel = new Label();
@@ -209,6 +212,8 @@ public class EmitStatement {
 
         // End of the loop
         mv.visitLabel(loopEnd);
+
+        emitterVisitor.ctx.javaClassInfo.asmStackLevel -= 1;
 
         // Pop the iterator from the stack
         mv.visitInsn(Opcodes.POP);

@@ -38,6 +38,7 @@ public class PerlExecutionTest {
             "numification.pl",
             "operations.pl",
             "wantarray.pl",
+            "loop_label.pl",
             "typeglob.pl",
             "range.pl",
             "flipflop.pl",

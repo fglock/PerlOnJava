@@ -1336,12 +1336,6 @@ public class EmitterVisitor implements Visitor {
     private void handleNextOperator(OperatorNode node) {
         ctx.logDebug("visit(next)");
 
-        while (ctx.javaClassInfo.asmStackLevel > 0) {
-            // consume the JVM stack - in case we are in a List literal
-            ctx.mv.visitInsn(Opcodes.POP);
-            ctx.javaClassInfo.asmStackLevel--;
-        }
-
         String labelStr = null;
         ListNode labelNode = (ListNode) node.operand;
         if (labelNode.elements.isEmpty()) {
@@ -1363,6 +1357,16 @@ public class EmitterVisitor implements Visitor {
         if (loopLabels == null) {
             throw new RuntimeException("Label not found: " + node);
         }
+
+        ctx.logDebug("visit(next): asmStackLevel: " + ctx.javaClassInfo.asmStackLevel);
+
+        int consumeStack = ctx.javaClassInfo.asmStackLevel;
+        int targetStack = loopLabels.asmStackLevel;
+        while (consumeStack-- > targetStack) {
+            // consume the JVM stack
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
+
         Label label = operator.equals("next") ? loopLabels.nextLabel
                 : operator.equals("last") ? loopLabels.lastLabel
                 : loopLabels.redoLabel;
@@ -1373,10 +1377,10 @@ public class EmitterVisitor implements Visitor {
         ctx.logDebug("visit(return) in context " + ctx.contextType);
         ctx.logDebug("visit(return) will visit " + node.operand + " in context " + ctx.with(RuntimeContextType.RUNTIME).contextType);
 
-        while (ctx.javaClassInfo.asmStackLevel > 0) {
-            // consume the JVM stack - in case we are in a List literal
+        int consumeStack = ctx.javaClassInfo.asmStackLevel;
+        while (consumeStack-- > 0) {
+            // consume the JVM stack
             ctx.mv.visitInsn(Opcodes.POP);
-            ctx.javaClassInfo.asmStackLevel--;
         }
 
         if (node.operand instanceof ListNode) {
