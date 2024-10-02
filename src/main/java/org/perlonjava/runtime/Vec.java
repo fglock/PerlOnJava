@@ -2,8 +2,12 @@ package org.perlonjava.runtime;
 
 public class Vec {
 
-    public RuntimeScalar get(RuntimeScalar str, int offset, int bits) {
-        StringBuilder data = new StringBuilder(str.toString());
+    public RuntimeScalar vec(RuntimeList args) {
+        String str = args.elements.get(0).toString();
+        int offset = ((RuntimeScalar) args.elements.get(1)).getInt();
+        int bits = ((RuntimeScalar) args.elements.get(2)).getInt();
+
+        StringBuilder data = new StringBuilder(str);
 
         if (bits <= 0 || bits > 32) {
             throw new IllegalArgumentException("BITS must be between 1 and 32");
@@ -26,8 +30,12 @@ public class Vec {
         return new RuntimeScalar(value & ((1 << bits) - 1));
     }
 
-    public RuntimeScalar set(RuntimeScalar str, int offset, int bits, RuntimeScalar value) {
-        StringBuilder data = new StringBuilder(str.toString());
+    public RuntimeScalar set(RuntimeList args, RuntimeScalar value) {
+        String str = args.elements.get(0).toString();
+        int offset = ((RuntimeScalar) args.elements.get(1)).getInt();
+        int bits = ((RuntimeScalar) args.elements.get(2)).getInt();
+
+        StringBuilder data = new StringBuilder(str);
 
         if (bits <= 0 || bits > 32) {
             throw new IllegalArgumentException("BITS must be between 1 and 32");
@@ -50,7 +58,7 @@ public class Vec {
             charValue |= (val << bitOffset) >>> (i * 16);
             data.setCharAt(charOffset + i, (char) charValue);
         }
-        str.set(data.toString());
+        ((RuntimeScalar) args.elements.get(0)).set(data.toString());
         return value;
     }
 }
