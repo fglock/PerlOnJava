@@ -79,9 +79,10 @@
 - ✔️   **`crypt` operator**: `crypt` is implemented.
 - ✔️   **`study`, `srand`**: `study`, `srand` are implemented.
 - ✔️   **`chomp`**: `chomp` is implemented.
+- ✔️   **Vectors**: `vec` is implemented.
 - ❌  **Chained operators**: operations like `$x < $y <= $z` not yet implemented.
 - ❌  **Lvalue `substr`**: Assignable Substring extraction is not yet implemented.
-- ❌  **Vectors**: `vec` is not yet implemented.
+- ❌  **Lvalue `vec`**: Assignable `vec` is not yet implemented.
 
 ## Arrays, Hashes, and Lists
 - ✔️   **Array, Hash, and List infrastructure**: Basic infrastructure for arrays, hashes, and lists is implemented.

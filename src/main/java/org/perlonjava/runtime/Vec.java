@@ -4,7 +4,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 public class Vec {
-
     public static RuntimeScalar vec(RuntimeList args) throws IllegalArgumentException {
         String str = args.elements.get(0).toString();
         int offset = ((RuntimeScalar) args.elements.get(1)).getInt();
@@ -30,7 +29,7 @@ public class Vec {
             return new RuntimeScalar(0);
         }
 
-        ByteBuffer buffer = ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN);
+        ByteBuffer buffer = ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN); // Change to BIG_ENDIAN
         int value = 0;
 
         if (bits == 32 && byteOffset + 3 < data.length) {
@@ -44,7 +43,7 @@ public class Vec {
                 int byteIndex = byteOffset + (bitOffset + i) / 8;
                 int bitIndex = (bitOffset + i) % 8;
                 if (byteIndex < data.length) {
-                    value |= ((data[byteIndex] >> (7 - bitIndex)) & 1) << i;
+                    value |= ((data[byteIndex] >> bitIndex) & 1) << i; // Adjust bit extraction
                 }
             }
         }
@@ -81,7 +80,7 @@ public class Vec {
         }
 
         int val = value.getInt();
-        ByteBuffer buffer = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
+        ByteBuffer buffer = ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN); // Change to BIG_ENDIAN
 
         if (bits == 32 && byteOffset + 3 < data.length) {
             buffer.putInt(byteOffset, val);
