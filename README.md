@@ -373,13 +373,21 @@ public class Main {
 
 ### Upcoming Milestones
 
-- **v1.8.0**: Concurrency and Security Features
+- **v1.8.0**: Operators
     - Planned release date: 2024-12-10
+    - Added `continue` blocks and loop operators `next`, `last`, `redo`
+    - Added bitwise operators `vec`, `pack`, `unpack`
+    - Added `srand`, `crypt`
+    - Added `readdir`, `opendir`, `closedir`, `telldir`, `seekdir`, `rewinddir`, `mkdir`, `rmdir`
+    - Added file test operators like `-d`, `-f`
+    - Completed `chomp` operator
+
+- **v1.9.0**: Concurrency and Security Features
     - Add support for concurrency and parallelism, such as threads and async/await.
     - Enhance security features, including sandboxing and input validation.
     - Increase test coverage and introduce automated testing tools.
 
-- **v1.9.0**: External Integration and Advanced Data Manipulation
+- **v1.10.0**: External Integration and Advanced Data Manipulation
     - Integrate with external libraries and APIs for tasks like HTTP requests and database access.
     - Add advanced data manipulation features, such as JSON/XML parsing and data transformation.
     - Allow users to define their own operators and macros for greater flexibility.
