@@ -787,6 +787,18 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
+    private void handleVecBuiltin(OperatorNode node) {
+        MethodVisitor mv = ctx.mv;
+        node.operand.accept(this.with(RuntimeContextType.LIST));
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/Vec",
+                node.operator,
+                "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            mv.visitInsn(Opcodes.POP);
+        }
+    }
+
     private void handleIndexBuiltin(OperatorNode node) {
         MethodVisitor mv = ctx.mv;
         EmitterVisitor scalarVisitor = this.with(RuntimeContextType.SCALAR);
@@ -1077,6 +1089,9 @@ public class EmitterVisitor implements Visitor {
             case "rindex":
             case "index":
                 handleIndexBuiltin(node);
+                break;
+            case "vec":
+                handleVecBuiltin(node);
                 break;
             case "atan2":
                 handleAtan2(node);
