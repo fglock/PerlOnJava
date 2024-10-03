@@ -349,6 +349,7 @@ public class Parser {
             case "srand":
             case "study":
             case "undef":
+            case "exit":
             case "quotemeta":
             case "ref":
             case "oct":
@@ -395,6 +396,10 @@ public class Parser {
                             break;
                         case "srand":
                             operand = new OperatorNode("undef", null, tokenIndex);
+                            break;
+                        case "exit":
+                            // create "0"
+                            operand = new NumberNode("0", tokenIndex);
                             break;
                         case "undef":
                             operand = null;

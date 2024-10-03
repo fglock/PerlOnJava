@@ -461,7 +461,7 @@ public class StringParser {
     public static ListNode parseWordsString(ParsedString rawStr) {
         // Use a regular expression to split the string.
         // " +" matches one or more ASCII space characters
-        String[] words = rawStr.buffers.get(0).trim().split(" +");
+        String[] words = rawStr.buffers.get(0).trim().split("[ \t\n]+");
         ListNode list = new ListNode(rawStr.index);
         for (String word : words) {
             list.elements.add(new StringNode(word, rawStr.index));
