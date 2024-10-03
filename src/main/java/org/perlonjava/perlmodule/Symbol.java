@@ -10,13 +10,13 @@ import static org.perlonjava.runtime.GlobalContext.getGlobalHash;
 public class Symbol {
 
     public static void initialize() {
-        // Initialize UNIVERSAL class
+        // Initialize Symbol class
 
         // Set %INC
         getGlobalHash("main::INC").put("Symbol.pm", new RuntimeScalar("Symbol.pm"));
 
         try {
-            // load UNIVERSAL methods into Perl namespace
+            // load Symbol methods into Perl namespace
             Class<?> clazz = Symbol.class;
             RuntimeScalar instance = new RuntimeScalar();
             Method mm;
@@ -34,7 +34,7 @@ public class Symbol {
         }
     }
 
-    //    "Symbol::qualify" turns unqualified symbol names into qualified variable
+//    "Symbol::qualify" turns unqualified symbol names into qualified variable
 //    names (e.g. "myvar" -> "MyPackage::myvar"). If it is given a second
 //    parameter, "qualify" uses it as the default package; otherwise, it uses
 //    the package of its caller. Regardless, global variable names (e.g.
@@ -43,7 +43,6 @@ public class Symbol {
 //    Qualification applies only to symbol names (strings). References are
 //    left unchanged under the assumption that they are glob references, which
 //    are qualified by their nature.
-
     public static RuntimeList qualify(RuntimeArray args, int ctx) {
         if (args.size() < 1 || args.size() > 2) {
             throw new IllegalStateException("Bad number of arguments for qualify()");
@@ -69,11 +68,9 @@ public class Symbol {
         return list;
     }
 
-    //    "Symbol::qualify_to_ref" is just like "Symbol::qualify" except that it
+//    "Symbol::qualify_to_ref" is just like "Symbol::qualify" except that it
 //    returns a glob ref rather than a symbol name, so you can use the result
 //    even if "use strict 'refs'" is in effect.
-    //
-    // Note this is a Perl subroutine
     public static RuntimeList qualify_to_ref(RuntimeArray args, int ctx) {
         if (args.size() < 1 || args.size() > 2) {
             throw new IllegalStateException("Bad number of arguments for qualify_to_ref()");

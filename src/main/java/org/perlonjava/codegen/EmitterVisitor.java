@@ -1051,6 +1051,7 @@ public class EmitterVisitor implements Visitor {
             case "uc":
             case "ucfirst":
             case "undef":
+            case "exit":
             case "wantarray":
             case "time":
             case "times":

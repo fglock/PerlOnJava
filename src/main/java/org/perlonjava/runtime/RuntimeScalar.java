@@ -292,6 +292,11 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
     }
 
+    public RuntimeScalar exit() {
+        System.exit(this.getInt());
+        return new RuntimeScalar(); // This line will never be reached
+    }
+
     public RuntimeScalar study() {
         return scalarUndef;
     }
