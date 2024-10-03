@@ -9,6 +9,8 @@ import static org.perlonjava.runtime.GlobalContext.*;
 public class Exporter {
 
     public static void initialize() {
+        // Initialize Exporter class
+
         // Set %INC
         getGlobalHash("main::INC").put("Exporter.pm", new RuntimeScalar("Exporter.pm"));
 

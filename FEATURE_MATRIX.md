@@ -122,6 +122,7 @@
 - ❌  **Lexical subroutines**: Subroutines declared `my`, `state`, or `our` are not yet supported.
 - ✔️   **CORE namespace**: `CORE` is implemented.
 - ❌  **CORE::GLOBAL namespace**: `CORE::GLOBAL` is not implemented.
+- ❌  **alternate subroutine call syntax**: `&$sub` syntax is not implemented.
 
 ## Regular Expressions
 - ✔️   **Basic Matching**: Operators `qr//`, `m//`, `s///`, `split` are implemented.
@@ -157,7 +158,7 @@
 - ✔️   **Typeglob operations**: Operations like `*x = sub {}` are supported.
 - ✔️   **Code references**: Code references like `&subr` are implemented.
 - ✔️   **Special literals**: `__PACKAGE__`, `__FILE__`, `__LINE__`
-- ✔️   **`die` related operators**: `die`, `warn` are supported.
+- ✔️   **`die` related operators**: `die`, `warn`, `exit` are supported.
 - ❌  **`die` related features**: `$SIG{__DIE__}`, `$SIG{__WARN__}`, `PROPAGATE` are not yet supported.
 - ❌  **`version` objects**: Version objects are not yet supported.
 - ❌  **`require` operator**: The `require` operator is partially implemented.

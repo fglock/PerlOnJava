@@ -377,10 +377,11 @@ public class Main {
     - Planned release date: 2024-12-10
     - Added `continue` blocks and loop operators `next`, `last`, `redo`
     - Added bitwise operators `vec`, `pack`, `unpack`
-    - Added `srand`, `crypt`
+    - Added `srand`, `crypt`, `exit`
     - Added `readdir`, `opendir`, `closedir`, `telldir`, `seekdir`, `rewinddir`, `mkdir`, `rmdir`
     - Added file test operators like `-d`, `-f`
-    - Completed `chomp` operator
+    - Completed `chomp` operator; fixed `qw//` operator
+    - Added modules: `parent`, `Test::More`
 
 - **v1.9.0**: Concurrency and Security Features
     - Add support for concurrency and parallelism, such as threads and async/await.
