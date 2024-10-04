@@ -37,9 +37,9 @@ public class LValueVisitor implements Visitor {
             case "=":   // $a = ...
                 node.left.accept(this);
                 break;
-            case "[":   // $a[]
-            case "{":   // $a{}
-                context = RuntimeContextType.SCALAR;
+            case "[":   // $a[]  @a[]
+            case "{":   // $a{}  @a{}
+                node.left.accept(this);
                 break;
             case "->":  // $a->() $a->[] $a->()
                 context = RuntimeContextType.SCALAR;

@@ -1,5 +1,5 @@
-# use feature 'say';
-# use strict;
+use feature 'say';
+use strict;
 
 ###################
 # Perl Hash Operations Tests
@@ -80,3 +80,12 @@ my @array_of_hashes = (
 print "not " if $array_of_hashes[0]{name} ne 'Alice' or $array_of_hashes[1]{age} != 25;
 say "ok # Array of hashes";
 
+# Slice assignment
+@hash{'key4', 'key5'} = ('value4', 'value5');
+print "not " if $hash{key4} ne 'value4' or $hash{key5} ne 'value5';
+say "ok # Slice assignment";
+
+# Verify slice assignment
+my @new_slice = @hash{'key4', 'key5'};
+print "not " if @new_slice != 2 or $new_slice[0] ne 'value4' or $new_slice[1] ne 'value5';
+say "ok # Verify slice assignment";
