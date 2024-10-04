@@ -155,6 +155,10 @@ public class EmitVariable {
         switch (lvalueContext) {
             case RuntimeContextType.SCALAR:
                 emitterVisitor.ctx.logDebug("SET right side scalar");
+
+                // TODO - special case where the left value is an operator or subroutine call:
+                //   `pos`, `substr`, `vec`, `sub :lvalue`
+
                 node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the value
                 node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the variable
 
