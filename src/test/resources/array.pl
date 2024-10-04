@@ -1,5 +1,5 @@
-# use feature 'say';
-# use strict;
+use feature 'say';
+use strict;
 
 ###################
 # Perl Array Operations Tests
@@ -101,3 +101,12 @@ my @split = split ", ", $joined;
 print "not " if @split != 6 or $split[0] != 0 or $split[-1] != 5;
 say "ok # Split operation";
 
+# Slice assignment
+@array[1, 3, 5] = (20, 30, 40);
+print "not " if $array[1] != 20 or $array[3] != 30 or $array[5] != 40;
+say "ok # Slice assignment";
+
+# Verify slice assignment
+my @new_slice = @array[1, 3, 5];
+print "not " if @new_slice != 3 or $new_slice[0] != 20 or $new_slice[2] != 40;
+say "ok # Verify slice assignment";
