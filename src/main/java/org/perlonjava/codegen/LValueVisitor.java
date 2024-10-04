@@ -64,6 +64,7 @@ public class LValueVisitor implements Visitor {
             case "*":  // typeglob
             case "substr":
             case "vec":
+            case "pos":
                 context = RuntimeContextType.SCALAR;
                 break;
             default:
@@ -93,7 +94,6 @@ public class LValueVisitor implements Visitor {
 
     @Override
     public void visit(TernaryOperatorNode node) {
-        // XXX FIXME
         context = RuntimeContextType.VOID;
     }
 
