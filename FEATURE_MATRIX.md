@@ -130,6 +130,7 @@
 - ✔️   **Special variables**: The special variables `$1`, `$2`... are implemented.
 - ✔️   **Transliteration**: `tr` and `y` transliteration operators are implemented.
 - ❌  **`pos`**: `pos` operator is not implemented.
+- ❌  **lvalue `pos`**: lvalue `pos` operator is not implemented.
 - ❌  **Perl-specific Regex Features**: Some features like `/xx` `/ee` are missing.
 
 ## Statements and Special Operators
@@ -190,6 +191,7 @@
 - ❌  **loop control operators**: `next`, `last`, `redo` with expression are not implemented.
 - ❌  **loop control operators**: `next`, `last`, `redo` going to a different place in the call stack are not implemented.
 - ❌  **`goto` operator**: `goto` is not implemented.
+- ❌  **setting `$_` in `while` loop with `<>`**: automatic setting `$_` in `while` loops is not implemented.
 
 ## Namespaces and Global Variables
 - ✔️   **Global variable infrastructure**: Support for global variables is implemented.
