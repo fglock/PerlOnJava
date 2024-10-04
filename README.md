@@ -10,10 +10,8 @@ This is a Perl compiler under development. It compiles Perl into Java bytecode a
 3. [Running the jar file](#running-the-jar-file)
 4. [Debugging Tools](#debugging-tools)
 5. [Internal Modules](#internal-modules)
-6. [Using Java Scripting API](#using-java-scripting-api)
-7. [Milestones](#milestones)
-8. [Benchmarks](#benchmarks)
-9. [License](#license)
+6. [Milestones](#milestones)
+7. [License](#license)
 
 ## Introduction
 
@@ -275,63 +273,6 @@ file.
 
 - `PerlScriptEngine` is a Java class that allows you to execute Perl scripts using the Java Scripting API (JSR 223).
 
-## Using Java Scripting API
-
-### Using jrunscript
-
-- jrunscript implements a generic interactive shell using Java Scripting API.
-
-- Note that `jrunscript` creates a new scope every time, so it doesn't keep lexical variables from one line to the next.
-
-  ```sh
-  $ jrunscript -cp target/perlonjava-1.0-SNAPSHOT.jar -l perl 
-  Perl5> my $sub = sub { say $_[0] }; $sub->($_) for 4,5,6;
-  4
-  5
-  6
-  []
-  Perl5>
-  ```
-
-### PerlScriptEngine installation
-
-To use `PerlScriptEngine`, include the necessary dependencies in your project. For example, if you are using Maven, add
-the following to your `pom.xml`:
-
-```xml
-
-<dependency>
-    <groupId>org.perlonjava</groupId>
-    <artifactId>perl-script-engine</artifactId>
-    <version>1.0.0</version>
-</dependency>
-```
-
-### PerlScriptEngine usage
-
-Here is an example of how to use `PerlScriptEngine` to execute a simple Perl script:
-
-```java
-import javax.script.ScriptEngine;
-import javax.script.ScriptEngineManager;
-import javax.script.ScriptException;
-
-public class Main {
-    public static void main(String[] args) {
-        ScriptEngineManager manager = new ScriptEngineManager();
-        ScriptEngine engine = manager.getEngineByName("perl");
-
-        String script = "print 'Hello, Perl from Java!';";
-
-        try {
-            engine.eval(script);
-        } catch (ScriptException e) {
-            e.printStackTrace();
-        }
-    }
-}
-```
-
 ## Milestones
 
 ### Completed Milestones
@@ -397,34 +338,6 @@ public class Main {
     - Perform comprehensive refactoring and optimization.
     - Introduce significant new features and improvements.
     - Ensure full compliance with relevant standards and best practices.
-
-
-## Benchmarks
-
-### Performance Benchmarks
-
-These benchmarks provide an order-of-magnitude comparison with Perl:
-
-| Version | Feature | Performance Relative to Perl |
-|---------|---------|------------------------------|
-| v1.0.0  | Lexer and Parser | 50k lines/second (N/A) |
-| v1.1.0  | Numeric operations | 2x faster |
-|         | String operations | Comparable |
-|         | Eval-string | 10x slower |
-| v1.5.0  | Example: `life.pl` | 3x slower |
-| v1.6.0  | Module compilation | 5x slower |
-| v1.7.0  | Module compilation | 5x slower  |
-|         | Example: `life.pl` | Comparable |
-|         | Eval-string        | 7x slower  |
-
-Notes:
-- v1.2.0 through v1.4.0: No significant performance changes.
-- Script `life.pl` run without `sleep` between iterations.
-- Module compilation benchmark: Repeatedly loading `Data::Dumper`:
-
-  ```perl
-  perl -Ilib -e 'for (1..80) { eval "use Data::Dumper;"; delete $INC{"Data/Dumper.pm"}; }'
-  ```
 
 ## License
 
