@@ -34,7 +34,7 @@ public class Symbol {
         }
     }
 
-//    "Symbol::qualify" turns unqualified symbol names into qualified variable
+    //    "Symbol::qualify" turns unqualified symbol names into qualified variable
 //    names (e.g. "myvar" -> "MyPackage::myvar"). If it is given a second
 //    parameter, "qualify" uses it as the default package; otherwise, it uses
 //    the package of its caller. Regardless, global variable names (e.g.
@@ -68,7 +68,7 @@ public class Symbol {
         return list;
     }
 
-//    "Symbol::qualify_to_ref" is just like "Symbol::qualify" except that it
+    //    "Symbol::qualify_to_ref" is just like "Symbol::qualify" except that it
 //    returns a glob ref rather than a symbol name, so you can use the result
 //    even if "use strict 'refs'" is in effect.
     public static RuntimeList qualify_to_ref(RuntimeArray args, int ctx) {
