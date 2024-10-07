@@ -3,14 +3,7 @@
 ## Harder to Implement
 - `BEGIN` block
 
-## Easy, but Low Impact
-- `wantarray()`
-- `warn()`
-- `die()`
-- Other builtins
-
 ## More Difficult, and Low Impact
-- `caller()`
 - `goto()`
 - Thread
 - Optimizations
@@ -32,15 +25,8 @@
 ## Implement Thread-Safety
 - It may need locking when calling ASM
 
-## Create Multiple Classes
-- Ensure GC works for these classes
-
-## `goto`, labels
-
-## `eval` String
-- Optimize `ctx.symbolTable` at `eval` string if needed
-
-## `BEGIN` Block
+## GC
+- Ensure GC works for classes
 
 ## Implement __SUB__
 
