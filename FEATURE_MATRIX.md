@@ -195,6 +195,7 @@
 - ❌  **loop control operators**: `next`, `last`, `redo` going to a different place in the call stack are not implemented.
 - ❌  **`goto` operator**: `goto` is not implemented.
 - ❌  **setting `$_` in `while` loop with `<>`**: automatic setting `$_` in `while` loops is not implemented.
+- ❌  **`do BLOCK while`**: `do` executes once before the conditional is evaluated.
 
 ## Namespaces and Global Variables
 - ✔️   **Global variable infrastructure**: Support for global variables is implemented.
