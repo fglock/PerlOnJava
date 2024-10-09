@@ -529,7 +529,7 @@ public class StringParser {
 
     public static Node parseRawString(Parser parser, String operator) {
         // handle special quotes for operators: q qq qx qw // s/// m//
-        if (operator.equals("'") || operator.equals("\"") || operator.equals("/") || operator.equals("//")
+        if (operator.equals("<") || operator.equals("'") || operator.equals("\"") || operator.equals("/") || operator.equals("//")
                 || operator.equals("`")) {
             parser.tokenIndex--;   // will reparse the quote
         }
