@@ -132,6 +132,7 @@
 - ❌  **`pos`**: `pos` operator is not implemented.
 - ❌  **lvalue `pos`**: lvalue `pos` operator is not implemented.
 - ❌  **Perl-specific Regex Features**: Some features like `/xx` `/ee` are missing.
+- ❌  **`m?pat?`** one-time matches are missing.
 
 ## Statements and Special Operators
 - ✔️   **Context void, scalar, list**: Contexts for void, scalar, and list are supported.
