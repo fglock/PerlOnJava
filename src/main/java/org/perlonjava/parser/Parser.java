@@ -616,12 +616,13 @@ public class Parser {
                     case ".":
                         // Handle fractional numbers
                         return NumberParser.parseFractionalNumber(this);
+                    case "<":
+                        return parseDiamondOperator(token);
                     case "'":
                     case "\"":
                     case "/":
                     case "//":
                     case "`":
-                    case "<":
                         // Handle single and double-quoted strings
                         return StringParser.parseRawString(this, token.text);
                     case "\\":
@@ -676,6 +677,35 @@ public class Parser {
         }
         // Throw an exception if no valid case was found
         throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, ctx.errorUtil);
+    }
+
+    private Node parseDiamondOperator(LexerToken token) {
+        // Handle diamond operator
+        int currentTokenIndex = tokenIndex;
+        if (tokens.get(tokenIndex).text.equals("$")) {
+            // <$fh>
+            ctx.logDebug("diamond operator " + token.text + tokens.get(tokenIndex));
+            tokenIndex++;
+            Node var = parseVariable("$");
+            ctx.logDebug("diamond operator var " + var);
+            if (tokens.get(tokenIndex).text.equals(">")) {
+                consume();
+                return new BinaryOperatorNode("readline", var, new ListNode(tokenIndex), tokenIndex);
+            }
+        }
+        tokenIndex = currentTokenIndex;
+        if (tokens.get(tokenIndex).text.equals("STDIN")) {
+            // <STDIN>
+            ctx.logDebug("diamond operator " + token.text + tokens.get(tokenIndex));
+            tokenIndex++;
+            if (tokens.get(tokenIndex).text.equals(">")) {
+                consume();
+                return new BinaryOperatorNode("readline", new IdentifierNode("main::STDIN", currentTokenIndex), new ListNode(tokenIndex), tokenIndex);
+            }
+        }
+        tokenIndex = currentTokenIndex;
+        // <>  <<>>  <*.*>  <ARGV>
+        return StringParser.parseRawString(this, token.text);
     }
 
     /**
