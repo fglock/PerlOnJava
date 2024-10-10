@@ -464,45 +464,33 @@ public class RuntimeIO implements RuntimeScalarReference {
                 throw new UnsupportedOperationException("Readline is not supported for output streams");
             }
 
-            if (this.isEOF) {
-                return scalarUndef; // If EOF flag is already set, return null
-            }
-
             String sep = getGlobalVariable("main::/").toString();  // fetch $/
             boolean hasSeparator = !sep.isEmpty();
             int separator = hasSeparator ? sep.charAt(0) : '\n';
 
             StringBuilder line = new StringBuilder();
-            boolean foundSeparator = false;
 
             if (fileChannel != null) {
-                while (!foundSeparator) {
-                    readBuffer.clear();
-                    int bytesRead = fileChannel.read(readBuffer);
+                ByteBuffer charBuffer = ByteBuffer.allocate(1);
+                while (true) {
+                    int bytesRead = fileChannel.read(charBuffer);
                     if (bytesRead == -1) {
-                        if (line.length() == 0) {
-                            this.isEOF = true;
-                            return scalarUndef;
-                        }
+                        this.isEOF = true;
                         break;
                     }
-
-                    readBuffer.flip();
-                    while (readBuffer.hasRemaining() && !foundSeparator) {
-                        char c = (char) readBuffer.get();
-                        line.append(c);
-                        if (hasSeparator && c == separator) {
-                            foundSeparator = true;
-                        }
+                    charBuffer.flip();
+                    char c = (char) charBuffer.get();
+                    line.append(c);
+                    if (hasSeparator && c == separator) {
+                        break;
                     }
+                    charBuffer.clear();
                 }
-            } else {
-                // Use existing bufferedReader implementation
+            } else if (bufferedReader != null) {
                 int c;
                 while ((c = bufferedReader.read()) != -1) {
                     line.append((char) c);
                     if (hasSeparator && c == separator) {
-                        foundSeparator = true;
                         break;
                     }
                 }
@@ -511,8 +499,8 @@ public class RuntimeIO implements RuntimeScalarReference {
                 }
             }
 
-            if (!foundSeparator) {
-                this.isEOF = true;
+            if (line.length() == 0 && this.isEOF) {
+                return scalarUndef;
             }
 
             return new RuntimeScalar(line.toString());

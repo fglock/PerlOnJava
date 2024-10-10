@@ -23,46 +23,30 @@ public class DiamondIO {
      * undefined scalar if EOF is reached for all files.
      */
     public static RuntimeScalar readline(RuntimeScalar arg) {
-        // TODO use arg
-        // arg is `` or `<>` for Perl syntax `<>` or `<<>>`
-
-        // Check if EOF has been reached for all files
-        if (eofReached) {
-            // Reset the readingStarted flag when EOF is reached
-            readingStarted = false;
-            return scalarUndef;
-        }
-
-        // Check if the reading process has started
         if (!readingStarted) {
             readingStarted = true;
-            // Check if @ARGV is empty and add "-" if necessary
             if (getGlobalArray("main::ARGV").size() == 0) {
                 getGlobalArray("main::ARGV").push(new RuntimeScalar("-"));
             }
         }
 
-        // Loop until a valid line is read or all files are exhausted
-        while (currentReader == null || !currentReader.eof().getBoolean()) {
-            // Try to open the next file if the current reader is null or EOF is reached
-            if (!openNextFile()) {
-                eofReached = true;
-                return scalarUndef;
+        while (true) {
+            if (currentReader == null) {
+                if (!openNextFile()) {
+                    eofReached = true;
+                    return scalarUndef;
+                }
             }
+
+            RuntimeScalar line = currentReader.readline();
+            if (line.type != RuntimeScalarType.UNDEF) {
+                return line;
+            }
+
+            // If we reach here, we've hit EOF for the current file
+            currentReader = null;
         }
-
-        // Read a line from the current file
-        RuntimeScalar line = currentReader.readline();
-
-        // If the line is undefined, recursively call readline to get the next line
-        if (line.type == RuntimeScalarType.UNDEF) {
-            return readline(arg);
-        }
-
-        // Return the line read
-        return line;
     }
-
     /**
      * Opens the next file in the list and sets it as the current reader.
      * Updates the global variables to reflect the current file being read.
