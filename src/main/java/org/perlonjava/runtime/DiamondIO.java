@@ -11,18 +11,32 @@ public class DiamondIO {
     // Flag to indicate if the end of all files has been reached
     static boolean eofReached = false;
 
+    // Flag to indicate if the reading process has started
+    static boolean readingStarted = false;
+
     /**
      * Reads a line from the current file. If the end of the file is reached,
      * it attempts to open the next file. If all files are exhausted, it returns
      * an undefined scalar.
      *
      * @return A RuntimeScalar representing the line read from the file, or an
-     *         undefined scalar if EOF is reached for all files.
+     * undefined scalar if EOF is reached for all files.
      */
     static RuntimeScalar readline() {
         // Check if EOF has been reached for all files
         if (eofReached) {
+            // Reset the readingStarted flag when EOF is reached
+            readingStarted = false;
             return scalarUndef;
+        }
+
+        // Check if the reading process has started
+        if (!readingStarted) {
+            readingStarted = true;
+            // Check if @ARGV is empty and add "-" if necessary
+            if (getGlobalArray("main::ARGV").size() == 0) {
+                getGlobalArray("main::ARGV").push(new RuntimeScalar("-"));
+            }
         }
 
         // Loop until a valid line is read or all files are exhausted
