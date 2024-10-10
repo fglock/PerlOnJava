@@ -759,7 +759,7 @@ public class EmitterVisitor implements Visitor {
 
     void handleDiamondBuiltin(OperatorNode node) {
         MethodVisitor mv = ctx.mv;
-        String argument = ((StringNode)((ListNode) node.operand).elements.get(0)).value;
+        String argument = ((StringNode) ((ListNode) node.operand).elements.get(0)).value;
         ctx.logDebug("visit diamond " + argument);
         if (argument.equals("") || argument.equals("<>")) {
             // null filehandle:  <>  <<>>
