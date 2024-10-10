@@ -321,6 +321,7 @@ file.
     - Added `srand`, `crypt`, `exit`
     - Added `readdir`, `opendir`, `closedir`, `telldir`, `seekdir`, `rewinddir`, `mkdir`, `rmdir`
     - Added file test operators like `-d`, `-f`
+    - Added the variants of diamond operator `<>` and special cases of `while`
     - Completed `chomp` operator; fixed `qw//` operator
     - Added modules: `parent`, `Test::More`
 
