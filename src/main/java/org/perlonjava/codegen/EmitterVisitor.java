@@ -1046,7 +1046,7 @@ public class EmitterVisitor implements Visitor {
             case "not":
                 handleUnaryBuiltin(node, "not");
                 break;
-            case "<":
+            case "<>":
                 handleDiamondBuiltin(node);
                 break;
             case "abs":
