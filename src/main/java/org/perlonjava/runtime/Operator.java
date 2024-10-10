@@ -443,6 +443,11 @@ public class Operator {
         return fh.write(sb.toString());
     }
 
+    public static RuntimeScalar eof(RuntimeList runtimeList, RuntimeScalar fileHandle) {
+        RuntimeIO fh = fileHandle.getRuntimeIO();
+        return fh.eof();
+    }
+
     /**
      * Reads a line from a file handle.
      *
