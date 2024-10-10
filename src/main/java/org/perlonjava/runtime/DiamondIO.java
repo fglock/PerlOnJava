@@ -13,6 +13,9 @@ import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 public class DiamondIO extends RuntimeIO {
+    
+    // Perl docs - https://perldoc.perl.org/perlop#I/O-Operators
+
     // List of files to read from, simulating the behavior of Perl's @ARGV
     private final List<String> fileList;
     // Current BufferedReader for the file being read
