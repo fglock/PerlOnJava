@@ -532,6 +532,9 @@ public class StringParser {
         if (operator.equals("<") || operator.equals("<<") || operator.equals("'") || operator.equals("\"") || operator.equals("/") || operator.equals("//")
                 || operator.equals("`")) {
             parser.tokenIndex--;   // will reparse the quote
+            if (operator.equals("<<")) {
+                operator = "<";
+            }
         }
         ParsedString rawStr;
         int stringParts = 1;

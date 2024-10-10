@@ -757,6 +757,26 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
+    void handleDiamondBuiltin(OperatorNode node) {
+        MethodVisitor mv = ctx.mv;
+        String argument = ((StringNode)((ListNode) node.operand).elements.get(0)).value;
+        ctx.logDebug("visit diamond " + argument);
+        if (argument.equals("") || argument.equals("<>")) {
+            // null filehandle:  <>  <<>>
+            node.operand.accept(this.with(RuntimeContextType.SCALAR));
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/DiamondIO",
+                    "readline",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            if (ctx.contextType == RuntimeContextType.VOID) {
+                mv.visitInsn(Opcodes.POP);
+            }
+        } else {
+            node.operator = "glob";
+            handleGlobBuiltin(node);
+        }
+    }
+
     void handleChompBuiltin(OperatorNode node) {
         MethodVisitor mv = ctx.mv;
         node.operand.accept(this.with(RuntimeContextType.LIST));
@@ -1024,6 +1044,9 @@ public class EmitterVisitor implements Visitor {
             case "!":
             case "not":
                 handleUnaryBuiltin(node, "not");
+                break;
+            case "<":
+                handleDiamondBuiltin(node);
                 break;
             case "abs":
             case "defined":
