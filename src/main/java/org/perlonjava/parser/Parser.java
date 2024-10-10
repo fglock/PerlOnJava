@@ -617,6 +617,7 @@ public class Parser {
                         // Handle fractional numbers
                         return NumberParser.parseFractionalNumber(this);
                     case "<":
+                    case "<<":
                         return OperatorParser.parseDiamondOperator(this, token);
                     case "'":
                     case "\"":
