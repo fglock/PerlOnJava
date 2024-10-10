@@ -447,11 +447,23 @@ public class Operator {
      * Reads a line from a file handle.
      *
      * @param fileHandle The file handle.
-     * @return A RuntimeScalar with the line.
+     * @param ctx        The context (SCALAR or LIST).
+     * @return A RuntimeDataProvider with the line(s).
      */
-    public static RuntimeScalar readline(RuntimeScalar fileHandle) {
+    public static RuntimeDataProvider readline(RuntimeScalar fileHandle, int ctx) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
-        return fh.readline();
+        if (ctx == RuntimeContextType.LIST) {
+            // Handle LIST context
+            RuntimeList lines = new RuntimeList();
+            RuntimeScalar line;
+            while ((line = fh.readline()).type != RuntimeScalarType.UNDEF) {
+                lines.elements.add(line);
+            }
+            return lines;
+        } else {
+            // Handle SCALAR context (original behavior)
+            return fh.readline();
+        }
     }
 
     /**
