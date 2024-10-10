@@ -20,12 +20,12 @@ close $fh;
 
 # Test <>
 my @files = ($test_file);
-my @lines = do { local @ARGV = @files; <> };
+my @lines = do { @ARGV = @files; <> };
 print "not " unless @lines == 3 && $lines[1] eq "Line 2\n";
 say "ok # <> operator";
 
 # Test <<>>
-@lines = do { local @ARGV = @files; <<>> };
+@lines = do { @ARGV = @files; <<>> };
 print "not " unless @lines == 3 && $lines[2] eq "Line 3\n";
 say "ok # <<>> operator";
 

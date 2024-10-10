@@ -174,10 +174,10 @@
 - ❌  **Search for labels in call stack**: Label searching in the call stack is missing.
 - ❌  **Here-docs**: Here-docs for multiline string literals are not yet implemented.
 - ✔️   **`glob`**: `glob` operator is implemented.
-- ❌  **`<>`**: support for the `<>` operator is missing.
-- ❌  **`<$fh>`**: support for the `<$fh>` and `<STDIN>` operator is missing.
-- ❌  **`<ARGV>`**: support for the `<ARGV>` operator is missing.
-- ❌  **`<*.*>`**: support for the `<*.*>` operator is missing.
+- ✔️   **`<>`**: `<>` operator is implemented.
+- ✔️   **`<$fh>`**: `<$fh>` and `<STDIN>` operators are implemented.
+- ✔️   **`<ARGV>`**: `ARGV` and $ARGV are implemented.
+- ✔️   **`<*.*>`**: `<*.*>` glob operator is implemented.
 - ✔️   **End of file markers**: Source code control characters `^D` and `^Z`, and the tokens `__END__` and `__DATA__` are implemented. There is no `DATA` file handle yet.
 - ❌  **Startup processing**: processing `$sitelib/sitecustomize.pl` at startup is not enabled.
 - ❌  **Smartmatch operator**: `~~` and `given`/`when` construct
@@ -196,7 +196,7 @@
 - ❌  **loop control operators**: `next`, `last`, `redo` with expression are not implemented.
 - ❌  **loop control operators**: `next`, `last`, `redo` going to a different place in the call stack are not implemented.
 - ❌  **`goto` operator**: `goto` is not implemented.
-- ❌  **setting `$_` in `while` loop with `<>`**: automatic setting `$_` in `while` loops is not implemented.
+- ✔️   **setting `$_` in `while` loop with `<>`**: automatic setting `$_` in `while` loops is implemented.
 - ❌  **`do BLOCK while`**: `do` executes once before the conditional is evaluated.
 
 ## Namespaces and Global Variables
