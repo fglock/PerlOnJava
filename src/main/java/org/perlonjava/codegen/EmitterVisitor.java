@@ -764,10 +764,11 @@ public class EmitterVisitor implements Visitor {
         if (argument.equals("") || argument.equals("<>")) {
             // null filehandle:  <>  <<>>
             node.operand.accept(this.with(RuntimeContextType.SCALAR));
+            pushCallContext();
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/DiamondIO",
                     "readline",
-                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
             if (ctx.contextType == RuntimeContextType.VOID) {
                 mv.visitInsn(Opcodes.POP);
             }
