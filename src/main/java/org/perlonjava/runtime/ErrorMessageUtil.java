@@ -136,7 +136,11 @@ public class ErrorMessageUtil {
 
         // Count newlines from the last processed index to the current index
         for (int i = tokenIndex + 1; i <= index; i++) {
-            if (tokens.get(i).type == LexerTokenType.NEWLINE) {
+            LexerToken tok = tokens.get(i);
+            if (tok.type == LexerTokenType.EOF) {
+                break;
+            }
+            if (tok.type == LexerTokenType.NEWLINE) {
                 lastLineNumber++;
             }
         }

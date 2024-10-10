@@ -99,13 +99,13 @@ public class For3Node extends AbstractNode {
     private static boolean isMagicWhile(Node node) {
         String operator = "";
         if (node instanceof OperatorNode) {
-            // "<", "each", "glob"
+            // "<>", "each", "glob"
             operator = ((OperatorNode) node).operator;
         } else if (node instanceof BinaryOperatorNode) {
             // "readline"
             operator = ((BinaryOperatorNode) node).operator;
         }
-        return operator.equals("<") ||
+        return operator.equals("<>") ||
                 operator.equals("each") ||
                 operator.equals("glob") ||
                 operator.equals("readline");
