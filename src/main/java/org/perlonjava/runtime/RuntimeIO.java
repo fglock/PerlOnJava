@@ -111,8 +111,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             fh.outputStream = new BufferedOutputStream(System.out, BUFFER_SIZE);
             fh.channel = Channels.newChannel(fh.outputStream);
         } else {
-            getGlobalVariable("main::!").set("File operation failed: Not implemented");
-            fh = null;
+            return open(fileName, "<");
         }
         return fh;
     }
