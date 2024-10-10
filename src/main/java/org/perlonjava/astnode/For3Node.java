@@ -1,6 +1,8 @@
 package org.perlonjava.astnode;
 
+import org.perlonjava.codegen.LValueVisitor;
 import org.perlonjava.codegen.Visitor;
+import org.perlonjava.runtime.RuntimeContextType;
 
 /**
  * The For3Node class represents a node in the abstract syntax tree (AST) that holds a "for" loop statement.
@@ -44,6 +46,46 @@ public class For3Node extends AbstractNode {
      * @param tokenIndex     the index of the token in the source code
      */
     public For3Node(String labelName, boolean useNewScope, Node initialization, Node condition, Node increment, Node body, Node continueBlock, int tokenIndex) {
+
+        // "magic" `while ( <> )`
+        if (condition != null) {
+            String operator = "";
+            if (condition instanceof BinaryOperatorNode) {
+                // test for `my $line = <STDIN>`
+                BinaryOperatorNode operatorNode = (BinaryOperatorNode) condition;
+                operator = operatorNode.operator;
+                if (operator.equals("=")) {
+                    // is SCALAR context?
+                    int lvalueContext = LValueVisitor.getContext(operatorNode.left);
+                    if (lvalueContext == RuntimeContextType.SCALAR && isMagicWhile(operatorNode.right)) {
+                        // need  `defined( ... )`
+                        condition = new OperatorNode(
+                                "defined",
+                                operatorNode,
+                                operatorNode.tokenIndex
+                        );
+                    }
+                }
+            }
+            if (isMagicWhile(condition)) {
+                // need  `defined( $_ = ...)`
+                condition = new OperatorNode(
+                        "defined",
+                        new BinaryOperatorNode(
+                                "=",
+                                new OperatorNode(
+                                        "$",
+                                        new IdentifierNode("_", tokenIndex),
+                                        tokenIndex
+                                ),
+                                condition,
+                                tokenIndex
+                        ),
+                        tokenIndex
+                );
+            }
+        }
+
         this.labelName = labelName;
         this.useNewScope = useNewScope;
         this.initialization = initialization;
@@ -52,6 +94,21 @@ public class For3Node extends AbstractNode {
         this.body = body;
         this.continueBlock = continueBlock;
         this.tokenIndex = tokenIndex;
+    }
+
+    private static boolean isMagicWhile(Node node) {
+        String operator = "";
+        if (node instanceof OperatorNode) {
+            // "<", "each", "glob"
+            operator = ((OperatorNode) node).operator;
+        } else if (node instanceof BinaryOperatorNode) {
+            // "readline"
+            operator = ((BinaryOperatorNode) node).operator;
+        }
+        return operator.equals("<") ||
+                operator.equals("each") ||
+                operator.equals("glob") ||
+                operator.equals("readline");
     }
 
     /**
