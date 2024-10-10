@@ -200,11 +200,16 @@ public class Operator {
 //        open FILEHANDLE,EXPR
 //        open FILEHANDLE
 
-        // fetch parameters - we are assuming the usual 3-argument open
+        RuntimeIO fh;
         String mode = runtimeList.elements.get(0).toString();
-        String fileName = runtimeList.elements.get(1).toString();
-
-        RuntimeIO fh = RuntimeIO.open(fileName, mode);
+        if (runtimeList.size() > 1) {
+            // 3-argument open
+            String fileName = runtimeList.elements.get(1).toString();
+            fh = RuntimeIO.open(fileName, mode);
+        } else {
+            // 2-argument open
+            fh = RuntimeIO.open(mode);
+        }
         if (fh == null) {
             return new RuntimeScalar();
         }

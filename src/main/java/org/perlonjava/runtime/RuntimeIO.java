@@ -100,6 +100,23 @@ public class RuntimeIO implements RuntimeScalarReference {
         getGlobalIO("main::STDIN").set(stdin);
     }
 
+    // Constructor to open the file, without mode specification
+    public static RuntimeIO open(String fileName) {
+        RuntimeIO fh = new RuntimeIO();
+        if ("-".equals(fileName) || "<-".equals(fileName)) {
+            // Handle standard input
+            fh.bufferedReader = new BufferedReader(new InputStreamReader(System.in));
+        } else if (">-".equals(fileName)) {
+            // Handle standard output
+            fh.outputStream = new BufferedOutputStream(System.out, BUFFER_SIZE);
+            fh.channel = Channels.newChannel(fh.outputStream);
+        } else {
+            getGlobalVariable("main::!").set("File operation failed: Not implemented");
+            fh = null;
+        }
+        return fh;
+    }
+
     // Constructor to open the file with a specific mode
     public static RuntimeIO open(String fileName, String mode) {
         RuntimeIO fh = new RuntimeIO();
