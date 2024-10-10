@@ -3,6 +3,10 @@ package org.perlonjava.runtime;
 import static org.perlonjava.runtime.GlobalContext.*;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
+/**
+ * The DiamondIO class manages reading from multiple input files,
+ * similar to Perl's diamond operator (<>).
+ */
 public class DiamondIO {
 
     // Static variable to hold the current file reader
@@ -19,18 +23,22 @@ public class DiamondIO {
      * it attempts to open the next file. If all files are exhausted, it returns
      * an undefined scalar.
      *
+     * @param arg An unused parameter, kept for compatibility with other readline methods
      * @return A RuntimeScalar representing the line read from the file, or an
      * undefined scalar if EOF is reached for all files.
      */
     public static RuntimeScalar readline(RuntimeScalar arg) {
+        // Initialize the reading process if it hasn't started yet
         if (!readingStarted) {
             readingStarted = true;
+            // If no files are specified, use standard input (represented by "-")
             if (getGlobalArray("main::ARGV").size() == 0) {
                 getGlobalArray("main::ARGV").push(new RuntimeScalar("-"));
             }
         }
 
         while (true) {
+            // If there's no current reader, try to open the next file
             if (currentReader == null) {
                 if (!openNextFile()) {
                     eofReached = true;
@@ -38,6 +46,7 @@ public class DiamondIO {
                 }
             }
 
+            // Attempt to read a line from the current file
             RuntimeScalar line = currentReader.readline();
             if (line.type != RuntimeScalarType.UNDEF) {
                 return line;
@@ -47,6 +56,7 @@ public class DiamondIO {
             currentReader = null;
         }
     }
+
     /**
      * Opens the next file in the list and sets it as the current reader.
      * Updates the global variables to reflect the current file being read.

@@ -452,7 +452,7 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     public RuntimeScalar readline() {
         try {
-            // flush stdout and stderr, in case we are displaying a prompt
+            // Flush stdout and stderr before reading, in case we are displaying a prompt
             if (stdout.needFlush) {
                 stdout.flush();
             }
@@ -460,16 +460,19 @@ public class RuntimeIO implements RuntimeScalarReference {
                 stderr.flush();
             }
 
+            // Check if the IO object is set up for reading
             if (fileChannel == null && bufferedReader == null) {
                 throw new UnsupportedOperationException("Readline is not supported for output streams");
             }
 
-            String sep = getGlobalVariable("main::/").toString();  // fetch $/
+            // Get the input record separator (equivalent to Perl's $/)
+            String sep = getGlobalVariable("main::/").toString();
             boolean hasSeparator = !sep.isEmpty();
             int separator = hasSeparator ? sep.charAt(0) : '\n';
 
             StringBuilder line = new StringBuilder();
 
+            // Reading from a file using NIO FileChannel
             if (fileChannel != null) {
                 ByteBuffer charBuffer = ByteBuffer.allocate(1);
                 while (true) {
@@ -481,15 +484,19 @@ public class RuntimeIO implements RuntimeScalarReference {
                     charBuffer.flip();
                     char c = (char) charBuffer.get();
                     line.append(c);
+                    // Break if we've reached the separator (if defined)
                     if (hasSeparator && c == separator) {
                         break;
                     }
                     charBuffer.clear();
                 }
-            } else if (bufferedReader != null) {
+            }
+            // Reading from a BufferedReader (e.g., for standard input)
+            else if (bufferedReader != null) {
                 int c;
                 while ((c = bufferedReader.read()) != -1) {
                     line.append((char) c);
+                    // Break if we've reached the separator (if defined)
                     if (hasSeparator && c == separator) {
                         break;
                     }
@@ -499,12 +506,15 @@ public class RuntimeIO implements RuntimeScalarReference {
                 }
             }
 
+            // Return undef if we've reached EOF and no characters were read
             if (line.length() == 0 && this.isEOF) {
                 return scalarUndef;
             }
 
+            // Return the read line as a RuntimeScalar
             return new RuntimeScalar(line.toString());
         } catch (Exception e) {
+            // Set the global error variable ($!) and return undef on error
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
             return scalarUndef;
         }
