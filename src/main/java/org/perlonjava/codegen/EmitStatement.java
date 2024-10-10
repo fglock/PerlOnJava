@@ -62,28 +62,6 @@ public class EmitStatement {
 
         EmitterVisitor voidVisitor = emitterVisitor.with(RuntimeContextType.VOID); // some parts have context VOID
 
-        // "magic" `while ( <> )`
-        if (node.condition != null) {
-            String operator = "";
-            if (node.condition instanceof BinaryOperatorNode) {
-                // test for `my $line = <STDIN>`
-                BinaryOperatorNode operatorNode = (BinaryOperatorNode) node.condition;
-                operator = operatorNode.operator;
-                if (operator.equals("=")) {
-                    // is SCALAR context?
-                    int lvalueContext = LValueVisitor.getContext(operatorNode.left);
-                    if (lvalueContext == RuntimeContextType.SCALAR && isMagicWhile(operatorNode.right)) {
-                        // need  `defined( ... )`
-                        // TODO
-                    }
-                }
-            }
-            if (isMagicWhile(node.condition)) {
-                // need  `defined( $_ = ...)`
-                // TODO
-            }
-        }
-
         // Enter a new scope in the symbol table
         if (node.useNewScope) {
             emitterVisitor.ctx.symbolTable.enterScope();
@@ -158,21 +136,6 @@ public class EmitStatement {
         }
 
         emitterVisitor.ctx.logDebug("FOR end");
-    }
-
-    private static boolean isMagicWhile(Node node) {
-        String operator = "";
-        if (node instanceof OperatorNode) {
-            // "<", "each", "glob"
-            operator = ((OperatorNode) node).operator;
-        } else if (node instanceof BinaryOperatorNode) {
-            // "readline"
-            operator = ((BinaryOperatorNode) node).operator;
-        }
-        return operator.equals("<") ||
-                operator.equals("each") ||
-                operator.equals("glob") ||
-                operator.equals("readline");
     }
 
     static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
