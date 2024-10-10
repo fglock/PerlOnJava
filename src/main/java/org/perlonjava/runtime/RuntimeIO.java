@@ -465,7 +465,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             }
 
             if (this.isEOF) {
-                return null; // If EOF flag is already set, return null
+                return scalarUndef; // If EOF flag is already set, return null
             }
 
             String sep = getGlobalVariable("main::/").toString();  // fetch $/

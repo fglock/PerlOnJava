@@ -22,7 +22,10 @@ public class DiamondIO {
      * @return A RuntimeScalar representing the line read from the file, or an
      * undefined scalar if EOF is reached for all files.
      */
-    static RuntimeScalar readline() {
+    public static RuntimeScalar readline(RuntimeScalar arg) {
+        // TODO use arg
+        // arg is `` or `<>` for Perl syntax `<>` or `<<>>`
+
         // Check if EOF has been reached for all files
         if (eofReached) {
             // Reset the readingStarted flag when EOF is reached
@@ -53,7 +56,7 @@ public class DiamondIO {
 
         // If the line is undefined, recursively call readline to get the next line
         if (line.type == RuntimeScalarType.UNDEF) {
-            return readline();
+            return readline(arg);
         }
 
         // Return the line read
