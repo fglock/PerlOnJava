@@ -200,6 +200,29 @@ public class Parser {
                     if (token.text.equals("until")) {
                         modifierExpression = new OperatorNode("not", modifierExpression, modifierExpression.getIndex());
                     }
+                    if (expression instanceof BlockNode) {
+                        // special case:  `do { BLOCK } while CONDITION`
+                        // executes the loop at least once
+                        ctx.logDebug("do-while " + expression);
+                        // transform to:  `for (;;) { BLOCK; CONDITION || last }`
+                        BlockNode exp = (BlockNode) expression;
+                        exp.elements.add(
+                                new BinaryOperatorNode(
+                                        "||",
+                                        modifierExpression,
+                                        new OperatorNode("last", new ListNode(tokenIndex), tokenIndex),
+                                        tokenIndex
+                                )
+                        );
+                        return new For3Node(null,
+                                false,
+                                null,
+                                null,
+                                null,
+                                expression,
+                                null,
+                                tokenIndex);
+                    }
                     return new For3Node(null,
                             false,
                             null, modifierExpression,
