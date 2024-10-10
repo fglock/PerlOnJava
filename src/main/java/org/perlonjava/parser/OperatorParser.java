@@ -93,4 +93,53 @@ public class OperatorParser {
         }
         return new OperatorNode("eval", operand, parser.tokenIndex);
     }
+
+    static Node parseDiamondOperator(Parser parser, LexerToken token) {
+        // Save the current token index to restore later if needed
+        int currentTokenIndex = parser.tokenIndex;
+        String tokenText = parser.tokens.get(parser.tokenIndex).text;
+
+        // Check if the token is a dollar sign, indicating a variable
+        if (tokenText.equals("$")) {
+            // Handle the case for <$fh>
+            parser.ctx.logDebug("diamond operator " + token.text + parser.tokens.get(parser.tokenIndex));
+            parser.tokenIndex++;
+            Node var = parser.parseVariable("$"); // Parse the variable following the dollar sign
+            parser.ctx.logDebug("diamond operator var " + var);
+
+            // Check if the next token is a closing angle bracket
+            if (parser.tokens.get(parser.tokenIndex).text.equals(">")) {
+                parser.consume(); // Consume the '>' token
+                // Return a BinaryOperatorNode representing a readline operation
+                return new BinaryOperatorNode("readline",
+                        var,
+                        new ListNode(parser.tokenIndex), parser.tokenIndex);
+            }
+        }
+
+        // Restore the token index
+        parser.tokenIndex = currentTokenIndex;
+
+        // Check if the token is one of the standard input sources
+        if (tokenText.equals("STDIN") || tokenText.equals("DATA") || tokenText.equals("ARGV")) {
+            // Handle the case for <STDIN>, <DATA>, or <ARGV>
+            parser.ctx.logDebug("diamond operator " + token.text + parser.tokens.get(parser.tokenIndex));
+            parser.tokenIndex++;
+
+            // Check if the next token is a closing angle bracket
+            if (parser.tokens.get(parser.tokenIndex).text.equals(">")) {
+                parser.consume(); // Consume the '>' token
+                // Return a BinaryOperatorNode representing a readline operation
+                return new BinaryOperatorNode("readline",
+                        new IdentifierNode("main::" + tokenText, currentTokenIndex),
+                        new ListNode(parser.tokenIndex), parser.tokenIndex);
+            }
+        }
+
+        // Restore the token index
+        parser.tokenIndex = currentTokenIndex;
+
+        // Handle other cases like <>, <<>>, or <*.*> by parsing as a raw string
+        return StringParser.parseRawString(parser, token.text);
+    }
 }
