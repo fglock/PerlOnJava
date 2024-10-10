@@ -230,8 +230,7 @@ public class EmitterMethodCreator implements Opcodes {
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/GlobalContext",
                     "setGlobalVariable",
-                    "(Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-            mv.visitInsn(Opcodes.POP);    // throw away the RuntimeScalar result
+                    "(Ljava/lang/String;Ljava/lang/String;)V", false);
 
             // Restore the stack state to match the end of the try block if needed
             // Return "undef"
