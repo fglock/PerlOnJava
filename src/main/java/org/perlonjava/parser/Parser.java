@@ -617,7 +617,7 @@ public class Parser {
                         // Handle fractional numbers
                         return NumberParser.parseFractionalNumber(this);
                     case "<":
-                        return parseDiamondOperator(token);
+                        return OperatorParser.parseDiamondOperator(this, token);
                     case "'":
                     case "\"":
                     case "/":
@@ -679,35 +679,6 @@ public class Parser {
         throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, ctx.errorUtil);
     }
 
-    private Node parseDiamondOperator(LexerToken token) {
-        // Handle diamond operator
-        int currentTokenIndex = tokenIndex;
-        if (tokens.get(tokenIndex).text.equals("$")) {
-            // <$fh>
-            ctx.logDebug("diamond operator " + token.text + tokens.get(tokenIndex));
-            tokenIndex++;
-            Node var = parseVariable("$");
-            ctx.logDebug("diamond operator var " + var);
-            if (tokens.get(tokenIndex).text.equals(">")) {
-                consume();
-                return new BinaryOperatorNode("readline", var, new ListNode(tokenIndex), tokenIndex);
-            }
-        }
-        tokenIndex = currentTokenIndex;
-        if (tokens.get(tokenIndex).text.equals("STDIN")) {
-            // <STDIN>
-            ctx.logDebug("diamond operator " + token.text + tokens.get(tokenIndex));
-            tokenIndex++;
-            if (tokens.get(tokenIndex).text.equals(">")) {
-                consume();
-                return new BinaryOperatorNode("readline", new IdentifierNode("main::STDIN", currentTokenIndex), new ListNode(tokenIndex), tokenIndex);
-            }
-        }
-        tokenIndex = currentTokenIndex;
-        // <>  <<>>  <*.*>  <ARGV>
-        return StringParser.parseRawString(this, token.text);
-    }
-
     /**
      * Parses a variable from the given lexer token.
      *
@@ -715,7 +686,7 @@ public class Parser {
      * @return The parsed variable node.
      * @throws PerlCompilerException If there is a syntax error.
      */
-    private Node parseVariable(String sigil) {
+    public Node parseVariable(String sigil) {
         Node operand;
         String varName = IdentifierParser.parseComplexIdentifier(this);
 
