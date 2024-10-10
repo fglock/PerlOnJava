@@ -27,33 +27,44 @@ public class DiamondIO {
      * @return A RuntimeScalar representing the line read from the file, or an
      * undefined scalar if EOF is reached for all files.
      */
-    public static RuntimeScalar readline(RuntimeScalar arg) {
-        // Initialize the reading process if it hasn't started yet
-        if (!readingStarted) {
-            readingStarted = true;
-            // If no files are specified, use standard input (represented by "-")
-            if (getGlobalArray("main::ARGV").size() == 0) {
-                getGlobalArray("main::ARGV").push(new RuntimeScalar("-"));
+    public static RuntimeDataProvider readline(RuntimeScalar arg, int ctx) {
+        if (ctx == RuntimeContextType.LIST) {
+            // Handle LIST context
+            RuntimeList lines = new RuntimeList();
+            RuntimeScalar line;
+            while ((line = (RuntimeScalar) readline(arg, RuntimeContextType.SCALAR)).type != RuntimeScalarType.UNDEF) {
+                lines.elements.add(line);
             }
-        }
-
-        while (true) {
-            // If there's no current reader, try to open the next file
-            if (currentReader == null) {
-                if (!openNextFile()) {
-                    eofReached = true;
-                    return scalarUndef;
+            return lines;
+        } else {
+            // Handle SCALAR context
+            // Initialize the reading process if it hasn't started yet
+            if (!readingStarted) {
+                readingStarted = true;
+                // If no files are specified, use standard input (represented by "-")
+                if (getGlobalArray("main::ARGV").size() == 0) {
+                    getGlobalArray("main::ARGV").push(new RuntimeScalar("-"));
                 }
             }
 
-            // Attempt to read a line from the current file
-            RuntimeScalar line = currentReader.readline();
-            if (line.type != RuntimeScalarType.UNDEF) {
-                return line;
-            }
+            while (true) {
+                // If there's no current reader, try to open the next file
+                if (currentReader == null) {
+                    if (!openNextFile()) {
+                        eofReached = true;
+                        return scalarUndef;
+                    }
+                }
 
-            // If we reach here, we've hit EOF for the current file
-            currentReader = null;
+                // Attempt to read a line from the current file
+                RuntimeScalar line = currentReader.readline();
+                if (line.type != RuntimeScalarType.UNDEF) {
+                    return line;
+                }
+
+                // If we reach here, we've hit EOF for the current file
+                currentReader = null;
+            }
         }
     }
 
