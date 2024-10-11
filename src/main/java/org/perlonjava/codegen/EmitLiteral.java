@@ -6,7 +6,7 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 
-import static org.perlonjava.codegen.EmitterVisitor.isInteger;
+import static org.perlonjava.runtime.ScalarUtils.isInteger;
 
 public class EmitLiteral {
     static void emitArrayLiteral(EmitterVisitor emitterVisitor, ArrayLiteralNode node) {
