@@ -10,6 +10,13 @@ import org.perlonjava.runtime.*;
 
 public class StatementParser {
 
+    /**
+     * Parses a while or until statement.
+     *
+     * @param parser The Parser instance
+     * @param label  The label for the loop (can be null)
+     * @return A For3Node representing the while/until loop
+     */
     public static Node parseWhileStatement(Parser parser, String label) {
         LexerToken operator = parser.consume(LexerTokenType.IDENTIFIER); // "while" "until"
 
@@ -36,13 +43,14 @@ public class StatementParser {
         return new For3Node(label, true, null,
                 condition, null, body, continueNode, false, parser.tokenIndex);
     }
+
     /**
-      * Parses a for or foreach statement.
-      *
-      * @param parser The Parser instance
-      * @param label The label for the loop (can be null)
-      * @return A For1Node or For3Node representing the for/foreach loop
-      */
+     * Parses a for or foreach statement.
+     *
+     * @param parser The Parser instance
+     * @param label  The label for the loop (can be null)
+     * @return A For1Node or For3Node representing the for/foreach loop
+     */
     public static Node parseForStatement(Parser parser, String label) {
         parser.consume(LexerTokenType.IDENTIFIER); // "for" or "foreach"
 
@@ -74,8 +82,8 @@ public class StatementParser {
     }
 
     /**
-      * Helper method to parse a one-argument for loop (foreach-like).
-      */
+     * Helper method to parse a one-argument for loop (foreach-like).
+     */
     private static Node parseOneArgumentForLoop(Parser parser, String label, Node varNode, Node initialization) {
         parser.consume(); // Consume ")"
 
@@ -103,8 +111,8 @@ public class StatementParser {
     }
 
     /**
-      * Helper method to parse a three-argument for loop.
-      */
+     * Helper method to parse a three-argument for loop.
+     */
     private static Node parseThreeArgumentForLoop(Parser parser, String label, Node varNode, Node initialization) {
         if (varNode != null) {
             throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
@@ -136,6 +144,13 @@ public class StatementParser {
         return new For3Node(label, true, initialization,
                 condition, increment, body, null, false, parser.tokenIndex);
     }
+
+    /**
+     * Parses an if, unless, or elsif statement.
+     *
+     * @param parser The Parser instance
+     * @return An IfNode representing the if/unless/elsif statement
+     */
     public static Node parseIfStatement(Parser parser) {
         LexerToken operator = parser.consume(LexerTokenType.IDENTIFIER); // "if", "unless", "elsif"
         parser.consume(LexerTokenType.OPERATOR, "(");
@@ -157,6 +172,13 @@ public class StatementParser {
         return new IfNode(operator.text, condition, thenBranch, elseBranch, parser.tokenIndex);
     }
 
+    /**
+     * Parses a use or no declaration.
+     *
+     * @param parser The Parser instance
+     * @param token  The current token
+     * @return A ListNode representing the use/no declaration
+     */
     public static Node parseUseDeclaration(Parser parser, LexerToken token) {
         EmitterContext ctx = parser.ctx;
         ctx.logDebug("use: " + token.text);
@@ -245,6 +267,13 @@ public class StatementParser {
         return new ListNode(parser.tokenIndex);
     }
 
+    /**
+     * Parses a package declaration.
+     *
+     * @param parser The Parser instance
+     * @param token  The current token
+     * @return An OperatorNode or BlockNode representing the package declaration
+     */
     public static Node parsePackageDeclaration(Parser parser, LexerToken token) {
         parser.consume();
         String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
@@ -266,6 +295,14 @@ public class StatementParser {
         return packageNode;
     }
 
+    /**
+     * Parses an optional package block.
+     *
+     * @param parser      The Parser instance
+     * @param nameNode    The IdentifierNode representing the package name
+     * @param packageNode The OperatorNode representing the package declaration
+     * @return A BlockNode if a block is present, null otherwise
+     */
     public static BlockNode parseOptionalPackageBlock(Parser parser, IdentifierNode nameNode, OperatorNode packageNode) {
         LexerToken token;
         token = parser.peek();
@@ -286,6 +323,12 @@ public class StatementParser {
         return null;
     }
 
+    /**
+     * Parses an optional package version.
+     *
+     * @param parser The Parser instance
+     * @return A String representing the package version, or null if not present
+     */
     public static String parseOptionalPackageVersion(Parser parser) {
         LexerToken token;
         token = parser.peek();
@@ -323,5 +366,4 @@ public class StatementParser {
         }
         return null;
     }
-
 }

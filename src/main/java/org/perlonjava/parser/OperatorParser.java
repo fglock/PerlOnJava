@@ -17,7 +17,7 @@ public class OperatorParser {
      * Parses map, grep, and sort operators.
      *
      * @param parser The Parser instance.
-     * @param token The current LexerToken.
+     * @param token  The current LexerToken.
      * @return A BinaryOperatorNode representing the parsed operator.
      */
     static BinaryOperatorNode parseMapGrepSort(Parser parser, LexerToken token) {
@@ -127,7 +127,7 @@ public class OperatorParser {
      * Parses the diamond operator (<>).
      *
      * @param parser The Parser instance.
-     * @param token The current LexerToken.
+     * @param token  The current LexerToken.
      * @return A Node representing the parsed diamond operator.
      */
     static Node parseDiamondOperator(Parser parser, LexerToken token) {

@@ -31,7 +31,8 @@ public class ScalarUtils {
      * @param str The input string to be incremented
      * @return The incremented string
      * @throws IllegalArgumentException if the input string is null or empty
-     */    public static String incrementPlainString(String str) {
+     */
+    public static String incrementPlainString(String str) {
         if (str == null || str.isEmpty()) {
             return str; // Consider throwing an IllegalArgumentException instead
         }
@@ -39,8 +40,8 @@ public class ScalarUtils {
         char lastChar = str.charAt(str.length() - 1);
 
         if ((lastChar >= '0' && lastChar <= '8') ||
-            (lastChar >= 'A' && lastChar <= 'Y') ||
-            (lastChar >= 'a' && lastChar <= 'y')) {
+                (lastChar >= 'A' && lastChar <= 'Y') ||
+                (lastChar >= 'a' && lastChar <= 'y')) {
             return str.substring(0, str.length() - 1) + (char) (lastChar + 1);
         } else {
             StringBuilder result = new StringBuilder(str);
