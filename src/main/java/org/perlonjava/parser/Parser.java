@@ -324,11 +324,11 @@ public class Parser {
             // If the operator is right associative (like exponentiation), parse it with lower precedence.
             if (RIGHT_ASSOC_OP.contains(token.text)) {
                 ctx.logDebug("parseExpression `" + token.text + "` precedence: " + tokenPrecedence + " right assoc");
-                left = parseInfix(left, tokenPrecedence - 1); // Parse the right side with lower precedence.
+                left = parseInfixOperation(left, tokenPrecedence - 1); // Parse the right side with lower precedence.
             } else {
                 // Otherwise, parse it normally with the same precedence.
                 ctx.logDebug("parseExpression `" + token.text + "` precedence: " + tokenPrecedence + " left assoc");
-                left = parseInfix(left, tokenPrecedence);
+                left = parseInfixOperation(left, tokenPrecedence);
             }
         }
 
@@ -393,48 +393,7 @@ public class Parser {
             case "rmdir":
             case "glob":
             case "caller":
-                // Handle operators with one optional argument
-                String text = token.text;
-                operand = ListParser.parseZeroOrOneList(this, 0);
-                if (((ListNode) operand).elements.isEmpty()) {
-                    switch (text) {
-                        case "sleep":
-                            operand = new NumberNode(Long.toString(Long.MAX_VALUE), tokenIndex);
-                            break;
-                        case "pop":
-                        case "shift":
-                            // create `@_` variable
-                            // XXX in main program, use `@ARGV`
-                            operand = new OperatorNode(
-                                    "@", new IdentifierNode("_", tokenIndex), tokenIndex);
-                            break;
-                        case "localtime":
-                        case "gmtime":
-                        case "caller":
-                            // empty list
-                            break;
-                        case "srand":
-                            operand = new OperatorNode("undef", null, tokenIndex);
-                            break;
-                        case "exit":
-                            // create "0"
-                            operand = new NumberNode("0", tokenIndex);
-                            break;
-                        case "undef":
-                            operand = null;
-                            break;  // leave it empty
-                        case "rand":
-                            // create "1"
-                            operand = new NumberNode("1", tokenIndex);
-                            break;
-                        default:
-                            // create `$_` variable
-                            operand = new OperatorNode(
-                                    "$", new IdentifierNode("_", tokenIndex), tokenIndex);
-                            break;
-                    }
-                }
-                return new OperatorNode(text, operand, tokenIndex);
+                return parseOperatorWithOneOptionalArgument(token);
             case "unpack":
                 // Handle operators with one mandatory, one optional argument
                 operand = ListParser.parseZeroOrMoreList(this, 1, false, true, false, false);
@@ -587,6 +546,52 @@ public class Parser {
                 return StringParser.parseRawString(this, token.text);
         }
         return null;
+    }
+
+    private OperatorNode parseOperatorWithOneOptionalArgument(LexerToken token) {
+        Node operand;
+        // Handle operators with one optional argument
+        String text = token.text;
+        operand = ListParser.parseZeroOrOneList(this, 0);
+        if (((ListNode) operand).elements.isEmpty()) {
+            switch (text) {
+                case "sleep":
+                    operand = new NumberNode(Long.toString(Long.MAX_VALUE), tokenIndex);
+                    break;
+                case "pop":
+                case "shift":
+                    // create `@_` variable
+                    // XXX in main program, use `@ARGV`
+                    operand = new OperatorNode(
+                            "@", new IdentifierNode("_", tokenIndex), tokenIndex);
+                    break;
+                case "localtime":
+                case "gmtime":
+                case "caller":
+                    // default to empty list
+                    break;
+                case "srand":
+                    operand = new OperatorNode("undef", null, tokenIndex);
+                    break;
+                case "exit":
+                    // create "0"
+                    operand = new NumberNode("0", tokenIndex);
+                    break;
+                case "undef":
+                    operand = null;
+                    break;  // leave it empty
+                case "rand":
+                    // create "1"
+                    operand = new NumberNode("1", tokenIndex);
+                    break;
+                default:
+                    // create `$_` variable
+                    operand = new OperatorNode(
+                            "$", new IdentifierNode("_", tokenIndex), tokenIndex);
+                    break;
+            }
+        }
+        return new OperatorNode(text, operand, tokenIndex);
     }
 
     public Node parsePrimary() {
@@ -745,7 +750,16 @@ public class Parser {
         return new OperatorNode(sigil, operand, tokenIndex);
     }
 
-    public Node parseInfix(Node left, int precedence) {
+    /**
+     * Parses infix operators and their right-hand operands.
+     * This method handles binary operators, ternary operators, and special cases like method calls and subscripts.
+     *
+     * @param left The left-hand operand of the infix operation.
+     * @param precedence The current precedence level for parsing.
+     * @return A node representing the parsed infix operation.
+     * @throws PerlCompilerException If there's an unexpected infix operator or syntax error.
+     */
+    public Node parseInfixOperation(Node left, int precedence) {
         LexerToken token = consume();
 
         Node right;

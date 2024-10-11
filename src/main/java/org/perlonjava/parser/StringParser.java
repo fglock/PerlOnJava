@@ -255,7 +255,7 @@ public class StringParser {
                             switch (text) {
                                 case "[":
                                 case "{":
-                                    operand = parser.parseInfix(operand, 0);
+                                    operand = parser.parseInfixOperation(operand, 0);
                                     ctx.logDebug("str operand " + operand);
                                     break;
                                 case "->":
@@ -266,7 +266,7 @@ public class StringParser {
                                         case "[":
                                         case "{":
                                             parser.tokenIndex = previousIndex;  // re-parse "->"
-                                            operand = parser.parseInfix(operand, 0);
+                                            operand = parser.parseInfixOperation(operand, 0);
                                             ctx.logDebug("str operand " + operand);
                                             break;
                                         default:
