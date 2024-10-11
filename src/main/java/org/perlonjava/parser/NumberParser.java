@@ -17,7 +17,7 @@ public class NumberParser {
      * Parses a number token and returns a NumberNode.
      *
      * @param parser The Parser instance.
-     * @param token The LexerToken representing the number.
+     * @param token  The LexerToken representing the number.
      * @return A NumberNode representing the parsed number.
      */
     public static NumberNode parseNumber(Parser parser, LexerToken token) {
