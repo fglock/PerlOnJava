@@ -153,6 +153,10 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         return !elements.isEmpty();
     }
 
+    public boolean getDefinedBoolean() {
+        return true;
+    }
+
     // Get the list value of the list
     public RuntimeList getList() {
         return new RuntimeList(this);

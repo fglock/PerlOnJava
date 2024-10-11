@@ -121,6 +121,10 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         return !elements.isEmpty();
     }
 
+    public boolean getDefinedBoolean() {
+        return true;
+    }
+
     // Get a list of key-value pairs as a RuntimeArray
     public RuntimeArray entryArray() {
         RuntimeArray array = new RuntimeArray();
