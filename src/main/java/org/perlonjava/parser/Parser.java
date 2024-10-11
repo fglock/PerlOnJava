@@ -754,7 +754,7 @@ public class Parser {
      * Parses infix operators and their right-hand operands.
      * This method handles binary operators, ternary operators, and special cases like method calls and subscripts.
      *
-     * @param left The left-hand operand of the infix operation.
+     * @param left       The left-hand operand of the infix operation.
      * @param precedence The current precedence level for parsing.
      * @return A node representing the parsed infix operation.
      * @throws PerlCompilerException If there's an unexpected infix operator or syntax error.

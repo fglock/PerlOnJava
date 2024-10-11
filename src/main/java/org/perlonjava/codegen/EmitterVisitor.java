@@ -1,13 +1,11 @@
 package org.perlonjava.codegen;
 
-import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
-import org.perlonjava.runtime.ScalarGlobOperator;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -150,7 +148,7 @@ public class EmitterVisitor implements Visitor {
                 EmitVariable.handleAssignOperator(this, node);
                 return;
             case ".":
-                handleConcatOperator(node);
+                EmitOperator.handleConcatOperator(this, node);
                 return;
             case "->":
                 handleArrowOperator(node);
@@ -166,36 +164,36 @@ public class EmitterVisitor implements Visitor {
                 return;
             case "push":
             case "unshift":
-                handlePushOperator(node);
+                EmitOperator.handlePushOperator(this, node);
                 return;
             case "map":
             case "sort":
             case "grep":
-                handleMapOperator(node);
+                EmitOperator.handleMapOperator(this, node);
                 return;
             case "eof":
             case "open":
             case "printf":
             case "print":
             case "say":
-                handleSayOperator(node);
+                EmitOperator.handleSayOperator(this, node);
                 return;
             case "close":
             case "readline":
-                handleReadlineOperator(node);
+                EmitOperator.handleReadlineOperator(this, node);
                 return;
             case "sprintf":
             case "substr":
-                handleSubstr(node);
+                EmitOperator.handleSubstr(this, node);
                 return;
             case "x":
-                handleRepeat(node);
+                EmitOperator.handleRepeat(this, node);
                 return;
             case "join":
-                handleJoinOperator(node);
+                EmitOperator.handleJoinOperator(this, node);
                 return;
             case "split":
-                handleSplitOperator(node);
+                EmitOperator.handleSplitOperator(this, node);
                 return;
             case "!~":
                 EmitRegex.handleNotBindRegex(this, node);
@@ -234,7 +232,7 @@ public class EmitterVisitor implements Visitor {
                     EmitLogicalOperator.emitFlipFlopOperator(this, node);
                     return;
                 }
-                handleRangeOperator(node);
+                EmitOperator.handleRangeOperator(this, node);
                 return;
         }
 
@@ -245,61 +243,6 @@ public class EmitterVisitor implements Visitor {
         }
 
         throw new PerlCompilerException(node.tokenIndex, "Unexpected infix operator: " + operator, ctx.errorUtil);
-    }
-
-    private void handleRangeOperator(BinaryOperatorNode node) {
-        node.left.accept(this.with(RuntimeContextType.SCALAR));
-        node.right.accept(this.with(RuntimeContextType.SCALAR));
-        // static PerlRange generateList(int start, int end)
-        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/PerlRange",
-                "createRange",
-                "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/PerlRange;", false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handleSubstr(BinaryOperatorNode node) {
-        String operator = node.operator;
-        node.left.accept(this.with(RuntimeContextType.SCALAR));
-        node.right.accept(this.with(RuntimeContextType.LIST));
-        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handleRepeat(BinaryOperatorNode node) {
-        Node left = node.left;
-        if (node.left instanceof ListNode) {
-            node.left.accept(this.with(RuntimeContextType.LIST));
-        } else {
-            node.left.accept(this.with(RuntimeContextType.SCALAR));
-        }
-        node.right.accept(this.with(RuntimeContextType.SCALAR));
-        pushCallContext();
-        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Operator",
-                "repeat",
-                "(Lorg/perlonjava/runtime/RuntimeDataProvider;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handleConcatOperator(BinaryOperatorNode node) {
-        EmitterVisitor scalarVisitor =
-                this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
-        node.left.accept(scalarVisitor); // target - left parameter
-        node.right.accept(scalarVisitor); // right parameter
-        ctx.mv.visitMethodInsn(
-                Opcodes.INVOKEVIRTUAL,
-                "org/perlonjava/runtime/RuntimeScalar",
-                "stringConcat",
-                "(Lorg/perlonjava/runtime/RuntimeDataProvider;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
     }
 
     private void handleBinaryOperator(BinaryOperatorNode node, String methodStr) {
@@ -353,46 +296,6 @@ public class EmitterVisitor implements Visitor {
                 Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", methodStr, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         // assign to the Lvalue
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handlePushOperator(BinaryOperatorNode node) {
-        String operator = node.operator;
-        node.left.accept(this.with(RuntimeContextType.LIST));
-        node.right.accept(this.with(RuntimeContextType.LIST));
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", operator, "(Lorg/perlonjava/runtime/RuntimeDataProvider;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handleMapOperator(BinaryOperatorNode node) {
-        String operator = node.operator;
-        node.right.accept(this.with(RuntimeContextType.LIST));  // list
-        node.left.accept(this.with(RuntimeContextType.SCALAR)); // subroutine
-        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeList;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeList;", false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handleSplitOperator(BinaryOperatorNode node) {
-        String operator = node.operator;
-        node.left.accept(this.with(RuntimeContextType.SCALAR));
-        node.right.accept(this.with(RuntimeContextType.LIST));
-        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handleJoinOperator(BinaryOperatorNode node) {
-        String operator = node.operator;
-        node.left.accept(this.with(RuntimeContextType.SCALAR));
-        node.right.accept(this.with(RuntimeContextType.LIST));
-        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeDataProvider;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         if (ctx.contextType == RuntimeContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.POP);
         }
@@ -487,7 +390,7 @@ public class EmitterVisitor implements Visitor {
      * <p>
      * hashOperation is one of: "get", "delete", "exists"
      */
-    private void handleHashElementOperator(BinaryOperatorNode node, String hashOperation) {
+    public void handleHashElementOperator(BinaryOperatorNode node, String hashOperation) {
         ctx.logDebug("handleHashElementOperator " + node + " in context " + ctx.contextType);
         EmitterVisitor scalarVisitor =
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
@@ -676,7 +579,7 @@ public class EmitterVisitor implements Visitor {
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "arrayDerefGet", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
     }
 
-    private void handleArrowHashDeref(BinaryOperatorNode node, String hashOperation) {
+    public void handleArrowHashDeref(BinaryOperatorNode node, String hashOperation) {
         ctx.logDebug("visit(BinaryOperatorNode) ->{} ");
         EmitterVisitor scalarVisitor =
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
@@ -754,116 +657,6 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    void handleDiamondBuiltin(OperatorNode node) {
-        MethodVisitor mv = ctx.mv;
-        String argument = ((StringNode) ((ListNode) node.operand).elements.get(0)).value;
-        ctx.logDebug("visit diamond " + argument);
-        if (argument.equals("") || argument.equals("<>")) {
-            // null filehandle:  <>  <<>>
-            node.operand.accept(this.with(RuntimeContextType.SCALAR));
-            pushCallContext();
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/DiamondIO",
-                    "readline",
-                    "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
-            if (ctx.contextType == RuntimeContextType.VOID) {
-                mv.visitInsn(Opcodes.POP);
-            }
-        } else {
-            node.operator = "glob";
-            handleGlobBuiltin(node);
-        }
-    }
-
-    void handleChompBuiltin(OperatorNode node) {
-        MethodVisitor mv = ctx.mv;
-        node.operand.accept(this.with(RuntimeContextType.LIST));
-        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE,
-                "org/perlonjava/runtime/RuntimeDataProvider",
-                node.operator,
-                "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    void handleGlobBuiltin(OperatorNode node) {
-        MethodVisitor mv = ctx.mv;
-
-        // Generate unique IDs for this glob instance
-        int globId = ScalarGlobOperator.currentId++;
-
-        // public static RuntimeDataProvider evaluate(id, patternArg, ctx)
-        mv.visitLdcInsn(globId);
-        node.operand.accept(this.with(RuntimeContextType.SCALAR));
-        pushCallContext();
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/ScalarGlobOperator", "evaluate", "(ILorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
-
-        // If the context is VOID, we need to pop the result from the stack
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handleVecBuiltin(OperatorNode node) {
-        MethodVisitor mv = ctx.mv;
-        node.operand.accept(this.with(RuntimeContextType.LIST));
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/Vec",
-                node.operator,
-                "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handleIndexBuiltin(OperatorNode node) {
-        MethodVisitor mv = ctx.mv;
-        EmitterVisitor scalarVisitor = this.with(RuntimeContextType.SCALAR);
-        if (node.operand instanceof ListNode) {
-            ListNode operand = (ListNode) node.operand;
-            if (!operand.elements.isEmpty()) {
-                operand.elements.get(0).accept(scalarVisitor);
-                operand.elements.get(1).accept(scalarVisitor);
-                if (operand.elements.size() == 3) {
-                    operand.elements.get(2).accept(scalarVisitor);
-                } else {
-                    new OperatorNode("undef", null, node.tokenIndex).accept(scalarVisitor);
-                }
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/RuntimeScalar",
-                        node.operator,
-                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-                if (ctx.contextType == RuntimeContextType.VOID) {
-                    mv.visitInsn(Opcodes.POP);
-                }
-                return;
-            }
-        }
-        throw new PerlCompilerException(node.tokenIndex, "Not implemented: operator: " + node.operator, ctx.errorUtil);
-    }
-
-    private void handleAtan2(OperatorNode node) {
-        MethodVisitor mv = ctx.mv;
-        EmitterVisitor scalarVisitor = this.with(RuntimeContextType.SCALAR);
-        if (node.operand instanceof ListNode) {
-            ListNode operand = (ListNode) node.operand;
-            if (operand.elements.size() == 2) {
-                operand.elements.get(0).accept(scalarVisitor);
-                operand.elements.get(1).accept(scalarVisitor);
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/RuntimeScalar",
-                        node.operator,
-                        "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-                if (ctx.contextType == RuntimeContextType.VOID) {
-                    mv.visitInsn(Opcodes.POP);
-                }
-                return;
-            }
-        }
-        throw new PerlCompilerException(node.tokenIndex, "Not implemented: operator: " + node.operator, ctx.errorUtil);
-    }
-
     private void handleArrayUnaryBuiltin(OperatorNode node, String operator) {
         // Handle:  $#array  $#$array_ref  shift @array  pop @array
         Node operand = node.operand;
@@ -873,39 +666,6 @@ public class EmitterVisitor implements Visitor {
         }
         operand.accept(this.with(RuntimeContextType.LIST));
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handleDieBuiltin(OperatorNode node) {
-        // Handle:  die LIST
-        //   static RuntimeDataProvider die(RuntimeDataProvider value, int ctx)
-        String operator = node.operator;
-        ctx.logDebug("handleDieBuiltin " + node);
-        node.operand.accept(this.with(RuntimeContextType.LIST));
-
-        // push the formatted line number
-        Node message = new StringNode(ctx.errorUtil.errorMessage(node.tokenIndex, ""), node.tokenIndex);
-        message.accept(this.with(RuntimeContextType.SCALAR));
-
-        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/Operator",
-                operator,
-                "(Lorg/perlonjava/runtime/RuntimeDataProvider;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handleReverseBuiltin(OperatorNode node) {
-        // Handle:  reverse LIST
-        //   static RuntimeDataProvider reverse(RuntimeDataProvider value, int ctx)
-        String operator = node.operator;
-        ctx.logDebug("handleReverseBuiltin " + node);
-        node.operand.accept(this.with(RuntimeContextType.LIST));
-        pushCallContext();
-        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeDataProvider;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
         if (ctx.contextType == RuntimeContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.POP);
         }
@@ -939,59 +699,6 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleCryptBuiltin(OperatorNode node) {
-        // Handle:  crypt PLAINTEXT,SALT
-        ctx.logDebug("handleCryptBuiltin " + node);
-        node.operand.accept(this.with(RuntimeContextType.LIST));
-        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Crypt",
-                node.operator,
-                "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handleUnpackBuiltin(OperatorNode node) {
-        // Handle:  unpack TEMPLATE, EXPR
-        ctx.logDebug("handleUnpackBuiltin " + node);
-        node.operand.accept(this.with(RuntimeContextType.LIST));
-        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Unpack",
-                node.operator,
-                "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;",
-                false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handlePackBuiltin(OperatorNode node) {
-        // Handle:  pack TEMPLATE, LIST
-        ctx.logDebug("handlePackBuiltin " + node);
-        node.operand.accept(this.with(RuntimeContextType.LIST));
-        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Pack",
-                node.operator,
-                "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handleSpliceBuiltin(OperatorNode node) {
-        // Handle:  splice @array, LIST
-        String operator = node.operator;
-        ctx.logDebug("handleSpliceBuiltin " + node);
-        Node args = node.operand;
-        Node operand = ((ListNode) args).elements.remove(0);
-        operand.accept(this.with(RuntimeContextType.LIST));
-        args.accept(this.with(RuntimeContextType.LIST));
-        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeArray;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
     @Override
     public void visit(OperatorNode node) {
         String operator = node.operator;
@@ -999,7 +706,7 @@ public class EmitterVisitor implements Visitor {
 
         switch (operator) {
             case "package":
-                handlePackageOperator(node);
+                EmitOperator.handlePackageOperator(this, node);
                 break;
             case "$":
             case "@":
@@ -1010,10 +717,10 @@ public class EmitterVisitor implements Visitor {
                 break;
             case "keys":
             case "values":
-                handleKeysOperator(node);
+                EmitOperator.handleKeysOperator(this, node);
                 break;
             case "each":
-                handleEachOperator(node);
+                EmitOperator.handleEachOperator(this, node);
                 break;
             case "our":
             case "my":
@@ -1022,10 +729,10 @@ public class EmitterVisitor implements Visitor {
             case "next":
             case "redo":
             case "last":
-                handleNextOperator(node);
+                EmitOperator.handleNextOperator(ctx, node);
                 break;
             case "return":
-                handleReturnOperator(node);
+                EmitOperator.handleReturnOperator(this, node);
                 break;
             case "eval":
                 EmitEval.handleEvalOperator(this, node);
@@ -1034,7 +741,7 @@ public class EmitterVisitor implements Visitor {
                 handleUnaryBuiltin(node, "unaryMinus");
                 break;
             case "+":
-                handleUnaryPlusOperator(node);
+                EmitOperator.handleUnaryPlusOperator(this, node);
                 break;
             case "~":
                 handleUnaryBuiltin(node, "bitwiseNot");
@@ -1044,7 +751,7 @@ public class EmitterVisitor implements Visitor {
                 handleUnaryBuiltin(node, "not");
                 break;
             case "<>":
-                handleDiamondBuiltin(node);
+                EmitOperator.handleDiamondBuiltin(this, node);
                 break;
             case "abs":
             case "defined":
@@ -1087,43 +794,43 @@ public class EmitterVisitor implements Visitor {
                 break;
             case "chop":
             case "chomp":
-                handleChompBuiltin(node);
+                EmitOperator.handleChompBuiltin(this, node);
                 break;
             case "mkdir":
             case "opendir":
-                handleMkdirOperator(node);
+                EmitOperator.handleMkdirOperator(this, node);
                 break;
             case "readdir":
-                handleReaddirOperator(node);
+                EmitOperator.handleReaddirOperator(this, node);
                 break;
             case "pack":
-                handlePackBuiltin(node);
+                EmitOperator.handlePackBuiltin(this, node);
                 break;
             case "unpack":
-                handleUnpackBuiltin(node);
+                EmitOperator.handleUnpackBuiltin(this, node);
                 break;
             case "crypt":
-                handleCryptBuiltin(node);
+                EmitOperator.handleCryptBuiltin(this, node);
                 break;
             case "glob":
-                handleGlobBuiltin(node);
+                EmitOperator.handleGlobBuiltin(this, node);
                 break;
             case "rindex":
             case "index":
-                handleIndexBuiltin(node);
+                EmitOperator.handleIndexBuiltin(this, node);
                 break;
             case "vec":
-                handleVecBuiltin(node);
+                EmitOperator.handleVecBuiltin(this, node);
                 break;
             case "atan2":
-                handleAtan2(node);
+                EmitOperator.handleAtan2(this, node);
                 break;
             case "scalar":
-                handleScalar(node);
+                EmitOperator.handleScalar(this, node);
                 break;
             case "delete":
             case "exists":
-                handleDeleteExists(node);
+                EmitOperator.handleDeleteExists(this, node);
                 break;
             case "int":
                 handleUnaryBuiltin(node, "integer");
@@ -1149,14 +856,14 @@ public class EmitterVisitor implements Visitor {
                 break;
             case "die":
             case "warn":
-                handleDieBuiltin(node);
+                EmitOperator.handleDieBuiltin(this, node);
                 break;
             case "reverse":
             case "unlink":
-                handleReverseBuiltin(node);
+                EmitOperator.handleReverseBuiltin(this, node);
                 break;
             case "splice":
-                handleSpliceBuiltin(node);
+                EmitOperator.handleSpliceBuiltin(this, node);
                 break;
             case "pop":
             case "shift":
@@ -1207,144 +914,7 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleScalar(OperatorNode node) {
-        MethodVisitor mv = ctx.mv;
-        node.operand.accept(this.with(RuntimeContextType.SCALAR));
-        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handleDeleteExists(OperatorNode node) {
-        //   OperatorNode: delete
-        //    ListNode:
-        //      BinaryOperatorNode: {
-        //        OperatorNode: $
-        //          IdentifierNode: a
-        //        HashLiteralNode:
-        //          NumberNode: 10
-        String operator = node.operator;
-        if (node.operand instanceof ListNode) {
-            ListNode operand = (ListNode) node.operand;
-            if (operand.elements.size() == 1) {
-                BinaryOperatorNode binop = (BinaryOperatorNode) operand.elements.get(0);
-                if (binop.operator.equals("{")) {
-                    handleHashElementOperator(binop, operator);
-                    return;
-                }
-                if (binop.operator.equals("->")) {
-                    if (binop.right instanceof HashLiteralNode) { // ->{x}
-                        handleArrowHashDeref(binop, operator);
-                        return;
-                    }
-                }
-            }
-        }
-        throw new PerlCompilerException(node.tokenIndex, "Not implemented: operator: " + operator, ctx.errorUtil);
-    }
-
-    private void handlePackageOperator(OperatorNode node) {
-        String name = ((IdentifierNode) node.operand).name;
-        ctx.symbolTable.setCurrentPackage(name);
-        DebugInfo.setDebugInfoFileName(ctx);
-        if (ctx.contextType != RuntimeContextType.VOID) {
-            // if context is not void, return an empty list
-            ListNode listNode = new ListNode(node.tokenIndex);
-            listNode.accept(this);
-        }
-    }
-
-    private void handleReaddirOperator(OperatorNode node) {
-        String operator = node.operator;
-        node.operand.accept(this.with(RuntimeContextType.SCALAR));
-        pushCallContext();
-        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/Operator",
-                operator,
-                "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handleMkdirOperator(OperatorNode node) {
-        String operator = node.operator;
-        node.operand.accept(this.with(RuntimeContextType.LIST));
-        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/Operator",
-                operator,
-                "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handleEachOperator(OperatorNode node) {
-        String operator = node.operator;
-        node.operand.accept(this.with(RuntimeContextType.LIST));
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", operator, "()Lorg/perlonjava/runtime/RuntimeList;", true);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handleKeysOperator(OperatorNode node) {
-        String operator = node.operator;
-        node.operand.accept(this.with(RuntimeContextType.LIST));
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", operator, "()Lorg/perlonjava/runtime/RuntimeArray;", true);
-        if (ctx.contextType == RuntimeContextType.LIST) {
-        } else if (ctx.contextType == RuntimeContextType.SCALAR) {
-            ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
-        } else if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handleReadlineOperator(BinaryOperatorNode node) {
-        String operator = node.operator;
-
-        // Emit the File Handle
-        if (node.left instanceof OperatorNode) {
-            // my $fh  $fh
-            node.left.accept(this.with(RuntimeContextType.SCALAR));
-        } else {
-            emitFileHandle(node.left);
-        }
-
-        if (operator.equals("readline")) {
-            pushCallContext();  // SCALAR or LIST context
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
-        } else {
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        }
-
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handleSayOperator(BinaryOperatorNode node) {
-        String operator = node.operator;
-        // Emit the argument list
-        node.right.accept(this.with(RuntimeContextType.LIST));
-
-        // Emit the File Handle
-        if (node.left instanceof OperatorNode) {
-            // my $fh  $fh
-            node.left.accept(this.with(RuntimeContextType.SCALAR));
-        } else {
-            emitFileHandle(node.left);
-        }
-
-        // Call the operator, return Scalar
-        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeList;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void emitFileHandle(Node node) {
+    public void emitFileHandle(Node node) {
         // Emit File Handle
         if (node instanceof IdentifierNode) {
             // `print FILE 123`
@@ -1366,78 +936,6 @@ public class EmitterVisitor implements Visitor {
             // {STDERR}  or  {$fh}
             // TODO
         }
-    }
-
-    private void handleUnaryPlusOperator(OperatorNode node) {
-        node.operand.accept(this.with(RuntimeContextType.SCALAR));
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private void handleNextOperator(OperatorNode node) {
-        ctx.logDebug("visit(next)");
-
-        String labelStr = null;
-        ListNode labelNode = (ListNode) node.operand;
-        if (labelNode.elements.isEmpty()) {
-            // next
-        } else {
-            // next LABEL
-            Node arg = labelNode.elements.get(0);
-            if (arg instanceof IdentifierNode) {
-                // L1
-                labelStr = ((IdentifierNode) arg).name;
-            } else {
-                throw new RuntimeException("Not implemented: " + node);
-            }
-        }
-
-        String operator = node.operator;
-        LoopLabels loopLabels = ctx.javaClassInfo.findLoopLabelsByName(labelStr);
-        ctx.logDebug("visit(next) operator: " + operator + " label: " + labelStr + " labels: " + loopLabels);
-        if (loopLabels == null) {
-            throw new PerlCompilerException(node.tokenIndex, "Can't \"" + operator + "\" outside a loop block", ctx.errorUtil);
-        }
-
-        ctx.logDebug("visit(next): asmStackLevel: " + ctx.javaClassInfo.asmStackLevel);
-
-        int consumeStack = ctx.javaClassInfo.asmStackLevel;
-        int targetStack = loopLabels.asmStackLevel;
-        while (consumeStack-- > targetStack) {
-            // consume the JVM stack
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-
-        Label label = operator.equals("next") ? loopLabels.nextLabel
-                : operator.equals("last") ? loopLabels.lastLabel
-                : loopLabels.redoLabel;
-        ctx.mv.visitJumpInsn(Opcodes.GOTO, label);
-    }
-
-    private void handleReturnOperator(OperatorNode node) {
-        ctx.logDebug("visit(return) in context " + ctx.contextType);
-        ctx.logDebug("visit(return) will visit " + node.operand + " in context " + ctx.with(RuntimeContextType.RUNTIME).contextType);
-
-        int consumeStack = ctx.javaClassInfo.asmStackLevel;
-        while (consumeStack-- > 0) {
-            // consume the JVM stack
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-
-        if (node.operand instanceof ListNode) {
-            ListNode list = (ListNode) node.operand;
-            if (list.elements.size() == 1) {
-                // special case for a list with 1 element
-                list.elements.get(0).accept(this.with(RuntimeContextType.RUNTIME));
-                ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
-                return;
-            }
-        }
-
-        node.operand.accept(this.with(RuntimeContextType.RUNTIME));
-        ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
-        // TODO return (1,2), 3
     }
 
     @Override
