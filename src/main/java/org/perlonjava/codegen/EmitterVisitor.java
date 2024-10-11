@@ -128,17 +128,23 @@ public class EmitterVisitor implements Visitor {
         switch (operator) { // handle operators that support short-circuit or other special cases
             case "||":
             case "or":
-                handleOrOperator(node, Opcodes.IFNE);
+                EmitLogicalOperator.emitLogicalOperator(this, node, Opcodes.IFNE, "getBoolean");
                 return;
             case "||=":
-                handleOrEqualOperator(node, Opcodes.IFNE);
+                EmitLogicalOperator.emitLogicalAssign(this, node, Opcodes.IFNE, "getBoolean");
                 return;
             case "&&":
             case "and":
-                handleOrOperator(node, Opcodes.IFEQ);
+                EmitLogicalOperator.emitLogicalOperator(this, node, Opcodes.IFEQ, "getBoolean");
                 return;
             case "&&=":
-                handleOrEqualOperator(node, Opcodes.IFEQ);
+                EmitLogicalOperator.emitLogicalAssign(this, node, Opcodes.IFEQ, "getBoolean");
+                return;
+            case "//":
+                EmitLogicalOperator.emitLogicalOperator(this, node, Opcodes.IFNE, "getDefinedBoolean");
+                return;
+            case "//=":
+                EmitLogicalOperator.emitLogicalAssign(this, node, Opcodes.IFNE, "getDefinedBoolean");
                 return;
             case "=":
                 EmitVariable.handleAssignOperator(this, node);
@@ -212,7 +218,6 @@ public class EmitterVisitor implements Visitor {
             case "%=":
             case "^=":
             case "^.=":
-            case "//=":
             case "x=":
                 String newOp = operator.substring(0, operator.length() - 1);
                 String methodStr = operatorHandlers.get(newOp);
@@ -391,14 +396,6 @@ public class EmitterVisitor implements Visitor {
         if (ctx.contextType == RuntimeContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.POP);
         }
-    }
-
-    private void handleOrEqualOperator(BinaryOperatorNode node, int compareOpcode) {
-        EmitLogicalOperator.emitLogicalAssign(this, node, compareOpcode);
-    }
-
-    private void handleOrOperator(BinaryOperatorNode node, int compareOpcode) {
-        EmitLogicalOperator.emitLogicalOperator(this, node, compareOpcode);
     }
 
     /**

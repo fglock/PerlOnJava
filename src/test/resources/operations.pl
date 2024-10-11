@@ -454,7 +454,7 @@ say "ok # (1, 2) x 1000 produces a list with 2000 elements";
 # Test unary minus with plain strings and numbers
 
 # Test with plain strings
-my $result = -("+");
+$result = -("+");
 print "not " if $result ne "-"; say "ok # unary minus on + results in -";
 
 $result = -("-");

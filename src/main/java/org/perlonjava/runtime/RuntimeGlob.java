@@ -91,6 +91,10 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
         return true;
     }
 
+    public boolean getDefinedBoolean() {
+        return true;
+    }
+
     // Get the scalar value of the Scalar
     public RuntimeScalar scalar() {
         RuntimeScalar ret = new RuntimeScalar();

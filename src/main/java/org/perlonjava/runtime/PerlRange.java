@@ -92,6 +92,10 @@ public class PerlRange extends RuntimeBaseEntity implements RuntimeDataProvider,
         return this.scalar().getBoolean();
     }
 
+    public boolean getDefinedBoolean() {
+        return true;
+    }
+
     /**
      * @return
      */
