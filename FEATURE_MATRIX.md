@@ -3,19 +3,19 @@
 # Table of Contents
 
 1. [Compiler Usability](#compiler-usability)
-2. [Scalars](#scalars)
-2. [Objects](#objects)
-3. [Operators](#operators)
-4. [Arrays, Hashes, and Lists](#arrays-hashes-and-lists)
-5. [Subroutines](#subroutines)
-6. [Regular Expressions](#regular-expressions)
-7. [Statements and Special Operators](#statements-and-special-operators)
-8. [Namespaces and Global Variables](#namespaces-and-global-variables)
-9. [Perl Modules](#perl-modules)
-10. [Non-strict Features](#non-strict-features)
-11. [Features Probably Incompatible with JVM](#features-probably-incompatible-with-jvm)
-12. [Language Differences and Workarounds](#language-differences-and-workarounds)
-
+2. [Testing](#testing)
+3. [Scalars](#scalars)
+4. [Objects](#objects)
+5. [Operators](#operators)
+6. [Arrays, Hashes, and Lists](#arrays-hashes-and-lists)
+7. [Subroutines](#subroutines)
+8. [Regular Expressions](#regular-expressions)
+9. [Statements and Special Operators](#statements-and-special-operators)
+10. [Namespaces and Global Variables](#namespaces-and-global-variables)
+11. [Perl Modules, Pragmas, Features](#perl-modules-pragmas-features)
+12. [Non-strict and Obsolete Features](#non-strict-and-obsolete-features)
+13. [Features Probably Incompatible with JVM](#features-probably-incompatible-with-jvm)
+14. [Language Differences and Workarounds](#language-differences-and-workarounds)
 
 ## Compiler Usability
 - ✔️   **Perl-like compile-time error messages**: Error messages mimic those in Perl for consistency.
@@ -114,7 +114,7 @@
 - ✔️   **`@_` contains aliases to the caller variables**: The `@_` array reflects caller arguments correctly.
 - ✔️   **Named subroutines**: Support for named subroutines is implemented.
 - ✔️   **Calling context**: `wantarray` is implemented.
-- ❌  **Subroutine prototypes**: Partial implementation of prototypes; some features are supported.
+- 🚧  **Subroutine prototypes**: Partial implementation of prototypes; some features are supported.
 - ❌  **Subroutine signatures**: Formal parameters are not implemented.
 - ❌  **Inline "constant" subroutines optimization**: Optimization for inline constants is not yet implemented.
 - ❌  **Subroutine attributes**: Subroutine attributes are not yet supported.
@@ -165,8 +165,8 @@
 - ✔️   **`die` related operators**: `die`, `warn`, `exit` are supported.
 - ❌  **`die` related features**: `$SIG{__DIE__}`, `$SIG{__WARN__}`, `PROPAGATE` are not yet supported.
 - ❌  **`version` objects**: Version objects are not yet supported.
-- ❌  **`require` operator**: The `require` operator is partially implemented; version checks are not implemented.
-- ❌  **`use` and `no` statements**: Module imports and version check via `use` and `no` are partially implemented; version checks are not implemented..
+- 🚧  **`require` operator**: The `require` operator is partially implemented; version checks are not implemented.
+- 🚧  **`use` and `no` statements**: Module imports and version check via `use` and `no` are partially implemented; version checks are not implemented..
 - ✔️   **`caller` operator**: `caller` returns ($package, $filename, $line). The remaining results are undef. This means we don't include subroutine names in error messages yet.
 - ✔️   **Import methods**: `import`, `unimport` works.
 - ❌  **`__SUB__`**: The `__SUB__` special variable is not yet supported.
@@ -188,7 +188,7 @@
 - ✔️   **File test operators**: `-T` and `-B` (text/binary check) are implemented using a heuristic similar to Perl's approach.
 - ✔️   **File test operators**: Time-based operators (`-M`, `-A`, `-C`) return the difference in days as a floating-point number.
 - ✔️   **File test operators**: Using `_` as the argument reuses the last stat result.
-- ❌  **File test operators**: The current implementation only works with file paths, not filehandles or dirhandles.
+- 🚧  **File test operators**: The current implementation only works with file paths, not filehandles or dirhandles.
 - ❌  **File test operators**: Add support for stacked file test operators.
 - ✔️   **Directory operators**: `readdir`, `opendir`, `closedir`, `telldir`, `seekdir`, `rewinddir`, `mkdir`, `rmdir`.
 - ❌  **`for` loop variable**: The `for` loop variable is not an alias to a list element.
