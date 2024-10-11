@@ -40,6 +40,7 @@ public class PerlExecutionTest {
             "compound_assignment.pl",
             "wantarray.pl",
             "loop_label.pl",
+            "loop_modifiers.pl",
             "typeglob.pl",
             "range.pl",
             "flipflop.pl",

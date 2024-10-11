@@ -33,7 +33,8 @@ public class StatementParser {
         if (operator.text.equals("until")) {
             condition = new OperatorNode("not", condition, condition.getIndex());
         }
-        return new For3Node(label, true, null, condition, null, body, continueNode, parser.tokenIndex);
+        return new For3Node(label, true, null,
+                condition, null, body, continueNode, false, parser.tokenIndex);
     }
 
     public static Node parseForStatement(Parser parser, String label) {
@@ -106,7 +107,8 @@ public class StatementParser {
 
         // 3-argument for doesn't have a continue block
 
-        return new For3Node(label, true, initialization, condition, increment, body, null, parser.tokenIndex);
+        return new For3Node(label, true, initialization,
+                condition, increment, body, null, false, parser.tokenIndex);
     }
 
     public static Node parseIfStatement(Parser parser) {

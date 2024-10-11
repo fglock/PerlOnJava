@@ -57,94 +57,98 @@ public class EmitStatement {
     }
 
     static void emitFor3(EmitterVisitor emitterVisitor, For3Node node) {
-        emitterVisitor.ctx.logDebug("FOR3 start");
-        MethodVisitor mv = emitterVisitor.ctx.mv;
-
-        EmitterVisitor voidVisitor = emitterVisitor.with(RuntimeContextType.VOID); // some parts have context VOID
-
-        // Enter a new scope in the symbol table
-        if (node.useNewScope) {
-            emitterVisitor.ctx.symbolTable.enterScope();
-        }
-
-        // Create labels for the start of the loop and the end of the loop
-        Label startLabel = new Label();
-        Label endLabel = new Label();
-        Label continueLabel = new Label();
-
-        // Visit the initialization node (executed once at the start)
-        if (node.initialization != null) {
-            node.initialization.accept(voidVisitor);
-        }
-
-        // Visit the start label (this is where the loop condition and body are)
-        mv.visitLabel(startLabel);
-
-        // Visit the condition node in scalar context
-        if (node.condition != null) {
-            node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-
-            // Convert the result to a boolean
-            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getBoolean", "()Z", true);
-
-            // Jump to the end label if the condition is false (exit the loop)
-            mv.visitJumpInsn(Opcodes.IFEQ, endLabel);
-        }
-
-        // Add redo label
-        Label redoLabel = new Label();
-        mv.visitLabel(redoLabel);
-
-        if (node.useNewScope) {
-            // register next/redo/last labels
-            emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
-                    node.labelName,
-                    continueLabel,
-                    redoLabel,
-                    endLabel);
-
-            // Visit the loop body
-            node.body.accept(voidVisitor);
-
-            // cleanup loop labels
-            emitterVisitor.ctx.javaClassInfo.popLoopLabels();
+        if (node.isDoWhile) {
+            emitDoWhile(emitterVisitor, node);
         } else {
-            // within a `while` modifier, next/redo/last labels are not active
-            // Visit the loop body
-            node.body.accept(voidVisitor);
+            emitterVisitor.ctx.logDebug("FOR3 start");
+            MethodVisitor mv = emitterVisitor.ctx.mv;
+
+            EmitterVisitor voidVisitor = emitterVisitor.with(RuntimeContextType.VOID); // some parts have context VOID
+
+            // Enter a new scope in the symbol table
+            if (node.useNewScope) {
+                emitterVisitor.ctx.symbolTable.enterScope();
+            }
+
+            // Create labels for the start of the loop and the end of the loop
+            Label startLabel = new Label();
+            Label endLabel = new Label();
+            Label continueLabel = new Label();
+
+            // Visit the initialization node (executed once at the start)
+            if (node.initialization != null) {
+                node.initialization.accept(voidVisitor);
+            }
+
+            // Visit the start label (this is where the loop condition and body are)
+            mv.visitLabel(startLabel);
+
+            // Visit the condition node in scalar context
+            if (node.condition != null) {
+                node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+                // Convert the result to a boolean
+                mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getBoolean", "()Z", true);
+
+                // Jump to the end label if the condition is false (exit the loop)
+                mv.visitJumpInsn(Opcodes.IFEQ, endLabel);
+            }
+
+            // Add redo label
+            Label redoLabel = new Label();
+            mv.visitLabel(redoLabel);
+
+            if (node.useNewScope) {
+                // register next/redo/last labels
+                emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
+                        node.labelName,
+                        continueLabel,
+                        redoLabel,
+                        endLabel);
+
+                // Visit the loop body
+                node.body.accept(voidVisitor);
+
+                // cleanup loop labels
+                emitterVisitor.ctx.javaClassInfo.popLoopLabels();
+            } else {
+                // within a `while` modifier, next/redo/last labels are not active
+                // Visit the loop body
+                node.body.accept(voidVisitor);
+            }
+
+
+            // Add continue label
+            mv.visitLabel(continueLabel);
+
+            // Execute continue block if it exists
+            if (node.continueBlock != null) {
+                node.continueBlock.accept(voidVisitor);
+            }
+
+            // Visit the increment node (executed after the loop body)
+            if (node.increment != null) {
+                node.increment.accept(voidVisitor);
+            }
+
+            // Jump back to the start label to continue the loop
+            mv.visitJumpInsn(Opcodes.GOTO, startLabel);
+
+            // Visit the end label (this is where the loop ends)
+            mv.visitLabel(endLabel);
+
+            // Exit the scope in the symbol table
+            if (node.useNewScope) {
+                emitterVisitor.ctx.symbolTable.exitScope();
+            }
+
+            // If the context is not VOID, push "undef" to the stack
+            if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", "undef", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            }
+
+            emitterVisitor.ctx.logDebug("FOR end");
         }
-
-
-        // Add continue label
-        mv.visitLabel(continueLabel);
-
-        // Execute continue block if it exists
-        if (node.continueBlock != null) {
-            node.continueBlock.accept(voidVisitor);
-        }
-
-        // Visit the increment node (executed after the loop body)
-        if (node.increment != null) {
-            node.increment.accept(voidVisitor);
-        }
-
-        // Jump back to the start label to continue the loop
-        mv.visitJumpInsn(Opcodes.GOTO, startLabel);
-
-        // Visit the end label (this is where the loop ends)
-        mv.visitLabel(endLabel);
-
-        // Exit the scope in the symbol table
-        if (node.useNewScope) {
-            emitterVisitor.ctx.symbolTable.exitScope();
-        }
-
-        // If the context is not VOID, push "undef" to the stack
-        if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", "undef", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        }
-
-        emitterVisitor.ctx.logDebug("FOR end");
     }
 
     static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
@@ -290,6 +294,51 @@ public class EmitStatement {
 
         emitterVisitor.ctx.symbolTable.exitScope();
         emitterVisitor.ctx.logDebug("generateCodeBlock end");
+    }
+
+
+    static void emitDoWhile(EmitterVisitor emitterVisitor, For3Node node) {
+        emitterVisitor.ctx.logDebug("DO-WHILE start");
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+
+        // Enter a new scope in the symbol table
+        emitterVisitor.ctx.symbolTable.enterScope();
+
+        // Create labels
+        Label startLabel = new Label();
+        Label continueLabel = new Label();
+        Label endLabel = new Label();
+
+        // Start of the loop body
+        mv.visitLabel(startLabel);
+
+        // Visit the loop body
+        node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
+
+        // Continue label (for next iteration)
+        mv.visitLabel(continueLabel);
+
+        // Visit the condition node in scalar context
+        node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+        // Convert the result to a boolean
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getBoolean", "()Z", true);
+
+        // If condition is true, jump back to start
+        mv.visitJumpInsn(Opcodes.IFNE, startLabel);
+
+        // End of loop
+        mv.visitLabel(endLabel);
+
+        // Exit the scope in the symbol table
+        emitterVisitor.ctx.symbolTable.exitScope();
+
+        // If the context is not VOID, push "undef" to the stack
+        if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", "undef", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        }
+
+        emitterVisitor.ctx.logDebug("DO-WHILE end");
     }
 
 }

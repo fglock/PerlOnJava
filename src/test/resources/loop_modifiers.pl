@@ -57,5 +57,5 @@ say "ok # `while` loop with statement modifier";
 $while_mod_count = 0;
 do { $while_mod_count++ } while 0;  # executes once
 print "not " if $while_mod_count != 1;
-say "ok # `while` loop with statement modifier";
+say "ok # `do-while` loop with statement modifier executes at least once";
 
