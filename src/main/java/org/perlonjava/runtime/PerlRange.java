@@ -214,7 +214,7 @@ public class PerlRange extends RuntimeBaseEntity implements RuntimeDataProvider,
             if (current.length() < endString.length() ||
                     (current.length() == endString.length() &&
                             current.compareTo(endString) < 0)) {
-                current = RuntimeScalar.incrementPlainString(current);
+                current = ScalarUtils.incrementPlainString(current);
             } else {
                 hasNext = false;
             }
