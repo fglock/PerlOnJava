@@ -318,7 +318,7 @@ file.
     - Planned release date: 2024-12-10
     - Added `continue` blocks and loop operators `next`, `last`, `redo`; a bare-block is a loop
     - Added bitwise operators `vec`, `pack`, `unpack`
-    - Added `srand`, `crypt`, `exit`
+    - Added `srand`, `crypt`, `exit`, ellipsis statement (`...`)
     - Added `readdir`, `opendir`, `closedir`, `telldir`, `seekdir`, `rewinddir`, `mkdir`, `rmdir`
     - Added file test operators like `-d`, `-f`
     - Added the variants of diamond operator `<>` and special cases of `while`

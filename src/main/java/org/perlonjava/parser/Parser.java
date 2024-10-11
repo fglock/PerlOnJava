@@ -156,15 +156,24 @@ public class Parser {
                     tokenIndex = currentIndex;
             }
         }
-        if (token.type == LexerTokenType.OPERATOR
-                && token.text.equals("{")
-                && !isHashLiteral()) { // bare-block
-            consume(LexerTokenType.OPERATOR, "{");
-            BlockNode block = parseBlock();
-            block.isLoop = true;
-            block.labelName = label;
-            consume(LexerTokenType.OPERATOR, "}");
-            return block;
+        if (token.type == LexerTokenType.OPERATOR) {
+            switch (token.text) {
+                case "...":
+                    consume();
+                    return new OperatorNode(
+                            "die",
+                            new StringNode("Unimplemented", tokenIndex),
+                            tokenIndex);
+                case "{":
+                    if (!isHashLiteral()) { // bare-block
+                        consume(LexerTokenType.OPERATOR, "{");
+                        BlockNode block = parseBlock();
+                        block.isLoop = true;
+                        block.labelName = label;
+                        consume(LexerTokenType.OPERATOR, "}");
+                        return block;
+                    }
+            }
         }
         Node expression = parseExpression(0);
         token = peek();
