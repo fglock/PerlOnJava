@@ -1563,7 +1563,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar sleep() {
 
-        // Flush stdout and stderr before reading, in case we are displaying a prompt
+        // Flush stdout and stderr before sleep, in case we are displaying a prompt
         if (stdout.needFlush) {
             stdout.flush();
         }
