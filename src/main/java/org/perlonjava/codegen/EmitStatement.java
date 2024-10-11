@@ -95,16 +95,25 @@ public class EmitStatement {
         Label redoLabel = new Label();
         mv.visitLabel(redoLabel);
 
-        emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
-                node.labelName,
-                continueLabel,
-                redoLabel,
-                endLabel);
+        if (node.useNewScope) {
+            // register next/redo/last labels
+            emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
+                    node.labelName,
+                    continueLabel,
+                    redoLabel,
+                    endLabel);
 
-        // Visit the loop body
-        node.body.accept(voidVisitor);
+            // Visit the loop body
+            node.body.accept(voidVisitor);
 
-        emitterVisitor.ctx.javaClassInfo.popLoopLabels();
+            // cleanup loop labels
+            emitterVisitor.ctx.javaClassInfo.popLoopLabels();
+        } else {
+            // within a `while` modifier, next/redo/last labels are not active
+            // Visit the loop body
+            node.body.accept(voidVisitor);
+        }
+
 
         // Add continue label
         mv.visitLabel(continueLabel);
