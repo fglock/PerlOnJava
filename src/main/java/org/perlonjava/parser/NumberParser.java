@@ -6,7 +6,20 @@ import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
+/**
+ * This class provides methods for parsing numbers in various formats.
+ * It handles integer, fractional, and exponential notations, as well as
+ * binary, octal, and hexadecimal representations.
+ */
 public class NumberParser {
+
+    /**
+     * Parses a number token and returns a NumberNode.
+     *
+     * @param parser The Parser instance.
+     * @param token The LexerToken representing the number.
+     * @return A NumberNode representing the parsed number.
+     */
     public static NumberNode parseNumber(Parser parser, LexerToken token) {
         StringBuilder number = new StringBuilder(token.text);
 
@@ -47,6 +60,13 @@ public class NumberParser {
         return new NumberNode(number.toString(), parser.tokenIndex);
     }
 
+    /**
+     * Parses a fractional number starting with a decimal point.
+     *
+     * @param parser The Parser instance.
+     * @return A Node representing the parsed fractional number.
+     * @throws PerlCompilerException if the syntax is invalid.
+     */
     public static Node parseFractionalNumber(Parser parser) {
         StringBuilder number = new StringBuilder("0.");
 
@@ -61,11 +81,17 @@ public class NumberParser {
         return new NumberNode(number.toString(), parser.tokenIndex);
     }
 
+    /**
+     * Checks for and parses the exponent part of a number.
+     *
+     * @param parser The Parser instance.
+     * @param number The StringBuilder containing the number being parsed.
+     * @throws PerlCompilerException if the exponent is malformed.
+     */
     public static void checkNumberExponent(Parser parser, StringBuilder number) {
         // Check for exponent part
         String exponentPart = parser.peek().text;
-        if (exponentPart.startsWith("e")
-                || exponentPart.startsWith("E")) {
+        if (exponentPart.startsWith("e") || exponentPart.startsWith("E")) {
             parser.consume(); // consume 'e' or 'E' and possibly more 'E10'
 
             // Check if the rest of the token contains digits (e.g., "E10")
@@ -90,4 +116,3 @@ public class NumberParser {
         }
     }
 }
-
