@@ -202,33 +202,18 @@ public class Parser {
                     if (token.text.equals("until")) {
                         modifierExpression = new OperatorNode("not", modifierExpression, modifierExpression.getIndex());
                     }
-                    // if (expression instanceof BlockNode) {
-                    //     // special case:  `do { BLOCK } while CONDITION`
-                    //     // executes the loop at least once
-                    //     ctx.logDebug("do-while " + expression);
-                    //     // transform to:  `for (;;) { BLOCK; CONDITION || last }`
-                    //     BlockNode exp = (BlockNode) expression;
-                    //     exp.elements.add(
-                    //             new BinaryOperatorNode(
-                    //                     "||",
-                    //                     modifierExpression,
-                    //                     new OperatorNode("last", new ListNode(tokenIndex), tokenIndex),
-                    //                     tokenIndex
-                    //             )
-                    //     );
-                    //     return new For3Node(null,
-                    //             false,
-                    //             null,
-                    //             null,
-                    //             null,
-                    //             expression,
-                    //             null,
-                    //             tokenIndex);
-                    // }
+                    boolean isDoWhile = false;
+                    if (expression instanceof BlockNode) {
+                        // special case:  `do { BLOCK } while CONDITION`
+                        // executes the loop at least once
+                        ctx.logDebug("do-while " + expression);
+                        isDoWhile = true;
+                    }
                     return new For3Node(null,
                             false,
                             null, modifierExpression,
                             null, expression, null,
+                            isDoWhile,
                             tokenIndex);
             }
             throw new PerlCompilerException(tokenIndex, "Not implemented: " + token, ctx.errorUtil);

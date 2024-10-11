@@ -10,6 +10,12 @@ import org.perlonjava.runtime.RuntimeContextType;
  * This class implements the Node interface, allowing it to be visited by a Visitor.
  */
 public class For3Node extends AbstractNode {
+
+    /**
+     * isDoWhile indicates if this is a do-while loop, which means that the condition is checked after the body.
+     */
+    public final boolean isDoWhile;
+
     /**
      * This loop creates a new variable scope
      */
@@ -45,7 +51,8 @@ public class For3Node extends AbstractNode {
      * @param body           the body of the for loop
      * @param tokenIndex     the index of the token in the source code
      */
-    public For3Node(String labelName, boolean useNewScope, Node initialization, Node condition, Node increment, Node body, Node continueBlock, int tokenIndex) {
+    public For3Node(String labelName, boolean useNewScope, Node initialization, Node condition, Node increment, Node body, Node continueBlock, boolean isDoWhile, int tokenIndex) {
+        this.isDoWhile = isDoWhile;
 
         // "magic" `while ( <> )`
         if (condition != null) {
