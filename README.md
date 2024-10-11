@@ -316,7 +316,7 @@ file.
 
 - **v1.8.0**: Operators
     - Planned release date: 2024-12-10
-    - Added `continue` blocks and loop operators `next`, `last`, `redo`
+    - Added `continue` blocks and loop operators `next`, `last`, `redo`; a bare-block is a loop
     - Added bitwise operators `vec`, `pack`, `unpack`
     - Added `srand`, `crypt`, `exit`
     - Added `readdir`, `opendir`, `closedir`, `telldir`, `seekdir`, `rewinddir`, `mkdir`, `rmdir`

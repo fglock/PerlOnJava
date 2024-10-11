@@ -16,6 +16,15 @@ public class BlockNode extends AbstractNode {
     public final List<Node> elements;
 
     /**
+     * This flag indicates if this BlockNode represents a loop.
+     */
+    public boolean isLoop;
+    /**
+     * the label name for this loop
+     */
+    public String labelName;
+
+    /**
      * Constructs a new BlockNode with the specified list of child nodes.
      *
      * @param elements   the list of child nodes to be stored in this BlockNode
@@ -24,6 +33,7 @@ public class BlockNode extends AbstractNode {
     public BlockNode(List<Node> elements, int tokenIndex) {
         this.elements = elements;
         this.tokenIndex = tokenIndex;
+        this.isLoop = false;
     }
 
     /**
