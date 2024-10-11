@@ -6,6 +6,7 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
+import org.perlonjava.runtime.ScalarUtils;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -59,18 +60,6 @@ public class EmitterVisitor implements Visitor {
 
     public EmitterVisitor(EmitterContext ctx) {
         this.ctx = ctx;
-    }
-
-    public static boolean isInteger(String str) {
-        if (str == null || str.isEmpty()) {
-            return false;
-        }
-        try {
-            Integer.parseInt(str);
-            return true;
-        } catch (NumberFormatException e) {
-            return false;
-        }
     }
 
     /**
@@ -257,7 +246,7 @@ public class EmitterVisitor implements Visitor {
                 && node.right instanceof NumberNode) {
             NumberNode right = (NumberNode) node.right;
             String value = right.value;
-            boolean isInteger = isInteger(value);
+            boolean isInteger = ScalarUtils.isInteger(value);
             if (isInteger) {
                 int intValue = Integer.parseInt(value);
                 ctx.mv.visitLdcInsn(intValue);

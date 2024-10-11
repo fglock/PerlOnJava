@@ -3,10 +3,7 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
-import org.perlonjava.runtime.GlobalContext;
-import org.perlonjava.runtime.NameNormalizer;
-import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.RuntimeContextType;
+import org.perlonjava.runtime.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -100,7 +97,7 @@ public class EmitVariable {
                 // Fetch a global variable.
                 // Autovivify if the name is fully qualified, or if it is a regex variable like `$1`
                 // TODO special variables: `$,` `$$`
-                boolean createIfNotExists = name.contains("::") || EmitterVisitor.isInteger(name);
+                boolean createIfNotExists = name.contains("::") || ScalarUtils.isInteger(name);
                 fetchGlobalVariable(emitterVisitor.ctx, createIfNotExists, sigil, name, node.getIndex());
             } else {
                 // retrieve the `my` or `our` variable from local vars

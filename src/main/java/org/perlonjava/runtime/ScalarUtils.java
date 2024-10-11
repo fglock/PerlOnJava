@@ -78,4 +78,34 @@ public class ScalarUtils {
             return result.toString();
         }
     }
+
+    /**
+     * Checks if the given string represents a valid integer.
+     *
+     * <p>This method determines whether the input string can be parsed as an integer.
+     * It returns true if the string represents a valid integer, and false otherwise.</p>
+     *
+     * <p>The method considers the following cases:
+     * <ul>
+     *   <li>Returns false for null or empty strings</li>
+     *   <li>Returns true for strings that can be parsed as integers</li>
+     *   <li>Returns false for strings that cannot be parsed as integers (including decimals,
+     *       non-numeric characters, etc.)</li>
+     * </ul>
+     * </p>
+     *
+     * @param str The string to be checked for integer representation
+     * @return true if the string represents a valid integer, false otherwise
+     */
+    public static boolean isInteger(String str) {
+        if (str == null || str.isEmpty()) {
+            return false;
+        }
+        try {
+            Integer.parseInt(str);
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
 }
