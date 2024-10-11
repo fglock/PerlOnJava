@@ -14,8 +14,8 @@
 #   Ensure that any new Perl scripts added to src/test/resources follow the project's testing conventions.
 #
 
-# use strict;
-# use feature "say";
+use strict;
+use feature "say";
 
 ###################
 # Arithmetic Operators
@@ -207,6 +207,33 @@ say "ok # 0 || 1 is true";
 $a = !0;
 print "not " if !$a;
 say "ok # !0 is true";
+
+###################
+# Defined-or Operator (//)
+
+# Test with undefined left operand
+my $undefined;
+my $result = $undefined // "default";
+print "not " if $result ne "default";
+say "ok # undefined // 'default' equals 'default'";
+
+# Test with defined left operand
+my $defined = "value";
+$result = $defined // "default";
+print "not " if $result ne "value";
+say "ok # 'value' // 'default' equals 'value'";
+
+# Test with false but defined left operand
+my $false = 0;
+$result = $false // "default";
+print "not " if $result != 0;
+say "ok # 0 // 'default' equals 0";
+
+# Test with empty string as left operand
+my $empty = "";
+$result = $empty // "default";
+print "not " if $result ne "";
+say "ok # '' // 'default' equals ''";
 
 ###################
 # Bitwise Operators
