@@ -199,6 +199,7 @@
 - ❌  **`goto` operator**: `goto` is not implemented.
 - ✔️   **setting `$_` in `while` loop with `<>`**: automatic setting `$_` in `while` loops is implemented.
 - ✔️   **`do BLOCK while`**: `do` executes once before the conditional is evaluated.
+- ✔️   **`...` ellipsis statement**: `...` is supported.
 
 ## Namespaces and Global Variables
 - ✔️   **Global variable infrastructure**: Support for global variables is implemented.
