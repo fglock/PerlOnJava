@@ -142,7 +142,7 @@
 - ✔️   **`while` and `until` loop**: `while` and `until` loops are supported.
 - ✔️   **`if` `unless` Statement modifiers**: Conditional modifiers for `if` and `unless` are implemented.
 - ✔️   **`while` `until` Statement modifiers**: Loop modifiers for `while` and `until` are supported.
-- ❌  **`while` `until` Statement modifiers**: `last`, `redo`, `next` should give an error `Can't "last" outside a loop block`.
+- ✔️   **`while` `until` Statement modifiers**: `last`, `redo`, `next` give an error `Can't "last" outside a loop block`.
 - ✔️   **`for` `foreach` Statement modifiers**: Loop modifiers for `for` and `foreach` are implemented.
 - ✔️   **`continue` blocks**: `continue` blocks in looks are implemented.
 - ✔️   **`eval` string with closure variables**: `eval` in string context with closures is supported.
@@ -198,7 +198,7 @@
 - ❌  **loop control operators**: `next`, `last`, `redo` going to a different place in the call stack are not implemented.
 - ❌  **`goto` operator**: `goto` is not implemented.
 - ✔️   **setting `$_` in `while` loop with `<>`**: automatic setting `$_` in `while` loops is implemented.
-- ❌  **`do BLOCK while`**: `do` executes once before the conditional is evaluated.
+- ✔️   **`do BLOCK while`**: `do` executes once before the conditional is evaluated.
 
 ## Namespaces and Global Variables
 - ✔️   **Global variable infrastructure**: Support for global variables is implemented.
