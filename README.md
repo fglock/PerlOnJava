@@ -322,7 +322,7 @@ file.
     - Added `readdir`, `opendir`, `closedir`, `telldir`, `seekdir`, `rewinddir`, `mkdir`, `rmdir`
     - Added file test operators like `-d`, `-f`
     - Added the variants of diamond operator `<>` and special cases of `while`
-    - Completed `chomp` operator; fixed `qw//` operator
+    - Completed `chomp` operator; fixed `qw//` operator, `defined-or` and `x=`
     - Added modules: `parent`, `Test::More`
 
 - **v1.9.0**: Concurrency and Security Features
