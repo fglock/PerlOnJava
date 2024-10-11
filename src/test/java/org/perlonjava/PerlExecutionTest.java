@@ -37,6 +37,7 @@ public class PerlExecutionTest {
             "demo.pl",
             "numification.pl",
             "operations.pl",
+            "compound_assignment.pl",
             "wantarray.pl",
             "loop_label.pl",
             "typeglob.pl",
