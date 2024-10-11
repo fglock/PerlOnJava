@@ -110,54 +110,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         this.value = value;
     }
 
-    // Helper method to autoincrement a String variable
-    private static String _string_increment(String s) {
-        // Check if the string length is less than 2
-        if (s.length() < 2) {
-            // Get the Unicode code point of the first character
-            final int c = s.codePointAt(0);
-
-            // Check if the character is a digit from '0' to '8'
-            if ((c >= '0' && c <= '8') || (c >= 'A' && c <= 'Y') || (c >= 'a' && c <= 'y')) {
-                // If so, increment the character and return it as a new String
-                return "" + (char) (c + 1);
-            }
-
-            // Special case: if the character is '9', return "10"
-            if (c == '9') {
-                return "10";
-            }
-
-            // Special case: if the character is 'Z', return "AA"
-            if (c == 'Z') {
-                return "AA";
-            }
-
-            // Special case: if the character is 'z', return "aa"
-            if (c == 'z') {
-                return "aa";
-            }
-
-            // For any other character, return "1" as the incremented value
-            return "1";
-        }
-
-        // Recursive case: increment the last character of the string
-        String c = _string_increment(s.substring(s.length() - 1));
-
-        // Check if the result of the increment is a single character
-        if (c.length() == 1) {
-            // If the result is a single character, replace the last character of the original string
-            // Example: If input is "AAAC", incrementing last character gives "AAAD"
-            return s.substring(0, s.length() - 1) + c;
-        }
-
-        // If the result of incrementing the last character causes a carry (e.g., "AAAZ" becomes "AABA")
-        // Increment the rest of the string (all characters except the last one)
-        // and concatenate it with the last character of the incremented value
-        return _string_increment(s.substring(0, s.length() - 1)) + c.substring(c.length() - 1);
-    }
-
     public static RuntimeScalar undef() {
         return scalarUndef;
     }
@@ -274,22 +226,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         res.add(date.getDayOfYear() - 1);
         res.add(date.getZone().getRules().isDaylightSavings(date.toInstant()) ? 1 : 0);
         return res;
-    }
-
-    public static String incrementPlainString(String str) {
-        char c;
-        // Handle non-numeric increment for alphabetical characters
-        int length = str.length(); // Get the length of the string
-        c = str.charAt(length - 1); // Get the last character of the string
-
-        // Check if the last character is a valid character for incrementing
-        if ((c >= '0' && c <= '8') || (c >= 'A' && c <= 'Y') || (c >= 'a' && c <= 'y')) {
-            // If valid, increment the last character and update the value
-            return str.substring(0, length - 1) + (char) (c + 1);
-        } else {
-            // If not valid (like '9', 'Z', or 'z'), use a helper function to handle incrementing
-            return _string_increment(str);
-        }
     }
 
     public RuntimeScalar exit() {
@@ -833,7 +769,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
         // Check if the first character is a letter (either uppercase or lowercase)
         if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
-            this.value = incrementPlainString(str);
+            this.value = ScalarUtils.incrementPlainString(str);
             return this; // Return the current instance after increment
         }
 
