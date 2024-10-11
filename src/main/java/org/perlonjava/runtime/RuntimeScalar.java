@@ -1085,6 +1085,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(result);
     }
 
+    public RuntimeScalar repeat(RuntimeScalar arg) {
+        return (RuntimeScalar) Operator.repeat(this, arg, RuntimeContextType.SCALAR);
+    }
+
     public RuntimeScalar lessThan(RuntimeScalar arg2) {
         RuntimeScalar arg1 = this;
         if (arg1.type == RuntimeScalarType.STRING) {
