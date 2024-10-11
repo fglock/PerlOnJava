@@ -1397,7 +1397,7 @@ public class EmitterVisitor implements Visitor {
         LoopLabels loopLabels = ctx.javaClassInfo.findLoopLabelsByName(labelStr);
         ctx.logDebug("visit(next) operator: " + operator + " label: " + labelStr + " labels: " + loopLabels);
         if (loopLabels == null) {
-            throw new RuntimeException("Label not found: " + node);
+            throw new PerlCompilerException(node.tokenIndex, "Can't \"" + operator + "\" outside a loop block", ctx.errorUtil);
         }
 
         ctx.logDebug("visit(next): asmStackLevel: " + ctx.javaClassInfo.asmStackLevel);
