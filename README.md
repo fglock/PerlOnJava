@@ -311,11 +311,7 @@ file.
     - Improve error handling and debugging tools to make development easier. More detailed debugging symbols added to the bytecode. Added `Carp` module.
     - Moved Perl standard library modules into the jar file.
     - More tests and various bug fixes
-
-### Upcoming Milestones
-
 - **v1.8.0**: Operators
-    - Planned release date: 2024-12-10
     - Added `continue` blocks and loop operators `next`, `last`, `redo`; a bare-block is a loop
     - Added bitwise operators `vec`, `pack`, `unpack`
     - Added `srand`, `crypt`, `exit`, ellipsis statement (`...`)
@@ -325,7 +321,10 @@ file.
     - Completed `chomp` operator; fixed `qw//` operator, `defined-or` and `x=`
     - Added modules: `parent`, `Test::More`
 
+### Upcoming Milestones
+
 - **v1.9.0**: Concurrency and Security Features
+    - Planned release date: 2024-12-10
     - Add support for concurrency and parallelism, such as threads and async/await.
     - Enhance security features, including sandboxing and input validation.
     - Increase test coverage and introduce automated testing tools.
