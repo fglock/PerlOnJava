@@ -165,14 +165,13 @@
 - ✔️   **`die` related operators**: `die`, `warn`, `exit` are supported.
 - ❌  **`die` related features**: `$SIG{__DIE__}`, `$SIG{__WARN__}`, `PROPAGATE` are not yet supported.
 - ❌  **`version` objects**: Version objects are not yet supported.
-- ❌  **`require` operator**: The `require` operator is partially implemented.
-- ❌  **`use` and `no` statements**: Module imports and version check via `use` and `no` are partially implemented.
+- ❌  **`require` operator**: The `require` operator is partially implemented; version checks are not implemented.
+- ❌  **`use` and `no` statements**: Module imports and version check via `use` and `no` are partially implemented; version checks are not implemented..
 - ✔️   **`caller` operator**: `caller` returns ($package, $filename, $line). The remaining results are undef. This means we don't include subroutine names in error messages yet.
 - ✔️   **Import methods**: `import`, `unimport` works.
 - ❌  **`__SUB__`**: The `__SUB__` special variable is not yet supported.
 - ❌  **`BEGIN` block**: `BEGIN`, `END` and other special blocks are missing.
-- ❌  **Labels**: Labels and their usage are not supported.
-- ❌  **Search for labels in call stack**: Label searching in the call stack is missing.
+- ✔️   **Labels**: Labels are implemented.
 - ❌  **Here-docs**: Here-docs for multiline string literals are not yet implemented.
 - ✔️   **`glob`**: `glob` operator is implemented.
 - ✔️   **`<>`**: `<>` operator is implemented.
@@ -181,7 +180,7 @@
 - ✔️   **`<*.*>`**: `<*.*>` glob operator is implemented.
 - ✔️   **End of file markers**: Source code control characters `^D` and `^Z`, and the tokens `__END__` and `__DATA__` are implemented. There is no `DATA` file handle yet.
 - ❌  **Startup processing**: processing `$sitelib/sitecustomize.pl` at startup is not enabled.
-- ❌  **Smartmatch operator**: `~~` and `given`/`when` construct
+- ❌  **Smartmatch operator**: `~~` and `given`/`when` construct are not implemented.
 - ❌  **File test operators**: `-R`, `-W`, `-X`, `-O` (for real uid/gid) are not implemented due to lack of straightforward Java equivalents.
 - ❌  **File test operators**: `-t` (tty check) is not implemented.
 - ✔️   **File test operators**: `-p`, `-S`, `-b`, and `-c` are approximated using file names or paths, as Java doesn't provide direct equivalents.
@@ -195,7 +194,7 @@
 - ❌  **`for` loop variable**: The `for` loop variable is not an alias to a list element.
 - ✔️   **loop control operators**: `next`, `last`, `redo` with labels are implemented.
 - ❌  **loop control operators**: `next`, `last`, `redo` with expression are not implemented.
-- ❌  **loop control operators**: `next`, `last`, `redo` going to a different place in the call stack are not implemented.
+- ❌  **loop control operators**: `next`, `last`, `redo` going to a different place in the call stack are not implemented. Label searching in the call stack is missing.
 - ❌  **`goto` operator**: `goto` is not implemented.
 - ✔️   **setting `$_` in `while` loop with `<>`**: automatic setting `$_` in `while` loops is implemented.
 - ✔️   **`do BLOCK while`**: `do` executes once before the conditional is evaluated.
@@ -294,9 +293,4 @@ Here’s an alternative approach using the Symbol module:
         return;
     }
 ```
-
-`qualify_to_ref` from the `Symbol` module returns a reference to the fully qualified symbol in the caller’s package.
-This avoids having to use the symbolic reference (`no strict 'refs'`), so you can keep strict and warnings enabled.
-
-This approach is safer and aligns with the practice of using strict mode throughout the codebase.
 
