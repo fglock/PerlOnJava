@@ -67,30 +67,38 @@ public class RuntimeCode implements RuntimeScalarReference {
         Lexer lexer = new Lexer(code.toString());
         List<LexerToken> tokens = lexer.tokenize(); // Tokenize the Perl code
         Node ast;
+        Class<?> generatedClass;
         try {
             // Create the AST
             // Create an instance of ErrorMessageUtil with the file name and token list
             evalCtx.errorUtil = new ErrorMessageUtil(evalCtx.compilerOptions.fileName, tokens);
             Parser parser = new Parser(evalCtx, tokens); // Parse the tokens
             ast = parser.parse(); // Generate the abstract syntax tree (AST)
+
+            // Create a new instance of ErrorMessageUtil, resetting the line counter
+            evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
+            evalCtx.symbolTable = symbolTable.clone(); // reset the symboltable
+            generatedClass = EmitterMethodCreator.createClassWithMethod(
+                    evalCtx,
+                    ast,
+                    true  // use try-catch
+            );
         } catch (Exception e) {
             // compilation error in eval-string
 
             // Set the global error variable "$@" using GlobalContext.setGlobalVariable(key, value)
             GlobalContext.getGlobalVariable("main::@").set(e.toString());
 
-            // In case of error return an "undef" ast
+            // In case of error return an "undef" ast and class
             ast = new OperatorNode("undef", null, 1);
+            evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
+            evalCtx.symbolTable = symbolTable.clone(); // reset the symboltable
+            generatedClass = EmitterMethodCreator.createClassWithMethod(
+                    evalCtx,
+                    ast,
+                    true  // use try-catch
+            );
         }
-
-        // Create a new instance of ErrorMessageUtil, resetting the line counter
-        evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
-        evalCtx.symbolTable = symbolTable.clone(); // reset the symboltable
-        Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
-                evalCtx,
-                ast,
-                true  // use try-catch
-        );
         return generatedClass;
     }
 
