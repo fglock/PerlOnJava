@@ -64,7 +64,7 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     // State flags
     private boolean isEOF;
-    private boolean needFlush;
+    boolean needFlush;
 
     // Constructor to initialize buffers
     public RuntimeIO() {
