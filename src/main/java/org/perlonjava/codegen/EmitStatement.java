@@ -241,11 +241,29 @@ public class EmitStatement {
     }
 
     static void emitBlock(EmitterVisitor emitterVisitor, BlockNode node) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+
         emitterVisitor.ctx.logDebug("generateCodeBlock start");
         emitterVisitor.ctx.symbolTable.enterScope();
         EmitterVisitor voidVisitor =
                 emitterVisitor.with(RuntimeContextType.VOID); // statements in the middle of the block have context VOID
         List<Node> list = node.elements;
+
+        // Create labels for the loop
+        Label redoLabel = new Label();
+        Label nextLabel = new Label();
+
+        // Add redo label
+        mv.visitLabel(redoLabel);
+
+        if (node.isLoop) {
+            emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
+                    node.labelName,
+                    nextLabel,
+                    redoLabel,
+                    nextLabel);
+        }
+
         for (int i = 0; i < list.size(); i++) {
             Node element = list.get(i);
 
@@ -262,6 +280,14 @@ public class EmitStatement {
                 element.accept(voidVisitor);
             }
         }
+
+        if (node.isLoop) {
+            emitterVisitor.ctx.javaClassInfo.popLoopLabels();
+        }
+        
+        // Add next label
+        mv.visitLabel(nextLabel);
+
         emitterVisitor.ctx.symbolTable.exitScope();
         emitterVisitor.ctx.logDebug("generateCodeBlock end");
     }
