@@ -8,7 +8,18 @@ import org.perlonjava.runtime.RuntimeContextType;
 
 import static org.perlonjava.runtime.ScalarUtils.isInteger;
 
+/**
+ * This class contains static methods for emitting bytecode for various literal types
+ * in the Perl-to-Java compiler.
+ */
 public class EmitLiteral {
+
+    /**
+     * Emits bytecode for an array literal.
+     *
+     * @param emitterVisitor The visitor for emitting bytecode
+     * @param node The ArrayLiteralNode to be processed
+     */
     static void emitArrayLiteral(EmitterVisitor emitterVisitor, ArrayLiteralNode node) {
         emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
@@ -44,6 +55,12 @@ public class EmitLiteral {
         emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) end");
     }
 
+    /**
+     * Emits bytecode for a hash literal.
+     *
+     * @param emitterVisitor The visitor for emitting bytecode
+     * @param node The HashLiteralNode to be processed
+     */
     static void emitHashLiteral(EmitterVisitor emitterVisitor, HashLiteralNode node) {
         emitterVisitor.ctx.logDebug("visit(HashLiteralNode) in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
@@ -63,6 +80,12 @@ public class EmitLiteral {
         emitterVisitor.ctx.logDebug("visit(HashLiteralNode) end");
     }
 
+    /**
+     * Emits bytecode for a string literal.
+     *
+     * @param ctx The emission context
+     * @param node The StringNode to be processed
+     */
     static void emitString(EmitterContext ctx, StringNode node) {
         if (ctx.contextType == RuntimeContextType.VOID) {
             return;
@@ -83,6 +106,12 @@ public class EmitLiteral {
         }
     }
 
+    /**
+     * Emits bytecode for a list literal.
+     *
+     * @param emitterVisitor The visitor for emitting bytecode
+     * @param node The ListNode to be processed
+     */
     static void emitList(EmitterVisitor emitterVisitor, ListNode node) {
         emitterVisitor.ctx.logDebug("visit(ListNode) in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
@@ -125,6 +154,12 @@ public class EmitLiteral {
         emitterVisitor.ctx.logDebug("visit(ListNode) end");
     }
 
+    /**
+     * Emits bytecode for a number literal.
+     *
+     * @param ctx The emission context
+     * @param node The NumberNode to be processed
+     */
     static void emitNumber(EmitterContext ctx, NumberNode node) {
         ctx.logDebug("visit(NumberNode) in context " + ctx.contextType);
         if (ctx.contextType == RuntimeContextType.VOID) {
@@ -158,6 +193,13 @@ public class EmitLiteral {
         }
     }
 
+    /**
+     * Emits bytecode for an identifier.
+     *
+     * @param ctx The emission context
+     * @param node The IdentifierNode to be processed
+     * @throws PerlCompilerException if the bare word is not implemented
+     */
     static void emitIdentifier(EmitterContext ctx, IdentifierNode node) {
         // Emit code for identifier
         throw new PerlCompilerException(

@@ -8,6 +8,11 @@ import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 
+/**
+ * The StatementParser class is responsible for parsing various types of statements
+ * in the Perl-like language, including while loops, for loops, if statements,
+ * use declarations, and package declarations.
+ */
 public class StatementParser {
 
     /**
