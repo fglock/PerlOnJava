@@ -8,8 +8,18 @@ import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.List;
 
+/**
+ * This class provides methods for parsing various Perl operators and constructs.
+ */
 public class OperatorParser {
 
+    /**
+     * Parses map, grep, and sort operators.
+     *
+     * @param parser The Parser instance.
+     * @param token The current LexerToken.
+     * @return A BinaryOperatorNode representing the parsed operator.
+     */
     static BinaryOperatorNode parseMapGrepSort(Parser parser, LexerToken token) {
         ListNode operand;
         // Handle 'sort' keyword as a Binary operator with a Code and List operands
@@ -28,6 +38,13 @@ public class OperatorParser {
         return new BinaryOperatorNode(token.text, block, operand, parser.tokenIndex);
     }
 
+    /**
+     * Parses the 'require' operator.
+     *
+     * @param parser The Parser instance.
+     * @return A Node representing the parsed 'require' operator.
+     * @throws PerlCompilerException If there's a syntax error.
+     */
     static Node parseRequire(Parser parser) {
         LexerToken token;
         // Handle 'require' keyword which can be followed by a version, bareword or filename
@@ -51,6 +68,12 @@ public class OperatorParser {
         return new OperatorNode("require", operand, parser.tokenIndex);
     }
 
+    /**
+     * Parses the 'do' operator.
+     *
+     * @param parser The Parser instance.
+     * @return A Node representing the parsed 'do' operator.
+     */
     static Node parseDoOperator(Parser parser) {
         LexerToken token;
         Node block;
@@ -67,6 +90,12 @@ public class OperatorParser {
         return new OperatorNode("doFile", operand, parser.tokenIndex);
     }
 
+    /**
+     * Parses the 'eval' operator.
+     *
+     * @param parser The Parser instance.
+     * @return An AbstractNode representing the parsed 'eval' operator.
+     */
     static AbstractNode parseEval(Parser parser) {
         Node block;
         Node operand;
@@ -94,6 +123,13 @@ public class OperatorParser {
         return new OperatorNode("eval", operand, parser.tokenIndex);
     }
 
+    /**
+     * Parses the diamond operator (<>).
+     *
+     * @param parser The Parser instance.
+     * @param token The current LexerToken.
+     * @return A Node representing the parsed diamond operator.
+     */
     static Node parseDiamondOperator(Parser parser, LexerToken token) {
         // Save the current token index to restore later if needed
         int currentTokenIndex = parser.tokenIndex;

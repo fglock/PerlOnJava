@@ -36,10 +36,17 @@ public class StatementParser {
         return new For3Node(label, true, null,
                 condition, null, body, continueNode, false, parser.tokenIndex);
     }
-
+    /**
+      * Parses a for or foreach statement.
+      *
+      * @param parser The Parser instance
+      * @param label The label for the loop (can be null)
+      * @return A For1Node or For3Node representing the for/foreach loop
+      */
     public static Node parseForStatement(Parser parser, String label) {
-        parser.consume(LexerTokenType.IDENTIFIER); // "for" "foreach"
+        parser.consume(LexerTokenType.IDENTIFIER); // "for" or "foreach"
 
+        // Parse optional loop variable
         Node varNode = null;
         LexerToken token = parser.peek(); // "my" "$" "("
         if (token.text.equals("my") || token.text.equals("$")) {
@@ -57,33 +64,52 @@ public class StatementParser {
 
             token = parser.peek();
             if (token.text.equals(")")) {
-                // 1-argument for
-                parser.consume();
-
-                // Parse the body of the loop
-                parser.consume(LexerTokenType.OPERATOR, "{");
-                Node body = parser.parseBlock();
-                parser.consume(LexerTokenType.OPERATOR, "}");
-
-                Node continueNode = null;
-                if (parser.peek().text.equals("continue")) {
-                    parser.consume();
-                    parser.consume(LexerTokenType.OPERATOR, "{");
-                    continueNode = parser.parseBlock();
-                    parser.consume(LexerTokenType.OPERATOR, "}");
-                }
-
-                if (varNode == null) {
-                    varNode = new OperatorNode(
-                            "$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);  // $_
-                }
-                return new For1Node(label, true, varNode, initialization, body, continueNode, parser.tokenIndex);
+                // 1-argument for loop (foreach-like)
+                return parseOneArgumentForLoop(parser, label, varNode, initialization);
             }
         }
-        // 3-argument for
+
+        // 3-argument for loop
+        return parseThreeArgumentForLoop(parser, label, varNode, initialization);
+    }
+
+    /**
+      * Helper method to parse a one-argument for loop (foreach-like).
+      */
+    private static Node parseOneArgumentForLoop(Parser parser, String label, Node varNode, Node initialization) {
+        parser.consume(); // Consume ")"
+
+        // Parse the body of the loop
+        parser.consume(LexerTokenType.OPERATOR, "{");
+        Node body = parser.parseBlock();
+        parser.consume(LexerTokenType.OPERATOR, "}");
+
+        // Parse optional continue block
+        Node continueNode = null;
+        if (parser.peek().text.equals("continue")) {
+            parser.consume();
+            parser.consume(LexerTokenType.OPERATOR, "{");
+            continueNode = parser.parseBlock();
+            parser.consume(LexerTokenType.OPERATOR, "}");
+        }
+
+        // Use $_ as the default loop variable if not specified
+        if (varNode == null) {
+            varNode = new OperatorNode(
+                    "$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);  // $_
+        }
+
+        return new For1Node(label, true, varNode, initialization, body, continueNode, parser.tokenIndex);
+    }
+
+    /**
+      * Helper method to parse a three-argument for loop.
+      */
+    private static Node parseThreeArgumentForLoop(Parser parser, String label, Node varNode, Node initialization) {
         if (varNode != null) {
             throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
         }
+
         parser.consume(LexerTokenType.OPERATOR, ";");
 
         // Parse the condition part
@@ -110,7 +136,6 @@ public class StatementParser {
         return new For3Node(label, true, initialization,
                 condition, increment, body, null, false, parser.tokenIndex);
     }
-
     public static Node parseIfStatement(Parser parser) {
         LexerToken operator = parser.consume(LexerTokenType.IDENTIFIER); // "if", "unless", "elsif"
         parser.consume(LexerTokenType.OPERATOR, "(");
