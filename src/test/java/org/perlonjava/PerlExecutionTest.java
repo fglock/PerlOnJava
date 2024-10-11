@@ -36,7 +36,7 @@ public class PerlExecutionTest {
     @ValueSource(strings = {
             "demo.pl",
             "numification.pl",
-            //"operations.pl",
+            "operations.pl",
             "wantarray.pl",
             "loop_label.pl",
             "typeglob.pl",

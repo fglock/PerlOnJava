@@ -116,6 +116,10 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         return scalar().getBoolean();
     }
 
+    public boolean getDefinedBoolean() {
+        return scalar().getDefinedBoolean();
+    }
+
     // keys() operator
     public RuntimeArray keys() {
         throw new IllegalStateException("Type of arg 1 to values must be hash or array");

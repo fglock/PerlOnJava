@@ -41,6 +41,8 @@ public interface RuntimeDataProvider {
 
     boolean getBoolean();
 
+    boolean getDefinedBoolean();
+
     /**
      * Create a reference
      */
