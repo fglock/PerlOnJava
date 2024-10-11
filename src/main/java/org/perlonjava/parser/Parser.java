@@ -160,7 +160,9 @@ public class Parser {
                 && token.text.equals("{")
                 && !isHashLiteral()) { // bare-block
             consume(LexerTokenType.OPERATOR, "{");
-            Node block = parseBlock();
+            BlockNode block = parseBlock();
+            block.isLoop = true;
+            block.labelName = label;
             consume(LexerTokenType.OPERATOR, "}");
             return block;
         }
