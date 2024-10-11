@@ -284,7 +284,7 @@ public class EmitStatement {
         if (node.isLoop) {
             emitterVisitor.ctx.javaClassInfo.popLoopLabels();
         }
-        
+
         // Add next label
         mv.visitLabel(nextLabel);
 
