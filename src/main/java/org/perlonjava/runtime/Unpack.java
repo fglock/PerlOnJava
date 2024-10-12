@@ -117,10 +117,6 @@ public class Unpack {
         }
     }
 
-    private static int readShort(ByteBuffer buffer) {
-        return buffer.get() & 0xFF | (buffer.get() & 0xFF) << 8;
-    }
-
     private static int readShortBigEndian(ByteBuffer buffer) {
         return (buffer.get() & 0xFF) << 8 | buffer.get() & 0xFF;
     }
@@ -129,24 +125,12 @@ public class Unpack {
         return buffer.get() & 0xFF | (buffer.get() & 0xFF) << 8;
     }
 
-    private static long readLong(ByteBuffer buffer) {
-        return buffer.getInt() & 0xFFFFFFFFL;
-    }
-
     private static int readIntBigEndian(ByteBuffer buffer) {
         return (buffer.get() & 0xFF) << 24 | (buffer.get() & 0xFF) << 16 | (buffer.get() & 0xFF) << 8 | buffer.get() & 0xFF;
     }
 
     private static int readIntLittleEndian(ByteBuffer buffer) {
         return buffer.get() & 0xFF | (buffer.get() & 0xFF) << 8 | (buffer.get() & 0xFF) << 16 | (buffer.get() & 0xFF) << 24;
-    }
-
-    private static float readFloat(ByteBuffer buffer) {
-        return buffer.getFloat();
-    }
-
-    private static double readDouble(ByteBuffer buffer) {
-        return buffer.getDouble();
     }
 
     private static String readString(ByteBuffer buffer, int count, char format) {

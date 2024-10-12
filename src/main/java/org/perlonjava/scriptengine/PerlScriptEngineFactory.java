@@ -58,7 +58,6 @@ public class PerlScriptEngineFactory implements ScriptEngineFactory {
     public Object getParameter(String key) {
         switch (key) {
             case ScriptEngine.NAME:
-                return getEngineName();
             case ScriptEngine.ENGINE:
                 return getEngineName();
             case ScriptEngine.ENGINE_VERSION:
