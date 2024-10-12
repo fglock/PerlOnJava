@@ -1,8 +1,0 @@
-public enum TokenType {
-    NUMBER, IDENTIFIER,
-    PLUS, MINUS, STAR, SLASH,
-    LPAREN, RPAREN, LBRACE, RBRACE,
-    SEMICOLON, COMMA,
-    RETURN, PRINT, SUB,
-    EOF
-}
