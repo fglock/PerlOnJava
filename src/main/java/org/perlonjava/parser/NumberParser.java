@@ -39,8 +39,7 @@ public class NumberParser {
                     int num = Integer.parseInt(letter.substring(1), 16);
                     return new NumberNode(Integer.toString(num), parser.tokenIndex);
                 }
-            } else if (token.text.length() > 1) {
-                char secondChar = token.text.charAt(1);
+            } else {
                 // Octal number: 0...
                 int num = Integer.parseInt(token.text, 8);
                 return new NumberNode(Integer.toString(num), parser.tokenIndex);
