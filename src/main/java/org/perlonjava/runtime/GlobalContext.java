@@ -46,9 +46,7 @@ public class GlobalContext {
 
         // Initialize %ENV
         Map<String, RuntimeScalar> env = getGlobalHash("main::ENV").elements;
-        System.getenv().forEach((k, v) -> {
-            env.put(k, new RuntimeScalar(v));
-        });
+        System.getenv().forEach((k, v) -> env.put(k, new RuntimeScalar(v)));
 
         // Initialize @INC
         // https://stackoverflow.com/questions/2526804/how-is-perls-inc-constructed
@@ -57,9 +55,9 @@ public class GlobalContext {
         inc.addAll(compilerOptions.inc.elements);   // add from `-I`
 
         String[] directories = env.getOrDefault("PERL5LIB", new RuntimeScalar("")).toString().split(":");
-        for (int i = 0; i < directories.length; i++) {
-            if (!directories[i].isEmpty()) {
-                inc.add(new RuntimeScalar(directories[i])); // add from env PERL5LIB
+        for (String directory : directories) {
+            if (!directory.isEmpty()) {
+                inc.add(new RuntimeScalar(directory)); // add from env PERL5LIB
             }
         }
 

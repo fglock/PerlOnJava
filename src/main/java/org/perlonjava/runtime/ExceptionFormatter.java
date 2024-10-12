@@ -6,7 +6,6 @@ import java.util.Arrays;
 public class ExceptionFormatter {
 
     public static ArrayList<ArrayList<String>> formatException(Throwable t) {
-        StringBuilder sb = new StringBuilder();
         Throwable innermostCause = findInnermostCause(t);
         return formatThrowable(innermostCause);
     }
