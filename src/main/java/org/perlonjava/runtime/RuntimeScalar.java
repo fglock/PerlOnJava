@@ -1282,13 +1282,13 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     public RuntimeScalar chomp() {
         String str = this.toString();
         if (str.isEmpty()) {
-            return new RuntimeScalar(0);
+            return getScalarInt(0);
         }
 
         RuntimeScalar separatorScalar = getGlobalVariable("main::/");
         if (separatorScalar.type == RuntimeScalarType.UNDEF) {
             // Slurp mode: don't remove anything
-            return new RuntimeScalar(0);
+            return getScalarInt(0);
         }
 
         String separator = separatorScalar.toString();
@@ -1317,7 +1317,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             this.type = RuntimeScalarType.STRING;
             this.value = str;
         }
-        return new RuntimeScalar(charsRemoved);
+        return getScalarInt(charsRemoved);
     }
 
     public RuntimeScalar index(RuntimeScalar substr, RuntimeScalar position) {
@@ -1330,14 +1330,14 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (pos < 0) {
             pos = 0;
         } else if (pos >= str.length()) {
-            return new RuntimeScalar(-1);
+            return getScalarInt(-1);
         }
 
         // Find the index of the substring starting from the specified position
         int result = str.indexOf(sub, pos);
 
         // Return the index or -1 if not found
-        return new RuntimeScalar(result);
+        return getScalarInt(result);
     }
 
     public RuntimeScalar rindex(RuntimeScalar substr, RuntimeScalar position) {
@@ -1350,14 +1350,14 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (pos >= str.length()) {
             pos = str.length() - 1;
         } else if (pos < 0) {
-            return new RuntimeScalar(-1);
+            return getScalarInt(-1);
         }
 
         // Find the last index of the substring before or at the specified position
         int result = str.lastIndexOf(sub, pos);
 
         // Return the index or -1 if not found
-        return new RuntimeScalar(result);
+        return getScalarInt(result);
     }
 
     public RuntimeScalar log() {
@@ -1523,7 +1523,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         } else {
             i = str.charAt(0);
         }
-        return new RuntimeScalar(i);
+        return getScalarInt(i);
     }
 
     public RuntimeScalar chr() {
@@ -1578,7 +1578,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         String fileName = this.toString();
         if (GlobalContext.getGlobalHash("main::INC").elements.containsKey(fileName)) {
             // module was already loaded
-            return new RuntimeScalar(1);
+            return getScalarInt(1);
         }
 
         // Call `do` operator
