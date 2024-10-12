@@ -28,10 +28,6 @@ public class CallerStack {
         return new ArrayList<>(callerStack);
     }
 
-    public static void clear() {
-        callerStack.clear();
-    }
-
     public static class CallerInfo {
         public final String packageName;
         public final String filename;
