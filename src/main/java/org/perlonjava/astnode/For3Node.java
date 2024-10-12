@@ -65,6 +65,21 @@ public class For3Node extends AbstractNode {
         this.tokenIndex = tokenIndex;
     }
 
+    private static boolean isMagicWhile(Node node) {
+        String operator = "";
+        if (node instanceof OperatorNode) {
+            // "<>", "each", "glob"
+            operator = ((OperatorNode) node).operator;
+        } else if (node instanceof BinaryOperatorNode) {
+            // "readline"
+            operator = ((BinaryOperatorNode) node).operator;
+        }
+        return operator.equals("<>") ||
+                operator.equals("each") ||
+                operator.equals("glob") ||
+                operator.equals("readline");
+    }
+
     private Node whileConditionMagic(Node condition, int tokenIndex) {
         // "magic" `while ( <> )`
         if (condition != null) {
@@ -105,21 +120,6 @@ public class For3Node extends AbstractNode {
             }
         }
         return condition;
-    }
-
-    private static boolean isMagicWhile(Node node) {
-        String operator = "";
-        if (node instanceof OperatorNode) {
-            // "<>", "each", "glob"
-            operator = ((OperatorNode) node).operator;
-        } else if (node instanceof BinaryOperatorNode) {
-            // "readline"
-            operator = ((BinaryOperatorNode) node).operator;
-        }
-        return operator.equals("<>") ||
-                operator.equals("each") ||
-                operator.equals("glob") ||
-                operator.equals("readline");
     }
 
     /**
