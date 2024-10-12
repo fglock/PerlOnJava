@@ -48,23 +48,21 @@ public class RuntimeIO implements RuntimeScalarReference {
     private final ByteBuffer singleCharBuffer;
     // List to keep track of directory stream positions
     private final List<DirectoryStream<Path>> directoryStreamPositions = new ArrayList<>();
+    boolean needFlush;
     // Streams and channels for I/O operations
     private InputStream inputStream;
     private OutputStream outputStream;
     private BufferedReader bufferedReader;
     private FileChannel fileChannel;
     private WritableByteChannel channel;
-
     // Stream for directory operations
     private DirectoryStream<Path> directoryStream;
     private int currentDirPosition = 0;
     private String directoryPath;
     private Iterator<Path> directoryIterator;
     private ArrayList<RuntimeScalar> directorySpecialEntries = new ArrayList<>();
-
     // State flags
     private boolean isEOF;
-    boolean needFlush;
 
     // Constructor to initialize buffers
     public RuntimeIO() {
@@ -314,7 +312,7 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
     }
 
-    static void flushFileHandles() {
+    public static void flushFileHandles() {
         // Flush stdout and stderr before sleep, in case we are displaying a prompt
         if (stdout.needFlush) {
             stdout.flush();
