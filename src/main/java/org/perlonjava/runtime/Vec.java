@@ -36,7 +36,7 @@ public class Vec {
             value = buffer.getInt(byteOffset);
         } else if (bits == 16 && byteOffset + 1 < data.length) {
             value = buffer.getShort(byteOffset) & 0xFFFF;
-        } else if (bits == 8 && byteOffset < data.length) {
+        } else if (bits == 8) {
             value = buffer.get(byteOffset) & 0xFF;
         } else {
             for (int i = 0; i < bits; i++) {

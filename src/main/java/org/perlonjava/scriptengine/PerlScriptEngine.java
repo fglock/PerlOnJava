@@ -6,7 +6,6 @@ import org.perlonjava.runtime.RuntimeList;
 import javax.script.*;
 import java.io.Reader;
 import java.io.StringWriter;
-import java.lang.invoke.MethodHandles;
 
 /**
  * The PerlScriptEngine class is a custom implementation of the AbstractScriptEngine.
@@ -25,7 +24,6 @@ import java.lang.invoke.MethodHandles;
  */
 public class PerlScriptEngine extends AbstractScriptEngine {
 
-    private static final MethodHandles.Lookup lookup = MethodHandles.lookup();
     private final ScriptEngineFactory factory;
 
     public PerlScriptEngine(ScriptEngineFactory factory) {
