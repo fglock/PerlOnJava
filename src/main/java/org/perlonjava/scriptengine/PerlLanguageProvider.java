@@ -12,10 +12,7 @@ import org.perlonjava.runtime.*;
 
 import java.lang.invoke.*;
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
 import java.util.List;
-
-import static org.perlonjava.runtime.GlobalContext.getGlobalIO;
 
 /**
  * The PerlLanguageProvider class is responsible for executing Perl code within the Java environment.
@@ -103,7 +100,7 @@ public class PerlLanguageProvider {
         ctx.logDebug("createClassWithMethod");
         // Create a new instance of ErrorMessageUtil, resetting the line counter
         ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
-        ctx.symbolTable = globalSymbolTable.clone(); // reset the symboltable
+        ctx.symbolTable = globalSymbolTable.clone(); // reset the symbol table
         Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
                 ctx,
                 ast,
@@ -119,9 +116,6 @@ public class PerlLanguageProvider {
         // Instantiate the class
         Object instance = constructor.newInstance();
 
-        // Find the apply method
-        Method applyMethod = generatedClass.getMethod("apply", RuntimeArray.class, int.class);
-
         // Define the method type
         MethodType methodType = MethodType.methodType(RuntimeList.class, RuntimeArray.class, int.class);
 
@@ -135,14 +129,12 @@ public class PerlLanguageProvider {
             result = (RuntimeList) invoker.invoke(instance, new RuntimeArray(), RuntimeContextType.SCALAR);
         } catch (Throwable t) {
             // Flush STDOUT, STDERR, STDIN
-            getGlobalIO("main::STDOUT").getRuntimeIO().flush();
-            getGlobalIO("main::STDERR").getRuntimeIO().flush();
+            RuntimeIO.flushFileHandles();
 
             throw new RuntimeException(t);
         }
         // Flush STDOUT, STDERR, STDIN
-        getGlobalIO("main::STDOUT").getRuntimeIO().flush();
-        getGlobalIO("main::STDERR").getRuntimeIO().flush();
+        RuntimeIO.flushFileHandles();
 
         // Print the result of the execution
         ctx.logDebug("Result of generatedMethod: " + result);
