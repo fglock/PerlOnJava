@@ -15,9 +15,7 @@ public class PrintVisitor implements Visitor {
     private int indentLevel = 0;
 
     private void appendIndent() {
-        for (int i = 0; i < indentLevel; i++) {
-            sb.append("  ");
-        }
+        sb.append("  ".repeat(Math.max(0, indentLevel)));
     }
 
     public String getResult() {
@@ -39,7 +37,7 @@ public class PrintVisitor implements Visitor {
     @Override
     public void visit(BinaryOperatorNode node) {
         appendIndent();
-        sb.append("BinaryOperatorNode: ").append(node.operator).append("  pos:" + node.tokenIndex + "\n");
+        sb.append("BinaryOperatorNode: ").append(node.operator).append("  pos:").append(node.tokenIndex).append("\n");
         indentLevel++;
         if (node.left == null) {
             appendIndent();
@@ -54,7 +52,7 @@ public class PrintVisitor implements Visitor {
     @Override
     public void visit(OperatorNode node) {
         appendIndent();
-        sb.append("OperatorNode: ").append(node.operator).append("  pos:" + node.tokenIndex + "\n");
+        sb.append("OperatorNode: ").append(node.operator).append("  pos:").append(node.tokenIndex).append("\n");
         if (node.operand != null) {
             indentLevel++;
             node.operand.accept(this);
@@ -70,7 +68,7 @@ public class PrintVisitor implements Visitor {
 
         if (node.labelName != null) {
             appendIndent();
-            sb.append("label: " + node.labelName + "\n");
+            sb.append("label: ").append(node.labelName).append("\n");
         }
 
         appendIndent();
@@ -123,7 +121,7 @@ public class PrintVisitor implements Visitor {
 
         if (node.labelName != null) {
             appendIndent();
-            sb.append("label: " + node.labelName + "\n");
+            sb.append("label: ").append(node.labelName).append("\n");
         }
 
         appendIndent();
@@ -193,15 +191,15 @@ public class PrintVisitor implements Visitor {
     @Override
     public void visit(SubroutineNode node) {
         appendIndent();
-        sb.append("SubroutineNode:  pos:" + node.tokenIndex + "\n");
+        sb.append("SubroutineNode:  pos:").append(node.tokenIndex).append("\n");
         indentLevel++;
 
         appendIndent();
-        sb.append("name: " + (node.name == null ? "<anon>\n" : node.name + "\n"));
+        sb.append("name: ").append(node.name == null ? "<anon>\n" : node.name + "\n");
 
         if (node.prototype != null) {
             appendIndent();
-            sb.append("prototype: " + node.prototype + "\n");
+            sb.append("prototype: ").append(node.prototype).append("\n");
         }
 
         if (node.attributes != null) {
@@ -211,7 +209,7 @@ public class PrintVisitor implements Visitor {
             indentLevel++;
             for (String element : node.attributes) {
                 appendIndent();
-                sb.append(element + "\n");
+                sb.append(element).append("\n");
             }
             indentLevel--;
         }

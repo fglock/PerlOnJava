@@ -44,15 +44,8 @@ public class JavaClassInfo {
     /**
      * Pop the top LoopLabels object off the stack.
      */
-    public LoopLabels popLoopLabels() {
-        return loopLabelStack.pop();
-    }
-
-    /**
-     * Peek at the top LoopLabels object without removing it.
-     */
-    public LoopLabels peekLoopLabels() {
-        return loopLabelStack.peek();
+    public void popLoopLabels() {
+        loopLabelStack.pop();
     }
 
     public LoopLabels findLoopLabelsByName(String labelName) {
