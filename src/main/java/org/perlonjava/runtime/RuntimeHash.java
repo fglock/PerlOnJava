@@ -125,16 +125,6 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         return true;
     }
 
-    // Get a list of key-value pairs as a RuntimeArray
-    public RuntimeArray entryArray() {
-        RuntimeArray array = new RuntimeArray();
-        for (Map.Entry<String, RuntimeScalar> entry : elements.entrySet()) {
-            array.push(new RuntimeScalar(entry.getKey()));
-            array.push(entry.getValue());
-        }
-        return array;
-    }
-
     // Get the list value of the hash
     public RuntimeList getList() {
         return new RuntimeList(this);
