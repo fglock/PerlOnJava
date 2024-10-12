@@ -25,8 +25,6 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeIO.stderr;
-import static org.perlonjava.runtime.RuntimeIO.stdout;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 /**
@@ -1562,14 +1560,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar sleep() {
-
-        // Flush stdout and stderr before sleep, in case we are displaying a prompt
-        if (stdout.needFlush) {
-            stdout.flush();
-        }
-        if (stderr.needFlush) {
-            stderr.flush();
-        }
+        RuntimeIO.flushFileHandles();
 
         long s = (long) this.getDouble() * 1000;
         try {
