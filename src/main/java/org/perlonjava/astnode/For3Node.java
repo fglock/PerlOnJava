@@ -52,8 +52,20 @@ public class For3Node extends AbstractNode {
      * @param tokenIndex     the index of the token in the source code
      */
     public For3Node(String labelName, boolean useNewScope, Node initialization, Node condition, Node increment, Node body, Node continueBlock, boolean isDoWhile, int tokenIndex) {
-        this.isDoWhile = isDoWhile;
+        condition = whileConditionMagic(condition, tokenIndex);
 
+        this.isDoWhile = isDoWhile;
+        this.labelName = labelName;
+        this.useNewScope = useNewScope;
+        this.initialization = initialization;
+        this.condition = condition;
+        this.increment = increment;
+        this.body = body;
+        this.continueBlock = continueBlock;
+        this.tokenIndex = tokenIndex;
+    }
+
+    private Node whileConditionMagic(Node condition, int tokenIndex) {
         // "magic" `while ( <> )`
         if (condition != null) {
             String operator = "";
@@ -92,15 +104,7 @@ public class For3Node extends AbstractNode {
                 );
             }
         }
-
-        this.labelName = labelName;
-        this.useNewScope = useNewScope;
-        this.initialization = initialization;
-        this.condition = condition;
-        this.increment = increment;
-        this.body = body;
-        this.continueBlock = continueBlock;
-        this.tokenIndex = tokenIndex;
+        return condition;
     }
 
     private static boolean isMagicWhile(Node node) {

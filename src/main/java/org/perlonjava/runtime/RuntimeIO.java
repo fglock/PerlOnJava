@@ -314,6 +314,16 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
     }
 
+    static void flushFileHandles() {
+        // Flush stdout and stderr before sleep, in case we are displaying a prompt
+        if (stdout.needFlush) {
+            stdout.flush();
+        }
+        if (stderr.needFlush) {
+            stderr.flush();
+        }
+    }
+
     // Method to get the directory stream
     public DirectoryStream<Path> getDirectoryStream() {
         if (directoryStream != null && !directoryStreamPositions.contains(directoryStream)) {
@@ -453,12 +463,7 @@ public class RuntimeIO implements RuntimeScalarReference {
     public RuntimeScalar readline() {
         try {
             // Flush stdout and stderr before reading, in case we are displaying a prompt
-            if (stdout.needFlush) {
-                stdout.flush();
-            }
-            if (stderr.needFlush) {
-                stderr.flush();
-            }
+            flushFileHandles();
 
             // Check if the IO object is set up for reading
             if (fileChannel == null && bufferedReader == null) {
