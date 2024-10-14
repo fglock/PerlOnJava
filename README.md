@@ -328,7 +328,7 @@ file.
     - Added bitwise string operators.
     - Added lvalue `substr`
     - Emulate Perl behaviour with unsigned integers in bitwise operators.
-    - WIP: sockets
+    - WIP: sockets, lvalue `vec`
     - Add support for concurrency and parallelism, such as threads and async/await.
     - Enhance security features, including sandboxing and input validation.
     - Increase test coverage and introduce automated testing tools.
