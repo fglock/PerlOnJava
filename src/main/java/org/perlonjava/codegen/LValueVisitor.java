@@ -44,6 +44,9 @@ public class LValueVisitor implements Visitor {
             case "->":  // $a->() $a->[] $a->()
                 context = RuntimeContextType.SCALAR;
                 break;
+            case "substr":
+                context = RuntimeContextType.SCALAR;
+                break;
             default:
                 context = RuntimeContextType.VOID;  // Not an L-value
         }
@@ -62,7 +65,6 @@ public class LValueVisitor implements Visitor {
                 break;
             case "$":   // $a $$a
             case "*":  // typeglob
-            case "substr":
             case "vec":
             case "pos":
                 context = RuntimeContextType.SCALAR;
