@@ -83,7 +83,7 @@
 - ✔️   **`chomp`**: `chomp` is implemented.
 - ✔️   **Vectors**: `vec` is implemented.
 - ❌  **Chained operators**: operations like `$x < $y <= $z` not yet implemented.
-- ❌  **Lvalue `substr`**: Assignable Substring extraction is not yet implemented.
+- ✔️   **Lvalue `substr`**: Assignable Substring extraction is implemented.
 - ❌  **Lvalue `vec`**: Assignable `vec` is not yet implemented.
 
 ## Arrays, Hashes, and Lists

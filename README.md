@@ -326,8 +326,9 @@ file.
 - **v1.9.0**: Concurrency and Security Features
     - Planned release date: 2024-12-10
     - Added bitwise string operators.
+    - Added lvalue `substr`
     - Emulate Perl behaviour with unsigned integers in bitwise operators.
-    - WIP: sockets; lvalue `substr`
+    - WIP: sockets
     - Add support for concurrency and parallelism, such as threads and async/await.
     - Enhance security features, including sandboxing and input validation.
     - Increase test coverage and introduce automated testing tools.
