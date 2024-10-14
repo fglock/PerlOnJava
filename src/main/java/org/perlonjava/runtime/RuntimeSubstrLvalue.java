@@ -12,28 +12,28 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
         this.type = RuntimeScalarType.STRING;
         this.value = str;
     }
-
+    
     @Override
     void vivify() {
-            String parentValue = lvalue.toString();
-            String newValue = this.toString();
-            int actualOffset = offset < 0 ? parentValue.length() + offset : offset;
+        String parentValue = lvalue.toString();
+        String newValue = this.toString();
+        int actualOffset = offset < 0 ? parentValue.length() + offset : offset;
 
-            if (actualOffset < 0) {
-                actualOffset = 0;
-            }
+        if (actualOffset < 0) {
+            actualOffset = 0;
+        }
 
-            StringBuilder updatedValue = new StringBuilder(parentValue);
+        StringBuilder updatedValue = new StringBuilder(parentValue);
 
-            if (actualOffset >= parentValue.length()) {
-                updatedValue.append(" ".repeat(actualOffset - parentValue.length()));
-                updatedValue.append(newValue);
-            } else {
-                int endIndex = Math.min(actualOffset + length, parentValue.length());
-                updatedValue.replace(actualOffset, endIndex, newValue);
-            }
+        if (actualOffset >= parentValue.length()) {
+            updatedValue.append(" ".repeat(actualOffset - parentValue.length()));
+            updatedValue.append(newValue);
+        } else {
+            int endIndex = Math.min(actualOffset + Math.max(length, 0), parentValue.length());
+            updatedValue.replace(actualOffset, endIndex, newValue);
+        }
 
-            lvalue.set(new RuntimeScalar(updatedValue.toString()));
+        lvalue.set(new RuntimeScalar(updatedValue.toString()));
     }
 
     @Override
