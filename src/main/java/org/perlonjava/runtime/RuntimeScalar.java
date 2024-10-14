@@ -357,6 +357,21 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
     }
 
+    public long getLong() {
+        switch (type) {
+            case INTEGER:
+                return (int) value;
+            case DOUBLE:
+                return (long) ((double) value);
+            case STRING:
+                return this.parseNumber().getLong();
+            case UNDEF:
+                return 0L;
+            default:
+                return (long) ((RuntimeScalarReference) value).getIntRef();
+        }
+    }
+
     public double getDouble() {
         switch (this.type) {
             case INTEGER:
@@ -1188,7 +1203,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
             return new RuntimeScalar(result.toString());
         }
-        return new RuntimeScalar(this.getInt() & arg2.getInt());
+        return new RuntimeScalar(this.getLong() & arg2.getLong());
     }
 
     public RuntimeScalar bitwiseOr(RuntimeScalar arg2) {
@@ -1209,7 +1224,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
             return new RuntimeScalar(result.toString());
         }
-        return new RuntimeScalar(this.getInt() | arg2.getInt());
+        return new RuntimeScalar(this.getLong() | arg2.getLong());
     }
 
     public RuntimeScalar bitwiseXor(RuntimeScalar arg2) {
@@ -1230,7 +1245,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
             return new RuntimeScalar(result.toString());
         }
-        return new RuntimeScalar(this.getInt() ^ arg2.getInt());
+        return new RuntimeScalar(this.getLong() ^ arg2.getLong());
     }
 
     public RuntimeScalar bitwiseNot() {
@@ -1249,7 +1264,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
             return new RuntimeScalar(result.toString());
         }
-        return new RuntimeScalar(~this.getInt());
+        // force 32-bit unsigned to match Perl behavior
+        return new RuntimeScalar(~this.getLong() & 0xFFFFFFFFL);
     }
 
     public RuntimeScalar shiftLeft(RuntimeScalar arg2) {

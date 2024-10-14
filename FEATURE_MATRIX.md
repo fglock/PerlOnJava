@@ -69,6 +69,7 @@
 - ✔️   **`q`, `qq`, `qw`, `qx` String operators**: Various string quoting mechanisms are supported.
 - ✔️   **Bitwise operators**: Bitwise operations like `~`, `&`, `|`, `^`, `<<`, and `>>` are supported.
 - ✔️   **Bitwise operators**: Bitwise integer and string operations are implemented.
+- ✔️   **Bitwise operators return unsigned**: Emulate unsigned integers.
 - ✔️   **Autoincrement, Autodecrement; String increment**: Increment and decrement operators, including for strings, are implemented.
 - ✔️   **Scalar string and math operators**: `quotemeta`, `ref`, `undef`, `log`, `rand`, `oct`, `hex`, `ord`, `chr`, `int`, `sqrt`, `cos`, `sin`, `exp`, `atan2`, `lc`, `lcfirst`, `uc`, `ucfirst`, `chop`, `fc`, `index`, `rindex`.
 - ✔️   **`join`**: Join operator for combining array elements into a string is supported.
@@ -248,7 +249,6 @@
 - ❌  **Fetching user and group info**: endgrent, endhostent, endnetent, endpwent, getgrent, getgrgid, getgrnam, getlogin, getpwent, getpwnam, getpwuid, setgrent, setpwent
 - ❌  **Fetching network info**: endprotoent, endservent, gethostbyaddr, gethostbyname, gethostent, getnetbyaddr, getnetbyname, getnetent, getprotobyname, getprotobynumber, getprotoent, getservbyname, getservbyport, getservent, sethostent, setnetent, setprotoent, setservent
 - ❌  **Keywords related to the control flow of the Perl program**: `dump` operator.
-- ❌  **Bitwise operators return unsigned**: JVM doesn't have unsigned integers. This could be emulated, but with a high cost. The result of some operations may return a negative number, where perl would return a large integer. For example, the bitwise not `~5`.
 - ❌  **Tail calls**: `goto` going to a different subroutine as a tail call is not supported.
 
 ## Language Differences and Workarounds
