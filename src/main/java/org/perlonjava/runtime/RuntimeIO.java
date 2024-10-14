@@ -9,6 +9,9 @@ package org.perlonjava.runtime;
  */
 
 import java.io.*;
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
@@ -49,6 +52,8 @@ public class RuntimeIO implements RuntimeScalarReference {
     // List to keep track of directory stream positions
     private final List<DirectoryStream<Path>> directoryStreamPositions = new ArrayList<>();
     boolean needFlush;
+    private Socket socket;
+    private ServerSocket serverSocket;
     // Streams and channels for I/O operations
     private InputStream inputStream;
     private OutputStream outputStream;
@@ -74,6 +79,22 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Constructor for directory streams
     public RuntimeIO(DirectoryStream<Path> directoryStream) {
         this.directoryStream = directoryStream;
+        this.buffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
+        this.readBuffer = ByteBuffer.allocate(BUFFER_SIZE);
+        this.singleCharBuffer = ByteBuffer.allocate(1);
+    }
+
+    // Constructor for socket
+    public RuntimeIO(Socket socket) {
+        this.socket = socket;
+        this.inputStream = null;
+        this.outputStream = null;
+        try {
+            this.inputStream = socket.getInputStream();
+            this.outputStream = socket.getOutputStream();
+        } catch (IOException e) {
+            // Handle exception
+        }
         this.buffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
         this.readBuffer = ByteBuffer.allocate(BUFFER_SIZE);
         this.singleCharBuffer = ByteBuffer.allocate(1);
@@ -592,6 +613,15 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Method to close the filehandle
     public RuntimeScalar close() {
         try {
+            if (socket != null) {
+                socket.close();
+                socket = null;
+            }
+            if (serverSocket != null) {
+                serverSocket.close();
+                serverSocket = null;
+            }
+
             if (fileChannel != null) {
                 fileChannel.force(true);  // Ensure all data is written to the file
                 fileChannel.close();
@@ -619,7 +649,6 @@ public class RuntimeIO implements RuntimeScalarReference {
             return scalarFalse;
         }
     }
-
 
     // Method to append data to a file
     public RuntimeScalar write(String data) {
@@ -651,6 +680,74 @@ public class RuntimeIO implements RuntimeScalarReference {
         } catch (Exception e) {
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
             return scalarFalse;
+        }
+    }
+
+    // Method to get the underlying Socket
+    public Socket getSocket() {
+        return this.socket;
+    }
+
+    // Method to bind a socket
+    public RuntimeScalar bind(String address, int port) {
+        try {
+            if (this.socket != null) {
+                this.socket.bind(new InetSocketAddress(address, port));
+            } else if (this.serverSocket != null) {
+                this.serverSocket.bind(new InetSocketAddress(address, port));
+            } else {
+                throw new IllegalStateException("No socket available to bind");
+            }
+            return RuntimeScalarCache.scalarTrue;
+        } catch (IOException e) {
+            GlobalContext.setGlobalVariable("main::!", e.getMessage());
+            return RuntimeScalarCache.scalarFalse;
+        }
+    }
+
+    // Method to connect a socket
+    public RuntimeScalar connect(String address, int port) {
+        if (this.socket == null) {
+            throw new IllegalStateException("No socket available to connect");
+        }
+        try {
+            this.socket.connect(new InetSocketAddress(address, port));
+            return RuntimeScalarCache.scalarTrue;
+        } catch (IOException e) {
+            GlobalContext.setGlobalVariable("main::!", e.getMessage());
+            return RuntimeScalarCache.scalarFalse;
+        }
+    }
+
+    // Method to listen on a server socket
+    public RuntimeScalar listen(int backlog) {
+        if (this.serverSocket == null) {
+            throw new IllegalStateException("No server socket available to listen");
+        }
+        try {
+            this.serverSocket.setReceiveBufferSize(backlog);
+            return RuntimeScalarCache.scalarTrue;
+        } catch (IOException e) {
+            GlobalContext.setGlobalVariable("main::!", e.getMessage());
+            return RuntimeScalarCache.scalarFalse;
+        }
+    }
+
+    // Method to accept a connection on a server socket
+    public RuntimeScalar accept() {
+        if (this.serverSocket == null) {
+            throw new IllegalStateException("No server socket available to accept connections");
+        }
+        try {
+            Socket clientSocket = this.serverSocket.accept();
+
+            RuntimeScalar fileHandle = new RuntimeScalar();
+            fileHandle.type = RuntimeScalarType.GLOB;
+            fileHandle.value = new RuntimeIO(clientSocket);
+            return fileHandle;
+        } catch (IOException e) {
+            GlobalContext.setGlobalVariable("main::!", e.getMessage());
+            return RuntimeScalarCache.scalarUndef;
         }
     }
 }
