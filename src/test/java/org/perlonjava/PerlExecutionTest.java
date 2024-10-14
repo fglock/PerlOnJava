@@ -75,7 +75,7 @@ public class PerlExecutionTest {
             // Check the captured output for "not ok"
             String output = outputStream.toString();
             assertFalse(output.lines().anyMatch(line -> line.contains("not ok")),
-                    "Output should not contain 'not ok'");
+                    "Output should not contain 'not ok' in " + filename);
         } catch (Exception e) {
             // Log the exception for debugging purposes
             e.printStackTrace();
