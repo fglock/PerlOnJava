@@ -1251,6 +1251,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
         return new RuntimeScalar(~this.getInt());
     }
+
     public RuntimeScalar shiftLeft(RuntimeScalar arg2) {
         return new RuntimeScalar(this.getInt() << arg2.getInt());
     }
