@@ -602,46 +602,48 @@ public class Operator {
         return result;
     }
 
+    /**
+     * Extracts a substring from a given RuntimeScalar based on the provided offset and length.
+     * This method mimics Perl's substr function, handling negative offsets and lengths.
+     *
+     * @param runtimeScalar The RuntimeScalar containing the original string.
+     * @param list A RuntimeList containing the offset and optionally the length.
+     * @return A RuntimeSubstrLvalue representing the extracted substring, which can be used for further operations.
+     */
     public static RuntimeScalar substr(RuntimeScalar runtimeScalar, RuntimeList list) {
         String str = runtimeScalar.toString();
         int strLength = str.length();
 
         int size = list.elements.size();
         int offset = Integer.parseInt(list.elements.get(0).toString());
+        // If length is not provided, use the rest of the string
         int length = (size > 1) ? Integer.parseInt(list.elements.get(1).toString()) : strLength - offset;
 
+        // Store original offset and length for LValue creation
         int originalOffset = offset;
         int originalLength = length;
 
-        // Handle negative offsets
+        // Handle negative offsets (count from the end of the string)
         if (offset < 0) {
             offset = strLength + offset;
         }
 
         // Ensure offset is within bounds
-        if (offset < 0) {
-            offset = 0;
-        }
-        if (offset > strLength) {
-            offset = strLength;
-        }
+        offset = Math.max(0, Math.min(offset, strLength));
 
-        // Handle negative lengths
+        // Handle negative lengths (count from the end of the string)
         if (length < 0) {
             length = strLength + length - offset;
         }
 
         // Ensure length is non-negative and within bounds
-        if (length < 0) {
-            length = 0;
-        }
-        if (offset + length > strLength) {
-            length = strLength - offset;
-        }
+        length = Math.max(0, Math.min(length, strLength - offset));
 
+        // Extract the substring
         String result = str.substring(offset, offset + length);
-        
-        // return an LValue "RuntimeSubstrLvalue" that can be used to assign to the original string
+
+        // Return an LValue "RuntimeSubstrLvalue" that can be used to assign to the original string
+        // This allows for in-place modification of the original string if needed
         return new RuntimeSubstrLvalue(runtimeScalar, result, originalOffset, originalLength);
     }
 
