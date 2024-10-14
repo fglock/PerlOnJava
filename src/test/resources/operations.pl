@@ -489,3 +489,4 @@ print "not " if $result ne "0"; say "ok # unary minus on  results in 0";
 
 $result = -("123");
 print "not " if $result ne "-123"; say "ok # unary minus on 123 results in -123";
+
