@@ -35,6 +35,7 @@ public class PerlExecutionTest {
     @ParameterizedTest(name = "Test using resource file: {0}")
     @ValueSource(strings = {
             "demo.pl",
+            "bitwise_string.pl",
             "numification.pl",
             "operations.pl",
             "compound_assignment.pl",
