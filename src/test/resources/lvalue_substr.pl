@@ -14,7 +14,7 @@ my $error = eval {
     substr($str, 10, 5) = "long";
     1;
 } ? "" : $@;
-$result = $error =~ /substr outside of string/ ? "Error caught: $error" : "No error or unexpected error";
+$result = $error =~ /substr outside of string/ ? "Error caught: " . substr($error, 0, 30) . "..." : "No error or unexpected error";
 print "not " if $error !~ /substr outside of string/;
 say "ok # Assignment beyond string length (error check) <$result>";
 
