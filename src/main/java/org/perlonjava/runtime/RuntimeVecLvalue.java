@@ -43,10 +43,11 @@ public class RuntimeVecLvalue extends RuntimeBaseProxy {
      */
     @Override
     public RuntimeScalar set(RuntimeScalar value) {
-        int newValue = value.getInt();
+        // Update the local type and value
+        this.type = value.type;
+        this.value = value.value;
 
-        // Update the local value
-        this.value = newValue;
+        int newValue = value.getInt();
 
         // Create arguments for Vec.set method
         RuntimeList args = new RuntimeList();

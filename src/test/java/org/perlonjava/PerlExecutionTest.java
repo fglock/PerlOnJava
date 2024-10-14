@@ -47,6 +47,7 @@ public class PerlExecutionTest {
             "flipflop.pl",
             "regex.pl",
             "regexreplace.pl",
+            "regex_once.pl",
             "statement.pl",
             "split.pl",
             "transliterate.pl",
