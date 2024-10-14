@@ -56,7 +56,8 @@ public class PerlExecutionTest {
             "pack.pl",
             "unpack.pl",
             "lvalue_substr.pl",
-            "vec.pl"
+            "vec.pl",
+            "lvalue_vec.pl"
     })
     void testUsingResourceFile(String filename) {
         // Load the file from the resources folder
