@@ -55,6 +55,7 @@ public class PerlExecutionTest {
             "chomp.pl",
             "pack.pl",
             "unpack.pl",
+            "lvalue_substr.pl",
             "vec.pl"
     })
     void testUsingResourceFile(String filename) {

@@ -640,7 +640,8 @@ public class Operator {
         }
 
         String result = str.substring(offset, offset + length);
-        // return an LValue
+        
+        // return an LValue "RuntimeSubstrLvalue" that can be used to assign to the original string
         return new RuntimeSubstrLvalue(runtimeScalar, result, originalOffset, originalLength);
     }
 
