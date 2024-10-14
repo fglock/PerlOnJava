@@ -1,5 +1,5 @@
-# use feature 'say';
-# use strict;
+use strict;
+use feature 'say';
 
 ###################
 # Perl m// Operator Tests

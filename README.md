@@ -329,6 +329,7 @@ file.
     - Added lvalue `substr`, lvalue `vec`
     - Fix `b` specifier in `sprintf`
     - Emulate Perl behaviour with unsigned integers in bitwise operators.
+    - Regex `m?pat?` match-once is implemented.
     - WIP: sockets
     - Add support for concurrency and parallelism, such as threads and async/await.
     - Enhance security features, including sandboxing and input validation.
