@@ -248,7 +248,7 @@
 - ❌  **Fetching user and group info**: endgrent, endhostent, endnetent, endpwent, getgrent, getgrgid, getgrnam, getlogin, getpwent, getpwnam, getpwuid, setgrent, setpwent
 - ❌  **Fetching network info**: endprotoent, endservent, gethostbyaddr, gethostbyname, gethostent, getnetbyaddr, getnetbyname, getnetent, getprotobyname, getprotobynumber, getprotoent, getservbyname, getservbyport, getservent, sethostent, setnetent, setprotoent, setservent
 - ❌  **Keywords related to the control flow of the Perl program**: `dump` operator.
-- ❌  **Bitwise operators return unsigned**: JVM doesn't have unsigned integers. This could be emulated, but with a high cost.
+- ❌  **Bitwise operators return unsigned**: JVM doesn't have unsigned integers. This could be emulated, but with a high cost. The result of some operations may return a negative number, where perl would return a large integer. For example, the bitwise not `~5`.
 - ❌  **Tail calls**: `goto` going to a different subroutine as a tail call is not supported.
 
 ## Language Differences and Workarounds
