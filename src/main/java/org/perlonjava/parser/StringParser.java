@@ -509,7 +509,13 @@ public class StringParser {
     public static OperatorNode parseRegexMatch(EmitterContext ctx, String operator, ParsedString rawStr) {
         operator = operator.equals("qr") ? "quoteRegex" : "matchRegex";
         Node parsed = parseRegexString(ctx, rawStr);
-        Node modifiers = new StringNode(rawStr.buffers.get(1), rawStr.index);
+        String modStr = rawStr.buffers.get(1);
+        if (rawStr.startDelim == '?') {
+            // `m?PAT?` matches exactly once
+            // save the internal flag in the modifier string
+            modStr += '?';
+        }
+        Node modifiers = new StringNode(modStr, rawStr.index);
         List<Node> elements = new ArrayList<>();
         elements.add(parsed);
         elements.add(modifiers);

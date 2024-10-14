@@ -29,7 +29,9 @@ public class RuntimeRegex implements RuntimeScalarReference {
     public Pattern pattern;  // first part of `m//` and `s///`
     boolean isGlobalMatch;
     boolean isNonDestructive;
+    boolean isMatchExactlyOnce; // flag for `m?PAT?` (matches exactly once)
     private RuntimeScalar replacement = null;  // second part of `s///`
+    private boolean matched = false; // counter for `m?PAT?` (matches exactly once)
 
     /**
      * Creates a RuntimeRegex object from a regex pattern string with optional modifiers.
@@ -48,6 +50,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 int flags = regex.convertModifiers(modifiers);
                 regex.isGlobalMatch = modifiers.contains("g");
                 regex.isNonDestructive = modifiers.contains("r");
+                regex.isMatchExactlyOnce = modifiers.contains("?");
                 regex.pattern = Pattern.compile(patternString, flags);
             } catch (Exception e) {
                 throw new IllegalStateException("Regex compilation failed: " + e.getMessage());
@@ -99,6 +102,17 @@ public class RuntimeRegex implements RuntimeScalarReference {
             return replaceRegex(quotedRegex, string, ctx);
         }
 
+        if (regex.isMatchExactlyOnce && regex.matched) {
+            // m?PAT? already matched once; now return false
+            if (ctx == RuntimeContextType.LIST) {
+                return new RuntimeList();
+            } else if (ctx == RuntimeContextType.SCALAR) {
+                return RuntimeScalarCache.scalarFalse;
+            } else {
+                return RuntimeScalarCache.scalarUndef;
+            }
+        }
+
         Pattern pattern = regex.pattern;
 
         String inputStr = string.toString();
@@ -136,6 +150,10 @@ public class RuntimeRegex implements RuntimeScalarReference {
         }
         // System.out.println("Undefine capture $" + capture);
         GlobalContext.getGlobalVariable("main::" + capture++).set(RuntimeScalarCache.scalarUndef);
+
+        if (found) {
+            regex.matched = true;    // counter for m?PAT?
+        }
 
         if (ctx == RuntimeContextType.LIST) {
             return result;
