@@ -5,7 +5,8 @@ import java.nio.ByteOrder;
 
 public class Vec {
     public static RuntimeScalar vec(RuntimeList args) throws IllegalArgumentException {
-        String str = args.elements.get(0).toString();
+        RuntimeScalar strScalar = (RuntimeScalar) args.elements.get(0);
+        String str = strScalar.toString();
         int offset = ((RuntimeScalar) args.elements.get(1)).getInt();
         int bits = ((RuntimeScalar) args.elements.get(2)).getInt();
 
@@ -26,10 +27,10 @@ public class Vec {
         int bitOffset = (offset * bits) % 8;
 
         if (byteOffset >= data.length) {
-            return new RuntimeScalar(0);
+            return new RuntimeVecLvalue(strScalar, offset, bits, 0);
         }
 
-        ByteBuffer buffer = ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN); // Change to BIG_ENDIAN
+        ByteBuffer buffer = ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN);
         int value = 0;
 
         if (bits == 32 && byteOffset + 3 < data.length) {
@@ -43,12 +44,12 @@ public class Vec {
                 int byteIndex = byteOffset + (bitOffset + i) / 8;
                 int bitIndex = (bitOffset + i) % 8;
                 if (byteIndex < data.length) {
-                    value |= ((data[byteIndex] >> bitIndex) & 1) << i; // Adjust bit extraction
+                    value |= ((data[byteIndex] >> bitIndex) & 1) << i;
                 }
             }
         }
 
-        return new RuntimeScalar(value);
+        return new RuntimeVecLvalue(strScalar, offset, bits, value);
     }
 
     public static RuntimeScalar set(RuntimeList args, RuntimeScalar value) throws IllegalArgumentException {
