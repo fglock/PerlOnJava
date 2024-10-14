@@ -610,6 +610,9 @@ public class Operator {
         int offset = Integer.parseInt(list.elements.get(0).toString());
         int length = (size > 1) ? Integer.parseInt(list.elements.get(1).toString()) : strLength - offset;
 
+        int originalOffset = offset;
+        int originalLength = length;
+
         // Handle negative offsets
         if (offset < 0) {
             offset = strLength + offset;
@@ -637,7 +640,8 @@ public class Operator {
         }
 
         String result = str.substring(offset, offset + length);
-        return new RuntimeScalar(result);
+        // return an LValue
+        return new RuntimeSubstrLvalue(runtimeScalar, result, originalOffset, originalLength);
     }
 
     /**
