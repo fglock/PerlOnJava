@@ -66,15 +66,17 @@ substr($str, 6, 0) = " text";
 $result = $str;
 print "not " if $str ne "Append text";
 say "ok # Assignment at the end <$result>";
+
 # Test assignment with unicode characters
-use utf8;
-binmode(STDOUT, ":utf8");
+# use utf8;
+# binmode(STDOUT, ":utf8");
 $str = "Unicode \x{263A} test";  # Unicode smiley face
 substr($str, 8, 1) = "\x{2665}"; # Unicode heart symbol
 $result = $str;
 my $expected = "Unicode \x{2665} test";
 print "not " if $str ne $expected;
 say "ok # Assignment with unicode characters <$result>";
+
 # Test empty string assignment
 $str = "Remove";
 substr($str, 2, 2) = "";
