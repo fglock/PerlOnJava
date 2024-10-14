@@ -128,8 +128,17 @@ public class Operator {
                 case 'u':
                 case 'x':
                 case 'o':
-                case 'b':
                     arg = element.getInt();
+                    break;
+                case 'b':
+                    // Special handling for binary format
+                    int intValue = element.getInt();
+                    // Use 8 bits for values that fit in a byte, 32 bits otherwise
+                    arg = (intValue >= 0 && intValue <= 255)
+                        ? String.format("%8s", Integer.toBinaryString(intValue)).replace(' ', '0')
+                        : String.format("%32s", Integer.toBinaryString(intValue)).replace(' ', '0');
+                    // Modify the format string to use %s instead of %b
+                    format = format.replace(specifier, "%s");
                     break;
                 case 'f':
                 case 'e':
