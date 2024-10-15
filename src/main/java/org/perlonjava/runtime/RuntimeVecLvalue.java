@@ -5,10 +5,14 @@ package org.perlonjava.runtime;
  * This class allows for modification of specific bits within a string, similar to Perl's vec function.
  */
 public class RuntimeVecLvalue extends RuntimeBaseProxy {
-    /** The offset in the bit string. */
+    /**
+     * The offset in the bit string.
+     */
     private final int offset;
 
-    /** The number of bits to operate on. */
+    /**
+     * The number of bits to operate on.
+     */
     private final int bits;
 
     /**
@@ -16,8 +20,8 @@ public class RuntimeVecLvalue extends RuntimeBaseProxy {
      *
      * @param parent The parent RuntimeScalar containing the original string.
      * @param offset The offset in the bit string.
-     * @param bits The number of bits to operate on.
-     * @param value The initial value of the vector.
+     * @param bits   The number of bits to operate on.
+     * @param value  The initial value of the vector.
      */
     public RuntimeVecLvalue(RuntimeScalar parent, int offset, int bits, int value) {
         this.lvalue = parent;
@@ -32,7 +36,8 @@ public class RuntimeVecLvalue extends RuntimeBaseProxy {
      * Vivification method (currently empty as vec doesn't require vivification).
      */
     @Override
-    void vivify() {}
+    void vivify() {
+    }
 
     /**
      * Sets the value of this vector and updates the parent string accordingly.

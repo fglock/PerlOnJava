@@ -135,8 +135,8 @@ public class Operator {
                     int intValue = element.getInt();
                     // Use 8 bits for values that fit in a byte, 32 bits otherwise
                     arg = (intValue >= 0 && intValue <= 255)
-                        ? String.format("%8s", Integer.toBinaryString(intValue)).replace(' ', '0')
-                        : String.format("%32s", Integer.toBinaryString(intValue)).replace(' ', '0');
+                            ? String.format("%8s", Integer.toBinaryString(intValue)).replace(' ', '0')
+                            : String.format("%32s", Integer.toBinaryString(intValue)).replace(' ', '0');
                     // Modify the format string to use %s instead of %b
                     format = format.replace(specifier, "%s");
                     break;
@@ -616,7 +616,7 @@ public class Operator {
      * This method mimics Perl's substr function, handling negative offsets and lengths.
      *
      * @param runtimeScalar The RuntimeScalar containing the original string.
-     * @param list A RuntimeList containing the offset and optionally the length.
+     * @param list          A RuntimeList containing the offset and optionally the length.
      * @return A RuntimeSubstrLvalue representing the extracted substring, which can be used for further operations.
      */
     public static RuntimeScalar substr(RuntimeScalar runtimeScalar, RuntimeList list) {
