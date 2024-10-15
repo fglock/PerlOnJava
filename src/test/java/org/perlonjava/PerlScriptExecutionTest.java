@@ -19,16 +19,30 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class PerlExecutionTest {
+/**
+ * This class contains tests for executing Perl scripts using the PerlLanguageProvider.
+ * It uses JUnit 5 for testing and includes a parameterized test that runs all .pl files
+ * found in the resources directory.
+ */
+public class PerlScriptExecutionTest {
 
     private PrintStream originalOut;
     private ByteArrayOutputStream outputStream;
 
+    /**
+     * Provides a stream of Perl script filenames found in the resources directory.
+     * This method is used as a MethodSource for the parameterized test.
+     *
+     * @return A stream of Perl script filenames
+     * @throws URISyntaxException If there's an issue with the URI syntax
+     * @throws IOException        If there's an I/O error
+     */
     static Stream<String> providePerlScripts() throws URISyntaxException, IOException {
-        URI uri = PerlExecutionTest.class.getResource("/").toURI();
+        URI uri = PerlScriptExecutionTest.class.getResource("/").toURI();
         Path myPath;
+        // Interesting: This code handles both JAR and file system resources
         if (uri.getScheme().equals("jar")) {
-            FileSystem fileSystem = FileSystems.newFileSystem(uri, Collections.<String, Object>emptyMap());
+            FileSystem fileSystem = FileSystems.newFileSystem(uri, Collections.emptyMap());
             myPath = fileSystem.getPath("/");
         } else {
             myPath = Paths.get(uri);
@@ -38,6 +52,10 @@ public class PerlExecutionTest {
                 .map(path -> path.getFileName().toString());
     }
 
+    /**
+     * Sets up the test environment before each test.
+     * This method redirects System.out to a ByteArrayOutputStream for output capturing.
+     */
     @BeforeEach
     void setUp() {
         originalOut = System.out;
@@ -46,18 +64,28 @@ public class PerlExecutionTest {
         RuntimeIO.setCustomOutputStream(outputStream); // Set custom OutputStream in RuntimeIO
     }
 
+    /**
+     * Tears down the test environment after each test.
+     * This method restores the original System.out.
+     */
     @AfterEach
     void tearDown() {
         System.setOut(originalOut);
         RuntimeIO.setCustomOutputStream(System.out); // Reset to original System.out
     }
 
+    /**
+     * Parameterized test that executes each Perl script found in the resources directory.
+     * It checks that the script execution doesn't produce any "not ok" output, which would indicate a test failure.
+     *
+     * @param filename The name of the Perl script file to test
+     */
     @ParameterizedTest(name = "Test using resource file: {0}")
     @MethodSource("providePerlScripts")
     void testUsingResourceFile(String filename) {
         // Load the file from the resources folder
         InputStream inputStream = getClass().getClassLoader().getResourceAsStream(filename);
-        assertNotNull(inputStream);
+        assertNotNull(inputStream, "Resource file not found: " + filename);
 
         try {
             // Read the file content
