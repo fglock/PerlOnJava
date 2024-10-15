@@ -12,11 +12,19 @@ import java.io.PrintStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class PerlLanguageProviderTest {
+/**
+ * Test class for PerlLanguageProvider.
+ * This class tests the execution of Perl code using the PerlLanguageProvider.
+ */
+public class PerlLanguageProviderExecutionTest {
 
     private PrintStream originalOut;
     private ByteArrayOutputStream outputStream;
 
+    /**
+     * Set up the test environment before each test.
+     * This method redirects System.out to a ByteArrayOutputStream for capturing output.
+     */
     @BeforeEach
     void setUp() {
         originalOut = System.out;
@@ -25,26 +33,36 @@ public class PerlLanguageProviderTest {
         RuntimeIO.setCustomOutputStream(outputStream); // Set custom OutputStream in RuntimeIO
     }
 
+    /**
+     * Clean up the test environment after each test.
+     * This method restores the original System.out.
+     */
     @AfterEach
     void tearDown() {
         System.setOut(originalOut);
         RuntimeIO.setCustomOutputStream(System.out); // Reset to original System.out
     }
 
+    /**
+     * Test the execution of valid Perl code.
+     * This test verifies that the PerlLanguageProvider can execute a simple Perl script
+     * and produce the expected output.
+     */
     @Test
     public void testExecutePerlCode() {
+        // Set up test options
         ArgumentParser.CompilerOptions options = new ArgumentParser.CompilerOptions();
         options.code = "print 'Hello, World!';";
         options.fileName = "test.pl";
 
         try {
+            // Execute the Perl code
             RuntimeList result = PerlLanguageProvider.executePerlCode(options);
 
-            // Add assertions to verify the result
+            // Verify the result
             assertNotNull(result, "Result should not be null");
-            // Add more specific assertions based on the expected behavior of executePerlCode
-            // For example, if the result should contain certain elements:
-            // assertTrue(result.contains(expectedElement), "Result should contain the expected element");
+            // TODO: Add more specific assertions based on the expected behavior of executePerlCode
+            // For example: assertTrue(result.contains(expectedElement), "Result should contain the expected element");
 
             // Check the captured output
             String output = outputStream.toString();
@@ -54,14 +72,19 @@ public class PerlLanguageProviderTest {
         }
     }
 
+    /**
+     * Test the execution of invalid Perl code.
+     * This test verifies that the PerlLanguageProvider throws an exception
+     * when trying to execute Perl code with syntax errors.
+     */
     @Test
     public void testExecutePerlCodeWithError() {
+        // Set up test options with invalid Perl code
         ArgumentParser.CompilerOptions options = new ArgumentParser.CompilerOptions();
-        options.code = "print 'Hello, World!' 123;"; // There is an error in Perl code
+        options.code = "print 'Hello, World!' 123;"; // Syntax error in Perl code
         options.fileName = "test_error.pl";
 
-        assertThrows(Throwable.class, () -> {
-            PerlLanguageProvider.executePerlCode(options);
-        }, "Expected an exception to be thrown");
+        // Verify that an exception is thrown
+        assertThrows(Throwable.class, () -> PerlLanguageProvider.executePerlCode(options), "Expected an exception to be thrown");
     }
 }
