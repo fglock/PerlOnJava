@@ -3,13 +3,19 @@ package org.perlonjava;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.perlonjava.runtime.RuntimeIO;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.file.*;
+import java.util.Collections;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -32,34 +38,22 @@ public class PerlExecutionTest {
         RuntimeIO.setCustomOutputStream(System.out); // Reset to original System.out
     }
 
+    static Stream<String> providePerlScripts() throws URISyntaxException, IOException {
+        URI uri = PerlExecutionTest.class.getResource("/").toURI();
+        Path myPath;
+        if (uri.getScheme().equals("jar")) {
+            FileSystem fileSystem = FileSystems.newFileSystem(uri, Collections.<String, Object>emptyMap());
+            myPath = fileSystem.getPath("/");
+        } else {
+            myPath = Paths.get(uri);
+        }
+        return Files.walk(myPath)
+                .filter(path -> path.toString().endsWith(".pl"))
+                .map(path -> path.getFileName().toString());
+    }
+
     @ParameterizedTest(name = "Test using resource file: {0}")
-    @ValueSource(strings = {
-            "demo.pl",
-            "bitwise_string.pl",
-            "numification.pl",
-            "operations.pl",
-            "compound_assignment.pl",
-            "wantarray.pl",
-            "loop_label.pl",
-            "loop_modifiers.pl",
-            "typeglob.pl",
-            "range.pl",
-            "flipflop.pl",
-            "regex.pl",
-            "regexreplace.pl",
-            "regex_once.pl",
-            "statement.pl",
-            "split.pl",
-            "transliterate.pl",
-            "array.pl",
-            "hash.pl",
-            "chomp.pl",
-            "pack.pl",
-            "unpack.pl",
-            "lvalue_substr.pl",
-            "vec.pl",
-            "lvalue_vec.pl"
-    })
+    @MethodSource("providePerlScripts")
     void testUsingResourceFile(String filename) {
         // Load the file from the resources folder
         InputStream inputStream = getClass().getClassLoader().getResourceAsStream(filename);
