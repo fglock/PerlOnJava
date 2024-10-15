@@ -10,6 +10,7 @@ import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.parser.Parser;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
@@ -21,9 +22,11 @@ public class RuntimeCode implements RuntimeScalarReference {
     public Method methodObject;
     public Object codeObject; // apply() needs this
     public String prototype;
+    public List<String> attributes = new ArrayList<>();
 
-    public RuntimeCode(String prototype) {
+    public RuntimeCode(String prototype, List<String> attributes) {
         this.prototype = prototype;
+        this.attributes = attributes;
     }
 
     public RuntimeCode(Method methodObject, Object codeObject) {

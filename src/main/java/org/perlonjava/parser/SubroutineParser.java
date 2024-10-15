@@ -35,12 +35,14 @@ public class SubroutineParser {
         // Check if the subroutine exists in the global namespace
         boolean subExists = GlobalContext.existsGlobalCodeRef(fullName);
         String prototype = null;
+        List<String> attributes = null;
         if (subExists) {
             // Fetch the subroutine reference
             RuntimeScalar codeRef = GlobalContext.getGlobalCodeRef(fullName);
             prototype = ((RuntimeCode) codeRef.value).prototype;
+            attributes = ((RuntimeCode) codeRef.value).attributes;
         }
-        parser.ctx.logDebug("SubroutineCall exists " + subExists + " prototype `" + prototype + "`");
+        parser.ctx.logDebug("SubroutineCall exists " + subExists + " prototype `" + prototype + "` attributes " + attributes);
 
         // Check if the subroutine call has parentheses
         boolean hasParentheses = parser.peek().text.equals("(");
@@ -139,7 +141,7 @@ public class SubroutineParser {
 
             // register the named subroutine
             String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
-            RuntimeCode codeRef = new RuntimeCode(prototype);
+            RuntimeCode codeRef = new RuntimeCode(prototype, attributes);
             GlobalContext.getGlobalCodeRef(fullName).set(new RuntimeScalar(codeRef));
 
             // return typeglob assignment

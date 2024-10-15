@@ -63,6 +63,13 @@ public class LValueVisitor implements Visitor {
             case "%":   // %a
                 context = RuntimeContextType.LIST;
                 break;
+            case "&":
+//                if (node.attributes.contains("lvalue")) {
+//                    // lvalue subroutine
+//                    context = RuntimeContextType.SCALAR;
+//                } else {
+//                }
+                break;
             case "$":   // $a $$a
             case "*":  // typeglob
             case "vec":
