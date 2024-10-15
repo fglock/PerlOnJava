@@ -24,20 +24,6 @@ public class PerlExecutionTest {
     private PrintStream originalOut;
     private ByteArrayOutputStream outputStream;
 
-    @BeforeEach
-    void setUp() {
-        originalOut = System.out;
-        outputStream = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(outputStream));
-        RuntimeIO.setCustomOutputStream(outputStream); // Set custom OutputStream in RuntimeIO
-    }
-
-    @AfterEach
-    void tearDown() {
-        System.setOut(originalOut);
-        RuntimeIO.setCustomOutputStream(System.out); // Reset to original System.out
-    }
-
     static Stream<String> providePerlScripts() throws URISyntaxException, IOException {
         URI uri = PerlExecutionTest.class.getResource("/").toURI();
         Path myPath;
@@ -50,6 +36,20 @@ public class PerlExecutionTest {
         return Files.walk(myPath)
                 .filter(path -> path.toString().endsWith(".pl"))
                 .map(path -> path.getFileName().toString());
+    }
+
+    @BeforeEach
+    void setUp() {
+        originalOut = System.out;
+        outputStream = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(outputStream));
+        RuntimeIO.setCustomOutputStream(outputStream); // Set custom OutputStream in RuntimeIO
+    }
+
+    @AfterEach
+    void tearDown() {
+        System.setOut(originalOut);
+        RuntimeIO.setCustomOutputStream(System.out); // Reset to original System.out
     }
 
     @ParameterizedTest(name = "Test using resource file: {0}")
