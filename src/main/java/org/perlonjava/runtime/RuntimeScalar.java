@@ -368,7 +368,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case UNDEF:
                 return 0L;
             default:
-                return (long) ((RuntimeScalarReference) value).getIntRef();
+                return ((RuntimeScalarReference) value).getIntRef();
         }
     }
 
