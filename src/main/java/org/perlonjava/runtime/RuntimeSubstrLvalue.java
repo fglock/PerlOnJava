@@ -5,17 +5,21 @@ package org.perlonjava.runtime;
  * This class allows for modification of a specific portion of a string within a RuntimeScalar.
  */
 public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
-    /** The starting position of the substring within the parent string. */
+    /**
+     * The starting position of the substring within the parent string.
+     */
     private final int offset;
 
-    /** The length of the substring. */
+    /**
+     * The length of the substring.
+     */
     private final int length;
 
     /**
      * Constructs a new RuntimeSubstrLvalue.
      *
      * @param parent The parent RuntimeScalar containing the original string.
-     * @param str The substring value.
+     * @param str    The substring value.
      * @param offset The starting position of the substring within the parent string.
      * @param length The length of the substring.
      */
@@ -32,7 +36,8 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
      * Vivification method (currently empty as substrings don't require vivification).
      */
     @Override
-    void vivify() {}
+    void vivify() {
+    }
 
     /**
      * Sets the value of this substring and updates the parent string accordingly.
