@@ -935,7 +935,7 @@ public class Parser {
                 // looks like a fractional number, not an infix `.`
                 ctx.logDebug("parseZeroOrMoreList looks like Number");
             } else {
-                // subroutine call with zero arguments, followed by infix operator
+                // subroutine call with zero arguments, followed by infix operator: `pos = 3`
                 ctx.logDebug("parseZeroOrMoreList return zero at `" + tokens.get(tokenIndex) + "`");
                 // if (LVALUE_INFIX_OP.contains(token.text)) {
                 //    throw new PerlCompilerException(tokenIndex, "Can't modify non-lvalue subroutine call", ctx.errorUtil);
