@@ -331,7 +331,7 @@ file.
     - Emulate Perl behaviour with unsigned integers in bitwise operators.
     - Regex `m?pat?` match-once is implemented.
     - Added `__SUB__` operator.
-    - WIP: sockets
+    - WIP: sockets, `pos`.
     - Add support for concurrency and parallelism, such as threads and async/await.
     - Enhance security features, including sandboxing and input validation.
     - Increase test coverage and introduce automated testing tools.
