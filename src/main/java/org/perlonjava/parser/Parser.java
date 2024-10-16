@@ -426,6 +426,10 @@ public class Parser {
                 // Handle operators with 3 mandatory arguments
                 operand = ListParser.parseZeroOrMoreList(this, 3, false, true, false, false);
                 return new OperatorNode(token.text, operand, currentIndex);
+            case "socket":
+                // Handle operators with 4 mandatory arguments
+                operand = ListParser.parseZeroOrMoreList(this, 4, false, true, false, false);
+                return new OperatorNode(token.text, operand, currentIndex);
             case "bless":
                 operand = ListParser.parseZeroOrMoreList(this, 1, false, true, false, false);
                 Node ref = ((ListNode) operand).elements.get(0);
