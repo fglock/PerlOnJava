@@ -4,6 +4,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.perlonjava.astnode.BinaryOperatorNode;
+import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.astnode.SubroutineNode;
 import org.perlonjava.runtime.RuntimeCode;
 import org.perlonjava.runtime.RuntimeContextType;
@@ -175,6 +176,32 @@ public class EmitSubroutine {
             // Transform the value in the stack to RuntimeScalar
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+            // Remove the value from the stack
+            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+        }
+    }
+
+    /**
+     * Handles the `__SUB__` operator.
+     */
+    static void handleSelfCallOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
+        emitterVisitor.ctx.logDebug("handleSelfCallOperator " + node + " in context " + emitterVisitor.ctx.contextType);
+
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+
+        // Load 'this' (the current RuntimeCode instance)
+        mv.visitVarInsn(Opcodes.ALOAD, 0); // Assuming 'this' is at index 0
+
+        // Call RuntimeCode.makeCodeObject(this)
+        mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/RuntimeCode",
+                "makeCodeObject",
+                "(Ljava/lang/Object;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                false);
+
+        // Now we have a RuntimeScalar representing the current subroutine (__SUB__)
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             // Remove the value from the stack
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
         }

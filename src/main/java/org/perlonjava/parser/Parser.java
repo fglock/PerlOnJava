@@ -347,6 +347,7 @@ public class Parser {
                 return new StringNode(ctx.compilerOptions.fileName, tokenIndex);
             case "__PACKAGE__":
                 return new StringNode(ctx.symbolTable.getCurrentPackage(), tokenIndex);
+            case "__SUB__":
             case "time":
             case "times":
             case "fork":

@@ -694,6 +694,9 @@ public class EmitterVisitor implements Visitor {
         ctx.logDebug("visit(OperatorNode) " + operator + " in context " + ctx.contextType);
 
         switch (operator) {
+            case "__SUB__":
+                EmitSubroutine.handleSelfCallOperator(this, node);
+                break;
             case "package":
                 EmitOperator.handlePackageOperator(this, node);
                 break;
