@@ -327,14 +327,18 @@ file.
     - Planned release date: 2024-12-10
     - Added bitwise string operators.
     - Added lvalue `substr`, lvalue `vec`
-    - Fix `b` specifier in `sprintf`
+    - Fix `%b` specifier in `sprintf`
     - Emulate Perl behaviour with unsigned integers in bitwise operators.
     - Regex `m?pat?` match-once is implemented.
     - Added `__SUB__` operator.
-    - WIP: sockets, `pos`.
-    - Add support for concurrency and parallelism, such as threads and async/await.
-    - Enhance security features, including sandboxing and input validation.
-    - Increase test coverage and introduce automated testing tools.
+    - Tests in `src/test/resources` are executed automatically.
+    - Work in progress: 
+        - `socket` and related operators
+        - `pos` operator and regex `\G`.
+    - Stretch goals
+        - Add support for concurrency and parallelism, such as threads and async/await.
+        - Enhance security features, including sandboxing and input validation.
+        - Increase test coverage and introduce automated testing tools.
 
 - **v1.10.0**: External Integration and Advanced Data Manipulation
     - Integrate with external libraries and APIs for tasks like HTTP requests and database access.
