@@ -394,6 +394,7 @@ public class Parser {
             case "rmdir":
             case "glob":
             case "caller":
+            case "pos":
                 return parseOperatorWithOneOptionalArgument(token);
             case "unpack":
                 // Handle operators with one mandatory, one optional argument
