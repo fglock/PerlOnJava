@@ -937,9 +937,9 @@ public class Parser {
             } else {
                 // subroutine call with zero arguments, followed by infix operator
                 ctx.logDebug("parseZeroOrMoreList return zero at `" + tokens.get(tokenIndex) + "`");
-                if (LVALUE_INFIX_OP.contains(token.text)) {
-                    throw new PerlCompilerException(tokenIndex, "Can't modify non-lvalue subroutine call", ctx.errorUtil);
-                }
+                // if (LVALUE_INFIX_OP.contains(token.text)) {
+                //    throw new PerlCompilerException(tokenIndex, "Can't modify non-lvalue subroutine call", ctx.errorUtil);
+                // }
                 isEmptyList = true;
             }
         }
