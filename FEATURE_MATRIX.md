@@ -132,6 +132,7 @@
 - ✔️   **Special variables**: The special variables `$1`, `$2`... are implemented.
 - ✔️   **Transliteration**: `tr` and `y` transliteration operators are implemented.
 - ❌  **`pos`**: `pos` operator is not implemented.
+- ❌  **`\G`**: `\G` operator in regex is not implemented.
 - ❌  **lvalue `pos`**: lvalue `pos` operator is not implemented.
 - ❌  **Perl-specific Regex Features**: Some features like `/xx` `/ee` are missing.
 - ✔️   **`m?pat?`** one-time match is implemented.
