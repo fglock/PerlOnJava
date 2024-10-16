@@ -13,10 +13,10 @@ public interface RuntimeScalarReference {
     String toStringRef();
 
     /**
-     * Retrieves the long value of the scalar reference.
-     * If the value cannot be converted to a long, it should return a default or converted value.
+     * Retrieves the int value of the scalar reference.
+     * If the value cannot be converted to a int, it should return a default or converted value.
      *
-     * @return The long representation of the scalar reference. In general, this is the hash value of the object.
+     * @return The int representation of the scalar reference. In general, this is the hash value of the object.
      */
     int getIntRef();
 
