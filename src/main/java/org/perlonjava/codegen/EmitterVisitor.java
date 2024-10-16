@@ -782,6 +782,7 @@ public class EmitterVisitor implements Visitor {
             case "telldir":
             case "closedir":
             case "rmdir":
+            case "pos":
                 handleUnaryBuiltin(node, operator);
                 break;
             case "chop":

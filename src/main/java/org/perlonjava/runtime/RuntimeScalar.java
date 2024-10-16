@@ -1542,6 +1542,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(str.substring(0, 1).toUpperCase() + str.substring(1));
     }
 
+    public RuntimeScalar pos() {
+        return RuntimePosLvalue.pos(this);
+    }
+
     public RuntimeScalar oct() {
         String expr = this.toString();
         int result = 0;
