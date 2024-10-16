@@ -18,7 +18,7 @@ public class RuntimePosLvalue {
      * It uses a LinkedHashMap to maintain insertion order and automatically remove the eldest entry
      * when the cache exceeds the maximum size.
      */
-    private static final Map<RuntimeScalar, RuntimeScalar> positionCache = new LinkedHashMap<RuntimeScalar, RuntimeScalar>(MAX_CACHE_SIZE, 0.75f, true) {
+    private static final Map<RuntimeScalar, RuntimeScalar> positionCache = new LinkedHashMap<>(MAX_CACHE_SIZE, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<RuntimeScalar, RuntimeScalar> eldest) {
             // Remove the eldest entry if the cache size exceeds the maximum limit
