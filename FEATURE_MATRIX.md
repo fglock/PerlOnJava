@@ -172,7 +172,7 @@
 - 🚧  **`use` and `no` statements**: Module imports and version check via `use` and `no` are partially implemented; version checks are not implemented..
 - ✔️   **`caller` operator**: `caller` returns ($package, $filename, $line). The remaining results are undef. This means we don't include subroutine names in error messages yet.
 - ✔️   **Import methods**: `import`, `unimport` works.
-- ❌  **`__SUB__`**: The `__SUB__` special variable is not yet supported.
+- ✔️   **`__SUB__`**: The `__SUB__` keyword works.
 - ❌  **`BEGIN` block**: `BEGIN`, `END` and other special blocks are missing.
 - ✔️   **Labels**: Labels are implemented.
 - ❌  **Here-docs**: Here-docs for multiline string literals are not yet implemented.
