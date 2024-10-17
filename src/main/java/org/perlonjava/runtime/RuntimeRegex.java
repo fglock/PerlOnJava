@@ -52,7 +52,14 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 regex.isGlobalMatch = modifiers.contains("g");
                 regex.isNonDestructive = modifiers.contains("r");
                 regex.isMatchExactlyOnce = modifiers.contains("?");
-                regex.pattern = Pattern.compile(patternString, flags);
+
+                // Check for \G and set useGAssertion
+                regex.useGAssertion = patternString.contains("\\G");
+
+                // Remove \G from the pattern string for Java compilation
+                String javaPatternString = patternString.replace("\\G", "");
+
+                regex.pattern = Pattern.compile(javaPatternString, flags);
             } catch (Exception e) {
                 throw new IllegalStateException("Regex compilation failed: " + e.getMessage());
             }
@@ -61,11 +68,9 @@ public class RuntimeRegex implements RuntimeScalarReference {
             if (regexCache.size() < MAX_REGEX_CACHE_SIZE) {
                 regexCache.put(cacheKey, regex);
             }
-
         }
         return regex;
     }
-
     /**
      * Creates a Perl "qr" object from a regex pattern string with optional modifiers.
      * `my $v = qr/abc/i;`
