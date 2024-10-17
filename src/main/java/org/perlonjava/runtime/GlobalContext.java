@@ -8,6 +8,8 @@ import org.perlonjava.perlmodule.Universal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.RuntimeIO.initStdHandles;
 
@@ -22,6 +24,9 @@ public class GlobalContext {
     private static final Map<String, RuntimeHash> globalHashes = new HashMap<>();
     private static final Map<String, RuntimeScalar> globalCodeRefs = new HashMap<>();
     private static final Map<String, RuntimeScalar> globalIORefs = new HashMap<>();
+
+    // Regular expression for regex variables like $main::1
+    static Pattern regexVariablePattern = Pattern.compile("^main::(\\d+)$");
 
     public static void initializeGlobals(ArgumentParser.CompilerOptions compilerOptions) {
 
@@ -43,9 +48,6 @@ public class GlobalContext {
         getGlobalVariable("main::/").set("\n"); // initialize $/ to newline
         getGlobalVariable("main::$").set(ProcessHandle.current().pid()); // initialize $$ to process id
         getGlobalVariable("main::0").set(compilerOptions.fileName);
-        for (int i = 1; i <= 10; i++) {
-            globalVariables.put("main::" + i, new RuntimeScalarRegexVariable(i));
-        }
 
         // Initialize arrays
         getGlobalArray("main::+");  // regex @+
@@ -86,7 +88,20 @@ public class GlobalContext {
     public static RuntimeScalar getGlobalVariable(String key) {
         RuntimeScalar var = globalVariables.get(key);
         if (var == null) {
-            var = new RuntimeScalar();
+            // Need to initialize global variable
+            Matcher matcher = regexVariablePattern.matcher(key);
+            if (matcher.matches()) {
+                // Regex capture variable like $1
+                // Extract the numeric capture group as a string
+                String capturedNumber = matcher.group(1);
+                // Convert the capture group to an integer
+                int position = Integer.parseInt(capturedNumber);
+                // Initialize the regex capture variable
+                var = new RuntimeScalarRegexVariable(position);
+            } else {
+                // Normal "non-magic" global variable
+                var = new RuntimeScalar();
+            }
             globalVariables.put(key, var);
         }
         return var;
