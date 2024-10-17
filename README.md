@@ -331,6 +331,7 @@ file.
     - Emulate Perl behaviour with unsigned integers in bitwise operators.
     - Regex `m?pat?` match-once and the `reset()` operator are implemented.
     - Regex `\G` and the `pos` operator are implemented.
+    - Regex `@-` and `@+` special variables are implemented.
     - Added `__SUB__` operator.
     - Tests in `src/test/resources` are executed automatically.
     - Work in progress: 

@@ -44,6 +44,10 @@ public class GlobalContext {
         getGlobalVariable("main::$").set(ProcessHandle.current().pid()); // initialize $$ to process id
         getGlobalVariable("main::0").set(compilerOptions.fileName);
 
+        // Initialize arrays
+        getGlobalArray("main::+");  // regex @+
+        getGlobalArray("main::-");  // regex @-
+
         // Initialize %ENV
         Map<String, RuntimeScalar> env = getGlobalHash("main::ENV").elements;
         System.getenv().forEach((k, v) -> env.put(k, new RuntimeScalar(v)));
