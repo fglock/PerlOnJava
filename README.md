@@ -329,12 +329,11 @@ file.
     - Added lvalue `substr`, lvalue `vec`
     - Fix `%b` specifier in `sprintf`
     - Emulate Perl behaviour with unsigned integers in bitwise operators.
-    - Regex `m?pat?` match-once is implemented.
+    - Regex `m?pat?` match-once is implemented; `pos` operator and regex `\G` are implemented.
     - Added `__SUB__` operator.
     - Tests in `src/test/resources` are executed automatically.
     - Work in progress: 
         - `socket` and related operators
-        - `pos` operator and regex `\G`.
     - Stretch goals
         - Add support for concurrency and parallelism, such as threads and async/await.
         - Enhance security features, including sandboxing and input validation.

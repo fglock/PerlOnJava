@@ -11,6 +11,8 @@ import static java.util.regex.Pattern.COMMENTS;
 /**
  * RuntimeRegex class to implement Perl's qr// operator for regular expression handling,
  * including support for regex modifiers like /i, /g, and /e.
+ * This class provides methods to compile, cache, and apply regular expressions
+ * with Perl-like syntax and behavior.
  */
 public class RuntimeRegex implements RuntimeScalarReference {
 
@@ -26,20 +28,21 @@ public class RuntimeRegex implements RuntimeScalarReference {
         }
     };
 
-    public Pattern pattern;  // first part of `m//` and `s///`
-    boolean isGlobalMatch;
-    boolean isNonDestructive;
-    boolean isMatchExactlyOnce; // flag for `m?PAT?` (matches exactly once)
-    private RuntimeScalar replacement = null;  // second part of `s///`
-    private boolean matched = false; // counter for `m?PAT?` (matches exactly once)
-    private boolean useGAssertion = false;  // regex has `\G`
+    public Pattern pattern;  // Compiled regex pattern
+    boolean isGlobalMatch;   // Flag for global matching
+    boolean isNonDestructive; // Flag for non-destructive substitution
+    boolean isMatchExactlyOnce; // Flag for matching exactly once
+    private RuntimeScalar replacement = null;  // Replacement string for substitutions
+    private boolean matched = false; // Tracks if a match has occurred
+    private boolean useGAssertion = false;  // Indicates if \G assertion is used
 
     /**
-     * Creates a RuntimeRegex object from a regex pattern string with optional modifiers.
+     * Compiles a regex pattern string with optional modifiers into a RuntimeRegex object.
      *
      * @param patternString The regex pattern string with optional modifiers.
      * @param modifiers     Modifiers for the regex pattern (e.g., "i", "g").
      * @return A RuntimeRegex object.
+     * @throws IllegalStateException if regex compilation fails.
      */
     public static RuntimeRegex compile(String patternString, String modifiers) {
         String cacheKey = patternString + "/" + modifiers;
@@ -71,6 +74,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
         }
         return regex;
     }
+
     /**
      * Creates a Perl "qr" object from a regex pattern string with optional modifiers.
      * `my $v = qr/abc/i;`
@@ -83,24 +87,30 @@ public class RuntimeRegex implements RuntimeScalarReference {
         return new RuntimeScalar(compile(patternString.toString(), modifiers.toString()));
     }
 
-    // Internal variant of qr// that includes a `replacement`
-    // This is the internal representation of the `s///` operation
+    /**
+     * Internal variant of qr// that includes a `replacement`.
+     * This is the internal representation of the `s///` operation.
+     *
+     * @param patternString The regex pattern string.
+     * @param replacement   The replacement string.
+     * @param modifiers     Modifiers for the regex pattern.
+     * @return A RuntimeScalar representing the compiled regex with replacement.
+     */
     public static RuntimeScalar getReplacementRegex(RuntimeScalar patternString, RuntimeScalar replacement, RuntimeScalar modifiers) {
-        RuntimeRegex regex = new RuntimeRegex();
-        regex = compile(patternString.toString(), modifiers.toString());
+        RuntimeRegex regex = compile(patternString.toString(), modifiers.toString());
         regex.replacement = replacement;
         return new RuntimeScalar(regex);
     }
 
     /**
      * Applies a Perl "qr" object on a string; returns true/false or a list,
-     * and produces side-effects
+     * and produces side-effects.
      * `my $v =~ /$qr/;`
      *
-     * @param quotedRegex The regex pattern object, created by getQuotedRegex()
+     * @param quotedRegex The regex pattern object, created by getQuotedRegex().
      * @param string      The string to be matched.
-     * @param ctx         The context LIST, SCALAR, VOID
-     * @return A RuntimeScalar or RuntimeList
+     * @param ctx         The context LIST, SCALAR, VOID.
+     * @return A RuntimeScalar or RuntimeList.
      */
     public static RuntimeDataProvider matchRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
         RuntimeRegex regex = (RuntimeRegex) quotedRegex.value;
@@ -148,11 +158,11 @@ public class RuntimeRegex implements RuntimeScalarReference {
             found = true;
             int captureCount = matcher.groupCount();
             if (regex.isGlobalMatch && captureCount < 1 && ctx == RuntimeContextType.LIST) {
-                // global match and no captures, in list context return the matched string
+                // Global match and no captures, in list context return the matched string
                 String matchedStr = matcher.group(0);
                 matchedGroups.add(new RuntimeScalar(matchedStr));
             } else {
-                // initialize $1, $2 are save captures in return list if needed
+                // Initialize $1, $2 and save captures in return list if needed
                 for (int i = 1; i <= captureCount; i++) {
                     String matchedStr = matcher.group(i);
                     if (matchedStr != null) {
@@ -179,11 +189,13 @@ public class RuntimeRegex implements RuntimeScalarReference {
             if (!regex.isGlobalMatch) {
                 break;
             }
-        }        // System.out.println("Undefine capture $" + capture);
+        }
+
+        // Undefine capture variables beyond the last match
         GlobalContext.getGlobalVariable("main::" + capture++).set(RuntimeScalarCache.scalarUndef);
 
         if (found) {
-            regex.matched = true;    // counter for m?PAT?
+            regex.matched = true; // Counter for m?PAT?
         }
 
         if (ctx == RuntimeContextType.LIST) {
@@ -199,10 +211,10 @@ public class RuntimeRegex implements RuntimeScalarReference {
      * Applies a Perl "s///" substitution on a string.
      * `my $v =~ s/$pattern/$replacement/;`
      *
-     * @param quotedRegex The regex pattern object, created by getReplacementRegex()
+     * @param quotedRegex The regex pattern object, created by getReplacementRegex().
      * @param string      The string to be modified.
-     * @param ctx         The context LIST, SCALAR, VOID
-     * @return A RuntimeScalar or RuntimeList
+     * @param ctx         The context LIST, SCALAR, VOID.
+     * @return A RuntimeScalar or RuntimeList.
      */
     public static RuntimeBaseEntity replaceRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
         // Convert the input string to a Java string
@@ -232,11 +244,9 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 for (int i = 1; i <= captureCount; i++) {
                     String matchedStr = matcher.group(i);
                     if (matchedStr != null) {
-                        // System.out.println("Set capture $" + capture + " to <" + matchedStr + ">");
                         GlobalContext.setGlobalVariable("main::" + capture++, matchedStr);
                     }
                 }
-                // System.out.println("Undefine capture $" + capture);
                 GlobalContext.getGlobalVariable("main::" + capture++).set(RuntimeScalarCache.scalarUndef);
             }
 
@@ -326,4 +336,3 @@ public class RuntimeRegex implements RuntimeScalarReference {
         return flags;
     }
 }
-
