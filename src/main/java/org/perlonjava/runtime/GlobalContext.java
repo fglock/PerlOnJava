@@ -43,6 +43,9 @@ public class GlobalContext {
         getGlobalVariable("main::/").set("\n"); // initialize $/ to newline
         getGlobalVariable("main::$").set(ProcessHandle.current().pid()); // initialize $$ to process id
         getGlobalVariable("main::0").set(compilerOptions.fileName);
+        for (int i = 1; i <= 10; i++) {
+            globalVariables.put("main::" + i, new RuntimeScalarRegexVariable(i));
+        }
 
         // Initialize arrays
         getGlobalArray("main::+");  // regex @+
