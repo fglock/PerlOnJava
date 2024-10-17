@@ -33,7 +33,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
     boolean isNonDestructive; // Flag for non-destructive substitution
     boolean isMatchExactlyOnce; // Flag for matching exactly once
     private RuntimeScalar replacement = null;  // Replacement string for substitutions
-    private boolean matched = false; // Tracks if a match has occurred
+    private boolean matched = false; // Tracks if a match has occurred: this is used as a counter for m?PAT?
     private boolean useGAssertion = false;  // Indicates if \G assertion is used
 
     /**
@@ -334,5 +334,14 @@ public class RuntimeRegex implements RuntimeScalarReference {
         // /g (global) is not an actual flag for Pattern, it's used for matching multiple occurrences.
         // /r (non-destructive) is also not an actual flag for Pattern, it returns the replacement.
         return flags;
+    }
+
+    // Method to implement Perl's reset() function
+    public static void reset() {
+        // Iterate over the regexCache and reset the `matched` flag for each cached regex
+        for (Map.Entry<String, RuntimeRegex> entry : regexCache.entrySet()) {
+            RuntimeRegex regex = entry.getValue();
+            regex.matched = false; // Reset the matched field
+        }
     }
 }

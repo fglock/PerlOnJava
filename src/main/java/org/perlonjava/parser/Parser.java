@@ -394,6 +394,7 @@ public class Parser {
             case "rmdir":
             case "glob":
             case "caller":
+            case "reset":
             case "pos":
                 return parseOperatorWithOneOptionalArgument(token);
             case "unpack":
@@ -574,6 +575,7 @@ public class Parser {
                 case "localtime":
                 case "gmtime":
                 case "caller":
+                case "reset":
                     // default to empty list
                     break;
                 case "srand":
