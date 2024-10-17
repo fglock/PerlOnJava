@@ -180,10 +180,6 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 for (int i = 1; i <= captureCount; i++) {
                     String matchedStr = matcher.group(i);
                     if (matchedStr != null) {
-                        if (i > 10) {
-                            GlobalContext.setGlobalVariable("main::" + capture++, matchedStr);
-                        }
-
                         // Store start and end positions in @- and @+
                         atMinus.set(i, new RuntimeScalar(matcher.start(i)));
                         atPlus.set(i, new RuntimeScalar(matcher.end(i)));
@@ -210,11 +206,6 @@ public class RuntimeRegex implements RuntimeScalarReference {
             if (!regex.isGlobalMatch) {
                 break;
             }
-        }
-
-        // Undefine capture variables beyond the last match
-        if (capture > 10) {
-            GlobalContext.getGlobalVariable("main::" + capture++).set(RuntimeScalarCache.scalarUndef);
         }
 
         if (found) {
@@ -261,22 +252,8 @@ public class RuntimeRegex implements RuntimeScalarReference {
         while (matcher.find()) {
             found++;
 
-            // Initialize $1, $2 if needed
-            int captureCount = matcher.groupCount();
-            if (captureCount > 0) {
-                globalMatcher = matcher;
-
-                int capture = 1;
-                for (int i = 1; i <= captureCount; i++) {
-                    String matchedStr = matcher.group(i);
-                    if (matchedStr != null && i > 10) {
-                        GlobalContext.setGlobalVariable("main::" + capture++, matchedStr);
-                    }
-                }
-                if (capture > 10) {
-                    GlobalContext.getGlobalVariable("main::" + capture++).set(RuntimeScalarCache.scalarUndef);
-                }
-            }
+            // Initialize $1, $2
+            globalMatcher = matcher;
 
             String replacementStr;
             if (replacementIsCode) {
