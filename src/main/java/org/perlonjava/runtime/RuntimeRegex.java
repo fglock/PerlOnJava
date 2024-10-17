@@ -149,6 +149,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
 
         int capture = 1;
         int previousPos = startPos; // Track the previous position
+        RuntimeScalarRegexVariable.matcher = null;
 
         while (matcher.find()) {
             // If \G is used, ensure the match starts at the expected position
@@ -165,6 +166,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
             } else {
                 // Initialize $1, $2 and save captures in return list if needed
                 // Also initialize @+, @-
+                RuntimeScalarRegexVariable.matcher = matcher;
 
                 // Store start and end positions in @- and @+
                 RuntimeArray atMinus = GlobalContext.getGlobalArray("main::-");
@@ -177,7 +179,9 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 for (int i = 1; i <= captureCount; i++) {
                     String matchedStr = matcher.group(i);
                     if (matchedStr != null) {
-                        GlobalContext.setGlobalVariable("main::" + capture++, matchedStr);
+                        if (i > 10) {
+                            GlobalContext.setGlobalVariable("main::" + capture++, matchedStr);
+                        }
 
                         // Store start and end positions in @- and @+
                         atMinus.set(i, new RuntimeScalar(matcher.start(i)));
@@ -192,7 +196,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
 
             if (regex.isGlobalMatch) {
                 // Update the position for the next match
-                if (ctx == RuntimeContextType.SCALAR) {
+                if (ctx == RuntimeContextType.SCALAR || ctx == RuntimeContextType.VOID) {
                     // Set pos to the end of the current match to prepare for the next search
                     posScalar.set(matcher.end());
                     break; // Break out of the loop after the first match in SCALAR context
@@ -208,7 +212,9 @@ public class RuntimeRegex implements RuntimeScalarReference {
         }
 
         // Undefine capture variables beyond the last match
-        GlobalContext.getGlobalVariable("main::" + capture++).set(RuntimeScalarCache.scalarUndef);
+        if (capture > 10) {
+            GlobalContext.getGlobalVariable("main::" + capture++).set(RuntimeScalarCache.scalarUndef);
+        }
 
         if (found) {
             regex.matched = true; // Counter for m?PAT?
@@ -248,6 +254,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
 
         // Determine if the replacement is a code that needs to be evaluated
         boolean replacementIsCode = (replacement.type == RuntimeScalarType.CODE);
+        RuntimeScalarRegexVariable.matcher = null;
 
         // Perform the substitution
         while (matcher.find()) {
@@ -256,14 +263,18 @@ public class RuntimeRegex implements RuntimeScalarReference {
             // Initialize $1, $2 if needed
             int captureCount = matcher.groupCount();
             if (captureCount > 0) {
+                RuntimeScalarRegexVariable.matcher = matcher;
+
                 int capture = 1;
                 for (int i = 1; i <= captureCount; i++) {
                     String matchedStr = matcher.group(i);
-                    if (matchedStr != null) {
+                    if (matchedStr != null && i > 10) {
                         GlobalContext.setGlobalVariable("main::" + capture++, matchedStr);
                     }
                 }
-                GlobalContext.getGlobalVariable("main::" + capture++).set(RuntimeScalarCache.scalarUndef);
+                if (capture > 10) {
+                    GlobalContext.getGlobalVariable("main::" + capture++).set(RuntimeScalarCache.scalarUndef);
+                }
             }
 
             String replacementStr;

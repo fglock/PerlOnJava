@@ -45,12 +45,13 @@ public class RuntimePosLvalue {
         CacheEntry cachedEntry = positionCache.get(perlVariable);
 
         // Check if the value is missing or it has changed
-        if (cachedEntry == null || cachedEntry.valueHash != perlVariable.value.hashCode()) {
+        int code = perlVariable.value == null ? 0 : perlVariable.value.hashCode();
+        if (cachedEntry == null || cachedEntry.valueHash != code) {
             // If the position is not cached or the value has changed,
             // create a new undefined RuntimeScalar to represent the position
             position = new RuntimeScalar();
             // Cache the new position with the current hash of the value
-            positionCache.put(perlVariable, new CacheEntry(perlVariable.value.hashCode(), position));
+            positionCache.put(perlVariable, new CacheEntry(code, position));
         } else {
             // Use the cached position if the value has not changed
             position = cachedEntry.regexPosition;
