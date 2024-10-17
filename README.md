@@ -329,7 +329,8 @@ file.
     - Added lvalue `substr`, lvalue `vec`
     - Fix `%b` specifier in `sprintf`
     - Emulate Perl behaviour with unsigned integers in bitwise operators.
-    - Regex `m?pat?` match-once is implemented; `pos` operator and regex `\G` are implemented.
+    - Regex `m?pat?` match-once and the `reset()` operator are implemented.
+    - Regex `\G` and the `pos` operator are implemented.
     - Added `__SUB__` operator.
     - Tests in `src/test/resources` are executed automatically.
     - Work in progress: 
