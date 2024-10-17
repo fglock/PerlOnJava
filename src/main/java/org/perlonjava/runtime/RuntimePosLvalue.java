@@ -12,6 +12,7 @@ public class RuntimePosLvalue {
 
     // Maximum size of the cache to prevent excessive memory usage
     private static final int MAX_CACHE_SIZE = 1000;
+
     /**
      * A cache that stores the position of {@code RuntimeScalar} values and their hashes.
      * It uses a LinkedHashMap to maintain insertion order and automatically remove the eldest entry
@@ -33,6 +34,11 @@ public class RuntimePosLvalue {
      * @return the cached or newly created {@code RuntimeScalar} representing the position
      */
     public static RuntimeScalar pos(RuntimeScalar perlVariable) {
+        // Validate input
+        if (perlVariable == null) {
+            throw new IllegalArgumentException("perlVariable cannot be null");
+        }
+
         RuntimeScalar position;
 
         // Retrieve the cached entry for the given value
