@@ -138,6 +138,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
         List<RuntimeBaseEntity> matchedGroups = result.elements;
 
         int capture = 1;
+        int previousPos = startPos; // Track the previous position
         while (matcher.find()) {
             // If \G is used, ensure the match starts at the expected position
             if (regex.useGAssertion && isPosDefined && matcher.start() != startPos) {
@@ -155,7 +156,6 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 for (int i = 1; i <= captureCount; i++) {
                     String matchedStr = matcher.group(i);
                     if (matchedStr != null) {
-                        // System.out.println("Set capture $" + capture + " to <" + matchedStr + ">");
                         GlobalContext.setGlobalVariable("main::" + capture++, matchedStr);
                         if (ctx == RuntimeContextType.LIST) {
                             matchedGroups.add(new RuntimeScalar(matchedStr));
@@ -163,15 +163,23 @@ public class RuntimeRegex implements RuntimeScalarReference {
                     }
                 }
             }
+
+            if (regex.isGlobalMatch) {
+                // Update the position for the next match
+                if (ctx == RuntimeContextType.SCALAR) {
+                    // Set pos to the end of the current match to prepare for the next search
+                    posScalar.set(matcher.end());
+                    break; // Break out of the loop after the first match in SCALAR context
+                } else {
+                    startPos = matcher.end();
+                    posScalar.set(startPos);
+                }
+            }
+
             if (!regex.isGlobalMatch) {
                 break;
-            } else {
-                // Update the position for the next match
-                startPos = matcher.end();
-                posScalar.set(startPos);
             }
-        }
-        // System.out.println("Undefine capture $" + capture);
+        }        // System.out.println("Undefine capture $" + capture);
         GlobalContext.getGlobalVariable("main::" + capture++).set(RuntimeScalarCache.scalarUndef);
 
         if (found) {
