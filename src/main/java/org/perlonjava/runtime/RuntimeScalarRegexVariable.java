@@ -1,12 +1,6 @@
 package org.perlonjava.runtime;
 
-import java.util.regex.Matcher;
-
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
-
 public class RuntimeScalarRegexVariable extends RuntimeBaseProxy {
-
-    public static Matcher matcher;
 
     final int position;
 
@@ -32,10 +26,10 @@ public class RuntimeScalarRegexVariable extends RuntimeBaseProxy {
 
     public String getStringValue() {
         try {
-            if (matcher == null || position > matcher.groupCount()) {
+            if (RuntimeRegex.globalMatcher == null || position > RuntimeRegex.globalMatcher.groupCount()) {
                 return null;
             }
-            return matcher.group(position);
+            return RuntimeRegex.globalMatcher.group(position);
         } catch (IllegalStateException e) {
             return null;
         }
