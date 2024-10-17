@@ -135,8 +135,8 @@
 - ✔️   **`\G`**: `\G` operator in regex is implemented.
 - ✔️   **lvalue `pos`**: lvalue `pos` operator is implemented.
 - ✔️   **`m?pat?`** one-time match is implemented.
+- ✔️   **`reset`** resetting one-time match is implemented
 - ❌  **Perl-specific Regex Features**: Some features like `/xx` `/ee` are missing.
-- ❌  **`reset`** resetting one-time match is not implemented
 - ❌  **`$&` variables** `` $` ``, `$&`, `$'` special variables are not implemented
 - ❌  **`@-` and `@+` variables** `@-` and `@+` special variables are not implemented
 
@@ -243,6 +243,7 @@
 - ❌  **Use string as a scalar reference**: Support for scalar references from strings is not yet implemented.
 - ❌  **`format` operator**: Format is not implemented.
 - ❌  **DBM file support**: `dbmclose`, `dbmopen` are not implemented.
+- ❌  **`reset("A-Z")`** resetting global variables is not implemented
 
 ## Features Probably Incompatible with JVM
 - ❌  **`DESTROY`**: Handling of object destruction may be incompatible with JVM garbage collection.
