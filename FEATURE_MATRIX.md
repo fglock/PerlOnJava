@@ -137,6 +137,8 @@
 - ❌  **Perl-specific Regex Features**: Some features like `/xx` `/ee` are missing.
 - ✔️   **`m?pat?`** one-time match is implemented.
 - ❌  **`reset`** resetting one-time match is not implemented
+- ❌  **`$&` variables** `` $` ``, `$&`, `$'` special variables are not implemented
+- ❌  **`@-` and `@+` variables** `@-` and `@+` special variables are not implemented
 
 ## Statements and Special Operators
 - ✔️   **Context void, scalar, list**: Contexts for void, scalar, and list are supported.
