@@ -32,6 +32,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
     boolean isMatchExactlyOnce; // flag for `m?PAT?` (matches exactly once)
     private RuntimeScalar replacement = null;  // second part of `s///`
     private boolean matched = false; // counter for `m?PAT?` (matches exactly once)
+    private boolean useGAssertion = false;  // regex has `\G`
 
     /**
      * Creates a RuntimeRegex object from a regex pattern string with optional modifiers.
@@ -114,9 +115,18 @@ public class RuntimeRegex implements RuntimeScalarReference {
         }
 
         Pattern pattern = regex.pattern;
-
         String inputStr = string.toString();
         Matcher matcher = pattern.matcher(inputStr);
+
+        // Use RuntimePosLvalue to get the current position
+        RuntimeScalar posScalar = RuntimePosLvalue.pos(string);
+        boolean isPosDefined = posScalar.getDefinedBoolean();
+        int startPos = isPosDefined ? posScalar.getInt() : 0;
+
+        // Start matching from the current position if defined
+        if (isPosDefined) {
+            matcher.region(startPos, inputStr.length());
+        }
 
         boolean found = false;
         RuntimeList result = new RuntimeList();
@@ -124,11 +134,15 @@ public class RuntimeRegex implements RuntimeScalarReference {
 
         int capture = 1;
         while (matcher.find()) {
+            // If \G is used, ensure the match starts at the expected position
+            if (regex.useGAssertion && isPosDefined && matcher.start() != startPos) {
+                break;
+            }
+
             found = true;
             int captureCount = matcher.groupCount();
             if (regex.isGlobalMatch && captureCount < 1 && ctx == RuntimeContextType.LIST) {
                 // global match and no captures, in list context return the matched string
-                // capture++;
                 String matchedStr = matcher.group(0);
                 matchedGroups.add(new RuntimeScalar(matchedStr));
             } else {
@@ -146,6 +160,10 @@ public class RuntimeRegex implements RuntimeScalarReference {
             }
             if (!regex.isGlobalMatch) {
                 break;
+            } else {
+                // Update the position for the next match
+                startPos = matcher.end();
+                posScalar.set(startPos);
             }
         }
         // System.out.println("Undefine capture $" + capture);
