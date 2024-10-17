@@ -150,10 +150,6 @@ public class RuntimeRegex implements RuntimeScalarReference {
         int capture = 1;
         int previousPos = startPos; // Track the previous position
 
-        // Initialize the special variables @- and @+ arrays
-        RuntimeArray atMinus = GlobalContext.getGlobalArray("main::-");
-        RuntimeArray atPlus = GlobalContext.getGlobalArray("main::+");
-
         while (matcher.find()) {
             // If \G is used, ensure the match starts at the expected position
             if (regex.useGAssertion && isPosDefined && matcher.start() != startPos) {
@@ -171,6 +167,8 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 // Also initialize @+, @-
 
                 // Store start and end positions in @- and @+
+                RuntimeArray atMinus = GlobalContext.getGlobalArray("main::-");
+                RuntimeArray atPlus = GlobalContext.getGlobalArray("main::+");
                 atMinus.elements.clear(); // Clear previous matches
                 atPlus.elements.clear();  // Clear previous matches
                 atMinus.set(0, new RuntimeScalar(matcher.start(0)));
