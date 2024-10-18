@@ -8,17 +8,18 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
  * MatcherViewArray provides a dynamic view over a Matcher object,
- * representing the end or start positions of each capturing group in the Matcher,
- * depending on the specified mode. This class does not store data internally
- * but queries the Matcher whenever its methods are called, ensuring it reflects
- * the current state of the Matcher.
- * <p>
- * Example:
- * // Create a RuntimeArray and assign MatcherViewArray to its elements
- * RuntimeArray runtimeArray = new RuntimeArray();
- * runtimeArray.elements = matcherViewArray;
- */
-public class MatcherViewArray extends AbstractList<RuntimeScalar> {
+ * representing the end positions of each capturing group in the Matcher.
+ * This class does not store data internally but queries the Matcher
+ * whenever its methods are called, ensuring it reflects the current state
+ * of the Matcher.
+ *
+ * <p>Example usage:</p>
+ * <pre>
+ *     // Create a RuntimeArray and assign MatcherViewArray to its elements
+ *     RuntimeArray runtimeArray = new RuntimeArray();
+ *     runtimeArray.elements = matcherViewArray;
+ * </pre>
+ */public class MatcherViewArray extends AbstractList<RuntimeScalar> {
 
     private final Mode mode;
 
