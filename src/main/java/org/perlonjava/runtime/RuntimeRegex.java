@@ -16,26 +16,41 @@ import static java.util.regex.Pattern.COMMENTS;
  */
 public class RuntimeRegex implements RuntimeScalarReference {
 
+    // Constants for regex pattern flags
     private static final int CASE_INSENSITIVE = Pattern.CASE_INSENSITIVE;
     private static final int MULTILINE = Pattern.MULTILINE;
     private static final int DOTALL = Pattern.DOTALL;
 
+    // Maximum size for the regex cache
     private static final int MAX_REGEX_CACHE_SIZE = 1000;
+
+    // Cache to store compiled regex patterns
     private static final Map<String, RuntimeRegex> regexCache = new LinkedHashMap<String, RuntimeRegex>(MAX_REGEX_CACHE_SIZE, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, RuntimeRegex> eldest) {
             return size() > MAX_REGEX_CACHE_SIZE;
         }
     };
+
+    // Global matcher used for regex operations
     public static Matcher globalMatcher;
 
-    public Pattern pattern;  // Compiled regex pattern
+    // Compiled regex pattern
+    public Pattern pattern;
+
+    // Flags for regex behavior
     boolean isGlobalMatch;   // Flag for global matching
     boolean isNonDestructive; // Flag for non-destructive substitution
     boolean isMatchExactlyOnce; // Flag for matching exactly once
-    private RuntimeScalar replacement = null;  // Replacement string for substitutions
-    private boolean matched = false; // Tracks if a match has occurred: this is used as a counter for m?PAT?
-    private boolean useGAssertion = false;  // Indicates if \G assertion is used
+
+    // Replacement string for substitutions
+    private RuntimeScalar replacement = null;
+
+    // Tracks if a match has occurred: this is used as a counter for m?PAT?
+    private boolean matched = false;
+
+    // Indicates if \G assertion is used
+    private boolean useGAssertion = false;
 
     /**
      * Compiles a regex pattern string with optional modifiers into a RuntimeRegex object.
@@ -48,6 +63,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
     public static RuntimeRegex compile(String patternString, String modifiers) {
         String cacheKey = patternString + "/" + modifiers;
 
+        // Check if the regex is already cached
         RuntimeRegex regex = regexCache.get(cacheKey);
         if (regex == null) {
             regex = new RuntimeRegex();
@@ -63,6 +79,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 // Remove \G from the pattern string for Java compilation
                 String javaPatternString = patternString.replace("\\G", "");
 
+                // Compile the regex pattern
                 regex.pattern = Pattern.compile(javaPatternString, flags);
             } catch (Exception e) {
                 throw new IllegalStateException("Regex compilation failed: " + e.getMessage());
@@ -282,7 +299,10 @@ public class RuntimeRegex implements RuntimeScalarReference {
         }
     }
 
-    // Method to implement Perl's reset() function
+    /**
+     * Method to implement Perl's reset() function.
+     * Resets the `matched` flag for each cached regex.
+     */
     public static void reset() {
         // Iterate over the regexCache and reset the `matched` flag for each cached regex
         for (Map.Entry<String, RuntimeRegex> entry : regexCache.entrySet()) {
@@ -297,18 +317,38 @@ public class RuntimeRegex implements RuntimeScalarReference {
         return pattern.toString();
     }
 
+    /**
+     * Returns a string representation of the regex reference.
+     *
+     * @return A string representing the regex reference.
+     */
     public String toStringRef() {
         return "REF(" + this.hashCode() + ")";
     }
 
+    /**
+     * Returns the integer representation of the regex reference.
+     *
+     * @return The hash code of the regex.
+     */
     public int getIntRef() {
         return this.hashCode();
     }
 
+    /**
+     * Returns the double representation of the regex reference.
+     *
+     * @return The hash code of the regex.
+     */
     public double getDoubleRef() {
         return this.hashCode();
     }
 
+    /**
+     * Evaluates the boolean representation of the regex reference.
+     *
+     * @return Always true for regex references.
+     */
     public boolean getBooleanRef() {
         return true;
     }

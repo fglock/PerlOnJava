@@ -19,7 +19,8 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
  *     RuntimeArray runtimeArray = new RuntimeArray();
  *     runtimeArray.elements = matcherViewArray;
  * </pre>
- */public class MatcherViewArray extends AbstractList<RuntimeScalar> {
+ */
+public class MatcherViewArray extends AbstractList<RuntimeScalar> {
 
     private final Mode mode;
 

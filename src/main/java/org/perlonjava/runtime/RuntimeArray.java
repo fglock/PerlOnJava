@@ -13,6 +13,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
  * using a list of RuntimeScalar objects, which can hold any type of Perl scalar value.
  */
 public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarReference {
+    // List to hold the elements of the array.
     public List<RuntimeScalar> elements;
 
     // Constructor
@@ -20,6 +21,11 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         this.elements = new ArrayList<>();
     }
 
+    /**
+     * Constructs a RuntimeArray from a RuntimeList.
+     *
+     * @param a The RuntimeList to initialize the array with.
+     */
     public RuntimeArray(RuntimeList a) {
         this.elements = new ArrayList<>();
         Iterator<RuntimeScalar> iterator = a.iterator();
@@ -28,12 +34,21 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         }
     }
 
+    /**
+     * Constructs a RuntimeArray with a single scalar value.
+     *
+     * @param value The initial scalar value for the array.
+     */
     public RuntimeArray(RuntimeScalar value) {
         this.elements = new ArrayList<>();
         this.elements.add(value);
     }
 
-    // Add itself to a RuntimeArray.
+    /**
+     * Adds the elements of this array to another RuntimeArray.
+     *
+     * @param array The RuntimeArray to which elements will be added.
+     */
     public void addToArray(RuntimeArray array) {
         List<RuntimeScalar> elements = array.elements;
         for (RuntimeScalar arrElem : this.elements) {
@@ -41,26 +56,42 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         }
     }
 
+    /**
+     * Returns the number of elements in the array.
+     *
+     * @return The size of the array.
+     */
     public int countElements() {
         return elements.size();
     }
 
     /**
-     * Add itself to a RuntimeScalar.
+     * Adds the size of the array to a RuntimeScalar.
      *
-     * @param scalar The RuntimeScalar object
+     * @param scalar The RuntimeScalar object.
+     * @return The scalar with the size of the array set.
      */
     public RuntimeScalar addToScalar(RuntimeScalar scalar) {
         return scalar.set(this.size());
     }
 
-    // Add values to the end of the array
+    /**
+     * Adds values to the end of the array.
+     *
+     * @param value The values to add.
+     * @return A scalar representing the new size of the array.
+     */
     public RuntimeScalar push(RuntimeDataProvider value) {
         value.addToArray(this);
         return getScalarInt(elements.size());
     }
 
-    // Add values to the beginning of the array
+    /**
+     * Adds values to the beginning of the array.
+     *
+     * @param value The values to add.
+     * @return A scalar representing the new size of the array.
+     */
     public RuntimeScalar unshift(RuntimeDataProvider value) {
         RuntimeArray arr = new RuntimeArray();
         arr.push(value);
@@ -68,7 +99,11 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         return getScalarInt(this.elements.size());
     }
 
-    // Remove and return the last value of the array
+    /**
+     * Removes and returns the last value of the array.
+     *
+     * @return The last value of the array, or undefined if empty.
+     */
     public RuntimeScalar pop() {
         if (elements.isEmpty()) {
             return new RuntimeScalar(); // Return undefined if empty
@@ -76,7 +111,11 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         return elements.remove(elements.size() - 1);
     }
 
-    // Remove and return the first value of the array
+    /**
+     * Removes and returns the first value of the array.
+     *
+     * @return The first value of the array, or undefined if empty.
+     */
     public RuntimeScalar shift() {
         if (elements.isEmpty()) {
             return new RuntimeScalar(); // Return undefined if empty
@@ -84,46 +123,71 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         return elements.remove(0);
     }
 
-    // Get a value at a specific index
+    /**
+     * Gets a value at a specific index.
+     *
+     * @param index The index of the value to retrieve.
+     * @return The value at the specified index, or a proxy if out of bounds.
+     */
     public RuntimeScalar get(int index) {
         if (index < 0) {
             index = elements.size() + index; // Handle negative indices
         }
         if (index < 0 || index >= elements.size()) {
-            // lazy autovivification
+            // Lazy autovivification
             return new RuntimeArrayProxy(this, index);
         }
         return elements.get(index);
     }
 
-    // Get a value at a specific index
+    /**
+     * Gets a value at a specific index using a scalar.
+     *
+     * @param value The scalar representing the index.
+     * @return The value at the specified index, or a proxy if out of bounds.
+     */
     public RuntimeScalar get(RuntimeScalar value) {
         int index = value.getInt();
         if (index < 0) {
             index = elements.size() + index; // Handle negative indices
         }
         if (index < 0 || index >= elements.size()) {
-            // lazy autovivification
+            // Lazy autovivification
             return new RuntimeArrayProxy(this, index);
         }
         return elements.get(index);
     }
 
-    // Set the whole array to a Scalar
+    /**
+     * Sets the whole array to a single scalar value.
+     *
+     * @param value The scalar value to set.
+     * @return The updated RuntimeArray.
+     */
     public RuntimeArray set(RuntimeScalar value) {
         this.elements.clear();
         this.elements.add(value);
         return this;
     }
 
-    // Replace the whole array with the elements of a list
+    /**
+     * Replaces the whole array with the elements of a list.
+     *
+     * @param value The list to set.
+     * @return The updated RuntimeArray.
+     */
     public RuntimeArray setFromList(RuntimeList value) {
         this.elements.clear();
         value.addToArray(this);
         return this;
     }
 
-    // Set a value at a specific index
+    /**
+     * Sets a value at a specific index.
+     *
+     * @param index The index to set the value at.
+     * @param value The value to set.
+     */
     public void set(int index, RuntimeScalar value) {
         if (index < 0) {
             index = elements.size() + index; // Handle negative indices
@@ -136,7 +200,11 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         elements.set(index, value);
     }
 
-    // Create a reference to the Array
+    /**
+     * Creates a reference to the array.
+     *
+     * @return A scalar representing the array reference.
+     */
     public RuntimeScalar createReference() {
         RuntimeScalar result = new RuntimeScalar();
         result.type = RuntimeScalarType.ARRAYREFERENCE;
@@ -144,35 +212,66 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         return result;
     }
 
-    // Get the size of the array
+    /**
+     * Gets the size of the array.
+     *
+     * @return The size of the array.
+     */
     public int size() {
         return elements.size();
     }
 
+    /**
+     * Evaluates the boolean representation of the array.
+     *
+     * @return True if the array is not empty.
+     */
     public boolean getBoolean() {
         return !elements.isEmpty();
     }
 
+    /**
+     * Checks if the array is defined.
+     *
+     * @return Always true for arrays.
+     */
     public boolean getDefinedBoolean() {
         return true;
     }
 
-    // Get the list value of the list
+    /**
+     * Gets the list value of the array.
+     *
+     * @return A RuntimeList representing the array.
+     */
     public RuntimeList getList() {
         return new RuntimeList(this);
     }
 
-    // Get the index of the last element
+    /**
+     * Gets the index of the last element.
+     *
+     * @return A scalar representing the index of the last element.
+     */
     public RuntimeScalar indexLastElem() {
         return getScalarInt(elements.size() - 1);
     }
 
-    // Get the scalar value of the list
+    /**
+     * Gets the scalar value of the array.
+     *
+     * @return A scalar representing the size of the array.
+     */
     public RuntimeScalar scalar() {
         return getScalarInt(elements.size());
     }
 
-    // Slice the array:  @x[10, 20]
+    /**
+     * Slices the array using a list of indices.
+     *
+     * @param value The list of indices to slice.
+     * @return A RuntimeList representing the sliced elements.
+     */
     public RuntimeList getSlice(RuntimeList value) {
         RuntimeList result = new RuntimeList();
         List<RuntimeBaseEntity> outElements = result.elements;
@@ -183,62 +282,123 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         return result;
     }
 
-    // keys() operator
+    /**
+     * Gets the keys of the array.
+     *
+     * @return A RuntimeArray representing the keys.
+     */
     public RuntimeArray keys() {
         return new PerlRange(getScalarInt(0), getScalarInt(this.countElements())).getArrayOfAlias();
     }
 
-    // values() operator
+    /**
+     * Gets the values of the array.
+     *
+     * @return This RuntimeArray.
+     */
     public RuntimeArray values() {
         return this;
     }
 
+    /**
+     * Throws an exception as the 'each' operation is not implemented for arrays.
+     *
+     * @throws RuntimeException Always thrown as 'each' is not implemented.
+     */
     public RuntimeList each() {
         throw new RuntimeException("each not implemented for Array");
     }
 
-    // Get Array aliases into an Array
+    /**
+     * Sets array aliases into another array.
+     *
+     * @param arr The array to set aliases into.
+     * @return The updated array with aliases.
+     */
     public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
         List<RuntimeScalar> arrElements = arr.elements;
         arrElements.addAll(this.elements);
         return arr;
     }
 
-    // Method to return an iterator
+    /**
+     * Returns an iterator for the array.
+     *
+     * @return An iterator over the elements of the array.
+     */
     public Iterator<RuntimeScalar> iterator() {
         return new RuntimeArrayIterator();
     }
 
+    /**
+     * Returns a string representation of the array reference.
+     *
+     * @return A string representing the array reference.
+     */
     public String toStringRef() {
         return "ARRAY(" + this.hashCode() + ")";
     }
 
+    /**
+     * Returns the integer representation of the array reference.
+     *
+     * @return The hash code of the array.
+     */
     public int getIntRef() {
         return this.hashCode();
     }
 
+    /**
+     * Returns the double representation of the array reference.
+     *
+     * @return The hash code of the array.
+     */
     public double getDoubleRef() {
         return this.hashCode();
     }
 
+    /**
+     * Evaluates the boolean representation of the array reference.
+     *
+     * @return Always true for array references.
+     */
     public boolean getBooleanRef() {
         return true;
     }
 
+    /**
+     * Undefines the array by clearing all elements.
+     *
+     * @return The updated RuntimeArray after undefining.
+     */
     public RuntimeArray undefine() {
         this.elements.clear();
         return this;
     }
 
+    /**
+     * Removes the last character from each element in the list.
+     *
+     * @return A scalar representing the result of the chop operation.
+     */
     public RuntimeScalar chop() {
         return this.getList().chop();
     }
 
+    /**
+     * Removes the trailing newline from each element in the list.
+     *
+     * @return A scalar representing the result of the chomp operation.
+     */
     public RuntimeScalar chomp() {
         return this.getList().chomp();
     }
 
-    // Convert the array to a string, without separators
+    /**
+     * Converts the array to a string, concatenating all elements without separators.
+     *
+     * @return A string representation of the array.
+     */
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
@@ -248,7 +408,9 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         return sb.toString();
     }
 
-    // Inner class implementing the Iterator interface
+    /**
+     * Inner class implementing the Iterator interface for RuntimeArray.
+     */
     private class RuntimeArrayIterator implements Iterator<RuntimeScalar> {
         private int currentIndex = 0;
 
