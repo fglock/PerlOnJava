@@ -39,7 +39,6 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
      *
      * @param index the index of the capturing group
      * @return a RuntimeScalar representing the position of the group
-     * @throws IndexOutOfBoundsException if the index is out of range
      */
     @Override
     public RuntimeScalar get(int index) {
@@ -50,7 +49,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
         }
 
         if (index < 0 || index > matcher.groupCount()) {
-            throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + size());
+            return scalarUndef;
         }
 
         int position;
