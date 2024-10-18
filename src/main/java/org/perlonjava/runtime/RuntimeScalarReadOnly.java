@@ -1,12 +1,20 @@
 package org.perlonjava.runtime;
 
+/**
+ * The RuntimeScalarReadOnly class represents an immutable scalar value in the runtime environment.
+ * It is used for caching and reusing common scalar values such as integers, booleans, and strings.
+ */
 public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
 
+    // Immutable fields representing the scalar value
     final boolean b;
     final int i;
     final String s;
     final double d;
 
+    /**
+     * Constructs a RuntimeScalarReadOnly representing an undefined value.
+     */
     public RuntimeScalarReadOnly() {
         super();
         this.b = false;
@@ -17,6 +25,11 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
         this.type = RuntimeScalarType.UNDEF;
     }
 
+    /**
+     * Constructs a RuntimeScalarReadOnly representing an integer value.
+     *
+     * @param i the integer value
+     */
     public RuntimeScalarReadOnly(int i) {
         super();
         this.b = (i != 0);
@@ -27,6 +40,11 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
         this.type = RuntimeScalarType.INTEGER;
     }
 
+    /**
+     * Constructs a RuntimeScalarReadOnly representing a boolean value.
+     *
+     * @param b the boolean value
+     */
     public RuntimeScalarReadOnly(boolean b) {
         super();
         this.b = b;
@@ -37,6 +55,11 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
         this.type = RuntimeScalarType.INTEGER;
     }
 
+    /**
+     * Constructs a RuntimeScalarReadOnly representing a string value.
+     *
+     * @param s the string value
+     */
     public RuntimeScalarReadOnly(String s) {
         super();
         RuntimeScalar temp = new RuntimeScalar(s);
@@ -48,26 +71,51 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
         this.type = RuntimeScalarType.STRING;
     }
 
+    /**
+     * Throws an exception as this scalar is immutable and cannot be modified.
+     *
+     * @throws RuntimeException indicating that the constant item cannot be modified
+     */
     @Override
     void vivify() {
         throw new RuntimeException("Can't modify constant item");
     }
 
+    /**
+     * Retrieves the integer representation of the scalar.
+     *
+     * @return the integer value
+     */
     @Override
     public int getInt() {
         return i;
     }
 
+    /**
+     * Retrieves the double representation of the scalar.
+     *
+     * @return the double value
+     */
     @Override
     public double getDouble() {
         return d;
     }
 
+    /**
+     * Retrieves the string representation of the scalar.
+     *
+     * @return the string value
+     */
     @Override
     public String toString() {
         return s;
     }
 
+    /**
+     * Retrieves the boolean representation of the scalar.
+     *
+     * @return the boolean value
+     */
     @Override
     public boolean getBoolean() {
         return b;
