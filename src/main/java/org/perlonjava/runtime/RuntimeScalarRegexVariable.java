@@ -56,4 +56,10 @@ public class RuntimeScalarRegexVariable extends RuntimeBaseProxy {
         String str = this.getStringValue();
         return (str != null && !str.isEmpty() && !str.equals("0"));
     }
+
+    @Override
+    public boolean getDefinedBoolean() {
+        String str = this.getStringValue();
+        return (str != null);
+    }
 }
