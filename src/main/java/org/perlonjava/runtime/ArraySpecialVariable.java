@@ -5,29 +5,30 @@ import java.util.AbstractList;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
- * MatcherViewArray provides a dynamic view over a Matcher object,
- * representing the end positions of each capturing group in the Matcher.
+ * ArraySpecialVariable provides a dynamic view over an internal object, such as a Matcher object,
+ * representing the start or end positions of each capturing group in the Matcher.
  * This class does not store data internally but queries the Matcher
  * whenever its methods are called, ensuring it reflects the current state
  * of the Matcher.
  */
-public class MatcherViewArray extends AbstractList<RuntimeScalar> {
+public class ArraySpecialVariable extends AbstractList<RuntimeScalar> {
 
+    // Mode of operation for this special variable, determining whether it tracks start or end positions
     private final Id mode;
 
     /**
-     * Constructs a MatcherViewArray for the given Matcher with a specified mode.
+     * Constructs an ArraySpecialVariable for the given mode.
      *
-     * @param mode the mode of operation
+     * @param mode the mode of operation, determining whether to track start or end positions
      */
-    public MatcherViewArray(Id mode) {
+    public ArraySpecialVariable(Id mode) {
         this.mode = mode;
     }
 
     /**
      * Returns the position of the capturing group at the specified index.
-     * The position returned depends on the mode: end position for Id.END,
-     * and start position for Id.START.
+     * The position returned depends on the mode: end position for Id.LAST_MATCH_END,
+     * and start position for Id.LAST_MATCH_START.
      *
      * @param index the index of the capturing group
      * @return a RuntimeScalar representing the position of the group
@@ -62,8 +63,8 @@ public class MatcherViewArray extends AbstractList<RuntimeScalar> {
     }
 
     /**
-     * Enum to represent the mode of operation for MatcherViewArray.
-     * END corresponds to "@+" (end positions), and START corresponds to "@-" (start positions).
+     * Enum to represent the mode of operation for ArraySpecialVariable.
+     * LAST_MATCH_END corresponds to "@+" (end positions), and LAST_MATCH_START corresponds to "@-" (start positions).
      */
     public enum Id {
         LAST_MATCH_END,  // Represents the end positions of capturing groups
