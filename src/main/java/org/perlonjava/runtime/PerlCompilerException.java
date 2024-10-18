@@ -23,6 +23,21 @@ public class PerlCompilerException extends RuntimeException {
     }
 
     /**
+     * Constructs a new PerlCompilerException using runtime information
+     *
+     * @param message          the detail message
+     */
+    public PerlCompilerException(String message) {
+        super(message);
+        // get caller information: package name, file name, line number
+        RuntimeList caller = RuntimeScalar.caller(new RuntimeList(), RuntimeContextType.LIST);
+        String packageName = caller.elements.get(0).toString();
+        String fileName = caller.elements.get(1).toString();
+        int line = ((RuntimeScalar) caller.elements.get(2)).getInt();
+        this.errorMessage = message + " at " + fileName + " line " + line + "\n";
+    }
+
+    /**
      * Returns the detailed error message.
      *
      * @return the detailed error message
