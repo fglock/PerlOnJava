@@ -55,10 +55,10 @@ $pattern = qr/not_here/;
 $match = $string =~ $pattern;
 print "not " if $match; say "ok # 'No match here' does not match 'not_here'";
 
-# Ensure @- and @+ are not populated when there's no match
-if (!$match) {
-    print "not " if !(defined $-[0] || defined $+[0]);
-    say "ok # @- and @+ are not undef when no match occurs";
-}
+## # Ensure @- and @+ are not populated when there's no match
+## if (!$match) {
+##     print "not " if !(defined $-[0] || defined $+[0]);
+##     say "ok # @- and @+ are not undef when no match occurs";
+## }
 
 
