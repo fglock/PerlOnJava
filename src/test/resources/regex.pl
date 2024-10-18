@@ -10,6 +10,11 @@ my $pattern = qr/World/;
 my $match = $string =~ $pattern;
 print "not " if !$match; say "ok # 'Hello World' matches 'World'";
 
+# Test special variables $`, $&, $'
+print "not " if $` ne 'Hello '; say "ok # \$` is 'Hello ' <$`>";
+print "not " if $& ne 'World'; say "ok # \$& is 'World' <$&>";
+print "not " if $' ne ''; say "ok # \$' is '' <$'>";
+
 # No match
 $pattern = qr/Universe/;
 $match = $string =~ $pattern;
@@ -22,6 +27,11 @@ print "not " if !$match; say "ok # 'Hello World' matches '(Hello) (World)'";
 print "not " if $1 ne 'Hello'; say "ok # \$1 is 'Hello' <$1>";
 print "not " if $2 ne 'World'; say "ok # \$2 is 'World' <$2>";
 
+# Test special variables $`, $&, $'
+print "not " if $` ne ''; say "ok # \$` is '' <$`>";
+print "not " if $& ne 'Hello World'; say "ok # \$& is 'Hello World' <$&>";
+print "not " if $' ne ''; say "ok # \$' is '' <$'>";
+
 # Match with multiple capture groups
 $string = "foo bar baz";
 $pattern = qr/(foo) (bar) (baz)/;
@@ -30,6 +40,11 @@ print "not " if !$match; say "ok # 'foo bar baz' matches '(foo) (bar) (baz)'";
 print "not " if $1 ne 'foo'; say "ok # \$1 is 'foo'";
 print "not " if $2 ne 'bar'; say "ok # \$2 is 'bar'";
 print "not " if $3 ne 'baz'; say "ok # \$3 is 'baz'";
+
+# Test special variables $`, $&, $'
+print "not " if $` ne ''; say "ok # \$` is '' <$`>";
+print "not " if $& ne 'foo bar baz'; say "ok # \$& is 'foo bar baz' <$&>";
+print "not " if $' ne ''; say "ok # \$' is '' <$'>";
 
 # Match with global flag
 $string = "abc abc abc";

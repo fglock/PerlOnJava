@@ -1,19 +1,18 @@
 package org.perlonjava.runtime;
 
-import java.util.regex.Matcher;
-
 /**
- * Represents a Perl special scalar variable like $`, $&, $'
+ * Represents a Perl special scalar variable, such as $`, $&, or $'.
+ * These variables are used to capture specific parts of a string during regex operations.
  */
 public class ScalarSpecialVariable extends RuntimeBaseProxy {
 
-    // The type of special variable.
+    // The type of special variable, represented by an enum.
     final Id variableId;
 
     /**
-     * Constructs a ScalarSpecialVariable.
+     * Constructs a ScalarSpecialVariable for a specific type of special variable.
      *
-     * @param variableId The type of special variable.
+     * @param variableId The type of special variable (e.g., PREMATCH, MATCH, POSTMATCH).
      */
     public ScalarSpecialVariable(Id variableId) {
         super();
@@ -30,7 +29,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     }
 
     /**
-     * Adds the string value of this regex variable to another scalar variable.
+     * Adds the string value of this special variable to another scalar variable.
      *
      * @param var The scalar variable to which the value will be added.
      * @return The updated scalar variable.
@@ -46,23 +45,20 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     }
 
     /**
-     * Retrieves the string value of the regex match group at the specified position.
+     * Retrieves the string value of the special variable based on its type.
      *
-     * @return The string value of the match group, or null if not available.
+     * @return The string value of the special variable, or null if not available.
      */
     public String getStringValue() {
         try {
-            // return null or String
+            // Return the appropriate string based on the type of special variable.
             switch (variableId) {
                 case MATCH:
-                    Matcher matcher = RuntimeRegex.globalMatcher;
-                    return matcher == null ? null : matcher.group();
+                    return RuntimeRegex.matchString();
                 case PREMATCH:
-                    matcher = RuntimeRegex.globalMatcher;
-                    return matcher.group();
+                    return RuntimeRegex.preMatchString();
                 case POSTMATCH:
-                    matcher = RuntimeRegex.globalMatcher;
-                    return matcher.group();
+                    return RuntimeRegex.postMatchString();
                 default:
                     return null;
             }
@@ -72,9 +68,9 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     }
 
     /**
-     * Retrieves the integer representation of the regex match group.
+     * Retrieves the integer representation of the special variable.
      *
-     * @return The integer value of the match group.
+     * @return The integer value of the special variable.
      */
     @Override
     public int getInt() {
@@ -82,9 +78,9 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     }
 
     /**
-     * Retrieves the double representation of the regex match group.
+     * Retrieves the double representation of the special variable.
      *
-     * @return The double value of the match group.
+     * @return The double value of the special variable.
      */
     @Override
     public double getDouble() {
@@ -92,9 +88,9 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     }
 
     /**
-     * Returns the string representation of the regex match group.
+     * Returns the string representation of the special variable.
      *
-     * @return The string value of the match group, or an empty string if null.
+     * @return The string value of the special variable, or an empty string if null.
      */
     @Override
     public String toString() {
@@ -103,7 +99,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     }
 
     /**
-     * Evaluates the boolean representation of the regex match group.
+     * Evaluates the boolean representation of the special variable.
      *
      * @return True if the string value is not null, not empty, and not "0".
      */
@@ -114,7 +110,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     }
 
     /**
-     * Checks if the regex match group is defined.
+     * Checks if the special variable is defined.
      *
      * @return True if the string value is not null.
      */
@@ -128,9 +124,8 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      * Enum to represent the id of the special variable.
      */
     public enum Id {
-        PREMATCH,  // $` Represents the part of the string before the matched substring.
-        MATCH,     // $& Represents the matched substring.
-        POSTMATCH, // $' Represents the part of the string after the matched substring.
+        PREMATCH,  // Represents the part of the string before the matched substring.
+        MATCH,     // Represents the matched substring.
+        POSTMATCH  // Represents the part of the string after the matched substring.
     }
-
 }
