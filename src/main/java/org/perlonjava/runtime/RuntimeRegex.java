@@ -7,6 +7,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static java.util.regex.Pattern.COMMENTS;
+import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
  * RuntimeRegex class to implement Perl's qr// operator for regular expression handling,
@@ -144,7 +146,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
             } else if (ctx == RuntimeContextType.SCALAR) {
                 return RuntimeScalarCache.scalarFalse;
             } else {
-                return RuntimeScalarCache.scalarUndef;
+                return scalarUndef;
             }
         }
 
@@ -224,7 +226,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
         } else if (ctx == RuntimeContextType.SCALAR) {
             return RuntimeScalarCache.getScalarBoolean(found);
         } else {
-            return RuntimeScalarCache.scalarUndef;
+            return scalarUndef;
         }
     }
 
@@ -298,7 +300,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 return string;
             }
             // Return `undef`
-            return RuntimeScalarCache.scalarUndef;
+            return scalarUndef;
         }
     }
 
@@ -328,6 +330,34 @@ public class RuntimeRegex implements RuntimeScalarReference {
 
     public static String captureString(int group) {
         return globalMatcher == null ? null : globalMatcher.group(group);
+    }
+
+    public static RuntimeScalar matcherStart(int group) {
+        if (globalMatcher == null) {
+            return scalarUndef;
+        }
+        if (group < 0 || group > globalMatcher.groupCount()) {
+            return scalarUndef;
+        }
+        return getScalarInt(globalMatcher.start(group));
+    }
+
+    public static RuntimeScalar matcherEnd(int group) {
+        if (globalMatcher == null) {
+            return scalarUndef;
+        }
+        if (group < 0 || group > globalMatcher.groupCount()) {
+            return scalarUndef;
+        }
+        return getScalarInt(globalMatcher.end(group));
+    }
+
+    public static int matcherSize() {
+        if (globalMatcher == null) {
+            return 0;
+        }
+        // +1 because groupCount is zero-based, and we include the entire match
+        return globalMatcher.groupCount() + 1;
     }
 
     @Override
