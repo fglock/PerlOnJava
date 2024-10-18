@@ -34,6 +34,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
 
     // Global matcher used for regex operations
     public static Matcher globalMatcher;
+    public static String globalMatchString;
 
     // Compiled regex pattern
     public Pattern pattern;
@@ -182,14 +183,15 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 String matchedStr = matcher.group(0);
                 matchedGroups.add(new RuntimeScalar(matchedStr));
             } else {
-                // Initialize $1, $2 and save captures in return list if needed
-                // Also initialize @+, @-
+                // Initialize $1, $2, @+, @-
                 globalMatcher = matcher;
+                globalMatchString = inputStr;
 
-                for (int i = 1; i <= captureCount; i++) {
-                    String matchedStr = matcher.group(i);
-                    if (matchedStr != null) {
-                        if (ctx == RuntimeContextType.LIST) {
+                // save captures in return list if needed
+                if (ctx == RuntimeContextType.LIST) {
+                    for (int i = 1; i <= captureCount; i++) {
+                        String matchedStr = matcher.group(i);
+                        if (matchedStr != null) {
                             matchedGroups.add(new RuntimeScalar(matchedStr));
                         }
                     }
@@ -257,8 +259,9 @@ public class RuntimeRegex implements RuntimeScalarReference {
         while (matcher.find()) {
             found++;
 
-            // Initialize $1, $2
+            // Initialize $1, $2, @+, @-
             globalMatcher = matcher;
+            globalMatchString = inputStr;
 
             String replacementStr;
             if (replacementIsCode) {
