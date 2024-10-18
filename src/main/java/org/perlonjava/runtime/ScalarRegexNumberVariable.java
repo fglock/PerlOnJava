@@ -5,17 +5,17 @@ package org.perlonjava.runtime;
  * This class extends RuntimeBaseProxy and provides access to a specific
  * match group from a global regex matcher.
  */
-public class RuntimeScalarRegexVariable extends RuntimeBaseProxy {
+public class ScalarRegexNumberVariable extends RuntimeBaseProxy {
 
     // The position of the regex match group this variable represents.
     final int position;
 
     /**
-     * Constructs a RuntimeScalarRegexVariable for a specific match group position.
+     * Constructs a ScalarRegexNumberVariable for a specific match group position.
      *
      * @param position The position of the match group in the regex.
      */
-    public RuntimeScalarRegexVariable(int position) {
+    public ScalarRegexNumberVariable(int position) {
         super();
         this.position = position;
     }
