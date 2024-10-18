@@ -90,7 +90,7 @@ public class GlobalContext {
         if (var == null) {
             // Need to initialize global variable
             Matcher matcher = regexVariablePattern.matcher(key);
-            if (matcher.matches()) {
+            if (matcher.matches() && !key.equals("main::0")) {
                 // Regex capture variable like $1
                 // Extract the numeric capture group as a string
                 String capturedNumber = matcher.group(1);
