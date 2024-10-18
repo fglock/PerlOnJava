@@ -179,7 +179,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (args.elements.isEmpty()) {
             RuntimeRegex.reset();
         } else {
-            throw new RuntimeException("not implemented: reset(args)");
+            throw new PerlCompilerException("not implemented: reset(args)");
         }
         res.add(getScalarInt(1));
         return res;
@@ -276,7 +276,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar closedir() {
         if (type != RuntimeScalarType.GLOB) {
-            throw new RuntimeException("Invalid directory handle");
+            throw new PerlCompilerException("Invalid directory handle");
         }
 
         RuntimeIO dirIO = (RuntimeIO) value;
@@ -285,7 +285,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar rewinddir() {
         if (type != RuntimeScalarType.GLOB) {
-            throw new RuntimeException("Invalid directory handle");
+            throw new PerlCompilerException("Invalid directory handle");
         }
 
         RuntimeIO dirIO = (RuntimeIO) value;
@@ -295,7 +295,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar telldir() {
         if (type != RuntimeScalarType.GLOB) {
-            throw new RuntimeException("Invalid directory handle");
+            throw new PerlCompilerException("Invalid directory handle");
         }
 
         RuntimeIO dirIO = (RuntimeIO) value;
@@ -332,7 +332,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 // These types don't look like numbers in Perl
                 return false;
             default:
-                throw new IllegalStateException("Unexpected value: " + this.type);
+                throw new PerlCompilerException("Unexpected value: " + this.type);
         }
     }
 
@@ -548,7 +548,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case HASHREFERENCE:
                 return ((RuntimeHash) value).get(index.toString());
             default:
-                throw new IllegalStateException("Variable does not contain a hash reference");
+                throw new PerlCompilerException("Variable does not contain a hash reference");
         }
     }
 
@@ -560,7 +560,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case HASHREFERENCE:
                 return ((RuntimeHash) value).delete(index);
             default:
-                throw new IllegalStateException("Variable does not contain a hash reference");
+                throw new PerlCompilerException("Variable does not contain a hash reference");
         }
     }
 
@@ -572,7 +572,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case HASHREFERENCE:
                 return ((RuntimeHash) value).exists(index);
             default:
-                throw new IllegalStateException("Variable does not contain a hash reference");
+                throw new PerlCompilerException("Variable does not contain a hash reference");
         }
     }
 
@@ -586,7 +586,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case ARRAYREFERENCE:
                 return ((RuntimeArray) value).get(index.getInt());
             default:
-                throw new IllegalStateException("Variable does not contain an array reference");
+                throw new PerlCompilerException("Variable does not contain an array reference");
         }
     }
 
@@ -594,11 +594,11 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     public RuntimeArray arrayDeref() {
         switch (type) {
             case UNDEF:
-                throw new IllegalStateException("Can't use an undefined value as an ARRAY reference");
+                throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
             case ARRAYREFERENCE:
                 return (RuntimeArray) value;
             default:
-                throw new IllegalStateException("Variable does not contain an array reference");
+                throw new PerlCompilerException("Variable does not contain an array reference");
         }
     }
 
@@ -606,11 +606,11 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     public RuntimeHash hashDeref() {
         switch (type) {
             case UNDEF:
-                throw new IllegalStateException("Can't use an undefined value as an HASH reference");
+                throw new PerlCompilerException("Can't use an undefined value as an HASH reference");
             case HASHREFERENCE:
                 return (RuntimeHash) value;
             default:
-                throw new IllegalStateException("Variable does not contain an hash reference");
+                throw new PerlCompilerException("Variable does not contain an hash reference");
         }
     }
 
@@ -618,11 +618,11 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     public RuntimeScalar scalarDeref() {
         switch (type) {
             case UNDEF:
-                throw new IllegalStateException("Can't use an undefined value as a SCALAR reference");
+                throw new PerlCompilerException("Can't use an undefined value as a SCALAR reference");
             case REFERENCE:
                 return (RuntimeScalar) value;
             default:
-                throw new IllegalStateException("Variable does not contain a scalar reference");
+                throw new PerlCompilerException("Variable does not contain a scalar reference");
         }
     }
 
@@ -630,12 +630,12 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     public RuntimeGlob globDeref() {
         switch (type) {
             case UNDEF:
-                throw new IllegalStateException("Can't use an undefined value as a GLOB reference");
+                throw new PerlCompilerException("Can't use an undefined value as a GLOB reference");
             case GLOB:
             case GLOBREFERENCE:
                 return (RuntimeGlob) value;
             default:
-                throw new IllegalStateException("Variable does not contain a glob reference");
+                throw new PerlCompilerException("Variable does not contain a glob reference");
         }
     }
 
@@ -647,7 +647,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             return ((RuntimeCode) this.value).apply(a, callContext);
         } else {
             // If the type is not CODE, throw an exception indicating an invalid state
-            throw new IllegalStateException("Variable does not contain a code reference");
+            throw new PerlCompilerException("Variable does not contain a code reference");
         }
     }
 
@@ -664,7 +664,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 ((RuntimeBaseEntity) value).blessId = NameNormalizer.getBlessId(str);
                 break;
             default:
-                throw new IllegalStateException("Can't bless non-reference value");
+                throw new PerlCompilerException("Can't bless non-reference value");
         }
         return this;
     }
@@ -723,16 +723,16 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case HASHREFERENCE:
                 int blessId = ((RuntimeBaseEntity) value).blessId;
                 if (blessId == 0) {
-                    throw new IllegalStateException("Can't call method \"" + methodName + "\" on unblessed reference");
+                    throw new PerlCompilerException("Can't call method \"" + methodName + "\" on unblessed reference");
                 }
                 perlClassName = NameNormalizer.getBlessStr(blessId);
                 break;
             case UNDEF:
-                throw new IllegalStateException("Can't call method \"" + methodName + "\" on an undefined value");
+                throw new PerlCompilerException("Can't call method \"" + methodName + "\" on an undefined value");
             default:
                 perlClassName = this.toString();
                 if (perlClassName.isEmpty()) {
-                    throw new IllegalStateException("Can't call method \"" + methodName + "\" on an undefined value");
+                    throw new PerlCompilerException("Can't call method \"" + methodName + "\" on an undefined value");
                 }
                 if (perlClassName.endsWith("::")) {
                     perlClassName = perlClassName.substring(0, perlClassName.length() - 2);
@@ -774,7 +774,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
 
         // If the method is not found in any class, throw an exception
-        throw new IllegalStateException("Can't locate object method \"" + methodName + "\" via package \"" + perlClassName + "\" (perhaps you forgot to load \"" + perlClassName + "\"?)");
+        throw new PerlCompilerException("Can't locate object method \"" + methodName + "\" via package \"" + perlClassName + "\" (perhaps you forgot to load \"" + perlClassName + "\"?)");
     }
 
     // Helper method to autoincrement a String variable
@@ -1033,7 +1033,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
         double divisor = arg2.getDouble();
         if (divisor == 0.0) {
-            throw new RuntimeException("Illegal division by zero");
+            throw new PerlCompilerException("Illegal division by zero");
         }
         return new RuntimeScalar(arg1.getDouble() / divisor);
     }
@@ -1207,7 +1207,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 char c1 = s1.charAt(i);
                 char c2 = s2.charAt(i);
                 if (c1 > 0xFF || c2 > 0xFF) {
-                    throw new RuntimeException("Use of strings with code points over 0xFF as arguments to bitwise and (&) operator is not allowed");
+                    throw new PerlCompilerException("Use of strings with code points over 0xFF as arguments to bitwise and (&) operator is not allowed");
                 }
                 result.append((char) (c1 & c2));
             }
@@ -1228,7 +1228,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 char c1 = i < s1.length() ? s1.charAt(i) : 0;
                 char c2 = i < s2.length() ? s2.charAt(i) : 0;
                 if (c1 > 0xFF || c2 > 0xFF) {
-                    throw new RuntimeException("Use of strings with code points over 0xFF as arguments to bitwise or (|) operator is not allowed");
+                    throw new PerlCompilerException("Use of strings with code points over 0xFF as arguments to bitwise or (|) operator is not allowed");
                 }
                 result.append((char) (c1 | c2));
             }
@@ -1249,7 +1249,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 char c1 = i < s1.length() ? s1.charAt(i) : 0;
                 char c2 = i < s2.length() ? s2.charAt(i) : 0;
                 if (c1 > 0xFF || c2 > 0xFF) {
-                    throw new RuntimeException("Use of strings with code points over 0xFF as arguments to bitwise xor (^) operator is not allowed");
+                    throw new PerlCompilerException("Use of strings with code points over 0xFF as arguments to bitwise xor (^) operator is not allowed");
                 }
                 result.append((char) (c1 ^ c2));
             }
@@ -1267,7 +1267,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             for (int i = 0; i < s.length(); i++) {
                 char c = s.charAt(i);
                 if (c > 0xFF) {
-                    throw new RuntimeException("Use of strings with code points over 0xFF as arguments to bitwise not (~) operator is not allowed");
+                    throw new PerlCompilerException("Use of strings with code points over 0xFF as arguments to bitwise not (~) operator is not allowed");
                 }
                 // Perform bitwise NOT and mask with 0xFF to match Perl behavior
                 result.append((char) ((~c) & 0xFF));
@@ -1685,7 +1685,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             // `do FILE` returned undef
             String err = getGlobalVariable("main::@").toString();
             String ioErr = getGlobalVariable("main::!").toString();
-            throw new RuntimeException(err.isEmpty() ? "Can't locate " + fileName + ": " + ioErr : "Compilation failed in require: " + err);
+            throw new PerlCompilerException(err.isEmpty() ? "Can't locate " + fileName + ": " + ioErr : "Compilation failed in require: " + err);
         }
         return result;
     }
@@ -1767,16 +1767,16 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // keys() operator
     public RuntimeArray keys() {
-        throw new IllegalStateException("Type of arg 1 to values must be hash or array");
+        throw new PerlCompilerException("Type of arg 1 to values must be hash or array");
     }
 
     // values() operator
     public RuntimeArray values() {
-        throw new IllegalStateException("Type of arg 1 to values must be hash or array");
+        throw new PerlCompilerException("Type of arg 1 to values must be hash or array");
     }
 
     public RuntimeList each() {
-        throw new IllegalStateException("Type of arg 1 to each must be hash or array");
+        throw new PerlCompilerException("Type of arg 1 to each must be hash or array");
     }
 
     // Method to return an iterator
@@ -1805,7 +1805,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             // print STDOUT ...
             // System.out.println("IO");
             fh = (RuntimeIO) value;
-            // throw  new RuntimeException("Invalid fileHandle type: " + fileHandle.type);
+            // throw  new PerlCompilerException("Invalid fileHandle type: " + fileHandle.type);
         }
         return fh;
     }
