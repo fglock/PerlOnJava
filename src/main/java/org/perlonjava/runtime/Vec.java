@@ -14,13 +14,13 @@ public class Vec {
         for (int i = 0; i < str.length(); i++) {
             char c = str.charAt(i);
             if (c > 0xFF) {
-                throw new IllegalArgumentException("Use of strings with code points over 0xFF as arguments to vec is forbidden");
+                throw new PerlCompilerException("Use of strings with code points over 0xFF as arguments to vec is forbidden");
             }
             data[i] = (byte) c;
         }
 
         if (bits <= 0 || bits > 32) {
-            throw new IllegalArgumentException("BITS must be between 1 and 32");
+            throw new PerlCompilerException("BITS must be between 1 and 32");
         }
 
         int byteOffset = offset * bits / 8;
@@ -61,13 +61,13 @@ public class Vec {
         for (int i = 0; i < str.length(); i++) {
             char c = str.charAt(i);
             if (c > 0xFF) {
-                throw new IllegalArgumentException("Use of strings with code points over 0xFF as arguments to vec is forbidden");
+                throw new PerlCompilerException("Use of strings with code points over 0xFF as arguments to vec is forbidden");
             }
             data[i] = (byte) c;
         }
 
         if (bits <= 0 || bits > 32) {
-            throw new IllegalArgumentException("BITS must be between 1 and 32");
+            throw new PerlCompilerException("BITS must be between 1 and 32");
         }
 
         int byteOffset = offset * bits / 8;

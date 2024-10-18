@@ -85,7 +85,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 // Compile the regex pattern
                 regex.pattern = Pattern.compile(javaPatternString, flags);
             } catch (Exception e) {
-                throw new IllegalStateException("Regex compilation failed: " + e.getMessage());
+                throw new PerlCompilerException("Regex compilation failed: " + e.getMessage());
             }
 
             // Cache the result if the cache is not full
