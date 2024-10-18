@@ -16,7 +16,7 @@ public class LexerToken {
      * The type of the token, represented by an instance of the LexerTokenType enum.
      * This field categorizes the token (e.g., keyword, identifier, operator).
      */
-    public final LexerTokenType type;
+    public LexerTokenType type;
 
     /**
      * The text of the token, represented as a string.

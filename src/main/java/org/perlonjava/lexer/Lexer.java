@@ -150,13 +150,6 @@ public class Lexer {
                 && (Character.isLetterOrDigit(input[position]) || input[position] == '_')) {
             position++;
         }
-
-        // Check for the special case of 'x='
-        if (position - start == 1 && input[start] == 'x' && position < length && input[position] == '=') {
-            position++; // Consume the '=' character
-            return new LexerToken(LexerTokenType.OPERATOR, "x=");
-        }
-
         return new LexerToken(LexerTokenType.IDENTIFIER, new String(input, start, position - start));
     }
 
