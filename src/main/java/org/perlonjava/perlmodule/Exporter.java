@@ -33,7 +33,7 @@ public class Exporter {
 
     public static RuntimeList importSymbols(RuntimeArray args, int ctx) {
         if (args.size() < 1) {
-            throw new IllegalArgumentException("Not enough arguments for import");
+            throw new PerlCompilerException("Not enough arguments for import");
         }
 
         // System.out.println("importSymbols: " + args);
@@ -65,7 +65,7 @@ public class Exporter {
                 if (tagSymbols != null) {
                     tagArray.elements.addAll(tagSymbols.elements);
                 } else {
-                    throw new IllegalArgumentException("Unknown export tag: " + tagName);
+                    throw new PerlCompilerException("Unknown export tag: " + tagName);
                 }
             } else {
                 tagArray.elements.add(symbolObj);
@@ -86,10 +86,10 @@ public class Exporter {
                 if (symbolRef.type == RuntimeScalarType.CODE) {
                     getGlobalCodeRef(caller + "::" + symbolString).set(symbolRef);
                 } else {
-                    throw new IllegalArgumentException("Subroutine " + symbolString + " not found in package " + packageName);
+                    throw new PerlCompilerException("Subroutine " + symbolString + " not found in package " + packageName);
                 }
             } else {
-                throw new IllegalArgumentException("Subroutine " + symbolString + " not allowed for export in package " + packageName);
+                throw new PerlCompilerException("Subroutine " + symbolString + " not allowed for export in package " + packageName);
             }
         }
 

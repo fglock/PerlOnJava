@@ -192,7 +192,7 @@ public class EmitVariable {
                 mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "setFromList", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeArray;", true);
                 break;
             default:
-                throw new IllegalArgumentException("Unsupported assignment context: " + lvalueContext);
+                throw new PerlCompilerException("Unsupported assignment context: " + lvalueContext);
         }
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             // Remove the value from the stack

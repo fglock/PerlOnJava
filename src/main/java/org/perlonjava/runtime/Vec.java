@@ -4,7 +4,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 public class Vec {
-    public static RuntimeScalar vec(RuntimeList args) throws IllegalArgumentException {
+    public static RuntimeScalar vec(RuntimeList args) throws PerlCompilerException {
         RuntimeScalar strScalar = (RuntimeScalar) args.elements.get(0);
         String str = strScalar.toString();
         int offset = ((RuntimeScalar) args.elements.get(1)).getInt();
@@ -52,7 +52,7 @@ public class Vec {
         return new RuntimeVecLvalue(strScalar, offset, bits, value);
     }
 
-    public static RuntimeScalar set(RuntimeList args, RuntimeScalar value) throws IllegalArgumentException {
+    public static RuntimeScalar set(RuntimeList args, RuntimeScalar value) throws PerlCompilerException {
         String str = args.elements.get(0).toString();
         int offset = ((RuntimeScalar) args.elements.get(1)).getInt();
         int bits = ((RuntimeScalar) args.elements.get(2)).getInt();
