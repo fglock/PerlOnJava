@@ -64,7 +64,7 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
             actualOffset = 0;
         }
         if (actualOffset > strLength) {
-            throw new RuntimeException("substr outside of string");
+            throw new PerlCompilerException("substr outside of string");
         }
 
         // Calculate the actual length, handling negative lengths

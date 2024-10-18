@@ -36,7 +36,7 @@ public class RuntimePosLvalue {
     public static RuntimeScalar pos(RuntimeScalar perlVariable) {
         // Validate input
         if (perlVariable == null) {
-            throw new IllegalArgumentException("perlVariable cannot be null");
+            throw new PerlCompilerException("perlVariable cannot be null");
         }
 
         RuntimeScalar position;

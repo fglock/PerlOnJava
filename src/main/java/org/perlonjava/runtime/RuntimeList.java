@@ -205,28 +205,28 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
     /**
      * Throws an exception as the 'keys' operation is not implemented for lists.
      *
-     * @throws IllegalStateException Always thrown as 'keys' is not implemented.
+     * @throws PerlCompilerException Always thrown as 'keys' is not implemented.
      */
     public RuntimeArray keys() {
-        throw new IllegalStateException("Type of arg 1 to values must be hash or array");
+        throw new PerlCompilerException("Type of arg 1 to values must be hash or array");
     }
 
     /**
      * Throws an exception as the 'values' operation is not implemented for lists.
      *
-     * @throws IllegalStateException Always thrown as 'values' is not implemented.
+     * @throws PerlCompilerException Always thrown as 'values' is not implemented.
      */
     public RuntimeArray values() {
-        throw new IllegalStateException("Type of arg 1 to values must be hash or array");
+        throw new PerlCompilerException("Type of arg 1 to values must be hash or array");
     }
 
     /**
      * Throws an exception as the 'each' operation is not implemented for lists.
      *
-     * @throws IllegalStateException Always thrown as 'each' is not implemented.
+     * @throws PerlCompilerException Always thrown as 'each' is not implemented.
      */
     public RuntimeList each() {
-        throw new IllegalStateException("Type of arg 1 to each must be hash or array");
+        throw new PerlCompilerException("Type of arg 1 to each must be hash or array");
     }
 
     /**
@@ -273,11 +273,11 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
     /**
      * Throws an exception as creating a reference of a list is not implemented.
      *
-     * @throws IllegalStateException Always thrown as creating a reference is not implemented.
+     * @throws PerlCompilerException Always thrown as creating a reference is not implemented.
      */
     public RuntimeScalar createReference() {
         // TODO
-        throw new IllegalStateException("TODO - create reference of list not implemented");
+        throw new PerlCompilerException("TODO - create reference of list not implemented");
     }
 
     /**
