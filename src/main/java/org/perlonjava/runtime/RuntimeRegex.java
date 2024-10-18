@@ -314,6 +314,18 @@ public class RuntimeRegex implements RuntimeScalarReference {
         }
     }
 
+    public static String matchString() {
+        return globalMatcher == null ? null : globalMatcher.group();
+    }
+
+    public static String preMatchString() {
+        return globalMatcher == null ? null : globalMatchString.substring(0, globalMatcher.start());
+    }
+
+    public static String postMatchString() {
+        return globalMatcher == null ? null : globalMatchString.substring(globalMatcher.end());
+    }
+
     @Override
     public String toString() {
         // TODO add (?idmsux-idmsux:X) around the regex

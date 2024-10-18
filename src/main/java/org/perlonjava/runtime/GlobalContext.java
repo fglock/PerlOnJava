@@ -55,6 +55,10 @@ public class GlobalContext {
         getGlobalVariable("main::$").set(ProcessHandle.current().pid()); // initialize `$$` to process id
         getGlobalVariable("main::0").set(compilerOptions.fileName);
 
+        globalVariables.put("main::`", new ScalarSpecialVariable(ScalarSpecialVariable.Id.PREMATCH));
+        globalVariables.put("main::&", new ScalarSpecialVariable(ScalarSpecialVariable.Id.MATCH));
+        globalVariables.put("main::'", new ScalarSpecialVariable(ScalarSpecialVariable.Id.POSTMATCH));
+
         // Initialize arrays
         getGlobalArray("main::+").elements = new MatcherViewArray(MatcherViewArray.Mode.END);  // regex @+
         getGlobalArray("main::-").elements = new MatcherViewArray(MatcherViewArray.Mode.START);  // regex @-
