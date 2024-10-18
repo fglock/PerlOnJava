@@ -95,9 +95,9 @@ public class Vec {
                 int bitIndex = (bitOffset + i) % 8;
                 if (byteIndex < data.length) {
                     if ((val & (1 << i)) != 0) {
-                        data[byteIndex] |= (1 << bitIndex);
+                        data[byteIndex] |= (byte) (1 << bitIndex);
                     } else {
-                        data[byteIndex] &= ~(1 << bitIndex);
+                        data[byteIndex] &= (byte) ~(1 << bitIndex);
                     }
                 }
             }
