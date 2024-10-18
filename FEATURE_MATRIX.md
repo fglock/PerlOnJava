@@ -140,6 +140,7 @@
 - ✔️   **`$&` variables** `` $` ``, `$&`, `$'` special variables are implemented
 - ❌  **Perl-specific Regex Features**: Some features like `/xx` `/ee` are missing.
 - ❌  **Dynamically-scoped regex variables**: Regex variables are not dynamically-scoped.
+- ❌  **Code blocks**: `(?{ code })` in regex is not implemented.
 
 ## Statements and Special Operators
 - ✔️   **Context void, scalar, list**: Contexts for void, scalar, and list are supported.
