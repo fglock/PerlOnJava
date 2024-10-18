@@ -30,11 +30,11 @@ public class ScalarUtils {
      *
      * @param str The input string to be incremented
      * @return The incremented string
-     * @throws IllegalArgumentException if the input string is null or empty
+     * @throws PerlCompilerException if the input string is null or empty
      */
     public static String incrementPlainString(String str) {
         if (str == null || str.isEmpty()) {
-            return str; // Consider throwing an IllegalArgumentException instead
+            return str; // Consider throwing an PerlCompilerException instead
         }
 
         char lastChar = str.charAt(str.length() - 1);

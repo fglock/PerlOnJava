@@ -63,7 +63,7 @@ public class RuntimeVecLvalue extends RuntimeBaseProxy {
         try {
             // Use Vec.set to update the parent string
             Vec.set(args, new RuntimeScalar(newValue));
-        } catch (IllegalArgumentException e) {
+        } catch (PerlCompilerException e) {
             throw new RuntimeException("Invalid vec operation: " + e.getMessage());
         }
 

@@ -31,7 +31,7 @@ public class Parent {
 
     public static RuntimeList importParent(RuntimeArray args, int ctx) {
         if (args.size() < 1) {
-            throw new IllegalArgumentException("Not enough arguments for parent::import");
+            throw new PerlCompilerException("Not enough arguments for parent::import");
         }
 
         RuntimeScalar packageScalar = args.shift();

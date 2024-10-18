@@ -3,6 +3,7 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.*;
 import org.objectweb.asm.util.TraceClassVisitor;
 import org.perlonjava.astnode.Node;
+import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 
 import java.io.PrintWriter;
@@ -36,7 +37,7 @@ public class EmitterMethodCreator implements Opcodes {
     public static String getVariableDescriptor(String varName) {
         // Ensure the variable name is not empty
         if (varName == null || varName.isEmpty()) {
-            throw new IllegalArgumentException("Variable name cannot be null or empty");
+            throw new PerlCompilerException("Variable name cannot be null or empty");
         }
 
         // Extract the first character of the variable name
@@ -63,7 +64,7 @@ public class EmitterMethodCreator implements Opcodes {
     public static String getVariableClassName(String varName) {
         // Ensure the variable name is not empty
         if (varName == null || varName.isEmpty()) {
-            throw new IllegalArgumentException("Variable name cannot be null or empty");
+            throw new PerlCompilerException("Variable name cannot be null or empty");
         }
 
         // Extract the first character of the variable name
