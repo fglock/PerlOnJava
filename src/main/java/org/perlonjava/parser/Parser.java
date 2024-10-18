@@ -321,6 +321,18 @@ public class Parser {
                 break;
             }
 
+            // Check for the special case of 'x=' tokens;
+            // This handles cases where 'x=' is used as an operator.
+            // The token combination is also used in assignments like '$x=3'.
+            if (token.text.equals("x") && tokens.get(tokenIndex + 1).text.equals("=")) {
+                // Combine 'x' and '=' into a single token 'x='
+                token.text = "x=";
+                // Set the token type to OPERATOR to reflect its usage
+                token.type = LexerTokenType.OPERATOR;
+                // Remove the '=' token from the list as it is now part of 'x='
+                tokens.remove(tokenIndex + 1);
+            }
+
             // If the operator is right associative (like exponentiation), parse it with lower precedence.
             if (RIGHT_ASSOC_OP.contains(token.text)) {
                 ctx.logDebug("parseExpression `" + token.text + "` precedence: " + tokenPrecedence + " right assoc");
