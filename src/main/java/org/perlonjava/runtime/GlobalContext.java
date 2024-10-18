@@ -60,8 +60,8 @@ public class GlobalContext {
         globalVariables.put("main::'", new ScalarSpecialVariable(ScalarSpecialVariable.Id.POSTMATCH));
 
         // Initialize arrays
-        getGlobalArray("main::+").elements = new MatcherViewArray(MatcherViewArray.Id.LAST_MATCH_END);  // regex @+
-        getGlobalArray("main::-").elements = new MatcherViewArray(MatcherViewArray.Id.LAST_MATCH_START);  // regex @-
+        getGlobalArray("main::+").elements = new ArraySpecialVariable(ArraySpecialVariable.Id.LAST_MATCH_END);  // regex @+
+        getGlobalArray("main::-").elements = new ArraySpecialVariable(ArraySpecialVariable.Id.LAST_MATCH_START);  // regex @-
 
         // Initialize %ENV
         Map<String, RuntimeScalar> env = getGlobalHash("main::ENV").elements;

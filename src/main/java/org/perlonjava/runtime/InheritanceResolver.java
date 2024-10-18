@@ -2,20 +2,42 @@ package org.perlonjava.runtime;
 
 import java.util.*;
 
+/**
+ * The InheritanceResolver class provides methods for resolving method inheritance
+ * and linearizing class hierarchies using the C3 algorithm. It maintains caches
+ * for method resolution and linearized class hierarchies to improve performance.
+ */
 public class InheritanceResolver {
     // Method resolution cache
     private static final Map<String, RuntimeScalar> methodCache = new HashMap<>();
+    // Cache for linearized class hierarchies
     private static final Map<String, List<String>> linearizedClassesCache = new HashMap<>();
 
+    /**
+     * Invalidates the caches for method resolution and linearized class hierarchies.
+     * This should be called whenever the class hierarchy or method definitions change.
+     */
     public static void invalidateCache() {
         methodCache.clear();
         linearizedClassesCache.clear();
     }
 
+    /**
+     * Retrieves a cached method for the given normalized method name.
+     *
+     * @param normalizedMethodName The normalized name of the method.
+     * @return The cached RuntimeScalar representing the method, or null if not found.
+     */
     public static RuntimeScalar getCachedMethod(String normalizedMethodName) {
         return methodCache.get(normalizedMethodName);
     }
 
+    /**
+     * Caches a method for the given normalized method name.
+     *
+     * @param normalizedMethodName The normalized name of the method.
+     * @param method               The RuntimeScalar representing the method to cache.
+     */
     public static void cacheMethod(String normalizedMethodName, RuntimeScalar method) {
         methodCache.put(normalizedMethodName, method);
     }
