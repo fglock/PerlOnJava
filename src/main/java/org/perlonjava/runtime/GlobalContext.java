@@ -14,7 +14,8 @@ import java.util.regex.Pattern;
 import static org.perlonjava.runtime.RuntimeIO.initStdHandles;
 
 /**
- * The RuntimeScalar class simulates Perl namespaces.
+ * The GlobalContext class simulates Perl namespaces.
+ * It manages global variables, arrays, hashes, and other global entities.
  */
 public class GlobalContext {
 
@@ -28,6 +29,11 @@ public class GlobalContext {
     // Regular expression for regex variables like $main::1
     static Pattern regexVariablePattern = Pattern.compile("^main::(\\d+)$");
 
+    /**
+     * Initializes global variables, arrays, hashes, and other entities.
+     *
+     * @param compilerOptions The compiler options used for initialization.
+     */
     public static void initializeGlobals(ArgumentParser.CompilerOptions compilerOptions) {
 
         // Initialize scalar variables
@@ -46,7 +52,7 @@ public class GlobalContext {
         getGlobalVariable("main::,").set("");    // initialize $, to ""
         getGlobalVariable("main::\\").set("");    // initialize $\ to ""
         getGlobalVariable("main::/").set("\n"); // initialize $/ to newline
-        getGlobalVariable("main::$").set(ProcessHandle.current().pid()); // initialize $$ to process id
+        getGlobalVariable("main::$").set(ProcessHandle.current().pid()); // initialize `$$` to process id
         getGlobalVariable("main::0").set(compilerOptions.fileName);
 
         // Initialize arrays
@@ -85,6 +91,12 @@ public class GlobalContext {
         InheritanceResolver.invalidateCache();
     }
 
+    /**
+     * Retrieves a global variable by its key, initializing it if necessary.
+     *
+     * @param key The key of the global variable.
+     * @return The RuntimeScalar representing the global variable.
+     */
     public static RuntimeScalar getGlobalVariable(String key) {
         RuntimeScalar var = globalVariables.get(key);
         if (var == null) {
@@ -107,14 +119,32 @@ public class GlobalContext {
         return var;
     }
 
+    /**
+     * Sets the value of a global variable.
+     *
+     * @param key   The key of the global variable.
+     * @param value The value to set.
+     */
     public static void setGlobalVariable(String key, String value) {
         getGlobalVariable(key).set(value);
     }
 
+    /**
+     * Checks if a global variable exists.
+     *
+     * @param key The key of the global variable.
+     * @return True if the global variable exists, false otherwise.
+     */
     public static boolean existsGlobalVariable(String key) {
         return globalVariables.containsKey(key);
     }
 
+    /**
+     * Retrieves a global array by its key, initializing it if necessary.
+     *
+     * @param key The key of the global array.
+     * @return The RuntimeArray representing the global array.
+     */
     public static RuntimeArray getGlobalArray(String key) {
         RuntimeArray var = globalArrays.get(key);
         if (var == null) {
@@ -124,10 +154,22 @@ public class GlobalContext {
         return var;
     }
 
+    /**
+     * Checks if a global array exists.
+     *
+     * @param key The key of the global array.
+     * @return True if the global array exists, false otherwise.
+     */
     public static boolean existsGlobalArray(String key) {
         return globalArrays.containsKey(key);
     }
 
+    /**
+     * Retrieves a global hash by its key, initializing it if necessary.
+     *
+     * @param key The key of the global hash.
+     * @return The RuntimeHash representing the global hash.
+     */
     public static RuntimeHash getGlobalHash(String key) {
         RuntimeHash var = globalHashes.get(key);
         if (var == null) {
@@ -137,10 +179,22 @@ public class GlobalContext {
         return var;
     }
 
+    /**
+     * Checks if a global hash exists.
+     *
+     * @param key The key of the global hash.
+     * @return True if the global hash exists, false otherwise.
+     */
     public static boolean existsGlobalHash(String key) {
         return globalHashes.containsKey(key);
     }
 
+    /**
+     * Retrieves a global code reference by its key, initializing it if necessary.
+     *
+     * @param key The key of the global code reference.
+     * @return The RuntimeScalar representing the global code reference.
+     */
     public static RuntimeScalar getGlobalCodeRef(String key) {
         RuntimeScalar var = globalCodeRefs.get(key);
         if (var == null) {
@@ -151,10 +205,22 @@ public class GlobalContext {
         return var;
     }
 
+    /**
+     * Checks if a global code reference exists.
+     *
+     * @param key The key of the global code reference.
+     * @return True if the global code reference exists, false otherwise.
+     */
     public static boolean existsGlobalCodeRef(String key) {
         return globalCodeRefs.containsKey(key);
     }
 
+    /**
+     * Retrieves a global IO reference by its key, initializing it if necessary.
+     *
+     * @param key The key of the global IO reference.
+     * @return The RuntimeScalar representing the global IO reference.
+     */
     public static RuntimeScalar getGlobalIO(String key) {
         RuntimeScalar var = globalIORefs.get(key);
         if (var == null) {
@@ -164,6 +230,12 @@ public class GlobalContext {
         return var;
     }
 
+    /**
+     * Checks if a global IO reference exists.
+     *
+     * @param key The key of the global IO reference.
+     * @return True if the global IO reference exists, false otherwise.
+     */
     public static boolean existsGlobalIO(String key) {
         return globalIORefs.containsKey(key);
     }
