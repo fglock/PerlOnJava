@@ -1,13 +1,15 @@
 package org.perlonjava.runtime;
 
 /**
- * Represents a Perl special scalar variable, such as $`, $&, or $'.
+ * Represents a Perl special scalar variable, such as $`, $&, $', or $1.
  * These variables are used to capture specific parts of a string during regex operations.
+ * The class extends RuntimeBaseProxy to provide access to these special variables.
  */
 public class ScalarSpecialVariable extends RuntimeBaseProxy {
 
     // The type of special variable, represented by an enum.
     final Id variableId;
+    final int position;
 
     /**
      * Constructs a ScalarSpecialVariable for a specific type of special variable.
@@ -17,6 +19,19 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     public ScalarSpecialVariable(Id variableId) {
         super();
         this.variableId = variableId;
+        this.position = 0;
+    }
+
+    /**
+     * Constructs a ScalarSpecialVariable for a specific capture group position.
+     *
+     * @param variableId The type of special variable (e.g., CAPTURE).
+     * @param position   The position of the capture group.
+     */
+    public ScalarSpecialVariable(Id variableId, int position) {
+        super();
+        this.variableId = variableId;
+        this.position = position;
     }
 
     /**
@@ -53,6 +68,8 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         try {
             // Return the appropriate string based on the type of special variable.
             switch (variableId) {
+                case CAPTURE:
+                    return RuntimeRegex.captureString(position);
                 case MATCH:
                     return RuntimeRegex.matchString();
                 case PREMATCH:
@@ -124,6 +141,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      * Enum to represent the id of the special variable.
      */
     public enum Id {
+        CAPTURE,   // Represents a captured substring.
         PREMATCH,  // Represents the part of the string before the matched substring.
         MATCH,     // Represents the matched substring.
         POSTMATCH  // Represents the part of the string after the matched substring.
