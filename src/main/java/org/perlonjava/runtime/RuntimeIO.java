@@ -221,7 +221,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             // Wait for the process to finish
             process.waitFor();
         } catch (IOException | InterruptedException e) {
-            throw new RuntimeException("Error: " + e.getMessage());
+            throw new PerlCompilerException("Error: " + e.getMessage());
         } finally {
             try {
                 if (reader != null) {
@@ -231,7 +231,7 @@ public class RuntimeIO implements RuntimeScalarReference {
                     errorReader.close();
                 }
             } catch (IOException e) {
-                throw new RuntimeException("Error closing stream: " + e.getMessage());
+                throw new PerlCompilerException("Error closing stream: " + e.getMessage());
             }
             if (process != null) {
                 process.destroy();
@@ -286,7 +286,7 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     static RuntimeBaseEntity readdir(RuntimeScalar dirHandle, int ctx) {
         if (dirHandle.type != RuntimeScalarType.GLOB) {
-            throw new RuntimeException("Invalid directory handle");
+            throw new PerlCompilerException("Invalid directory handle");
         }
 
         RuntimeIO dirIO = (RuntimeIO) dirHandle.value;
@@ -374,7 +374,7 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Method to seek to a specific position in the directory stream (seekdir equivalent)
     public void seekdir(int position) {
         if (directoryStream == null) {
-            throw new UnsupportedOperationException("seekdir is not supported for non-directory streams");
+            throw new PerlCompilerException("seekdir is not supported for non-directory streams");
         }
 
         // Reset the directory stream
@@ -387,7 +387,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             }
             currentDirPosition = position;
         } catch (IOException e) {
-            throw new RuntimeException("Directory operation failed: " + e.getMessage());
+            throw new PerlCompilerException("Directory operation failed: " + e.getMessage());
         }
     }
 
@@ -399,7 +399,7 @@ public class RuntimeIO implements RuntimeScalarReference {
     private Set<StandardOpenOption> convertMode(String mode) {
         Set<StandardOpenOption> options = MODE_OPTIONS.get(mode);
         if (options == null) {
-            throw new IllegalArgumentException("Unsupported file mode: " + mode);
+            throw new PerlCompilerException("Unsupported file mode: " + mode);
         }
         return new HashSet<>(options);
     }
@@ -445,7 +445,7 @@ public class RuntimeIO implements RuntimeScalarReference {
                 }
                 return result;
             }
-            throw new IllegalStateException("No input source available");
+            throw new PerlCompilerException("No input source available");
         } catch (Exception e) {
             System.err.println("File operation failed: " + e.getMessage());
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
@@ -470,7 +470,7 @@ public class RuntimeIO implements RuntimeScalarReference {
                 }
                 return bytesRead;
             } else {
-                throw new IllegalStateException("No input source available");
+                throw new PerlCompilerException("No input source available");
             }
         } catch (Exception e) {
             System.err.println("File operation failed: " + e.getMessage());
@@ -486,7 +486,7 @@ public class RuntimeIO implements RuntimeScalarReference {
 
             // Check if the IO object is set up for reading
             if (fileChannel == null && bufferedReader == null) {
-                throw new UnsupportedOperationException("Readline is not supported for output streams");
+                throw new PerlCompilerException("Readline is not supported for output streams");
             }
 
             // Get the input record separator (equivalent to Perl's $/)
@@ -568,7 +568,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             if (fileChannel != null) {
                 return fileChannel.position();
             } else {
-                throw new UnsupportedOperationException("Tell operation is not supported for standard streams");
+                throw new PerlCompilerException("Tell operation is not supported for standard streams");
             }
         } catch (Exception e) {
             System.err.println("File operation failed: " + e.getMessage());
@@ -589,7 +589,7 @@ public class RuntimeIO implements RuntimeScalarReference {
                 getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
             }
         } else {
-            throw new UnsupportedOperationException("Seek operation is not supported for standard streams");
+            throw new PerlCompilerException("Seek operation is not supported for standard streams");
         }
     }
 
@@ -674,7 +674,7 @@ public class RuntimeIO implements RuntimeScalarReference {
                     totalWritten += bytesWritten;
                 }
             } else {
-                throw new IllegalStateException("No output channel available");
+                throw new PerlCompilerException("No output channel available");
             }
             return scalarTrue;
         } catch (Exception e) {
@@ -722,7 +722,7 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Method to listen on a server socket
     public RuntimeScalar listen(int backlog) {
         if (this.serverSocket == null) {
-            throw new IllegalStateException("No server socket available to listen");
+            throw new PerlCompilerException("No server socket available to listen");
         }
         try {
             this.serverSocket.setReceiveBufferSize(backlog);
@@ -736,7 +736,7 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Method to accept a connection on a server socket
     public RuntimeScalar accept() {
         if (this.serverSocket == null) {
-            throw new IllegalStateException("No server socket available to accept connections");
+            throw new PerlCompilerException("No server socket available to accept connections");
         }
         try {
             Socket clientSocket = this.serverSocket.accept();
