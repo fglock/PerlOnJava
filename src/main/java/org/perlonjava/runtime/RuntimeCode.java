@@ -14,43 +14,73 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
+/**
+ * The RuntimeCode class represents a compiled code object in the runtime environment.
+ * It provides functionality to compile, store, and execute Perl subroutines and eval strings.
+ */
 public class RuntimeCode implements RuntimeScalarReference {
 
     // Temporary storage for anonymous subroutines and eval string compiler context
     public static HashMap<String, Class<?>> anonSubs = new HashMap<>(); // temp storage for makeCodeObject()
     public static HashMap<String, EmitterContext> evalContext = new HashMap<>(); // storage for eval string compiler context
+
+    // Method object representing the compiled subroutine
     public Method methodObject;
-    public Object codeObject; // apply() needs this
+    // Code object instance used during execution
+    public Object codeObject;
+    // Prototype of the subroutine
     public String prototype;
+    // Attributes associated with the subroutine
     public List<String> attributes = new ArrayList<>();
 
+    /**
+     * Constructs a RuntimeCode instance with the specified prototype and attributes.
+     *
+     * @param prototype  the prototype of the subroutine
+     * @param attributes the attributes associated with the subroutine
+     */
     public RuntimeCode(String prototype, List<String> attributes) {
         this.prototype = prototype;
         this.attributes = attributes;
     }
 
+    /**
+     * Constructs a RuntimeCode instance with the specified method object and code object.
+     *
+     * @param methodObject the method object representing the compiled subroutine
+     * @param codeObject   the code object instance used during execution
+     */
     public RuntimeCode(Method methodObject, Object codeObject) {
         this.methodObject = methodObject;
         this.codeObject = codeObject;
     }
 
+    /**
+     * Constructs a RuntimeCode instance with the specified method object, code object, and prototype.
+     *
+     * @param methodObject the method object representing the compiled subroutine
+     * @param codeObject   the code object instance used during execution
+     * @param prototype    the prototype of the subroutine
+     */
     public RuntimeCode(Method methodObject, Object codeObject, String prototype) {
         this.methodObject = methodObject;
         this.codeObject = codeObject;
         this.prototype = prototype;
     }
 
-    // Method to compile the text of eval string into a Class that
-    // represents an anonymous subroutine.
-    //
-    // After the Class returns to the caller, an instance of the Class
-    // will be populated with closure variables, and then
-    // makeCodeObject() will be called to transform the Class instance
-    // into a Perl CODE object
-    //
+    /**
+     * Compiles the text of an eval string into a Class that represents an anonymous subroutine.
+     * After the Class is returned to the caller, an instance of the Class will be populated
+     * with closure variables, and then makeCodeObject() will be called to transform the Class
+     * instance into a Perl CODE object.
+     *
+     * @param code    the RuntimeScalar containing the eval string
+     * @param evalTag the tag used to retrieve the eval context
+     * @return the compiled Class representing the anonymous subroutine
+     * @throws Exception if an error occurs during compilation
+     */
     public static Class<?> evalStringHelper(RuntimeScalar code, String evalTag) throws Exception {
-
-        // retrieve the eval context that was saved at program compile-time
+        // Retrieve the eval context that was saved at program compile-time
         EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
         ScopedSymbolTable symbolTable = ctx.symbolTable.clone();
 
@@ -87,7 +117,7 @@ public class RuntimeCode implements RuntimeScalarReference {
                     true  // use try-catch
             );
         } catch (Exception e) {
-            // compilation error in eval-string
+            // Compilation error in eval-string
 
             // Set the global error variable "$@" using GlobalContext.setGlobalVariable(key, value)
             GlobalContext.getGlobalVariable("main::@").set(e.toString());
@@ -105,12 +135,15 @@ public class RuntimeCode implements RuntimeScalarReference {
         return generatedClass;
     }
 
-    // Factory method to create a CODE object (anonymous subroutine)
-    //
-    // This is called right after a new Class is compiled.
-    //
-    // codeObject is an instance of the new Class, with the closure variables in place.
-    //
+    /**
+     * Factory method to create a CODE object (anonymous subroutine).
+     * This is called right after a new Class is compiled.
+     * The codeObject is an instance of the new Class, with the closure variables in place.
+     *
+     * @param codeObject the instance of the compiled Class
+     * @return a RuntimeScalar representing the CODE object
+     * @throws Exception if an error occurs during method retrieval
+     */
     public static RuntimeScalar makeCodeObject(Object codeObject) throws Exception {
         // Retrieve the class of the provided code object
         Class<?> clazz = codeObject.getClass();
@@ -125,10 +158,15 @@ public class RuntimeCode implements RuntimeScalarReference {
         return new RuntimeScalar(new RuntimeCode(mm, codeObject));
     }
 
-    // Method to apply (execute) a subroutine reference
+    /**
+     * Method to apply (execute) a subroutine reference.
+     * Invokes the method associated with the code object, passing the RuntimeArray and RuntimeContextType as arguments.
+     *
+     * @param a           the RuntimeArray containing the arguments for the subroutine
+     * @param callContext the context in which the subroutine is called
+     * @return the result of the subroutine execution as a RuntimeList
+     */
     public RuntimeList apply(RuntimeArray a, int callContext) {
-        // Invoke the method associated with the code object, passing the RuntimeArray and RuntimeContextType as arguments
-        // This executes the subroutine and returns the result, which is expected to be a RuntimeList
         try {
             return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
         } catch (Exception e) {
@@ -136,18 +174,38 @@ public class RuntimeCode implements RuntimeScalarReference {
         }
     }
 
+    /**
+     * Returns a string representation of the CODE reference.
+     *
+     * @return a string representing the CODE reference
+     */
     public String toStringRef() {
         return "CODE(" + this.hashCode() + ")";
     }
 
+    /**
+     * Returns an integer representation of the CODE reference.
+     *
+     * @return an integer representing the CODE reference
+     */
     public int getIntRef() {
         return this.hashCode();
     }
 
+    /**
+     * Returns a double representation of the CODE reference.
+     *
+     * @return a double representing the CODE reference
+     */
     public double getDoubleRef() {
         return this.hashCode();
     }
 
+    /**
+     * Returns a boolean representation of the CODE reference.
+     *
+     * @return true, indicating the presence of the CODE reference
+     */
     public boolean getBooleanRef() {
         return true;
     }

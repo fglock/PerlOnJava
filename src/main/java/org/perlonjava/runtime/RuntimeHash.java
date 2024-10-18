@@ -13,15 +13,25 @@ import java.util.Map;
  * any type of Perl scalar value.
  */
 public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarReference {
+    // Map to store the elements of the hash
     public Map<String, RuntimeScalar> elements;
+    // Iterator for traversing the hash elements
     Iterator<RuntimeScalar> hashIterator;
 
-    // Constructor
+    /**
+     * Constructor for RuntimeHash.
+     * Initializes an empty hash map to store elements.
+     */
     public RuntimeHash() {
         this.elements = new HashMap<>();
     }
 
-    // Create hash with the elements of a list
+    /**
+     * Creates a hash with the elements of a list.
+     *
+     * @param value The RuntimeDataProvider containing the elements to populate the hash.
+     * @return A new RuntimeHash populated with the elements from the list.
+     */
     public static RuntimeHash createHash(RuntimeDataProvider value) {
         RuntimeHash result = new RuntimeHash();
         Map<String, RuntimeScalar> resultHash = result.elements;
@@ -34,16 +44,30 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         return result;
     }
 
-    // Create hash reference with the elements of a list
+    /**
+     * Creates a hash reference with the elements of a list.
+     *
+     * @param value The RuntimeDataProvider containing the elements to populate the hash.
+     * @return A RuntimeScalar representing the hash reference.
+     */
     public static RuntimeScalar createHashRef(RuntimeDataProvider value) {
         return createHash(value).createReference();
     }
 
+    /**
+     * Counts the number of elements in the hash.
+     *
+     * @return The number of elements in the hash.
+     */
     public int countElements() {
         return size();
     }
 
-    // Add itself to a RuntimeArray.
+    /**
+     * Adds itself to a RuntimeArray.
+     *
+     * @param array The RuntimeArray to which this hash will be added.
+     */
     public void addToArray(RuntimeArray array) {
         List<RuntimeScalar> elements = array.elements;
         for (Map.Entry<String, RuntimeScalar> entry : this.elements.entrySet()) {
@@ -53,49 +77,82 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
     }
 
     /**
-     * Add itself to a RuntimeScalar.
+     * Adds itself to a RuntimeScalar.
      *
-     * @param scalar The RuntimeScalar object
+     * @param scalar The RuntimeScalar to which this hash will be added.
+     * @return The updated RuntimeScalar.
      */
     public RuntimeScalar addToScalar(RuntimeScalar scalar) {
         return scalar.set(this.scalar());
     }
 
-    // Replace the whole hash with the elements of a list
+    /**
+     * Replaces the whole hash with the elements of a list.
+     *
+     * @param value The RuntimeList containing the elements to set in the hash.
+     * @return A RuntimeArray containing the updated hash.
+     */
     public RuntimeArray setFromList(RuntimeList value) {
         RuntimeHash hash = createHash(value);
         this.elements = hash.elements;
         return new RuntimeArray(new RuntimeList(this));
     }
 
-    // Add a key-value pair to the hash
+    /**
+     * Adds a key-value pair to the hash.
+     *
+     * @param key   The key for the hash entry.
+     * @param value The value for the hash entry.
+     */
     public void put(String key, RuntimeScalar value) {
         elements.put(key, value);
     }
 
-    // Get a value by key
+    /**
+     * Retrieves a value by key.
+     *
+     * @param key The key for the hash entry.
+     * @return The value associated with the key, or a proxy for lazy autovivification if the key does not exist.
+     */
     public RuntimeScalar get(String key) {
         if (elements.containsKey(key)) {
             return elements.get(key);
         }
-        // lazy autovivification
+        // Lazy autovivification
         return new RuntimeHashProxy(this, key);
     }
 
-    // Get a value by key
+    /**
+     * Retrieves a value by key.
+     *
+     * @param keyScalar The RuntimeScalar representing the key for the hash entry.
+     * @return The value associated with the key, or a proxy for lazy autovivification if the key does not exist.
+     */
     public RuntimeScalar get(RuntimeScalar keyScalar) {
         String key = keyScalar.toString();
         if (elements.containsKey(key)) {
             return elements.get(key);
         }
-        // lazy autovivification
+        // Lazy autovivification
         return new RuntimeHashProxy(this, key);
     }
 
+    /**
+     * Checks if a key exists in the hash.
+     *
+     * @param key The RuntimeScalar representing the key to check.
+     * @return A RuntimeScalar indicating whether the key exists.
+     */
     public RuntimeScalar exists(RuntimeScalar key) {
         return new RuntimeScalar(elements.containsKey(key.toString()));
     }
 
+    /**
+     * Deletes a key-value pair from the hash.
+     *
+     * @param key The RuntimeScalar representing the key to delete.
+     * @return The value associated with the deleted key, or an empty RuntimeScalar if the key did not exist.
+     */
     public RuntimeScalar delete(RuntimeScalar key) {
         String k = key.toString();
         if (elements.containsKey(k)) {
@@ -104,7 +161,11 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         return new RuntimeScalar();
     }
 
-    // Create a reference to the Hash
+    /**
+     * Creates a reference to the hash.
+     *
+     * @return A RuntimeScalar representing the hash reference.
+     */
     public RuntimeScalar createReference() {
         RuntimeScalar result = new RuntimeScalar();
         result.type = RuntimeScalarType.HASHREFERENCE;
@@ -112,30 +173,57 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         return result;
     }
 
-    // Get the size of the hash
+    /**
+     * Gets the size of the hash.
+     *
+     * @return The number of key-value pairs in the hash.
+     */
     public int size() {
         return elements.size();
     }
 
+    /**
+     * Retrieves the boolean value of the hash.
+     *
+     * @return True if the hash is not empty, false otherwise.
+     */
     public boolean getBoolean() {
         return !elements.isEmpty();
     }
 
+    /**
+     * Retrieves the defined boolean value of the hash.
+     *
+     * @return Always true, as hashes are always considered defined.
+     */
     public boolean getDefinedBoolean() {
         return true;
     }
 
-    // Get the list value of the hash
+    /**
+     * Gets the list value of the hash.
+     *
+     * @return A RuntimeList containing the elements of the hash.
+     */
     public RuntimeList getList() {
         return new RuntimeList(this);
     }
 
-    // Get the scalar value of the hash
+    /**
+     * Gets the scalar value of the hash.
+     *
+     * @return A RuntimeScalar representing the size of the hash.
+     */
     public RuntimeScalar scalar() {
         return new RuntimeScalar(this.size());
     }
 
-    // Slice the hash:  @x{"a", "b"}
+    /**
+     * Slices the hash: @x{"a", "b"}
+     *
+     * @param value The RuntimeList containing the keys to slice.
+     * @return A RuntimeList containing the values associated with the specified keys.
+     */
     public RuntimeList getSlice(RuntimeList value) {
         RuntimeList result = new RuntimeList();
         List<RuntimeBaseEntity> outElements = result.elements;
@@ -146,6 +234,12 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         return result;
     }
 
+    /**
+     * Deletes a slice of the hash.
+     *
+     * @param value The RuntimeList containing the keys to delete.
+     * @return A RuntimeList containing the values associated with the deleted keys.
+     */
     public RuntimeList deleteSlice(RuntimeList value) {
         RuntimeList result = new RuntimeList();
         List<RuntimeBaseEntity> outElements = result.elements;
@@ -156,26 +250,39 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         return result;
     }
 
-    // keys() operator
+    /**
+     * The keys() operator for hashes.
+     *
+     * @return A RuntimeArray containing the keys of the hash.
+     */
     public RuntimeArray keys() {
         RuntimeArray list = new RuntimeArray();
         for (String key : elements.keySet()) {
             list.push(new RuntimeScalar(key));
         }
-        hashIterator = null;    // keys resets the iterator
+        hashIterator = null; // keys resets the iterator
         return list;
     }
 
-    // values() operator
+    /**
+     * The values() operator for hashes.
+     *
+     * @return A RuntimeArray containing the values of the hash.
+     */
     public RuntimeArray values() {
         RuntimeArray list = new RuntimeArray();
         for (RuntimeScalar value : elements.values()) {
-            list.push(value);   // push an alias to the value
+            list.push(value); // push an alias to the value
         }
-        hashIterator = null;    // values resets the iterator
+        hashIterator = null; // values resets the iterator
         return list;
     }
 
+    /**
+     * The each() operator for hashes.
+     *
+     * @return A RuntimeList containing the next key-value pair, or an empty list if the iterator is exhausted.
+     */
     public RuntimeList each() {
         if (hashIterator == null) {
             hashIterator = iterator();
@@ -190,20 +297,38 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         return new RuntimeList();
     }
 
+    /**
+     * Performs the chop operation on the hash.
+     *
+     * @return A RuntimeScalar representing the result of the chop operation.
+     */
     public RuntimeScalar chop() {
         return this.values().chop();
     }
 
+    /**
+     * Performs the chomp operation on the hash.
+     *
+     * @return A RuntimeScalar representing the result of the chomp operation.
+     */
     public RuntimeScalar chomp() {
         return this.values().chop();
     }
 
-    // Method to return an iterator
+    /**
+     * Returns an iterator over the elements of type RuntimeScalar.
+     *
+     * @return An Iterator<RuntimeScalar> for iterating over the elements.
+     */
     public Iterator<RuntimeScalar> iterator() {
         return new RuntimeHashIterator();
     }
 
-    // Convert the hash to a string (for debugging purposes)
+    /**
+     * Converts the hash to a string (for debugging purposes).
+     *
+     * @return A string representation of the hash.
+     */
     public String dump() {
         StringBuilder sb = new StringBuilder("{");
         boolean first = true;
@@ -218,28 +343,58 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         return sb.toString();
     }
 
+    /**
+     * Returns a string representation of the hash reference.
+     *
+     * @return A string in the format "HASH(hashCode)".
+     */
     public String toStringRef() {
         return "HASH(" + this.hashCode() + ")";
     }
 
+    /**
+     * Returns an integer representation of the hash reference.
+     *
+     * @return The hash code of this instance.
+     */
     public int getIntRef() {
         return this.hashCode();
     }
 
+    /**
+     * Returns a double representation of the hash reference.
+     *
+     * @return The hash code of this instance as a double.
+     */
     public double getDoubleRef() {
         return this.hashCode();
     }
 
+    /**
+     * Returns a boolean representation of the hash reference.
+     *
+     * @return Always true, indicating the presence of the hash reference.
+     */
     public boolean getBooleanRef() {
         return true;
     }
 
+    /**
+     * Undefines the elements of the hash.
+     * This method clears all elements in the hash.
+     *
+     * @return The current RuntimeHash instance after undefining its elements.
+     */
     public RuntimeHash undefine() {
         this.elements.clear();
         return this;
     }
 
-    // Convert the hash to a string (for debugging purposes)
+    /**
+     * Converts the hash to a string (for debugging purposes).
+     *
+     * @return A string representation of the hash.
+     */
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
@@ -249,7 +404,12 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         return sb.toString();
     }
 
-    // Get Hash aliases into an Array
+    /**
+     * Gets hash aliases into an array.
+     *
+     * @param arr The RuntimeArray to which the aliases will be added.
+     * @return The updated RuntimeArray.
+     */
     public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
         List<RuntimeScalar> arrElements = arr.elements;
         for (Map.Entry<String, RuntimeScalar> entry : this.elements.entrySet()) {
@@ -259,22 +419,37 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         return arr;
     }
 
-    // Inner class implementing the Iterator interface
+    /**
+     * Inner class implementing the Iterator interface for iterating over hash elements.
+     */
     private class RuntimeHashIterator implements Iterator<RuntimeScalar> {
         private final Iterator<Map.Entry<String, RuntimeScalar>> entryIterator;
         private Map.Entry<String, RuntimeScalar> currentEntry;
         private boolean returnKey;
 
+        /**
+         * Constructs a RuntimeHashIterator for iterating over hash elements.
+         */
         public RuntimeHashIterator() {
             this.entryIterator = elements.entrySet().iterator();
             this.returnKey = true;
         }
 
+        /**
+         * Checks if there are more elements to iterate over.
+         *
+         * @return True if there are more elements, false otherwise.
+         */
         @Override
         public boolean hasNext() {
             return (currentEntry != null && !returnKey) || entryIterator.hasNext();
         }
 
+        /**
+         * Retrieves the next element in the iteration.
+         *
+         * @return The next RuntimeScalar element.
+         */
         @Override
         public RuntimeScalar next() {
             if (returnKey) {
@@ -287,6 +462,11 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
             }
         }
 
+        /**
+         * Remove operation is not supported for this iterator.
+         *
+         * @throws UnsupportedOperationException if called
+         */
         @Override
         public void remove() {
             throw new UnsupportedOperationException("Remove not supported");
