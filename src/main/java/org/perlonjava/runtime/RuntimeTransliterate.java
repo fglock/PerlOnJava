@@ -1,11 +1,13 @@
 package org.perlonjava.runtime;
 
 /**
- * RuntimeTransliterate class to implement Perl's tr// operator
+ * The RuntimeTransliterate class implements Perl's tr/// operator, which is used for character
+ * transliteration. It provides functionality to compile a transliteration pattern and apply it
+ * to a given string.
  */
 public class RuntimeTransliterate {
 
-
+    // Arrays and flags used for transliteration
     private char[] translationMap;
     private boolean[] usedChars;
     private boolean[] deleteChars;
@@ -15,20 +17,26 @@ public class RuntimeTransliterate {
     private boolean returnOriginal;
 
     /**
-     * Creates a RuntimeTransliterate object from a pattern string with optional modifiers.
+     * Compiles a RuntimeTransliterate object from a pattern string with optional modifiers.
      *
-     * @param search    The  pattern string
+     * @param search    The pattern string to search for
      * @param replace   The replacement string
-     * @param modifiers Modifiers for the pattern
-     * @return A RuntimeTransliterate object.
+     * @param modifiers Modifiers for the pattern (e.g., complement, delete, squash)
+     * @return A compiled RuntimeTransliterate object
      */
     public static RuntimeTransliterate compile(RuntimeScalar search, RuntimeScalar replace, RuntimeScalar modifiers) {
-        // TODO cache the compilation
+        // TODO: Cache the compilation
         RuntimeTransliterate transliterate = new RuntimeTransliterate();
         transliterate.compileTransliteration(search.toString(), replace.toString(), modifiers.toString());
         return transliterate;
     }
 
+    /**
+     * Applies the transliteration pattern to the given string.
+     *
+     * @param originalString The original string to be transliterated
+     * @return A new RuntimeScalar containing the transliterated string
+     */
     public RuntimeScalar transliterate(RuntimeScalar originalString) {
         String input = originalString.toString();
         StringBuilder result = new StringBuilder();
@@ -39,15 +47,12 @@ public class RuntimeTransliterate {
             if (deleteChars[ch]) {
                 lastCharAdded = false;
             } else if (ch < 256 && usedChars[ch]) {
-                // System.out.println("used: " + ch);
                 char mappedChar = translationMap[ch];
                 if (!squashDuplicates || result.length() == 0 || result.charAt(result.length() - 1) != mappedChar) {
-                    // System.out.println("used append: " + ch);
                     result.append(mappedChar);
                     lastCharAdded = true;
                 }
             } else {
-                // System.out.println("not used: " + ch);
                 result.append(ch);
                 lastCharAdded = false;
             }
@@ -60,6 +65,13 @@ public class RuntimeTransliterate {
         return new RuntimeScalar(resultString);
     }
 
+    /**
+     * Compiles the transliteration pattern and replacement strings with the given modifiers.
+     *
+     * @param search    The pattern string to search for
+     * @param replace   The replacement string
+     * @param modifiers Modifiers for the pattern (e.g., complement, delete, squash)
+     */
     public void compileTransliteration(String search, String replace, String modifiers) {
         complement = modifiers.contains("c");
         deleteUnmatched = modifiers.contains("d");
@@ -85,6 +97,12 @@ public class RuntimeTransliterate {
         }
     }
 
+    /**
+     * Expands character ranges and escape sequences in the input string.
+     *
+     * @param input The input string containing ranges and escapes
+     * @return The expanded string
+     */
     private String expandRangesAndEscapes(String input) {
         StringBuilder expanded = new StringBuilder();
         for (int i = 0; i < input.length(); i++) {
@@ -136,10 +154,24 @@ public class RuntimeTransliterate {
         return expanded.toString();
     }
 
+    /**
+     * Checks if a character is a hexadecimal digit.
+     *
+     * @param ch The character to check
+     * @return True if the character is a hexadecimal digit, false otherwise
+     */
     private boolean isHexDigit(char ch) {
         return (ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'F') || (ch >= 'a' && ch <= 'f');
     }
 
+    /**
+     * Complements the translation map based on the search and replace strings.
+     *
+     * @param translationMap The translation map to populate
+     * @param usedChars      The array indicating which characters are used
+     * @param search         The search string
+     * @param replace        The replacement string
+     */
     private void complementTranslationMap(char[] translationMap, boolean[] usedChars, String search, String replace) {
         boolean[] complementSet = new boolean[256];
         for (int i = 0; i < search.length(); i++) {
@@ -165,6 +197,14 @@ public class RuntimeTransliterate {
         }
     }
 
+    /**
+     * Populates the translation map based on the search and replace strings.
+     *
+     * @param translationMap The translation map to populate
+     * @param usedChars      The array indicating which characters are used
+     * @param search         The search string
+     * @param replace        The replacement string
+     */
     private void populateTranslationMap(char[] translationMap, boolean[] usedChars, String search, String replace) {
         int minLength = Math.min(search.length(), replace.length());
         for (int i = 0; i < minLength; i++) {
@@ -182,4 +222,3 @@ public class RuntimeTransliterate {
         }
     }
 }
-
