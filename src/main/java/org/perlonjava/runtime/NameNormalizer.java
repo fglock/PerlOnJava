@@ -83,7 +83,7 @@ public class NameNormalizer {
 
     public static String moduleToFilename(String moduleName) {
         if (moduleName == null || moduleName.isEmpty()) {
-            throw new IllegalArgumentException("Module name cannot be null or empty");
+            throw new PerlCompilerException("Module name cannot be null or empty");
         }
 
         // Replace '::' with '/' and append '.pm'

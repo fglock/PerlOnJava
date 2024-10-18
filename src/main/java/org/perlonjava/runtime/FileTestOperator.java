@@ -183,7 +183,7 @@ public class FileTestOperator {
                 fileTime = ((FileTime) Files.getAttribute(path, "creationTime", LinkOption.NOFOLLOW_LINKS)).toMillis();
                 break;
             default:
-                throw new IllegalArgumentException("Invalid time operator: " + operator);
+                throw new PerlCompilerException("Invalid time operator: " + operator);
         }
 
         double daysDifference = (currentTime - fileTime) / (1000.0 * 60 * 60 * 24);
