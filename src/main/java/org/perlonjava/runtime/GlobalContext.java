@@ -113,7 +113,7 @@ public class GlobalContext {
                 // Convert the capture group to an integer
                 int position = Integer.parseInt(capturedNumber);
                 // Initialize the regex capture variable
-                var = new ScalarRegexNumberVariable(position);
+                var = new ScalarSpecialVariable(ScalarSpecialVariable.Id.CAPTURE, position);
             } else {
                 // Normal "non-magic" global variable
                 var = new RuntimeScalar();

@@ -326,6 +326,10 @@ public class RuntimeRegex implements RuntimeScalarReference {
         return globalMatcher == null ? null : globalMatchString.substring(globalMatcher.end());
     }
 
+    public static String captureString(int group) {
+        return globalMatcher == null ? null : globalMatcher.group(group);
+    }
+
     @Override
     public String toString() {
         // TODO add (?idmsux-idmsux:X) around the regex
