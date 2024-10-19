@@ -136,7 +136,7 @@
 - ✔️   **lvalue `pos`**: lvalue `pos` operator is implemented.
 - ✔️   **`m?pat?`** one-time match is implemented.
 - ✔️   **`reset`** resetting one-time match is implemented
-- ✔️   **`@-` and `@+` variables** `@-` and `@+` special variables are implemented
+- ✔️   **`@-`, `@+`, `%+` variables** `@-`, `@+`, `%+` special variables are implemented
 - ✔️   **`$&` variables** `` $` ``, `$&`, `$'` special variables are implemented
 - ❌  **Perl-specific Regex Features**: Some features like `/xx` `/ee` are missing.
 - ❌  **Dynamically-scoped regex variables**: Regex variables are not dynamically-scoped.
