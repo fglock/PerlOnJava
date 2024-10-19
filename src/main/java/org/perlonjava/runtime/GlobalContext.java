@@ -63,6 +63,9 @@ public class GlobalContext {
         getGlobalArray("main::+").elements = new ArraySpecialVariable(ArraySpecialVariable.Id.LAST_MATCH_END);  // regex @+
         getGlobalArray("main::-").elements = new ArraySpecialVariable(ArraySpecialVariable.Id.LAST_MATCH_START);  // regex @-
 
+        // Initialize hashes
+        getGlobalHash("main::+").elements = new HashSpecialVariable();
+
         // Initialize %ENV
         Map<String, RuntimeScalar> env = getGlobalHash("main::ENV").elements;
         System.getenv().forEach((k, v) -> env.put(k, new RuntimeScalar(v)));
