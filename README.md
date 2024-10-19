@@ -190,7 +190,7 @@ file.
 
 - The project uses the `maven-shade-plugin` for Maven to create a shaded JAR.
 - The project uses the `com.github.johnrengelman.shadow` plugin for Gradle to create a shaded JAR.
-- Both Maven and Gradle configurations are set to use Java 11.
+- Both Maven and Gradle configurations are set to use Java 21.
 
 ## Running the jar file
 
