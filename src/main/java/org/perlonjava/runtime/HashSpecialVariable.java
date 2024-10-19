@@ -5,7 +5,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
@@ -16,26 +15,23 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
  */
 public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 
-    private final Matcher matcher;
-    private final Map<String, Integer> namedGroups;
-
     /**
      * Constructs a HashSpecialVariable for the given Matcher.
-     *
-     * @param matcher the Matcher object to query for named capturing groups
      */
-    public HashSpecialVariable(Matcher matcher) {
-        this.matcher = matcher;
-        this.namedGroups = matcher.pattern().namedGroups();  // Use Java 20's built-in namedGroups support
+    public HashSpecialVariable() {
     }
 
     @Override
     public Set<Entry<String, RuntimeScalar>> entrySet() {
+        Matcher matcher = RuntimeRegex.globalMatcher;
         Set<Entry<String, RuntimeScalar>> entries = new HashSet<>();
-        for (String name : namedGroups.keySet()) {
-            String matchedValue = matcher.group(name);  // Use Matcher.group(String name)
-            if (matchedValue != null) {
-                entries.add(new SimpleEntry<>(name, new RuntimeScalar(matchedValue)));
+        if (matcher != null) {
+            Map<String, Integer> namedGroups = matcher.pattern().namedGroups();
+            for (String name : namedGroups.keySet()) {
+                String matchedValue = matcher.group(name);
+                if (matchedValue != null) {
+                    entries.add(new SimpleEntry<>(name, new RuntimeScalar(matchedValue)));
+                }
             }
         }
         return entries;
@@ -43,9 +39,9 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 
     @Override
     public RuntimeScalar get(Object key) {
-        if (key instanceof String) {
-            String name = (String) key;
-            String matchedValue = matcher.group(name);  // Use Matcher.group(String name)
+        Matcher matcher = RuntimeRegex.globalMatcher;
+        if (matcher != null && key instanceof String name) {
+            String matchedValue = matcher.group(name);
             if (matchedValue != null) {
                 return new RuntimeScalar(matchedValue);
             }
