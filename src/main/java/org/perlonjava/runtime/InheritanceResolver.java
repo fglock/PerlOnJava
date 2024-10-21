@@ -116,7 +116,7 @@ public class InheritanceResolver {
             String candidate = null;
             for (List<String> linearization : linearizations) {
                 if (linearization.isEmpty()) continue;
-                candidate = linearization.get(0);
+                candidate = linearization.getFirst();
                 boolean isValidCandidate = true;
                 for (List<String> other : linearizations) {
                     if (other.indexOf(candidate) > 0) {
@@ -133,8 +133,8 @@ public class InheritanceResolver {
 
             result.add(candidate);
             for (List<String> linearization : linearizations) {
-                if (!linearization.isEmpty() && linearization.get(0).equals(candidate)) {
-                    linearization.remove(0);
+                if (!linearization.isEmpty() && linearization.getFirst().equals(candidate)) {
+                    linearization.removeFirst();
                 }
             }
             linearizations.removeIf(List::isEmpty);

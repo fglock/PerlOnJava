@@ -1,3 +1,4 @@
+our ($i, $j, $k, $count);
 
 $i = 0;
 while ( $i < 400 ) {

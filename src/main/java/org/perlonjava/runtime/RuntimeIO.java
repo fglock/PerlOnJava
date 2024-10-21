@@ -306,7 +306,7 @@ public class RuntimeIO implements RuntimeScalarReference {
         if (ctx == RuntimeContextType.SCALAR) {
             // Handle special entries first ('.' and '..')
             if (!dirIO.directorySpecialEntries.isEmpty()) {
-                return dirIO.directorySpecialEntries.remove(0);  // return '.' or '..'
+                return dirIO.directorySpecialEntries.removeFirst();  // return '.' or '..'
             }
 
             // Now handle actual directory contents
@@ -532,7 +532,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             }
 
             // Return undef if we've reached EOF and no characters were read
-            if (line.length() == 0 && this.isEOF) {
+            if (line.isEmpty() && this.isEOF) {
                 return scalarUndef;
             }
 

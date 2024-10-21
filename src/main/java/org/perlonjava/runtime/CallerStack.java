@@ -14,14 +14,14 @@ public class CallerStack {
         if (callerStack.isEmpty()) {
             return null;
         }
-        return callerStack.get(callerStack.size() - 1);
+        return callerStack.getLast();
     }
 
     public static CallerInfo pop() {
         if (callerStack.isEmpty()) {
             return null;
         }
-        return callerStack.remove(callerStack.size() - 1);
+        return callerStack.removeLast();
     }
 
     public static List<CallerInfo> getStack() {

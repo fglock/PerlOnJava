@@ -267,7 +267,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
             return new RuntimeScalar(); // Return undefined if empty
         }
         // XXX expand the last element
-        return elements.get(elements.size() - 1).scalar();
+        return elements.getLast().scalar();
     }
 
     /**
@@ -374,7 +374,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         public RuntimeListIterator(List<RuntimeBaseEntity> elements) {
             this.elements = elements;
             if (!elements.isEmpty()) {
-                currentIterator = elements.get(0).iterator();
+                currentIterator = elements.getFirst().iterator();
             }
         }
 
