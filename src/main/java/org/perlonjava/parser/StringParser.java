@@ -211,7 +211,7 @@ public class StringParser {
                     ctx.logDebug("str sigil");
                     Node operand;
                     boolean isArray = sigil.equals("@");
-                    if (parser.peek().text.equals("{")) {
+                    if (TokenUtils.peek(parser).text.equals("{")) {
                         // block-like
                         // extract the string between brackets
                         StringParser.ParsedString rawStr2 = StringParser.parseRawStrings(ctx, parser.tokens, parser.tokenIndex, 1);
@@ -227,7 +227,7 @@ public class StringParser {
                         if (identifier == null) {
                             // parse $$$a  @$$a
                             int dollarCount = 0;
-                            while (parser.peek().text.equals("$")) {
+                            while (TokenUtils.peek(parser).text.equals("$")) {
                                 dollarCount++;
                                 parser.tokenIndex++;
                             }
@@ -314,17 +314,17 @@ public class StringParser {
         token = tokens.get(parser.tokenIndex);
         if (token.type == LexerTokenType.NUMBER) {
             //  octal like `\200`
-            StringBuilder octalStr = new StringBuilder(parser.consumeChar());
-            String chr = parser.peekChar();
+            StringBuilder octalStr = new StringBuilder(TokenUtils.consumeChar(parser));
+            String chr = TokenUtils.peekChar(parser);
             while (octalStr.length() < 3 && chr.compareTo("0") >= 0 && chr.compareTo("7") <= 0) {
-                octalStr.append(parser.consumeChar());
-                chr = parser.peekChar();
+                octalStr.append(TokenUtils.consumeChar(parser));
+                chr = TokenUtils.peekChar(parser);
             }
             ctx.logDebug("octalStr: " + octalStr);
             str.append((char) Integer.parseInt(octalStr.toString(), 8));
             return;
         }
-        escape = parser.consumeChar();
+        escape = TokenUtils.consumeChar(parser);
         switch (escape) {
             case "\\":
             case "\"":
@@ -352,7 +352,7 @@ public class StringParser {
                 str.append((char) 27);  // Append escape
                 break;
             case "c":
-                String ctl = parser.consumeChar();
+                String ctl = TokenUtils.consumeChar(parser);
                 if (!ctl.isEmpty()) {
                     //  \cA is control-A char(1)
                     char chr = ctl.charAt(0);
