@@ -17,8 +17,7 @@ public class EmitRegex {
         //
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
-        if (node.right instanceof OperatorNode) {
-            OperatorNode right = (OperatorNode) node.right;
+        if (node.right instanceof OperatorNode right) {
             if (right.operand instanceof ListNode) {
                 // regex operator:  $v =~ /regex/;
                 // bind the variable to the regex operation

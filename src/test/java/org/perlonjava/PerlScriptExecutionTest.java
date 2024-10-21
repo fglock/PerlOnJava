@@ -6,19 +6,18 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.perlonjava.runtime.RuntimeIO;
-import org.perlonjava.scriptengine.PerlLanguageProvider;
 import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.scriptengine.PerlLanguageProvider;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
-import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.nio.file.*;
-import java.util.Collections;
-import java.util.Enumeration;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
