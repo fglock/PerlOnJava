@@ -86,7 +86,7 @@ public class Parser {
     public Node parse() {
         if (tokens.get(tokenIndex).text.equals("=")) {
             // looks like pod: insert a newline to trigger pod parsing
-            tokens.add(0, new LexerToken(LexerTokenType.NEWLINE, "\n"));
+            tokens.addFirst(new LexerToken(LexerTokenType.NEWLINE, "\n"));
         }
         return parseBlock();
     }
@@ -464,7 +464,7 @@ public class Parser {
             case "split":
                 // RuntimeList split(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar limitArg)
                 operand = ListParser.parseZeroOrMoreList(this, 1, false, true, false, true);
-                Node separator = ((ListNode) operand).elements.remove(0);
+                Node separator = ((ListNode) operand).elements.removeFirst();
                 if (separator instanceof OperatorNode) {
                     if (((OperatorNode) separator).operator.equals("matchRegex")) {
                         ((OperatorNode) separator).operator = "quoteRegex";
@@ -508,7 +508,7 @@ public class Parser {
                 operand = ListParser.parseZeroOrMoreList(this, 0, false, true, false, false);
                 // Node handle = ((ListNode) operand).handle;
                 // ((ListNode) operand).handle = null;
-                Node handle = ((ListNode) operand).elements.remove(0);
+                Node handle = ((ListNode) operand).elements.removeFirst();
                 if (handle == null) {
                     handle = new IdentifierNode("main::STDOUT", currentIndex);
                 }
