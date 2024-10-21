@@ -288,19 +288,19 @@ public class Operator {
         RuntimeArray filterArgs = new RuntimeArray();
 
         // Iterate over each element in the current RuntimeArray
-        for (RuntimeBaseEntity element : array.elements) {
+        for (RuntimeScalar element : array.elements) {
             try {
                 // Create $_ argument for the filter subroutine
-                var_.set((RuntimeScalar) element);
+                var_.set(element);
 
                 // Apply the Perl filter subroutine with the argument
                 RuntimeList result = perlFilterClosure.apply(filterArgs, RuntimeContextType.SCALAR);
 
                 // Check the result of the filter subroutine
-                if (result.elements.get(0).scalar().getBoolean()) {
+                if (result.elements.getFirst().scalar().getBoolean()) {
                     // If the result is non-zero, add the element to the filtered list
                     // We need to clone, otherwise we would be adding an alias to the original element
-                    filteredElements.add(((RuntimeScalar) element).clone());
+                    filteredElements.add(element.clone());
                 }
             } catch (Exception e) {
                 // Wrap any exceptions thrown by the filter subroutine in a RuntimeException
@@ -335,10 +335,10 @@ public class Operator {
         RuntimeArray mapArgs = new RuntimeArray();
 
         // Iterate over each element in the current RuntimeArray
-        for (RuntimeBaseEntity element : array.elements) {
+        for (RuntimeScalar element : array.elements) {
             try {
                 // Create $_ argument for the map subroutine
-                var_.set((RuntimeScalar) element);
+                var_.set(element);
 
                 // Apply the Perl map subroutine with the argument
                 RuntimeList result = perlMapClosure.apply(mapArgs, RuntimeContextType.LIST);
@@ -383,7 +383,7 @@ public class Operator {
      * @return A RuntimeScalar indicating the result of the write operation.
      */
     public static RuntimeScalar printf(RuntimeList runtimeList, RuntimeScalar fileHandle) {
-        RuntimeScalar format = (RuntimeScalar) runtimeList.elements.remove(0); // Extract the format string from elements
+        RuntimeScalar format = (RuntimeScalar) runtimeList.elements.removeFirst(); // Extract the format string from elements
 
         // Use sprintf to get the formatted string
         String formattedString = sprintf(format, runtimeList).toString();
@@ -577,8 +577,8 @@ public class Operator {
 
                 // Handle trailing empty strings if no capturing groups and limit is zero or negative
                 if (matcher.groupCount() == 0 && limit <= 0) {
-                    while (!splitElements.isEmpty() && splitElements.get(splitElements.size() - 1).toString().isEmpty()) {
-                        splitElements.remove(splitElements.size() - 1);
+                    while (!splitElements.isEmpty() && splitElements.getLast().toString().isEmpty()) {
+                        splitElements.removeLast();
                     }
                 }
             }
@@ -678,7 +678,7 @@ public class Operator {
 
         int offset;
         if (!list.elements.isEmpty()) {
-            RuntimeDataProvider value = list.elements.remove(0);
+            RuntimeDataProvider value = list.elements.removeFirst();
             offset = value.scalar().getInt();
         } else {
             offset = 0;
@@ -686,7 +686,7 @@ public class Operator {
 
         int length;
         if (!list.elements.isEmpty()) {
-            RuntimeDataProvider value = list.elements.remove(0);
+            RuntimeDataProvider value = list.elements.removeFirst();
             length = value.scalar().getInt();
         } else {
             length = size;

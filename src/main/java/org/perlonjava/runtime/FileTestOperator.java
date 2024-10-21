@@ -56,68 +56,65 @@ public class FileTestOperator {
         Path path = Paths.get(filePath);
 
         try {
-            switch (operator) {
-                case "-r":
+            return switch (operator) {
+                case "-r" ->
                     // Check if file is readable
-                    return getScalarBoolean(Files.isReadable(path));
-                case "-w":
+                        getScalarBoolean(Files.isReadable(path));
+                case "-w" ->
                     // Check if file is writable
-                    return getScalarBoolean(Files.isWritable(path));
-                case "-x":
+                        getScalarBoolean(Files.isWritable(path));
+                case "-x" ->
                     // Check if file is executable
-                    return getScalarBoolean(Files.isExecutable(path));
-                case "-e":
+                        getScalarBoolean(Files.isExecutable(path));
+                case "-e" ->
                     // Check if file exists
-                    return getScalarBoolean(Files.exists(path));
-                case "-z":
+                        getScalarBoolean(Files.exists(path));
+                case "-z" ->
                     // Check if file is empty (zero size)
-                    return getScalarBoolean(Files.size(path) == 0);
-                case "-s":
+                        getScalarBoolean(Files.size(path) == 0);
+                case "-s" -> {
                     // Return file size if non-zero, otherwise return false
                     long size = Files.size(path);
-                    return size > 0 ? new RuntimeScalar(size) : scalarFalse;
-                case "-f":
+                    yield size > 0 ? new RuntimeScalar(size) : scalarFalse;
+                }
+                case "-f" ->
                     // Check if path is a regular file
-                    return getScalarBoolean(Files.isRegularFile(path));
-                case "-d":
+                        getScalarBoolean(Files.isRegularFile(path));
+                case "-d" ->
                     // Check if path is a directory
-                    return getScalarBoolean(Files.isDirectory(path));
-                case "-l":
+                        getScalarBoolean(Files.isDirectory(path));
+                case "-l" ->
                     // Check if path is a symbolic link
-                    return getScalarBoolean(Files.isSymbolicLink(path));
-                case "-p":
+                        getScalarBoolean(Files.isSymbolicLink(path));
+                case "-p" ->
                     // Approximate check for named pipe (FIFO)
-                    return getScalarBoolean(Files.isRegularFile(path) && filePath.endsWith(".fifo"));
-                case "-S":
+                        getScalarBoolean(Files.isRegularFile(path) && filePath.endsWith(".fifo"));
+                case "-S" ->
                     // Approximate check for socket
-                    return getScalarBoolean(Files.isRegularFile(path) && filePath.endsWith(".sock"));
-                case "-b":
+                        getScalarBoolean(Files.isRegularFile(path) && filePath.endsWith(".sock"));
+                case "-b" ->
                     // Approximate check for block special file
-                    return getScalarBoolean(Files.isRegularFile(path) && filePath.startsWith("/dev/"));
-                case "-c":
+                        getScalarBoolean(Files.isRegularFile(path) && filePath.startsWith("/dev/"));
+                case "-c" ->
                     // Approximate check for character special file
-                    return getScalarBoolean(Files.isRegularFile(path) && filePath.startsWith("/dev/"));
-                case "-u":
+                        getScalarBoolean(Files.isRegularFile(path) && filePath.startsWith("/dev/"));
+                case "-u" ->
                     // Check if setuid bit is set
-                    return getScalarBoolean((Files.getPosixFilePermissions(path).contains(PosixFilePermission.OWNER_EXECUTE)));
-                case "-g":
+                        getScalarBoolean((Files.getPosixFilePermissions(path).contains(PosixFilePermission.OWNER_EXECUTE)));
+                case "-g" ->
                     // Check if setgid bit is set
-                    return getScalarBoolean((Files.getPosixFilePermissions(path).contains(PosixFilePermission.GROUP_EXECUTE)));
-                case "-k":
+                        getScalarBoolean((Files.getPosixFilePermissions(path).contains(PosixFilePermission.GROUP_EXECUTE)));
+                case "-k" ->
                     // Approximate check for sticky bit (using others execute permission)
-                    return getScalarBoolean((Files.getPosixFilePermissions(path).contains(PosixFilePermission.OTHERS_EXECUTE)));
-                case "-T":
-                case "-B":
+                        getScalarBoolean((Files.getPosixFilePermissions(path).contains(PosixFilePermission.OTHERS_EXECUTE)));
+                case "-T", "-B" ->
                     // Check if file is text (-T) or binary (-B)
-                    return isTextOrBinary(path, operator.equals("-T"));
-                case "-M":
-                case "-A":
-                case "-C":
+                        isTextOrBinary(path, operator.equals("-T"));
+                case "-M", "-A", "-C" ->
                     // Get file time difference for modification (-M), access (-A), or creation (-C) time
-                    return getFileTimeDifference(path, operator);
-                default:
-                    throw new UnsupportedOperationException("Unsupported file test operator: " + operator);
-            }
+                        getFileTimeDifference(path, operator);
+                default -> throw new UnsupportedOperationException("Unsupported file test operator: " + operator);
+            };
         } catch (IOException e) {
             // Set error message in global variable and return false
             getGlobalVariable("main::!").set(e.getMessage());
@@ -167,24 +164,18 @@ public class FileTestOperator {
      */
     private static RuntimeScalar getFileTimeDifference(Path path, String operator) throws IOException {
         long currentTime = System.currentTimeMillis();
-        long fileTime;
-
-        switch (operator) {
-            case "-M":
+        long fileTime = switch (operator) {
+            case "-M" ->
                 // Get last modified time
-                fileTime = Files.getLastModifiedTime(path).toMillis();
-                break;
-            case "-A":
+                    Files.getLastModifiedTime(path).toMillis();
+            case "-A" ->
                 // Get last access time
-                fileTime = ((FileTime) Files.getAttribute(path, "lastAccessTime", LinkOption.NOFOLLOW_LINKS)).toMillis();
-                break;
-            case "-C":
+                    ((FileTime) Files.getAttribute(path, "lastAccessTime", LinkOption.NOFOLLOW_LINKS)).toMillis();
+            case "-C" ->
                 // Get creation time
-                fileTime = ((FileTime) Files.getAttribute(path, "creationTime", LinkOption.NOFOLLOW_LINKS)).toMillis();
-                break;
-            default:
-                throw new PerlCompilerException("Invalid time operator: " + operator);
-        }
+                    ((FileTime) Files.getAttribute(path, "creationTime", LinkOption.NOFOLLOW_LINKS)).toMillis();
+            default -> throw new PerlCompilerException("Invalid time operator: " + operator);
+        };
 
         double daysDifference = (currentTime - fileTime) / (1000.0 * 60 * 60 * 24);
         return new RuntimeScalar(daysDifference);

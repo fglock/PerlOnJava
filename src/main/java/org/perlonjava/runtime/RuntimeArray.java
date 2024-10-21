@@ -108,7 +108,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         if (elements.isEmpty()) {
             return new RuntimeScalar(); // Return undefined if empty
         }
-        return elements.remove(elements.size() - 1);
+        return elements.removeLast();
     }
 
     /**
@@ -120,7 +120,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         if (elements.isEmpty()) {
             return new RuntimeScalar(); // Return undefined if empty
         }
-        return elements.remove(0);
+        return elements.removeFirst();
     }
 
     /**
