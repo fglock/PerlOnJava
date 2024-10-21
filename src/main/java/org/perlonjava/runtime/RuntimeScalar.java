@@ -898,6 +898,13 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return result;
     }
 
+    // Return a reference to the subroutine with this name: \&$a
+    public RuntimeScalar createCodeReference(String packageName) {
+        String name = NameNormalizer.normalizeVariableName(this.toString(), packageName);
+        System.out.println("Creating code reference: " + name + " got: " + GlobalContext.getGlobalCodeRef(name));
+        return GlobalContext.getGlobalCodeRef(name);
+    }
+
     public RuntimeScalar undefine() {
         this.type = RuntimeScalarType.UNDEF;
         return this;
