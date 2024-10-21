@@ -203,9 +203,8 @@ public class EmitVariable {
 
     static void handleMyOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         String operator = node.operator;
-        if (node.operand instanceof ListNode) { // my ($a, $b)  our ($a, $b)
+        if (node.operand instanceof ListNode listNode) { // my ($a, $b)  our ($a, $b)
             // process each item of the list; then returns the list
-            ListNode listNode = (ListNode) node.operand;
             for (Node element : listNode.elements) {
                 if (element instanceof OperatorNode && "undef".equals(((OperatorNode) element).operator)) {
                     continue; // skip "undef"
@@ -217,8 +216,7 @@ public class EmitVariable {
                 listNode.accept(emitterVisitor);
             }
             return;
-        } else if (node.operand instanceof OperatorNode) { //  [my our] followed by [$ @ %]
-            OperatorNode sigilNode = (OperatorNode) node.operand;
+        } else if (node.operand instanceof OperatorNode sigilNode) { //  [my our] followed by [$ @ %]
             String sigil = sigilNode.operator;
             if ("$@%".contains(sigil)) {
                 Node identifierNode = sigilNode.operand;
