@@ -253,7 +253,7 @@ public class StatementParser {
                 RuntimeList codeList = Universal.can(canArgs, RuntimeContextType.SCALAR);
                 ctx.logDebug("Use can(" + packageName + ", " + importMethod + "): " + codeList);
                 if (codeList.size() == 1) {
-                    RuntimeScalar code = (RuntimeScalar) codeList.elements.get(0);
+                    RuntimeScalar code = (RuntimeScalar) codeList.elements.getFirst();
                     if (code.getBoolean()) {
                         // call the method
                         ctx.logDebug("Use call : " + importMethod + "(" + args + ")");
@@ -319,7 +319,7 @@ public class StatementParser {
             BlockNode block = parser.parseBlock();
 
             // Insert packageNode as first statement in block
-            block.elements.add(0, packageNode);
+            block.elements.addFirst(packageNode);
 
             parser.ctx.symbolTable.exitScope();
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
