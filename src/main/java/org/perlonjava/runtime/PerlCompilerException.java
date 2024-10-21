@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import java.io.Serial;
+
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 
 /**
@@ -8,6 +10,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
  * that include the file name, line number, and a snippet of code.
  */
 public class PerlCompilerException extends RuntimeException {
+    @Serial
     private static final long serialVersionUID = 1L;
 
     // Detailed error message that includes additional context about the error

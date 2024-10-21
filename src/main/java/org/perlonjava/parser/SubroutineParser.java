@@ -12,7 +12,7 @@ public class SubroutineParser {
     /**
      * Parses a subroutine call.
      *
-     * @param parser  The parser object
+     * @param parser The parser object
      * @return A Node representing the parsed subroutine call.
      */
     static Node parseSubroutineCall(Parser parser) {
