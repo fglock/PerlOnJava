@@ -409,6 +409,15 @@ public class Parser {
             case "reset":
             case "pos":
                 return parseOperatorWithOneOptionalArgument(token);
+            case "readpipe":
+                // one optional argument
+                operand = ListParser.parseZeroOrOneList(this, 0);
+                if (((ListNode) operand).elements.isEmpty()) {
+                    // create `$_` variable
+                    operand = new OperatorNode(
+                            "$", new IdentifierNode("_", tokenIndex), tokenIndex);
+                }
+                return new OperatorNode("qx", operand, tokenIndex);
             case "unpack":
                 // Handle operators with one mandatory, one optional argument
                 operand = ListParser.parseZeroOrMoreList(this, 1, false, true, false, false);
