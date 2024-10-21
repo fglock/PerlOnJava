@@ -78,7 +78,7 @@ public class StringParser {
                             if (parenLevel == 0) {
                                 if (redo && !isPair) {
                                     redo = false;
-                                    state = STRING;  // Restart FSM for another string
+                                    // Restart FSM for another string
                                     buffers.add(buffer.toString());
                                     buffer = new StringBuilder();
                                     break;  // Exit the loop to restart FSM
@@ -107,7 +107,7 @@ public class StringParser {
             tokPos++;  // Move to the next token
         }
         buffers.add(buffer.toString());
-        if (remain.length() > 0) {
+        if (!remain.isEmpty()) {
             tokPos--;
             tokens.get(tokPos).text = remain.toString();  // Put the remaining string back in the tokens list
         }
@@ -128,7 +128,7 @@ public class StringParser {
             if (QUOTE_PAIR.containsKey(delim)) {
                 pos = Whitespace.skipWhitespace(pos, tokens);
                 ParsedString ast2 = parseRawStringWithDelimiter(ctx, tokens, pos, false);
-                ast.buffers.add(ast2.buffers.get(0));
+                ast.buffers.add(ast2.buffers.getFirst());
                 ast.next = ast2.next;
                 pos = ast.next;
             }
@@ -153,7 +153,7 @@ public class StringParser {
         Node parsed;
         if (rawStr.startDelim == '\'') {
             // single quote delimiter, use the string as-is
-            parsed = new StringNode(rawStr.buffers.get(0), rawStr.index);
+            parsed = new StringNode(rawStr.buffers.getFirst(), rawStr.index);
         } else {
             // interpolate variables, but ignore the escapes
             parsed = parseDoubleQuotedString(ctx, rawStr, false);
@@ -162,7 +162,7 @@ public class StringParser {
     }
 
     static Node parseDoubleQuotedString(EmitterContext ctx, ParsedString rawStr, boolean parseEscapes) {
-        String input = rawStr.buffers.get(0);
+        String input = rawStr.buffers.getFirst();
         int tokenIndex = rawStr.next;
 
         StringBuilder str = new StringBuilder();  // Buffer to hold the parsed string
@@ -203,7 +203,7 @@ public class StringParser {
                         str.append(text);
                         break;
                     }
-                    if (str.length() > 0) {
+                    if (!str.isEmpty()) {
                         parts.add(new StringNode(str.toString(), tokenIndex));  // Add the string so far to parts
                         str = new StringBuilder();  // Reset the buffer
                     }
@@ -215,7 +215,7 @@ public class StringParser {
                         // block-like
                         // extract the string between brackets
                         StringParser.ParsedString rawStr2 = StringParser.parseRawStrings(ctx, parser.tokens, parser.tokenIndex, 1);
-                        String blockStr = rawStr2.buffers.get(0);
+                        String blockStr = rawStr2.buffers.getFirst();
                         ctx.logDebug("str block-like: " + blockStr);
                         blockStr = sigil + "{" + blockStr + "}";
                         Parser blockParser = new Parser(ctx, new Lexer(blockStr).tokenize());
@@ -288,7 +288,7 @@ public class StringParser {
             }
         }
 
-        if (str.length() > 0) {
+        if (!str.isEmpty()) {
             parts.add(new StringNode(str.toString(), tokenIndex));  // Add the remaining string to parts
         }
 
@@ -296,9 +296,9 @@ public class StringParser {
         if (parts.isEmpty()) {
             return new StringNode("", tokenIndex);
         } else if (parts.size() == 1) {
-            Node result = parts.get(0);
+            Node result = parts.getFirst();
             if (result instanceof StringNode) {
-                return parts.get(0);
+                return parts.getFirst();
             }
         }
         return new BinaryOperatorNode("join",
@@ -425,7 +425,7 @@ public class StringParser {
     }
 
     static Node parseSingleQuotedString(StringParser.ParsedString rawStr) {
-        String input = rawStr.buffers.get(0);
+        String input = rawStr.buffers.getFirst();
         char startDelim = rawStr.startDelim;
         char endDelim = rawStr.endDelim;
         int tokenIndex = rawStr.index;
@@ -461,7 +461,7 @@ public class StringParser {
     public static ListNode parseWordsString(ParsedString rawStr) {
         // Use a regular expression to split the string.
         // " +" matches one or more ASCII space characters
-        String[] words = rawStr.buffers.get(0).trim().split("[ \t\n]+");
+        String[] words = rawStr.buffers.getFirst().trim().split("[ \t\n]+");
         ListNode list = new ListNode(rawStr.index);
         for (String word : words) {
             list.elements.add(new StringNode(word, rawStr.index));
@@ -483,7 +483,7 @@ public class StringParser {
             replace = blockParser.parseBlock();
         } else {
             // handle string interpolaton
-            rawStr.buffers.remove(0);   // shift replace to first position
+            rawStr.buffers.removeFirst();   // shift replace to first position
             replace = parseDoubleQuotedString(ctx, rawStr, false);
         }
 
@@ -526,7 +526,7 @@ public class StringParser {
     public static OperatorNode parseSystemCommand(EmitterContext ctx, String operator, ParsedString rawStr) {
         operator = "qx";
         // TODO when to interpolate variables?
-        Node parsed = new StringNode(rawStr.buffers.get(0), rawStr.index);
+        Node parsed = new StringNode(rawStr.buffers.getFirst(), rawStr.index);
         List<Node> elements = new ArrayList<>();
         elements.add(parsed);
         ListNode list = new ListNode(elements, rawStr.index);
@@ -543,20 +543,11 @@ public class StringParser {
             }
         }
         ParsedString rawStr;
-        int stringParts = 1;
-        switch (operator) {
-            case "s":
-            case "tr":
-            case "y":
-                stringParts = 3;    // s{str}{str}modifier
-                break;
-            case "m":
-            case "qr":
-            case "/":
-            case "//":
-                stringParts = 2;    // m{str}modifier
-                break;
-        }
+        int stringParts = switch (operator) {
+            case "s", "tr", "y" -> 3;    // s{str}{str}modifier
+            case "m", "qr", "/", "//" -> 2;
+            default -> 1;    // m{str}modifier
+        };
         rawStr = parseRawStrings(parser.ctx, parser.tokens, parser.tokenIndex, stringParts);
         parser.tokenIndex = rawStr.next;
 
