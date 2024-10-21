@@ -317,7 +317,7 @@ public class EmitterVisitor implements Visitor {
                 ArrayLiteralNode right = (ArrayLiteralNode) node.right;
                 if (right.elements.size() == 1) {
                     // Optimization: Extract the single element if the list has only one item
-                    Node elem = right.elements.get(0);
+                    Node elem = right.elements.getFirst();
                     elem.accept(this.with(RuntimeContextType.SCALAR));
                 } else {
                     // emit the [0] as a RuntimeList
@@ -400,7 +400,7 @@ public class EmitterVisitor implements Visitor {
                 // emit the {x} as a RuntimeList
                 ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
 
-                Node nodeZero = nodeRight.elements.get(0);
+                Node nodeZero = nodeRight.elements.getFirst();
                 if (nodeRight.elements.size() == 1 && nodeZero instanceof IdentifierNode) {
                     // Convert IdentifierNode to StringNode:  {a} to {"a"}
                     nodeRight.elements.set(0, new StringNode(((IdentifierNode) nodeZero).name, ((IdentifierNode) nodeZero).tokenIndex));
@@ -434,7 +434,7 @@ public class EmitterVisitor implements Visitor {
                 // emit the {x} as a RuntimeList
                 ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
 
-                Node nodeZero = nodeRight.elements.get(0);
+                Node nodeZero = nodeRight.elements.getFirst();
                 if (nodeRight.elements.size() == 1 && nodeZero instanceof IdentifierNode) {
                     // Convert IdentifierNode to StringNode:  {a} to {"a"}
                     nodeRight.elements.set(0, new StringNode(((IdentifierNode) nodeZero).name, ((IdentifierNode) nodeZero).tokenIndex));
@@ -537,7 +537,7 @@ public class EmitterVisitor implements Visitor {
         ArrayLiteralNode right = (ArrayLiteralNode) node.right;
         if (right.elements.size() == 1) {
             // Optimization: Extract the single element if the list has only one item
-            Node elem = right.elements.get(0);
+            Node elem = right.elements.getFirst();
             elem.accept(this.with(RuntimeContextType.SCALAR));
         } else {
             // emit the [0] as a RuntimeList
@@ -570,7 +570,7 @@ public class EmitterVisitor implements Visitor {
         // emit the {0} as a RuntimeList
         ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
 
-        Node nodeZero = nodeRight.elements.get(0);
+        Node nodeZero = nodeRight.elements.getFirst();
         if (nodeRight.elements.size() == 1 && nodeZero instanceof IdentifierNode) {
             // Convert IdentifierNode to StringNode:  {a} to {"a"}
             nodeRight.elements.set(0, new StringNode(((IdentifierNode) nodeZero).name, ((IdentifierNode) nodeZero).tokenIndex));
@@ -579,20 +579,13 @@ public class EmitterVisitor implements Visitor {
         ctx.logDebug("visit -> (HashLiteralNode) autoquote " + node.right);
         nodeRight.accept(this.with(RuntimeContextType.SCALAR));
 
-        String methodName;
-        switch (hashOperation) {
-            case "get":
-                methodName = "hashDerefGet";
-                break;
-            case "delete":
-                methodName = "hashDerefDelete";
-                break;
-            case "exists":
-                methodName = "hashDerefExists";
-                break;
-            default:
-                throw new PerlCompilerException(node.tokenIndex, "Not implemented: hash operation: " + hashOperation, ctx.errorUtil);
-        }
+        String methodName = switch (hashOperation) {
+            case "get" -> "hashDerefGet";
+            case "delete" -> "hashDerefDelete";
+            case "exists" -> "hashDerefExists";
+            default ->
+                    throw new PerlCompilerException(node.tokenIndex, "Not implemented: hash operation: " + hashOperation, ctx.errorUtil);
+        };
 
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", methodName, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
     }
@@ -643,7 +636,7 @@ public class EmitterVisitor implements Visitor {
         Node operand = node.operand;
         ctx.logDebug("handleArrayUnaryBuiltin " + operand);
         if (operand instanceof ListNode) {
-            operand = ((ListNode) operand).elements.get(0);
+            operand = ((ListNode) operand).elements.getFirst();
         }
         operand.accept(this.with(RuntimeContextType.LIST));
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
