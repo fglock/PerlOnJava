@@ -33,6 +33,7 @@ testing {
 
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs << '-Xlint:-options'
+    options.compilerArgs << '-Xlint:deprecation'
 }
 
 shadowJar {
@@ -50,10 +51,13 @@ tasks.named('build') {
 }
 
 sourceSets {
-    main {
+    test {
         resources {
-            srcDirs = ['src/main/perl']
-            include '**/*.pm'
+            srcDir 'src/test/resources'
         }
     }
+}
+
+tasks.named('processTestResources', Copy) {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
