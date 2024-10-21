@@ -335,6 +335,7 @@ file.
     - Regex `` $` ``, `$&`, `$'` special variables are implemented.
     - Regex performance comparable to Perl; optimized regex variables.
     - Added `__SUB__` keyword; `readpipe`.
+    - Added `&$sub` call syntax.
     - Tests in `src/test/resources` are executed automatically.
     - Work in progress: 
         - `socket` and related operators
