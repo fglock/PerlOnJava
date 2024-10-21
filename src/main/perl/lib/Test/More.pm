@@ -2,7 +2,6 @@ package Test::More;
 
 use strict;
 use warnings;
-# use Exporter 'import';
 use Symbol 'qualify_to_ref';
 
 our @EXPORT = qw(
