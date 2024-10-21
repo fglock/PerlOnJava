@@ -202,8 +202,9 @@ public class RuntimeIO implements RuntimeScalarReference {
         BufferedReader errorReader = null;
 
         try {
-            // Execute the command
-            process = Runtime.getRuntime().exec(command.toString());
+            // Use ProcessBuilder to execute the command
+            ProcessBuilder processBuilder = new ProcessBuilder(command.toString().split(" "));
+            process = processBuilder.start();
 
             // Capture standard output
             reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
