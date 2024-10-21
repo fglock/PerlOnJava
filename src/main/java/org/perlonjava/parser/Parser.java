@@ -942,7 +942,10 @@ public class Parser {
         } else if (INFIX_OP.contains(token.text) || token.text.equals(",")) {
             // tokenIndex++;
             ctx.logDebug("parseZeroOrMoreList infix `" + token.text + "` followed by `" + nextToken.text + "`");
-            if (token.text.equals("%") && (nextToken.text.equals("$") || nextToken.type == LexerTokenType.IDENTIFIER)) {
+            if (token.text.equals("&")) {
+                // looks like a subroutine call, not an infix `&`
+                ctx.logDebug("parseZeroOrMoreList looks like subroutine call");
+            } else if (token.text.equals("%") && (nextToken.text.equals("$") || nextToken.type == LexerTokenType.IDENTIFIER)) {
                 // looks like a hash deref, not an infix `%`
                 ctx.logDebug("parseZeroOrMoreList looks like Hash");
             } else if (token.text.equals(".") && token1.type == LexerTokenType.NUMBER) {
