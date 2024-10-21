@@ -3,6 +3,7 @@ package Test::More;
 use strict;
 use warnings;
 use Exporter 'import';
+use Symbol 'qualify_to_ref';
 
 our @EXPORT = qw(
     plan ok is isnt like unlike cmp_ok can_ok isa_ok
@@ -12,6 +13,16 @@ our @EXPORT = qw(
 my $Test_Count = 0;
 my $Plan_Count;
 my $Failed_Count = 0;
+
+# sub import {
+#     my $package = shift;
+#     my $caller = caller;
+# 
+#     for my $symbol (@EXPORT) {
+#         my $full_name = qualify_to_ref($symbol, $caller);
+#         *$full_name = \&{$symbol};
+#     }
+# }
 
 sub plan {
     my ($directive, $arg) = @_;
