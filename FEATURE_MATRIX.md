@@ -289,14 +289,14 @@ Here’s an alternative approach using the Exporter module:
 Here’s an alternative approach using the Symbol module:
 
 ```perl
-    use Symbol 'qualify_to_ref';
+    use Symbol;
     
     sub import {
         my $pkg     = shift;
         my $callpkg = caller(0);
     
         # Dynamically assign the Dumper function to the caller's namespace
-        my $sym_ref = qualify_to_ref('Dumper', $callpkg);
+        my $sym_ref = Symbol::qualify_to_ref('Dumper', $callpkg);
         *$sym_ref = \&Dumper;
     
         return;
