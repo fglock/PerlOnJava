@@ -136,8 +136,8 @@
 - ✔️   **lvalue `pos`**: lvalue `pos` operator is implemented.
 - ✔️   **`m?pat?`** one-time match is implemented.
 - ✔️   **`reset`** resetting one-time match is implemented
-- ✔️   **`@-`, `@+`, `%+` variables** `@-`, `@+`, `%+` special variables are implemented
-- ✔️   **`$&` variables** `` $` ``, `$&`, `$'` special variables are implemented
+- ✔️   **`@-`, `@+`, `%+`, `%-` variables**: regex special variables are implemented
+- ✔️   **`$&` variables**: `` $` ``, `$&`, `$'` special variables are implemented
 - ❌  **Perl-specific Regex Features**: Some features like `/xx` `/ee` are missing.
 - ❌  **Dynamically-scoped regex variables**: Regex variables are not dynamically-scoped.
 - ❌  **Code blocks**: `(?{ code })` in regex is not implemented.
@@ -257,6 +257,8 @@
 - ❌  **Fetching network info**: endprotoent, endservent, gethostbyaddr, gethostbyname, gethostent, getnetbyaddr, getnetbyname, getnetent, getprotobyname, getprotobynumber, getprotoent, getservbyname, getservbyport, getservent, sethostent, setnetent, setprotoent, setservent
 - ❌  **Keywords related to the control flow of the Perl program**: `dump` operator.
 - ❌  **Tail calls**: `goto` going to a different subroutine as a tail call is not supported.
+- ❌  **Regex differences**:
+    - Java's regular expression engine does not support duplicate named capture groups. In Java, each named capturing group must have a unique name within a regular expression.
 
 ## Language Differences and Workarounds
 

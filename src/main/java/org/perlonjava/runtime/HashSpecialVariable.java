@@ -15,10 +15,14 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
  */
 public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 
+    // Mode of operation for this special variable
+    private final HashSpecialVariable.Id mode;
+
     /**
      * Constructs a HashSpecialVariable for the given Matcher.
      */
-    public HashSpecialVariable() {
+    public HashSpecialVariable(HashSpecialVariable.Id mode) {
+        this.mode = mode;
     }
 
     @Override
@@ -43,9 +47,22 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
         if (matcher != null && key instanceof String name) {
             String matchedValue = matcher.group(name);
             if (matchedValue != null) {
-                return new RuntimeScalar(matchedValue);
+                if (this.mode == Id.CAPTURE_ALL) {
+                    return new RuntimeArray(new RuntimeScalar(matchedValue)).createReference();
+                } else if (this.mode == Id.CAPTURE) {
+                    return new RuntimeScalar(matchedValue);
+                }
+                return scalarUndef;
             }
         }
         return scalarUndef;
+    }
+
+    /**
+     * Enum to represent the mode of operation for HashSpecialVariable.
+     */
+    public enum Id {
+        CAPTURE_ALL,  // Perl %-
+        CAPTURE // Perl %+
     }
 }
