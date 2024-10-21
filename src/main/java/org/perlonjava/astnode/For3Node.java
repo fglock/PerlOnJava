@@ -84,9 +84,8 @@ public class For3Node extends AbstractNode {
         // "magic" `while ( <> )`
         if (condition != null) {
             String operator = "";
-            if (condition instanceof BinaryOperatorNode) {
+            if (condition instanceof BinaryOperatorNode operatorNode) {
                 // test for `my $line = <STDIN>`
-                BinaryOperatorNode operatorNode = (BinaryOperatorNode) condition;
                 operator = operatorNode.operator;
                 if (operator.equals("=")) {
                     // is SCALAR context?

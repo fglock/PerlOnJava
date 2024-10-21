@@ -141,8 +141,7 @@ public class EmitOperator {
     static void handleIndexBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
-        if (node.operand instanceof ListNode) {
-            ListNode operand = (ListNode) node.operand;
+        if (node.operand instanceof ListNode operand) {
             if (!operand.elements.isEmpty()) {
                 // Accept the first two elements in SCALAR context.
                 operand.elements.get(0).accept(scalarVisitor);
@@ -174,8 +173,7 @@ public class EmitOperator {
     static void handleAtan2(EmitterVisitor emitterVisitor, OperatorNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
-        if (node.operand instanceof ListNode) {
-            ListNode operand = (ListNode) node.operand;
+        if (node.operand instanceof ListNode operand) {
             if (operand.elements.size() == 2) {
                 // Accept both elements in SCALAR context.
                 operand.elements.get(0).accept(scalarVisitor);
@@ -535,8 +533,7 @@ public class EmitOperator {
         //        HashLiteralNode:
         //          NumberNode: 10
         String operator = node.operator;
-        if (node.operand instanceof ListNode) {
-            ListNode operand = (ListNode) node.operand;
+        if (node.operand instanceof ListNode operand) {
             if (operand.elements.size() == 1) {
                 BinaryOperatorNode binop = (BinaryOperatorNode) operand.elements.get(0);
                 if (binop.operator.equals("{")) {
@@ -626,8 +623,7 @@ public class EmitOperator {
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
         }
 
-        if (node.operand instanceof ListNode) {
-            ListNode list = (ListNode) node.operand;
+        if (node.operand instanceof ListNode list) {
             if (list.elements.size() == 1) {
                 // Special case for a list with 1 element.
                 list.elements.get(0).accept(emitterVisitor.with(RuntimeContextType.RUNTIME));

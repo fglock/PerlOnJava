@@ -243,8 +243,7 @@ public class EmitterVisitor implements Visitor {
         if ((node.operator.equals("+")
                 || node.operator.equals("-")
                 || node.operator.equals("=="))
-                && node.right instanceof NumberNode) {
-            NumberNode right = (NumberNode) node.right;
+                && node.right instanceof NumberNode right) {
             String value = right.value;
             boolean isInteger = ScalarUtils.isInteger(value);
             if (isInteger) {
@@ -299,10 +298,9 @@ public class EmitterVisitor implements Visitor {
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
 
         // check if node.left is a `$` or `@` variable - it means we have a RuntimeArray instead of RuntimeScalar
-        if (node.left instanceof OperatorNode) { // $ @ %
-            OperatorNode sigilNode = (OperatorNode) node.left;
+        if (node.left instanceof OperatorNode sigilNode) { // $ @ %
             String sigil = sigilNode.operator;
-            if (sigil.equals("$") && sigilNode.operand instanceof IdentifierNode) {
+            if (sigil.equals("$") && sigilNode.operand instanceof IdentifierNode identifierNode) {
                 /*  $a[10]
                  *  BinaryOperatorNode: [
                  *    OperatorNode: $
@@ -310,7 +308,6 @@ public class EmitterVisitor implements Visitor {
                  *    ArrayLiteralNode:
                  *      NumberNode: 10
                  */
-                IdentifierNode identifierNode = (IdentifierNode) sigilNode.operand;
                 // Rewrite the variable node from `$` to `@`
                 OperatorNode varNode = new OperatorNode("@", identifierNode, sigilNode.tokenIndex);
 
@@ -359,9 +356,8 @@ public class EmitterVisitor implements Visitor {
                 return;
             }
         }
-        if (node.left instanceof ListNode) { // ("a","b","c")[2]
+        if (node.left instanceof ListNode list) { // ("a","b","c")[2]
             // transform to:  ["a","b","c"]->2]
-            ListNode list = (ListNode) node.left;
             BinaryOperatorNode refNode = new BinaryOperatorNode("->",
                     new ArrayLiteralNode(list.elements, list.getIndex()),
                     node.right, node.tokenIndex);
@@ -385,10 +381,9 @@ public class EmitterVisitor implements Visitor {
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
 
         // check if node.left is a `$` or `@` variable
-        if (node.left instanceof OperatorNode) { // $ @ %
-            OperatorNode sigilNode = (OperatorNode) node.left;
+        if (node.left instanceof OperatorNode sigilNode) { // $ @ %
             String sigil = sigilNode.operator;
-            if (sigil.equals("$") && sigilNode.operand instanceof IdentifierNode) {
+            if (sigil.equals("$") && sigilNode.operand instanceof IdentifierNode identifierNode) {
                 /*  $a{"a"}
                  *  BinaryOperatorNode: {
                  *    OperatorNode: $
@@ -396,7 +391,6 @@ public class EmitterVisitor implements Visitor {
                  *    ArrayLiteralNode:
                  *      StringNode: a
                  */
-                IdentifierNode identifierNode = (IdentifierNode) sigilNode.operand;
                 // Rewrite the variable node from `$` to `%`
                 OperatorNode varNode = new OperatorNode("%", identifierNode, sigilNode.tokenIndex);
 
@@ -422,7 +416,7 @@ public class EmitterVisitor implements Visitor {
                 }
                 return;
             }
-            if (sigil.equals("@") && sigilNode.operand instanceof IdentifierNode) {
+            if (sigil.equals("@") && sigilNode.operand instanceof IdentifierNode identifierNode) {
                 /*  @a{"a", "b"}
                  *  BinaryOperatorNode: {
                  *    OperatorNode: @
@@ -431,7 +425,6 @@ public class EmitterVisitor implements Visitor {
                  *      StringNode: a
                  *      StringNode: b
                  */
-                IdentifierNode identifierNode = (IdentifierNode) sigilNode.operand;
                 // Rewrite the variable node from `@` to `%`
                 OperatorNode varNode = new OperatorNode("%", identifierNode, sigilNode.tokenIndex);
 
@@ -501,8 +494,7 @@ public class EmitterVisitor implements Visitor {
             }
 
             // Convert method to StringNode if needed
-            if (method instanceof OperatorNode) {
-                OperatorNode op = (OperatorNode) method;
+            if (method instanceof OperatorNode op) {
                 // &method is introduced by the parser if the method is predeclared
                 if (op.operator.equals("&")) {
                     method = op.operand;
