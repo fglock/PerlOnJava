@@ -144,7 +144,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         RuntimeList res = new RuntimeList();
         int frame = 0;
         if (!args.elements.isEmpty()) {
-            frame = ((RuntimeScalar) args.elements.get(0)).getInt();
+            frame = ((RuntimeScalar) args.elements.getFirst()).getInt();
         }
         CallerStack.CallerInfo info = CallerStack.peek();
         if (info == null) {
@@ -154,7 +154,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             frame++;  // frame 0 is the current method, so we need to increment it
             if (frame >= 0 && frame < stackTrace.size()) {
                 if (ctx == RuntimeContextType.SCALAR) {
-                    res.add(new RuntimeScalar(stackTrace.get(frame).get(0)));
+                    res.add(new RuntimeScalar(stackTrace.get(frame).getFirst()));
                 } else {
                     res.add(new RuntimeScalar(stackTrace.get(frame).get(0)));
                     res.add(new RuntimeScalar(stackTrace.get(frame).get(1)));
@@ -191,7 +191,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (args.elements.isEmpty()) {
             date = ZonedDateTime.now();
         } else {
-            long arg = ((RuntimeScalar) args.elements.get(0)).getInt();
+            long arg = ((RuntimeScalar) args.elements.getFirst()).getInt();
             date = Instant.ofEpochSecond(arg).atZone(ZoneId.systemDefault());
         }
         if (ctx == RuntimeContextType.SCALAR) {
@@ -218,7 +218,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (args.elements.isEmpty()) {
             date = ZonedDateTime.now(ZoneOffset.UTC);
         } else {
-            long arg = ((RuntimeScalar) args.elements.get(0)).getInt();
+            long arg = ((RuntimeScalar) args.elements.getFirst()).getInt();
             date = Instant.ofEpochSecond(arg).atZone(ZoneId.of("UTC"));
         }
         if (ctx == RuntimeContextType.SCALAR) {
@@ -354,64 +354,46 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Getters
     public int getInt() {
-        switch (type) {
-            case INTEGER:
-                return (int) value;
-            case DOUBLE:
-                return (int) ((double) value);
-            case STRING:
-                return this.parseNumber().getInt();
-            case UNDEF:
-                return 0;
-            default:
-                return ((RuntimeScalarReference) value).getIntRef();
-        }
+        return switch (type) {
+            case INTEGER -> (int) value;
+            case DOUBLE -> (int) ((double) value);
+            case STRING -> this.parseNumber().getInt();
+            case UNDEF -> 0;
+            default -> ((RuntimeScalarReference) value).getIntRef();
+        };
     }
 
     public long getLong() {
-        switch (type) {
-            case INTEGER:
-                return (int) value;
-            case DOUBLE:
-                return (long) ((double) value);
-            case STRING:
-                return this.parseNumber().getLong();
-            case UNDEF:
-                return 0L;
-            default:
-                return ((RuntimeScalarReference) value).getIntRef();
-        }
+        return switch (type) {
+            case INTEGER -> (int) value;
+            case DOUBLE -> (long) ((double) value);
+            case STRING -> this.parseNumber().getLong();
+            case UNDEF -> 0L;
+            default -> ((RuntimeScalarReference) value).getIntRef();
+        };
     }
 
     public double getDouble() {
-        switch (this.type) {
-            case INTEGER:
-                return (int) this.value;
-            case DOUBLE:
-                return (double) this.value;
-            case STRING:
-                return this.parseNumber().getDouble();
-            case UNDEF:
-                return 0.0;
-            default:
-                return ((RuntimeScalarReference) value).getDoubleRef();
-        }
+        return switch (this.type) {
+            case INTEGER -> (int) this.value;
+            case DOUBLE -> (double) this.value;
+            case STRING -> this.parseNumber().getDouble();
+            case UNDEF -> 0.0;
+            default -> ((RuntimeScalarReference) value).getDoubleRef();
+        };
     }
 
     public boolean getBoolean() {
-        switch (type) {
-            case INTEGER:
-                return (int) value != 0;
-            case DOUBLE:
-                return (double) value != 0.0;
-            case STRING:
+        return switch (type) {
+            case INTEGER -> (int) value != 0;
+            case DOUBLE -> (double) value != 0.0;
+            case STRING -> {
                 String s = (String) value;
-                return !s.isEmpty() && !s.equals("0");
-            case UNDEF:
-                return false;
-            default:
-                return ((RuntimeScalarReference) value).getBooleanRef();
-        }
+                yield !s.isEmpty() && !s.equals("0");
+            }
+            case UNDEF -> false;
+            default -> ((RuntimeScalarReference) value).getBooleanRef();
+        };
     }
 
     // Get the Scalar alias into an Array
@@ -492,38 +474,29 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     @Override
     public String toString() {
-        switch (type) {
-            case INTEGER:
-                return Integer.toString((int) value);
-            case DOUBLE:
-                return Double.toString((double) value);
-            case STRING:
-                return (String) value;
-            case UNDEF:
-                return "";
-            case GLOB:
-                return value.toString();
-            case REGEX:
-                return value.toString();
-            default:
-                return ((RuntimeScalarReference) value).toStringRef();
-        }
+        return switch (type) {
+            case INTEGER -> Integer.toString((int) value);
+            case DOUBLE -> Double.toString((double) value);
+            case STRING -> (String) value;
+            case UNDEF -> "";
+            case GLOB -> value.toString();
+            case REGEX -> value.toString();
+            default -> ((RuntimeScalarReference) value).toStringRef();
+        };
     }
 
     public String toStringRef() {
-        switch (type) {
-            case UNDEF:
-                return "REF(0x14500834042)";
-            case CODE:
-                return ((RuntimeCode) value).toStringRef();
-            case GLOB:
+        return switch (type) {
+            case UNDEF -> "REF(0x14500834042)";
+            case CODE -> ((RuntimeCode) value).toStringRef();
+            case GLOB -> {
                 if (value == null) {
-                    return "CODE(0x14500834042)";
+                    yield "CODE(0x14500834042)";
                 }
-                return ((RuntimeCode) value).toStringRef();
-            default:
-                return "REF(" + value.hashCode() + ")";
-        }
+                yield ((RuntimeCode) value).toStringRef();
+            }
+            default -> "REF(" + value.hashCode() + ")";
+        };
     }
 
     public int getIntRef() {
@@ -554,26 +527,20 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Method to implement `delete $v->{key}`
     public RuntimeScalar hashDerefDelete(RuntimeScalar index) {
-        switch (type) {
-            case UNDEF:
-                return new RuntimeScalar();
-            case HASHREFERENCE:
-                return ((RuntimeHash) value).delete(index);
-            default:
-                throw new PerlCompilerException("Variable does not contain a hash reference");
-        }
+        return switch (type) {
+            case UNDEF -> new RuntimeScalar();
+            case HASHREFERENCE -> ((RuntimeHash) value).delete(index);
+            default -> throw new PerlCompilerException("Variable does not contain a hash reference");
+        };
     }
 
     // Method to implement `exists $v->{key}`
     public RuntimeScalar hashDerefExists(RuntimeScalar index) {
-        switch (type) {
-            case UNDEF:
-                return new RuntimeScalar();
-            case HASHREFERENCE:
-                return ((RuntimeHash) value).exists(index);
-            default:
-                throw new PerlCompilerException("Variable does not contain a hash reference");
-        }
+        return switch (type) {
+            case UNDEF -> new RuntimeScalar();
+            case HASHREFERENCE -> ((RuntimeHash) value).exists(index);
+            default -> throw new PerlCompilerException("Variable does not contain a hash reference");
+        };
     }
 
     // Method to implement `$v->[10]`
@@ -592,51 +559,38 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Method to implement `@$v`
     public RuntimeArray arrayDeref() {
-        switch (type) {
-            case UNDEF:
-                throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
-            case ARRAYREFERENCE:
-                return (RuntimeArray) value;
-            default:
-                throw new PerlCompilerException("Variable does not contain an array reference");
-        }
+        return switch (type) {
+            case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
+            case ARRAYREFERENCE -> (RuntimeArray) value;
+            default -> throw new PerlCompilerException("Variable does not contain an array reference");
+        };
     }
 
     // Method to implement `%$v`
     public RuntimeHash hashDeref() {
-        switch (type) {
-            case UNDEF:
-                throw new PerlCompilerException("Can't use an undefined value as an HASH reference");
-            case HASHREFERENCE:
-                return (RuntimeHash) value;
-            default:
-                throw new PerlCompilerException("Variable does not contain an hash reference");
-        }
+        return switch (type) {
+            case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as an HASH reference");
+            case HASHREFERENCE -> (RuntimeHash) value;
+            default -> throw new PerlCompilerException("Variable does not contain an hash reference");
+        };
     }
 
     // Method to implement `$$v`
     public RuntimeScalar scalarDeref() {
-        switch (type) {
-            case UNDEF:
-                throw new PerlCompilerException("Can't use an undefined value as a SCALAR reference");
-            case REFERENCE:
-                return (RuntimeScalar) value;
-            default:
-                throw new PerlCompilerException("Variable does not contain a scalar reference");
-        }
+        return switch (type) {
+            case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as a SCALAR reference");
+            case REFERENCE -> (RuntimeScalar) value;
+            default -> throw new PerlCompilerException("Variable does not contain a scalar reference");
+        };
     }
 
     // Method to implement `*$v`
     public RuntimeGlob globDeref() {
-        switch (type) {
-            case UNDEF:
-                throw new PerlCompilerException("Can't use an undefined value as a GLOB reference");
-            case GLOB:
-            case GLOBREFERENCE:
-                return (RuntimeGlob) value;
-            default:
-                throw new PerlCompilerException("Variable does not contain a glob reference");
-        }
+        return switch (type) {
+            case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as a GLOB reference");
+            case GLOB, GLOBREFERENCE -> (RuntimeGlob) value;
+            default -> throw new PerlCompilerException("Variable does not contain a glob reference");
+        };
     }
 
     // Method to apply (execute) a subroutine reference
@@ -671,6 +625,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar ref() {
         String str;
+        int blessId;
         switch (type) {
             case CODE:
                 str = "CODE";
@@ -679,7 +634,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 str = "GLOB";
                 break;
             case REFERENCE:
-                int blessId = ((RuntimeBaseEntity) value).blessId;
+                blessId = ((RuntimeBaseEntity) value).blessId;
                 str = blessId == 0 ? "REF" : NameNormalizer.getBlessStr(blessId);
                 break;
             case ARRAYREFERENCE:
@@ -706,7 +661,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
      */
     public RuntimeList call(RuntimeScalar method, RuntimeArray args, int callContext) throws Exception {
         // insert `this` into the parameter list
-        args.elements.add(0, this);
+        args.elements.addFirst(this);
 
         if (method.type == RuntimeScalarType.CODE) {
             // If method is a subroutine reference, just call it
