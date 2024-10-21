@@ -48,7 +48,7 @@ public class OperatorParser {
     static Node parseRequire(Parser parser) {
         LexerToken token;
         // Handle 'require' keyword which can be followed by a version, bareword or filename
-        token = parser.peek();
+        token = TokenUtils.peek(parser);
         Node operand;
         if (token.type == LexerTokenType.IDENTIFIER) {
             // TODO `require` version
@@ -78,11 +78,11 @@ public class OperatorParser {
         LexerToken token;
         Node block;
         // Handle 'do' keyword which can be followed by a block or filename
-        token = parser.peek();
+        token = TokenUtils.peek(parser);
         if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
-            parser.consume(LexerTokenType.OPERATOR, "{");
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
             block = parser.parseBlock();
-            parser.consume(LexerTokenType.OPERATOR, "}");
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             return block;
         }
         // `do` file
@@ -101,12 +101,12 @@ public class OperatorParser {
         Node operand;
         LexerToken token;
         // Handle 'eval' keyword which can be followed by a block or an expression
-        token = parser.peek();
+        token = TokenUtils.peek(parser);
         if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
             // If the next token is '{', parse a block
-            parser.consume(LexerTokenType.OPERATOR, "{");
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
             block = parser.parseBlock();
-            parser.consume(LexerTokenType.OPERATOR, "}");
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             // transform:  eval { 123 }
             // into:  sub { 123 }->()  with useTryCatch flag
             return new BinaryOperatorNode("->",
@@ -146,7 +146,7 @@ public class OperatorParser {
 
                 // Check if the next token is a closing angle bracket
                 if (parser.tokens.get(parser.tokenIndex).text.equals(">")) {
-                    parser.consume(); // Consume the '>' token
+                    TokenUtils.consume(parser); // Consume the '>' token
                     // Return a BinaryOperatorNode representing a readline operation
                     return new BinaryOperatorNode("readline",
                             var,
@@ -165,7 +165,7 @@ public class OperatorParser {
 
                 // Check if the next token is a closing angle bracket
                 if (parser.tokens.get(parser.tokenIndex).text.equals(">")) {
-                    parser.consume(); // Consume the '>' token
+                    TokenUtils.consume(parser); // Consume the '>' token
                     // Return a BinaryOperatorNode representing a readline operation
                     return new BinaryOperatorNode("readline",
                             new IdentifierNode("main::" + tokenText, currentTokenIndex),

@@ -16,7 +16,7 @@ public class ListParser {
     // Comma is allowed after the argument:   rand, rand 10,
     //
     static ListNode parseZeroOrOneList(Parser parser, int minItems) {
-        if (parser.looksLikeEmptyList()) {
+        if (looksLikeEmptyList(parser)) {
             // return an empty list
             if (minItems > 0) {
                 throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
@@ -25,11 +25,11 @@ public class ListParser {
         }
 
         ListNode expr;
-        LexerToken token = parser.peek();
+        LexerToken token = TokenUtils.peek(parser);
         if (token.text.equals("(")) {
             // argument in parentheses, can be 0 or 1 argument:    rand(), rand(10)
             // Commas are allowed after the single argument:       rand(10,)
-            parser.consume();
+            TokenUtils.consume(parser);
             expr = new ListNode(parseList(parser, ")", 0), parser.tokenIndex);
             if (expr.elements.size() > 1) {
                 throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
@@ -71,20 +71,20 @@ public class ListParser {
 
         if (wantRegex) {
             boolean matched = false;
-            if (parser.peek().text.equals("(")) {
-                parser.consume();
+            if (TokenUtils.peek(parser).text.equals("(")) {
+                TokenUtils.consume(parser);
                 hasParen = true;
             }
-            if (parser.peek().text.equals("/") || parser.peek().text.equals("//")) {
-                parser.consume();
+            if (TokenUtils.peek(parser).text.equals("/") || TokenUtils.peek(parser).text.equals("//")) {
+                TokenUtils.consume(parser);
                 Node regex = StringParser.parseRawString(parser, "/");
                 if (regex != null) {
                     matched = true;
                     expr.elements.add(regex);
-                    token = parser.peek();
+                    token = TokenUtils.peek(parser);
                     if (token.type != LexerTokenType.EOF && !Parser.LIST_TERMINATORS.contains(token.text)) {
                         // consume comma
-                        parser.consume(LexerTokenType.OPERATOR, ",");
+                        TokenUtils.consume(parser, LexerTokenType.OPERATOR, ",");
                     }
                 }
             }
@@ -96,8 +96,8 @@ public class ListParser {
         }
 
         if (wantFileHandle) {
-            if (parser.peek().text.equals("(")) {
-                parser.consume();
+            if (TokenUtils.peek(parser).text.equals("(")) {
+                TokenUtils.consume(parser);
                 hasParen = true;
             }
             expr.handle = parser.parseFileHandle();
@@ -109,37 +109,37 @@ public class ListParser {
         }
 
         if (wantBlockNode) {
-            if (parser.peek().text.equals("(")) {
-                parser.consume();
+            if (TokenUtils.peek(parser).text.equals("(")) {
+                TokenUtils.consume(parser);
                 hasParen = true;
             }
-            if (parser.peek().text.equals("{")) {
-                parser.consume();
+            if (TokenUtils.peek(parser).text.equals("{")) {
+                TokenUtils.consume(parser);
                 expr.handle = parser.parseBlock();
-                parser.consume(LexerTokenType.OPERATOR, "}");
+                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             }
-            if (!parser.isSpaceAfterPrintBlock() || parser.looksLikeEmptyList()) {
+            if (!parser.isSpaceAfterPrintBlock() || looksLikeEmptyList(parser)) {
                 throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
             }
         }
 
-        if (!parser.looksLikeEmptyList()) {
+        if (!looksLikeEmptyList(parser)) {
             // it doesn't look like an empty list
-            token = parser.peek();
+            token = TokenUtils.peek(parser);
             if (obeyParentheses && token.text.equals("(")) {
                 // arguments in parentheses, can be 0 or more arguments:    print(), print(10)
                 // Commas are allowed after the arguments:       print(10,)
-                parser.consume();
+                TokenUtils.consume(parser);
                 expr.elements.addAll(parseList(parser, ")", 0));
             } else {
                 while (token.type != LexerTokenType.EOF && !Parser.LIST_TERMINATORS.contains(token.text)) {
                     // Argument without parentheses
                     expr.elements.add(parser.parseExpression(parser.getPrecedence(",")));
-                    token = parser.peek();
+                    token = TokenUtils.peek(parser);
                     if (token.text.equals(",") || token.text.equals("=>")) {
                         while (token.text.equals(",") || token.text.equals("=>")) {
-                            parser.consume();
-                            token = parser.peek();
+                            TokenUtils.consume(parser);
+                            token = TokenUtils.peek(parser);
                         }
                     } else {
                         break;
@@ -149,7 +149,7 @@ public class ListParser {
         }
 
         if (hasParen) {
-            parser.consume(LexerTokenType.OPERATOR, ")");
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
         }
         parser.ctx.logDebug("parseZeroOrMoreList end: " + expr);
 
@@ -174,16 +174,16 @@ public class ListParser {
         parser.ctx.logDebug("parseList start");
         ListNode expr;
 
-        LexerToken token = parser.peek();
+        LexerToken token = TokenUtils.peek(parser);
         parser.ctx.logDebug("parseList start at " + token);
         if (token.text.equals(close)) {
             // empty list
-            parser.consume();
+            TokenUtils.consume(parser);
             expr = new ListNode(parser.tokenIndex);
         } else {
             expr = ListNode.makeList(parser.parseExpression(0));
-            parser.ctx.logDebug("parseList end at " + parser.peek());
-            parser.consume(LexerTokenType.OPERATOR, close);
+            parser.ctx.logDebug("parseList end at " + TokenUtils.peek(parser));
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, close);
         }
 
         if (expr.elements.size() < minItems) {
@@ -192,5 +192,44 @@ public class ListParser {
         parser.ctx.logDebug("parseList end");
 
         return expr.elements;
+    }
+
+    public static boolean looksLikeEmptyList(Parser parser) {
+        boolean isEmptyList = false;
+        int previousIndex = parser.tokenIndex;
+        LexerToken token = TokenUtils.consume(parser);
+        LexerToken token1 = parser.tokens.get(parser.tokenIndex); // next token including spaces
+        LexerToken nextToken = TokenUtils.peek(parser);  // after spaces
+
+        if (token.type == LexerTokenType.EOF || Parser.LIST_TERMINATORS.contains(token.text)) {
+            isEmptyList = true;
+        } else if (token.text.equals("-")
+                && token1.type == LexerTokenType.IDENTIFIER
+                && token1.text.length() == 1) {
+            // -d, -e, -f, -l, -p, -x
+            isEmptyList = false;
+        } else if (Parser.INFIX_OP.contains(token.text) || token.text.equals(",")) {
+            // tokenIndex++;
+            parser.ctx.logDebug("parseZeroOrMoreList infix `" + token.text + "` followed by `" + nextToken.text + "`");
+            if (token.text.equals("&")) {
+                // looks like a subroutine call, not an infix `&`
+                parser.ctx.logDebug("parseZeroOrMoreList looks like subroutine call");
+            } else if (token.text.equals("%") && (nextToken.text.equals("$") || nextToken.type == LexerTokenType.IDENTIFIER)) {
+                // looks like a hash deref, not an infix `%`
+                parser.ctx.logDebug("parseZeroOrMoreList looks like Hash");
+            } else if (token.text.equals(".") && token1.type == LexerTokenType.NUMBER) {
+                // looks like a fractional number, not an infix `.`
+                parser.ctx.logDebug("parseZeroOrMoreList looks like Number");
+            } else {
+                // subroutine call with zero arguments, followed by infix operator: `pos = 3`
+                parser.ctx.logDebug("parseZeroOrMoreList return zero at `" + parser.tokens.get(parser.tokenIndex) + "`");
+                // if (LVALUE_INFIX_OP.contains(token.text)) {
+                //    throw new PerlCompilerException(tokenIndex, "Can't modify non-lvalue subroutine call", ctx.errorUtil);
+                // }
+                isEmptyList = true;
+            }
+        }
+        parser.tokenIndex = previousIndex;
+        return isEmptyList;
     }
 }

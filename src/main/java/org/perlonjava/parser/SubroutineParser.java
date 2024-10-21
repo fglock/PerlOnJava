@@ -45,7 +45,7 @@ public class SubroutineParser {
         parser.ctx.logDebug("SubroutineCall exists " + subExists + " prototype `" + prototype + "` attributes " + attributes);
 
         // Check if the subroutine call has parentheses
-        boolean hasParentheses = parser.peek().text.equals("(");
+        boolean hasParentheses = TokenUtils.peek(parser).text.equals("(");
         if (!subExists && !hasParentheses) {
             // If the subroutine does not exist and there are no parentheses, it is not a subroutine call
             return nameNode;
@@ -86,7 +86,7 @@ public class SubroutineParser {
         String subName = null;
 
         // If the 'wantName' flag is true and the next token is an identifier, we parse the subroutine name.
-        if (wantName && parser.peek().type == LexerTokenType.IDENTIFIER) {
+        if (wantName && TokenUtils.peek(parser).type == LexerTokenType.IDENTIFIER) {
             // 'parseSubroutineIdentifier' is called to handle cases where the subroutine name might be complex
             // (e.g., namespaced, fully qualified names). It may return null if no valid name is found.
             subName = IdentifierParser.parseSubroutineIdentifier(parser);
@@ -96,7 +96,7 @@ public class SubroutineParser {
         String prototype = null;
 
         // Check if the next token is an opening parenthesis '(' indicating a prototype.
-        if (parser.peek().text.equals("(")) {
+        if (TokenUtils.peek(parser).text.equals("(")) {
             // If a prototype exists, we parse it using 'parseRawString' method which handles it like the 'q()' operator.
             // This means it will take everything inside the parentheses as a literal string.
             prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
@@ -106,25 +106,25 @@ public class SubroutineParser {
         List<String> attributes = new ArrayList<>();
 
         // While there are attributes (denoted by a colon ':'), we keep parsing them.
-        while (parser.peek().text.equals(":")) {
+        while (TokenUtils.peek(parser).text.equals(":")) {
             // Consume the colon operator.
-            parser.consume(LexerTokenType.OPERATOR, ":");
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, ":");
             // Consume the attribute name (an identifier) and add it to the attributes list.
-            attributes.add(parser.consume(LexerTokenType.IDENTIFIER).text);
+            attributes.add(TokenUtils.consume(parser, LexerTokenType.IDENTIFIER).text);
         }
 
         // After parsing name, prototype, and attributes, we expect an opening curly brace '{' to denote the start of the subroutine block.
-        parser.consume(LexerTokenType.OPERATOR, "{");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
 
         // Parse the block of the subroutine, which contains the actual code.
         Node block = parser.parseBlock();
 
         // After the block, we expect a closing curly brace '}' to denote the end of the subroutine.
-        parser.consume(LexerTokenType.OPERATOR, "}");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
         // Now we check if the next token is one of the illegal characters that cannot follow a subroutine.
         // These are '(', '{', and '['. If any of these follow, we throw a syntax error.
-        LexerToken token = parser.peek();
+        LexerToken token = TokenUtils.peek(parser);
         if (token.text.equals("(") || token.text.equals("{") || token.text.equals("[")) {
             // Throw an exception indicating a syntax error.
             throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
