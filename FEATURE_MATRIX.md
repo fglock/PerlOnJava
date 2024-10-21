@@ -124,7 +124,8 @@
 - ❌  **Lexical subroutines**: Subroutines declared `my`, `state`, or `our` are not yet supported.
 - ✔️   **CORE namespace**: `CORE` is implemented.
 - ❌  **CORE::GLOBAL namespace**: `CORE::GLOBAL` is not implemented.
-- ❌  **alternate subroutine call syntax**: `&$sub` syntax is not implemented.
+- ✔️   **alternate subroutine call syntax**: `&$sub` syntax is implemented.
+- ❌  **alternate subroutine call syntax**: `&$sub(args)` syntax is not implemented.
 
 ## Regular Expressions
 - ✔️   **Basic Matching**: Operators `qr//`, `m//`, `s///`, `split` are implemented.
