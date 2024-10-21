@@ -23,23 +23,23 @@ public class StatementParser {
      * @return A For3Node representing the while/until loop
      */
     public static Node parseWhileStatement(Parser parser, String label) {
-        LexerToken operator = parser.consume(LexerTokenType.IDENTIFIER); // "while" "until"
+        LexerToken operator = TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "while" "until"
 
-        parser.consume(LexerTokenType.OPERATOR, "(");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
         Node condition = parser.parseExpression(0);
-        parser.consume(LexerTokenType.OPERATOR, ")");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
 
         // Parse the body of the loop
-        parser.consume(LexerTokenType.OPERATOR, "{");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
         Node body = parser.parseBlock();
-        parser.consume(LexerTokenType.OPERATOR, "}");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
         Node continueNode = null;
-        if (parser.peek().text.equals("continue")) {
-            parser.consume();
-            parser.consume(LexerTokenType.OPERATOR, "{");
+        if (TokenUtils.peek(parser).text.equals("continue")) {
+            TokenUtils.consume(parser);
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
             continueNode = parser.parseBlock();
-            parser.consume(LexerTokenType.OPERATOR, "}");
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         }
 
         if (operator.text.equals("until")) {
@@ -57,25 +57,25 @@ public class StatementParser {
      * @return A For1Node or For3Node representing the for/foreach loop
      */
     public static Node parseForStatement(Parser parser, String label) {
-        parser.consume(LexerTokenType.IDENTIFIER); // "for" or "foreach"
+        TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "for" or "foreach"
 
         // Parse optional loop variable
         Node varNode = null;
-        LexerToken token = parser.peek(); // "my" "$" "("
+        LexerToken token = TokenUtils.peek(parser); // "my" "$" "("
         if (token.text.equals("my") || token.text.equals("$")) {
             parser.parsingForLoopVariable = true;
             varNode = parser.parsePrimary();
             parser.parsingForLoopVariable = false;
         }
 
-        parser.consume(LexerTokenType.OPERATOR, "(");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
 
         // Parse the initialization part
         Node initialization = null;
-        if (!parser.peek().text.equals(";")) {
+        if (!TokenUtils.peek(parser).text.equals(";")) {
             initialization = parser.parseExpression(0);
 
-            token = parser.peek();
+            token = TokenUtils.peek(parser);
             if (token.text.equals(")")) {
                 // 1-argument for loop (foreach-like)
                 return parseOneArgumentForLoop(parser, label, varNode, initialization);
@@ -90,20 +90,20 @@ public class StatementParser {
      * Helper method to parse a one-argument for loop (foreach-like).
      */
     private static Node parseOneArgumentForLoop(Parser parser, String label, Node varNode, Node initialization) {
-        parser.consume(); // Consume ")"
+        TokenUtils.consume(parser); // Consume ")"
 
         // Parse the body of the loop
-        parser.consume(LexerTokenType.OPERATOR, "{");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
         Node body = parser.parseBlock();
-        parser.consume(LexerTokenType.OPERATOR, "}");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
         // Parse optional continue block
         Node continueNode = null;
-        if (parser.peek().text.equals("continue")) {
-            parser.consume();
-            parser.consume(LexerTokenType.OPERATOR, "{");
+        if (TokenUtils.peek(parser).text.equals("continue")) {
+            TokenUtils.consume(parser);
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
             continueNode = parser.parseBlock();
-            parser.consume(LexerTokenType.OPERATOR, "}");
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         }
 
         // Use $_ as the default loop variable if not specified
@@ -123,26 +123,26 @@ public class StatementParser {
             throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
         }
 
-        parser.consume(LexerTokenType.OPERATOR, ";");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, ";");
 
         // Parse the condition part
         Node condition = null;
-        if (!parser.peek().text.equals(";")) {
+        if (!TokenUtils.peek(parser).text.equals(";")) {
             condition = parser.parseExpression(0);
         }
-        parser.consume(LexerTokenType.OPERATOR, ";");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, ";");
 
         // Parse the increment part
         Node increment = null;
-        if (!parser.peek().text.equals(")")) {
+        if (!TokenUtils.peek(parser).text.equals(")")) {
             increment = parser.parseExpression(0);
         }
-        parser.consume(LexerTokenType.OPERATOR, ")");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
 
         // Parse the body of the loop
-        parser.consume(LexerTokenType.OPERATOR, "{");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
         Node body = parser.parseBlock();
-        parser.consume(LexerTokenType.OPERATOR, "}");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
         // 3-argument for doesn't have a continue block
 
@@ -157,20 +157,20 @@ public class StatementParser {
      * @return An IfNode representing the if/unless/elsif statement
      */
     public static Node parseIfStatement(Parser parser) {
-        LexerToken operator = parser.consume(LexerTokenType.IDENTIFIER); // "if", "unless", "elsif"
-        parser.consume(LexerTokenType.OPERATOR, "(");
+        LexerToken operator = TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "if", "unless", "elsif"
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
         Node condition = parser.parseExpression(0);
-        parser.consume(LexerTokenType.OPERATOR, ")");
-        parser.consume(LexerTokenType.OPERATOR, "{");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
         Node thenBranch = parser.parseBlock();
-        parser.consume(LexerTokenType.OPERATOR, "}");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         Node elseBranch = null;
-        LexerToken token = parser.peek();
+        LexerToken token = TokenUtils.peek(parser);
         if (token.text.equals("else")) {
-            parser.consume(LexerTokenType.IDENTIFIER); // "else"
-            parser.consume(LexerTokenType.OPERATOR, "{");
+            TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "else"
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
             elseBranch = parser.parseBlock();
-            parser.consume(LexerTokenType.OPERATOR, "}");
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         } else if (token.text.equals("elsif")) {
             elseBranch = parseIfStatement(parser);
         }
@@ -189,8 +189,8 @@ public class StatementParser {
         ctx.logDebug("use: " + token.text);
         boolean isNoDeclaration = token.text.equals("no");
 
-        parser.consume();   // "use"
-        token = parser.peek();
+        TokenUtils.consume(parser);   // "use"
+        token = TokenUtils.peek(parser);
 
         String fullName = null;
         String packageName = null;
@@ -211,14 +211,14 @@ public class StatementParser {
         parser.ctx.logDebug("use version: " + version);
         if (version != null) {
             // `use` statement can terminate after Version
-            token = parser.peek();
+            token = TokenUtils.peek(parser);
             if (token.type == LexerTokenType.EOF || token.text.equals("}") || token.text.equals(";")) {
                 return new ListNode(parser.tokenIndex);
             }
         }
 
         // Parse the parameter list
-        boolean hasParentheses = parser.peek().text.equals("(");
+        boolean hasParentheses = TokenUtils.peek(parser).text.equals("(");
         Node list = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
         ctx.logDebug("Use statement list hasParentheses:" + hasParentheses + " ast:" + list);
 
@@ -280,7 +280,7 @@ public class StatementParser {
      * @return An OperatorNode or BlockNode representing the package declaration
      */
     public static Node parsePackageDeclaration(Parser parser, LexerToken token) {
-        parser.consume();
+        TokenUtils.consume(parser);
         String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
         if (packageName == null) {
             throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
@@ -310,10 +310,10 @@ public class StatementParser {
      */
     public static BlockNode parseOptionalPackageBlock(Parser parser, IdentifierNode nameNode, OperatorNode packageNode) {
         LexerToken token;
-        token = parser.peek();
+        token = TokenUtils.peek(parser);
         if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
             // package NAME BLOCK
-            parser.consume(LexerTokenType.OPERATOR, "{");
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
             parser.ctx.symbolTable.enterScope();
             parser.ctx.symbolTable.setCurrentPackage(nameNode.name);
             BlockNode block = parser.parseBlock();
@@ -322,7 +322,7 @@ public class StatementParser {
             block.elements.add(0, packageNode);
 
             parser.ctx.symbolTable.exitScope();
-            parser.consume(LexerTokenType.OPERATOR, "}");
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             return block;
         }
         return null;
@@ -336,19 +336,19 @@ public class StatementParser {
      */
     public static String parseOptionalPackageVersion(Parser parser) {
         LexerToken token;
-        token = parser.peek();
+        token = TokenUtils.peek(parser);
         if (token.type == LexerTokenType.NUMBER) {
-            return NumberParser.parseNumber(parser, parser.consume()).value;
+            return NumberParser.parseNumber(parser, TokenUtils.consume(parser)).value;
         } else if (token.text.startsWith("v")) {
             // parseDottedDecimalVersion
             StringBuilder version = new StringBuilder(token.text); // start with 'v'
-            parser.consume();
+            TokenUtils.consume(parser);
 
             int componentCount = 0;
 
             // Loop through components separated by '.'
             while (true) {
-                if (!parser.peek().text.equals(".")) {
+                if (!TokenUtils.peek(parser).text.equals(".")) {
                     if (componentCount < 2) { // Ensures at least 3 components (v1.2.3)
                         throw new PerlCompilerException(parser.tokenIndex, "Dotted-decimal version must have at least 3 components", parser.ctx.errorUtil);
                     } else {
@@ -356,10 +356,10 @@ public class StatementParser {
                     }
                 }
 
-                version.append(parser.consume().text); // consume '.'
+                version.append(TokenUtils.consume(parser).text); // consume '.'
 
-                if (parser.peek().type == LexerTokenType.NUMBER) {
-                    version.append(parser.consume().text); // consume number
+                if (TokenUtils.peek(parser).type == LexerTokenType.NUMBER) {
+                    version.append(TokenUtils.consume(parser).text); // consume number
                     componentCount++;
                 } else {
                     throw new PerlCompilerException(parser.tokenIndex, "Invalid dotted-decimal format", parser.ctx.errorUtil);

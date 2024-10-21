@@ -15,7 +15,7 @@ public class Parser {
             Set.of(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when");
     public static final Set<String> LIST_TERMINATORS =
             Set.of(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when", "not", "and", "or");
-    private static final Set<String> INFIX_OP = Set.of(
+    public static final Set<String> INFIX_OP = Set.of(
             "or", "xor", "and", "||", "//", "&&", "|", "^", "&",
             "==", "!=", "<=>", "eq", "ne", "cmp", "<", ">", "<=",
             ">=", "lt", "gt", "le", "ge", "<<", ">>", "+", "-", "*",
@@ -95,15 +95,15 @@ public class Parser {
         int currentIndex = tokenIndex;
         ctx.symbolTable.enterScope();
         List<Node> statements = new ArrayList<>();
-        LexerToken token = peek();
+        LexerToken token = TokenUtils.peek(this);
         while (token.type != LexerTokenType.EOF
                 && !(token.type == LexerTokenType.OPERATOR && token.text.equals("}"))) {
             if (token.text.equals(";")) {
-                consume();
+                TokenUtils.consume(this);
             } else {
                 statements.add(parseStatement());
             }
-            token = peek();
+            token = TokenUtils.peek(this);
         }
         if (statements.isEmpty()) {
             statements.add(new ListNode(tokenIndex));
@@ -114,17 +114,17 @@ public class Parser {
 
     public Node parseStatement() {
         int currentIndex = tokenIndex;
-        LexerToken token = peek();
+        LexerToken token = TokenUtils.peek(this);
         ctx.logDebug("parseStatement `" + token.text + "`");
 
         // check for label:
         String label = null;
         if (token.type == LexerTokenType.IDENTIFIER) {
-            String id = consume().text;
-            if (peek().text.equals(":")) {
+            String id = TokenUtils.consume(this).text;
+            if (TokenUtils.peek(this).text.equals(":")) {
                 label = id;
-                consume();
-                token = peek();
+                TokenUtils.consume(this);
+                token = TokenUtils.peek(this);
             } else {
                 tokenIndex = currentIndex;  // backtrack
             }
@@ -149,7 +149,7 @@ public class Parser {
                 case "sub":
                     // Must be followed by an identifier
                     tokenIndex++;
-                    if (peek().type == LexerTokenType.IDENTIFIER) {
+                    if (TokenUtils.peek(this).type == LexerTokenType.IDENTIFIER) {
                         return SubroutineParser.parseSubroutineDefinition(this, true);
                     }
                     // otherwise backtrack
@@ -159,40 +159,40 @@ public class Parser {
         if (token.type == LexerTokenType.OPERATOR) {
             switch (token.text) {
                 case "...":
-                    consume();
+                    TokenUtils.consume(this);
                     return new OperatorNode(
                             "die",
                             new StringNode("Unimplemented", tokenIndex),
                             tokenIndex);
                 case "{":
                     if (!isHashLiteral()) { // bare-block
-                        consume(LexerTokenType.OPERATOR, "{");
+                        TokenUtils.consume(this, LexerTokenType.OPERATOR, "{");
                         BlockNode block = parseBlock();
                         block.isLoop = true;
                         block.labelName = label;
-                        consume(LexerTokenType.OPERATOR, "}");
+                        TokenUtils.consume(this, LexerTokenType.OPERATOR, "}");
                         return block;
                     }
             }
         }
         Node expression = parseExpression(0);
-        token = peek();
+        token = TokenUtils.peek(this);
         if (token.type == LexerTokenType.IDENTIFIER) {
             // statement modifier: if, for ...
             switch (token.text) {
                 case "if":
-                    consume();
+                    TokenUtils.consume(this);
                     Node modifierExpression = parseExpression(0);
                     parseStatementTerminator();
                     return new BinaryOperatorNode("&&", modifierExpression, expression, tokenIndex);
                 case "unless":
-                    consume();
+                    TokenUtils.consume(this);
                     modifierExpression = parseExpression(0);
                     parseStatementTerminator();
                     return new BinaryOperatorNode("||", modifierExpression, expression, tokenIndex);
                 case "for":
                 case "foreach":
-                    consume();
+                    TokenUtils.consume(this);
                     modifierExpression = parseExpression(0);
                     parseStatementTerminator();
                     return new For1Node(
@@ -205,7 +205,7 @@ public class Parser {
                             tokenIndex);
                 case "while":
                 case "until":
-                    consume();
+                    TokenUtils.consume(this);
                     modifierExpression = parseExpression(0);
                     parseStatementTerminator();
                     if (token.text.equals("until")) {
@@ -232,12 +232,12 @@ public class Parser {
     }
 
     public void parseStatementTerminator() {
-        LexerToken token = peek();
+        LexerToken token = TokenUtils.peek(this);
         if (token.type != LexerTokenType.EOF && !token.text.equals("}") && !token.text.equals(";")) {
             throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
         }
         if (token.text.equals(";")) {
-            consume();
+            TokenUtils.consume(this);
         }
     }
 
@@ -246,12 +246,12 @@ public class Parser {
         int currentIndex = tokenIndex;
 
         // Start after the opening '{'
-        consume(LexerTokenType.OPERATOR, "{");
+        TokenUtils.consume(this, LexerTokenType.OPERATOR, "{");
 
         int braceCount = 1; // Track nested braces
         bracesLoop:
         while (braceCount > 0) {
-            LexerToken token = consume();
+            LexerToken token = TokenUtils.consume(this);
             ctx.logDebug("isHashLiteral " + token + " braceCount:" + braceCount);
             if (token.type == LexerTokenType.EOF) {
                 break; // not a hash literal;
@@ -306,7 +306,7 @@ public class Parser {
         // Continuously process tokens until we reach the end of the expression.
         while (true) {
             // Peek at the next token to determine what to do next.
-            LexerToken token = peek();
+            LexerToken token = TokenUtils.peek(this);
 
             // Check if we have reached the end of the input (EOF) or a terminator (like `;`).
             if (token.type == LexerTokenType.EOF || TERMINATORS.contains(token.text)) {
@@ -625,12 +625,12 @@ public class Parser {
 
     public Node parsePrimary() {
         int startIndex = tokenIndex;
-        LexerToken token = consume(); // Consume the next token from the input
+        LexerToken token = TokenUtils.consume(this); // Consume the next token from the input
         Node operand;
 
         switch (token.type) {
             case IDENTIFIER:
-                LexerToken nextToken = peek();
+                LexerToken nextToken = TokenUtils.peek(this);
                 if (nextToken.text.equals("=>")) {
                     // Autoquote
                     return new StringNode(token.text, tokenIndex);
@@ -638,8 +638,8 @@ public class Parser {
 
                 // Try to parse a builtin operation; backtrack if it fails
                 if (token.text.equals("CORE") && nextToken.text.equals("::")) {
-                    consume();  // "::"
-                    token = consume(); // operator
+                    TokenUtils.consume(this);  // "::"
+                    token = TokenUtils.consume(this); // operator
                 }
                 Node operation = parseCoreOperator(token);
                 if (operation != null) {
@@ -707,10 +707,10 @@ public class Parser {
                             // Handle `-d`
                             String operator = "-" + nextToken.text;
                             tokenIndex++;
-                            nextToken = peek();
+                            nextToken = TokenUtils.peek(this);
                             if (nextToken.text.equals("_")) {
                                 // Handle `-f _`
-                                consume();
+                                TokenUtils.consume(this);
                                 operand = new IdentifierNode("_", tokenIndex);
                             } else {
                                 operand = parseExpression(getPrecedence("-d") + 1);
@@ -747,7 +747,7 @@ public class Parser {
         if (varName != null) {
             // Variable name is valid.
             // Check for illegal characters after a variable
-            if (peek().text.equals("(") && !sigil.equals("&") && !parsingForLoopVariable) {
+            if (TokenUtils.peek(this).text.equals("(") && !sigil.equals("&") && !parsingForLoopVariable) {
                 // Parentheses are only allowed after a variable in specific cases:
                 // - `for my $v (...`
                 // - `&name(...`
@@ -759,17 +759,17 @@ public class Parser {
             Node opNode = new OperatorNode(sigil, new IdentifierNode(varName, tokenIndex), tokenIndex);
 
             // Handle auto-call: transform `&subr` to `&subr(@_)`
-            if (!peek().text.equals("(") && sigil.equals("&") && !parsingTakeReference) {
+            if (!TokenUtils.peek(this).text.equals("(") && sigil.equals("&") && !parsingTakeReference) {
                 Node list = new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex);
                 return new BinaryOperatorNode("(", opNode, list, tokenIndex);
             }
 
             return opNode;
-        } else if (peek().text.equals("{")) {
+        } else if (TokenUtils.peek(this).text.equals("{")) {
             // Handle curly brackets to parse a nested expression `${v}`
-            consume(); // Consume the '{'
+            TokenUtils.consume(this); // Consume the '{'
             Node block = parseBlock(); // Parse the block inside the curly brackets
-            consume(LexerTokenType.OPERATOR, "}"); // Consume the '}'
+            TokenUtils.consume(this, LexerTokenType.OPERATOR, "}"); // Consume the '}'
             return new OperatorNode(sigil, block, tokenIndex);
         }
 
@@ -789,7 +789,7 @@ public class Parser {
      * @throws PerlCompilerException If there's an unexpected infix operator or syntax error.
      */
     public Node parseInfixOperation(Node left, int precedence) {
-        LexerToken token = consume();
+        LexerToken token = TokenUtils.consume(this);
 
         Node right;
 
@@ -805,7 +805,7 @@ public class Parser {
                     // Autoquote - Convert IdentifierNode to StringNode
                     left = new StringNode(((IdentifierNode) left).name, ((IdentifierNode) left).tokenIndex);
                 }
-                token = peek();
+                token = TokenUtils.peek(this);
                 if (token.type == LexerTokenType.EOF || LIST_TERMINATORS.contains(token.text) || token.text.equals(",") || token.text.equals("=>")) {
                     // "postfix" comma
                     return ListNode.makeList(left);
@@ -814,22 +814,22 @@ public class Parser {
                 return ListNode.makeList(left, right);
             case "?":
                 Node middle = parseExpression(0);
-                consume(LexerTokenType.OPERATOR, ":");
+                TokenUtils.consume(this, LexerTokenType.OPERATOR, ":");
                 right = parseExpression(precedence);
                 return new TernaryOperatorNode(token.text, left, middle, right, tokenIndex);
             case "->":
-                String nextText = peek().text;
+                String nextText = TokenUtils.peek(this).text;
                 switch (nextText) {
                     case "(":
-                        consume();
+                        TokenUtils.consume(this);
                         right = new ListNode(ListParser.parseList(this, ")", 0), tokenIndex);
                         return new BinaryOperatorNode(token.text, left, right, tokenIndex);
                     case "{":
-                        consume();
+                        TokenUtils.consume(this);
                         right = new HashLiteralNode(parseHashSubscript(), tokenIndex);
                         return new BinaryOperatorNode(token.text, left, right, tokenIndex);
                     case "[":
-                        consume();
+                        TokenUtils.consume(this);
                         right = new ArrayLiteralNode(ListParser.parseList(this, "]", 1), tokenIndex);
                         return new BinaryOperatorNode(token.text, left, right, tokenIndex);
                 }
@@ -861,125 +861,13 @@ public class Parser {
         throw new PerlCompilerException(tokenIndex, "Unexpected infix operator: " + token, ctx.errorUtil);
     }
 
-    public LexerToken peek() {
-        tokenIndex = Whitespace.skipWhitespace(tokenIndex, tokens);
-        if (tokenIndex >= tokens.size()) {
-            return new LexerToken(LexerTokenType.EOF, "");
-        }
-        return tokens.get(tokenIndex);
-    }
-
-    public String consumeChar() {
-        String str;
-        if (tokenIndex >= tokens.size()) {
-            str = "";
-        } else {
-            LexerToken token = tokens.get(tokenIndex);
-            if (token.type == LexerTokenType.EOF) {
-                str = "";
-            } else if (token.text.length() == 1) {
-                str = token.text;
-                tokenIndex++;
-            } else {
-                str = token.text.substring(0, 1);
-                token.text = token.text.substring(1);
-            }
-        }
-        return str;
-    }
-
-    public String peekChar() {
-        String str;
-        if (tokenIndex >= tokens.size()) {
-            str = "";
-        } else {
-            LexerToken token = tokens.get(tokenIndex);
-            if (token.type == LexerTokenType.EOF) {
-                str = "";
-            } else if (token.text.length() == 1) {
-                str = token.text;
-            } else {
-                str = token.text.substring(0, 1);
-            }
-        }
-        return str;
-    }
-
-    public LexerToken consume() {
-        tokenIndex = Whitespace.skipWhitespace(tokenIndex, tokens);
-        if (tokenIndex >= tokens.size()) {
-            return new LexerToken(LexerTokenType.EOF, "");
-        }
-        return tokens.get(tokenIndex++);
-    }
-
-    public LexerToken consume(LexerTokenType type) {
-        LexerToken token = consume();
-        if (token.type != type) {
-            throw new PerlCompilerException(
-                    tokenIndex, "Expected token " + type + " but got " + token, ctx.errorUtil);
-        }
-        return token;
-    }
-
-    public void consume(LexerTokenType type, String text) {
-        LexerToken token = consume();
-        if (token.type != type || !token.text.equals(text)) {
-            throw new PerlCompilerException(
-                    tokenIndex,
-                    "Expected token " + type + " with text " + text + " but got " + token,
-                    ctx.errorUtil);
-        }
-    }
-
-    // List parsers
-
-    public boolean looksLikeEmptyList() {
-        boolean isEmptyList = false;
-        int previousIndex = tokenIndex;
-        LexerToken token = consume();
-        LexerToken token1 = tokens.get(tokenIndex); // next token including spaces
-        LexerToken nextToken = peek();  // after spaces
-
-        if (token.type == LexerTokenType.EOF || LIST_TERMINATORS.contains(token.text)) {
-            isEmptyList = true;
-        } else if (token.text.equals("-")
-                && token1.type == LexerTokenType.IDENTIFIER
-                && token1.text.length() == 1) {
-            // -d, -e, -f, -l, -p, -x
-            isEmptyList = false;
-        } else if (INFIX_OP.contains(token.text) || token.text.equals(",")) {
-            // tokenIndex++;
-            ctx.logDebug("parseZeroOrMoreList infix `" + token.text + "` followed by `" + nextToken.text + "`");
-            if (token.text.equals("&")) {
-                // looks like a subroutine call, not an infix `&`
-                ctx.logDebug("parseZeroOrMoreList looks like subroutine call");
-            } else if (token.text.equals("%") && (nextToken.text.equals("$") || nextToken.type == LexerTokenType.IDENTIFIER)) {
-                // looks like a hash deref, not an infix `%`
-                ctx.logDebug("parseZeroOrMoreList looks like Hash");
-            } else if (token.text.equals(".") && token1.type == LexerTokenType.NUMBER) {
-                // looks like a fractional number, not an infix `.`
-                ctx.logDebug("parseZeroOrMoreList looks like Number");
-            } else {
-                // subroutine call with zero arguments, followed by infix operator: `pos = 3`
-                ctx.logDebug("parseZeroOrMoreList return zero at `" + tokens.get(tokenIndex) + "`");
-                // if (LVALUE_INFIX_OP.contains(token.text)) {
-                //    throw new PerlCompilerException(tokenIndex, "Can't modify non-lvalue subroutine call", ctx.errorUtil);
-                // }
-                isEmptyList = true;
-            }
-        }
-        tokenIndex = previousIndex;
-        return isEmptyList;
-    }
-
     public Node parseFileHandle() {
         boolean hasBracket = false;
-        if (peek().text.equals("{")) {
-            consume();
+        if (TokenUtils.peek(this).text.equals("{")) {
+            TokenUtils.consume(this);
             hasBracket = true;
         }
-        LexerToken token = peek();
+        LexerToken token = TokenUtils.peek(this);
         Node fileHandle = null;
         if (token.type == LexerTokenType.IDENTIFIER) {
             // bareword
@@ -1001,27 +889,27 @@ public class Parser {
             fileHandle = parsePrimary();
             if (!hasBracket) {
                 // assert that is not followed by infix
-                String nextText = peek().text;
+                String nextText = TokenUtils.peek(this).text;
                 if (INFIX_OP.contains(nextText) || "{[".contains(nextText) || "->".equals(nextText)) {
                     // print $fh + 2;  # not a file handle
                     fileHandle = null;
                 }
                 // assert that list is not empty
-                if (looksLikeEmptyList()) {
+                if (ListParser.looksLikeEmptyList(this)) {
                     // print $fh;  # not a file handle
                     fileHandle = null;
                 }
             }
         }
         if (hasBracket) {
-            consume(LexerTokenType.OPERATOR, "}");
+            TokenUtils.consume(this, LexerTokenType.OPERATOR, "}");
         }
         return fileHandle;
     }
 
     public boolean isSpaceAfterPrintBlock() {
         int currentIndex = tokenIndex;
-        LexerToken token = peek();
+        LexerToken token = TokenUtils.peek(this);
         boolean isSpace = false;
         switch (token.type) {
             case EOF:
@@ -1055,7 +943,7 @@ public class Parser {
                         break;
                     case ".":
                         // must be followed by NUMBER
-                        consume();
+                        TokenUtils.consume(this);
                         if (tokens.get(tokenIndex).type == LexerTokenType.NUMBER) {
                             isSpace = true;
                         }
@@ -1064,7 +952,7 @@ public class Parser {
                     case "(":
                     case "'":
                         // must have space before
-                        consume();
+                        TokenUtils.consume(this);
                         if (tokenIndex != currentIndex) {
                             isSpace = true;
                         }
@@ -1080,8 +968,8 @@ public class Parser {
         ctx.logDebug("parseHashSubscript start");
         int currentIndex = tokenIndex;
 
-        LexerToken ident = consume();
-        LexerToken close = consume();
+        LexerToken ident = TokenUtils.consume(this);
+        LexerToken close = TokenUtils.consume(this);
         if (ident.type == LexerTokenType.IDENTIFIER && close.text.equals("}")) {
             // autoquote
             List<Node> list = new ArrayList<>();
