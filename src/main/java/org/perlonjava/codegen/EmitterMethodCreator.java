@@ -44,14 +44,11 @@ public class EmitterMethodCreator implements Opcodes {
         char firstChar = varName.charAt(0);
 
         // Use a switch statement to determine the descriptor based on the first character
-        switch (firstChar) {
-            case '%':
-                return "Lorg/perlonjava/runtime/RuntimeHash;";
-            case '@':
-                return "Lorg/perlonjava/runtime/RuntimeArray;";
-            default:
-                return "Lorg/perlonjava/runtime/RuntimeScalar;";
-        }
+        return switch (firstChar) {
+            case '%' -> "Lorg/perlonjava/runtime/RuntimeHash;";
+            case '@' -> "Lorg/perlonjava/runtime/RuntimeArray;";
+            default -> "Lorg/perlonjava/runtime/RuntimeScalar;";
+        };
     }
 
     /**
@@ -71,14 +68,11 @@ public class EmitterMethodCreator implements Opcodes {
         char firstChar = varName.charAt(0);
 
         // Use a switch statement to determine the class name based on the first character
-        switch (firstChar) {
-            case '%':
-                return "org/perlonjava/runtime/RuntimeHash";
-            case '@':
-                return "org/perlonjava/runtime/RuntimeArray";
-            default:
-                return "org/perlonjava/runtime/RuntimeScalar";
-        }
+        return switch (firstChar) {
+            case '%' -> "org/perlonjava/runtime/RuntimeHash";
+            case '@' -> "org/perlonjava/runtime/RuntimeArray";
+            default -> "org/perlonjava/runtime/RuntimeScalar";
+        };
     }
 
     /**
