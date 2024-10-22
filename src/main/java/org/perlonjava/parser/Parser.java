@@ -692,15 +692,7 @@ public class Parser {
                     case "*":
                         return parseVariable(token.text);
                     case "&":
-                        parsingForLoopVariable = true;  // allow parentheses after variable: &$sub(...)
-                        Node node = parseVariable(token.text);
-                        parsingForLoopVariable = false;
-                        // Handle auto-call: transform `&subr` to `&subr(@_)`
-                        if (!TokenUtils.peek(this).text.equals("(") && !parsingTakeReference) {
-                            Node list = new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex);
-                            return new BinaryOperatorNode("(", node, list, tokenIndex);
-                        }
-                        return node;
+                        return parseCoderefVariable(token);
                     case "!":
                     case "~":
                     case "+":
@@ -740,6 +732,49 @@ public class Parser {
         }
         // Throw an exception if no valid case was found
         throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, ctx.errorUtil);
+    }
+
+    private Node parseCoderefVariable(LexerToken token) {
+        parsingForLoopVariable = true;  // allow parentheses after variable: &$sub(...)
+        Node node = parseVariable(token.text);
+        parsingForLoopVariable = false;
+        if (parsingTakeReference) {
+            // Parsing \&sub, don't add parameters
+            return node;
+        }
+        this.ctx.logDebug("parse & node: " + node);
+        if (node instanceof OperatorNode operatorNode) {
+            if (operatorNode.operand instanceof BinaryOperatorNode binaryOperatorNode) {
+                // Handle `&$subr(@_)`
+                if (binaryOperatorNode.operator.equals("(")) {
+                    return binaryOperatorNode;
+                }
+            }
+        }
+        Node list;
+        if (!TokenUtils.peek(this).text.equals("(")) {
+            // Handle auto-call: transform `&subr` to `&subr(@_)`
+            list = new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex);
+        } else {
+            list = ListParser.parseZeroOrMoreList(this,
+                    0,
+                    false,
+                    true,
+                    false,
+                    false);
+        }
+        if (node instanceof OperatorNode operatorNode) {
+            // Handle &$sub(), &{$sub}()
+            if (operatorNode.operand instanceof OperatorNode) {
+                // &$sub becomes $sub(@_)
+                node = operatorNode.operand;
+            } else if (operatorNode.operand instanceof BlockNode blockNode) {
+                // &{$sub} becomes $sub(@_)
+                node = blockNode;
+            }
+        }
+        // Handle &sub()
+        return new BinaryOperatorNode("(", node, list, tokenIndex);
     }
 
     /**
