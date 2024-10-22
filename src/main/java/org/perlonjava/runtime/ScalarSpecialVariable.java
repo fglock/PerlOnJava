@@ -67,18 +67,13 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     public String getStringValue() {
         try {
             // Return the appropriate string based on the type of special variable.
-            switch (variableId) {
-                case CAPTURE:
-                    return RuntimeRegex.captureString(position);
-                case MATCH:
-                    return RuntimeRegex.matchString();
-                case PREMATCH:
-                    return RuntimeRegex.preMatchString();
-                case POSTMATCH:
-                    return RuntimeRegex.postMatchString();
-                default:
-                    return null;
-            }
+            return switch (variableId) {
+                case CAPTURE -> RuntimeRegex.captureString(position);
+                case MATCH -> RuntimeRegex.matchString();
+                case PREMATCH -> RuntimeRegex.preMatchString();
+                case POSTMATCH -> RuntimeRegex.postMatchString();
+                default -> null;
+            };
         } catch (IllegalStateException e) {
             return null; // Return null if the matcher is in an invalid state.
         }
