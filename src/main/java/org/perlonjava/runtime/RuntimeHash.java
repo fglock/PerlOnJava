@@ -12,13 +12,12 @@ import java.util.*;
  * any type of Perl scalar value.
  */
 public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarReference, DynamicState {
+    // Static stack to store saved "local" states of RuntimeHash instances
+    private static final Stack<RuntimeHash> dynamicStateStack = new Stack<>();
     // Map to store the elements of the hash
     public Map<String, RuntimeScalar> elements;
     // Iterator for traversing the hash elements
     Iterator<RuntimeScalar> hashIterator;
-
-    // Static stack to store saved "local" states of RuntimeHash instances
-    private static final Stack<RuntimeHash> dynamicStateStack = new Stack<>();
 
     /**
      * Constructor for RuntimeHash.

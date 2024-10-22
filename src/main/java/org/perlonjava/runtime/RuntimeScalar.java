@@ -3,6 +3,7 @@ package org.perlonjava.runtime;
 import com.ibm.icu.text.CaseMap;
 import com.ibm.icu.text.Normalizer2;
 import org.perlonjava.ArgumentParser;
+import org.perlonjava.codegen.DynamicState;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
 
@@ -39,7 +40,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.*;
  * to mimic this behavior by using an enum `RuntimeScalarType` to track the type of the value stored in the
  * scalar.
  */
-public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarReference {
+public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarReference, DynamicState {
 
     private static final int MAX_NUMIFICATION_CACHE_SIZE = 1000;
     private static final Map<String, RuntimeScalar> numificationCache = new LinkedHashMap<String, RuntimeScalar>(MAX_NUMIFICATION_CACHE_SIZE, 0.75f, true) {
@@ -48,10 +49,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             return size() > MAX_NUMIFICATION_CACHE_SIZE;
         }
     };
-
+    // Static stack to store saved "local" states of RuntimeScalar instances
+    private static final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
     private static long currentSeed = System.currentTimeMillis();
     private static final Random random = new Random(currentSeed);
-
     // Fields to store the type and value of the scalar variable
     public RuntimeScalarType type;
     public Object value;
@@ -1770,6 +1771,46 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             // throw  new PerlCompilerException("Invalid fileHandle type: " + fileHandle.type);
         }
         return fh;
+    }
+
+    /**
+     * Saves the current state of the RuntimeScalar instance.
+     *
+     * <p>This method creates a snapshot of the current type and value of the scalar,
+     * and pushes it onto a static stack for later restoration.
+     */
+    @Override
+    public void dynamicSaveState() {
+        // Create a new RuntimeScalar to save the current state
+        RuntimeScalar currentState = new RuntimeScalar();
+        // Copy the current type and value to the new state
+        currentState.type = this.type;
+        currentState.value = this.value;
+        currentState.blessId = this.blessId;
+        // Push the current state onto the stack
+        dynamicStateStack.push(currentState);
+        // Clear the current type and value
+        this.type = RuntimeScalarType.UNDEF;
+        this.value = null;
+        this.blessId = 0;
+    }
+
+    /**
+     * Restores the most recently saved state of the RuntimeScalar instance.
+     *
+     * <p>This method pops the most recent state from the static stack and restores
+     * the type and value to the current scalar. If no state is saved, it does nothing.
+     */
+    @Override
+    public void dynamicRestoreState() {
+        if (!dynamicStateStack.isEmpty()) {
+            // Pop the most recent saved state from the stack
+            RuntimeScalar previousState = dynamicStateStack.pop();
+            // Restore the type, value from the saved state
+            this.type = previousState.type;
+            this.value = previousState.value;
+            this.blessId = previousState.blessId;
+        }
     }
 
     private static class RuntimeScalarIterator implements Iterator<RuntimeScalar> {

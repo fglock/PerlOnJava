@@ -12,16 +12,24 @@ import java.util.Deque;
  */
 public class JavaClassInfo {
 
-    /** The name of the Java class. */
+    /**
+     * The name of the Java class.
+     */
     public String javaClassName;
 
-    /** The label to return to after method execution. */
+    /**
+     * The label to return to after method execution.
+     */
     public Label returnLabel;
 
-    /** Manages the stack level for the class. */
+    /**
+     * Manages the stack level for the class.
+     */
     public StackLevelManager stackLevelManager;
 
-    /** A stack of loop labels for managing nested loops. */
+    /**
+     * A stack of loop labels for managing nested loops.
+     */
     public Deque<LoopLabels> loopLabelStack;
 
     /**
