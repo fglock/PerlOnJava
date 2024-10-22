@@ -339,6 +339,7 @@ file.
     - Tests in `src/test/resources` are executed automatically.
     - Work in progress: 
         - `socket` and related operators
+        - `local` dynamic variables
     - Stretch goals
         - Add support for concurrency and parallelism, such as threads and async/await.
         - Enhance security features, including sandboxing and input validation.
