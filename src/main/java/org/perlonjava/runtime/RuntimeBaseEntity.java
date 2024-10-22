@@ -1,11 +1,13 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.codegen.DynamicState;
+
 /**
  * The RuntimeBaseEntity class serves as an abstract base class for scalar, hash,
  * and array variables in the runtime environment. It provides common functionality
  * and interfaces for these entities.
  */
-public abstract class RuntimeBaseEntity implements RuntimeDataProvider {
+public abstract class RuntimeBaseEntity implements RuntimeDataProvider, DynamicState {
     // Index to the class that this reference belongs
     public int blessId;
 

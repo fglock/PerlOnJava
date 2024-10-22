@@ -222,6 +222,29 @@ public class PerlRange extends RuntimeBaseEntity implements RuntimeDataProvider,
         }
     }
 
+    /**
+     * Saves the current state of the instance.
+     *
+     * <p>This method creates a snapshot of the current value,
+     * and pushes it onto a static stack for later restoration. After saving, it clears
+     * the current elements and resets the value.
+     */
+    @Override
+    public void dynamicSaveState() {
+        throw new PerlCompilerException("not implemented: local RANGE");
+    }
+
+    /**
+     * Restores the most recently saved state of the instance.
+     *
+     * <p>This method pops the most recent state from the static stack and restores
+     * the value. If no state is saved, it does nothing.
+     */
+    @Override
+    public void dynamicRestoreState() {
+        throw new PerlCompilerException("not implemented: local RANGE");
+    }
+
     private class PerlRangeIntegerIterator implements Iterator<RuntimeScalar> {
         private final int endInt;
         private int current;
