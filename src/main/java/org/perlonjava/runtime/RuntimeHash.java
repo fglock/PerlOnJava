@@ -18,7 +18,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
     Iterator<RuntimeScalar> hashIterator;
 
     // Static stack to store saved "local" states of RuntimeHash instances
-    private static final Stack<Map<String, RuntimeScalar>> dynamicStateStack = new Stack<>();
+    private static final Stack<RuntimeHash> dynamicStateStack = new Stack<>();
 
     /**
      * Constructor for RuntimeHash.
@@ -427,11 +427,14 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
      */
     @Override
     public void dynamicSaveState() {
-        // Create a copy of the elements map and push it onto the dynamic stack
-        Map<String, RuntimeScalar> currentState = new HashMap<>(elements);
+        // Create a new RuntimeHash to save the current state
+        RuntimeHash currentState = new RuntimeHash();
+        currentState.elements = new HashMap<>(this.elements);
+        currentState.blessId = this.blessId;
         dynamicStateStack.push(currentState);
         // Clear the hash
-        elements.clear();
+        this.elements.clear();
+        this.blessId = 0;
     }
 
     /**
@@ -441,8 +444,10 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
     @Override
     public void dynamicRestoreState() {
         if (!dynamicStateStack.isEmpty()) {
-            // Restore the elements map from the most recent saved state
-            elements = dynamicStateStack.pop();
+            // Restore the elements map and blessId from the most recent saved state
+            RuntimeHash previousState = dynamicStateStack.pop();
+            this.elements = previousState.elements;
+            this.blessId = previousState.blessId;
         }
     }
 
