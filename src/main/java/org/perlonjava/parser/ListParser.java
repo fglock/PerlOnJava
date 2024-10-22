@@ -8,16 +8,30 @@ import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.List;
 
+/**
+ * The ListParser class provides methods to parse lists in various contexts,
+ * such as function calls, array literals, and hash literals. It supports
+ * parsing lists with or without parentheses and handles optional arguments.
+ */
 public class ListParser {
 
-    // List parser for predeclared function calls with One optional argument,
-    // accepts a list with Parentheses or without.
-    //
-    // Comma is allowed after the argument:   rand, rand 10,
-    //
+    /**
+     * Parses a list with zero or one optional argument. The list can be enclosed
+     * in parentheses or not. Commas are allowed after the argument.
+     *
+     * Examples:
+     * - rand()
+     * - rand(10)
+     * - rand, rand 10,
+     *
+     * @param parser   The parser instance.
+     * @param minItems The minimum number of items required in the list.
+     * @return A ListNode representing the parsed list.
+     * @throws PerlCompilerException If the syntax is incorrect or the minimum number of items is not met.
+     */
     static ListNode parseZeroOrOneList(Parser parser, int minItems) {
         if (looksLikeEmptyList(parser)) {
-            // return an empty list
+            // Return an empty list if it looks like an empty list
             if (minItems > 0) {
                 throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
             }
@@ -27,18 +41,18 @@ public class ListParser {
         ListNode expr;
         LexerToken token = TokenUtils.peek(parser);
         if (token.text.equals("(")) {
-            // argument in parentheses, can be 0 or 1 argument:    rand(), rand(10)
-            // Commas are allowed after the single argument:       rand(10,)
+            // Argument in parentheses, can be 0 or 1 argument: rand(), rand(10)
+            // Commas are allowed after the single argument: rand(10,)
             TokenUtils.consume(parser);
             expr = new ListNode(parseList(parser, ")", 0), parser.tokenIndex);
             if (expr.elements.size() > 1) {
                 throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
             }
         } else if (token.type == LexerTokenType.EOF || Parser.LIST_TERMINATORS.contains(token.text) || token.text.equals(",")) {
-            // no argument
+            // No argument
             expr = new ListNode(parser.tokenIndex);
         } else {
-            // argument without parentheses
+            // Argument without parentheses
             expr = ListNode.makeList(parser.parseExpression(parser.getPrecedence("isa") + 1));
         }
         if (expr.elements.size() < minItems) {
@@ -47,20 +61,20 @@ public class ListParser {
         return expr;
     }
 
-    // List parser for predeclared function calls, accepts a list with Parentheses or without
-    //
-    // The Minimum number of arguments can be set.
-    //
-    // wantBlockNode:   sort { $a <=> $b } @array
-    //
-    // obeyParentheses: print ("this", "that"), "not printed"
-    //
-    // not obeyParentheses:  return ("this", "that"), "this too"
-    //
-    // wantFileHandle:  print STDOUT "this\n";
-    //
-    // wantRegex:  split / /, "this";
-    //
+    /**
+     * Parses a list with zero or more arguments. The list can be enclosed in
+     * parentheses or not. Supports various parsing contexts such as block nodes,
+     * file handles, and regex patterns.
+     *
+     * @param parser           The parser instance.
+     * @param minItems         The minimum number of items required in the list.
+     * @param wantBlockNode    Indicates if a block node is expected.
+     * @param obeyParentheses  Indicates if parentheses should be obeyed.
+     * @param wantFileHandle   Indicates if a file handle is expected.
+     * @param wantRegex        Indicates if a regex pattern is expected.
+     * @return A ListNode representing the parsed list.
+     * @throws PerlCompilerException If the syntax is incorrect or the minimum number of items is not met.
+     */
     static ListNode parseZeroOrMoreList(Parser parser, int minItems, boolean wantBlockNode, boolean obeyParentheses, boolean wantFileHandle, boolean wantRegex) {
         parser.ctx.logDebug("parseZeroOrMoreList start");
         ListNode expr = new ListNode(parser.tokenIndex);
@@ -83,13 +97,13 @@ public class ListParser {
                     expr.elements.add(regex);
                     token = TokenUtils.peek(parser);
                     if (token.type != LexerTokenType.EOF && !Parser.LIST_TERMINATORS.contains(token.text)) {
-                        // consume comma
+                        // Consume comma
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ",");
                     }
                 }
             }
             if (!matched) {
-                // backtrack
+                // Backtrack
                 parser.tokenIndex = currentIndex;
                 hasParen = false;
             }
@@ -102,7 +116,7 @@ public class ListParser {
             }
             expr.handle = parser.parseFileHandle();
             if (expr.handle == null || !parser.isSpaceAfterPrintBlock()) {
-                // backtrack
+                // Backtrack
                 parser.tokenIndex = currentIndex;
                 hasParen = false;
             }
@@ -124,11 +138,11 @@ public class ListParser {
         }
 
         if (!looksLikeEmptyList(parser)) {
-            // it doesn't look like an empty list
+            // It doesn't look like an empty list
             token = TokenUtils.peek(parser);
             if (obeyParentheses && token.text.equals("(")) {
-                // arguments in parentheses, can be 0 or more arguments:    print(), print(10)
-                // Commas are allowed after the arguments:       print(10,)
+                // Arguments in parentheses, can be 0 or more arguments: print(), print(10)
+                // Commas are allowed after the arguments: print(10,)
                 TokenUtils.consume(parser);
                 expr.elements.addAll(parseList(parser, ")", 0));
             } else {
@@ -159,17 +173,22 @@ public class ListParser {
         return expr;
     }
 
-    // Generic List parser for Parentheses, Hash literal, Array literal,
-    // function arguments, get Array element, get Hash element.
-    //
-    // The Minimum number of arguments can be set.
-    //
-    // Example usage:
-    //
-    //    new ListNode(parseList(")", 0), tokenIndex);
-    //    new HashLiteralNode(parseList("}", 1), tokenIndex);
-    //    new ArrayLiteralNode(parseList("]", 1), tokenIndex);
-    //
+    /**
+     * Parses a generic list with a specified closing delimiter. This method is
+     * used for parsing various constructs like parentheses, hash literals, and
+     * array literals.
+     *
+     * Example usage:
+     * - new ListNode(parseList(")", 0), tokenIndex);
+     * - new HashLiteralNode(parseList("}", 1), tokenIndex);
+     * - new ArrayLiteralNode(parseList("]", 1), tokenIndex);
+     *
+     * @param parser   The parser instance.
+     * @param close    The closing delimiter for the list.
+     * @param minItems The minimum number of items required in the list.
+     * @return A list of Nodes representing the parsed elements.
+     * @throws PerlCompilerException If the syntax is incorrect or the minimum number of items is not met.
+     */
     static List<Node> parseList(Parser parser, String close, int minItems) {
         parser.ctx.logDebug("parseList start");
         ListNode expr;
@@ -177,7 +196,7 @@ public class ListParser {
         LexerToken token = TokenUtils.peek(parser);
         parser.ctx.logDebug("parseList start at " + token);
         if (token.text.equals(close)) {
-            // empty list
+            // Empty list
             TokenUtils.consume(parser);
             expr = new ListNode(parser.tokenIndex);
         } else {
@@ -194,12 +213,18 @@ public class ListParser {
         return expr.elements;
     }
 
+    /**
+     * Determines if the current token sequence looks like an empty list.
+     *
+     * @param parser The parser instance.
+     * @return True if the sequence looks like an empty list, false otherwise.
+     */
     public static boolean looksLikeEmptyList(Parser parser) {
         boolean isEmptyList = false;
         int previousIndex = parser.tokenIndex;
         LexerToken token = TokenUtils.consume(parser);
-        LexerToken token1 = parser.tokens.get(parser.tokenIndex); // next token including spaces
-        LexerToken nextToken = TokenUtils.peek(parser);  // after spaces
+        LexerToken token1 = parser.tokens.get(parser.tokenIndex); // Next token including spaces
+        LexerToken nextToken = TokenUtils.peek(parser);  // After spaces
 
         if (token.type == LexerTokenType.EOF || Parser.LIST_TERMINATORS.contains(token.text)) {
             isEmptyList = true;
@@ -209,19 +234,18 @@ public class ListParser {
             // -d, -e, -f, -l, -p, -x
             isEmptyList = false;
         } else if (Parser.INFIX_OP.contains(token.text) || token.text.equals(",")) {
-            // tokenIndex++;
             parser.ctx.logDebug("parseZeroOrMoreList infix `" + token.text + "` followed by `" + nextToken.text + "`");
             if (token.text.equals("&")) {
-                // looks like a subroutine call, not an infix `&`
+                // Looks like a subroutine call, not an infix `&`
                 parser.ctx.logDebug("parseZeroOrMoreList looks like subroutine call");
             } else if (token.text.equals("%") && (nextToken.text.equals("$") || nextToken.type == LexerTokenType.IDENTIFIER)) {
-                // looks like a hash deref, not an infix `%`
+                // Looks like a hash deref, not an infix `%`
                 parser.ctx.logDebug("parseZeroOrMoreList looks like Hash");
             } else if (token.text.equals(".") && token1.type == LexerTokenType.NUMBER) {
-                // looks like a fractional number, not an infix `.`
+                // Looks like a fractional number, not an infix `.`
                 parser.ctx.logDebug("parseZeroOrMoreList looks like Number");
             } else {
-                // subroutine call with zero arguments, followed by infix operator: `pos = 3`
+                // Subroutine call with zero arguments, followed by infix operator: `pos = 3`
                 parser.ctx.logDebug("parseZeroOrMoreList return zero at `" + parser.tokens.get(parser.tokenIndex) + "`");
                 // if (LVALUE_INFIX_OP.contains(token.text)) {
                 //    throw new PerlCompilerException(tokenIndex, "Can't modify non-lvalue subroutine call", ctx.errorUtil);
