@@ -51,11 +51,25 @@ tasks.named('build') {
 }
 
 sourceSets {
+    main {
+        resources {
+            srcDir 'src/main/perl'
+            include '**/*.pm'
+        }
+    }
     test {
         resources {
             srcDir 'src/test/resources'
         }
     }
+}
+
+tasks.named('processResources', Copy) {
+    from(sourceSets.main.resources.srcDirs) {
+        include '**/*.pm'
+    }
+    into("$buildDir/resources/main")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
 tasks.named('processTestResources', Copy) {
