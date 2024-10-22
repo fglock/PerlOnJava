@@ -1,9 +1,8 @@
 package org.perlonjava.runtime;
 
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import org.perlonjava.codegen.DynamicState;
+
+import java.util.*;
 
 /**
  * The RuntimeHash class simulates Perl hashes.
@@ -12,11 +11,14 @@ import java.util.Map;
  * class tries to mimic this behavior using a map of string keys to RuntimeScalar objects, which can hold
  * any type of Perl scalar value.
  */
-public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarReference {
+public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarReference, DynamicState {
     // Map to store the elements of the hash
     public Map<String, RuntimeScalar> elements;
     // Iterator for traversing the hash elements
     Iterator<RuntimeScalar> hashIterator;
+
+    // Static stack to store saved "local" states of RuntimeHash instances
+    private static final Stack<Map<String, RuntimeScalar>> dynamicStateStack = new Stack<>();
 
     /**
      * Constructor for RuntimeHash.
@@ -417,6 +419,31 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
             arrElements.add(entry.getValue());
         }
         return arr;
+    }
+
+    /**
+     * Saves the current state of the hash.
+     * This method pushes a deep copy of the current elements onto the dynamic state stack.
+     */
+    @Override
+    public void dynamicSaveState() {
+        // Create a copy of the elements map and push it onto the dynamic stack
+        Map<String, RuntimeScalar> currentState = new HashMap<>(elements);
+        dynamicStateStack.push(currentState);
+        // Clear the hash
+        elements.clear();
+    }
+
+    /**
+     * Restores the hash to the last saved state.
+     * This method pops the most recent state from the dynamic state stack and restores it.
+     */
+    @Override
+    public void dynamicRestoreState() {
+        if (!dynamicStateStack.isEmpty()) {
+            // Restore the elements map from the most recent saved state
+            elements = dynamicStateStack.pop();
+        }
     }
 
     /**
