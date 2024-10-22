@@ -478,7 +478,7 @@ public class Parser {
             case "sprintf":
                 // Handle 'join' keyword as a Binary operator with a RuntimeList operand
                 operand = ListParser.parseZeroOrMoreList(this, 1, false, true, false, false);
-                separator = ((ListNode) operand).elements.remove(0);
+                separator = ((ListNode) operand).elements.removeFirst();
                 return new BinaryOperatorNode(token.text, separator, operand, currentIndex);
             case "sort":
             case "map":
@@ -630,14 +630,14 @@ public class Parser {
 
         switch (token.type) {
             case IDENTIFIER:
-                LexerToken nextToken = TokenUtils.peek(this);
-                if (nextToken.text.equals("=>")) {
+                String nextTokenText = TokenUtils.peek(this).text;
+                if (nextTokenText.equals("=>")) {
                     // Autoquote
                     return new StringNode(token.text, tokenIndex);
                 }
 
                 // Try to parse a builtin operation; backtrack if it fails
-                if (token.text.equals("CORE") && nextToken.text.equals("::")) {
+                if (token.text.equals("CORE") && nextTokenText.equals("::")) {
                     TokenUtils.consume(this);  // "::"
                     token = TokenUtils.consume(this); // operator
                 }
@@ -703,7 +703,7 @@ public class Parser {
                         return new OperatorNode(token.text, operand, tokenIndex);
                     case "-":
                         // Handle unary operators like `- -d`
-                        nextToken = tokens.get(tokenIndex);
+                        LexerToken nextToken = tokens.get(tokenIndex);
                         if (nextToken.type == LexerTokenType.IDENTIFIER && nextToken.text.length() == 1) {
                             // Handle `-d`
                             String operator = "-" + nextToken.text;
@@ -819,8 +819,7 @@ public class Parser {
             }
 
             // Create a Variable node
-            Node opNode = new OperatorNode(sigil, new IdentifierNode(varName, tokenIndex), tokenIndex);
-            return opNode;
+            return new OperatorNode(sigil, new IdentifierNode(varName, tokenIndex), tokenIndex);
         } else if (TokenUtils.peek(this).text.equals("{")) {
             // Handle curly brackets to parse a nested expression `${v}`
             TokenUtils.consume(this); // Consume the '{'
