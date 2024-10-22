@@ -203,6 +203,11 @@ public class StringParser {
                         str.append(text);
                         break;
                     }
+                    if (tokens.get(parser.tokenIndex).type == LexerTokenType.WHITESPACE) {
+                        // space after $ or @
+                        str.append(text);
+                        break;
+                    }
                     if (!str.isEmpty()) {
                         parts.add(new StringNode(str.toString(), tokenIndex));  // Add the string so far to parts
                         str = new StringBuilder();  // Reset the buffer
