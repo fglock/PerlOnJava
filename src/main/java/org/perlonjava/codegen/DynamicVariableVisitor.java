@@ -2,11 +2,11 @@ package org.perlonjava.codegen;
 
 import org.perlonjava.astnode.*;
 
-public class LocalOperatorVisitor implements Visitor {
+public class DynamicVariableVisitor implements Visitor {
     private boolean containsLocalOperator = false;
 
     public static boolean containsLocalOperator(BlockNode blockNode) {
-        LocalOperatorVisitor visitor = new LocalOperatorVisitor();
+        DynamicVariableVisitor visitor = new DynamicVariableVisitor();
         blockNode.accept(visitor);
         return visitor.containsLocalOperator;
     }
@@ -36,16 +36,24 @@ public class LocalOperatorVisitor implements Visitor {
             node.variable.accept(this);
             node.list.accept(this);
             node.body.accept(this);
-            node.continueBlock.accept(this);
+            if (node.continueBlock != null) {
+                node.continueBlock.accept(this);
+            }
         }
     }
 
     @Override
     public void visit(For3Node node) {
         if (!node.useNewScope) {
-            node.initialization.accept(this);
-            node.condition.accept(this);
-            node.increment.accept(this);
+            if (node.initialization != null) {
+                node.initialization.accept(this);
+            }
+            if (node.condition != null) {
+                node.condition.accept(this);
+            }
+            if (node.increment != null) {
+                node.increment.accept(this);
+            }
             node.body.accept(this);
         }
     }
