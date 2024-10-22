@@ -195,7 +195,7 @@ public class EmitStatement {
         mv.visitInsn(Opcodes.POP);  // we don't need the variable in the stack
         // Stack: [iterator]
 
-        emitterVisitor.ctx.javaClassInfo.asmStackLevel += 1;
+        emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);;
 
         // Add redo label
         Label redoLabel = new Label();
@@ -226,7 +226,7 @@ public class EmitStatement {
         // End of the loop
         mv.visitLabel(loopEnd);
 
-        emitterVisitor.ctx.javaClassInfo.asmStackLevel -= 1;
+        emitterVisitor.ctx.javaClassInfo.decrementStackLevel(1);;
 
         // Pop the iterator from the stack
         mv.visitInsn(Opcodes.POP);
