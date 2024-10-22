@@ -134,7 +134,13 @@ public class RuntimeRegex implements RuntimeScalarReference {
      * @return A RuntimeScalar or RuntimeList.
      */
     public static RuntimeDataProvider matchRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
-        RuntimeRegex regex = (RuntimeRegex) quotedRegex.value;
+        RuntimeRegex regex;
+        if (quotedRegex.type != RuntimeScalarType.REGEX) {
+            // not a regex:  $var =~ "Test"
+            regex = compile(quotedRegex.toString(), "");
+        } else {
+            regex = (RuntimeRegex) quotedRegex.value;
+        }
         if (regex.replacement != null) {
             return replaceRegex(quotedRegex, string, ctx);
         }
