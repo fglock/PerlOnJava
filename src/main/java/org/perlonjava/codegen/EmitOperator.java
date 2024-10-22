@@ -596,14 +596,10 @@ public class EmitOperator {
             throw new PerlCompilerException(node.tokenIndex, "Can't \"" + operator + "\" outside a loop block", ctx.errorUtil);
         }
 
-        ctx.logDebug("visit(next): asmStackLevel: " + ctx.javaClassInfo.asmStackLevel);
+        ctx.logDebug("visit(next): asmStackLevel: " + ctx.javaClassInfo.stackLevelManager.getStackLevel());
 
-        int consumeStack = ctx.javaClassInfo.asmStackLevel;
-        int targetStack = loopLabels.asmStackLevel;
-        while (consumeStack-- > targetStack) {
-            // Consume the JVM stack.
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
+        // Use StackLevelManager to emit POP instructions
+        ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, loopLabels.asmStackLevel);
 
         // Determine the appropriate label to jump to.
         Label label = operator.equals("next") ? loopLabels.nextLabel
@@ -614,19 +610,18 @@ public class EmitOperator {
 
     // Handles the 'return' operator, which exits a subroutine and returns a value.
     static void handleReturnOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
-        emitterVisitor.ctx.logDebug("visit(return) in context " + emitterVisitor.ctx.contextType);
-        emitterVisitor.ctx.logDebug("visit(return) will visit " + node.operand + " in context " + emitterVisitor.ctx.with(RuntimeContextType.RUNTIME).contextType);
+        EmitterContext ctx = emitterVisitor.ctx;
 
-        int consumeStack = emitterVisitor.ctx.javaClassInfo.asmStackLevel;
-        while (consumeStack-- > 0) {
-            // Consume the JVM stack.
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        ctx.logDebug("visit(return) in context " + emitterVisitor.ctx.contextType);
+        ctx.logDebug("visit(return) will visit " + node.operand + " in context " + emitterVisitor.ctx.with(RuntimeContextType.RUNTIME).contextType);
+
+        // Use StackLevelManager to emit POP instructions
+        ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
 
         if (node.operand instanceof ListNode list) {
             if (list.elements.size() == 1) {
                 // Special case for a list with 1 element.
-                list.elements.get(0).accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
+                list.elements.getFirst().accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
                 emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
                 return;
             }
