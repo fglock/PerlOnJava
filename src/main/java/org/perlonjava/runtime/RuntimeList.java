@@ -363,7 +363,9 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
      */
     @Override
     public void dynamicSaveState() {
-        throw new PerlCompilerException("not implemented: local LIST");
+        for (RuntimeBaseEntity elem : elements) {
+            elem.dynamicSaveState();
+        }
     }
 
     /**
@@ -374,7 +376,11 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
      */
     @Override
     public void dynamicRestoreState() {
-        throw new PerlCompilerException("not implemented: local LIST");
+        // Note: this method is probably not needed,
+        // because the elements are handled by their respective classes.
+        for (RuntimeBaseEntity elem : elements) {
+            elem.dynamicRestoreState();
+        }
     }
 
     /**
