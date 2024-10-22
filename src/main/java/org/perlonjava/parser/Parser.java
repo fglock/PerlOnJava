@@ -689,9 +689,18 @@ public class Parser {
                     case "$#":
                     case "@":
                     case "%":
-                    case "&":
                     case "*":
                         return parseVariable(token.text);
+                    case "&":
+                        parsingForLoopVariable = true;  // allow parentheses after variable: &$sub(...)
+                        Node node = parseVariable(token.text);
+                        parsingForLoopVariable = false;
+                        // Handle auto-call: transform `&subr` to `&subr(@_)`
+                        if (!TokenUtils.peek(this).text.equals("(") && !parsingTakeReference) {
+                            Node list = new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex);
+                            return new BinaryOperatorNode("(", node, list, tokenIndex);
+                        }
+                        return node;
                     case "!":
                     case "~":
                     case "+":
@@ -757,13 +766,6 @@ public class Parser {
 
             // Create a Variable node
             Node opNode = new OperatorNode(sigil, new IdentifierNode(varName, tokenIndex), tokenIndex);
-
-            // Handle auto-call: transform `&subr` to `&subr(@_)`
-            if (!TokenUtils.peek(this).text.equals("(") && sigil.equals("&") && !parsingTakeReference) {
-                Node list = new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex);
-                return new BinaryOperatorNode("(", opNode, list, tokenIndex);
-            }
-
             return opNode;
         } else if (TokenUtils.peek(this).text.equals("{")) {
             // Handle curly brackets to parse a nested expression `${v}`
