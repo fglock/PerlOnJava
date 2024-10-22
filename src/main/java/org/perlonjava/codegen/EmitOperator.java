@@ -529,11 +529,19 @@ public class EmitOperator {
         int lvalueContext = LValueVisitor.getContext(node.operand);
         node.operand.accept(emitterVisitor.with(lvalueContext));
         // save the old value
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/codegen/DynamicVariableManager",
-                "pushLocalVariable",
-                "(Lorg/perlonjava/runtime/RuntimeBaseEntity;)Lorg/perlonjava/runtime/RuntimeBaseEntity;",
-                false);
+        if (lvalueContext == RuntimeContextType.LIST) {
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/codegen/DynamicVariableManager",
+                    "pushLocalVariable",
+                    "(Lorg/perlonjava/runtime/RuntimeBaseEntity;)Lorg/perlonjava/runtime/RuntimeBaseEntity;",
+                    false);
+        } else {
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/codegen/DynamicVariableManager",
+                    "pushLocalVariable",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+        }
         // If the context is VOID, pop the result from the stack.
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
