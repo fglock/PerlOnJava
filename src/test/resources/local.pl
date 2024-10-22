@@ -32,38 +32,6 @@ say @global_array == 3 && $global_array[0] == 1 ? "ok # local array restored" : 
 }
 say exists $global_hash{key} ? "ok # local hash restored" : "not ok";
 
-__END__
-
-#----- TODO --------
-
-# Special case: localizing special variables
-$@ = "";
-{
-    local $@ = "error occurred";
-    eval { die "Test error" };
-    print $@ =~ "Test error" ? "" : "not ";
-    say "ok # localized \$@ during eval <" . substr($@, 0, 20) . ">";
-}
-say $@ eq "" ? "ok # \$@ restored after eval <$@>" : "not ok";
-
-## # Special case: localizing filehandles
-## open my $fh, "<", "/etc/passwd" or die "Cannot open file: $!";
-## {
-##     local *FH = $fh;
-##     while (<FH>) {
-##         last if $. > 5;  # Read only first 5 lines
-##     }
-## }
-## say "ok # filehandle localized";
-
-# Special case: localizing package globals
-our $package_var = "package original";
-{
-    local $::package_var = "package temporary";
-    say $::package_var eq "package temporary" ? "ok # local package variable changed" : "not ok";
-}
-say $::package_var eq "package original" ? "ok # local package variable restored" : "not ok";
-
 # Case: local with a for loop and exceptions
 {
     local $global_var = "for-loop scope";
@@ -92,9 +60,35 @@ say $global_var eq "original" ? "ok # local variable restored after subroutine" 
 }
 say $global_var eq "original" ? "ok # variable restored after nested scopes" : "not ok";
 
-#######################
+# Special case: localizing package globals
+our $package_var = "package original";
+{
+    local $::package_var = "package temporary";
+    say $::package_var eq "package temporary" ? "ok # local package variable changed" : "not ok";
+}
+say $::package_var eq "package original" ? "ok # local package variable restored" : "not ok";
 
-# Done with all tests
-say "ok # All tests completed";
+__END__
 
+#----- TODO --------
+
+# Special case: localizing special variables
+$@ = "";
+{
+    local $@ = "error occurred";
+    eval { die "Test error" };
+    print $@ =~ "Test error" ? "" : "not ";
+    say "ok # localized \$@ during eval <" . substr($@, 0, 20) . ">";
+}
+say $@ eq "" ? "ok # \$@ restored after eval <$@>" : "not ok";
+
+## # Special case: localizing filehandles
+## open my $fh, "<", "/etc/passwd" or die "Cannot open file: $!";
+## {
+##     local *FH = $fh;
+##     while (<FH>) {
+##         last if $. > 5;  # Read only first 5 lines
+##     }
+## }
+## say "ok # filehandle localized";
 
