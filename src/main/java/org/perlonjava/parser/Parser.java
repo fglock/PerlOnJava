@@ -734,28 +734,45 @@ public class Parser {
         throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, ctx.errorUtil);
     }
 
+    /**
+     * Parses a code reference variable, handling Perl's `&` code reference parsing rules.
+     * This method is responsible for parsing expressions that start with `&`, which in Perl
+     * can be used to refer to subroutines or to call them.
+     *
+     * @param token The lexer token representing the `&` operator.
+     * @return A Node representing the parsed code reference or subroutine call.
+     */
     private Node parseCoderefVariable(LexerToken token) {
-        parsingForLoopVariable = true;  // allow parentheses after variable: &$sub(...)
+        // Set a flag to allow parentheses after a variable, as in &$sub(...)
+        parsingForLoopVariable = true;
+        // Parse the variable following the `&` sigil
         Node node = parseVariable(token.text);
+        // Reset the flag after parsing
         parsingForLoopVariable = false;
+
+        // If we are parsing a reference (e.g., \&sub), return the node without adding parameters
         if (parsingTakeReference) {
-            // Parsing \&sub, don't add parameters
             return node;
         }
+
         this.ctx.logDebug("parse & node: " + node);
+
+        // Check if the node is an OperatorNode with a BinaryOperatorNode operand
         if (node instanceof OperatorNode operatorNode) {
             if (operatorNode.operand instanceof BinaryOperatorNode binaryOperatorNode) {
-                // Handle `&$subr(@_)`
+                // If the operator is `(`, return the BinaryOperatorNode directly
                 if (binaryOperatorNode.operator.equals("(")) {
                     return binaryOperatorNode;
                 }
             }
         }
+
         Node list;
+        // If the next token is not `(`, handle auto-call by transforming `&subr` to `&subr(@_)`
         if (!TokenUtils.peek(this).text.equals("(")) {
-            // Handle auto-call: transform `&subr` to `&subr(@_)`
             list = new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex);
         } else {
+            // Otherwise, parse the list of arguments
             list = ListParser.parseZeroOrMoreList(this,
                     0,
                     false,
@@ -763,17 +780,19 @@ public class Parser {
                     false,
                     false);
         }
+
+        // Handle cases where the node is an OperatorNode
         if (node instanceof OperatorNode operatorNode) {
-            // Handle &$sub(), &{$sub}()
+            // If the operand is another OperatorNode, transform &$sub to $sub(@_)
             if (operatorNode.operand instanceof OperatorNode) {
-                // &$sub becomes $sub(@_)
                 node = operatorNode.operand;
             } else if (operatorNode.operand instanceof BlockNode blockNode) {
-                // &{$sub} becomes $sub(@_)
+                // If the operand is a BlockNode, transform &{$sub} to $sub(@_)
                 node = blockNode;
             }
         }
-        // Handle &sub()
+
+        // Return a new BinaryOperatorNode representing the function call with arguments
         return new BinaryOperatorNode("(", node, list, tokenIndex);
     }
 
