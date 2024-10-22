@@ -10,6 +10,8 @@ import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.*;
 
+import static org.perlonjava.parser.TokenUtils.peek;
+
 public class Parser {
     public static final Set<String> TERMINATORS =
             Set.of(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when");
@@ -95,7 +97,7 @@ public class Parser {
         int currentIndex = tokenIndex;
         ctx.symbolTable.enterScope();
         List<Node> statements = new ArrayList<>();
-        LexerToken token = TokenUtils.peek(this);
+        LexerToken token = peek(this);
         while (token.type != LexerTokenType.EOF
                 && !(token.type == LexerTokenType.OPERATOR && token.text.equals("}"))) {
             if (token.text.equals(";")) {
@@ -103,7 +105,7 @@ public class Parser {
             } else {
                 statements.add(parseStatement());
             }
-            token = TokenUtils.peek(this);
+            token = peek(this);
         }
         if (statements.isEmpty()) {
             statements.add(new ListNode(tokenIndex));
@@ -114,17 +116,17 @@ public class Parser {
 
     public Node parseStatement() {
         int currentIndex = tokenIndex;
-        LexerToken token = TokenUtils.peek(this);
+        LexerToken token = peek(this);
         ctx.logDebug("parseStatement `" + token.text + "`");
 
         // check for label:
         String label = null;
         if (token.type == LexerTokenType.IDENTIFIER) {
             String id = TokenUtils.consume(this).text;
-            if (TokenUtils.peek(this).text.equals(":")) {
+            if (peek(this).text.equals(":")) {
                 label = id;
                 TokenUtils.consume(this);
-                token = TokenUtils.peek(this);
+                token = peek(this);
             } else {
                 tokenIndex = currentIndex;  // backtrack
             }
@@ -149,7 +151,7 @@ public class Parser {
                 case "sub":
                     // Must be followed by an identifier
                     tokenIndex++;
-                    if (TokenUtils.peek(this).type == LexerTokenType.IDENTIFIER) {
+                    if (peek(this).type == LexerTokenType.IDENTIFIER) {
                         return SubroutineParser.parseSubroutineDefinition(this, true);
                     }
                     // otherwise backtrack
@@ -176,7 +178,7 @@ public class Parser {
             }
         }
         Node expression = parseExpression(0);
-        token = TokenUtils.peek(this);
+        token = peek(this);
         if (token.type == LexerTokenType.IDENTIFIER) {
             // statement modifier: if, for ...
             switch (token.text) {
@@ -232,7 +234,7 @@ public class Parser {
     }
 
     public void parseStatementTerminator() {
-        LexerToken token = TokenUtils.peek(this);
+        LexerToken token = peek(this);
         if (token.type != LexerTokenType.EOF && !token.text.equals("}") && !token.text.equals(";")) {
             throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
         }
@@ -306,7 +308,7 @@ public class Parser {
         // Continuously process tokens until we reach the end of the expression.
         while (true) {
             // Peek at the next token to determine what to do next.
-            LexerToken token = TokenUtils.peek(this);
+            LexerToken token = peek(this);
 
             // Check if we have reached the end of the input (EOF) or a terminator (like `;`).
             if (token.type == LexerTokenType.EOF || TERMINATORS.contains(token.text)) {
@@ -539,6 +541,14 @@ public class Parser {
                 // Handle 'my' keyword as a unary operator with an operand
                 operand = parsePrimary();
                 return new OperatorNode(token.text, operand, currentIndex);
+            case "local":
+                // Handle 'local' keyword as a unary operator with an operand
+                if (peek(this).text.equals("(")) {
+                    operand = parsePrimary();
+                } else {
+                    operand = parseExpression(getPrecedence("++"));
+                }
+                return new OperatorNode(token.text, operand, currentIndex);
             case "last":
             case "next":
             case "redo":
@@ -630,7 +640,7 @@ public class Parser {
 
         switch (token.type) {
             case IDENTIFIER:
-                String nextTokenText = TokenUtils.peek(this).text;
+                String nextTokenText = peek(this).text;
                 if (nextTokenText.equals("=>")) {
                     // Autoquote
                     return new StringNode(token.text, tokenIndex);
@@ -708,7 +718,7 @@ public class Parser {
                             // Handle `-d`
                             String operator = "-" + nextToken.text;
                             tokenIndex++;
-                            nextToken = TokenUtils.peek(this);
+                            nextToken = peek(this);
                             if (nextToken.text.equals("_")) {
                                 // Handle `-f _`
                                 TokenUtils.consume(this);
@@ -769,7 +779,7 @@ public class Parser {
 
         Node list;
         // If the next token is not `(`, handle auto-call by transforming `&subr` to `&subr(@_)`
-        if (!TokenUtils.peek(this).text.equals("(")) {
+        if (!peek(this).text.equals("(")) {
             list = new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex);
         } else {
             // Otherwise, parse the list of arguments
@@ -810,7 +820,7 @@ public class Parser {
         if (varName != null) {
             // Variable name is valid.
             // Check for illegal characters after a variable
-            if (TokenUtils.peek(this).text.equals("(") && !sigil.equals("&") && !parsingForLoopVariable) {
+            if (peek(this).text.equals("(") && !sigil.equals("&") && !parsingForLoopVariable) {
                 // Parentheses are only allowed after a variable in specific cases:
                 // - `for my $v (...`
                 // - `&name(...`
@@ -820,7 +830,7 @@ public class Parser {
 
             // Create a Variable node
             return new OperatorNode(sigil, new IdentifierNode(varName, tokenIndex), tokenIndex);
-        } else if (TokenUtils.peek(this).text.equals("{")) {
+        } else if (peek(this).text.equals("{")) {
             // Handle curly brackets to parse a nested expression `${v}`
             TokenUtils.consume(this); // Consume the '{'
             Node block = parseBlock(); // Parse the block inside the curly brackets
@@ -860,7 +870,7 @@ public class Parser {
                     // Autoquote - Convert IdentifierNode to StringNode
                     left = new StringNode(((IdentifierNode) left).name, ((IdentifierNode) left).tokenIndex);
                 }
-                token = TokenUtils.peek(this);
+                token = peek(this);
                 if (token.type == LexerTokenType.EOF || LIST_TERMINATORS.contains(token.text) || token.text.equals(",") || token.text.equals("=>")) {
                     // "postfix" comma
                     return ListNode.makeList(left);
@@ -873,7 +883,7 @@ public class Parser {
                 right = parseExpression(precedence);
                 return new TernaryOperatorNode(token.text, left, middle, right, tokenIndex);
             case "->":
-                String nextText = TokenUtils.peek(this).text;
+                String nextText = peek(this).text;
                 switch (nextText) {
                     case "(":
                         TokenUtils.consume(this);
@@ -918,11 +928,11 @@ public class Parser {
 
     public Node parseFileHandle() {
         boolean hasBracket = false;
-        if (TokenUtils.peek(this).text.equals("{")) {
+        if (peek(this).text.equals("{")) {
             TokenUtils.consume(this);
             hasBracket = true;
         }
-        LexerToken token = TokenUtils.peek(this);
+        LexerToken token = peek(this);
         Node fileHandle = null;
         if (token.type == LexerTokenType.IDENTIFIER) {
             // bareword
@@ -944,7 +954,7 @@ public class Parser {
             fileHandle = parsePrimary();
             if (!hasBracket) {
                 // assert that is not followed by infix
-                String nextText = TokenUtils.peek(this).text;
+                String nextText = peek(this).text;
                 if (INFIX_OP.contains(nextText) || "{[".contains(nextText) || "->".equals(nextText)) {
                     // print $fh + 2;  # not a file handle
                     fileHandle = null;
@@ -964,7 +974,7 @@ public class Parser {
 
     public boolean isSpaceAfterPrintBlock() {
         int currentIndex = tokenIndex;
-        LexerToken token = TokenUtils.peek(this);
+        LexerToken token = peek(this);
         boolean isSpace = false;
         switch (token.type) {
             case EOF:
