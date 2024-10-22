@@ -1,5 +1,7 @@
 package org.perlonjava.codegen;
 
+import org.perlonjava.runtime.RuntimeBaseEntity;
+
 import java.util.Stack;
 
 /**
@@ -10,14 +12,7 @@ import java.util.Stack;
  */
 public class DynamicVariableManager {
     // A stack to hold the dynamic states of variables.
-    private final Stack<DynamicState> variableStack;
-
-    /**
-     * Constructs a new DynamicVariableManager with an empty stack of dynamic variables.
-     */
-    public DynamicVariableManager() {
-        this.variableStack = new Stack<>();
-    }
+    private static final Stack<DynamicState> variableStack = new Stack<>();
 
     /**
      * Returns the current local level, which is the size of the variable stack.
@@ -25,7 +20,7 @@ public class DynamicVariableManager {
      *
      * @return the number of dynamic states in the stack.
      */
-    public int getLocalLevel() {
+    public static int getLocalLevel() {
         return variableStack.size();
     }
 
@@ -35,17 +30,18 @@ public class DynamicVariableManager {
      *
      * @param variable the dynamic state to be pushed onto the stack.
      */
-    public void pushLocalVariable(DynamicState variable) {
+    public static RuntimeBaseEntity pushLocalVariable(RuntimeBaseEntity variable) {
         // Save the current state of the variable and push it onto the stack.
         variable.dynamicSaveState();
         variableStack.push(variable);
+        return variable;
     }
 
     /**
      * Pops the most recent dynamic variable from the stack and restores its state.
      * If the stack is empty, this method does nothing.
      */
-    public void popLocalVariable() {
+    public static void popLocalVariable() {
         if (!variableStack.isEmpty()) {
             // Pop the variable from the stack and restore its previous state.
             DynamicState variable = variableStack.pop();
@@ -59,7 +55,7 @@ public class DynamicVariableManager {
      *
      * @param targetLocalLevel the target size of the stack after popping variables.
      */
-    public void popToLocalLevel(int targetLocalLevel) {
+    public static void popToLocalLevel(int targetLocalLevel) {
         // Continue popping variables until the stack size matches the target local level.
         while (variableStack.size() > targetLocalLevel) {
             popLocalVariable();

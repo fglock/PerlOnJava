@@ -523,6 +523,31 @@ public class EmitOperator {
         }
     }
 
+    // Handles the 'local' operator.
+    static void handleLocal(EmitterVisitor emitterVisitor, OperatorNode node) {
+        String operator = node.operator;
+        if (node.operand instanceof ListNode operand) {
+            throw new PerlCompilerException(node.tokenIndex, "Not implemented: operator: " + operator, emitterVisitor.ctx.errorUtil);
+        }
+        if (node.operand instanceof OperatorNode operand) {
+            // emit the lvalue
+            operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            // save the old value
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/codegen/DynamicVariableManager",
+                    "pushLocalVariable",
+                    "(Lorg/perlonjava/runtime/RuntimeBaseEntity;)Lorg/perlonjava/runtime/RuntimeBaseEntity;",
+                    false);
+            // If the context is VOID, pop the result from the stack.
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+            }
+            return;
+        }
+        // Throw an exception if the operator is not implemented.
+        throw new PerlCompilerException(node.tokenIndex, "Not implemented: operator: " + operator, emitterVisitor.ctx.errorUtil);
+    }
+
     // Handles the 'delete' and 'exists' operators for hash elements.
     static void handleDeleteExists(EmitterVisitor emitterVisitor, OperatorNode node) {
         //   OperatorNode: delete
