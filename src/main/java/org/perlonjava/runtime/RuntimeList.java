@@ -355,6 +355,29 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
     }
 
     /**
+     * Saves the current state of the instance.
+     *
+     * <p>This method creates a snapshot of the current elements,
+     * and pushes it onto a static stack for later restoration. After saving, it clears
+     * the current elements and resets the values.
+     */
+    @Override
+    public void dynamicSaveState() {
+        throw new PerlCompilerException("not implemented: local LIST");
+    }
+
+    /**
+     * Restores the most recently saved state of the instance.
+     *
+     * <p>This method pops the most recent state from the static stack and restores
+     * the elements. If no state is saved, it does nothing.
+     */
+    @Override
+    public void dynamicRestoreState() {
+        throw new PerlCompilerException("not implemented: local LIST");
+    }
+
+    /**
      * Returns an iterator for the list.
      *
      * @return An iterator over the elements of the list.

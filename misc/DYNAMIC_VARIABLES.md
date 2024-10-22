@@ -14,6 +14,8 @@ Create a special case for Regex variables if needed.
 
 Make sure %ENV changes get reflected in system calls.
 
+Create a special case for `@_`, which is stored in JVM local vars.
+
 # Manage Dynamic Variables with DynamicVariableManager:
 
 Utilize the DynamicVariableManager to handle the stack of dynamic variables. This class already provides methods to push and pop dynamic states, which can be used to manage the lifecycle of dynamic variables.

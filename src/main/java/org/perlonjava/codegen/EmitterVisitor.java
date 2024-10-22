@@ -811,6 +811,9 @@ public class EmitterVisitor implements Visitor {
             case "exists":
                 EmitOperator.handleDeleteExists(this, node);
                 break;
+            case "local":
+                EmitOperator.handleLocal(this, node);
+                break;
             case "int":
                 handleUnaryBuiltin(node, "integer");
                 break;
