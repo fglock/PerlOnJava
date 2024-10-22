@@ -320,11 +320,7 @@ file.
     - Added the variants of diamond operator `<>` and special cases of `while`
     - Completed `chomp` operator; fixed `qw//` operator, `defined-or` and `x=`
     - Added modules: `parent`, `Test::More`
-
-### Upcoming Milestones
-
-- **v1.9.0**: Concurrency and Security Features
-    - Planned release date: 2024-12-10
+- **v1.9.0**: Operators and Special Variables
     - Added bitwise string operators.
     - Added lvalue `substr`, lvalue `vec`
     - Fix `%b` specifier in `sprintf`
@@ -339,14 +335,19 @@ file.
     - Added `&$sub` call syntax.
     - Added `local` dynamic variables.
     - Tests in `src/test/resources` are executed automatically.
+
+### Upcoming Milestones
+
+- **v1.10.0**: Concurrency and Security Features
+    - Planned release date: 2024-12-10
     - Work in progress: 
         - `socket` and related operators
     - Stretch goals
         - Add support for concurrency and parallelism, such as threads and async/await.
         - Enhance security features, including sandboxing and input validation.
-        - Increase test coverage and introduce automated testing tools.
+        - Increase test coverage.
 
-- **v1.10.0**: External Integration and Advanced Data Manipulation
+- **v1.11.0**: External Integration and Advanced Data Manipulation
     - Integrate with external libraries and APIs for tasks like HTTP requests and database access.
     - Add advanced data manipulation features, such as JSON/XML parsing and data transformation.
     - Allow users to define their own operators and macros for greater flexibility.
