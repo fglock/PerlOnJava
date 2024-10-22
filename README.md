@@ -334,12 +334,13 @@ file.
     - Regex `@-`, `@+`, `%+`, `%-` special variables are implemented.
     - Regex `` $` ``, `$&`, `$'` special variables are implemented.
     - Regex performance comparable to Perl; optimized regex variables.
+    - Regex matching plain strings: `$var =~ "Test"`.
     - Added `__SUB__` keyword; `readpipe`.
     - Added `&$sub` call syntax.
+    - Added `local` dynamic variables.
     - Tests in `src/test/resources` are executed automatically.
     - Work in progress: 
         - `socket` and related operators
-        - `local` dynamic variables
     - Stretch goals
         - Add support for concurrency and parallelism, such as threads and async/await.
         - Enhance security features, including sandboxing and input validation.
