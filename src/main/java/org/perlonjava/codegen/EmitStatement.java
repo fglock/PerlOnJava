@@ -259,6 +259,16 @@ public class EmitStatement {
         Label redoLabel = new Label();
         Label nextLabel = new Label();
 
+        // "LOCAL" WIP
+        // Save dynamic variables stack index in a JVM local variable
+        int dynamicIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/codegen/DynamicVariableManager",
+                "getLocalLevel",
+                "()I",
+                false);
+        mv.visitVarInsn(Opcodes.ISTORE, dynamicIndex);
+
         // Add redo label
         mv.visitLabel(redoLabel);
 
@@ -293,6 +303,15 @@ public class EmitStatement {
 
         // Add next label
         mv.visitLabel(nextLabel);
+
+        // "LOCAL" WIP
+        // Restore dynamic variables
+        mv.visitVarInsn(Opcodes.ILOAD, dynamicIndex);
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/codegen/DynamicVariableManager",
+                "popToLocalLevel",
+                "(I)V",
+                false);
 
         emitterVisitor.ctx.symbolTable.exitScope();
         emitterVisitor.ctx.logDebug("generateCodeBlock end");
