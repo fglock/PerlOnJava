@@ -68,10 +68,6 @@ our $package_var = "package original";
 }
 say $::package_var eq "package original" ? "ok # local package variable restored" : "not ok";
 
-__END__
-
-#----- TODO --------
-
 # Special case: localizing special variables
 $@ = "";
 {
@@ -82,13 +78,17 @@ $@ = "";
 }
 say $@ eq "" ? "ok # \$@ restored after eval <$@>" : "not ok";
 
-## # Special case: localizing filehandles
-## open my $fh, "<", "/etc/passwd" or die "Cannot open file: $!";
-## {
-##     local *FH = $fh;
-##     while (<FH>) {
-##         last if $. > 5;  # Read only first 5 lines
-##     }
-## }
-## say "ok # filehandle localized";
+__END__
+
+#----- TODO --------
+
+# Special case: localizing filehandles
+open my $fh, "<", "/etc/passwd" or die "Cannot open file: $!";
+{
+    local *FH = $fh;
+    while (<FH>) {
+        last if $. > 5;  # Read only first 5 lines
+    }
+}
+say "ok # filehandle localized";
 

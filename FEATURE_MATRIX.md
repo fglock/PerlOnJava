@@ -32,7 +32,7 @@
 ## Scalars
 - ✔️   **`my` variable declaration**: Local variables can be declared using `my`.
 - ✔️   **`our` variable declaration**: Global variables can be declared using `our`.
-- ❌  **`local` variable declaration**: Support for temporary local variable changes is missing. `local` is also missing for typeglobs.
+- ✔️   **`local` variable declaration**: Dynamic variables are implemented.
 - ❌  **`state` variable declaration**: Support for state variable changes is missing.
 - ✔️   **Variable assignment**: Basic variable assignment is implemented.
 - ✔️   **Basic types**: Support for integers, doubles, strings, CODE, and undef is present.
@@ -49,6 +49,7 @@
 - ✔️   **Cached string/numeric conversions; dualvars**: Caching is implemented, but it doesn't use the Perl "dual variable" implementation.
 - ❌  **Unicode**: Support for non-Unicode strings is not implemented.
 - ❌  **Taint checks**: Support for taint checks is not implemented.
+- ❌  **`local` special cases**: `local` is missing for typeglobs and filehandles. Localization in for-loops is also missing.
 
 ## Objects
 - ✔️   **Objects**: Creating classes, method call syntax works.
@@ -138,6 +139,7 @@
 - ✔️   **`reset`** resetting one-time match is implemented
 - ✔️   **`@-`, `@+`, `%+`, `%-` variables**: regex special variables are implemented
 - ✔️   **`$&` variables**: `` $` ``, `$&`, `$'` special variables are implemented
+- ✔️   **Matching plain strings**: `$var =~ "Test"` is implemented.
 - ❌  **Perl-specific Regex Features**: Some features like `/xx` `/ee` are missing.
 - ❌  **Dynamically-scoped regex variables**: Regex variables are not dynamically-scoped.
 - ❌  **Code blocks**: `(?{ code })` in regex is not implemented.
