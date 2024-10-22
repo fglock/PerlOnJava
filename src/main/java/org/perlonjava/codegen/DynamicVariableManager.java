@@ -1,6 +1,7 @@
 package org.perlonjava.codegen;
 
 import org.perlonjava.runtime.RuntimeBaseEntity;
+import org.perlonjava.runtime.RuntimeScalar;
 
 import java.util.Stack;
 
@@ -31,6 +32,13 @@ public class DynamicVariableManager {
      * @param variable the dynamic state to be pushed onto the stack.
      */
     public static RuntimeBaseEntity pushLocalVariable(RuntimeBaseEntity variable) {
+        // Save the current state of the variable and push it onto the stack.
+        variable.dynamicSaveState();
+        variableStack.push(variable);
+        return variable;
+    }
+
+    public static RuntimeScalar pushLocalVariable(RuntimeScalar variable) {
         // Save the current state of the variable and push it onto the stack.
         variable.dynamicSaveState();
         variableStack.push(variable);
