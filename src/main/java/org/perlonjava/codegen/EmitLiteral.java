@@ -129,12 +129,14 @@ public class EmitLiteral {
             mv.visitInsn(Opcodes.DUP);
             // stack: [RuntimeList] [RuntimeList]
 
-            emitterVisitor.ctx.javaClassInfo.incrementStackLevel(2);;
+            emitterVisitor.ctx.javaClassInfo.incrementStackLevel(2);
+            ;
 
             // emit the list element
             element.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
-            emitterVisitor.ctx.javaClassInfo.decrementStackLevel(2);;
+            emitterVisitor.ctx.javaClassInfo.decrementStackLevel(2);
+            ;
 
             // Call the add method to add the element to the RuntimeList
             // This calls RuntimeDataProvider.addToList() in order to allow (1, 2, $x, @x, %x)

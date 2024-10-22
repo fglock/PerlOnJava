@@ -1,8 +1,11 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.codegen.DynamicState;
+
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Stack;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 
@@ -12,7 +15,9 @@ import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
  * <p>In Perl, an array is a dynamic list of scalar values. This class tries to mimic this behavior
  * using a list of RuntimeScalar objects, which can hold any type of Perl scalar value.
  */
-public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarReference {
+public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarReference, DynamicState {
+    // Static stack to store saved "local" states of RuntimeArray instances
+    private static final Stack<RuntimeArray> dynamicStateStack = new Stack<>();
     // List to hold the elements of the array.
     public List<RuntimeScalar> elements;
 
@@ -406,6 +411,47 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
             sb.append(element.toString());
         }
         return sb.toString();
+    }
+
+    /**
+     * Saves the current state of the RuntimeArray instance.
+     *
+     * <p>This method creates a snapshot of the current elements and blessId of the array,
+     * and pushes it onto a static stack for later restoration. After saving, it clears
+     * the current elements and resets the blessId.
+     */
+    @Override
+    public void dynamicSaveState() {
+        // Create a new RuntimeArray to save the current state
+        RuntimeArray currentState = new RuntimeArray();
+        // Copy the current elements to the new state
+        currentState.elements = new ArrayList<>(this.elements);
+        // Copy the current blessId to the new state
+        currentState.blessId = this.blessId;
+        // Push the current state onto the stack
+        dynamicStateStack.push(currentState);
+        // Clear the array elements
+        this.elements.clear();
+        // Reset the blessId
+        this.blessId = 0;
+    }
+
+    /**
+     * Restores the most recently saved state of the RuntimeArray instance.
+     *
+     * <p>This method pops the most recent state from the static stack and restores
+     * the elements and blessId to the current array. If no state is saved, it does nothing.
+     */
+    @Override
+    public void dynamicRestoreState() {
+        if (!dynamicStateStack.isEmpty()) {
+            // Pop the most recent saved state from the stack
+            RuntimeArray previousState = dynamicStateStack.pop();
+            // Restore the elements from the saved state
+            this.elements = previousState.elements;
+            // Restore the blessId from the saved state
+            this.blessId = previousState.blessId;
+        }
     }
 
     /**

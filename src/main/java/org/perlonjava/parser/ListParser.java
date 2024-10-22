@@ -18,7 +18,7 @@ public class ListParser {
     /**
      * Parses a list with zero or one optional argument. The list can be enclosed
      * in parentheses or not. Commas are allowed after the argument.
-     *
+     * <p>
      * Examples:
      * - rand()
      * - rand(10)
@@ -66,12 +66,12 @@ public class ListParser {
      * parentheses or not. Supports various parsing contexts such as block nodes,
      * file handles, and regex patterns.
      *
-     * @param parser           The parser instance.
-     * @param minItems         The minimum number of items required in the list.
-     * @param wantBlockNode    Indicates if a block node is expected.
-     * @param obeyParentheses  Indicates if parentheses should be obeyed.
-     * @param wantFileHandle   Indicates if a file handle is expected.
-     * @param wantRegex        Indicates if a regex pattern is expected.
+     * @param parser          The parser instance.
+     * @param minItems        The minimum number of items required in the list.
+     * @param wantBlockNode   Indicates if a block node is expected.
+     * @param obeyParentheses Indicates if parentheses should be obeyed.
+     * @param wantFileHandle  Indicates if a file handle is expected.
+     * @param wantRegex       Indicates if a regex pattern is expected.
      * @return A ListNode representing the parsed list.
      * @throws PerlCompilerException If the syntax is incorrect or the minimum number of items is not met.
      */
@@ -177,7 +177,7 @@ public class ListParser {
      * Parses a generic list with a specified closing delimiter. This method is
      * used for parsing various constructs like parentheses, hash literals, and
      * array literals.
-     *
+     * <p>
      * Example usage:
      * - new ListNode(parseList(")", 0), tokenIndex);
      * - new HashLiteralNode(parseList("}", 1), tokenIndex);
