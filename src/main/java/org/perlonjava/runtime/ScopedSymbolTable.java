@@ -187,6 +187,23 @@ public class ScopedSymbolTable {
     }
 
     /**
+     * Allocates a new JVM local variable index in the current scope.
+     * This method is used to create internal variables, such as those needed
+     * for tracking the dynamic variable stack state.
+     *
+     * @return The index of the newly allocated local variable.
+     * @throws IllegalStateException if there is no current scope available for allocation.
+     */
+    public int allocateLocalVariable() {
+        // Ensure there's a current scope available for allocation
+        if (stack.isEmpty()) {
+            throw new IllegalStateException("No scope available for JVM local variable allocation.");
+        }
+        // Allocate a new index in the current scope by incrementing the index counter
+        return stack.peek().index++;
+    }
+
+    /**
      * toString() method for debugging
      */
     @Override
@@ -264,4 +281,3 @@ public class ScopedSymbolTable {
         }
     }
 }
-
