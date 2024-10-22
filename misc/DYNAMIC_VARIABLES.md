@@ -22,6 +22,8 @@ Utilize the DynamicVariableManager to handle the stack of dynamic variables. Thi
 
 Modify the ScopedSymbolTable to interact with DynamicVariableManager. When entering or exiting a scope, ensure that dynamic variables are appropriately saved and restored.
 
+Use ScopedSymbolTable.allocateLocalVariable.
+
 # Integrate with JavaClassInfo.loopLabelStack, LoopLabels, LocalOperatorVisitor, Return
 
 Restore the variable state.
