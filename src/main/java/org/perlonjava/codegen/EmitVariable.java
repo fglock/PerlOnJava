@@ -264,10 +264,34 @@ public class EmitVariable {
                                 false);
                     } else if (operator.equals("state")) {
                         // "state":
-                        // Fetch a state variable from StateManager
-                        // TODO
-                        throw new PerlCompilerException(
-                                node.tokenIndex, "Not implemented: " + node.operator, emitterVisitor.ctx.errorUtil);
+                        // Fetch a state variable from StateContext
+                        emitterVisitor.ctx.mv.visitLdcInsn(varIndex); // XXX TODO change to a global unique index
+                        switch (sigil) {
+                            case "$":
+                                emitterVisitor.ctx.mv.visitMethodInsn(
+                                        Opcodes.INVOKESTATIC,
+                                        "org/perlonjava/runtime/StateContext",
+                                        "getStateScalar",
+                                        "(I)Lorg/perlonjava/runtime/RuntimeScalar;",
+                                        false);
+                                break;
+                            case "@":
+                                emitterVisitor.ctx.mv.visitMethodInsn(
+                                        Opcodes.INVOKESTATIC,
+                                        "org/perlonjava/runtime/StateContext",
+                                        "getStateArray",
+                                        "(I)Lorg/perlonjava/runtime/RuntimeArray;",
+                                        false);
+                                break;
+                            case "%":
+                                emitterVisitor.ctx.mv.visitMethodInsn(
+                                        Opcodes.INVOKESTATIC,
+                                        "org/perlonjava/runtime/StateContext",
+                                        "getStateHash",
+                                        "(I)Lorg/perlonjava/runtime/RuntimeHash;",
+                                        false);
+                                break;
+                        }
                     } else {
                         // "our":
                         // Create and fetch a global variable
