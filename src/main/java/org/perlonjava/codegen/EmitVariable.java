@@ -262,6 +262,12 @@ public class EmitVariable {
                                 "<init>",
                                 "()V",
                                 false);
+                    } else if (operator.equals("state")) {
+                        // "state":
+                        // Fetch a state variable from StateManager
+                        // TODO
+                        throw new PerlCompilerException(
+                                node.tokenIndex, "Not implemented: " + node.operator, emitterVisitor.ctx.errorUtil);
                     } else {
                         // "our":
                         // Create and fetch a global variable
