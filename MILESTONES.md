@@ -67,6 +67,7 @@
     - Planned release date: 2024-12-10
     - Error messages mimic those in Perl for consistency.
     - Work in progress: 
+        - `state` variables
         - `socket` and related operators
     - Stretch goals
         - Add support for concurrency and parallelism, such as threads and async/await.
