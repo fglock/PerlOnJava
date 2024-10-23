@@ -28,14 +28,14 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     // Buffer size for I/O operations
     private static final int BUFFER_SIZE = 8192;
-
     // Mapping of file modes to their corresponding StandardOpenOption sets
     private static final Map<String, Set<StandardOpenOption>> MODE_OPTIONS = new HashMap<>();
-
     // Standard I/O streams
     public static RuntimeIO stdout = RuntimeIO.open(FileDescriptor.out, true);
     public static RuntimeIO stderr = RuntimeIO.open(FileDescriptor.err, true);
     public static RuntimeIO stdin = RuntimeIO.open(FileDescriptor.in, false);
+    // Static variable to store the last accessed filehandle -  `${^LAST_FH}`
+    private static RuntimeIO lastAccessedFileHandle = null;
 
     static {
         // Initialize mode options
@@ -69,7 +69,7 @@ public class RuntimeIO implements RuntimeScalarReference {
     // State flags
     private boolean isEOF;
 
-    // Line number counter for the current filehandle
+    // Line number counter for the current filehandle - `$.`
     private int currentLineNumber = 0;
 
     // Constructor to initialize buffers
@@ -485,6 +485,9 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     public RuntimeScalar readline() {
         try {
+            // Update the last accessed filehandle
+            lastAccessedFileHandle = this;
+
             // Flush stdout and stderr before reading, in case we are displaying a prompt
             flushFileHandles();
 
@@ -552,10 +555,13 @@ public class RuntimeIO implements RuntimeScalarReference {
             return scalarUndef;
         }
     }
-    
+
     // Method to check for end-of-file (eof equivalent)
     public RuntimeScalar eof() {
         try {
+            // Update the last accessed filehandle
+            lastAccessedFileHandle = this;
+
             if (fileChannel != null) {
                 this.isEOF = (fileChannel.position() >= fileChannel.size());
             } else if (bufferedReader != null) {
@@ -574,6 +580,9 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Method to get the current file pointer position (tell equivalent)
     public long tell() {
         try {
+            // Update the last accessed filehandle
+            lastAccessedFileHandle = this;
+
             if (fileChannel != null) {
                 return fileChannel.position();
             } else {
@@ -589,6 +598,9 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     // Method to move the file pointer (seek equivalent)
     public void seek(long pos) {
+        // Update the last accessed filehandle
+        lastAccessedFileHandle = this;
+
         if (fileChannel != null) {
             try {
                 fileChannel.position(pos);
