@@ -39,7 +39,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         Iterator<RuntimeScalar> iterator = value.iterator();
         while (iterator.hasNext()) {
             String key = iterator.next().toString();
-            RuntimeScalar val = iterator.hasNext() ? iterator.next() : new RuntimeScalar();
+            RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
             resultHash.put(key, val);
         }
         return result;

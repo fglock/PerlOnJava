@@ -1,6 +1,6 @@
 use strict;
 no warnings;
-use Test::More tests => 10;
+use Test::More tests => 11;
 
 # Helper subroutine to capture error messages
 sub capture_error {
@@ -57,6 +57,10 @@ my @tests = (
     {
         code => 'my $x = $undeclared_variable;',
         expected => qr/Global symbol "\$undeclared_variable" requires explicit package name \(did you forget to declare "my \$undeclared_variable"\?\)/,
+    },
+    {
+        code => 'my @b; my $c = 1; $c ? $a : @b = 123',
+        expected => qr/Assignment to both a list and a scalar/,
     },
 );
 

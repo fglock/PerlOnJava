@@ -3,10 +3,11 @@ package Test::More;
 use strict;
 use warnings;
 use Symbol 'qualify_to_ref';
+use Data::Dumper;
 
 our @EXPORT = qw(
     plan ok is isnt like unlike cmp_ok can_ok isa_ok
-    pass fail diag skip todo done_testing
+    pass fail diag skip todo done_testing is_deeply
 );
 
 my $Test_Count = 0;
@@ -149,6 +150,20 @@ sub done_testing {
     $count ||= $Test_Count;
     print "1..$count\n" unless $Plan_Count;
     return $Failed_Count == 0;
+}
+
+sub is_deeply {
+    my ($got, $expected, $name) = @_;
+    local $Data::Dumper::Sortkeys = 1;
+    my $got_dumped = Dumper($got);
+    my $expected_dumped = Dumper($expected);
+    my $test = $got_dumped eq $expected_dumped;
+    ok($test, $name);
+    unless ($test) {
+        diag("         got: $got_dumped");
+        diag("    expected: $expected_dumped");
+    }
+    return $test;
 }
 
 1;

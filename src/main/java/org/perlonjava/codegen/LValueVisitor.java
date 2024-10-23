@@ -1,6 +1,7 @@
 package org.perlonjava.codegen;
 
 import org.perlonjava.astnode.*;
+import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 
 /**
@@ -104,7 +105,13 @@ public class LValueVisitor implements Visitor {
 
     @Override
     public void visit(TernaryOperatorNode node) {
-        context = RuntimeContextType.VOID;
+        node.trueExpr.accept(this);
+        int context1 = context;
+        node.falseExpr.accept(this);
+        int context2 = context;
+        if (context1 != context2) {
+            throw new PerlCompilerException("Assignment to both a list and a scalar");
+        }
     }
 
     @Override
