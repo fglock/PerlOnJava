@@ -69,6 +69,9 @@ public class RuntimeIO implements RuntimeScalarReference {
     // State flags
     private boolean isEOF;
 
+    // Line number counter for the current filehandle
+    private int currentLineNumber = 0;
+
     // Constructor to initialize buffers
     public RuntimeIO() {
         this.buffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
@@ -531,6 +534,11 @@ public class RuntimeIO implements RuntimeScalarReference {
                 }
             }
 
+            // Increment the line number counter if a line was read
+            if (!line.isEmpty()) {
+                currentLineNumber++;
+            }
+
             // Return undef if we've reached EOF and no characters were read
             if (line.isEmpty() && this.isEOF) {
                 return scalarUndef;
@@ -544,7 +552,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             return scalarUndef;
         }
     }
-
+    
     // Method to check for end-of-file (eof equivalent)
     public RuntimeScalar eof() {
         try {
