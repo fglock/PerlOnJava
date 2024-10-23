@@ -40,7 +40,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      */
     @Override
     void vivify() {
-        throw new PerlCompilerException("Can't modify constant item $" + variableId);
+        throw new PerlCompilerException("Modification of a read-only value attempted");
     }
 
     /**

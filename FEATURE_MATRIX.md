@@ -20,7 +20,7 @@
 ## Compiler Usability
 - ✔️   **Perl-like compile-time error messages**: Error messages mimic those in Perl for consistency.
 - ✔️   **Perl line numbers in bytecode**: Bytecode includes line numbers for better debugging.
-- ❌  **Perl-like runtime error messages**: Runtime errors are not yet formatted similarly to Perl's.
+- ✔️   **Perl-like runtime error messages**: Runtime errors are formatted similarly to Perl's.
 - ❌  **Perl-like warnings**: Internal support for most warnings is missing. Warnings need to be formatted to resemble Perl’s output.
 - ✔️   **Comments**: Support for comments and POD (documentation) in code is implemented.
 - ❌  **Subroutine hoisting**: Calling subroutines before they are declared is not implemented.
