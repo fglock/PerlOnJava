@@ -700,6 +700,7 @@ public class EmitterVisitor implements Visitor {
                 EmitOperator.handleEachOperator(this, node);
                 break;
             case "our":
+            case "state":
             case "my":
                 EmitVariable.handleMyOperator(this, node);
                 break;
