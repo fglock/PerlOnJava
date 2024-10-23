@@ -1,6 +1,6 @@
-# Perl Compiler Under Development
+# PerlOnJava Perl Compiler
 
-This is a Perl compiler under development. It compiles Perl into Java bytecode and runs it, offering a unique way to integrate Perl with Java-based ecosystems.
+This project presents a Perl compiler that compiles Perl into Java bytecode and runs it, providing a method to integrate Perl with Java-based ecosystems.
 
 ## Table of Contents
 
@@ -16,7 +16,7 @@ This is a Perl compiler under development. It compiles Perl into Java bytecode a
 
 ## Introduction
 
-This project aims to develop a Perl compiler that translates Perl code into Java bytecode and executes it on the Java Virtual Machine (JVM). It provides an experimental platform for running Perl scripts in a JVM environment.
+This project aims to develop a Perl compiler that translates Perl code into Java bytecode and executes it on the Java Virtual Machine (JVM). It provides a platform for running Perl scripts in a JVM environment, facilitating integration between Perl and Java.
 
 ## Features and Limitations
 
@@ -34,14 +34,14 @@ For a detailed feature list, see the [FEATURE_MATRIX.md](FEATURE_MATRIX.md).
 - **Limited Module Support**: Does not support XS modules or many CPAN libraries.
 - **Syntax Compatibility**: May not fully support advanced syntax-changing modules or esoteric Perl features.
 
-### What This Project Is Not
+### What This Project Is
 
-- **A Drop-in Replacement for Perl**: This is not intended to replace Perl or to be a full Perl interpreter.
+- **A Complement to Perl**: This project complements Perl by enabling its integration with Java environments.
 
 ## Target Audience
 
-- **Java Developers with Perl Knowledge**: Offers a way to integrate Perl scripts into Java applications.
-- **Compiler and Language Enthusiasts**: Provides insights into translating high-level languages into JVM bytecode.
+- **Java Developers with Perl Knowledge**: Provides a method for integrating Perl scripts into Java applications.
+- **Compiler and Language Enthusiasts**: Offers insights into translating high-level languages into JVM bytecode.
 - **Experimenters and Tinkerers**: A tool for experimenting with language interoperability.
 
 ## Build Instructions
@@ -84,7 +84,6 @@ For a detailed feature list, see the [FEATURE_MATRIX.md](FEATURE_MATRIX.md).
     java -jar target/perlonjava-1.0-SNAPSHOT.jar
     ```
 
-
 ### Dependencies
 
 - **JUnit**: For testing.
@@ -100,38 +99,54 @@ For a detailed feature list, see the [FEATURE_MATRIX.md](FEATURE_MATRIX.md).
 ## Running the JAR File
 
 1. **Show Instructions**:
-    
+
+    ```bash
     java -jar target/perlonjava-1.0-SNAPSHOT.jar --help
+    ```
 
 2. **Execute Something**:
-    
+
+    ```bash
     java -jar target/perlonjava-1.0-SNAPSHOT.jar -e ' print 123 '
+    ```
 
 Setting `lib` path with `-I` to access Perl modules is optional. Standard modules are included in the jar file.
 
 ## Debugging Tools
 
 1. **Execute Emitting Debug Information**:
-    
+
+    ```bash
     java -jar target/perlonjava-1.0-SNAPSHOT.jar --debug -e ' print 123 '
+    ```
 
 2. **Compile Only; Can Be Combined with --debug**:
-    
-    java -jar target/perlonjava-1.0-SNAPSHOT.jar -c -e ' print 123 '
 
+    ```bash
+    java -jar target/perlonjava-1.0-SNAPSHOT.jar -c -e ' print 123 '
+    ```
+
+    ```bash
     java -jar target/perlonjava-1.0-SNAPSHOT.jar --debug -c -e ' print 123 '
-    
+    ```
+
 3. **Execute and Emit Disassembled ASM Code**:
-    
-    java -jar target/perlonjava-1.0-SNAPSHOT.jar --disassemble -e ' print 123 ' 
+
+    ```bash
+    java -jar target/perlonjava-1.0-SNAPSHOT.jar --disassemble -e ' print 123 '
+    ```
 
 4. **Run the Lexer Only**:
-    
+
+    ```bash
     java -jar target/perlonjava-1.0-SNAPSHOT.jar --tokenize -e ' print 123 '
+    ```
 
 5. **Run the Parser Only**:
-    
+
+    ```bash
     java -jar target/perlonjava-1.0-SNAPSHOT.jar --parse -e ' print 123 '
+    ```
 
 ## Internal Modules
 
