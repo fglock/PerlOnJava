@@ -537,6 +537,7 @@ public class Parser {
                 operand = parsePrimary();
                 return new OperatorNode(token.text, operand, currentIndex);
             case "our":
+            case "state":
             case "my":
                 // Handle 'my' keyword as a unary operator with an operand
                 operand = parsePrimary();
