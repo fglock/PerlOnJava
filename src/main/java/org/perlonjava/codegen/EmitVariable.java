@@ -43,13 +43,14 @@ public class EmitVariable {
                     false);
         } else {
             // variable not found
-            System.err.println(
-                    ctx.errorUtil.errorMessage(tokenIndex,
-                            "Warning: Global symbol \""
-                                    + sigil + varName
-                                    + "\" requires explicit package name (did you forget to declare \"my "
-                                    + sigil + varName
-                                    + "\"?)"));
+            throw new PerlCompilerException(
+                    tokenIndex,
+                    "Global symbol \""
+                            + sigil + varName
+                            + "\" requires explicit package name (did you forget to declare \"my "
+                            + sigil + varName
+                            + "\"?)",
+                    ctx.errorUtil);
         }
     }
 

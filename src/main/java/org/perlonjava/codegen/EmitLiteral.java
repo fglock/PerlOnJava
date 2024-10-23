@@ -205,6 +205,6 @@ public class EmitLiteral {
     static void emitIdentifier(EmitterContext ctx, IdentifierNode node) {
         // Emit code for identifier
         throw new PerlCompilerException(
-                node.tokenIndex, "Not implemented: bare word " + node.name, ctx.errorUtil);
+                node.tokenIndex, "Bareword \"" + node.name + "\" not allowed while \"strict subs\" in use", ctx.errorUtil);
     }
 }

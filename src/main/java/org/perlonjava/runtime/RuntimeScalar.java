@@ -521,8 +521,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 value = new RuntimeHash();
             case HASHREFERENCE:
                 return ((RuntimeHash) value).get(index.toString());
+            case STRING:
+                throw new PerlCompilerException("Can't use string (\"" + this.toString() + "\") as a HASH ref");
             default:
-                throw new PerlCompilerException("Variable does not contain a hash reference");
+                throw new PerlCompilerException("Not a HASH reference");
         }
     }
 
@@ -531,7 +533,9 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return switch (type) {
             case UNDEF -> new RuntimeScalar();
             case HASHREFERENCE -> ((RuntimeHash) value).delete(index);
-            default -> throw new PerlCompilerException("Variable does not contain a hash reference");
+            case STRING ->
+                    throw new PerlCompilerException("Can't use string (\"" + this.toString() + "\") as a HASH ref");
+            default -> throw new PerlCompilerException("Not a HASH reference");
         };
     }
 
@@ -540,7 +544,9 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return switch (type) {
             case UNDEF -> new RuntimeScalar();
             case HASHREFERENCE -> ((RuntimeHash) value).exists(index);
-            default -> throw new PerlCompilerException("Variable does not contain a hash reference");
+            case STRING ->
+                    throw new PerlCompilerException("Can't use string (\"" + this.toString() + "\") as a HASH ref");
+            default -> throw new PerlCompilerException("Not a HASH reference");
         };
     }
 
@@ -554,7 +560,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case ARRAYREFERENCE:
                 return ((RuntimeArray) value).get(index.getInt());
             default:
-                throw new PerlCompilerException("Variable does not contain an array reference");
+                throw new PerlCompilerException("Not an ARRAY reference");
         }
     }
 
@@ -563,7 +569,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return switch (type) {
             case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
             case ARRAYREFERENCE -> (RuntimeArray) value;
-            default -> throw new PerlCompilerException("Variable does not contain an array reference");
+            default -> throw new PerlCompilerException("Not an ARRAY reference");
         };
     }
 
@@ -602,7 +608,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             return ((RuntimeCode) this.value).apply(a, callContext);
         } else {
             // If the type is not CODE, throw an exception indicating an invalid state
-            throw new PerlCompilerException("Variable does not contain a code reference");
+            throw new PerlCompilerException("Not a CODE reference");
         }
     }
 
