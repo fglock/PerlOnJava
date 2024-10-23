@@ -69,6 +69,7 @@
     - Work in progress: 
         - `state` variables
         - `socket` and related operators
+        - `$.` special variable
     - Stretch goals
         - Add support for concurrency and parallelism, such as threads and async/await.
         - Enhance security features, including sandboxing and input validation.
