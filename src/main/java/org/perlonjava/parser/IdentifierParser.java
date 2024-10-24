@@ -2,20 +2,26 @@ package org.perlonjava.parser;
 
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.runtime.PerlCompilerException;
 
+/**
+ * The IdentifierParser class is responsible for parsing complex Perl identifiers
+ * from a list of tokens, excluding the sigil (e.g., $, @, %).
+ */
 public class IdentifierParser {
 
     /**
      * Parses a complex Perl identifier from the list of tokens, excluding the sigil.
+     * This method handles identifiers that may be enclosed in braces.
      *
-     * @param parser the parser object
+     * @param parser The parser object containing the tokens and current parsing state.
      * @return The parsed identifier as a String, or null if there is no valid identifier.
      */
     public static String parseComplexIdentifier(Parser parser) {
         // Save the current token index to allow backtracking if needed
         int saveIndex = parser.tokenIndex;
 
-        // Skip any leading whitespace
+        // Skip any leading whitespace to find the start of the identifier
         parser.tokenIndex = Whitespace.skipWhitespace(parser.tokenIndex, parser.tokens);
 
         // Check if the identifier is enclosed in braces
@@ -26,7 +32,7 @@ public class IdentifierParser {
         }
 
         // Parse the identifier using the inner method
-        String identifier = parseComplexIdentifierInner(parser);
+        String identifier = parseComplexIdentifierInner(parser, insideBraces);
 
         // If an identifier was found, and it was inside braces, ensure the braces are properly closed
         if (identifier != null && insideBraces) {
@@ -52,7 +58,16 @@ public class IdentifierParser {
         return identifier;
     }
 
-    public static String parseComplexIdentifierInner(Parser parser) {
+    /**
+     * Parses the inner part of a complex identifier, handling cases where the identifier
+     * may be enclosed in braces.
+     *
+     * @param parser The parser object containing the tokens and current parsing state.
+     * @param insideBraces A boolean indicating if the identifier is enclosed in braces.
+     * @return The parsed identifier as a String, or null if there is no valid identifier.
+     */
+    public static String parseComplexIdentifierInner(Parser parser, boolean insideBraces) {
+        // Skip any leading whitespace to find the start of the identifier
         parser.tokenIndex = Whitespace.skipWhitespace(parser.tokenIndex, parser.tokens);
 
         boolean isFirstToken = true;
@@ -61,6 +76,7 @@ public class IdentifierParser {
         LexerToken token = parser.tokens.get(parser.tokenIndex);
         LexerToken nextToken = parser.tokens.get(parser.tokenIndex + 1);
         while (true) {
+            // Check for various token types that can form part of an identifier
             if (token.type == LexerTokenType.OPERATOR || token.type == LexerTokenType.NUMBER || token.type == LexerTokenType.STRING) {
                 if (token.text.equals("$") && (nextToken.text.equals("$")
                         || nextToken.type == LexerTokenType.IDENTIFIER
@@ -71,13 +87,19 @@ public class IdentifierParser {
                 if (token.text.equals("^") && nextToken.type == LexerTokenType.IDENTIFIER && Character.isUpperCase(nextToken.text.charAt(0))) {
                     // `$^` can be followed by an optional uppercase identifier: `$^A`
                     //  ^A is control-A char(1)
-                    String str = nextToken.text;
+                    TokenUtils.consume(parser); // consume the ^
+                    parser.ctx.logDebug("parse $^ at token " + TokenUtils.peek(parser).text);
+                    //  `$^LAST_FH` is parsed as `$^L` + `AST_FH`
+                    //  `${^LAST_FH}` is parsed as `${^LAST_FH}`
+                    String str = insideBraces
+                            ? TokenUtils.consume(parser).text
+                            : TokenUtils.consumeChar(parser);
                     variableName.append(Character.toString(str.charAt(0) - 'A' + 1)).append(str.substring(1));
-                    parser.tokenIndex += 2;
+
                     return variableName.toString();
                 }
                 if (isFirstToken && token.type == LexerTokenType.NUMBER) {
-                    // finish because $1 can't be followed by `::`
+                    // Finish because $1 can't be followed by `::`
                     variableName.append(token.text);
                     parser.tokenIndex++;
                     return variableName.toString();
@@ -108,7 +130,14 @@ public class IdentifierParser {
         }
     }
 
+    /**
+     * Parses a subroutine identifier from the list of tokens.
+     *
+     * @param parser The parser object containing the tokens and current parsing state.
+     * @return The parsed subroutine identifier as a String, or null if there is no valid identifier.
+     */
     public static String parseSubroutineIdentifier(Parser parser) {
+        // Skip any leading whitespace to find the start of the identifier
         parser.tokenIndex = Whitespace.skipWhitespace(parser.tokenIndex, parser.tokens);
         StringBuilder variableName = new StringBuilder();
         LexerToken token = parser.tokens.get(parser.tokenIndex);
@@ -117,6 +146,7 @@ public class IdentifierParser {
             return null;
         }
         while (true) {
+            // Check for various token types that can form part of a subroutine identifier
             if (token.type == LexerTokenType.WHITESPACE || token.type == LexerTokenType.EOF || token.type == LexerTokenType.NEWLINE || (token.type == LexerTokenType.OPERATOR && !token.text.equals("::"))) {
                 return variableName.toString();
             }
