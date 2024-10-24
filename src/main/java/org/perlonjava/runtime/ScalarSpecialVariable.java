@@ -65,6 +65,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                 case MATCH -> new RuntimeScalar(RuntimeRegex.matchString());
                 case PREMATCH -> new RuntimeScalar(RuntimeRegex.preMatchString());
                 case POSTMATCH -> new RuntimeScalar(RuntimeRegex.postMatchString());
+                case LAST_FH -> new RuntimeScalar(RuntimeIO.lastAccessedFileHandle);
                 default -> null;
             };
         } catch (IllegalStateException e) {
@@ -123,12 +124,23 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     }
 
     /**
+     * Get the special variable as a file handle.
+     *
+     * @return file handle.
+     */
+    @Override
+    public RuntimeIO getRuntimeIO() {
+        return this.getValueAsScalar().getRuntimeIO();
+    }
+
+    /**
      * Enum to represent the id of the special variable.
      */
     public enum Id {
         CAPTURE,   // Represents a captured substring.
         PREMATCH,  // Represents the part of the string before the matched substring.
         MATCH,     // Represents the matched substring.
-        POSTMATCH  // Represents the part of the string after the matched substring.
+        POSTMATCH,  // Represents the part of the string after the matched substring.
+        LAST_FH // Represents the last filehandle used in an input operation.
     }
 }
