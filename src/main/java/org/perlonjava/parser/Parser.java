@@ -508,12 +508,9 @@ public class Parser {
             case "seek":
                 // Handle 'open' keyword as a Binary operator with a FileHandle and List operands
                 operand = ListParser.parseZeroOrMoreList(this, 0, false, true, false, false);
-                // Node handle = ((ListNode) operand).handle;
-                // ((ListNode) operand).handle = null;
-                Node handle = ((ListNode) operand).elements.removeFirst();
-                if (handle == null) {
-                    handle = new IdentifierNode("main::STDOUT", currentIndex);
-                }
+                Node handle = ((ListNode) operand).elements.isEmpty()
+                        ? new IdentifierNode("main::STDOUT", currentIndex)
+                        : ((ListNode) operand).elements.removeFirst();
                 return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
             case "printf":
             case "print":
