@@ -215,7 +215,7 @@ public class EmitterVisitor implements Visitor {
                         operatorHandler.getMethodType(),
                         operatorHandler.getClassName(),
                         operatorHandler.getMethodName(),
-                        "(I)Lorg/perlonjava/runtime/RuntimeScalar;",
+                        operatorHandler.getDescriptorWithIntParameter(),
                         false);
                 if (ctx.contextType == RuntimeContextType.VOID) {
                     ctx.mv.visitInsn(Opcodes.POP);
@@ -231,7 +231,7 @@ public class EmitterVisitor implements Visitor {
                 operatorHandler.getMethodType(),
                 operatorHandler.getClassName(),
                 operatorHandler.getMethodName(),
-                "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                operatorHandler.getDescriptor(),
                 false);
         if (ctx.contextType == RuntimeContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.POP);
@@ -251,7 +251,7 @@ public class EmitterVisitor implements Visitor {
                 operatorHandler.getMethodType(),
                 operatorHandler.getClassName(),
                 operatorHandler.getMethodName(),
-                "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                operatorHandler.getDescriptor(),
                 false);
         // assign to the Lvalue
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
