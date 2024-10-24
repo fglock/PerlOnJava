@@ -408,6 +408,10 @@ public class RuntimeIO implements RuntimeScalarReference {
         return new HashSet<>(options);
     }
 
+    public String toString() {
+        return "GLOB(" + this.hashCode() + ")";
+    }
+
     public String toStringRef() {
         return "IO(" + this.hashCode() + ")";
     }
