@@ -6,9 +6,9 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.BinaryOperatorNode;
 import org.perlonjava.astnode.TernaryOperatorNode;
 import org.perlonjava.runtime.RuntimeContextType;
-import org.perlonjava.runtime.ScalarFlipFlopOperator;
+import org.perlonjava.operators.ScalarFlipFlopOperator;
 
-import static org.perlonjava.runtime.ScalarFlipFlopOperator.flipFlops;
+import static org.perlonjava.operators.ScalarFlipFlopOperator.flipFlops;
 
 public class EmitLogicalOperator {
 
@@ -27,7 +27,7 @@ public class EmitLogicalOperator {
         mv.visitLdcInsn(flipFlopId);
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/ScalarFlipFlopOperator", "evaluate", "(ILorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/ScalarFlipFlopOperator", "evaluate", "(ILorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
         // If the context is VOID, we need to pop the result from the stack
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {

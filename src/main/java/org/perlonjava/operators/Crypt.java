@@ -1,4 +1,7 @@
-package org.perlonjava.runtime;
+package org.perlonjava.operators;
+
+import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.RuntimeScalar;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;

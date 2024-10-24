@@ -5,6 +5,7 @@ import com.ibm.icu.text.Normalizer2;
 import org.perlonjava.ArgumentParser;
 import org.perlonjava.codegen.DynamicState;
 import org.perlonjava.operators.ArithmeticOperators;
+import org.perlonjava.operators.Operator;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
 

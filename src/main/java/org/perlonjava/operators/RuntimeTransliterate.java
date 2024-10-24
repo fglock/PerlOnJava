@@ -1,4 +1,6 @@
-package org.perlonjava.runtime;
+package org.perlonjava.operators;
+
+import org.perlonjava.runtime.RuntimeScalar;
 
 /**
  * The RuntimeTransliterate class implements Perl's tr/// operator, which is used for character

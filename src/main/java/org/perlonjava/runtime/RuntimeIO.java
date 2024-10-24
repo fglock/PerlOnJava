@@ -270,7 +270,7 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
     }
 
-    static RuntimeScalar openDir(RuntimeList args) {
+    public static RuntimeScalar openDir(RuntimeList args) {
         RuntimeScalar dirHandle = (RuntimeScalar) args.elements.get(0);
         String dirPath = args.elements.get(1).toString();
 
@@ -287,7 +287,7 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
     }
 
-    static RuntimeBaseEntity readdir(RuntimeScalar dirHandle, int ctx) {
+    public static RuntimeBaseEntity readdir(RuntimeScalar dirHandle, int ctx) {
         if (dirHandle.type != RuntimeScalarType.GLOB) {
             throw new PerlCompilerException("Invalid directory handle");
         }

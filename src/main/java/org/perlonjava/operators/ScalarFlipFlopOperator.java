@@ -1,4 +1,6 @@
-package org.perlonjava.runtime;
+package org.perlonjava.operators;
+
+import org.perlonjava.runtime.RuntimeScalar;
 
 import java.util.HashMap;
 import java.util.Map;
