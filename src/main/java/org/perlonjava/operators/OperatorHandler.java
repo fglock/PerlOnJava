@@ -15,6 +15,7 @@ public class OperatorHandler {
 
     // Static block to initialize operator handlers
     static {
+        // Scalar operators
         put("**", "pow");
         put("+", "add", "org/perlonjava/operators/ArithmeticOperators");
         put("-", "subtract", "org/perlonjava/operators/ArithmeticOperators");
@@ -50,6 +51,17 @@ public class OperatorHandler {
         put("ge", "ge");
         put("cmp", "cmp");
         put("bless", "bless");
+
+        // List operators
+        put("map", "map",
+                "org/perlonjava/operators/ListOperators",
+                "(Lorg/perlonjava/runtime/RuntimeList;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeList;");
+        put("grep", "grep",
+                "org/perlonjava/operators/ListOperators",
+                "(Lorg/perlonjava/runtime/RuntimeList;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeList;");
+        put("sort", "sort",
+                "org/perlonjava/operators/ListOperators",
+                "(Lorg/perlonjava/runtime/RuntimeList;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeList;");
     }
 
     private final String className;
@@ -99,6 +111,22 @@ public class OperatorHandler {
                         methodName,
                         Opcodes.INVOKESTATIC,
                         "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;"));
+    }
+
+    /**
+     * Associates an operator with a method in a specified class.
+     *
+     * @param operator   The operator symbol (e.g., "+").
+     * @param methodName The name of the method to associate with the operator.
+     * @param className  The name of the class containing the method.
+     * @param descriptor The JVM parameter descriptor
+     */
+    static void put(String operator, String methodName, String className, String descriptor) {
+        operatorHandlers.put(operator,
+                new OperatorHandler(className,
+                        methodName,
+                        Opcodes.INVOKESTATIC,
+                        descriptor));
     }
 
     /**
