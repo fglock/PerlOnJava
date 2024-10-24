@@ -4,11 +4,18 @@ package org.perlonjava.runtime;
  * Represents a Perl special scalar variable, such as $`, $&, $', or $1.
  * These variables are used to capture specific parts of a string during regex operations.
  * The class extends RuntimeBaseProxy to provide access to these special variables.
+ *
+ * <p>This class provides functionality to handle special scalar variables in Perl,
+ * which are typically used in the context of regular expression operations. Each
+ * special variable has a specific role, such as capturing matched substrings or
+ * parts of the string before or after a match.</p>
  */
 public class ScalarSpecialVariable extends RuntimeBaseProxy {
 
     // The type of special variable, represented by an enum.
     final Id variableId;
+
+    // The position of the capture group, used only for CAPTURE type variables.
     final int position;
 
     /**
@@ -19,7 +26,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     public ScalarSpecialVariable(Id variableId) {
         super();
         this.variableId = variableId;
-        this.position = 0;
+        this.position = 0; // Default position is 0 for non-capture variables.
     }
 
     /**
@@ -37,6 +44,9 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     /**
      * Throws an exception as this variable represents a constant item
      * and cannot be modified.
+     *
+     * <p>This method is overridden to prevent modification of the special
+     * variable, as these are intended to be read-only.</p>
      */
     @Override
     void vivify() {
@@ -69,7 +79,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                 default -> null;
             };
         } catch (IllegalStateException e) {
-            return null;
+            return null; // Return null if the state is invalid for obtaining the value.
         }
     }
 
@@ -126,7 +136,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     /**
      * Get the special variable as a file handle.
      *
-     * @return file handle.
+     * @return The file handle associated with the special variable.
      */
     @Override
     public RuntimeIO getRuntimeIO() {
@@ -135,12 +145,16 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
 
     /**
      * Enum to represent the id of the special variable.
+     *
+     * <p>This enum defines the different types of special variables that can be
+     * represented by this class, each corresponding to a specific role in regex
+     * operations or file handling.</p>
      */
     public enum Id {
         CAPTURE,   // Represents a captured substring.
         PREMATCH,  // Represents the part of the string before the matched substring.
         MATCH,     // Represents the matched substring.
-        POSTMATCH,  // Represents the part of the string after the matched substring.
-        LAST_FH // Represents the last filehandle used in an input operation.
+        POSTMATCH, // Represents the part of the string after the matched substring.
+        LAST_FH    // Represents the last filehandle used in an input operation.
     }
 }
