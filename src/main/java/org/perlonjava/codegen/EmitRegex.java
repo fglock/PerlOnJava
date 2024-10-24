@@ -80,8 +80,8 @@ public class EmitRegex {
                     variable = operand.elements.get(3);
                 }
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/RuntimeTransliterate", "compile",
-                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeTransliterate;", false);
+                        "org/perlonjava/operators/RuntimeTransliterate", "compile",
+                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/operators/RuntimeTransliterate;", false);
 
                 // RuntimeScalar transliterate(RuntimeScalar originalString)
                 if (variable == null) {
@@ -89,7 +89,7 @@ public class EmitRegex {
                     variable = new OperatorNode("$", new IdentifierNode("_", node.tokenIndex), node.tokenIndex);
                 }
                 variable.accept(scalarVisitor);
-                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeTransliterate", "transliterate", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/operators/RuntimeTransliterate", "transliterate", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                 if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
                     emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
                 }
