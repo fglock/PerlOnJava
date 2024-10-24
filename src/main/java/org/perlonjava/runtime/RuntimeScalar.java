@@ -83,7 +83,11 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar(String value) {
-        this.type = RuntimeScalarType.STRING;
+        if (value == null) {
+            this.type = RuntimeScalarType.UNDEF;
+        } else {
+            this.type = RuntimeScalarType.STRING;
+        }
         this.value = value;
     }
 
