@@ -64,7 +64,7 @@ public class RuntimeScalarCache {
      * @param i the long integer value
      * @return the cached or newly created RuntimeScalar representing the long integer value
      */
-    static RuntimeScalar getScalarInt(long i) {
+    public static RuntimeScalar getScalarInt(long i) {
         if (i >= minInt && i <= maxInt) {
             return scalarInt[(int) i - minInt];
         }
