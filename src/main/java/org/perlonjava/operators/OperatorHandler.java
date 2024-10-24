@@ -16,12 +16,13 @@ public class OperatorHandler {
     // Static block to initialize operator handlers
     static {
         // Scalar operators
-        put("**", "pow");
         put("+", "add", "org/perlonjava/operators/ArithmeticOperators");
         put("-", "subtract", "org/perlonjava/operators/ArithmeticOperators");
         put("*", "multiply", "org/perlonjava/operators/ArithmeticOperators");
         put("/", "divide", "org/perlonjava/operators/ArithmeticOperators");
         put("%", "modulus", "org/perlonjava/operators/ArithmeticOperators");
+
+        put("**", "pow");
         put(".", "stringConcat");
         put("&", "bitwiseAnd");
         put("|", "bitwiseOr");
@@ -36,21 +37,22 @@ public class OperatorHandler {
         put("^.", "bitwiseStringXor");
         put("//", "logicalDefinedOr");
         put("isa", "isa");
-        put("<", "lessThan");
-        put("<=", "lessThanOrEqual");
-        put(">", "greaterThan");
-        put(">=", "greaterThanOrEqual");
-        put("==", "equalTo");
-        put("!=", "notEqualTo");
-        put("<=>", "spaceship");
-        put("eq", "eq");
-        put("ne", "ne");
-        put("lt", "lt");
-        put("le", "le");
-        put("gt", "gt");
-        put("ge", "ge");
-        put("cmp", "cmp");
         put("bless", "bless");
+
+        put("<", "lessThan", "org/perlonjava/operators/CompareOperators");
+        put("<=", "lessThanOrEqual", "org/perlonjava/operators/CompareOperators");
+        put(">", "greaterThan", "org/perlonjava/operators/CompareOperators");
+        put(">=", "greaterThanOrEqual", "org/perlonjava/operators/CompareOperators");
+        put("==", "equalTo", "org/perlonjava/operators/CompareOperators");
+        put("!=", "notEqualTo", "org/perlonjava/operators/CompareOperators");
+        put("<=>", "spaceship", "org/perlonjava/operators/CompareOperators");
+        put("eq", "eq", "org/perlonjava/operators/CompareOperators");
+        put("ne", "ne", "org/perlonjava/operators/CompareOperators");
+        put("lt", "lt", "org/perlonjava/operators/CompareOperators");
+        put("le", "le", "org/perlonjava/operators/CompareOperators");
+        put("gt", "gt", "org/perlonjava/operators/CompareOperators");
+        put("ge", "ge", "org/perlonjava/operators/CompareOperators");
+        put("cmp", "cmp", "org/perlonjava/operators/CompareOperators");
 
         // List operators
         put("map", "map",
