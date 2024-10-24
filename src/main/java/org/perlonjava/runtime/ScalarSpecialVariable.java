@@ -1,5 +1,8 @@
 package org.perlonjava.runtime;
 
+import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
+
 /**
  * Represents a Perl special scalar variable, such as $`, $&, $', or $1.
  * These variables are used to capture specific parts of a string during regex operations.
@@ -76,6 +79,9 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                 case PREMATCH -> new RuntimeScalar(RuntimeRegex.preMatchString());
                 case POSTMATCH -> new RuntimeScalar(RuntimeRegex.postMatchString());
                 case LAST_FH -> new RuntimeScalar(RuntimeIO.lastAccessedFileHandle);
+                case INPUT_LINE_NUMBER -> RuntimeIO.lastAccessedFileHandle == null
+                        ? scalarUndef
+                        : getScalarInt(RuntimeIO.lastAccessedFileHandle.currentLineNumber);
                 default -> null;
             };
         } catch (IllegalStateException e) {
@@ -155,6 +161,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         PREMATCH,  // Represents the part of the string before the matched substring.
         MATCH,     // Represents the matched substring.
         POSTMATCH, // Represents the part of the string after the matched substring.
-        LAST_FH    // Represents the last filehandle used in an input operation.
+        LAST_FH,    // Represents the last filehandle used in an input operation.
+        INPUT_LINE_NUMBER, // Represents the current line number in an input operation.
     }
 }

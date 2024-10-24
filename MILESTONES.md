@@ -66,10 +66,10 @@
 - **v1.10.0**: Concurrency and Security Features
     - Planned release date: 2024-12-10
     - Error messages mimic those in Perl for consistency.
+    - Added `$.`, `${^LAST_FH}` special variables.
     - Work in progress: 
         - `state` variables
         - `socket` and related operators
-        - `$.`, `${^LAST_FH}` special variables
     - Stretch goals
         - Add support for concurrency and parallelism, such as threads and async/await.
         - Enhance security features, including sandboxing and input validation.
