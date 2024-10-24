@@ -13,10 +13,10 @@ public class RuntimeScalarCache {
     // Array to store cached RuntimeScalarReadOnly objects for integers
     static RuntimeScalarReadOnly[] scalarInt = new RuntimeScalarReadOnly[maxInt - minInt + 1];
     // Cached RuntimeScalarReadOnly objects for common boolean and undefined values
-    static RuntimeScalarReadOnly scalarTrue;
-    static RuntimeScalarReadOnly scalarFalse;
-    static RuntimeScalarReadOnly scalarUndef;
-    static RuntimeScalarReadOnly scalarEmptyString;
+    public static RuntimeScalarReadOnly scalarTrue;
+    public static RuntimeScalarReadOnly scalarFalse;
+    public static RuntimeScalarReadOnly scalarUndef;
+    public static RuntimeScalarReadOnly scalarEmptyString;
 
     // Static block to initialize the cache
     static {
@@ -37,7 +37,7 @@ public class RuntimeScalarCache {
      * @param b the boolean value
      * @return the cached RuntimeScalar representing the boolean value
      */
-    static RuntimeScalar getScalarBoolean(boolean b) {
+    public static RuntimeScalar getScalarBoolean(boolean b) {
         return b ? scalarTrue : scalarFalse;
     }
 

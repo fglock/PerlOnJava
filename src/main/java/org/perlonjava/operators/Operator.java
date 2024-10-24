@@ -1,4 +1,6 @@
-package org.perlonjava.runtime;
+package org.perlonjava.operators;
+
+import org.perlonjava.runtime.*;
 
 import java.io.IOException;
 import java.nio.file.Files;

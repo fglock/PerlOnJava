@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.operators.Vec;
+
 /**
  * Represents a vector (bit string) that can be used as an lvalue (left-hand value).
  * This class allows for modification of specific bits within a string, similar to Perl's vec function.
