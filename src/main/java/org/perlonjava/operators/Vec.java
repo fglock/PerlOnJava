@@ -8,7 +8,19 @@ import org.perlonjava.runtime.RuntimeVecLvalue;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
+/**
+ * Provides operations similar to Perl's vec function, allowing manipulation of
+ * strings at the bit level.
+ */
 public class Vec {
+
+    /**
+     * Extracts a bit field from a string and returns it as a RuntimeScalar.
+     *
+     * @param args A RuntimeList containing the string, offset, and number of bits.
+     * @return A RuntimeScalar representing the extracted bit field.
+     * @throws PerlCompilerException if the string contains invalid characters or if the bit size is out of range.
+     */
     public static RuntimeScalar vec(RuntimeList args) throws PerlCompilerException {
         RuntimeScalar strScalar = (RuntimeScalar) args.elements.get(0);
         String str = strScalar.toString();
@@ -57,6 +69,14 @@ public class Vec {
         return new RuntimeVecLvalue(strScalar, offset, bits, value);
     }
 
+    /**
+     * Sets a bit field in a string to a specified value.
+     *
+     * @param args  A RuntimeList containing the string, offset, and number of bits.
+     * @param value The value to set the bit field to.
+     * @return The RuntimeScalar representing the value that was set.
+     * @throws PerlCompilerException if the string contains invalid characters or if the bit size is out of range.
+     */
     public static RuntimeScalar set(RuntimeList args, RuntimeScalar value) throws PerlCompilerException {
         String str = args.elements.get(0).toString();
         int offset = ((RuntimeScalar) args.elements.get(1)).getInt();
@@ -86,7 +106,7 @@ public class Vec {
         }
 
         int val = value.getInt();
-        ByteBuffer buffer = ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN); // Change to BIG_ENDIAN
+        ByteBuffer buffer = ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN);
 
         if (bits == 32 && byteOffset + 3 < data.length) {
             buffer.putInt(byteOffset, val);

@@ -5,6 +5,11 @@ import org.perlonjava.runtime.RuntimeScalar;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Implements a scalar flip-flop operator, similar to Perl's flip-flop operator.
+ * This operator maintains a state that toggles between true and false based on
+ * the evaluation of left and right operands.
+ */
 public class ScalarFlipFlopOperator {
 
     // Map to store the state (flip-flop) and sequence count for each operator instance
@@ -15,13 +20,25 @@ public class ScalarFlipFlopOperator {
     private boolean currentState;
     private int currentSequence;
 
+    /**
+     * Constructs a ScalarFlipFlopOperator with the specified dot type.
+     *
+     * @param isThreeDot true if the operator is a three-dot operator, false if two-dot.
+     */
     public ScalarFlipFlopOperator(boolean isThreeDot) {
         this.isThreeDot = isThreeDot;
         this.currentState = false;
         this.currentSequence = 0;
     }
 
-    // Core logic for evaluating the scalar range operator
+    /**
+     * Evaluates the scalar flip-flop operator for the given operands.
+     *
+     * @param id    The unique identifier for the operator instance.
+     * @param left  The left operand as a RuntimeScalar.
+     * @param right The right operand as a RuntimeScalar.
+     * @return A RuntimeScalar representing the current sequence count or an empty string.
+     */
     public static RuntimeScalar evaluate(int id, RuntimeScalar left, RuntimeScalar right) {
         ScalarFlipFlopOperator ff = flipFlops.get(id);
         boolean leftOperand = left.getBoolean();
@@ -50,4 +67,3 @@ public class ScalarFlipFlopOperator {
         return new RuntimeScalar(ff.currentState ? String.valueOf(ff.currentSequence) : "");  // Return sequence or empty string
     }
 }
-

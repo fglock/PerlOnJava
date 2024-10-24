@@ -9,8 +9,19 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+/**
+ * Provides functionality to unpack binary data into a list of scalars
+ * based on a specified template, similar to Perl's unpack function.
+ */
 public class Unpack {
 
+    /**
+     * Unpacks binary data into a list of RuntimeScalar objects according to the specified template.
+     *
+     * @param args A RuntimeList containing the template string and the packed data.
+     * @return A RuntimeList of unpacked RuntimeScalar objects.
+     * @throws RuntimeException if there are not enough arguments or if the data is insufficient for unpacking.
+     */
     public static RuntimeList unpack(RuntimeList args) {
         if (args.elements.size() < 2) {
             throw new RuntimeException("unpack: not enough arguments");
@@ -101,6 +112,12 @@ public class Unpack {
         return out;
     }
 
+    /**
+     * Determines the size in bytes of the data type specified by the format character.
+     *
+     * @param format The format character indicating the data type.
+     * @return The size in bytes of the data type.
+     */
     private static int getFormatSize(char format) {
         switch (format) {
             case 'C':
@@ -121,22 +138,54 @@ public class Unpack {
         }
     }
 
+    /**
+     * Reads a 16-bit short from the buffer in big-endian order.
+     *
+     * @param buffer The ByteBuffer containing the data.
+     * @return The short value read from the buffer.
+     */
     private static int readShortBigEndian(ByteBuffer buffer) {
         return (buffer.get() & 0xFF) << 8 | buffer.get() & 0xFF;
     }
 
+    /**
+     * Reads a 16-bit short from the buffer in little-endian order.
+     *
+     * @param buffer The ByteBuffer containing the data.
+     * @return The short value read from the buffer.
+     */
     private static int readShortLittleEndian(ByteBuffer buffer) {
         return buffer.get() & 0xFF | (buffer.get() & 0xFF) << 8;
     }
 
+    /**
+     * Reads a 32-bit integer from the buffer in big-endian order.
+     *
+     * @param buffer The ByteBuffer containing the data.
+     * @return The integer value read from the buffer.
+     */
     private static int readIntBigEndian(ByteBuffer buffer) {
         return (buffer.get() & 0xFF) << 24 | (buffer.get() & 0xFF) << 16 | (buffer.get() & 0xFF) << 8 | buffer.get() & 0xFF;
     }
 
+    /**
+     * Reads a 32-bit integer from the buffer in little-endian order.
+     *
+     * @param buffer The ByteBuffer containing the data.
+     * @return The integer value read from the buffer.
+     */
     private static int readIntLittleEndian(ByteBuffer buffer) {
         return buffer.get() & 0xFF | (buffer.get() & 0xFF) << 8 | (buffer.get() & 0xFF) << 16 | (buffer.get() & 0xFF) << 24;
     }
 
+    /**
+     * Reads a string from the buffer based on the specified format and count.
+     *
+     * @param buffer The ByteBuffer containing the data.
+     * @param count  The number of characters to read.
+     * @param format The format character indicating the string type.
+     * @return The string read from the buffer.
+     */
     private static String readString(ByteBuffer buffer, int count, char format) {
         byte[] bytes = new byte[count];
         buffer.get(bytes, 0, count);
@@ -154,6 +203,14 @@ public class Unpack {
         }
     }
 
+    /**
+     * Reads a bit string from the buffer based on the specified format and count.
+     *
+     * @param buffer The ByteBuffer containing the data.
+     * @param count  The number of bits to read.
+     * @param format The format character indicating the bit string type.
+     * @return The bit string read from the buffer.
+     */
     private static String readBitString(ByteBuffer buffer, int count, char format) {
         StringBuilder bitString = new StringBuilder();
         int bytesToRead = (count + 7) / 8;
@@ -170,4 +227,3 @@ public class Unpack {
         return bitString.toString();
     }
 }
-
