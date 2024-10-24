@@ -505,12 +505,32 @@ public class Parser {
             case "getc":
             case "open":
             case "close":
-            case "seek":
                 // Handle 'open' keyword as a Binary operator with a FileHandle and List operands
                 operand = ListParser.parseZeroOrMoreList(this, 0, false, true, false, false);
+                String defaultHandle = switch (token.text) {
+                    case "readline":
+                        yield "main::ARGV";
+                    case "eof":
+                        yield "main::STDIN";
+                    case "tell":
+                        yield "main::^LAST_FH";
+                    case "getc":
+                        yield "main::STDIN";
+                    case "open":
+                        throw new PerlCompilerException(tokenIndex, "Not enough arguments for open", ctx.errorUtil);
+                    case "close":
+                        yield "main::STDIN";    // XXX TODO use currently selected file handle
+                    default:
+                        throw new IllegalStateException("Unexpected value: " + token.text);
+                };
                 Node handle = ((ListNode) operand).elements.isEmpty()
-                        ? new IdentifierNode("main::STDOUT", currentIndex)
+                        ? new IdentifierNode(defaultHandle, currentIndex)
                         : ((ListNode) operand).elements.removeFirst();
+                return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
+            case "seek":
+                // Handle 'seek' keyword as a Binary operator with a FileHandle and List operands
+                operand = ListParser.parseZeroOrMoreList(this, 3, false, true, false, false);
+                handle = ((ListNode) operand).elements.removeFirst();
                 return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
             case "printf":
             case "print":
