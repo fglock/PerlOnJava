@@ -197,7 +197,6 @@ public class EmitterVisitor implements Visitor {
     }
 
     private void handleBinaryOperator(BinaryOperatorNode node, OperatorHandler operatorHandler) {
-        String methodStr = operatorHandler.getMethodName();
         EmitterVisitor scalarVisitor =
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
         node.left.accept(scalarVisitor); // target - left parameter
@@ -213,10 +212,11 @@ public class EmitterVisitor implements Visitor {
                 int intValue = Integer.parseInt(value);
                 ctx.mv.visitLdcInsn(intValue);
                 ctx.mv.visitMethodInsn(
-                        Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/RuntimeScalar",
-                        methodStr,
-                        "(I)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                        operatorHandler.getMethodType(),
+                        operatorHandler.getClassName(),
+                        operatorHandler.getMethodName(),
+                        "(I)Lorg/perlonjava/runtime/RuntimeScalar;",
+                        false);
                 if (ctx.contextType == RuntimeContextType.VOID) {
                     ctx.mv.visitInsn(Opcodes.POP);
                 }
@@ -228,7 +228,11 @@ public class EmitterVisitor implements Visitor {
         // stack: [left, right]
         // perform the operation
         ctx.mv.visitMethodInsn(
-                Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", methodStr, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                operatorHandler.getMethodType(),
+                operatorHandler.getClassName(),
+                operatorHandler.getMethodName(),
+                "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                false);
         if (ctx.contextType == RuntimeContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.POP);
         }
@@ -236,7 +240,6 @@ public class EmitterVisitor implements Visitor {
 
     private void handleCompoundAssignment(BinaryOperatorNode node, OperatorHandler operatorHandler) {
         // compound assignment operators like `+=`
-        String methodStr = operatorHandler.getMethodName();
         EmitterVisitor scalarVisitor =
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
         node.left.accept(scalarVisitor); // target - left parameter
@@ -245,7 +248,11 @@ public class EmitterVisitor implements Visitor {
         // stack: [left, left, right]
         // perform the operation
         ctx.mv.visitMethodInsn(
-                Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", methodStr, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                operatorHandler.getMethodType(),
+                operatorHandler.getClassName(),
+                operatorHandler.getMethodName(),
+                "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                false);
         // assign to the Lvalue
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         if (ctx.contextType == RuntimeContextType.VOID) {
