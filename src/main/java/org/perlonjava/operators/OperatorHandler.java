@@ -9,6 +9,7 @@ public class OperatorHandler {
     private final String className;
     private final String methodName;
     private final int methodType; // Opcodes.INVOKESTATIC
+    private final String descriptor;
 
     static Map<String, OperatorHandler> operatorHandlers = new HashMap<>();
 
@@ -51,20 +52,29 @@ public class OperatorHandler {
         put("bless", "bless");
     }
 
-    public OperatorHandler(String className, String methodName, int methodType) {
+    public OperatorHandler(String className, String methodName, int methodType, String descriptor) {
         this.className = className;
         this.methodName = methodName;
         this.methodType = methodType;
+        this.descriptor = descriptor;
     }
 
     // OperatorHandler.put("+", "add");
     static void put(String operator, String methodName) {
-        operatorHandlers.put(operator, new OperatorHandler("org/perlonjava/runtime/RuntimeScalar", methodName, Opcodes.INVOKEVIRTUAL));
+        operatorHandlers.put(operator,
+                new OperatorHandler("org/perlonjava/runtime/RuntimeScalar",
+                        methodName,
+                        Opcodes.INVOKEVIRTUAL,
+                        "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;"));
     }
 
     // OperatorHandler.put("+", "add", "org.perlonjava.operators.ArithmeticOperators");
     static void put(String operator, String methodName, String className) {
-        operatorHandlers.put(operator, new OperatorHandler(className, methodName, Opcodes.INVOKESTATIC));
+        operatorHandlers.put(operator,
+                new OperatorHandler(className,
+                        methodName,
+                        Opcodes.INVOKESTATIC,
+                        "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;"));
     }
 
     public static OperatorHandler get(String operator) {
@@ -81,6 +91,16 @@ public class OperatorHandler {
 
     public int getMethodType() {
         return methodType;
+    }
+
+    public String getDescriptor() {
+        return descriptor;
+    }
+
+    public String getDescriptorWithIntParameter() {
+        String descriptor = this.descriptor;
+        // replace last argument with `I`
+        return descriptor.replace("Lorg/perlonjava/runtime/RuntimeScalar;)", "I)");
     }
 }
 
