@@ -179,6 +179,10 @@ Setting `lib` path with `-I` to access Perl modules is optional. Standard module
 │   │               ├── perlmodule/
 │   │               │   ├── Universal.java
 │   │               │   └── other internalized Perl module classes
+│   │               ├── operators/
+│   │               |   ├── OperatorHandler.java
+│   │               |   ├── ArithmeticOperators.java
+│   │               |   └── other operator handling classes
 │   │               └── runtime/
 │   │                   ├── RuntimeScalar.java
 │   │                   └── other runtime classes
@@ -216,7 +220,7 @@ Setting `lib` path with `-I` to access Perl modules is optional. Standard module
 
 - Representations of AST nodes for code blocks, variable declarations, and operations.
 
-### Runtime classes: *Runtime*
+### Runtime packages: *Runtime* and *Operators*
 
 - **Runtime**: Provides the implementation of the behavior of a Perl scalar variable, Code, Array, Hash.
 - **ScopedSymbolTable**: Manage variable names and their corresponding local variable indices.
