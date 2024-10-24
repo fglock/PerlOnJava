@@ -50,32 +50,25 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      * @return The updated scalar variable.
      */
     public RuntimeScalar addToScalar(RuntimeScalar var) {
-        String str = this.getStringValue();
-        if (str == null) {
-            var.undefine(); // Undefine the variable if the string value is null.
-        } else {
-            var.set(str); // Set the string value to the variable.
-        }
-        return var;
+        return this.getValueAsScalar().addToScalar(var);
     }
 
     /**
-     * Retrieves the string value of the special variable based on its type.
+     * Retrieves the RuntimeScalar value of the special variable based on its type.
      *
-     * @return The string value of the special variable, or null if not available.
+     * @return The RuntimeScalar value of the special variable, or null if not available.
      */
-    public String getStringValue() {
+    private RuntimeScalar getValueAsScalar() {
         try {
-            // Return the appropriate string based on the type of special variable.
             return switch (variableId) {
-                case CAPTURE -> RuntimeRegex.captureString(position);
-                case MATCH -> RuntimeRegex.matchString();
-                case PREMATCH -> RuntimeRegex.preMatchString();
-                case POSTMATCH -> RuntimeRegex.postMatchString();
+                case CAPTURE -> new RuntimeScalar(RuntimeRegex.captureString(position));
+                case MATCH -> new RuntimeScalar(RuntimeRegex.matchString());
+                case PREMATCH -> new RuntimeScalar(RuntimeRegex.preMatchString());
+                case POSTMATCH -> new RuntimeScalar(RuntimeRegex.postMatchString());
                 default -> null;
             };
         } catch (IllegalStateException e) {
-            return null; // Return null if the matcher is in an invalid state.
+            return null;
         }
     }
 
@@ -86,7 +79,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      */
     @Override
     public int getInt() {
-        return new RuntimeScalar(this.getStringValue()).getInt();
+        return this.getValueAsScalar().getInt();
     }
 
     /**
@@ -96,7 +89,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      */
     @Override
     public double getDouble() {
-        return new RuntimeScalar(this.getStringValue()).getDouble();
+        return this.getValueAsScalar().getDouble();
     }
 
     /**
@@ -106,8 +99,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      */
     @Override
     public String toString() {
-        String str = this.getStringValue();
-        return str == null ? "" : str;
+        return this.getValueAsScalar().toString();
     }
 
     /**
@@ -117,8 +109,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      */
     @Override
     public boolean getBoolean() {
-        String str = this.getStringValue();
-        return (str != null && !str.isEmpty() && !str.equals("0"));
+        return this.getValueAsScalar().getBoolean();
     }
 
     /**
@@ -128,8 +119,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      */
     @Override
     public boolean getDefinedBoolean() {
-        String str = this.getStringValue();
-        return (str != null);
+        return this.getValueAsScalar().getDefinedBoolean();
     }
 
     /**
