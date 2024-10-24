@@ -51,6 +51,8 @@ public class RuntimeIO implements RuntimeScalarReference {
     private final ByteBuffer singleCharBuffer;
     // List to keep track of directory stream positions
     private final List<DirectoryStream<Path>> directoryStreamPositions = new ArrayList<>();
+    // Line number counter for the current filehandle - `$.`
+    public int currentLineNumber = 0;
     boolean needFlush;
     private Socket socket;
     private ServerSocket serverSocket;
@@ -68,9 +70,6 @@ public class RuntimeIO implements RuntimeScalarReference {
     private ArrayList<RuntimeScalar> directorySpecialEntries = new ArrayList<>();
     // State flags
     private boolean isEOF;
-
-    // Line number counter for the current filehandle - `$.`
-    private int currentLineNumber = 0;
 
     // Constructor to initialize buffers
     public RuntimeIO() {
