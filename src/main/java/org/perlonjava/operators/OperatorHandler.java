@@ -16,11 +16,11 @@ public class OperatorHandler {
     // Static block to initialize operator handlers
     static {
         put("**", "pow");
-        put("+", "add");
-        put("-", "subtract");
-        put("*", "multiply");
-        put("/", "divide");
-        put("%", "modulus");
+        put("+", "add", "org/perlonjava/operators/ArithmeticOperators");
+        put("-", "subtract", "org/perlonjava/operators/ArithmeticOperators");
+        put("*", "multiply", "org/perlonjava/operators/ArithmeticOperators");
+        put("/", "divide", "org/perlonjava/operators/ArithmeticOperators");
+        put("%", "modulus", "org/perlonjava/operators/ArithmeticOperators");
         put(".", "stringConcat");
         put("&", "bitwiseAnd");
         put("|", "bitwiseOr");
@@ -74,7 +74,7 @@ public class OperatorHandler {
                 new OperatorHandler(className,
                         methodName,
                         Opcodes.INVOKESTATIC,
-                        "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;"));
+                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;"));
     }
 
     public static OperatorHandler get(String operator) {

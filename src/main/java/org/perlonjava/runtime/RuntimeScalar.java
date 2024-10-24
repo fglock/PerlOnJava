@@ -4,6 +4,7 @@ import com.ibm.icu.text.CaseMap;
 import com.ibm.icu.text.Normalizer2;
 import org.perlonjava.ArgumentParser;
 import org.perlonjava.codegen.DynamicState;
+import org.perlonjava.operators.ArithmeticOperators;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
 
@@ -927,106 +928,11 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 }
             }
         }
-        return getScalarInt(0).subtract(this);
+        return ArithmeticOperators.subtract(getScalarInt(0), this);
     }
 
     public RuntimeScalar not() {
         return getScalarBoolean(!this.getBoolean());
-    }
-
-    // Optimization: add `int` instead of RuntimeScalar
-    public RuntimeScalar add(int arg2) {
-        RuntimeScalar arg1 = this;
-        if (arg1.type == RuntimeScalarType.STRING) {
-            arg1 = arg1.parseNumber();
-        }
-        if (arg1.type == RuntimeScalarType.DOUBLE) {
-            return new RuntimeScalar(arg1.getDouble() + arg2);
-        } else {
-            return getScalarInt(arg1.getInt() + arg2);
-        }
-    }
-
-    public RuntimeScalar add(RuntimeScalar arg2) {
-        RuntimeScalar arg1 = this;
-        if (arg1.type == RuntimeScalarType.STRING) {
-            arg1 = arg1.parseNumber();
-        }
-        if (arg2.type == RuntimeScalarType.STRING) {
-            arg2 = arg2.parseNumber();
-        }
-        if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
-            return new RuntimeScalar(arg1.getDouble() + arg2.getDouble());
-        } else {
-            return getScalarInt(arg1.getInt() + arg2.getInt());
-        }
-    }
-
-    // Optimization: subtract `int` instead of RuntimeScalar
-    public RuntimeScalar subtract(int arg2) {
-        RuntimeScalar arg1 = this;
-        if (arg1.type == RuntimeScalarType.STRING) {
-            arg1 = arg1.parseNumber();
-        }
-        if (arg1.type == RuntimeScalarType.DOUBLE) {
-            return new RuntimeScalar(arg1.getDouble() - arg2);
-        } else {
-            return getScalarInt(arg1.getInt() - arg2);
-        }
-    }
-
-    public RuntimeScalar subtract(RuntimeScalar arg2) {
-        RuntimeScalar arg1 = this;
-        if (arg1.type == RuntimeScalarType.STRING) {
-            arg1 = arg1.parseNumber();
-        }
-        if (arg2.type == RuntimeScalarType.STRING) {
-            arg2 = arg2.parseNumber();
-        }
-        if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
-            return new RuntimeScalar(arg1.getDouble() - arg2.getDouble());
-        } else {
-            return getScalarInt(arg1.getInt() - arg2.getInt());
-        }
-    }
-
-    public RuntimeScalar multiply(RuntimeScalar arg2) {
-        RuntimeScalar arg1 = this;
-        if (arg1.type == RuntimeScalarType.STRING) {
-            arg1 = arg1.parseNumber();
-        }
-        if (arg2.type == RuntimeScalarType.STRING) {
-            arg2 = arg2.parseNumber();
-        }
-        if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
-            return new RuntimeScalar(arg1.getDouble() * arg2.getDouble());
-        } else {
-            return getScalarInt((long) arg1.getInt() * (long) arg2.getInt());
-        }
-    }
-
-    public RuntimeScalar divide(RuntimeScalar arg2) {
-        RuntimeScalar arg1 = this;
-        if (arg1.type == RuntimeScalarType.STRING) {
-            arg1 = arg1.parseNumber();
-        }
-        if (arg2.type == RuntimeScalarType.STRING) {
-            arg2 = arg2.parseNumber();
-        }
-        double divisor = arg2.getDouble();
-        if (divisor == 0.0) {
-            throw new PerlCompilerException("Illegal division by zero");
-        }
-        return new RuntimeScalar(arg1.getDouble() / divisor);
-    }
-
-    public RuntimeScalar modulus(RuntimeScalar arg2) {
-        int divisor = arg2.getInt();
-        int result = this.getInt() % divisor;
-        if (result != 0.0 && ((divisor > 0.0 && result < 0.0) || (divisor < 0.0 && result > 0.0))) {
-            result += divisor;
-        }
-        return new RuntimeScalar(result);
     }
 
     public RuntimeScalar repeat(RuntimeScalar arg) {
