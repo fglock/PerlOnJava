@@ -32,7 +32,8 @@ sub plan {
     if ($directive eq 'tests') {
         $Plan_Count = $arg;
         print "1..$Plan_Count\n";
-    } elsif ($directive eq 'skip_all') {
+    }
+    elsif ($directive eq 'skip_all') {
         print "1..0 # Skipped: $arg\n";
         exit 0;
     }
@@ -123,8 +124,8 @@ sub isa_ok {
     return $test;
 }
 
-sub pass { ok(1, $_[0]) }
-sub fail { ok(0, $_[0]) }
+sub pass {ok(1, $_[0])}
+sub fail {ok(0, $_[0])}
 
 sub diag {
     my ($message) = @_;
@@ -133,7 +134,7 @@ sub diag {
 
 sub skip {
     my ($reason, $count) = @_;
-    for (1..$count) {
+    for (1 .. $count) {
         $Test_Count++;
         print "ok $Test_Count # skip $reason\n";
     }

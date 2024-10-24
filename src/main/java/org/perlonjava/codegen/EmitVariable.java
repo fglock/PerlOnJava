@@ -273,7 +273,7 @@ public class EmitVariable {
                                 break;
                         }
                         throw new PerlCompilerException(
-                                    node.tokenIndex, "Not implemented: " + node.operator, emitterVisitor.ctx.errorUtil);
+                                node.tokenIndex, "Not implemented: " + node.operator, emitterVisitor.ctx.errorUtil);
                     } else {
                         // "our":
                         // Create and fetch a global variable

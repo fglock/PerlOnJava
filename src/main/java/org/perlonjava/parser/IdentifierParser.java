@@ -2,7 +2,6 @@ package org.perlonjava.parser;
 
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.runtime.PerlCompilerException;
 
 /**
  * The IdentifierParser class is responsible for parsing complex Perl identifiers
@@ -62,7 +61,7 @@ public class IdentifierParser {
      * Parses the inner part of a complex identifier, handling cases where the identifier
      * may be enclosed in braces.
      *
-     * @param parser The parser object containing the tokens and current parsing state.
+     * @param parser       The parser object containing the tokens and current parsing state.
      * @param insideBraces A boolean indicating if the identifier is enclosed in braces.
      * @return The parsed identifier as a String, or null if there is no valid identifier.
      */
