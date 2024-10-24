@@ -3,6 +3,7 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
+import org.perlonjava.operators.OperatorHandler;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
@@ -12,45 +13,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class EmitterVisitor implements Visitor {
-    private static final Map<String, String> operatorHandlers = new HashMap<>();
-
-    static {
-        operatorHandlers.put("**", "pow");
-        operatorHandlers.put("+", "add");
-        operatorHandlers.put("-", "subtract");
-        operatorHandlers.put("*", "multiply");
-        operatorHandlers.put("/", "divide");
-        operatorHandlers.put("%", "modulus");
-        operatorHandlers.put(".", "stringConcat");
-        operatorHandlers.put("&", "bitwiseAnd");
-        operatorHandlers.put("|", "bitwiseOr");
-        operatorHandlers.put("^", "bitwiseXor");
-        operatorHandlers.put("<<", "shiftLeft");
-        operatorHandlers.put(">>", "shiftRight");
-        operatorHandlers.put("x", "repeat");
-        operatorHandlers.put("&.", "bitwiseStringAnd");
-        operatorHandlers.put("&&", "logicalAnd");
-        operatorHandlers.put("|.", "bitwiseStringOr");
-        operatorHandlers.put("||", "logicalOr");
-        operatorHandlers.put("^.", "bitwiseStringXor");
-        operatorHandlers.put("//", "logicalDefinedOr");
-        operatorHandlers.put("isa", "isa");
-        operatorHandlers.put("<", "lessThan");
-        operatorHandlers.put("<=", "lessThanOrEqual");
-        operatorHandlers.put(">", "greaterThan");
-        operatorHandlers.put(">=", "greaterThanOrEqual");
-        operatorHandlers.put("==", "equalTo");
-        operatorHandlers.put("!=", "notEqualTo");
-        operatorHandlers.put("<=>", "spaceship");
-        operatorHandlers.put("eq", "eq");
-        operatorHandlers.put("ne", "ne");
-        operatorHandlers.put("lt", "lt");
-        operatorHandlers.put("le", "le");
-        operatorHandlers.put("gt", "gt");
-        operatorHandlers.put("ge", "ge");
-        operatorHandlers.put("cmp", "cmp");
-        operatorHandlers.put("bless", "bless");
-    }
 
     public final EmitterContext ctx;
     /**
@@ -207,9 +169,9 @@ public class EmitterVisitor implements Visitor {
             case "^.=":
             case "x=":
                 String newOp = operator.substring(0, operator.length() - 1);
-                String methodStr = operatorHandlers.get(newOp);
-                if (methodStr != null) {
-                    handleCompoundAssignment(node, methodStr);
+                OperatorHandler operatorHandler = OperatorHandler.get(newOp);
+                if (operatorHandler != null) {
+                    handleCompoundAssignment(node, operatorHandler);
                     return;
                 }
                 break;
@@ -225,16 +187,17 @@ public class EmitterVisitor implements Visitor {
                 return;
         }
 
-        String methodStr = operatorHandlers.get(operator);
-        if (methodStr != null) {
-            handleBinaryOperator(node, methodStr);
+        OperatorHandler operatorHandler = OperatorHandler.get(operator);
+        if (operatorHandler != null) {
+            handleBinaryOperator(node, operatorHandler);
             return;
         }
 
         throw new PerlCompilerException(node.tokenIndex, "Unexpected infix operator: " + operator, ctx.errorUtil);
     }
 
-    private void handleBinaryOperator(BinaryOperatorNode node, String methodStr) {
+    private void handleBinaryOperator(BinaryOperatorNode node, OperatorHandler operatorHandler) {
+        String methodStr = operatorHandler.getMethodName();
         EmitterVisitor scalarVisitor =
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
         node.left.accept(scalarVisitor); // target - left parameter
@@ -271,8 +234,9 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleCompoundAssignment(BinaryOperatorNode node, String methodStr) {
+    private void handleCompoundAssignment(BinaryOperatorNode node, OperatorHandler operatorHandler) {
         // compound assignment operators like `+=`
+        String methodStr = operatorHandler.getMethodName();
         EmitterVisitor scalarVisitor =
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
         node.left.accept(scalarVisitor); // target - left parameter
