@@ -8,8 +8,19 @@ import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+/**
+ * Provides functionality to pack a list of scalars into a binary string
+ * based on a specified template, similar to Perl's pack function.
+ */
 public class Pack {
 
+    /**
+     * Packs a list of RuntimeScalar objects into a binary string according to the specified template.
+     *
+     * @param args A RuntimeList containing the template string followed by the values to pack.
+     * @return A RuntimeScalar representing the packed binary string.
+     * @throws RuntimeException if there are not enough arguments or if an unsupported format character is encountered.
+     */
     public static RuntimeScalar pack(RuntimeList args) {
         if (args.elements.isEmpty()) {
             throw new RuntimeException("pack: not enough arguments");
@@ -101,21 +112,45 @@ public class Pack {
         return new RuntimeScalar(output.toString(StandardCharsets.ISO_8859_1));
     }
 
+    /**
+     * Writes a short integer to the output stream in little-endian order.
+     *
+     * @param output The ByteArrayOutputStream to write to.
+     * @param value  The integer value to write.
+     */
     private static void writeShort(ByteArrayOutputStream output, int value) {
         output.write(value & 0xFF);
         output.write((value >> 8) & 0xFF);
     }
 
+    /**
+     * Writes a short integer to the output stream in big-endian order.
+     *
+     * @param output The ByteArrayOutputStream to write to.
+     * @param value  The integer value to write.
+     */
     private static void writeShortBigEndian(ByteArrayOutputStream output, int value) {
         output.write((value >> 8) & 0xFF);
         output.write(value & 0xFF);
     }
 
+    /**
+     * Writes a short integer to the output stream in little-endian order.
+     *
+     * @param output The ByteArrayOutputStream to write to.
+     * @param value  The integer value to write.
+     */
     private static void writeShortLittleEndian(ByteArrayOutputStream output, int value) {
         output.write(value & 0xFF);
         output.write((value >> 8) & 0xFF);
     }
 
+    /**
+     * Writes a 32-bit integer to the output stream in little-endian order.
+     *
+     * @param output The ByteArrayOutputStream to write to.
+     * @param value  The integer value to write.
+     */
     private static void writeInt(ByteArrayOutputStream output, int value) {
         output.write(value & 0xFF);
         output.write((value >> 8) & 0xFF);
@@ -123,6 +158,12 @@ public class Pack {
         output.write((value >> 24) & 0xFF);
     }
 
+    /**
+     * Writes a 32-bit integer to the output stream in big-endian order.
+     *
+     * @param output The ByteArrayOutputStream to write to.
+     * @param value  The long value to write.
+     */
     private static void writeIntBigEndian(ByteArrayOutputStream output, long value) {
         output.write((int) ((value >> 24) & 0xFF));
         output.write((int) ((value >> 16) & 0xFF));
@@ -130,6 +171,12 @@ public class Pack {
         output.write((int) (value & 0xFF));
     }
 
+    /**
+     * Writes a 32-bit integer to the output stream in little-endian order.
+     *
+     * @param output The ByteArrayOutputStream to write to.
+     * @param value  The long value to write.
+     */
     private static void writeIntLittleEndian(ByteArrayOutputStream output, long value) {
         output.write((int) (value & 0xFF));
         output.write((int) ((value >> 8) & 0xFF));
@@ -137,6 +184,12 @@ public class Pack {
         output.write((int) ((value >> 24) & 0xFF));
     }
 
+    /**
+     * Writes a long integer to the output stream in little-endian order.
+     *
+     * @param output The ByteArrayOutputStream to write to.
+     * @param value  The long value to write.
+     */
     private static void writeLong(ByteArrayOutputStream output, long value) {
         output.write((int) (value & 0xFF));
         output.write((int) ((value >> 8) & 0xFF));
@@ -144,11 +197,23 @@ public class Pack {
         output.write((int) ((value >> 24) & 0xFF));
     }
 
+    /**
+     * Writes a float to the output stream in little-endian order.
+     *
+     * @param output The ByteArrayOutputStream to write to.
+     * @param value  The float value to write.
+     */
     private static void writeFloat(ByteArrayOutputStream output, float value) {
         int intBits = Float.floatToIntBits(value);
         writeInt(output, intBits);
     }
 
+    /**
+     * Writes a double to the output stream in little-endian order.
+     *
+     * @param output The ByteArrayOutputStream to write to.
+     * @param value  The double value to write.
+     */
     private static void writeDouble(ByteArrayOutputStream output, double value) {
         long longBits = Double.doubleToLongBits(value);
         output.write((int) (longBits & 0xFF));
@@ -161,6 +226,14 @@ public class Pack {
         output.write((int) ((longBits >> 56) & 0xFF));
     }
 
+    /**
+     * Writes a string to the output stream based on the specified format and count.
+     *
+     * @param output The ByteArrayOutputStream to write to.
+     * @param str    The string to write.
+     * @param count  The number of characters to write.
+     * @param format The format character indicating the string type.
+     */
     private static void writeString(ByteArrayOutputStream output, String str, int count, char format) {
         byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
         int length = Math.min(bytes.length, count);
@@ -186,7 +259,14 @@ public class Pack {
         }
     }
 
-
+    /**
+     * Writes a bit string to the output stream based on the specified format and count.
+     *
+     * @param output The ByteArrayOutputStream to write to.
+     * @param str    The bit string to write.
+     * @param count  The number of bits to write.
+     * @param format The format character indicating the bit string type.
+     */
     private static void writeBitString(ByteArrayOutputStream output, String str, int count, char format) {
         int bitIndex = 0;
         int byteValue = 0;

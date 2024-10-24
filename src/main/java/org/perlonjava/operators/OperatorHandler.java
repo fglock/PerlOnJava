@@ -5,12 +5,12 @@ import org.objectweb.asm.Opcodes;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Handles the mapping of operators to their corresponding method implementations.
+ * This class provides a mechanism to associate operators with specific methods
+ * in designated classes, allowing for dynamic operator handling.
+ */
 public class OperatorHandler {
-    private final String className;
-    private final String methodName;
-    private final int methodType; // Opcodes.INVOKESTATIC
-    private final String descriptor;
-
     static Map<String, OperatorHandler> operatorHandlers = new HashMap<>();
 
     // Static block to initialize operator handlers
@@ -52,6 +52,19 @@ public class OperatorHandler {
         put("bless", "bless");
     }
 
+    private final String className;
+    private final String methodName;
+    private final int methodType; // Opcodes.INVOKESTATIC
+    private final String descriptor;
+
+    /**
+     * Constructs an OperatorHandler with the specified class name, method name, method type, and descriptor.
+     *
+     * @param className  The name of the class containing the method.
+     * @param methodName The name of the method to invoke.
+     * @param methodType The type of method invocation (e.g., INVOKESTATIC).
+     * @param descriptor The method descriptor indicating the method signature.
+     */
     public OperatorHandler(String className, String methodName, int methodType, String descriptor) {
         this.className = className;
         this.methodName = methodName;
@@ -59,7 +72,12 @@ public class OperatorHandler {
         this.descriptor = descriptor;
     }
 
-    // OperatorHandler.put("+", "add");
+    /**
+     * Associates an operator with a method in the RuntimeScalar class.
+     *
+     * @param operator   The operator symbol (e.g., "+").
+     * @param methodName The name of the method to associate with the operator.
+     */
     static void put(String operator, String methodName) {
         operatorHandlers.put(operator,
                 new OperatorHandler("org/perlonjava/runtime/RuntimeScalar",
@@ -68,7 +86,13 @@ public class OperatorHandler {
                         "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;"));
     }
 
-    // OperatorHandler.put("+", "add", "org.perlonjava.operators.ArithmeticOperators");
+    /**
+     * Associates an operator with a method in a specified class.
+     *
+     * @param operator   The operator symbol (e.g., "+").
+     * @param methodName The name of the method to associate with the operator.
+     * @param className  The name of the class containing the method.
+     */
     static void put(String operator, String methodName, String className) {
         operatorHandlers.put(operator,
                 new OperatorHandler(className,
@@ -77,30 +101,60 @@ public class OperatorHandler {
                         "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;"));
     }
 
+    /**
+     * Retrieves the OperatorHandler associated with the specified operator.
+     *
+     * @param operator The operator symbol.
+     * @return The OperatorHandler associated with the operator, or null if not found.
+     */
     public static OperatorHandler get(String operator) {
         return operatorHandlers.get(operator);
     }
 
+    /**
+     * Gets the class name containing the method associated with the operator.
+     *
+     * @return The class name.
+     */
     public String getClassName() {
         return className;
     }
 
+    /**
+     * Gets the method name associated with the operator.
+     *
+     * @return The method name.
+     */
     public String getMethodName() {
         return methodName;
     }
 
+    /**
+     * Gets the method type (e.g., INVOKESTATIC) for the operator.
+     *
+     * @return The method type.
+     */
     public int getMethodType() {
         return methodType;
     }
 
+    /**
+     * Gets the method descriptor indicating the method signature.
+     *
+     * @return The method descriptor.
+     */
     public String getDescriptor() {
         return descriptor;
     }
 
+    /**
+     * Gets the method descriptor with an integer parameter, replacing the last argument with an integer.
+     *
+     * @return The modified method descriptor.
+     */
     public String getDescriptorWithIntParameter() {
         String descriptor = this.descriptor;
         // replace last argument with `I`
         return descriptor.replace("Lorg/perlonjava/runtime/RuntimeScalar;)", "I)");
     }
 }
-

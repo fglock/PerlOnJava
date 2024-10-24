@@ -7,11 +7,22 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 
+/**
+ * Provides functionality to perform cryptographic hashing on strings
+ * using a salt, similar to Perl's crypt function.
+ */
 public class Crypt {
 
     private static final String SALT_CHARS = "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     private static final int DIGEST_LENGTH = 13;
 
+    /**
+     * Hashes a plaintext string using a salt and returns the hashed result.
+     *
+     * @param args A RuntimeList containing the plaintext string and the salt.
+     * @return A RuntimeScalar representing the hashed string.
+     * @throws RuntimeException if there are not enough arguments or if hashing fails.
+     */
     public static RuntimeScalar crypt(RuntimeList args) {
         if (args.elements.size() < 2) {
             throw new RuntimeException("crypt: not enough arguments");
@@ -34,6 +45,11 @@ public class Crypt {
         return new RuntimeScalar(hashed);
     }
 
+    /**
+     * Generates a random salt of 2 characters from the set of allowed salt characters.
+     *
+     * @return A string representing the generated salt.
+     */
     private static String generateSalt() {
         StringBuilder salt = new StringBuilder();
         for (int i = 0; i < 2; i++) {
@@ -43,6 +59,14 @@ public class Crypt {
         return salt.toString();
     }
 
+    /**
+     * Hashes the plaintext string using the specified salt and returns the hashed result.
+     *
+     * @param plaintext The plaintext string to hash.
+     * @param salt      The salt to use for hashing.
+     * @return A string representing the hashed result.
+     * @throws RuntimeException if the hashing algorithm is not available.
+     */
     private static String hashWithSalt(String plaintext, String salt) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
@@ -57,4 +81,3 @@ public class Crypt {
         }
     }
 }
-

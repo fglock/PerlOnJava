@@ -5,8 +5,8 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.BinaryOperatorNode;
 import org.perlonjava.astnode.TernaryOperatorNode;
-import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.operators.ScalarFlipFlopOperator;
+import org.perlonjava.runtime.RuntimeContextType;
 
 import static org.perlonjava.operators.ScalarFlipFlopOperator.flipFlops;
 
