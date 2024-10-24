@@ -7,16 +7,16 @@ package org.perlonjava.runtime;
  */
 public class RuntimeScalarCache {
 
-    // Range of integers to cache
-    static int minInt = -100;
-    static int maxInt = 100;
-    // Array to store cached RuntimeScalarReadOnly objects for integers
-    static RuntimeScalarReadOnly[] scalarInt = new RuntimeScalarReadOnly[maxInt - minInt + 1];
     // Cached RuntimeScalarReadOnly objects for common boolean and undefined values
     public static RuntimeScalarReadOnly scalarTrue;
     public static RuntimeScalarReadOnly scalarFalse;
     public static RuntimeScalarReadOnly scalarUndef;
     public static RuntimeScalarReadOnly scalarEmptyString;
+    // Range of integers to cache
+    static int minInt = -100;
+    static int maxInt = 100;
+    // Array to store cached RuntimeScalarReadOnly objects for integers
+    static RuntimeScalarReadOnly[] scalarInt = new RuntimeScalarReadOnly[maxInt - minInt + 1];
 
     // Static block to initialize the cache
     static {
