@@ -627,7 +627,7 @@ public class EmitterVisitor implements Visitor {
             // use the `_` file handle
             ctx.mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/FileTestOperator",
+                    "org/perlonjava/operators/FileTestOperator",
                     "fileTestLastHandle",
                     "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         } else {
@@ -635,7 +635,7 @@ public class EmitterVisitor implements Visitor {
             node.operand.accept(this.with(RuntimeContextType.SCALAR));
             ctx.mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/FileTestOperator",
+                    "org/perlonjava/operators/FileTestOperator",
                     "fileTest",
                     "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         }
