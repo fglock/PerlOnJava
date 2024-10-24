@@ -82,10 +82,10 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                 case INPUT_LINE_NUMBER -> RuntimeIO.lastAccessedFileHandle == null
                         ? scalarUndef
                         : getScalarInt(RuntimeIO.lastAccessedFileHandle.currentLineNumber);
-                default -> null;
+                default -> scalarUndef;
             };
         } catch (IllegalStateException e) {
-            return null; // Return null if the state is invalid for obtaining the value.
+            return scalarUndef;
         }
     }
 
@@ -112,7 +112,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     /**
      * Returns the string representation of the special variable.
      *
-     * @return The string value of the special variable, or an empty string if null.
+     * @return The string value of the special variable.
      */
     @Override
     public String toString() {
@@ -122,7 +122,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     /**
      * Evaluates the boolean representation of the special variable.
      *
-     * @return True if the string value is not null, not empty, and not "0".
+     * @return True value of the special variable.
      */
     @Override
     public boolean getBoolean() {
@@ -132,7 +132,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     /**
      * Checks if the special variable is defined.
      *
-     * @return True if the string value is not null.
+     * @return True if the value is not null.
      */
     @Override
     public boolean getDefinedBoolean() {
