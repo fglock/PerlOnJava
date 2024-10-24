@@ -4,6 +4,7 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
+import org.perlonjava.operators.OperatorHandler;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.ScalarGlobOperator;
@@ -322,11 +323,18 @@ public class EmitOperator {
     // Handles the 'map' operator, which applies a function to each element of a list.
     static void handleMapOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         String operator = node.operator;
+        OperatorHandler operatorHandler = OperatorHandler.get(operator);
+
         // Accept the right operand in LIST context and the left operand in SCALAR context.
         node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));  // list
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // subroutine
         // Invoke the static method for the operator.
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeList;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeList;", false);
+        emitterVisitor.ctx.mv.visitMethodInsn(
+                operatorHandler.getMethodType(),
+                operatorHandler.getClassName(),
+                operatorHandler.getMethodName(),
+                operatorHandler.getDescriptor(),
+                false);
         // If the context is VOID, pop the result from the stack.
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
