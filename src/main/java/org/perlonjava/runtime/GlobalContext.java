@@ -90,7 +90,11 @@ public class GlobalContext {
 
         // Initialize STDOUT, STDERR, STDIN
         initStdHandles();
-
+        // ARGV file handle - If no files are specified, use standard input
+        if (getGlobalArray("main::ARGV").size() == 0) {
+            getGlobalIO("main::ARGV").set(getGlobalIO("main::STDIN"));
+        }
+        
         // Initialize built-in Perl classes
         Universal.initialize();
         Symbol.initialize();
