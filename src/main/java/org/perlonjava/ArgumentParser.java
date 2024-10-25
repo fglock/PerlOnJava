@@ -61,6 +61,12 @@ public class ArgumentParser {
                         }
                         parsedArgs.compileOnly = true;
                         break;
+                    case "-n":
+                        parsedArgs.processOnly = true;
+                        break;
+                    case "-p":
+                        parsedArgs.processAndPrint = true;
+                        break;
                     case "-h":
                     case "--help":
                         printHelp();
@@ -87,6 +93,13 @@ public class ArgumentParser {
             }
         }
 
+        // Wrap the Perl code with the loop structure for -n and -p
+        if (parsedArgs.processAndPrint) {
+            parsedArgs.code = "while (<>) { " + parsedArgs.code + " } continue { print $_ or die \"-p destination: $!\\n\"; }";
+        } else if (parsedArgs.processOnly) {
+            parsedArgs.code = "while (<>) { " + parsedArgs.code + " }";
+        }
+
         return parsedArgs;
     }
 
@@ -99,6 +112,8 @@ public class ArgumentParser {
         System.out.println("  --parse         Parses the input code.");
         System.out.println("  --disassemble   Disassemble the generated code.");
         System.out.println("  -c              Compiles the input code only.");
+        System.out.println("  -n              Process input files without printing lines.");
+        System.out.println("  -p              Process input files and print each line.");
         System.out.println("  -Idirectory     Specify @INC/#include directory (several -I's allowed)");
         System.out.println("  -h, --help      Displays this help message.");
     }
@@ -125,6 +140,8 @@ public class ArgumentParser {
         public boolean tokenizeOnly = false;
         public boolean parseOnly = false;
         public boolean compileOnly = false;
+        public boolean processOnly = false; // For -n
+        public boolean processAndPrint = false; // For -p
         public String code = null;
         public String fileName = null;
 
