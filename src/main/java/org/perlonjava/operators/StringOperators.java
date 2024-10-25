@@ -121,8 +121,8 @@ public class StringOperators {
      * starting from a specified position.
      *
      * @param runtimeScalar the {@link RuntimeScalar} in which to search
-     * @param substr the substring to find
-     * @param position the position to start the search from
+     * @param substr        the substring to find
+     * @param position      the position to start the search from
      * @return a {@link RuntimeScalar} containing the index of the first occurrence, or -1 if not found
      */
     public static RuntimeScalar index(RuntimeScalar runtimeScalar, RuntimeScalar substr, RuntimeScalar position) {
@@ -150,8 +150,8 @@ public class StringOperators {
      * searching backwards from a specified position.
      *
      * @param runtimeScalar the {@link RuntimeScalar} in which to search
-     * @param substr the substring to find
-     * @param position the position to start the search from
+     * @param substr        the substring to find
+     * @param position      the position to start the search from
      * @return a {@link RuntimeScalar} containing the index of the last occurrence, or -1 if not found
      */
     public static RuntimeScalar rindex(RuntimeScalar runtimeScalar, RuntimeScalar substr, RuntimeScalar position) {

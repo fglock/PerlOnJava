@@ -49,7 +49,7 @@ public class EmitEval {
         String evalTag = "eval" + EmitterMethodCreator.classCounter++;
 
         // Create an EmitterContext for the eval.
-        // This context is  used to compile the eval string with the correct
+        // This context is used to compile the eval string with the correct
         // symbol table and compiler options.
         EmitterContext evalCtx = new EmitterContext(
                 null, // internal java class name will be created at runtime
@@ -82,7 +82,6 @@ public class EmitEval {
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Ljava/lang/Class;",
                 false);
         // Stack: [Class]
-
 
         int skipVariables = EmitterMethodCreator.skipVariables; // skip (this, @_, wantarray)
 
