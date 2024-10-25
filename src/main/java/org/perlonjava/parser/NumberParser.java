@@ -5,6 +5,12 @@ import org.perlonjava.astnode.NumberNode;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.RuntimeScalar;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 
 /**
  * This class provides methods for parsing numbers in various formats.
@@ -12,6 +18,14 @@ import org.perlonjava.runtime.PerlCompilerException;
  * binary, octal, and hexadecimal representations.
  */
 public class NumberParser {
+
+    public static final int MAX_NUMIFICATION_CACHE_SIZE = 1000;
+    public static final Map<String, RuntimeScalar> numificationCache = new LinkedHashMap<String, RuntimeScalar>(MAX_NUMIFICATION_CACHE_SIZE, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, RuntimeScalar> eldest) {
+            return size() > MAX_NUMIFICATION_CACHE_SIZE;
+        }
+    };
 
     /**
      * Parses a number token and returns a NumberNode.
@@ -113,5 +127,91 @@ public class NumberParser {
                 number.append(TokenUtils.consume(parser, LexerTokenType.NUMBER).text);
             }
         }
+    }
+
+    public static RuntimeScalar parseNumber(RuntimeScalar runtimeScalar) {
+        String str = (String) runtimeScalar.value;
+
+        // Check cache first
+        RuntimeScalar result = numificationCache.get(str);
+        if (result != null) {
+            return result;
+        }
+
+        int length = str.length();
+        int start = 0, end = length;
+
+        // Trim leading and trailing whitespace
+        while (start < length && Character.isWhitespace(str.charAt(start))) start++;
+        while (end > start && Character.isWhitespace(str.charAt(end - 1))) end--;
+
+        if (start == end) {
+            result = getScalarInt(0);
+        } else {
+
+            boolean hasDecimal = false;
+            boolean hasExponent = false;
+            boolean isNegative = false;
+            int exponentPos = -1;
+            int numberEnd = start;
+
+            char firstChar = str.charAt(start);
+            if (firstChar == '-' || firstChar == '+') {
+                isNegative = (firstChar == '-');
+                start++;
+            }
+
+            for (int i = start; i < end; i++) {
+                char c = str.charAt(i);
+                if (Character.isDigit(c)) {
+                    numberEnd = i + 1;
+                } else if (c == '.' && !hasDecimal && !hasExponent) {
+                    hasDecimal = true;
+                    numberEnd = i + 1;
+                } else if ((c == 'e' || c == 'E') && !hasExponent) {
+                    hasExponent = true;
+                    exponentPos = i;
+                    if (i + 1 < end && (str.charAt(i + 1) == '-' || str.charAt(i + 1) == '+')) {
+                        i++;
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            if (hasExponent && exponentPos == numberEnd - 1) {
+                // Invalid exponent, remove it
+                hasExponent = false;
+                numberEnd = exponentPos;
+            }
+
+            if (numberEnd == start) return getScalarInt(0);
+
+            try {
+                String numberStr = str.substring(start, numberEnd);
+                if (hasDecimal || hasExponent) {
+                    double value = Double.parseDouble(numberStr);
+                    result = new RuntimeScalar(isNegative ? -value : value);
+                } else {
+                    int value = Integer.parseInt(numberStr);
+                    result = getScalarInt(isNegative ? -value : value);
+                }
+            } catch (NumberFormatException e) {
+                // If integer parsing fails, try parsing as double
+                try {
+                    double value = Double.parseDouble(str.substring(start, numberEnd));
+                    result = new RuntimeScalar(isNegative ? -value : value);
+                } catch (NumberFormatException e2) {
+                    result = getScalarInt(0);
+                }
+            }
+        }
+
+        // Cache the result if the cache is not full
+        if (numificationCache.size() < MAX_NUMIFICATION_CACHE_SIZE) {
+            numificationCache.put(str, result);
+        }
+
+        return result;
     }
 }
