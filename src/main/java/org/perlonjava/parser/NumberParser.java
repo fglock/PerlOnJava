@@ -20,6 +20,11 @@ import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 public class NumberParser {
 
     public static final int MAX_NUMIFICATION_CACHE_SIZE = 1000;
+
+    /**
+     * A cache for storing parsed numbers to improve performance by avoiding
+     * repeated parsing of the same number strings.
+     */
     public static final Map<String, RuntimeScalar> numificationCache = new LinkedHashMap<String, RuntimeScalar>(MAX_NUMIFICATION_CACHE_SIZE, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, RuntimeScalar> eldest) {
@@ -129,6 +134,13 @@ public class NumberParser {
         }
     }
 
+    /**
+     * Parses a number from a RuntimeScalar and returns a RuntimeScalar.
+     * This method also utilizes a cache to store and retrieve previously parsed numbers.
+     *
+     * @param runtimeScalar The RuntimeScalar containing the number as a string.
+     * @return A RuntimeScalar representing the parsed number.
+     */
     public static RuntimeScalar parseNumber(RuntimeScalar runtimeScalar) {
         String str = (String) runtimeScalar.value;
 
