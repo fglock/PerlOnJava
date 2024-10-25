@@ -46,18 +46,6 @@ public class DynamicVariableManager {
     }
 
     /**
-     * Pops the most recent dynamic variable from the stack and restores its state.
-     * If the stack is empty, this method does nothing.
-     */
-    public static void popLocalVariable() {
-        if (!variableStack.isEmpty()) {
-            // Pop the variable from the stack and restore its previous state.
-            DynamicState variable = variableStack.pop();
-            variable.dynamicRestoreState();
-        }
-    }
-
-    /**
      * Pops dynamic variables from the stack until the stack size matches the specified target local level.
      * This is useful for restoring the stack to a previous state by removing any variables added after that state.
      *
@@ -65,8 +53,10 @@ public class DynamicVariableManager {
      */
     public static void popToLocalLevel(int targetLocalLevel) {
         // Continue popping variables until the stack size matches the target local level.
-        while (variableStack.size() > targetLocalLevel) {
-            popLocalVariable();
+        while (!variableStack.isEmpty() && variableStack.size() > targetLocalLevel) {
+            // Pop the variable from the stack and restore its previous state.
+            DynamicState variable = variableStack.pop();
+            variable.dynamicRestoreState();
         }
     }
 }
