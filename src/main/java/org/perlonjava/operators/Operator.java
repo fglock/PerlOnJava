@@ -258,6 +258,15 @@ public class Operator {
         return fh.write(formattedString);
     }
 
+    public static RuntimeScalar select(RuntimeList runtimeList, int ctx) {
+        if (runtimeList.elements.isEmpty()) {
+            return RuntimeIO.lastSelectedHandle;
+        }
+        RuntimeScalar fh = RuntimeIO.lastSelectedHandle;
+        RuntimeIO.lastSelectedHandle = (RuntimeScalar) runtimeList.elements.getFirst();
+        return fh;
+    }
+
     /**
      * Prints the elements to the specified file handle with a separator and newline.
      *

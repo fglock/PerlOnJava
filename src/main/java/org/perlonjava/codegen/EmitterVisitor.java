@@ -588,7 +588,7 @@ public class EmitterVisitor implements Visitor {
             operator = "undefine";
             node.operand.accept(this.with(RuntimeContextType.RUNTIME));
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", operator, "()Lorg/perlonjava/runtime/RuntimeList;", false);
-        } else if (operator.equals("gmtime") || operator.equals("localtime") || operator.equals("caller") || operator.equals("reset")) {
+        } else if (operator.equals("gmtime") || operator.equals("localtime") || operator.equals("caller") || operator.equals("reset") || operator.equals("select")) {
             node.operand.accept(this.with(RuntimeContextType.LIST));
             pushCallContext();
             mv.visitMethodInsn(
@@ -754,6 +754,7 @@ public class EmitterVisitor implements Visitor {
             case "closedir":
             case "rmdir":
             case "pos":
+            case "select":
                 handleUnaryBuiltin(node, operator);
                 break;
             case "chop":
