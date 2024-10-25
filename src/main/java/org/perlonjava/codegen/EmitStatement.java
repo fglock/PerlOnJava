@@ -196,7 +196,6 @@ public class EmitStatement {
         // Stack: [iterator]
 
         emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
-        ;
 
         // Add redo label
         Label redoLabel = new Label();
@@ -228,7 +227,6 @@ public class EmitStatement {
         mv.visitLabel(loopEnd);
 
         emitterVisitor.ctx.javaClassInfo.decrementStackLevel(1);
-        ;
 
         // Pop the iterator from the stack
         mv.visitInsn(Opcodes.POP);

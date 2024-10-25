@@ -16,6 +16,8 @@ public class OperatorHandler {
     // Static block to initialize operator handlers
     static {
         // Scalar operators
+
+        // Arithmetic
         put("+", "add", "org/perlonjava/operators/ArithmeticOperators");
         put("-", "subtract", "org/perlonjava/operators/ArithmeticOperators");
         put("*", "multiply", "org/perlonjava/operators/ArithmeticOperators");
@@ -39,6 +41,7 @@ public class OperatorHandler {
         put("isa", "isa");
         put("bless", "bless");
 
+        // Compare
         put("<", "lessThan", "org/perlonjava/operators/CompareOperators");
         put("<=", "lessThanOrEqual", "org/perlonjava/operators/CompareOperators");
         put(">", "greaterThan", "org/perlonjava/operators/CompareOperators");
@@ -53,6 +56,16 @@ public class OperatorHandler {
         put("gt", "gt", "org/perlonjava/operators/CompareOperators");
         put("ge", "ge", "org/perlonjava/operators/CompareOperators");
         put("cmp", "cmp", "org/perlonjava/operators/CompareOperators");
+
+        // Misc
+        put("caller", "caller", "org/perlonjava/runtime/RuntimeScalar", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
+        put("reset", "reset", "org/perlonjava/runtime/RuntimeScalar", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
+
+        // Time
+        put("time", "time", "org/perlonjava/operators/Time", "()Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("times", "times", "org/perlonjava/operators/Time", "()Lorg/perlonjava/runtime/RuntimeList;");
+        put("gmtime", "gmtime", "org/perlonjava/operators/Time", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
+        put("localtime", "localtime", "org/perlonjava/operators/Time", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
 
         // List operators
         put("map", "map",
