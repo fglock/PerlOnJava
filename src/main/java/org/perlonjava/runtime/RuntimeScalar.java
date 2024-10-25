@@ -6,6 +6,7 @@ import org.perlonjava.ArgumentParser;
 import org.perlonjava.codegen.DynamicState;
 import org.perlonjava.operators.ArithmeticOperators;
 import org.perlonjava.operators.Operator;
+import org.perlonjava.parser.NumberParser;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
 
@@ -37,13 +38,6 @@ import static org.perlonjava.runtime.RuntimeScalarCache.*;
  */
 public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarReference, DynamicState {
 
-    private static final int MAX_NUMIFICATION_CACHE_SIZE = 1000;
-    private static final Map<String, RuntimeScalar> numificationCache = new LinkedHashMap<String, RuntimeScalar>(MAX_NUMIFICATION_CACHE_SIZE, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, RuntimeScalar> eldest) {
-            return size() > MAX_NUMIFICATION_CACHE_SIZE;
-        }
-    };
     // Static stack to store saved "local" states of RuntimeScalar instances
     private static final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
     private static long currentSeed = System.currentTimeMillis();
@@ -291,7 +285,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return switch (type) {
             case INTEGER -> (int) value;
             case DOUBLE -> (int) ((double) value);
-            case STRING -> this.parseNumber().getInt();
+            case STRING -> NumberParser.parseNumber(this).getInt();
             case UNDEF -> 0;
             default -> ((RuntimeScalarReference) value).getIntRef();
         };
@@ -301,7 +295,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return switch (type) {
             case INTEGER -> (int) value;
             case DOUBLE -> (long) ((double) value);
-            case STRING -> this.parseNumber().getLong();
+            case STRING -> NumberParser.parseNumber(this).getLong();
             case UNDEF -> 0L;
             default -> ((RuntimeScalarReference) value).getIntRef();
         };
@@ -311,7 +305,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return switch (this.type) {
             case INTEGER -> (int) this.value;
             case DOUBLE -> (double) this.value;
-            case STRING -> this.parseNumber().getDouble();
+            case STRING -> NumberParser.parseNumber(this).getDouble();
             case UNDEF -> 0.0;
             default -> ((RuntimeScalarReference) value).getDoubleRef();
         };
@@ -466,8 +460,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return switch (type) {
             case UNDEF -> new RuntimeScalar();
             case HASHREFERENCE -> ((RuntimeHash) value).delete(index);
-            case STRING ->
-                    throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref");
+            case STRING -> throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref");
             default -> throw new PerlCompilerException("Not a HASH reference");
         };
     }
@@ -477,8 +470,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return switch (type) {
             case UNDEF -> new RuntimeScalar();
             case HASHREFERENCE -> ((RuntimeHash) value).exists(index);
-            case STRING ->
-                    throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref");
+            case STRING -> throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref");
             default -> throw new PerlCompilerException("Not a HASH reference");
         };
     }
@@ -695,94 +687,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
 
         // Handle numeric increment: parse the number and increment it
-        this.set(this.parseNumber()); // parseNumber parses the current string to a number
+        this.set(NumberParser.parseNumber(this)); // parseNumber parses the current string to a number
         return this.preAutoIncrement(); // preAutoIncrement handles the actual incrementing logic
-    }
-
-    public RuntimeScalar parseNumber() {
-        String str = (String) this.value;
-
-        // Check cache first
-        RuntimeScalar result = numificationCache.get(str);
-        if (result != null) {
-            return result;
-        }
-
-        int length = str.length();
-        int start = 0, end = length;
-
-        // Trim leading and trailing whitespace
-        while (start < length && Character.isWhitespace(str.charAt(start))) start++;
-        while (end > start && Character.isWhitespace(str.charAt(end - 1))) end--;
-
-        if (start == end) {
-            result = getScalarInt(0);
-        } else {
-
-            boolean hasDecimal = false;
-            boolean hasExponent = false;
-            boolean isNegative = false;
-            int exponentPos = -1;
-            int numberEnd = start;
-
-            char firstChar = str.charAt(start);
-            if (firstChar == '-' || firstChar == '+') {
-                isNegative = (firstChar == '-');
-                start++;
-            }
-
-            for (int i = start; i < end; i++) {
-                char c = str.charAt(i);
-                if (Character.isDigit(c)) {
-                    numberEnd = i + 1;
-                } else if (c == '.' && !hasDecimal && !hasExponent) {
-                    hasDecimal = true;
-                    numberEnd = i + 1;
-                } else if ((c == 'e' || c == 'E') && !hasExponent) {
-                    hasExponent = true;
-                    exponentPos = i;
-                    if (i + 1 < end && (str.charAt(i + 1) == '-' || str.charAt(i + 1) == '+')) {
-                        i++;
-                    }
-                } else {
-                    break;
-                }
-            }
-
-            if (hasExponent && exponentPos == numberEnd - 1) {
-                // Invalid exponent, remove it
-                hasExponent = false;
-                numberEnd = exponentPos;
-            }
-
-            if (numberEnd == start) return getScalarInt(0);
-
-            try {
-                String numberStr = str.substring(start, numberEnd);
-                if (hasDecimal || hasExponent) {
-                    double value = Double.parseDouble(numberStr);
-                    result = new RuntimeScalar(isNegative ? -value : value);
-                } else {
-                    int value = Integer.parseInt(numberStr);
-                    result = getScalarInt(isNegative ? -value : value);
-                }
-            } catch (NumberFormatException e) {
-                // If integer parsing fails, try parsing as double
-                try {
-                    double value = Double.parseDouble(str.substring(start, numberEnd));
-                    result = new RuntimeScalar(isNegative ? -value : value);
-                } catch (NumberFormatException e2) {
-                    result = getScalarInt(0);
-                }
-            }
-        }
-
-        // Cache the result if the cache is not full
-        if (numificationCache.size() < MAX_NUMIFICATION_CACHE_SIZE) {
-            numificationCache.put(str, result);
-        }
-
-        return result;
     }
 
     // Return a reference to this
@@ -994,7 +900,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 return this;
             case STRING:
                 // Handle numeric decrement
-                this.set(this.parseNumber());
+                this.set(NumberParser.parseNumber(this));
                 return this.preAutoDecrement();
         }
         this.type = RuntimeScalarType.INTEGER;
@@ -1013,7 +919,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 break;
             case STRING:
                 // Handle numeric decrement
-                this.set(this.parseNumber());
+                this.set(NumberParser.parseNumber(this));
                 this.preAutoDecrement();
                 break;
             default:
@@ -1146,7 +1052,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     public RuntimeScalar abs() {
         RuntimeScalar arg1 = this;
         if (arg1.type == RuntimeScalarType.STRING) {
-            arg1 = arg1.parseNumber();
+            arg1 = NumberParser.parseNumber(arg1);
         }
         if (arg1.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(Math.abs(arg1.getDouble()));
