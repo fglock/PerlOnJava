@@ -604,7 +604,16 @@ public class EmitterVisitor implements Visitor {
                     false);
         } else {
             node.operand.accept(this.with(RuntimeContextType.SCALAR));
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            if (operatorHandler != null) {
+                mv.visitMethodInsn(
+                        operatorHandler.getMethodType(),
+                        operatorHandler.getClassName(),
+                        operator,
+                        operatorHandler.getDescriptor(),
+                        false);
+            } else {
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            }
         }
         if (ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP);

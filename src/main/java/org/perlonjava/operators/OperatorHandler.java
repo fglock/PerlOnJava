@@ -57,6 +57,15 @@ public class OperatorHandler {
         put("ge", "ge", "org/perlonjava/operators/CompareOperators");
         put("cmp", "cmp", "org/perlonjava/operators/CompareOperators");
 
+        // String
+        put("length", "length", "org/perlonjava/operators/StringOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("quotemeta", "quotemeta", "org/perlonjava/operators/StringOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("fc", "fc", "org/perlonjava/operators/StringOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("lc", "lc", "org/perlonjava/operators/StringOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("lcfirst", "lcfirst", "org/perlonjava/operators/StringOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("uc", "uc", "org/perlonjava/operators/StringOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("ucfirst", "ucfirst", "org/perlonjava/operators/StringOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+
         // Misc
         put("caller", "caller", "org/perlonjava/runtime/RuntimeScalar", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
         put("reset", "reset", "org/perlonjava/runtime/RuntimeScalar", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
