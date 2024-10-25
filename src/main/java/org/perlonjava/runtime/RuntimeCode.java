@@ -120,7 +120,7 @@ public class RuntimeCode implements RuntimeScalarReference {
             // Compilation error in eval-string
 
             // Set the global error variable "$@" using GlobalContext.setGlobalVariable(key, value)
-            GlobalContext.getGlobalVariable("main::@").set(e.toString());
+            GlobalContext.getGlobalVariable("main::@").set(e.getMessage());
 
             // In case of error return an "undef" ast and class
             ast = new OperatorNode("undef", null, 1);

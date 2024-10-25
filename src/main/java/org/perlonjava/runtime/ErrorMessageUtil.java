@@ -69,9 +69,9 @@ public class ErrorMessageUtil {
             StackTraceElement element = stackTrace[0];
             String fileName = element.getFileName();
             int lineNumber = element.getLineNumber();
-            return String.format("Exception: %s at %s:%d\n", e, fileName, lineNumber);
+            return String.format("%s at %s:%d\n", e.getMessage(), fileName, lineNumber);
         } else {
-            return e.toString();
+            return e.getMessage();
         }
     }
 
