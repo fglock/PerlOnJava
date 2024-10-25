@@ -18,23 +18,20 @@ public class OperatorHandler {
         // Scalar operators
 
         // Arithmetic
-        put("+", "add", "org/perlonjava/operators/ArithmeticOperators");
-        put("-", "subtract", "org/perlonjava/operators/ArithmeticOperators");
-        put("*", "multiply", "org/perlonjava/operators/ArithmeticOperators");
-        put("/", "divide", "org/perlonjava/operators/ArithmeticOperators");
-        put("%", "modulus", "org/perlonjava/operators/ArithmeticOperators");
+        put("+", "add", "org/perlonjava/operators/MathOperators");
+        put("-", "subtract", "org/perlonjava/operators/MathOperators");
+        put("*", "multiply", "org/perlonjava/operators/MathOperators");
+        put("/", "divide", "org/perlonjava/operators/MathOperators");
+        put("%", "modulus", "org/perlonjava/operators/MathOperators");
 
-        put("**", "pow");
-        put(".", "stringConcat");
-        put("x", "repeat");
-        put("&.", "bitwiseStringAnd");
-        put("&&", "logicalAnd");
-        put("|.", "bitwiseStringOr");
-        put("||", "logicalOr");
-        put("^.", "bitwiseStringXor");
-        put("//", "logicalDefinedOr");
-        put("isa", "isa");
-        put("bless", "bless");
+        put("log", "log", "org/perlonjava/operators/MathOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("sqrt", "sqrt", "org/perlonjava/operators/MathOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("cos", "cos", "org/perlonjava/operators/MathOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("sin", "sin", "org/perlonjava/operators/MathOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("exp", "exp", "org/perlonjava/operators/MathOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("abs", "abs", "org/perlonjava/operators/MathOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("**", "pow", "org/perlonjava/operators/MathOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("atan2", "atan2", "org/perlonjava/operators/MathOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         // Bitwise
         put("&", "bitwiseAnd", "org/perlonjava/operators/BitwiseOperators");
@@ -69,15 +66,26 @@ public class OperatorHandler {
         put("uc", "uc", "org/perlonjava/operators/StringOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("ucfirst", "ucfirst", "org/perlonjava/operators/StringOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
-        // Misc
-        put("caller", "caller", "org/perlonjava/runtime/RuntimeScalar", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
-        put("reset", "reset", "org/perlonjava/runtime/RuntimeScalar", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
-
         // Time
         put("time", "time", "org/perlonjava/operators/Time", "()Lorg/perlonjava/runtime/RuntimeScalar;");
         put("times", "times", "org/perlonjava/operators/Time", "()Lorg/perlonjava/runtime/RuntimeList;");
         put("gmtime", "gmtime", "org/perlonjava/operators/Time", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
         put("localtime", "localtime", "org/perlonjava/operators/Time", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
+
+        // Misc
+        put(".", "stringConcat");
+        put("x", "repeat");
+        put("&.", "bitwiseStringAnd");
+        put("&&", "logicalAnd");
+        put("|.", "bitwiseStringOr");
+        put("||", "logicalOr");
+        put("^.", "bitwiseStringXor");
+        put("//", "logicalDefinedOr");
+        put("isa", "isa");
+        put("bless", "bless");
+
+        put("caller", "caller", "org/perlonjava/runtime/RuntimeScalar", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
+        put("reset", "reset", "org/perlonjava/runtime/RuntimeScalar", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
 
         // List operators
         put("map", "map",
