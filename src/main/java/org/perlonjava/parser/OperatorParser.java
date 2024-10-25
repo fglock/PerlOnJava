@@ -242,6 +242,7 @@ public class OperatorParser {
             case "caller":
             case "reset":
             case "pos":
+            case "select":
                 return parseOperatorWithOneOptionalArgument(parser, token);
             case "readpipe":
                 // one optional argument
@@ -373,8 +374,7 @@ public class OperatorParser {
                 printOperand.handle = null;
                 if (handle == null) {
                     // `print` without arguments means `print to last selected filehandle`
-                    // XXX TODO
-                    handle = new IdentifierNode("main::STDOUT", currentIndex);
+                    handle = new OperatorNode("select", new ListNode(currentIndex), currentIndex);
                 }
                 if (printOperand.elements.isEmpty()) {
                     // `print` without arguments means `print $_`
@@ -466,6 +466,7 @@ public class OperatorParser {
                 case "gmtime":
                 case "caller":
                 case "reset":
+                case "select":
                     // default to empty list
                     break;
                 case "srand":

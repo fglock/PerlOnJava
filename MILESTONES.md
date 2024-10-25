@@ -68,6 +68,7 @@
     - Error messages mimic those in Perl for consistency.
     - Added `$.`, `${^LAST_FH}` special variables.
     - Added command line switches `-p`, `n`.
+    - Added `select(filehandle)` operator.
     - Work in progress: 
         - `state` variables
         - `socket` and related operators
