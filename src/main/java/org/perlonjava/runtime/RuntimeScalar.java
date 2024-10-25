@@ -13,17 +13,10 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.lang.management.ManagementFactory;
-import java.lang.management.ThreadMXBean;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
@@ -135,27 +128,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 new RuntimeScalar(ctx == RuntimeContextType.LIST ? 1 : 0);
     }
 
-    public static RuntimeScalar time() {
-        return new RuntimeScalar(System.currentTimeMillis() / 1000L);
-    }
-
-    public static RuntimeList times() {
-        RuntimeList res = new RuntimeList();
-
-        ThreadMXBean bean = ManagementFactory.getThreadMXBean();
-        long cpu = bean.isCurrentThreadCpuTimeSupported() ?
-                bean.getCurrentThreadCpuTime() : 0L;
-        long user = bean.isCurrentThreadCpuTimeSupported() ?
-                bean.getCurrentThreadUserTime() : 0L;
-        long system = cpu - user;
-
-        res.add(user / 1.0E9); // user CPU time
-        res.add(system / 1.0E9); // System CPU time
-        res.add(0); // we don't have this information
-        res.add(0); // we don't have this information
-        return res;
-    }
-
     public static RuntimeList caller(RuntimeList args, int ctx) {
         RuntimeList res = new RuntimeList();
         int frame = 0;
@@ -198,60 +170,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             throw new PerlCompilerException("not implemented: reset(args)");
         }
         res.add(getScalarInt(1));
-        return res;
-    }
-
-    public static RuntimeList localtime(RuntimeList args, int ctx) {
-        RuntimeList res = new RuntimeList();
-        ZonedDateTime date;
-        if (args.elements.isEmpty()) {
-            date = ZonedDateTime.now();
-        } else {
-            long arg = ((RuntimeScalar) args.elements.getFirst()).getInt();
-            date = Instant.ofEpochSecond(arg).atZone(ZoneId.systemDefault());
-        }
-        if (ctx == RuntimeContextType.SCALAR) {
-            res.add(date.format(DateTimeFormatter.RFC_1123_DATE_TIME));
-            return res;
-        }
-        //      0    1    2     3     4    5     6     7     8
-        //   ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)
-        res.add(date.getSecond());
-        res.add(date.getMinute());
-        res.add(date.getHour());
-        res.add(date.getDayOfMonth());
-        res.add(date.getMonth().getValue() - 1);
-        res.add(date.getYear() - 1900);
-        res.add(date.getDayOfWeek().getValue());
-        res.add(date.getDayOfYear() - 1);
-        res.add(date.getZone().getRules().isDaylightSavings(date.toInstant()) ? 1 : 0);
-        return res;
-    }
-
-    public static RuntimeList gmtime(RuntimeList args, int ctx) {
-        RuntimeList res = new RuntimeList();
-        ZonedDateTime date;
-        if (args.elements.isEmpty()) {
-            date = ZonedDateTime.now(ZoneOffset.UTC);
-        } else {
-            long arg = ((RuntimeScalar) args.elements.getFirst()).getInt();
-            date = Instant.ofEpochSecond(arg).atZone(ZoneId.of("UTC"));
-        }
-        if (ctx == RuntimeContextType.SCALAR) {
-            res.add(date.format(DateTimeFormatter.RFC_1123_DATE_TIME));
-            return res;
-        }
-        //      0    1    2     3     4    5     6     7     8
-        //   ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)
-        res.add(date.getSecond());
-        res.add(date.getMinute());
-        res.add(date.getHour());
-        res.add(date.getDayOfMonth());
-        res.add(date.getMonth().getValue() - 1);
-        res.add(date.getYear() - 1900);
-        res.add(date.getDayOfWeek().getValue());
-        res.add(date.getDayOfYear() - 1);
-        res.add(date.getZone().getRules().isDaylightSavings(date.toInstant()) ? 1 : 0);
         return res;
     }
 
@@ -537,7 +455,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case HASHREFERENCE:
                 return ((RuntimeHash) value).get(index.toString());
             case STRING:
-                throw new PerlCompilerException("Can't use string (\"" + this.toString() + "\") as a HASH ref");
+                throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref");
             default:
                 throw new PerlCompilerException("Not a HASH reference");
         }
@@ -549,7 +467,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case UNDEF -> new RuntimeScalar();
             case HASHREFERENCE -> ((RuntimeHash) value).delete(index);
             case STRING ->
-                    throw new PerlCompilerException("Can't use string (\"" + this.toString() + "\") as a HASH ref");
+                    throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref");
             default -> throw new PerlCompilerException("Not a HASH reference");
         };
     }
@@ -560,7 +478,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case UNDEF -> new RuntimeScalar();
             case HASHREFERENCE -> ((RuntimeHash) value).exists(index);
             case STRING ->
-                    throw new PerlCompilerException("Can't use string (\"" + this.toString() + "\") as a HASH ref");
+                    throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref");
             default -> throw new PerlCompilerException("Not a HASH reference");
         };
     }

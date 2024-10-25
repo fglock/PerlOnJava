@@ -568,6 +568,7 @@ public class EmitterVisitor implements Visitor {
      */
     private void handleUnaryBuiltin(OperatorNode node, String operator) {
         MethodVisitor mv = ctx.mv;
+        OperatorHandler operatorHandler = OperatorHandler.get(operator);
         if (node.operand == null) {
             // Unary operator with no arguments, or with optional arguments called without arguments
             // example: undef()  wantarray()  time()  times()
@@ -575,9 +576,15 @@ public class EmitterVisitor implements Visitor {
                 // Retrieve wantarray value from JVM local vars
                 mv.visitVarInsn(Opcodes.ILOAD, ctx.symbolTable.getVariableIndex("wantarray"));
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", operator, "(I)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-            } else if (operator.equals("times")) {
+            } else if (operator.equals("times") || operator.equals("time")) {
                 // Call static RuntimeScalar method with no arguments; returns RuntimeList
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", operator, "()Lorg/perlonjava/runtime/RuntimeList;", false);
+                mv.visitMethodInsn(
+                        operatorHandler.getMethodType(),
+                        operatorHandler.getClassName(),
+                        operator,
+                        operatorHandler.getDescriptor(),
+                        false
+                );
             } else {
                 // Call static RuntimeScalar method with no arguments
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
@@ -589,10 +596,12 @@ public class EmitterVisitor implements Visitor {
         } else if (operator.equals("gmtime") || operator.equals("localtime") || operator.equals("caller") || operator.equals("reset")) {
             node.operand.accept(this.with(RuntimeContextType.LIST));
             pushCallContext();
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/RuntimeScalar",
+            mv.visitMethodInsn(
+                    operatorHandler.getMethodType(),
+                    operatorHandler.getClassName(),
                     operator,
-                    "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;", false);
+                    operatorHandler.getDescriptor(),
+                    false);
         } else {
             node.operand.accept(this.with(RuntimeContextType.SCALAR));
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
