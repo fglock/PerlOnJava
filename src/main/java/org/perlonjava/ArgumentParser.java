@@ -95,7 +95,7 @@ public class ArgumentParser {
 
         // Wrap the Perl code with the loop structure for -n and -p
         if (parsedArgs.processAndPrint) {
-            parsedArgs.code = "while (<>) { " + parsedArgs.code + " } continue { print $_ or die \"-p destination: $!\\n\"; }";
+            parsedArgs.code = "while (<>) { " + parsedArgs.code + " } continue { print or die \"-p destination: $!\\n\"; }";
         } else if (parsedArgs.processOnly) {
             parsedArgs.code = "while (<>) { " + parsedArgs.code + " }";
         }
