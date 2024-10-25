@@ -15,7 +15,7 @@ public class BitwiseOperators {
      * If both arguments are strings, it performs the operation character by character.
      *
      * @param runtimeScalar The first operand.
-     * @param arg2 The second operand.
+     * @param arg2          The second operand.
      * @return A new RuntimeScalar with the result of the bitwise AND operation.
      * @throws PerlCompilerException if the strings contain characters with code points over 0xFF.
      */
@@ -45,7 +45,7 @@ public class BitwiseOperators {
      * If both arguments are strings, it performs the operation character by character.
      *
      * @param runtimeScalar The first operand.
-     * @param arg2 The second operand.
+     * @param arg2          The second operand.
      * @return A new RuntimeScalar with the result of the bitwise OR operation.
      * @throws PerlCompilerException if the strings contain characters with code points over 0xFF.
      */
@@ -75,7 +75,7 @@ public class BitwiseOperators {
      * If both arguments are strings, it performs the operation character by character.
      *
      * @param runtimeScalar The first operand.
-     * @param arg2 The second operand.
+     * @param arg2          The second operand.
      * @return A new RuntimeScalar with the result of the bitwise XOR operation.
      * @throws PerlCompilerException if the strings contain characters with code points over 0xFF.
      */
@@ -132,7 +132,7 @@ public class BitwiseOperators {
      * Performs a left shift operation on a RuntimeScalar object.
      *
      * @param runtimeScalar The operand to be shifted.
-     * @param arg2 The number of positions to shift.
+     * @param arg2          The number of positions to shift.
      * @return A new RuntimeScalar with the result of the left shift operation.
      */
     public static RuntimeScalar shiftLeft(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
@@ -143,7 +143,7 @@ public class BitwiseOperators {
      * Performs a right shift operation on a RuntimeScalar object.
      *
      * @param runtimeScalar The operand to be shifted.
-     * @param arg2 The number of positions to shift.
+     * @param arg2          The number of positions to shift.
      * @return A new RuntimeScalar with the result of the right shift operation.
      */
     public static RuntimeScalar shiftRight(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
