@@ -1,7 +1,5 @@
 package org.perlonjava.runtime;
 
-import com.ibm.icu.text.CaseMap;
-import com.ibm.icu.text.Normalizer2;
 import org.perlonjava.ArgumentParser;
 import org.perlonjava.codegen.DynamicState;
 import org.perlonjava.operators.ArithmeticOperators;
@@ -1067,58 +1065,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar integer() {
         return getScalarInt(getInt());
-    }
-
-    public RuntimeScalar length() {
-        return getScalarInt(toString().length());
-    }
-
-    public RuntimeScalar quotemeta() {
-        StringBuilder quoted = new StringBuilder();
-        for (char c : this.value.toString().toCharArray()) {
-            if (Character.isLetterOrDigit(c)) {
-                quoted.append(c);
-            } else {
-                quoted.append("\\").append(c);
-            }
-        }
-        return new RuntimeScalar(quoted.toString());
-    }
-
-    public RuntimeScalar fc() {
-        String str = this.toString();
-        // Step 1: Normalize the string to NFKC form (Compatibility Composition)
-        Normalizer2 normalizer = Normalizer2.getNFKCInstance();
-        String normalized = normalizer.normalize(str);
-
-        // Step 2: Perform full Unicode case folding using ICU4J CaseMap
-        str = CaseMap.fold().apply(normalized);
-
-        return new RuntimeScalar(str);
-    }
-
-    public RuntimeScalar lc() {
-        return new RuntimeScalar(this.toString().toLowerCase());
-    }
-
-    public RuntimeScalar lcfirst() {
-        String str = this.toString();
-        if (str.isEmpty()) {
-            return new RuntimeScalar(str);
-        }
-        return new RuntimeScalar(str.substring(0, 1).toLowerCase() + str.substring(1));
-    }
-
-    public RuntimeScalar uc() {
-        return new RuntimeScalar(this.toString().toUpperCase());
-    }
-
-    public RuntimeScalar ucfirst() {
-        String str = this.toString();
-        if (str.isEmpty()) {
-            return new RuntimeScalar(str);
-        }
-        return new RuntimeScalar(str.substring(0, 1).toUpperCase() + str.substring(1));
     }
 
     public RuntimeScalar pos() {
