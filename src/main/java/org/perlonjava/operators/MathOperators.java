@@ -12,7 +12,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
  * This class includes methods for addition, subtraction, multiplication,
  * division, and modulus operations.
  */
-public class ArithmeticOperators {
+public class MathOperators {
 
     /**
      * Adds an integer to a RuntimeScalar and returns the result.
@@ -150,5 +150,45 @@ public class ArithmeticOperators {
             result += divisor;
         }
         return new RuntimeScalar(result);
+    }
+
+    public static RuntimeScalar log(RuntimeScalar runtimeScalar) {
+        return new RuntimeScalar(Math.log(runtimeScalar.getDouble()));
+    }
+
+    public static RuntimeScalar sqrt(RuntimeScalar runtimeScalar) {
+        return new RuntimeScalar(Math.sqrt(runtimeScalar.getDouble()));
+    }
+
+    public static RuntimeScalar cos(RuntimeScalar runtimeScalar) {
+        return new RuntimeScalar(Math.cos(runtimeScalar.getDouble()));
+    }
+
+    public static RuntimeScalar sin(RuntimeScalar runtimeScalar) {
+        return new RuntimeScalar(Math.sin(runtimeScalar.getDouble()));
+    }
+
+    public static RuntimeScalar exp(RuntimeScalar runtimeScalar) {
+        return new RuntimeScalar(Math.exp(runtimeScalar.getDouble()));
+    }
+
+    public static RuntimeScalar pow(RuntimeScalar runtimeScalar, RuntimeScalar arg) {
+        return new RuntimeScalar(Math.pow(runtimeScalar.getDouble(), arg.getDouble()));
+    }
+
+    public static RuntimeScalar atan2(RuntimeScalar runtimeScalar, RuntimeScalar arg) {
+        return new RuntimeScalar(Math.atan2(runtimeScalar.getDouble(), arg.getDouble()));
+    }
+
+    public static RuntimeScalar abs(RuntimeScalar runtimeScalar) {
+        RuntimeScalar arg1 = runtimeScalar;
+        if (arg1.type == RuntimeScalarType.STRING) {
+            arg1 = NumberParser.parseNumber(arg1);
+        }
+        if (arg1.type == RuntimeScalarType.DOUBLE) {
+            return new RuntimeScalar(Math.abs(arg1.getDouble()));
+        } else {
+            return new RuntimeScalar(Math.abs(arg1.getInt()));
+        }
     }
 }
