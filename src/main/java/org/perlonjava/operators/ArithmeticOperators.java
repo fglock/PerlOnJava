@@ -1,5 +1,6 @@
 package org.perlonjava.operators;
 
+import org.perlonjava.parser.NumberParser;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarType;
@@ -22,7 +23,7 @@ public class ArithmeticOperators {
      */
     public static RuntimeScalar add(RuntimeScalar arg1, int arg2) {
         if (arg1.type == RuntimeScalarType.STRING) {
-            arg1 = arg1.parseNumber();
+            arg1 = NumberParser.parseNumber(arg1);
         }
         if (arg1.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2);
@@ -41,10 +42,10 @@ public class ArithmeticOperators {
     public static RuntimeScalar add(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
         RuntimeScalar arg1 = runtimeScalar;
         if (arg1.type == RuntimeScalarType.STRING) {
-            arg1 = arg1.parseNumber();
+            arg1 = NumberParser.parseNumber(arg1);
         }
         if (arg2.type == RuntimeScalarType.STRING) {
-            arg2 = arg2.parseNumber();
+            arg2 = NumberParser.parseNumber(arg2);
         }
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2.getDouble());
@@ -62,7 +63,7 @@ public class ArithmeticOperators {
      */
     public static RuntimeScalar subtract(RuntimeScalar arg1, int arg2) {
         if (arg1.type == RuntimeScalarType.STRING) {
-            arg1 = arg1.parseNumber();
+            arg1 = NumberParser.parseNumber(arg1);
         }
         if (arg1.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2);
@@ -80,10 +81,10 @@ public class ArithmeticOperators {
      */
     public static RuntimeScalar subtract(RuntimeScalar arg1, RuntimeScalar arg2) {
         if (arg1.type == RuntimeScalarType.STRING) {
-            arg1 = arg1.parseNumber();
+            arg1 = NumberParser.parseNumber(arg1);
         }
         if (arg2.type == RuntimeScalarType.STRING) {
-            arg2 = arg2.parseNumber();
+            arg2 = NumberParser.parseNumber(arg2);
         }
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2.getDouble());
@@ -101,10 +102,10 @@ public class ArithmeticOperators {
      */
     public static RuntimeScalar multiply(RuntimeScalar arg1, RuntimeScalar arg2) {
         if (arg1.type == RuntimeScalarType.STRING) {
-            arg1 = arg1.parseNumber();
+            arg1 = NumberParser.parseNumber(arg1);
         }
         if (arg2.type == RuntimeScalarType.STRING) {
-            arg2 = arg2.parseNumber();
+            arg2 = NumberParser.parseNumber(arg2);
         }
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() * arg2.getDouble());
@@ -123,10 +124,10 @@ public class ArithmeticOperators {
      */
     public static RuntimeScalar divide(RuntimeScalar arg1, RuntimeScalar arg2) {
         if (arg1.type == RuntimeScalarType.STRING) {
-            arg1 = arg1.parseNumber();
+            arg1 = NumberParser.parseNumber(arg1);
         }
         if (arg2.type == RuntimeScalarType.STRING) {
-            arg2 = arg2.parseNumber();
+            arg2 = NumberParser.parseNumber(arg2);
         }
         double divisor = arg2.getDouble();
         if (divisor == 0.0) {
