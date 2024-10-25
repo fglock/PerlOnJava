@@ -68,6 +68,7 @@ public class ArgumentParser {
                         parsedArgs.processAndPrint = true;
                         break;
                     case "-h":
+                    case "-?":
                     case "--help":
                         printHelp();
                         System.exit(0);
