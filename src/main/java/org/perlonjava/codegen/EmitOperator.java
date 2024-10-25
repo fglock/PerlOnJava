@@ -5,7 +5,6 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.operators.OperatorHandler;
-import org.perlonjava.parser.OperatorParser;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.ScalarGlobOperator;

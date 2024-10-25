@@ -165,6 +165,40 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return res;
     }
 
+    public static boolean looksLikeNumber(RuntimeScalar runtimeScalar) {
+        switch (runtimeScalar.type) {
+            case INTEGER:
+            case DOUBLE:
+                return true;
+            case STRING:
+                String str = runtimeScalar.toString().trim();
+                if (str.isEmpty()) {
+                    return false;
+                }
+                // Check for Inf and NaN
+                if (str.equalsIgnoreCase("Inf") || str.equalsIgnoreCase("Infinity") || str.equalsIgnoreCase("NaN")) {
+                    return true;
+                }
+                // Check for decimal (integer or float)
+                try {
+                    Double.parseDouble(str);
+                    return true;
+                } catch (NumberFormatException e) {
+                    return false;
+                }
+            case UNDEF:
+                return false;
+            case GLOB:
+            case ARRAYREFERENCE:
+            case HASHREFERENCE:
+            case CODE:
+                // These types don't look like numbers in Perl
+                return false;
+            default:
+                throw new PerlCompilerException("Unexpected value: " + runtimeScalar.type);
+        }
+    }
+
     public RuntimeScalar exit() {
         System.exit(this.getInt());
         return new RuntimeScalar(); // This line will never be reached
@@ -226,40 +260,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
         RuntimeIO dirIO = (RuntimeIO) value;
         return new RuntimeScalar(dirIO.telldir());
-    }
-
-    public static boolean looksLikeNumber(RuntimeScalar runtimeScalar) {
-        switch (runtimeScalar.type) {
-            case INTEGER:
-            case DOUBLE:
-                return true;
-            case STRING:
-                String str = runtimeScalar.toString().trim();
-                if (str.isEmpty()) {
-                    return false;
-                }
-                // Check for Inf and NaN
-                if (str.equalsIgnoreCase("Inf") || str.equalsIgnoreCase("Infinity") || str.equalsIgnoreCase("NaN")) {
-                    return true;
-                }
-                // Check for decimal (integer or float)
-                try {
-                    Double.parseDouble(str);
-                    return true;
-                } catch (NumberFormatException e) {
-                    return false;
-                }
-            case UNDEF:
-                return false;
-            case GLOB:
-            case ARRAYREFERENCE:
-            case HASHREFERENCE:
-            case CODE:
-                // These types don't look like numbers in Perl
-                return false;
-            default:
-                throw new PerlCompilerException("Unexpected value: " + runtimeScalar.type);
-        }
     }
 
     public RuntimeScalar clone() {
