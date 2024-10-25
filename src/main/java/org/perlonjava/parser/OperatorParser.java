@@ -368,13 +368,24 @@ public class OperatorParser {
             case "print":
             case "say":
                 // Handle 'print' keyword as a Binary operator with a FileHandle and List operands
-                operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, true, false);
-                handle = ((ListNode) operand).handle;
-                ((ListNode) operand).handle = null;
+                ListNode printOperand = ListParser.parseZeroOrMoreList(parser, 0, false, true, true, false);
+                handle = printOperand.handle;
+                printOperand.handle = null;
                 if (handle == null) {
+                    // `print` without arguments means `print to last selected filehandle`
+                    // XXX TODO
                     handle = new IdentifierNode("main::STDOUT", currentIndex);
                 }
-                return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
+                if (printOperand.elements.isEmpty()) {
+                    // `print` without arguments means `print $_`
+                    printOperand.elements.add(
+                            new OperatorNode(
+                                    "$",
+                                    new IdentifierNode("_", parser.tokenIndex),
+                                    parser.tokenIndex)
+                    );
+                }
+                return new BinaryOperatorNode(token.text, handle, printOperand, currentIndex);
             case "delete":
             case "exists":
                 operand = ListParser.parseZeroOrOneList(parser, 1);
