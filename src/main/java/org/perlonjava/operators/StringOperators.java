@@ -3,6 +3,7 @@ package org.perlonjava.operators;
 import com.ibm.icu.text.CaseMap;
 import com.ibm.icu.text.Normalizer2;
 import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.RuntimeScalarType;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 
@@ -18,6 +19,7 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} containing the length of the input as an integer
      */
     public static RuntimeScalar length(RuntimeScalar runtimeScalar) {
+        // Convert the RuntimeScalar to a string and return its length as a RuntimeScalar
         return getScalarInt(runtimeScalar.toString().length());
     }
 
@@ -29,10 +31,13 @@ public class StringOperators {
      */
     public static RuntimeScalar quotemeta(RuntimeScalar runtimeScalar) {
         StringBuilder quoted = new StringBuilder();
+        // Iterate over each character in the string
         for (char c : runtimeScalar.value.toString().toCharArray()) {
+            // If the character is alphanumeric, append it as is
             if (Character.isLetterOrDigit(c)) {
                 quoted.append(c);
             } else {
+                // Otherwise, escape it with a backslash
                 quoted.append("\\").append(c);
             }
         }
@@ -64,6 +69,7 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} with the lowercase string
      */
     public static RuntimeScalar lc(RuntimeScalar runtimeScalar) {
+        // Convert the string to lowercase
         return new RuntimeScalar(runtimeScalar.toString().toLowerCase());
     }
 
@@ -75,9 +81,11 @@ public class StringOperators {
      */
     public static RuntimeScalar lcfirst(RuntimeScalar runtimeScalar) {
         String str = runtimeScalar.toString();
+        // Check if the string is empty
         if (str.isEmpty()) {
             return new RuntimeScalar(str);
         }
+        // Convert the first character to lowercase and concatenate with the rest of the string
         return new RuntimeScalar(str.substring(0, 1).toLowerCase() + str.substring(1));
     }
 
@@ -88,6 +96,7 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} with the uppercase string
      */
     public static RuntimeScalar uc(RuntimeScalar runtimeScalar) {
+        // Convert the string to uppercase
         return new RuntimeScalar(runtimeScalar.toString().toUpperCase());
     }
 
@@ -99,9 +108,69 @@ public class StringOperators {
      */
     public static RuntimeScalar ucfirst(RuntimeScalar runtimeScalar) {
         String str = runtimeScalar.toString();
+        // Check if the string is empty
         if (str.isEmpty()) {
             return new RuntimeScalar(str);
         }
+        // Convert the first character to uppercase and concatenate with the rest of the string
         return new RuntimeScalar(str.substring(0, 1).toUpperCase() + str.substring(1));
+    }
+
+    /**
+     * Finds the index of the first occurrence of a substring in the string representation of the given {@link RuntimeScalar},
+     * starting from a specified position.
+     *
+     * @param runtimeScalar the {@link RuntimeScalar} in which to search
+     * @param substr the substring to find
+     * @param position the position to start the search from
+     * @return a {@link RuntimeScalar} containing the index of the first occurrence, or -1 if not found
+     */
+    public static RuntimeScalar index(RuntimeScalar runtimeScalar, RuntimeScalar substr, RuntimeScalar position) {
+        String str = runtimeScalar.toString();
+        String sub = substr.toString();
+        int pos = position.type == RuntimeScalarType.UNDEF
+                ? 0 : position.getInt(); // if position is not provided, start from 0
+
+        // Bound the position to be within the valid range of the string
+        if (pos < 0) {
+            pos = 0;
+        } else if (pos >= str.length()) {
+            return getScalarInt(-1);
+        }
+
+        // Find the index of the substring starting from the specified position
+        int result = str.indexOf(sub, pos);
+
+        // Return the index or -1 if not found
+        return getScalarInt(result);
+    }
+
+    /**
+     * Finds the index of the last occurrence of a substring in the string representation of the given {@link RuntimeScalar},
+     * searching backwards from a specified position.
+     *
+     * @param runtimeScalar the {@link RuntimeScalar} in which to search
+     * @param substr the substring to find
+     * @param position the position to start the search from
+     * @return a {@link RuntimeScalar} containing the index of the last occurrence, or -1 if not found
+     */
+    public static RuntimeScalar rindex(RuntimeScalar runtimeScalar, RuntimeScalar substr, RuntimeScalar position) {
+        String str = runtimeScalar.toString();
+        String sub = substr.toString();
+        int pos = position.type == RuntimeScalarType.UNDEF
+                ? str.length() : position.getInt(); // Default to search from the end of the string
+
+        // Bound the position to be within the valid range of the string
+        if (pos >= str.length()) {
+            pos = str.length() - 1;
+        } else if (pos < 0) {
+            return getScalarInt(-1);
+        }
+
+        // Find the last index of the substring before or at the specified position
+        int result = str.lastIndexOf(sub, pos);
+
+        // Return the index or -1 if not found
+        return getScalarInt(result);
     }
 }
