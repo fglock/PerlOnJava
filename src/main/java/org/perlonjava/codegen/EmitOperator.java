@@ -5,6 +5,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.operators.OperatorHandler;
+import org.perlonjava.parser.OperatorParser;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.ScalarGlobOperator;
@@ -141,6 +142,7 @@ public class EmitOperator {
     // Handles the 'index' built-in function, which finds the position of a substring.
     static void handleIndexBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
+        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
         if (node.operand instanceof ListNode operand) {
             if (!operand.elements.isEmpty()) {
@@ -155,10 +157,13 @@ public class EmitOperator {
                     new OperatorNode("undef", null, node.tokenIndex).accept(scalarVisitor);
                 }
                 // Invoke the virtual method for the operator.
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/RuntimeScalar",
+                mv.visitMethodInsn(
+                        operatorHandler.getMethodType(),
+                        operatorHandler.getClassName(),
                         node.operator,
-                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                        operatorHandler.getDescriptor(),
+                        false
+                );
                 // If the context is VOID, pop the result from the stack.
                 if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
                     mv.visitInsn(Opcodes.POP);
