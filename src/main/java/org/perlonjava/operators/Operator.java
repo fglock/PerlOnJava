@@ -595,7 +595,7 @@ public class Operator {
         if (!out.endsWith("\n")) {
             out += message.toString();
         }
-        throw new RuntimeException(out);
+        throw new PerlCompilerException(out);
     }
 
     public static RuntimeDataProvider warn(RuntimeDataProvider value, RuntimeScalar message) {
