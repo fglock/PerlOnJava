@@ -706,6 +706,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar undefine() {
         this.type = RuntimeScalarType.UNDEF;
+        this.value = null;
         return this;
     }
 
@@ -760,97 +761,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar repeat(RuntimeScalar arg) {
         return (RuntimeScalar) Operator.repeat(this, arg, RuntimeContextType.SCALAR);
-    }
-
-    public RuntimeScalar bitwiseAnd(RuntimeScalar arg2) {
-        if (this.type == RuntimeScalarType.STRING && arg2.type == RuntimeScalarType.STRING) {
-            String s1 = this.toString();
-            String s2 = arg2.toString();
-            int len = Math.min(s1.length(), s2.length());
-            StringBuilder result = new StringBuilder(len);
-
-            for (int i = 0; i < len; i++) {
-                char c1 = s1.charAt(i);
-                char c2 = s2.charAt(i);
-                if (c1 > 0xFF || c2 > 0xFF) {
-                    throw new PerlCompilerException("Use of strings with code points over 0xFF as arguments to bitwise and (&) operator is not allowed");
-                }
-                result.append((char) (c1 & c2));
-            }
-
-            return new RuntimeScalar(result.toString());
-        }
-        return new RuntimeScalar(this.getLong() & arg2.getLong());
-    }
-
-    public RuntimeScalar bitwiseOr(RuntimeScalar arg2) {
-        if (this.type == RuntimeScalarType.STRING && arg2.type == RuntimeScalarType.STRING) {
-            String s1 = this.toString();
-            String s2 = arg2.toString();
-            int len = Math.max(s1.length(), s2.length());
-            StringBuilder result = new StringBuilder(len);
-
-            for (int i = 0; i < len; i++) {
-                char c1 = i < s1.length() ? s1.charAt(i) : 0;
-                char c2 = i < s2.length() ? s2.charAt(i) : 0;
-                if (c1 > 0xFF || c2 > 0xFF) {
-                    throw new PerlCompilerException("Use of strings with code points over 0xFF as arguments to bitwise or (|) operator is not allowed");
-                }
-                result.append((char) (c1 | c2));
-            }
-
-            return new RuntimeScalar(result.toString());
-        }
-        return new RuntimeScalar(this.getLong() | arg2.getLong());
-    }
-
-    public RuntimeScalar bitwiseXor(RuntimeScalar arg2) {
-        if (this.type == RuntimeScalarType.STRING && arg2.type == RuntimeScalarType.STRING) {
-            String s1 = this.toString();
-            String s2 = arg2.toString();
-            int len = Math.max(s1.length(), s2.length());
-            StringBuilder result = new StringBuilder(len);
-
-            for (int i = 0; i < len; i++) {
-                char c1 = i < s1.length() ? s1.charAt(i) : 0;
-                char c2 = i < s2.length() ? s2.charAt(i) : 0;
-                if (c1 > 0xFF || c2 > 0xFF) {
-                    throw new PerlCompilerException("Use of strings with code points over 0xFF as arguments to bitwise xor (^) operator is not allowed");
-                }
-                result.append((char) (c1 ^ c2));
-            }
-
-            return new RuntimeScalar(result.toString());
-        }
-        return new RuntimeScalar(this.getLong() ^ arg2.getLong());
-    }
-
-    public RuntimeScalar bitwiseNot() {
-        if (this.type == RuntimeScalarType.STRING) {
-            String s = this.toString();
-            StringBuilder result = new StringBuilder(s.length());
-
-            for (int i = 0; i < s.length(); i++) {
-                char c = s.charAt(i);
-                if (c > 0xFF) {
-                    throw new PerlCompilerException("Use of strings with code points over 0xFF as arguments to bitwise not (~) operator is not allowed");
-                }
-                // Perform bitwise NOT and mask with 0xFF to match Perl behavior
-                result.append((char) ((~c) & 0xFF));
-            }
-
-            return new RuntimeScalar(result.toString());
-        }
-        // force 32-bit unsigned to match Perl behavior
-        return new RuntimeScalar(~this.getLong() & 0xFFFFFFFFL);
-    }
-
-    public RuntimeScalar shiftLeft(RuntimeScalar arg2) {
-        return new RuntimeScalar(this.getInt() << arg2.getInt());
-    }
-
-    public RuntimeScalar shiftRight(RuntimeScalar arg2) {
-        return new RuntimeScalar(this.getInt() >> arg2.getInt());
     }
 
     public RuntimeScalar preAutoIncrement() {
