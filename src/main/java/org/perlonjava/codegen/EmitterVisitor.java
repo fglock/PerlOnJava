@@ -516,17 +516,12 @@ public class EmitterVisitor implements Visitor {
             nodeRight.accept(this.with(RuntimeContextType.SCALAR));
         }
 
-        String methodName;
-        switch (arrayOperation) {
-            case "get":
-                methodName = "arrayDerefGet";
-                break;
-            case "delete":
-                methodName = "arrayDerefDelete";
-                break;
-            default:
-                throw new PerlCompilerException(node.tokenIndex, "Not implemented: array operation: " + arrayOperation, ctx.errorUtil);
-        }
+        String methodName = switch (arrayOperation) {
+            case "get" -> "arrayDerefGet";
+            case "delete" -> "arrayDerefDelete";
+            default ->
+                    throw new PerlCompilerException(node.tokenIndex, "Not implemented: array operation: " + arrayOperation, ctx.errorUtil);
+        };
 
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "arrayDerefGet", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
     }
