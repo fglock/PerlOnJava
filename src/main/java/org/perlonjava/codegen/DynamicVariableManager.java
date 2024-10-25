@@ -52,9 +52,13 @@ public class DynamicVariableManager {
      * @param targetLocalLevel the target size of the stack after popping variables.
      */
     public static void popToLocalLevel(int targetLocalLevel) {
-        // Continue popping variables until the stack size matches the target local level.
-        while (!variableStack.isEmpty() && variableStack.size() > targetLocalLevel) {
-            // Pop the variable from the stack and restore its previous state.
+        // Ensure the target level is non-negative and does not exceed the current stack size
+        if (targetLocalLevel < 0 || targetLocalLevel > variableStack.size()) {
+            throw new IllegalArgumentException("Invalid target local level: " + targetLocalLevel);
+        }
+
+        // Pop variables until the stack size matches the target local level
+        while (variableStack.size() > targetLocalLevel) {
             DynamicState variable = variableStack.pop();
             variable.dynamicRestoreState();
         }
