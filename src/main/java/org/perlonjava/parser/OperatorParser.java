@@ -8,6 +8,8 @@ import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.List;
 
+import static org.perlonjava.parser.TokenUtils.peek;
+
 /**
  * This class provides methods for parsing various Perl operators and constructs.
  */
@@ -178,5 +180,304 @@ public class OperatorParser {
 
         // Handle other cases like <>, <<>>, or <*.*> by parsing as a raw string
         return StringParser.parseRawString(parser, token.text);
+    }
+
+    public static Node parseCoreOperator(Parser parser, LexerToken token) {
+        Node operand;
+        int currentIndex = parser.tokenIndex;
+
+        switch (token.text) {
+            case "__LINE__":
+                return new NumberNode(Integer.toString(parser.ctx.errorUtil.getLineNumber(parser.tokenIndex)), parser.tokenIndex);
+            case "__FILE__":
+                return new StringNode(parser.ctx.compilerOptions.fileName, parser.tokenIndex);
+            case "__PACKAGE__":
+                return new StringNode(parser.ctx.symbolTable.getCurrentPackage(), parser.tokenIndex);
+            case "__SUB__":
+            case "time":
+            case "times":
+            case "fork":
+            case "wait":
+            case "wantarray":
+                // Handle operators with zero arguments
+                return new OperatorNode(token.text, null, currentIndex);
+            case "not":
+                // Handle 'not' keyword as a unary operator with an operand
+                operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
+                return new OperatorNode(token.text, operand, currentIndex);
+            case "abs":
+            case "log":
+            case "sqrt":
+            case "cos":
+            case "sin":
+            case "exp":
+            case "rand":
+            case "srand":
+            case "study":
+            case "undef":
+            case "exit":
+            case "quotemeta":
+            case "ref":
+            case "oct":
+            case "hex":
+            case "pop":
+            case "shift":
+            case "sleep":
+            case "int":
+            case "chr":
+            case "ord":
+            case "fc":
+            case "lc":
+            case "lcfirst":
+            case "uc":
+            case "ucfirst":
+            case "chop":
+            case "chomp":
+            case "length":
+            case "defined":
+            case "localtime":
+            case "gmtime":
+            case "rmdir":
+            case "glob":
+            case "caller":
+            case "reset":
+            case "pos":
+                return parseOperatorWithOneOptionalArgument(parser, token);
+            case "readpipe":
+                // one optional argument
+                operand = ListParser.parseZeroOrOneList(parser, 0);
+                if (((ListNode) operand).elements.isEmpty()) {
+                    // create `$_` variable
+                    operand = new OperatorNode(
+                            "$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
+                }
+                return new OperatorNode("qx", operand, parser.tokenIndex);
+            case "unpack":
+                // Handle operators with one mandatory, one optional argument
+                operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
+                if (((ListNode) operand).elements.size() == 1) {
+                    // create `$_` variable
+                    ((ListNode) operand).elements.add(
+                            new OperatorNode(
+                                    "$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex)
+                    );
+                }
+                return new OperatorNode(token.text, operand, parser.tokenIndex);
+            case "readdir":
+            case "closedir":
+            case "telldir":
+            case "rewinddir":
+                // Handle operators with one mandatory argument
+                operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
+                return new OperatorNode(token.text, operand, currentIndex);
+            case "rindex":
+            case "index":
+            case "atan2":
+            case "crypt":
+            case "opendir":
+            case "seekdir":
+                // Handle operators with two mandatory arguments
+                operand = ListParser.parseZeroOrMoreList(parser, 2, false, true, false, false);
+                return new OperatorNode(token.text, operand, currentIndex);
+            case "vec":
+                // Handle operators with 3 mandatory arguments
+                operand = ListParser.parseZeroOrMoreList(parser, 3, false, true, false, false);
+                return new OperatorNode(token.text, operand, currentIndex);
+            case "socket":
+                // Handle operators with 4 mandatory arguments
+                operand = ListParser.parseZeroOrMoreList(parser, 4, false, true, false, false);
+                return new OperatorNode(token.text, operand, currentIndex);
+            case "bless":
+                operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
+                Node ref = ((ListNode) operand).elements.get(0);
+                Node className = ((ListNode) operand).elements.get(1);
+                if (className == null) {
+                    className = new StringNode("main", currentIndex);
+                }
+                return new BinaryOperatorNode("bless", ref, className, currentIndex);
+            case "split":
+                // RuntimeList split(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar limitArg)
+                operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, true);
+                Node separator = ((ListNode) operand).elements.removeFirst();
+                if (separator instanceof OperatorNode) {
+                    if (((OperatorNode) separator).operator.equals("matchRegex")) {
+                        ((OperatorNode) separator).operator = "quoteRegex";
+                    }
+                }
+                return new BinaryOperatorNode(token.text, separator, operand, currentIndex);
+            case "push":
+            case "unshift":
+            case "join":
+            case "substr":
+            case "sprintf":
+                // Handle 'join' keyword as a Binary operator with a RuntimeList operand
+                operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
+                separator = ((ListNode) operand).elements.removeFirst();
+                return new BinaryOperatorNode(token.text, separator, operand, currentIndex);
+            case "sort":
+            case "map":
+            case "grep":
+                return parseMapGrepSort(parser, token);
+            case "pack":
+                // Handle operators with one or more arguments
+                operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
+                return new OperatorNode(token.text, operand, currentIndex);
+            case "reverse":
+            case "splice":
+            case "unlink":
+            case "mkdir":
+            case "die":
+            case "warn":
+                // Handle operators with any number of arguments
+                operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
+                return new OperatorNode(token.text, operand, currentIndex);
+            case "readline":
+            case "eof":
+            case "tell":
+            case "getc":
+            case "open":
+            case "close":
+                // Handle 'open' keyword as a Binary operator with a FileHandle and List operands
+                operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
+                String defaultHandle = switch (token.text) {
+                    case "readline":
+                        yield "main::ARGV";
+                    case "eof":
+                        yield "main::STDIN";
+                    case "tell":
+                        yield "main::^LAST_FH";
+                    case "getc":
+                        yield "main::STDIN";
+                    case "open":
+                        throw new PerlCompilerException(parser.tokenIndex, "Not enough arguments for open", parser.ctx.errorUtil);
+                    case "close":
+                        yield "main::STDIN";    // XXX TODO use currently selected file handle
+                    default:
+                        throw new IllegalStateException("Unexpected value: " + token.text);
+                };
+                Node handle = ((ListNode) operand).elements.isEmpty()
+                        ? new IdentifierNode(defaultHandle, currentIndex)
+                        : ((ListNode) operand).elements.removeFirst();
+                return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
+            case "seek":
+                // Handle 'seek' keyword as a Binary operator with a FileHandle and List operands
+                operand = ListParser.parseZeroOrMoreList(parser, 3, false, true, false, false);
+                handle = ((ListNode) operand).elements.removeFirst();
+                return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
+            case "printf":
+            case "print":
+            case "say":
+                // Handle 'print' keyword as a Binary operator with a FileHandle and List operands
+                operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, true, false);
+                handle = ((ListNode) operand).handle;
+                ((ListNode) operand).handle = null;
+                if (handle == null) {
+                    handle = new IdentifierNode("main::STDOUT", currentIndex);
+                }
+                return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
+            case "delete":
+            case "exists":
+                operand = ListParser.parseZeroOrOneList(parser, 1);
+                return new OperatorNode(token.text, operand, currentIndex);
+            case "scalar":
+            case "values":
+            case "keys":
+            case "each":
+                operand = parser.parsePrimary();
+                return new OperatorNode(token.text, operand, currentIndex);
+            case "our":
+            case "state":
+            case "my":
+                // Handle 'my' keyword as a unary operator with an operand
+                operand = parser.parsePrimary();
+                return new OperatorNode(token.text, operand, currentIndex);
+            case "local":
+                // Handle 'local' keyword as a unary operator with an operand
+                if (peek(parser).text.equals("(")) {
+                    operand = parser.parsePrimary();
+                } else {
+                    operand = parser.parseExpression(parser.getPrecedence("++"));
+                }
+                return new OperatorNode(token.text, operand, currentIndex);
+            case "last":
+            case "next":
+            case "redo":
+                // Handle 'next'
+                operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
+                return new OperatorNode(token.text, operand, currentIndex);
+            case "return":
+                // Handle 'return' keyword as a unary operator with an operand;
+                // Parentheses are ignored.
+                operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
+                return new OperatorNode("return", operand, currentIndex);
+            case "eval":
+                return parseEval(parser);
+            case "do":
+                return parseDoOperator(parser);
+            case "require":
+                return parseRequire(parser);
+            case "sub":
+                // Handle 'sub' keyword to parse an anonymous subroutine
+                return SubroutineParser.parseSubroutineDefinition(parser, false);
+            case "q":
+            case "qq":
+            case "qx":
+            case "qw":
+            case "qr":
+            case "tr":
+            case "y":
+            case "s":
+            case "m":
+                // Handle special-quoted domain-specific arguments
+                return StringParser.parseRawString(parser, token.text);
+        }
+        return null;
+    }
+
+    private static OperatorNode parseOperatorWithOneOptionalArgument(Parser parser, LexerToken token) {
+        Node operand;
+        // Handle operators with one optional argument
+        String text = token.text;
+        operand = ListParser.parseZeroOrOneList(parser, 0);
+        if (((ListNode) operand).elements.isEmpty()) {
+            switch (text) {
+                case "sleep":
+                    operand = new NumberNode(Long.toString(Long.MAX_VALUE), parser.tokenIndex);
+                    break;
+                case "pop":
+                case "shift":
+                    // create `@_` variable
+                    // XXX in main program, use `@ARGV`
+                    operand = new OperatorNode(
+                            "@", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
+                    break;
+                case "localtime":
+                case "gmtime":
+                case "caller":
+                case "reset":
+                    // default to empty list
+                    break;
+                case "srand":
+                    operand = new OperatorNode("undef", null, parser.tokenIndex);
+                    break;
+                case "exit":
+                    // create "0"
+                    operand = new NumberNode("0", parser.tokenIndex);
+                    break;
+                case "undef":
+                    operand = null;
+                    break;  // leave it empty
+                case "rand":
+                    // create "1"
+                    operand = new NumberNode("1", parser.tokenIndex);
+                    break;
+                default:
+                    // create `$_` variable
+                    operand = new OperatorNode(
+                            "$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
+                    break;
+            }
+        }
+        return new OperatorNode(text, operand, parser.tokenIndex);
     }
 }
