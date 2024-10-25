@@ -36,6 +36,7 @@ public class RuntimeIO implements RuntimeScalarReference {
     public static RuntimeIO stdin = RuntimeIO.open(FileDescriptor.in, false);
     // Static variable to store the last accessed filehandle -  `${^LAST_FH}`
     public static RuntimeIO lastAccessedFileHandle = null;
+    public static RuntimeScalar lastSelectedHandle = new RuntimeScalar(stdout);
 
     static {
         // Initialize mode options

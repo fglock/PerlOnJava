@@ -83,6 +83,7 @@
 - ✔️   **`crypt` operator**: `crypt` is implemented.
 - ✔️   **`study`, `srand`**: `study`, `srand` are implemented.
 - ✔️   **`chomp`**: `chomp` is implemented.
+- ✔️   **`select`**: `select(filehandle)` is implemented.
 - ✔️   **Vectors**: `vec` is implemented.
 - ❌  **Chained operators**: operations like `$x < $y <= $z` not yet implemented.
 - ✔️   **Lvalue `substr`**: Assignable Substring extraction is implemented.
