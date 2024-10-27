@@ -165,40 +165,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return res;
     }
 
-    public static boolean looksLikeNumber(RuntimeScalar runtimeScalar) {
-        switch (runtimeScalar.type) {
-            case INTEGER:
-            case DOUBLE:
-                return true;
-            case STRING:
-                String str = runtimeScalar.toString().trim();
-                if (str.isEmpty()) {
-                    return false;
-                }
-                // Check for Inf and NaN
-                if (str.equalsIgnoreCase("Inf") || str.equalsIgnoreCase("Infinity") || str.equalsIgnoreCase("NaN")) {
-                    return true;
-                }
-                // Check for decimal (integer or float)
-                try {
-                    Double.parseDouble(str);
-                    return true;
-                } catch (NumberFormatException e) {
-                    return false;
-                }
-            case UNDEF:
-                return false;
-            case GLOB:
-            case ARRAYREFERENCE:
-            case HASHREFERENCE:
-            case CODE:
-                // These types don't look like numbers in Perl
-                return false;
-            default:
-                throw new PerlCompilerException("Unexpected value: " + runtimeScalar.type);
-        }
-    }
-
     public RuntimeScalar exit() {
         System.exit(this.getInt());
         return new RuntimeScalar(); // This line will never be reached
@@ -662,33 +628,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         throw new PerlCompilerException("Can't locate object method \"" + methodName + "\" via package \"" + perlClassName + "\" (perhaps you forgot to load \"" + perlClassName + "\"?)");
     }
 
-    // Helper method to autoincrement a String variable
-    private RuntimeScalar stringIncrement() {
-        // Retrieve the current value as a String
-        String str = (String) this.value;
-
-        // Check if the string is empty
-        if (str.isEmpty()) {
-            // If empty, set the value to 1 and update type to INTEGER
-            this.value = 1;
-            this.type = RuntimeScalarType.INTEGER; // RuntimeScalarType is an enum that holds different scalar types
-            return this; // Return the current instance
-        }
-
-        // Get the first character of the string
-        char c = str.charAt(0);
-
-        // Check if the first character is a letter (either uppercase or lowercase)
-        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
-            this.value = ScalarUtils.incrementPlainString(str);
-            return this; // Return the current instance after increment
-        }
-
-        // Handle numeric increment: parse the number and increment it
-        this.set(NumberParser.parseNumber(this)); // parseNumber parses the current string to a number
-        return this.preAutoIncrement(); // preAutoIncrement handles the actual incrementing logic
-    }
-
     // Return a reference to this
     public RuntimeScalar createReference() {
         RuntimeScalar result = new RuntimeScalar();
@@ -772,7 +711,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 this.value = (double) this.value + 1;
                 return this;
             case STRING:
-                return this.stringIncrement();
+                return ScalarUtils.stringIncrement(this);
         }
         this.type = RuntimeScalarType.INTEGER;
         this.value = 1;
@@ -789,7 +728,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 this.value = (double) this.value + 1;
                 break;
             case STRING:
-                this.stringIncrement();
+                ScalarUtils.stringIncrement(this);
                 break;
             default:
                 this.type = RuntimeScalarType.INTEGER;
