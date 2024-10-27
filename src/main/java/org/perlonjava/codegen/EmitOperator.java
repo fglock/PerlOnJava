@@ -34,14 +34,18 @@ public class EmitOperator {
 
     // Handles the 'mkdir' operator, which creates directories.
     static void handleMkdirOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
-        String operator = node.operator;
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         // Invoke the static method for the operator.
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/operators/Operator",
-                operator,
-                "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        mv.visitMethodInsn(
+                operatorHandler.getMethodType(),
+                operatorHandler.getClassName(),
+                node.operator,
+                operatorHandler.getDescriptor(),
+                false
+        );
         // If the context is VOID, pop the result from the stack.
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
@@ -261,15 +265,20 @@ public class EmitOperator {
 
     // Handles the 'crypt' built-in function, which encrypts data.
     static void handleCryptBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
         // Handle:  crypt PLAINTEXT,SALT
         emitterVisitor.ctx.logDebug("handleCryptBuiltin " + node);
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         // Invoke the static method for the operator.
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Crypt",
+        mv.visitMethodInsn(
+                operatorHandler.getMethodType(),
+                operatorHandler.getClassName(),
                 node.operator,
-                "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                false);
+                operatorHandler.getDescriptor(),
+                false
+        );
         // If the context is VOID, pop the result from the stack.
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
