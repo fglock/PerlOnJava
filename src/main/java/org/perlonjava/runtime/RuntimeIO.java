@@ -32,11 +32,11 @@ public class RuntimeIO implements RuntimeScalarReference {
     private static final Map<String, Set<StandardOpenOption>> MODE_OPTIONS = new HashMap<>();
     // Standard I/O streams
     public static RuntimeIO stdout = RuntimeIO.open(FileDescriptor.out, true);
+    public static RuntimeScalar lastSelectedHandle = new RuntimeScalar(stdout);
     public static RuntimeIO stderr = RuntimeIO.open(FileDescriptor.err, true);
     public static RuntimeIO stdin = RuntimeIO.open(FileDescriptor.in, false);
     // Static variable to store the last accessed filehandle -  `${^LAST_FH}`
     public static RuntimeIO lastAccessedFileHandle = null;
-    public static RuntimeScalar lastSelectedHandle = new RuntimeScalar(stdout);
 
     static {
         // Initialize mode options
