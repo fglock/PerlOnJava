@@ -79,6 +79,7 @@ public class OperatorHandler {
         put("closedir", "closedir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeScalar)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("rewinddir", "rewinddir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeScalar)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("telldir", "telldir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeScalar)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("readdir", "readdir", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;");
 
         // Misc
         put(".", "stringConcat");
@@ -95,6 +96,8 @@ public class OperatorHandler {
 
         put("caller", "caller", "org/perlonjava/runtime/RuntimeScalar", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
         put("reset", "reset", "org/perlonjava/runtime/RuntimeScalar", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
+        put("die", "die", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeDataProvider;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeDataProvider;");
+        put("reverse", "reverse", "org/perlonjava/operators/Operator","(Lorg/perlonjava/runtime/RuntimeDataProvider;I)Lorg/perlonjava/runtime/RuntimeDataProvider;");
 
         // List operators
         put("map", "map",
