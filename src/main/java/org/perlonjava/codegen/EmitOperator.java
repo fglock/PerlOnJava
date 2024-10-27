@@ -13,15 +13,19 @@ public class EmitOperator {
 
     // Handles the 'readdir' operator, which reads directory contents.
     static void handleReaddirOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
-        String operator = node.operator;
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
         // Accept the operand in SCALAR context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         emitterVisitor.pushCallContext();
         // Invoke the static method for the operator.
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/operators/Operator",
-                operator,
-                "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
+        mv.visitMethodInsn(
+                operatorHandler.getMethodType(),
+                operatorHandler.getClassName(),
+                node.operator,
+                operatorHandler.getDescriptor(),
+                false
+        );
         // If the context is VOID, pop the result from the stack.
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
@@ -177,6 +181,7 @@ public class EmitOperator {
     // Handles the 'atan2' function, which calculates the arctangent of two numbers.
     static void handleAtan2(EmitterVisitor emitterVisitor, OperatorNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
+        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
         if (node.operand instanceof ListNode operand) {
             if (operand.elements.size() == 2) {
@@ -184,10 +189,13 @@ public class EmitOperator {
                 operand.elements.get(0).accept(scalarVisitor);
                 operand.elements.get(1).accept(scalarVisitor);
                 // Invoke the virtual method for the operator.
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/RuntimeScalar",
+                mv.visitMethodInsn(
+                        operatorHandler.getMethodType(),
+                        operatorHandler.getClassName(),
                         node.operator,
-                        "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                        operatorHandler.getDescriptor(),
+                        false
+                );
                 // If the context is VOID, pop the result from the stack.
                 if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
                     mv.visitInsn(Opcodes.POP);
@@ -201,9 +209,10 @@ public class EmitOperator {
 
     // Handles the 'die' built-in function, which throws an exception.
     static void handleDieBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
         // Handle:  die LIST
         //   static RuntimeDataProvider die(RuntimeDataProvider value, int ctx)
-        String operator = node.operator;
         emitterVisitor.ctx.logDebug("handleDieBuiltin " + node);
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
@@ -213,10 +222,13 @@ public class EmitOperator {
         message.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
 
         // Invoke the static method for the operator.
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/operators/Operator",
-                operator,
-                "(Lorg/perlonjava/runtime/RuntimeDataProvider;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
+        mv.visitMethodInsn(
+                operatorHandler.getMethodType(),
+                operatorHandler.getClassName(),
+                node.operator,
+                operatorHandler.getDescriptor(),
+                false
+        );
         // If the context is VOID, pop the result from the stack.
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
@@ -225,15 +237,22 @@ public class EmitOperator {
 
     // Handles the 'reverse' built-in function, which reverses a list.
     static void handleReverseBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
         // Handle:  reverse LIST
         //   static RuntimeDataProvider reverse(RuntimeDataProvider value, int ctx)
-        String operator = node.operator;
         emitterVisitor.ctx.logDebug("handleReverseBuiltin " + node);
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         emitterVisitor.pushCallContext();
         // Invoke the static method for the operator.
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeDataProvider;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
+        mv.visitMethodInsn(
+                operatorHandler.getMethodType(),
+                operatorHandler.getClassName(),
+                node.operator,
+                operatorHandler.getDescriptor(),
+                false
+        );
         // If the context is VOID, pop the result from the stack.
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
