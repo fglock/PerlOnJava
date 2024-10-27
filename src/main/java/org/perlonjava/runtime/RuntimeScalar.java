@@ -186,48 +186,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return new RuntimeScalar(oldSeed);
     }
 
-    public RuntimeScalar rmdir() {
-        String dirName = value.toString();
-
-        try {
-            Path path = Paths.get(dirName);
-            Files.delete(path);
-            return scalarTrue;
-        } catch (IOException e) {
-            // Set $! (errno) in case of failure
-            getGlobalVariable("main::!").set(e.getMessage());
-            return scalarFalse;
-        }
-    }
-
-    public RuntimeScalar closedir() {
-        if (type != RuntimeScalarType.GLOB) {
-            throw new PerlCompilerException("Invalid directory handle");
-        }
-
-        RuntimeIO dirIO = (RuntimeIO) value;
-        return dirIO.closedir();
-    }
-
-    public RuntimeScalar rewinddir() {
-        if (type != RuntimeScalarType.GLOB) {
-            throw new PerlCompilerException("Invalid directory handle");
-        }
-
-        RuntimeIO dirIO = (RuntimeIO) value;
-        dirIO.rewinddir();
-        return scalarTrue;
-    }
-
-    public RuntimeScalar telldir() {
-        if (type != RuntimeScalarType.GLOB) {
-            throw new PerlCompilerException("Invalid directory handle");
-        }
-
-        RuntimeIO dirIO = (RuntimeIO) value;
-        return new RuntimeScalar(dirIO.telldir());
-    }
-
     public RuntimeScalar clone() {
         return new RuntimeScalar(this);
     }

@@ -74,6 +74,12 @@ public class OperatorHandler {
         put("gmtime", "gmtime", "org/perlonjava/operators/Time", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
         put("localtime", "localtime", "org/perlonjava/operators/Time", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
 
+        // Directory
+        put("rmdir", "rmdir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeScalar)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("closedir", "closedir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeScalar)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("rewinddir", "rewinddir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeScalar)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("telldir", "telldir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeScalar)Lorg/perlonjava/runtime/RuntimeScalar;");
+
         // Misc
         put(".", "stringConcat");
         put("x", "repeat");
