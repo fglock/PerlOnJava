@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.parser.NumberParser;
+
 /**
  * Utility class for scalar operations in the Perlon Java runtime.
  */
@@ -108,5 +110,66 @@ public class ScalarUtils {
         } catch (NumberFormatException e) {
             return false;
         }
+    }
+
+    public static boolean looksLikeNumber(RuntimeScalar runtimeScalar) {
+        switch (runtimeScalar.type) {
+            case INTEGER:
+            case DOUBLE:
+                return true;
+            case STRING:
+                String str = runtimeScalar.toString().trim();
+                if (str.isEmpty()) {
+                    return false;
+                }
+                // Check for Inf and NaN
+                if (str.equalsIgnoreCase("Inf") || str.equalsIgnoreCase("Infinity") || str.equalsIgnoreCase("NaN")) {
+                    return true;
+                }
+                // Check for decimal (integer or float)
+                try {
+                    Double.parseDouble(str);
+                    return true;
+                } catch (NumberFormatException e) {
+                    return false;
+                }
+            case UNDEF:
+                return false;
+            case GLOB:
+            case ARRAYREFERENCE:
+            case HASHREFERENCE:
+            case CODE:
+                // These types don't look like numbers in Perl
+                return false;
+            default:
+                throw new PerlCompilerException("Unexpected value: " + runtimeScalar.type);
+        }
+    }
+
+    // Helper method to autoincrement a String variable
+    public static RuntimeScalar stringIncrement(RuntimeScalar runtimeScalar) {
+        // Retrieve the current value as a String
+        String str = (String) runtimeScalar.value;
+
+        // Check if the string is empty
+        if (str.isEmpty()) {
+            // If empty, set the value to 1 and update type to INTEGER
+            runtimeScalar.value = 1;
+            runtimeScalar.type = RuntimeScalarType.INTEGER; // RuntimeScalarType is an enum that holds different scalar types
+            return runtimeScalar; // Return the current instance
+        }
+
+        // Get the first character of the string
+        char c = str.charAt(0);
+
+        // Check if the first character is a letter (either uppercase or lowercase)
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+            runtimeScalar.value = incrementPlainString(str);
+            return runtimeScalar; // Return the current instance after increment
+        }
+
+        // Handle numeric increment: parse the number and increment it
+        runtimeScalar.set(NumberParser.parseNumber(runtimeScalar)); // parseNumber parses the current string to a number
+        return runtimeScalar.preAutoIncrement(); // preAutoIncrement handles the actual incrementing logic
     }
 }

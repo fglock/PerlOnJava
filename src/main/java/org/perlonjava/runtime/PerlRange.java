@@ -50,7 +50,7 @@ public class PerlRange extends RuntimeBaseEntity implements RuntimeDataProvider,
             return new PerlRangeIntegerIterator();
         }
         String startString = start.toString();
-        if (RuntimeScalar.looksLikeNumber(start) && RuntimeScalar.looksLikeNumber(end)) {
+        if (ScalarUtils.looksLikeNumber(start) && ScalarUtils.looksLikeNumber(end)) {
             if (startString.length() > 1 && startString.startsWith("0")) {
                 // "01" is String-like
             } else {
