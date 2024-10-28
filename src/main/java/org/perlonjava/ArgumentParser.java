@@ -29,9 +29,50 @@ public class ArgumentParser {
         boolean readingArgv = false;
 
         for (int i = 0; i < args.length; i++) {
-            if (readingArgv) {
-                // Add remaining arguments to the argument list
-                parsedArgs.argumentList.push(new RuntimeScalar(args[i]));
+            if (readingArgv || !args[i].startsWith("-")) {
+                // Process non-switch arguments
+                if (parsedArgs.code == null) {
+                    // read code from file
+                    // Assume the argument is a filename
+                    parsedArgs.fileName = args[i];
+                    try {
+                        String fileContent = new String(Files.readAllBytes(Paths.get(parsedArgs.fileName)));
+                        parsedArgs.code = fileContent;
+
+                        // Check for shebang line
+                        String[] lines = fileContent.split("\n", 2);
+                        if (lines.length > 0 && lines[0].startsWith("#!")) {
+                            String shebangLine = lines[0].substring(2).trim(); // Remove "#!" and trim
+
+                            // Find the position of "perl" in the shebang line
+                            int perlIndex = shebangLine.indexOf("perl");
+                            if (perlIndex != -1) {
+                                // Extract arguments starting from "perl"
+                                String relevantPart = shebangLine.substring(perlIndex + 4).trim();
+                                String[] shebangArgs = relevantPart.split("\\s+");
+
+                                // System.out.println("Shebang arguments: " + String.join(", ", shebangArgs));
+
+                                // Create a new array to hold the combined arguments
+                                String[] newArgs = new String[i + 1 + shebangArgs.length + (args.length - i - 1)];
+                                System.arraycopy(args, 0, newArgs, 0, i + 1); // Copy already processed arguments
+                                System.arraycopy(shebangArgs, 0, newArgs, i + 1, shebangArgs.length); // Insert shebang arguments
+                                System.arraycopy(args, i + 1, newArgs, i + 1 + shebangArgs.length, args.length - i - 1); // Copy remaining arguments
+
+                                // Update args and continue processing
+                                args = newArgs;
+
+                                // System.out.println("Shebang i: " + i + " args: " + String.join(", ", args));
+                            }
+                        }
+                    } catch (IOException e) {
+                        System.err.println("Error: Unable to read file " + parsedArgs.fileName);
+                        System.exit(1);
+                    }
+                } else {
+                    parsedArgs.argumentList.push(new RuntimeScalar(args[i]));
+                    readingArgv = true;
+                }
             } else {
                 String arg = args[i];
                 if (arg.startsWith("-i")) {
@@ -61,10 +102,14 @@ public class ArgumentParser {
                         case "-e":
                             // Handle inline code execution
                             if (i + 1 < args.length) {
-                                parsedArgs.code = args[i + 1];
+                                String newCode = args[i + 1];
+                                if (parsedArgs.code == null) {
+                                    parsedArgs.code = newCode;
+                                } else {
+                                    parsedArgs.code += "\n" + newCode; // Append new code with a newline separator
+                                }
                                 parsedArgs.fileName = "-e";
                                 i++;
-                                readingArgv = true;
                             } else {
                                 System.err.println("Error: -e requires an argument");
                                 System.exit(1);
@@ -122,15 +167,8 @@ public class ArgumentParser {
                             System.exit(0);
                             break;
                         default:
-                            // Assume the argument is a filename
-                            parsedArgs.fileName = arg;
-                            try {
-                                parsedArgs.code = new String(Files.readAllBytes(Paths.get(parsedArgs.fileName)));
-                                readingArgv = true;
-                            } catch (IOException e) {
-                                System.err.println("Error: Unable to read file " + parsedArgs.fileName);
-                                System.exit(1);
-                            }
+                            System.err.println("Unrecognized switch: " + arg + "  (-h will show valid options)");
+                            System.exit(0);
                             break;
                     }
                 }
