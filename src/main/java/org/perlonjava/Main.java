@@ -29,6 +29,10 @@ public class Main {
 
         try {
             PerlLanguageProvider.executePerlCode(parsedArgs);
+
+            if (parsedArgs.compileOnly) {
+                System.out.println(parsedArgs.fileName + " syntax OK");
+            }
         } catch (Throwable t) {
             // Print full JVM stack
             t.printStackTrace();
