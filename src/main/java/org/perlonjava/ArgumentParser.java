@@ -3,6 +3,7 @@ package org.perlonjava;
 import org.perlonjava.runtime.GlobalContext;
 import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.ScalarUtils;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -146,6 +147,9 @@ public class ArgumentParser {
                 case '0':
                     // Handle input record separator specified with -0
                     index = handleInputRecordSeparator(args, parsedArgs, index, j, arg);
+                    break;
+                case 'g':
+                    parsedArgs.inputRecordSeparator = null;
                     break;
                 case 'e':
                     // Handle inline code specified with -e
@@ -560,9 +564,10 @@ public class ArgumentParser {
                     "    parseOnly=" + parseOnly + ",\n" +
                     "    compileOnly=" + compileOnly + ",\n" +
                     "    code='" + (code != null ? code : "null") + "',\n" +
-                    "    fileName='" + (fileName != null ? fileName : "null") + "',\n" +
-                    "    inPlaceExtension='" + (inPlaceExtension != null ? inPlaceExtension : "null") + "',\n" +
+                    "    fileName='" + ScalarUtils.printable(fileName) + "',\n" +
+                    "    inPlaceExtension='" + ScalarUtils.printable(inPlaceExtension) + "',\n" +
                     "    inPlaceEdit=" + inPlaceEdit + ",\n" +
+                    "    inputRecordSeparator=" + ScalarUtils.printable(inputRecordSeparator) + ",\n" +
                     "    argumentList=" + argumentList + ",\n" +
                     "    inc=" + inc + "\n" +
                     "}";

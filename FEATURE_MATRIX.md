@@ -28,9 +28,8 @@
 ### Command line switches
 
 - ✔️   Accept command line switches from the shebang line.
-- ✔️   Command line switches `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-m`, `-M`, `-h`, `-?` are implemented.
+- ✔️   Command line switches `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-m`, `-M`, `-g`, `-h`, `-?` are implemented.
 - ❌   Missing command line switches include:
-  - `-g`: Debugging features.
   - `-s`: Rudimentary switch parsing.
   - `-T`: Taint checks.
   - `-t`: Taint checks with warnings.
