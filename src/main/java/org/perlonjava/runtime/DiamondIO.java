@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 
 /**
  * The DiamondIO class manages reading from multiple input files,
@@ -129,23 +130,24 @@ public class DiamondIO {
                 // Create a temporary file for the original file
                 try {
                     tempFilePath = Files.createTempFile("temp_", null);
-                    Files.move(Paths.get(originalFileName), tempFilePath);
+                    backupFileName = tempFilePath.toString();
+
+                    Files.move(Paths.get(originalFileName), tempFilePath, StandardCopyOption.REPLACE_EXISTING);
 
                     // Schedule the file for deletion on JVM exit
                     tempFilePath.toFile().deleteOnExit();
 
                 } catch (IOException e) {
-                    System.err.println("Error: Unable to create temporary file for " + originalFileName);
+                    System.err.println("Error: Unable to create temporary file for " + originalFileName + ": " + e);
                     return false;
                 }
-            } else if (extension.contains("*")) {
-                backupFileName = extension.replace("*", originalFileName);
             } else {
-                backupFileName = originalFileName + extension;
-            }
-
-            // Rename the original file to the backup file if needed
-            if (backupFileName != null) {
+                if (extension.contains("*")) {
+                    backupFileName = extension.replace("*", originalFileName);
+                } else {
+                    backupFileName = originalFileName + extension;
+                }
+                // Rename the original file to the backup file if needed
                 try {
                     Files.move(Paths.get(originalFileName), Paths.get(backupFileName));
                 } catch (IOException e) {
@@ -164,6 +166,6 @@ public class DiamondIO {
         currentReader = RuntimeIO.open(tempFilePath != null ? tempFilePath.toString() : (backupFileName != null ? backupFileName : originalFileName));
         getGlobalIO("main::ARGV").set(currentReader);
 
-        return currentReader != null && currentWriter != null;
+        return currentReader != null;
     }
 }
