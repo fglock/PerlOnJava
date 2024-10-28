@@ -7,6 +7,8 @@ import org.perlonjava.runtime.RuntimeScalar;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The ArgumentParser class is responsible for parsing command-line arguments
@@ -15,6 +17,27 @@ import java.nio.file.Paths;
  * debug mode, specifying code to execute, or setting file processing modes.
  */
 public class ArgumentParser {
+
+    // Define a structured data type for module use statements
+    private static class ModuleUseStatement {
+        char type; // 'm' or 'M'
+        String moduleName;
+        String args;
+
+        ModuleUseStatement(char type, String moduleName, String args) {
+            this.type = type;
+            this.moduleName = moduleName;
+            this.args = args;
+        }
+
+        @Override
+        public String toString() {
+            if (args != null) {
+                return "use " + moduleName + " split(/,/,q{" + args + "});";
+            }
+            return type == 'm' ? "use " + moduleName + " ();" : "use " + moduleName + ";";
+        }
+    }
 
     /**
      * Parses the command-line arguments and returns a CompilerOptions object
@@ -148,6 +171,10 @@ public class ArgumentParser {
             char switchChar = arg.charAt(j);
 
             switch (switchChar) {
+                case 'm':
+                case 'M':
+                    index = handleModuleSwitch(args, parsedArgs, index, j, arg, switchChar);
+                    break;
                 case 'a':
                     // Enable autosplit mode
                     parsedArgs.autoSplit = true;
@@ -200,6 +227,30 @@ public class ArgumentParser {
                     break;
             }
         }
+        return index;
+    }
+
+    private static int handleModuleSwitch(String[] args, CompilerOptions parsedArgs, int index, int j, String arg, char switchChar) {
+        String moduleName = null;
+        String moduleArgs = null;
+
+        if (j < arg.length() - 1) {
+            moduleName = arg.substring(j + 1);
+        } else if (index + 1 < args.length && !args[index + 1].startsWith("-")) {
+            moduleName = args[++index];
+        } else {
+            System.err.println("No module specified for -" + switchChar + ".");
+            System.exit(1);
+        }
+
+        // Check for '=' to handle arguments
+        int equalsIndex = moduleName.indexOf('=');
+        if (equalsIndex != -1) {
+            moduleArgs = moduleName.substring(equalsIndex + 1);
+            moduleName = moduleName.substring(0, equalsIndex);
+        }
+
+        parsedArgs.moduleUseStatements.add(new ModuleUseStatement(switchChar, moduleName, moduleArgs));
         return index;
     }
 
@@ -406,8 +457,17 @@ public class ArgumentParser {
             // Wrap the code in a loop that processes each line without printing
             parsedArgs.code = "while (<>) { " + autoSplit + parsedArgs.code + " }";
         }
+
+        StringBuilder useStatements = new StringBuilder();
         if (parsedArgs.useVersion) {
-            parsedArgs.code = "use " + versionString + ";\n" + parsedArgs.code;
+            useStatements.append("use ").append(versionString).append(";\n").append(parsedArgs.code);
+        }
+        for (ModuleUseStatement moduleStatement : parsedArgs.moduleUseStatements) {
+            useStatements.append(moduleStatement.toString()).append("\n");
+        }
+        // Prepend the use statements to the code
+        if (!useStatements.isEmpty()) {
+            parsedArgs.code = useStatements + parsedArgs.code;
         }
     }
 
@@ -469,6 +529,7 @@ public class ArgumentParser {
         public String inputRecordSeparator = "\n";
         public boolean autoSplit = false; // For -a
         public boolean useVersion = false; // For -E
+        List<ModuleUseStatement> moduleUseStatements = new ArrayList<>(); // For -m -M
 
         // Initialize @ARGV
         public RuntimeArray argumentList = GlobalContext.getGlobalArray("main::ARGV");
