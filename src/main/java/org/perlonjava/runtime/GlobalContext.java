@@ -97,6 +97,7 @@ public class GlobalContext {
         }
 
         // Initialize built-in Perl classes
+        DiamondIO.initialize(compilerOptions);
         Universal.initialize();
         Symbol.initialize();
         Exporter.initialize();
