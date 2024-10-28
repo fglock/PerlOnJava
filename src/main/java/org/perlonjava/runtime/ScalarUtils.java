@@ -2,10 +2,22 @@ package org.perlonjava.runtime;
 
 import org.perlonjava.parser.NumberParser;
 
+import java.util.stream.Collectors;
+
 /**
  * Utility class for scalar operations in the Perlon Java runtime.
  */
 public class ScalarUtils {
+
+    // make a string printable
+    public static String printable(String string) {
+        if (string == null) return "null";
+        if (string.isEmpty()) return "empty";
+
+        return string.chars()
+                .mapToObj(c -> (c >= 32 && c < 127) ? String.valueOf((char) c) : String.format("\\u%04X", c))
+                .collect(Collectors.joining());
+    }
 
     /**
      * Increments a string value based on specific rules.
