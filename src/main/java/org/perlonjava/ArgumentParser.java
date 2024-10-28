@@ -161,6 +161,11 @@ public class ArgumentParser {
                     // Handle inline code specified with -e
                     index = handleInlineCode(args, parsedArgs, index, j, arg);
                     break;
+                case 'E':
+                    // Handle inline code specified with -E
+                    parsedArgs.useVersion = true;
+                    index = handleInlineCode(args, parsedArgs, index, j, arg);
+                    break;
                 case 'i':
                     // Handle in-place editing specified with -i
                     index = handleInPlaceEditing(args, parsedArgs, index, j, arg);
@@ -389,6 +394,7 @@ public class ArgumentParser {
      * @param parsedArgs The CompilerOptions object to modify.
      */
     private static void modifyCodeBasedOnFlags(CompilerOptions parsedArgs) {
+        String versionString = "v5.36.0";
         String autoSplit = "";
         if (parsedArgs.autoSplit) {
             autoSplit = " our @F = split(' '); ";
@@ -399,6 +405,9 @@ public class ArgumentParser {
         } else if (parsedArgs.processOnly) {
             // Wrap the code in a loop that processes each line without printing
             parsedArgs.code = "while (<>) { " + autoSplit + parsedArgs.code + " }";
+        }
+        if (parsedArgs.useVersion) {
+            parsedArgs.code = "use " + versionString + ";\n" + parsedArgs.code;
         }
     }
 
@@ -459,6 +468,7 @@ public class ArgumentParser {
         public String inPlaceExtension = null; // For -i
         public String inputRecordSeparator = "\n";
         public boolean autoSplit = false; // For -a
+        public boolean useVersion = false; // For -E
 
         // Initialize @ARGV
         public RuntimeArray argumentList = GlobalContext.getGlobalArray("main::ARGV");
