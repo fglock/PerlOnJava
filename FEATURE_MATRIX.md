@@ -28,7 +28,7 @@
 ### Command line switches
 
 - ✔️   Accept command line switches from the shebang line.
-- ✔️   Command line switches `-c`, `-e`, `-p`, `-n`, `-i`, `-0`, `-a`, `-h`, `-?` are implemented.
+- ✔️   Command line switches `-c`, `-e`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-h`, `-?` are implemented.
 - ❌   Missing command line switches include:
   - `-g`: Debugging features.
   - `-s`: Rudimentary switch parsing.
@@ -45,7 +45,6 @@
   - `-D[number/list]`: Sets debugging flags.
   - `-Fpattern`: Specifies the pattern for autosplit.
   - `-l[octal]`: Enables automatic line-ending processing.
-  - `-I*dir*`: Specify include directories (mentioned but not implemented).
   - `-m[-]module`: Loads a module.
   - `-M[-]'module...'`: Loads a module with arguments.
   - `-f`: Suppresses execution of `~/.perlrc`.
