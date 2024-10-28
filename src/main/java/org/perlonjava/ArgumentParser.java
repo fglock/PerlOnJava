@@ -148,6 +148,10 @@ public class ArgumentParser {
             char switchChar = arg.charAt(j);
 
             switch (switchChar) {
+                case '0':
+                    // Handle input record separator specified with -0
+                    index = handleInputRecordSeparator(args, parsedArgs, index, j, arg);
+                    break;
                 case 'e':
                     // Handle inline code specified with -e
                     index = handleInlineCode(args, parsedArgs, index, j, arg);
@@ -180,6 +184,38 @@ public class ArgumentParser {
                     System.err.println("Unrecognized switch: -" + switchChar + "  (-h will show valid options)");
                     System.exit(0);
                     break;
+            }
+        }
+        return index;
+    }
+
+    private static int handleInputRecordSeparator(String[] args, CompilerOptions parsedArgs, int index, int j, String arg) {
+        String separatorValue = arg.substring(j + 1);
+        if (separatorValue.isEmpty() && index + 1 < args.length && !args[index + 1].startsWith("-")) {
+            separatorValue = args[++index];
+        }
+
+        if (separatorValue.isEmpty()) {
+            parsedArgs.inputRecordSeparator = "\0"; // Null character
+        } else {
+            try {
+                int separatorInt;
+                if (separatorValue.startsWith("0x") || separatorValue.startsWith("0X")) {
+                    separatorInt = Integer.parseInt(separatorValue.substring(2), 16);
+                } else {
+                    separatorInt = Integer.parseInt(separatorValue, 8);
+                }
+
+                if (separatorInt == 0) {
+                    parsedArgs.inputRecordSeparator = "\n\n"; // Paragraph mode
+                } else if (separatorInt >= 0400) {
+                    parsedArgs.inputRecordSeparator = null; // Slurp whole file
+                } else {
+                    parsedArgs.inputRecordSeparator = Character.toString((char) separatorInt);
+                }
+            } catch (NumberFormatException e) {
+                System.err.println("Invalid input record separator: " + separatorValue);
+                System.exit(1);
             }
         }
         return index;
@@ -364,6 +400,7 @@ public class ArgumentParser {
         public String code = null;
         public String fileName = null;
         public String inPlaceExtension = null; // For -i
+        public String inputRecordSeparator = "\n";
 
         // Initialize @ARGV
         public RuntimeArray argumentList = GlobalContext.getGlobalArray("main::ARGV");
