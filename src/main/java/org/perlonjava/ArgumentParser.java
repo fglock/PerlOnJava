@@ -239,6 +239,19 @@ public class ArgumentParser {
         return index;
     }
 
+    /**
+     * Handles the module switch specified with the -m or -M options.
+     * This method processes the module name and any associated arguments,
+     * and adds a new ModuleUseStatement to the parsed arguments.
+     *
+     * @param args       The command-line arguments.
+     * @param parsedArgs The CompilerOptions object to configure.
+     * @param index      The current index in the arguments array.
+     * @param j          The current position in the clustered switch string.
+     * @param arg        The current argument being processed.
+     * @param switchChar The character representing the switch ('m' or 'M').
+     * @return The updated index after processing the module switch.
+     */
     private static int handleModuleSwitch(String[] args, CompilerOptions parsedArgs, int index, int j, String arg, char switchChar) {
         String moduleName = null;
         String moduleArgs = null;
