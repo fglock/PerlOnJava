@@ -38,6 +38,7 @@ public class PerlLanguageProvider {
 
     // Lookup object for performing method handle operations
     private static final MethodHandles.Lookup lookup = MethodHandles.lookup();
+    private static boolean globalInitialized = false;
 
     /**
      * Executes the given Perl code and returns the result.
@@ -66,8 +67,10 @@ public class PerlLanguageProvider {
                 compilerOptions
         );
 
-
-        GlobalContext.initializeGlobals(compilerOptions);
+        if (!globalInitialized) {
+            GlobalContext.initializeGlobals(compilerOptions);
+            globalInitialized = true;
+        }
 
         ctx.logDebug("parse code: " + compilerOptions.code);
         ctx.logDebug("  call context " + ctx.contextType);

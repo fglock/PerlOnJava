@@ -11,12 +11,22 @@ public class ScalarUtils {
 
     // make a string printable
     public static String printable(String string) {
-        if (string == null) return "null";
-        if (string.isEmpty()) return "empty";
+        if (string == null) {
+            return "null";
+        }
+        if (string.isEmpty()) {
+            return "empty";
+        }
 
-        return string.chars()
-                .mapToObj(c -> (c >= 32 && c < 127) ? String.valueOf((char) c) : String.format("\\u%04X", c))
-                .collect(Collectors.joining());
+        StringBuilder result = new StringBuilder();
+        for (char c : string.toCharArray()) {
+            if (Character.isISOControl(c)) {
+                result.append(String.format("\\x%02X", (int) c));
+            } else {
+                result.append(c);
+            }
+        }
+        return result.toString();
     }
 
     /**
