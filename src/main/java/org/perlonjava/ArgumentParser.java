@@ -189,6 +189,23 @@ public class ArgumentParser {
         return index;
     }
 
+    /**
+     * Handles the input record separator specified with the -0 switch.
+     * This switch allows specifying a custom input record separator for processing files.
+     *
+     * The -0 switch can be followed by an optional octal or hexadecimal value that specifies
+     * the character to be used as the input record separator. If no value is provided, the
+     * null character is used by default. Special cases include:
+     * - 0000: Paragraph mode, where the separator is set to two newlines.
+     * - Values >= 0400: Slurp mode, where the entire file is read as a single record.
+     *
+     * @param args       The command-line arguments.
+     * @param parsedArgs The CompilerOptions object to configure.
+     * @param index      The current index in the arguments array.
+     * @param j          The current position in the clustered switch string.
+     * @param arg        The current argument being processed.
+     * @return The updated index after processing the input record separator.
+     */
     private static int handleInputRecordSeparator(String[] args, CompilerOptions parsedArgs, int index, int j, String arg) {
         String separatorValue = arg.substring(j + 1);
         if (separatorValue.isEmpty() && index + 1 < args.length && !args[index + 1].startsWith("-")) {
@@ -362,6 +379,7 @@ public class ArgumentParser {
         System.out.println("  -n              Process input files without printing lines.");
         System.out.println("  -p              Process input files and print each line.");
         System.out.println("  -i[extension]   Edit files in-place (makes backup if extension supplied).");
+        System.out.println("  -0[octal|hex]   Specify input record separator (e.g., -0, -0x0A).");
         System.out.println("  -Idirectory     Specify @INC/#include directory (several -I's allowed)");
         System.out.println("  -h, --help      Displays this help message.");
     }
