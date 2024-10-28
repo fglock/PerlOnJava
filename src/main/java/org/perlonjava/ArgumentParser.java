@@ -140,6 +140,7 @@ public class ArgumentParser {
     private static int processClusteredSwitches(String[] args, CompilerOptions parsedArgs, String arg, int index) {
         for (int j = 1; j < arg.length(); j++) {
             char switchChar = arg.charAt(j);
+
             switch (switchChar) {
                 case 'e':
                     // Handle inline code specified with -e
@@ -148,7 +149,8 @@ public class ArgumentParser {
                 case 'i':
                     // Handle in-place editing specified with -i
                     index = handleInPlaceEditing(args, parsedArgs, index, j, arg);
-                    break;
+                    // Skip the rest of the characters in the current argument as they are part of the extension
+                    return index;
                 case 'p':
                     // Enable process and print mode
                     parsedArgs.processAndPrint = true;
@@ -198,7 +200,7 @@ public class ArgumentParser {
             }
             parsedArgs.fileName = "-e"; // Indicate that the code was provided inline
         } else {
-            System.err.println("Error: -e requires an argument");
+            System.err.println("No code specified for -e.");
             System.exit(1);
         }
         return index;
@@ -216,10 +218,11 @@ public class ArgumentParser {
      */
     private static int handleInPlaceEditing(String[] args, CompilerOptions parsedArgs, int index, int j, String arg) {
         parsedArgs.inPlaceEdit = true; // Enable in-place editing
+
         if (j < arg.length() - 1) {
             // If there's an extension specified immediately after -i, use it
             parsedArgs.inPlaceExtension = arg.substring(j + 1);
-            j = arg.length(); // Move to the end of the current argument
+            return index; // Return the current index as we've processed the extension
         } else if (index + 1 < args.length && !args[index + 1].startsWith("-")) {
             // If the next argument is not a switch, treat it as the extension
             parsedArgs.inPlaceExtension = args[++index];
@@ -227,6 +230,7 @@ public class ArgumentParser {
             // No extension specified
             parsedArgs.inPlaceExtension = null;
         }
+
         return index;
     }
 
