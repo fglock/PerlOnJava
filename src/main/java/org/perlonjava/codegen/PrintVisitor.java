@@ -242,6 +242,10 @@ public class PrintVisitor implements Visitor {
         appendIndent();
         sb.append("BlockNode:\n");
         indentLevel++;
+        if (node.isLoop) {
+            appendIndent();
+            sb.append("isLoop").append("\n");
+        }
         for (Node element : node.elements) {
             element.accept(this);
         }
