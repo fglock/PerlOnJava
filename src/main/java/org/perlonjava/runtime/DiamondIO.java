@@ -3,14 +3,23 @@ package org.perlonjava.runtime;
 import static org.perlonjava.runtime.GlobalContext.*;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
 /**
  * The DiamondIO class manages reading from multiple input files,
- * similar to Perl's diamond operator (<>).
+ * similar to Perl's diamond operator (<>). It also supports in-place
+ * editing with backup creation, akin to Perl's -i switch.
  */
 public class DiamondIO {
 
     // Static variable to hold the current file reader
     static RuntimeIO currentReader;
+
+    // Static variable to hold the current file writer (for in-place editing)
+    static RuntimeIO currentWriter;
 
     // Flag to indicate if the end of all files has been reached
     static boolean eofReached = false;
@@ -18,12 +27,32 @@ public class DiamondIO {
     // Flag to indicate if the reading process has started
     static boolean readingStarted = false;
 
+    // Static field to store the in-place extension for the -i switch
+    static String inPlaceExtension = null;
+
+    // Path to the temporary file to be deleted on exit
+    static Path tempFilePath = null;
+
+    static {
+        // Register a shutdown hook to delete the temporary file
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (tempFilePath != null) {
+                try {
+                    Files.deleteIfExists(tempFilePath);
+                } catch (IOException e) {
+                    System.err.println("Error: Unable to delete temporary file " + tempFilePath);
+                }
+            }
+        }));
+    }
+
     /**
      * Reads a line from the current file. If the end of the file is reached,
      * it attempts to open the next file. If all files are exhausted, it returns
      * an undefined scalar.
      *
      * @param arg An unused parameter, kept for compatibility with other readline methods
+     * @param ctx The context in which the method is called (SCALAR or LIST)
      * @return A RuntimeScalar representing the line read from the file, or an
      * undefined scalar if EOF is reached for all files.
      */
@@ -70,15 +99,21 @@ public class DiamondIO {
 
     /**
      * Opens the next file in the list and sets it as the current reader.
-     * Updates the global variables to reflect the current file being read.
+     * If in-place editing is enabled, it also sets up the writer for the
+     * output file. Updates the global variables to reflect the current file
+     * being read and written.
      *
      * @return true if a new file was successfully opened, false if no more files are available.
      */
     private static boolean openNextFile() {
-        // Close the current reader if it exists
+        // Close the current reader and writer if they exist
         if (currentReader != null) {
             currentReader.close();
             currentReader = null;
+        }
+        if (currentWriter != null) {
+            currentWriter.close();
+            currentWriter = null;
         }
 
         // Get the next file name from the global ARGV array
@@ -89,16 +124,46 @@ public class DiamondIO {
             return false;
         }
 
-        // Set the current filename in the global $main::ARGV variable
-        getGlobalVariable("main::ARGV").set(fileName);
+        String originalFileName = fileName.toString();
+        String backupFileName = null;
 
-        // Open the file and set it as the current reader
-        currentReader = RuntimeIO.open(fileName.toString());
+        // Check if in-place editing is enabled
+        if (GlobalContext.getCompilerOptions().inPlaceEdit) {
+            String extension = GlobalContext.getCompilerOptions().inPlaceExtension;
+            if (extension == null || extension.isEmpty()) {
+                // Create a temporary file for the original file
+                try {
+                    tempFilePath = Files.createTempFile("temp_", null);
+                    Files.move(Paths.get(originalFileName), tempFilePath);
+                } catch (IOException e) {
+                    System.err.println("Error: Unable to create temporary file for " + originalFileName);
+                    return false;
+                }
+            } else if (extension.contains("*")) {
+                backupFileName = extension.replace("*", originalFileName);
+            } else {
+                backupFileName = originalFileName + extension;
+            }
 
-        // Set the current handle in the global main::ARGV handle
+            // Rename the original file to the backup file if needed
+            if (backupFileName != null) {
+                try {
+                    Files.move(Paths.get(originalFileName), Paths.get(backupFileName));
+                } catch (IOException e) {
+                    System.err.println("Error: Unable to create backup file " + backupFileName);
+                    return false;
+                }
+            }
+        }
+
+        // Open the renamed file for reading
+        currentReader = RuntimeIO.open(tempFilePath != null ? tempFilePath.toString() : (backupFileName != null ? backupFileName : originalFileName));
         getGlobalIO("main::ARGV").set(currentReader);
 
-        // Return true if the current reader is successfully set
-        return currentReader != null;
+        // Open the original file for writing (this is the ARGVOUT equivalent)
+        currentWriter = RuntimeIO.open(originalFileName, ">");
+        getGlobalIO("main::ARGVOUT").set(currentWriter);
+
+        return currentReader != null && currentWriter != null;
     }
 }
