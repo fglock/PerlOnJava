@@ -121,22 +121,6 @@ public class ArgumentParser {
     }
 
     /**
-     * Combines the original arguments with those extracted from the shebang line.
-     *
-     * @param args        The original command-line arguments.
-     * @param shebangArgs The arguments extracted from the shebang line.
-     * @param index       The current index in the arguments array.
-     * @return A new array of arguments combining the original and shebang arguments.
-     */
-    private static String[] combineArgsWithShebang(String[] args, String[] shebangArgs, int index) {
-        String[] newArgs = new String[index + 1 + shebangArgs.length + (args.length - index - 1)];
-        System.arraycopy(args, 0, newArgs, 0, index + 1);
-        System.arraycopy(shebangArgs, 0, newArgs, index + 1, shebangArgs.length);
-        System.arraycopy(args, index + 1, newArgs, index + 1 + shebangArgs.length, args.length - index - 1);
-        return newArgs;
-    }
-
-    /**
      * Processes clustered single-character switches (e.g., -e, -i).
      *
      * @param args       The command-line arguments.
