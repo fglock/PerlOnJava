@@ -25,11 +25,38 @@
 - ✔️   **Comments**: Support for comments and POD (documentation) in code is implemented.
 - ❌  **Subroutine hoisting**: Calling subroutines before they are declared is not implemented.
 
+### Command line switches
+
+- ✔️   Accept command line switches from the shebang line.
+- ✔️   Command line switches `-c`, `-e`, `-p`, `-n`, `-i`, `-0`, `-a`, `-h`, `-?` are implemented.
+- ❌   Missing command line switches include:
+  - `-g`: Debugging features.
+  - `-s`: Rudimentary switch parsing.
+  - `-T`: Taint checks.
+  - `-t`: Taint checks with warnings.
+  - `-u`: Dumps core after compiling.
+  - `-U`: Allows unsafe operations.
+  - `-W`: Enables all warnings.
+  - `-X`: Disables all warnings.
+  - `-v`: Displays the version.
+  - `-V[:configvar]`: Displays configuration information.
+  - `-w`: Enables warnings.
+  - `-d[t][:debugger]`: Runs the program under the debugger.
+  - `-D[number/list]`: Sets debugging flags.
+  - `-Fpattern`: Specifies the pattern for autosplit.
+  - `-l[octal]`: Enables automatic line-ending processing.
+  - `-I*dir*`: Specify include directories (mentioned but not implemented).
+  - `-m[-]module`: Loads a module.
+  - `-M[-]'module...'`: Loads a module with arguments.
+  - `-f`: Suppresses execution of `~/.perlrc`.
+  - `-C [number/list]`: Controls Unicode features.
+  - `-S`: Uses the PATH environment variable to find the script.
+  - `-x[dir]`: Strips leading garbage before `#!perl`.
+  - `-E`: Similar to `-e` but enables all optional features.
+
 ## Testing
 - ✔️   **TAP tests**: Running standard Perl testing protocol.
 - ✔️   **CI/CD**: Github testing pipeline in Ubuntu.
-- ✔️   **Command line**: Command line switches `-c`, `-e`, `-p`, `-n`, `-i`, `-0`, `-a`, `-h`, `-?` are implemented.
-- ✔️   **Command line**: Accept command line switches from the shebang line.
 
 ## Scalars
 - ✔️   **`my` variable declaration**: Local variables can be declared using `my`.

@@ -185,11 +185,40 @@ public class ArgumentParser {
                     printHelp();
                     System.exit(0);
                     break;
+                case 'I':
+                    // Handle include directory specified with -I
+                    index = handleIncludeDirectory(args, parsedArgs, index, j, arg);
+                    return index;
                 default:
                     System.err.println("Unrecognized switch: -" + switchChar + "  (-h will show valid options)");
                     System.exit(0);
                     break;
             }
+        }
+        return index;
+    }
+
+    /**
+     * Handles include directory specified with the -I switch.
+     *
+     * @param args       The command-line arguments.
+     * @param parsedArgs The CompilerOptions object to configure.
+     * @param index      The current index in the arguments array.
+     * @param j          The current position in the clustered switch string.
+     * @param arg        The current argument being processed.
+     * @return The updated index after processing the include directory.
+     */
+    private static int handleIncludeDirectory(String[] args, CompilerOptions parsedArgs, int index, int j, String arg) {
+        if (j < arg.length() - 1) {
+            // If there's a directory specified immediately after -I, use it
+            String path = arg.substring(j + 1);
+            parsedArgs.inc.push(new RuntimeScalar(path));
+        } else if (index + 1 < args.length && !args[index + 1].startsWith("-")) {
+            // If the next argument is not a switch, treat it as the directory
+            parsedArgs.inc.push(new RuntimeScalar(args[++index]));
+        } else {
+            System.err.println("No directory specified for -I.");
+            System.exit(1);
         }
         return index;
     }
