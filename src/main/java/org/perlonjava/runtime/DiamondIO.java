@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.ArgumentParser;
+
 import static org.perlonjava.runtime.GlobalContext.*;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
@@ -29,6 +31,7 @@ public class DiamondIO {
 
     // Static field to store the in-place extension for the -i switch
     static String inPlaceExtension = null;
+    static boolean inPlaceEdit = false;
 
     // Path to the temporary file to be deleted on exit
     static Path tempFilePath = null;
@@ -44,6 +47,11 @@ public class DiamondIO {
                 }
             }
         }));
+    }
+
+    public static void initialize(ArgumentParser.CompilerOptions compilerOptions) {
+        inPlaceExtension = compilerOptions.inPlaceExtension;
+        inPlaceEdit = compilerOptions.inPlaceEdit;
     }
 
     /**
