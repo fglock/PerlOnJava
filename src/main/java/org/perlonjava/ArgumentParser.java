@@ -33,7 +33,16 @@ public class ArgumentParser {
         @Override
         public String toString() {
             if (args != null) {
-                return "use " + moduleName + " split(/,/,q{" + args + "});";
+                // Split the arguments by comma and wrap each in quotes
+                String[] splitArgs = args.split(",");
+                StringBuilder formattedArgs = new StringBuilder();
+                for (int i = 0; i < splitArgs.length; i++) {
+                    formattedArgs.append("\"").append(splitArgs[i].trim()).append("\"");
+                    if (i < splitArgs.length - 1) {
+                        formattedArgs.append(", ");
+                    }
+                }
+                return "use " + moduleName + " (" + formattedArgs.toString() + ");";
             }
             return type == 'm' ? "use " + moduleName + " ();" : "use " + moduleName + ";";
         }
@@ -174,7 +183,7 @@ public class ArgumentParser {
                 case 'm':
                 case 'M':
                     index = handleModuleSwitch(args, parsedArgs, index, j, arg, switchChar);
-                    break;
+                    return index;
                 case 'a':
                     // Enable autosplit mode
                     parsedArgs.autoSplit = true;
