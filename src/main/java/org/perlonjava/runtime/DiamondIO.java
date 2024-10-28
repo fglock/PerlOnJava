@@ -2,14 +2,15 @@ package org.perlonjava.runtime;
 
 import org.perlonjava.ArgumentParser;
 
-import static org.perlonjava.runtime.GlobalContext.*;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+
+import static org.perlonjava.runtime.GlobalContext.getGlobalArray;
+import static org.perlonjava.runtime.GlobalContext.getGlobalIO;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
  * The DiamondIO class manages reading from multiple input files,
