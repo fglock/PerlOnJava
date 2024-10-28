@@ -18,36 +18,6 @@ import java.util.List;
  */
 public class ArgumentParser {
 
-    // Define a structured data type for module use statements
-    private static class ModuleUseStatement {
-        char type; // 'm' or 'M'
-        String moduleName;
-        String args;
-
-        ModuleUseStatement(char type, String moduleName, String args) {
-            this.type = type;
-            this.moduleName = moduleName;
-            this.args = args;
-        }
-
-        @Override
-        public String toString() {
-            if (args != null) {
-                // Split the arguments by comma and wrap each in quotes
-                String[] splitArgs = args.split(",");
-                StringBuilder formattedArgs = new StringBuilder();
-                for (int i = 0; i < splitArgs.length; i++) {
-                    formattedArgs.append("\"").append(splitArgs[i].trim()).append("\"");
-                    if (i < splitArgs.length - 1) {
-                        formattedArgs.append(", ");
-                    }
-                }
-                return "use " + moduleName + " (" + formattedArgs.toString() + ");";
-            }
-            return type == 'm' ? "use " + moduleName + " ();" : "use " + moduleName + ";";
-        }
-    }
-
     /**
      * Parses the command-line arguments and returns a CompilerOptions object
      * configured based on the provided arguments.
@@ -304,7 +274,7 @@ public class ArgumentParser {
     /**
      * Handles the input record separator specified with the -0 switch.
      * This switch allows specifying a custom input record separator for processing files.
-     *
+     * <p>
      * The -0 switch can be followed by an optional octal or hexadecimal value that specifies
      * the character to be used as the input record separator. If no value is provided, the
      * null character is used by default. Special cases include:
@@ -514,6 +484,36 @@ public class ArgumentParser {
         System.out.println("  -h, --help      Displays this help message.");
     }
 
+    // Define a structured data type for module use statements
+    private static class ModuleUseStatement {
+        char type; // 'm' or 'M'
+        String moduleName;
+        String args;
+
+        ModuleUseStatement(char type, String moduleName, String args) {
+            this.type = type;
+            this.moduleName = moduleName;
+            this.args = args;
+        }
+
+        @Override
+        public String toString() {
+            if (args != null) {
+                // Split the arguments by comma and wrap each in quotes
+                String[] splitArgs = args.split(",");
+                StringBuilder formattedArgs = new StringBuilder();
+                for (int i = 0; i < splitArgs.length; i++) {
+                    formattedArgs.append("\"").append(splitArgs[i].trim()).append("\"");
+                    if (i < splitArgs.length - 1) {
+                        formattedArgs.append(", ");
+                    }
+                }
+                return "use " + moduleName + " (" + formattedArgs + ");";
+            }
+            return type == 'm' ? "use " + moduleName + " ();" : "use " + moduleName + ";";
+        }
+    }
+
     /**
      * CompilerOptions is a configuration class that holds various settings and flags
      * used by the compiler during the compilation process. These settings determine
@@ -551,12 +551,10 @@ public class ArgumentParser {
         public String inputRecordSeparator = "\n";
         public boolean autoSplit = false; // For -a
         public boolean useVersion = false; // For -E
-        List<ModuleUseStatement> moduleUseStatements = new ArrayList<>(); // For -m -M
-
         // Initialize @ARGV
         public RuntimeArray argumentList = GlobalContext.getGlobalArray("main::ARGV");
-
         public RuntimeArray inc = new RuntimeArray();
+        List<ModuleUseStatement> moduleUseStatements = new ArrayList<>(); // For -m -M
 
         @Override
         public CompilerOptions clone() {
