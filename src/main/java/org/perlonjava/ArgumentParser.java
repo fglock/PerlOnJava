@@ -148,6 +148,11 @@ public class ArgumentParser {
             char switchChar = arg.charAt(j);
 
             switch (switchChar) {
+                case 'a':
+                    // Enable autosplit mode
+                    parsedArgs.autoSplit = true;
+                    parsedArgs.processOnly = true; // -a implicitly sets -n
+                    break;
                 case '0':
                     // Handle input record separator specified with -0
                     index = handleInputRecordSeparator(args, parsedArgs, index, j, arg);
@@ -355,12 +360,16 @@ public class ArgumentParser {
      * @param parsedArgs The CompilerOptions object to modify.
      */
     private static void modifyCodeBasedOnFlags(CompilerOptions parsedArgs) {
+        String autoSplit = "";
+        if (parsedArgs.autoSplit) {
+            autoSplit = " @main::F = split(' '); ";
+        }
         if (parsedArgs.processAndPrint) {
             // Wrap the code in a loop that processes and prints each line
-            parsedArgs.code = "while (<>) { " + parsedArgs.code + " } continue { print or die \"-p destination: $!\\n\"; }";
+            parsedArgs.code = "while (<>) { " + autoSplit + parsedArgs.code + " } continue { print or die \"-p destination: $!\\n\"; }";
         } else if (parsedArgs.processOnly) {
             // Wrap the code in a loop that processes each line without printing
-            parsedArgs.code = "while (<>) { " + parsedArgs.code + " }";
+            parsedArgs.code = "while (<>) { " + autoSplit + parsedArgs.code + " }";
         }
     }
 
@@ -380,6 +389,7 @@ public class ArgumentParser {
         System.out.println("  -p              Process input files and print each line.");
         System.out.println("  -i[extension]   Edit files in-place (makes backup if extension supplied).");
         System.out.println("  -0[octal|hex]   Specify input record separator (e.g., -0, -0x0A).");
+        System.out.println("  -a              Enable autosplit mode (splits input lines into fields).");
         System.out.println("  -Idirectory     Specify @INC/#include directory (several -I's allowed)");
         System.out.println("  -h, --help      Displays this help message.");
     }
@@ -419,6 +429,7 @@ public class ArgumentParser {
         public String fileName = null;
         public String inPlaceExtension = null; // For -i
         public String inputRecordSeparator = "\n";
+        public boolean autoSplit = false; // For -a
 
         // Initialize @ARGV
         public RuntimeArray argumentList = GlobalContext.getGlobalArray("main::ARGV");
