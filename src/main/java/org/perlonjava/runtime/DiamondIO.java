@@ -36,19 +36,6 @@ public class DiamondIO {
     // Path to the temporary file to be deleted on exit
     static Path tempFilePath = null;
 
-    static {
-        // Register a shutdown hook to delete the temporary file
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            if (tempFilePath != null) {
-                try {
-                    Files.deleteIfExists(tempFilePath);
-                } catch (IOException e) {
-                    System.err.println("Error: Unable to delete temporary file " + tempFilePath);
-                }
-            }
-        }));
-    }
-
     public static void initialize(ArgumentParser.CompilerOptions compilerOptions) {
         inPlaceExtension = compilerOptions.inPlaceExtension;
         inPlaceEdit = compilerOptions.inPlaceEdit;
@@ -136,13 +123,17 @@ public class DiamondIO {
         String backupFileName = null;
 
         // Check if in-place editing is enabled
-        if (GlobalContext.getCompilerOptions().inPlaceEdit) {
-            String extension = GlobalContext.getCompilerOptions().inPlaceExtension;
+        if (inPlaceEdit) {
+            String extension = inPlaceExtension;
             if (extension == null || extension.isEmpty()) {
                 // Create a temporary file for the original file
                 try {
                     tempFilePath = Files.createTempFile("temp_", null);
                     Files.move(Paths.get(originalFileName), tempFilePath);
+
+                    // Schedule the file for deletion on JVM exit
+                    tempFilePath.toFile().deleteOnExit();
+
                 } catch (IOException e) {
                     System.err.println("Error: Unable to create temporary file for " + originalFileName);
                     return false;
@@ -162,15 +153,16 @@ public class DiamondIO {
                     return false;
                 }
             }
+
+            // Open the original file for writing (this is the ARGVOUT equivalent)
+            currentWriter = RuntimeIO.open(originalFileName, ">");
+            getGlobalIO("main::ARGVOUT").set(currentWriter);
+            RuntimeIO.lastSelectedHandle = new RuntimeScalar(currentWriter);
         }
 
         // Open the renamed file for reading
         currentReader = RuntimeIO.open(tempFilePath != null ? tempFilePath.toString() : (backupFileName != null ? backupFileName : originalFileName));
         getGlobalIO("main::ARGV").set(currentReader);
-
-        // Open the original file for writing (this is the ARGVOUT equivalent)
-        currentWriter = RuntimeIO.open(originalFileName, ">");
-        getGlobalIO("main::ARGVOUT").set(currentWriter);
 
         return currentReader != null && currentWriter != null;
     }
