@@ -440,7 +440,7 @@ public class ArgumentParser {
         String versionString = "v5.36.0";
         String autoSplit = "";
         if (parsedArgs.autoSplit) {
-            autoSplit = " our @F = split(' '); ";
+            autoSplit = " chomp; our @F = split(' '); ";
         }
         if (parsedArgs.processAndPrint) {
             // Wrap the code in a loop that processes and prints each line
