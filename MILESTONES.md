@@ -67,8 +67,8 @@
     - Planned release date: 2024-12-10
     - Error messages mimic those in Perl for consistency.
     - Added `$.`, `${^LAST_FH}` special variables.
-    - Added command line switches `-p`, `-n`, `-?`.
-    - Added `select(filehandle)` operator.
+    - Added command line switches `-p`, `-n`, `-i`, `-?`.
+    - Added `select(filehandle)` operator, `ARGVOUT` filehandle.
     - Work in progress: 
         - `state` variables
         - `socket` and related operators
