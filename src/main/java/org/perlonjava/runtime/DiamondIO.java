@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.ArgumentParser;
+
 import static org.perlonjava.runtime.GlobalContext.*;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
@@ -7,6 +9,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 
 /**
  * The DiamondIO class manages reading from multiple input files,
@@ -29,21 +32,14 @@ public class DiamondIO {
 
     // Static field to store the in-place extension for the -i switch
     static String inPlaceExtension = null;
+    static boolean inPlaceEdit = false;
 
     // Path to the temporary file to be deleted on exit
     static Path tempFilePath = null;
 
-    static {
-        // Register a shutdown hook to delete the temporary file
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            if (tempFilePath != null) {
-                try {
-                    Files.deleteIfExists(tempFilePath);
-                } catch (IOException e) {
-                    System.err.println("Error: Unable to delete temporary file " + tempFilePath);
-                }
-            }
-        }));
+    public static void initialize(ArgumentParser.CompilerOptions compilerOptions) {
+        inPlaceExtension = compilerOptions.inPlaceExtension;
+        inPlaceEdit = compilerOptions.inPlaceEdit;
     }
 
     /**
@@ -128,25 +124,30 @@ public class DiamondIO {
         String backupFileName = null;
 
         // Check if in-place editing is enabled
-        if (GlobalContext.getCompilerOptions().inPlaceEdit) {
-            String extension = GlobalContext.getCompilerOptions().inPlaceExtension;
+        if (inPlaceEdit) {
+            String extension = inPlaceExtension;
             if (extension == null || extension.isEmpty()) {
                 // Create a temporary file for the original file
                 try {
                     tempFilePath = Files.createTempFile("temp_", null);
-                    Files.move(Paths.get(originalFileName), tempFilePath);
+                    backupFileName = tempFilePath.toString();
+
+                    Files.move(Paths.get(originalFileName), tempFilePath, StandardCopyOption.REPLACE_EXISTING);
+
+                    // Schedule the file for deletion on JVM exit
+                    tempFilePath.toFile().deleteOnExit();
+
                 } catch (IOException e) {
-                    System.err.println("Error: Unable to create temporary file for " + originalFileName);
+                    System.err.println("Error: Unable to create temporary file for " + originalFileName + ": " + e);
                     return false;
                 }
-            } else if (extension.contains("*")) {
-                backupFileName = extension.replace("*", originalFileName);
             } else {
-                backupFileName = originalFileName + extension;
-            }
-
-            // Rename the original file to the backup file if needed
-            if (backupFileName != null) {
+                if (extension.contains("*")) {
+                    backupFileName = extension.replace("*", originalFileName);
+                } else {
+                    backupFileName = originalFileName + extension;
+                }
+                // Rename the original file to the backup file if needed
                 try {
                     Files.move(Paths.get(originalFileName), Paths.get(backupFileName));
                 } catch (IOException e) {
@@ -154,16 +155,17 @@ public class DiamondIO {
                     return false;
                 }
             }
+
+            // Open the original file for writing (this is the ARGVOUT equivalent)
+            currentWriter = RuntimeIO.open(originalFileName, ">");
+            getGlobalIO("main::ARGVOUT").set(currentWriter);
+            RuntimeIO.lastSelectedHandle = new RuntimeScalar(currentWriter);
         }
 
         // Open the renamed file for reading
         currentReader = RuntimeIO.open(tempFilePath != null ? tempFilePath.toString() : (backupFileName != null ? backupFileName : originalFileName));
         getGlobalIO("main::ARGV").set(currentReader);
 
-        // Open the original file for writing (this is the ARGVOUT equivalent)
-        currentWriter = RuntimeIO.open(originalFileName, ">");
-        getGlobalIO("main::ARGVOUT").set(currentWriter);
-
-        return currentReader != null && currentWriter != null;
+        return currentReader != null;
     }
 }
