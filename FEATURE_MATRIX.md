@@ -29,6 +29,7 @@
 - ✔️   **TAP tests**: Running standard Perl testing protocol.
 - ✔️   **CI/CD**: Github testing pipeline in Ubuntu.
 - ✔️   **Command line**: Command line switches `-c`, `-e`, `-p`, `-n`, `-i`, `-h`, `-?` are implemented.
+- ✔️   **Command line**: Accept command line switches from the shebang line.
 
 ## Scalars
 - ✔️   **`my` variable declaration**: Local variables can be declared using `my`.
