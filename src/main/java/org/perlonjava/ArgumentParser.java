@@ -452,7 +452,7 @@ public class ArgumentParser {
 
         StringBuilder useStatements = new StringBuilder();
         if (parsedArgs.useVersion) {
-            useStatements.append("use ").append(versionString).append(";\n").append(parsedArgs.code);
+            useStatements.append("use ").append(versionString).append(";\n");
         }
         for (ModuleUseStatement moduleStatement : parsedArgs.moduleUseStatements) {
             useStatements.append(moduleStatement.toString()).append("\n");
