@@ -603,13 +603,13 @@ public class EmitOperator {
                 BinaryOperatorNode binop = (BinaryOperatorNode) operand.elements.get(0);
                 if (binop.operator.equals("{")) {
                     // Handle hash element operator.
-                    emitterVisitor.handleHashElementOperator(binop, operator);
+                    Dereference.handleHashElementOperator(emitterVisitor, binop, operator);
                     return;
                 }
                 if (binop.operator.equals("->")) {
                     if (binop.right instanceof HashLiteralNode) { // ->{x}
                         // Handle arrow hash dereference
-                        emitterVisitor.handleArrowHashDeref(binop, operator);
+                        Dereference.handleArrowHashDeref(emitterVisitor, binop, operator);
                         return;
                     }
                 }
