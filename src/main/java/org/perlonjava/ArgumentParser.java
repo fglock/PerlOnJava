@@ -34,6 +34,12 @@ public class ArgumentParser {
         return parsedArgs;
     }
 
+    /**
+     * Processes the command-line arguments, distinguishing between switch and non-switch arguments.
+     *
+     * @param args       The command-line arguments.
+     * @param parsedArgs The CompilerOptions object to configure.
+     */
     private static void processArgs(String[] args, CompilerOptions parsedArgs) {
         boolean readingArgv = false; // Flag to indicate if we are reading non-switch arguments
 
@@ -67,9 +73,9 @@ public class ArgumentParser {
      * Processes non-switch arguments, typically file names or positional arguments.
      * If the code has not been set, it attempts to read the file content.
      *
-     * @param args The command-line arguments.
+     * @param args       The command-line arguments.
      * @param parsedArgs The CompilerOptions object to configure.
-     * @param index The current index in the arguments array.
+     * @param index      The current index in the arguments array.
      */
     private static void processNonSwitchArgument(String[] args, CompilerOptions parsedArgs, int index) {
         if (parsedArgs.code == null) {
@@ -93,10 +99,10 @@ public class ArgumentParser {
      * Processes the shebang line if present in the file content.
      * This can modify the arguments based on the shebang line content.
      *
-     * @param args The command-line arguments.
-     * @param parsedArgs The CompilerOptions object to configure.
+     * @param args        The command-line arguments.
+     * @param parsedArgs  The CompilerOptions object to configure.
      * @param fileContent The content of the file being processed.
-     * @param index The current index in the arguments array.
+     * @param index       The current index in the arguments array.
      */
     private static void processShebangLine(String[] args, CompilerOptions parsedArgs, String fileContent, int index) {
         String[] lines = fileContent.split("\n", 2);
@@ -115,9 +121,9 @@ public class ArgumentParser {
     /**
      * Combines the original arguments with those extracted from the shebang line.
      *
-     * @param args The original command-line arguments.
+     * @param args        The original command-line arguments.
      * @param shebangArgs The arguments extracted from the shebang line.
-     * @param index The current index in the arguments array.
+     * @param index       The current index in the arguments array.
      * @return A new array of arguments combining the original and shebang arguments.
      */
     private static String[] combineArgsWithShebang(String[] args, String[] shebangArgs, int index) {
@@ -131,10 +137,10 @@ public class ArgumentParser {
     /**
      * Processes clustered single-character switches (e.g., -e, -i).
      *
-     * @param args The command-line arguments.
+     * @param args       The command-line arguments.
      * @param parsedArgs The CompilerOptions object to configure.
-     * @param arg The current argument being processed.
-     * @param index The current index in the arguments array.
+     * @param arg        The current argument being processed.
+     * @param index      The current index in the arguments array.
      * @return The updated index after processing the switches.
      */
     private static int processClusteredSwitches(String[] args, CompilerOptions parsedArgs, String arg, int index) {
@@ -182,11 +188,11 @@ public class ArgumentParser {
     /**
      * Handles the inline code specified with the -e switch.
      *
-     * @param args The command-line arguments.
+     * @param args       The command-line arguments.
      * @param parsedArgs The CompilerOptions object to configure.
-     * @param index The current index in the arguments array.
-     * @param j The current position in the clustered switch string.
-     * @param arg The current argument being processed.
+     * @param index      The current index in the arguments array.
+     * @param j          The current position in the clustered switch string.
+     * @param arg        The current argument being processed.
      * @return The updated index after processing the inline code.
      */
     private static int handleInlineCode(String[] args, CompilerOptions parsedArgs, int index, int j, String arg) {
@@ -209,11 +215,11 @@ public class ArgumentParser {
     /**
      * Handles in-place editing specified with the -i switch.
      *
-     * @param args The command-line arguments.
+     * @param args       The command-line arguments.
      * @param parsedArgs The CompilerOptions object to configure.
-     * @param index The current index in the arguments array.
-     * @param j The current position in the clustered switch string.
-     * @param arg The current argument being processed.
+     * @param index      The current index in the arguments array.
+     * @param j          The current position in the clustered switch string.
+     * @param arg        The current argument being processed.
      * @return The updated index after processing the in-place editing switch.
      */
     private static int handleInPlaceEditing(String[] args, CompilerOptions parsedArgs, int index, int j, String arg) {
@@ -237,10 +243,10 @@ public class ArgumentParser {
     /**
      * Processes long-form switches (e.g., --debug, --tokenize).
      *
-     * @param args The command-line arguments.
+     * @param args       The command-line arguments.
      * @param parsedArgs The CompilerOptions object to configure.
-     * @param arg The current argument being processed.
-     * @param index The current index in the arguments array.
+     * @param arg        The current argument being processed.
+     * @param index      The current index in the arguments array.
      * @return The updated index after processing the long-form switch.
      */
     private static int processLongSwitches(String[] args, CompilerOptions parsedArgs, String arg, int index) {
@@ -281,7 +287,7 @@ public class ArgumentParser {
      * Validates that exclusive options are not combined.
      *
      * @param parsedArgs The CompilerOptions object to check.
-     * @param option The option being validated.
+     * @param option     The option being validated.
      */
     private static void validateExclusiveOptions(CompilerOptions parsedArgs, String option) {
         if (parsedArgs.tokenizeOnly || parsedArgs.parseOnly || parsedArgs.compileOnly) {
