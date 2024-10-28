@@ -8,7 +8,21 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
+/**
+ * The ArgumentParser class is responsible for parsing command-line arguments
+ * and configuring the CompilerOptions accordingly. It handles various flags
+ * and options that determine the behavior of the compiler, such as enabling
+ * debug mode, specifying code to execute, or setting file processing modes.
+ */
 public class ArgumentParser {
+
+    /**
+     * Parses the command-line arguments and returns a CompilerOptions object
+     * configured based on the provided arguments.
+     *
+     * @param args The command-line arguments to parse.
+     * @return A CompilerOptions object with settings derived from the arguments.
+     */
     public static CompilerOptions parseArguments(String[] args) {
         CompilerOptions parsedArgs = new CompilerOptions();
         parsedArgs.code = null;
@@ -16,81 +30,100 @@ public class ArgumentParser {
 
         for (int i = 0; i < args.length; i++) {
             if (readingArgv) {
+                // Add remaining arguments to the argument list
                 parsedArgs.argumentList.push(new RuntimeScalar(args[i]));
             } else {
-                switch (args[i]) {
-                    case "-e":
-                        if (i + 1 < args.length) {
-                            parsedArgs.code = args[i + 1];
-                            parsedArgs.fileName = "-e";
-                            i++;
-                            readingArgv = true;
-                        } else {
-                            System.err.println("Error: -e requires an argument");
-                            System.exit(1);
-                        }
-                        break;
-                    case "--debug":
-                        parsedArgs.debugEnabled = true;
-                        break;
-                    case "--tokenize":
-                        if (parsedArgs.parseOnly || parsedArgs.compileOnly) {
-                            System.err.println("Error: --tokenize cannot be combined with --parse or -c");
-                            System.exit(1);
-                        }
-                        parsedArgs.tokenizeOnly = true;
-                        break;
-                    case "--parse":
-                        if (parsedArgs.tokenizeOnly || parsedArgs.compileOnly) {
-                            System.err.println("Error: --parse cannot be combined with --tokenize or -c");
-                            System.exit(1);
-                        }
-                        parsedArgs.parseOnly = true;
-                        break;
-                    case "--disassemble":
-                        if (parsedArgs.tokenizeOnly || parsedArgs.parseOnly) {
-                            System.err.println("Error: --disassemble cannot be combined with --tokenize or --parse");
-                            System.exit(1);
-                        }
-                        parsedArgs.disassembleEnabled = true;
-                        break;
-                    case "-c":
-                        if (parsedArgs.tokenizeOnly || parsedArgs.parseOnly) {
-                            System.err.println("Error: -c cannot be combined with --tokenize or --parse");
-                            System.exit(1);
-                        }
-                        parsedArgs.compileOnly = true;
-                        break;
-                    case "-n":
-                        parsedArgs.processOnly = true;
-                        break;
-                    case "-p":
-                        parsedArgs.processAndPrint = true;
-                        break;
-                    case "-i":
-                        // Handle the -i switch for in-place editing
-                        parsedArgs.inPlaceEdit = true; // Set inPlaceEdit to true
-                        if (i + 1 < args.length && !args[i + 1].startsWith("-")) {
-                            parsedArgs.inPlaceExtension = args[i + 1];
-                            i++;
-                        } else {
-                            parsedArgs.inPlaceExtension = ".bak"; // Default extension
-                        }
-                        break;
-                    case "-h":
-                    case "-?":
-                    case "--help":
-                        printHelp();
-                        System.exit(0);
-                        break;
-                    default:
-                        if (args[i].startsWith("-I")) {
-                            String path = args[i].substring("-I".length());
-                            if (!path.isEmpty()) {
-                                parsedArgs.inc.push(new RuntimeScalar(path));
+                String arg = args[i];
+                if (arg.startsWith("-i")) {
+                    // Handle in-place editing option
+                    parsedArgs.inPlaceEdit = true;
+                    if (arg.length() > 2) {
+                        // Handle -i.bak (backup extension)
+                        parsedArgs.inPlaceExtension = arg.substring(2);
+                    } else if (i + 1 < args.length && !args[i + 1].startsWith("-")) {
+                        // Handle -i .bak (backup extension as separate argument)
+                        parsedArgs.inPlaceExtension = args[i + 1];
+                        i++;
+                    } else {
+                        parsedArgs.inPlaceExtension = null; // No extension given
+                    }
+                } else if (arg.startsWith("-I")) {
+                    // Handle include directory option
+                    String path = arg.substring(2);
+                    if (!path.isEmpty()) {
+                        parsedArgs.inc.push(new RuntimeScalar(path));
+                    } else if (i + 1 < args.length && !args[i + 1].startsWith("-")) {
+                        parsedArgs.inc.push(new RuntimeScalar(args[i + 1]));
+                        i++;
+                    }
+                } else {
+                    switch (arg) {
+                        case "-e":
+                            // Handle inline code execution
+                            if (i + 1 < args.length) {
+                                parsedArgs.code = args[i + 1];
+                                parsedArgs.fileName = "-e";
+                                i++;
+                                readingArgv = true;
+                            } else {
+                                System.err.println("Error: -e requires an argument");
+                                System.exit(1);
                             }
-                        } else {
-                            parsedArgs.fileName = args[i];
+                            break;
+                        case "--debug":
+                            // Enable debug mode
+                            parsedArgs.debugEnabled = true;
+                            break;
+                        case "--tokenize":
+                            // Enable tokenization only
+                            if (parsedArgs.parseOnly || parsedArgs.compileOnly) {
+                                System.err.println("Error: --tokenize cannot be combined with --parse or -c");
+                                System.exit(1);
+                            }
+                            parsedArgs.tokenizeOnly = true;
+                            break;
+                        case "--parse":
+                            // Enable parsing only
+                            if (parsedArgs.tokenizeOnly || parsedArgs.compileOnly) {
+                                System.err.println("Error: --parse cannot be combined with --tokenize or -c");
+                                System.exit(1);
+                            }
+                            parsedArgs.parseOnly = true;
+                            break;
+                        case "--disassemble":
+                            // Enable disassembly of generated code
+                            if (parsedArgs.tokenizeOnly || parsedArgs.parseOnly) {
+                                System.err.println("Error: --disassemble cannot be combined with --tokenize or --parse");
+                                System.exit(1);
+                            }
+                            parsedArgs.disassembleEnabled = true;
+                            break;
+                        case "-c":
+                            // Enable compilation only
+                            if (parsedArgs.tokenizeOnly || parsedArgs.parseOnly) {
+                                System.err.println("Error: -c cannot be combined with --tokenize or --parse");
+                                System.exit(1);
+                            }
+                            parsedArgs.compileOnly = true;
+                            break;
+                        case "-n":
+                            // Process input files without printing lines
+                            parsedArgs.processOnly = true;
+                            break;
+                        case "-p":
+                            // Process input files and print each line
+                            parsedArgs.processAndPrint = true;
+                            break;
+                        case "-h":
+                        case "-?":
+                        case "--help":
+                            // Display help message
+                            printHelp();
+                            System.exit(0);
+                            break;
+                        default:
+                            // Assume the argument is a filename
+                            parsedArgs.fileName = arg;
                             try {
                                 parsedArgs.code = new String(Files.readAllBytes(Paths.get(parsedArgs.fileName)));
                                 readingArgv = true;
@@ -98,13 +131,13 @@ public class ArgumentParser {
                                 System.err.println("Error: Unable to read file " + parsedArgs.fileName);
                                 System.exit(1);
                             }
-                        }
-                        break;
+                            break;
+                    }
                 }
             }
         }
 
-        // Wrap the Perl code with the loop structure for -n and -p
+        // Modify code based on processing flags
         if (parsedArgs.processAndPrint) {
             parsedArgs.code = "while (<>) { " + parsedArgs.code + " } continue { print or die \"-p destination: $!\\n\"; }";
         } else if (parsedArgs.processOnly) {
@@ -114,6 +147,9 @@ public class ArgumentParser {
         return parsedArgs;
     }
 
+    /**
+     * Prints the help message detailing the usage of the program and its options.
+     */
     private static void printHelp() {
         System.out.println("Usage: java -cp <classpath> org.perlonjava.Main [options] [file] [args]");
         System.out.println("Options:");
@@ -143,10 +179,14 @@ public class ArgumentParser {
      * - tokenizeOnly: If true, the compiler will only tokenize the input and stop.
      * - parseOnly: If true, the compiler will only parse the input and stop.
      * - compileOnly: If true, the compiler will compile the input but won't execute it.
+     * - processOnly: If true, the compiler will process input files without printing lines.
+     * - processAndPrint: If true, the compiler will process input files and print each line.
+     * - inPlaceEdit: Indicates if in-place editing is enabled.
      * - code: The source code to be compiled.
      * - fileName: The name of the file containing the source code, if any.
      * - inPlaceExtension: The extension used for in-place editing backups.
-     * - inPlaceEdit: Indicates if in-place editing is enabled.
+     * - argumentList: A list of arguments to be passed to the program.
+     * - inc: A list of include directories for the compiler.
      */
     public static class CompilerOptions implements Cloneable {
         public boolean debugEnabled = false;
