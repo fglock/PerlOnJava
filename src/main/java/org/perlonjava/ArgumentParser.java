@@ -67,6 +67,16 @@ public class ArgumentParser {
                     case "-p":
                         parsedArgs.processAndPrint = true;
                         break;
+                    case "-i":
+                        // Handle the -i switch for in-place editing
+                        parsedArgs.inPlaceEdit = true; // Set inPlaceEdit to true
+                        if (i + 1 < args.length && !args[i + 1].startsWith("-")) {
+                            parsedArgs.inPlaceExtension = args[i + 1];
+                            i++;
+                        } else {
+                            parsedArgs.inPlaceExtension = ".bak"; // Default extension
+                        }
+                        break;
                     case "-h":
                     case "-?":
                     case "--help":
@@ -115,6 +125,7 @@ public class ArgumentParser {
         System.out.println("  -c              Compiles the input code only.");
         System.out.println("  -n              Process input files without printing lines.");
         System.out.println("  -p              Process input files and print each line.");
+        System.out.println("  -i[extension]   Edit files in-place (makes backup if extension supplied).");
         System.out.println("  -Idirectory     Specify @INC/#include directory (several -I's allowed)");
         System.out.println("  -h, --help      Displays this help message.");
     }
@@ -134,6 +145,8 @@ public class ArgumentParser {
      * - compileOnly: If true, the compiler will compile the input but won't execute it.
      * - code: The source code to be compiled.
      * - fileName: The name of the file containing the source code, if any.
+     * - inPlaceExtension: The extension used for in-place editing backups.
+     * - inPlaceEdit: Indicates if in-place editing is enabled.
      */
     public static class CompilerOptions implements Cloneable {
         public boolean debugEnabled = false;
@@ -143,8 +156,10 @@ public class ArgumentParser {
         public boolean compileOnly = false;
         public boolean processOnly = false; // For -n
         public boolean processAndPrint = false; // For -p
+        public boolean inPlaceEdit = false; // New field for in-place editing
         public String code = null;
         public String fileName = null;
+        public String inPlaceExtension = null; // For -i
 
         // Initialize @ARGV
         public RuntimeArray argumentList = GlobalContext.getGlobalArray("main::ARGV");
@@ -172,10 +187,11 @@ public class ArgumentParser {
                     "    compileOnly=" + compileOnly + ",\n" +
                     "    code='" + (code != null ? code : "null") + "',\n" +
                     "    fileName='" + (fileName != null ? fileName : "null") + "',\n" +
+                    "    inPlaceExtension='" + (inPlaceExtension != null ? inPlaceExtension : "null") + "',\n" +
+                    "    inPlaceEdit=" + inPlaceEdit + ",\n" +
                     "    argumentList=" + argumentList + ",\n" +
                     "    inc=" + inc + "\n" +
                     "}";
         }
     }
 }
-
