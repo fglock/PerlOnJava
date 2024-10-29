@@ -574,21 +574,29 @@ public class ArgumentParser {
      * Prints the help message detailing the usage of the program and its options.
      */
     private static void printHelp() {
-        System.out.println("Usage: java -cp <classpath> org.perlonjava.Main [options] [file] [args]");
-        System.out.println("Options:");
-        System.out.println("  -e <code>       Specifies the code to be processed.");
-        System.out.println("  --debug         Enables debugging mode.");
-        System.out.println("  --tokenize      Tokenizes the input code.");
-        System.out.println("  --parse         Parses the input code.");
-        System.out.println("  --disassemble   Disassemble the generated code.");
-        System.out.println("  -c              Compiles the input code only.");
-        System.out.println("  -n              Process input files without printing lines.");
-        System.out.println("  -p              Process input files and print each line.");
-        System.out.println("  -i[extension]   Edit files in-place (makes backup if extension supplied).");
-        System.out.println("  -0[octal|hex]   Specify input record separator (e.g., -0, -0x0A).");
-        System.out.println("  -a              Enable autosplit mode (splits input lines into fields).");
-        System.out.println("  -Idirectory     Specify @INC/#include directory (several -I's allowed)");
-        System.out.println("  -h, --help      Displays this help message.");
+        System.out.println("Usage: java -jar target/perlonjava-1.0-SNAPSHOT.jar [options] [file] [args]");
+        System.out.println();
+        System.out.println("  -0[octal/hexadecimal] specify record separator (\\0, if no argument)");
+        System.out.println("  -a                    autosplit mode with -n or -p (splits $_ into @F)");
+        System.out.println("  -c                    check syntax only (runs BEGIN and CHECK blocks)");
+        System.out.println("  -e commandline        one line of program (several -e's allowed, omit programfile)");
+        System.out.println("  -E commandline        like -e, but enables all optional features");
+        System.out.println("  -F/pattern/           split() pattern for -a switch (//'s are optional)");
+        System.out.println("  -g                    read all input in one go (slurp), rather than line-by-line");
+        System.out.println("  -i[extension]         edit <> files in place (makes backup if extension supplied)");
+        System.out.println("  -Idirectory           specify @INC/#include directory (several -I's allowed)");
+        System.out.println("  -l[octnum]            enable line ending processing, specifies line terminator");
+        System.out.println("  -[mM][-]module        execute \"use/no module...\" before executing program");
+        System.out.println("  -n                    assume \"while (<>) { ... }\" loop around program");
+        System.out.println("  -p                    assume loop like -n but print line also, like sed");
+        System.out.println("  -x[directory]         ignore text before #!perl line (optionally cd to directory)");
+        System.out.println("  --debug               enable debugging mode");
+        System.out.println("  --tokenize            tokenize the input code");
+        System.out.println("  --parse               parse the input code");
+        System.out.println("  --disassemble         disassemble the generated code");
+        System.out.println("  -h, --help            displays this help message");
+        System.out.println();
+        System.out.println("Run 'perldoc perl' for more help with Perl.");
     }
 
     // Define a structured data type for module use statements
