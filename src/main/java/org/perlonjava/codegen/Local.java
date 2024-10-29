@@ -18,7 +18,7 @@ public class Local {
      * @param ast The abstract syntax tree node to be checked for a 'local' operator.
      * @param mv  The method visitor used to generate bytecode instructions.
      * @return A localRecord containing information about the presence of a 'local' operator
-     *         and the index of the dynamic variable stack.
+     * and the index of the dynamic variable stack.
      */
     static localRecord localSetup(EmitterContext ctx, Node ast, MethodVisitor mv) {
         // Check if the code contains a 'local' operator

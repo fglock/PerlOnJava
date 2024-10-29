@@ -78,6 +78,51 @@ $@ = "";
 }
 say $@ eq "" ? "ok # \$@ restored after eval <$@>" : "not ok";
 
+# Test for `next` in a loop
+$global_var = "original";
+{
+    for my $i (1..3) {
+        local $global_var = "next scope";
+        next if $i == 2;
+        say $global_var eq "next scope" ? "ok # local variable with next" : "not ok";
+    }
+    say $global_var eq "original" ? "ok # local variable restored after next" : "not ok";
+}
+
+# Test for `redo` in a loop
+$global_var = "original";
+{
+    my $count = 0;
+    for my $i (1..3) {
+        local $global_var = "redo scope";
+        $count++;
+        redo if $count == 1;  # redo the first iteration
+        say $global_var eq "redo scope" ? "ok # local variable with redo" : "not ok";
+    }
+    say $global_var eq "original" ? "ok # local variable restored after redo" : "not ok";
+}
+
+# Test for `last` in a loop
+$global_var = "original";
+{
+    for my $i (1..3) {
+        local $global_var = "last scope";
+        last if $i == 2;
+        say $global_var eq "last scope" ? "ok # local variable with last" : "not ok";
+    }
+    say $global_var eq "original" ? "ok # local variable restored after last" : "not ok";
+}
+
+# Test for `return` in a subroutine
+$global_var = "original";
+sub test_return {
+    local $global_var = "return scope";
+    return if $global_var eq "return scope";
+    say "not ok # this should not be printed";
+}
+test_return();
+say $global_var eq "original" ? "ok # local variable restored after return" : "not ok";
+
 __END__
 
 #----- TODO --------
