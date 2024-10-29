@@ -2,7 +2,6 @@ package org.perlonjava.codegen;
 
 import org.objectweb.asm.*;
 import org.objectweb.asm.util.TraceClassVisitor;
-import org.perlonjava.astnode.BlockNode;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
@@ -172,20 +171,7 @@ public class EmitterMethodCreator implements Opcodes {
         // Prepare to visit the AST to generate bytecode
         EmitterVisitor visitor = new EmitterVisitor(ctx);
 
-        // Check if the code contains a 'local' operator
-        boolean containsLocalOperator = DynamicVariableVisitor.containsLocalOperator(ast);
-        int dynamicIndex = -1;
-        if (containsLocalOperator) {
-            // Allocate a local variable to store the dynamic variable stack index
-            dynamicIndex = ctx.symbolTable.allocateLocalVariable();
-            // Get the current level of the dynamic variable stack and store it
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/codegen/DynamicVariableManager",
-                    "getLocalLevel",
-                    "()I",
-                    false);
-            mv.visitVarInsn(Opcodes.ISTORE, dynamicIndex);
-        }
+        Local.localRecord localRecord = Local.localSetup(ctx, ast, mv);
 
         if (useTryCatch) {
             ctx.logDebug("useTryCatch");
@@ -266,15 +252,7 @@ public class EmitterMethodCreator implements Opcodes {
             mv.visitLabel(ctx.javaClassInfo.returnLabel); // "return" from other places arrive here
         }
 
-        // Add `local` teardown logic
-        if (containsLocalOperator) {
-            mv.visitVarInsn(Opcodes.ILOAD, dynamicIndex);
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/codegen/DynamicVariableManager",
-                    "popToLocalLevel",
-                    "(I)V",
-                    false);
-        }
+        Local.localTeardown(localRecord, mv);
 
         // Transform the value in the stack to RuntimeList
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getList", "()Lorg/perlonjava/runtime/RuntimeList;", true);

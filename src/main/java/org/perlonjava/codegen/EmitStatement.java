@@ -257,21 +257,7 @@ public class EmitStatement {
         Label redoLabel = new Label();
         Label nextLabel = new Label();
 
-        // "local" WIP
-        boolean containsLocalOperator = DynamicVariableVisitor.containsLocalOperator(node);
-        int dynamicIndex = -1;
-
-        if (containsLocalOperator) {
-            // "local" WIP
-            // Save dynamic variables stack index in a JVM local variable
-            dynamicIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/codegen/DynamicVariableManager",
-                    "getLocalLevel",
-                    "()I",
-                    false);
-            mv.visitVarInsn(Opcodes.ISTORE, dynamicIndex);
-        }
+        Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv);
 
         // Add redo label
         mv.visitLabel(redoLabel);
@@ -308,16 +294,7 @@ public class EmitStatement {
         // Add next label
         mv.visitLabel(nextLabel);
 
-        if (containsLocalOperator) {
-            // "local" WIP
-            // Restore dynamic variables
-            mv.visitVarInsn(Opcodes.ILOAD, dynamicIndex);
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/codegen/DynamicVariableManager",
-                    "popToLocalLevel",
-                    "(I)V",
-                    false);
-        }
+        Local.localTeardown(localRecord, mv);
 
         emitterVisitor.ctx.symbolTable.exitScope();
         emitterVisitor.ctx.logDebug("generateCodeBlock end");
