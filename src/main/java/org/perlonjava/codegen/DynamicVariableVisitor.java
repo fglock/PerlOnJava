@@ -5,7 +5,7 @@ import org.perlonjava.astnode.*;
 public class DynamicVariableVisitor implements Visitor {
     private boolean containsLocalOperator = false;
 
-    public static boolean containsLocalOperator(BlockNode blockNode) {
+    public static boolean containsLocalOperator(Node blockNode) {
         DynamicVariableVisitor visitor = new DynamicVariableVisitor();
         blockNode.accept(visitor);
         return visitor.containsLocalOperator;
