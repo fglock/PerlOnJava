@@ -10,8 +10,18 @@ import org.perlonjava.runtime.RuntimeContextType;
 
 import static org.perlonjava.operators.ScalarFlipFlopOperator.flipFlops;
 
+/**
+ * The EmitLogicalOperator class is responsible for handling logical operators
+ * and generating the corresponding bytecode using ASM.
+ */
 public class EmitLogicalOperator {
 
+    /**
+     * Emits bytecode for the flip-flop operator, which is used in range-like conditions.
+     *
+     * @param emitterVisitor The visitor used for code emission.
+     * @param node The binary operator node representing the flip-flop operation.
+     */
     static void emitFlipFlopOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         EmitterContext ctx = emitterVisitor.ctx;
         MethodVisitor mv = ctx.mv;
@@ -23,39 +33,45 @@ public class EmitLogicalOperator {
         ScalarFlipFlopOperator op = new ScalarFlipFlopOperator(node.operator.equals("..."));
         flipFlops.putIfAbsent(flipFlopId, op);   // Initialize to false state
 
-        //     public static String evaluate(int id, boolean leftOperand, boolean rightOperand) {
+        // Emit bytecode to evaluate the flip-flop operator
         mv.visitLdcInsn(flipFlopId);
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/ScalarFlipFlopOperator", "evaluate", "(ILorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
-        // If the context is VOID, we need to pop the result from the stack
+        // If the context is VOID, pop the result from the stack
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP);
         }
     }
 
+    /**
+     * Emits bytecode for logical assignment operators such as `||=` and `&&=`.
+     *
+     * @param emitterVisitor The visitor used for code emission.
+     * @param node The binary operator node representing the logical assignment operation.
+     * @param compareOpcode The opcode used for comparison (e.g., IFEQ for `&&=`).
+     * @param getBoolean The method name to convert the result to a boolean.
+     */
     static void emitLogicalAssign(EmitterVisitor emitterVisitor, BinaryOperatorNode node, int compareOpcode, String getBoolean) {
-        // Implements `||=` `&&=`, depending on compareOpcode
-
         MethodVisitor mv = emitterVisitor.ctx.mv;
         Label endLabel = new Label(); // Label for the end of the operation
 
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // target - left parameter
-        // the left parameter is in the stack
+        // The left parameter is in the stack
 
         mv.visitInsn(Opcodes.DUP);
-        // stack is [left, left]
+        // Stack is [left, left]
 
         // Convert the result to a boolean
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", getBoolean, "()Z", true);
-        // stack is [left, boolean]
+        // Stack is [left, boolean]
 
         // If the boolean value is true, jump to endLabel (we keep the left operand)
         mv.visitJumpInsn(compareOpcode, endLabel);
 
         node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // Evaluate right operand in scalar context
-        // stack is [left, right]
+        // Stack is [left, right]
 
         mv.visitInsn(Opcodes.DUP_X1); // Stack becomes [right, left, right]
         mv.visitInsn(Opcodes.SWAP);   // Stack becomes [right, right, left]
@@ -63,39 +79,45 @@ public class EmitLogicalOperator {
         // Assign right to left
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "addToScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", true);
         mv.visitInsn(Opcodes.POP);
-        // stack is [right]
+        // Stack is [right]
 
         // At this point, the stack either has the left (if it was true) or the right (if left was false)
         mv.visitLabel(endLabel);
 
-        // If the context is VOID, we need to pop the result from the stack
+        // If the context is VOID, pop the result from the stack
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP);
         }
     }
 
+    /**
+     * Emits bytecode for logical operators such as `||` and `&&`.
+     *
+     * @param emitterVisitor The visitor used for code emission.
+     * @param node The binary operator node representing the logical operation.
+     * @param compareOpcode The opcode used for comparison (e.g., IFEQ for `&&`).
+     * @param getBoolean The method name to convert the result to a boolean.
+     */
     static void emitLogicalOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node, int compareOpcode, String getBoolean) {
-        // Implements `||` `&&`, depending on compareOpcode
-
         MethodVisitor mv = emitterVisitor.ctx.mv;
         Label endLabel = new Label(); // Label for the end of the operation
 
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // target - left parameter
-        // the left parameter is in the stack
+        // The left parameter is in the stack
 
         mv.visitInsn(Opcodes.DUP);
-        // stack is [left, left]
+        // Stack is [left, left]
 
         // Convert the result to a boolean
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", getBoolean, "()Z", true);
-        // stack is [left, boolean]
+        // Stack is [left, boolean]
 
         // If the left operand boolean value is true, return left operand
         mv.visitJumpInsn(compareOpcode, endLabel);
 
-        mv.visitInsn(Opcodes.POP); // remove left operand
-        node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // right operand in scalar context
-        // stack is [right]
+        mv.visitInsn(Opcodes.POP); // Remove left operand
+        node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // Right operand in scalar context
+        // Stack is [right]
 
         mv.visitLabel(endLabel);
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
@@ -103,6 +125,12 @@ public class EmitLogicalOperator {
         }
     }
 
+    /**
+     * Emits bytecode for the ternary operator (condition ? trueExpr : falseExpr).
+     *
+     * @param emitterVisitor The visitor used for code emission.
+     * @param node The ternary operator node representing the operation.
+     */
     static void emitTernaryOperator(EmitterVisitor emitterVisitor, TernaryOperatorNode node) {
         emitterVisitor.ctx.logDebug("TERNARY_OP start");
 
