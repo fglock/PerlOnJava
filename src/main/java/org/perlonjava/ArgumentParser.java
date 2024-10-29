@@ -428,7 +428,7 @@ public class ArgumentParser {
         String versionString = "v5.36.0";
         String autoSplit = "";
         if (parsedArgs.autoSplit) {
-            autoSplit = " chomp; our @F = split(' '); ";
+            autoSplit = " our @F; { my $f = $_; chomp $f; @F = split(' ', $f); } ";
         }
         if (parsedArgs.processAndPrint) {
             // Wrap the code in a loop that processes and prints each line
