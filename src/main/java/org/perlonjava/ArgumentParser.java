@@ -211,7 +211,16 @@ public class ArgumentParser {
         return index;
     }
 
-    // Handle -x
+    /**
+     * Handles the -x switch for embedded programs, optionally changing the directory.
+     *
+     * @param args       The command-line arguments.
+     * @param parsedArgs The CompilerOptions object to configure.
+     * @param index      The current index in the arguments array.
+     * @param j          The current position in the clustered switch string.
+     * @param arg        The current argument being processed.
+     * @return The updated index after processing the embedded program.
+     */
     private static int handleEmbeddedProgram(String[] args, CompilerOptions parsedArgs, int index, int j, String arg) {
         String directory = null;
         if (j < arg.length() - 1) {
@@ -230,7 +239,16 @@ public class ArgumentParser {
         return index;
     }
 
-    // Handle the -l switch
+    /**
+     * Handles automatic line-ending processing specified with the -l switch.
+     *
+     * @param args       The command-line arguments.
+     * @param parsedArgs The CompilerOptions object to configure.
+     * @param index      The current index in the arguments array.
+     * @param j          The current position in the clustered switch string.
+     * @param arg        The current argument being processed.
+     * @return The updated index after processing the line-ending switch.
+     */
     private static int handleLineEndingProcessing(String[] args, CompilerOptions parsedArgs, int index, int j, String arg) {
         parsedArgs.lineEndingProcessing = true; // Mark that -l is used
         String octnum = arg.substring(j + 1);
@@ -258,8 +276,16 @@ public class ArgumentParser {
         return index;
     }
 
-
-    // handle the -F split pattern
+    /**
+     * Handles the split pattern specified with the -F switch.
+     *
+     * @param args       The command-line arguments.
+     * @param parsedArgs The CompilerOptions object to configure.
+     * @param index      The current index in the arguments array.
+     * @param j          The current position in the clustered switch string.
+     * @param arg        The current argument being processed.
+     * @return The updated index after processing the split pattern.
+     */
     private static int handleSplitPattern(String[] args, CompilerOptions parsedArgs, int index, int j, String arg) {
         if (j < arg.length() - 1) {
             // If there's a pattern specified immediately after -F, use it
@@ -274,7 +300,12 @@ public class ArgumentParser {
         return index;
     }
 
-    // helper method to extract the -F pattern
+    /**
+     * Extracts the pattern for the -F switch, ensuring it is properly formatted.
+     *
+     * @param pattern The pattern string to extract.
+     * @return The formatted pattern string.
+     */
     private static String extractPattern(String pattern) {
         if ((pattern.startsWith("/") && pattern.endsWith("/"))
                 || (pattern.startsWith("\"") && pattern.endsWith("\""))
@@ -296,7 +327,7 @@ public class ArgumentParser {
      * @param j          The current position in the clustered switch string.
      * @param arg        The current argument being processed.
      * @param switchChar The character representing the switch ('m' or 'M').
-     * @return The updated index after processing the module switch.
+     * @return The updated index after processing the module switch
      */
     private static int handleModuleSwitch(String[] args, CompilerOptions parsedArgs, int index, int j, String arg, char switchChar) {
         String moduleName = null;
@@ -353,7 +384,7 @@ public class ArgumentParser {
         }
         return index;
     }
-
+    
     /**
      * Handles the input record separator specified with the -0 switch.
      * This switch allows specifying a custom input record separator for processing files.
