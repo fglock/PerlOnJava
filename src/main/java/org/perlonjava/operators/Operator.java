@@ -384,19 +384,14 @@ public class Operator {
 
         // Special case: if the pattern is a single space character, treat it as /\s+/
         if (quotedRegex.type != RuntimeScalarType.REGEX && quotedRegex.toString().equals(" ")) {
-            quotedRegex = RuntimeRegex.getQuotedRegex(new RuntimeScalar(" "), new RuntimeScalar(""));
+            quotedRegex = RuntimeRegex.getQuotedRegex(new RuntimeScalar("\\s+"), new RuntimeScalar(""));
+            // Remove leading whitespace from the input string
+            inputStr = inputStr.replaceAll("^\\s+", "");
         }
 
         if (quotedRegex.type == RuntimeScalarType.REGEX) {
             RuntimeRegex regex = (RuntimeRegex) quotedRegex.value;
             Pattern pattern = regex.pattern;
-
-            // Special case: if the pattern is omitted or a single space character, treat it as /\s+/
-            if (pattern == null || pattern.pattern().equals(" ")) {
-                pattern = Pattern.compile("\\s+");
-                // Remove leading whitespace from the input string
-                inputStr = inputStr.replaceAll("^\\s+", "");
-            }
 
             // Special case: if the pattern is "/^/", treat it as if it used the multiline modifier
             if (pattern.pattern().equals("^")) {

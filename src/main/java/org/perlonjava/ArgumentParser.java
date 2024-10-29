@@ -144,6 +144,12 @@ public class ArgumentParser {
                     parsedArgs.autoSplit = true;
                     parsedArgs.processOnly = true; // -a implicitly sets -n
                     break;
+                case 'F':
+                    // Handle the split pattern for -a
+                    index = handleSplitPattern(args, parsedArgs, index, j, arg);
+                    parsedArgs.autoSplit = true; // -F implicitly sets -a
+                    parsedArgs.processOnly = true; // -F implicitly sets -n
+                    return index;
                 case '0':
                     // Handle input record separator specified with -0
                     index = handleInputRecordSeparator(args, parsedArgs, index, j, arg);
@@ -195,6 +201,32 @@ public class ArgumentParser {
             }
         }
         return index;
+    }
+
+    // handle the -F split pattern
+    private static int handleSplitPattern(String[] args, CompilerOptions parsedArgs, int index, int j, String arg) {
+        if (j < arg.length() - 1) {
+            // If there's a pattern specified immediately after -F, use it
+            parsedArgs.splitPattern = extractPattern(arg.substring(j + 1));
+        } else if (index + 1 < args.length && !args[index + 1].startsWith("-")) {
+            // If the next argument is not a switch, treat it as the pattern
+            parsedArgs.splitPattern = extractPattern(args[++index]);
+        } else {
+            System.err.println("No pattern specified for -F.");
+            System.exit(1);
+        }
+        return index;
+    }
+
+    // helper method to extract the -F pattern
+    private static String extractPattern(String pattern) {
+        if ((pattern.startsWith("/") && pattern.endsWith("/"))
+                || (pattern.startsWith("\"") && pattern.endsWith("\""))
+                || (pattern.startsWith("'") && pattern.endsWith("'"))) {
+            return pattern;
+        } else {
+            return "'" + pattern + "'";
+        }
     }
 
     /**
@@ -428,7 +460,7 @@ public class ArgumentParser {
         String versionString = "v5.36.0";
         String autoSplit = "";
         if (parsedArgs.autoSplit) {
-            autoSplit = " our @F; { my $f = $_; chomp $f; @F = split(' ', $f); } ";
+            autoSplit = " our @F = split(" + parsedArgs.splitPattern + "); ";
         }
         if (parsedArgs.processAndPrint) {
             // Wrap the code in a loop that processes and prints each line
@@ -542,6 +574,7 @@ public class ArgumentParser {
         // Initialize @ARGV
         public RuntimeArray argumentList = GlobalContext.getGlobalArray("main::ARGV");
         public RuntimeArray inc = new RuntimeArray();
+        public String splitPattern = "' '"; // Default split pattern for -a
         List<ModuleUseStatement> moduleUseStatements = new ArrayList<>(); // For -m -M
 
         @Override
@@ -568,6 +601,7 @@ public class ArgumentParser {
                     "    inPlaceExtension='" + ScalarUtils.printable(inPlaceExtension) + "',\n" +
                     "    inPlaceEdit=" + inPlaceEdit + ",\n" +
                     "    inputRecordSeparator=" + ScalarUtils.printable(inputRecordSeparator) + ",\n" +
+                    "    splitPattern=" + ScalarUtils.printable(splitPattern) + ",\n" +
                     "    argumentList=" + argumentList + ",\n" +
                     "    inc=" + inc + "\n" +
                     "}";

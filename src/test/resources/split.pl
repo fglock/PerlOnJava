@@ -1,6 +1,6 @@
-# use feature 'say';
-# use strict;
-# use warnings;
+use feature 'say';
+use strict;
+use warnings;
 
 ###################
 # Perl split() Function Tests
