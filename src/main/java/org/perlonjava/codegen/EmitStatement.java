@@ -8,7 +8,18 @@ import org.perlonjava.runtime.RuntimeContextType;
 
 import java.util.List;
 
+/**
+ * The EmitStatement class is responsible for handling various control flow statements
+ * and generating the corresponding bytecode using ASM.
+ */
 public class EmitStatement {
+
+    /**
+     * Emits bytecode for an if statement, including support for 'unless'.
+     *
+     * @param emitterVisitor The visitor used for code emission.
+     * @param node The if node representing the if statement.
+     */
     static void emitIf(EmitterVisitor emitterVisitor, IfNode node) {
         emitterVisitor.ctx.logDebug("IF start: " + node.operator);
 
@@ -56,6 +67,12 @@ public class EmitStatement {
         emitterVisitor.ctx.logDebug("IF end");
     }
 
+    /**
+     * Emits bytecode for a for-loop with initialization, condition, and increment (C-style for loop).
+     *
+     * @param emitterVisitor The visitor used for code emission.
+     * @param node The for-loop node representing the loop.
+     */
     static void emitFor3(EmitterVisitor emitterVisitor, For3Node node) {
         if (node.isDoWhile) {
             emitDoWhile(emitterVisitor, node);
@@ -99,7 +116,7 @@ public class EmitStatement {
             mv.visitLabel(redoLabel);
 
             if (node.useNewScope) {
-                // register next/redo/last labels
+                // Register next/redo/last labels
                 emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
                         node.labelName,
                         continueLabel,
@@ -109,14 +126,13 @@ public class EmitStatement {
                 // Visit the loop body
                 node.body.accept(voidVisitor);
 
-                // cleanup loop labels
+                // Cleanup loop labels
                 emitterVisitor.ctx.javaClassInfo.popLoopLabels();
             } else {
-                // within a `while` modifier, next/redo/last labels are not active
+                // Within a `while` modifier, next/redo/last labels are not active
                 // Visit the loop body
                 node.body.accept(voidVisitor);
             }
-
 
             // Add continue label
             mv.visitLabel(continueLabel);
@@ -151,6 +167,12 @@ public class EmitStatement {
         }
     }
 
+    /**
+     * Emits bytecode for a foreach loop.
+     *
+     * @param emitterVisitor The visitor used for code emission.
+     * @param node The foreach node representing the loop.
+     */
     static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
         emitterVisitor.ctx.logDebug("FOR1 start");
 
@@ -160,11 +182,6 @@ public class EmitStatement {
         }
 
         MethodVisitor mv = emitterVisitor.ctx.mv;
-
-        // For1Node fields:
-        //  variable
-        //  list
-        //  body
 
         // Create labels for the loop
         Label loopStart = new Label();
@@ -193,9 +210,9 @@ public class EmitStatement {
 
         // Assign it to the loop variable
         node.variable.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        mv.visitInsn(Opcodes.SWAP); // move the target first
+        mv.visitInsn(Opcodes.SWAP); // Move the target first
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        mv.visitInsn(Opcodes.POP);  // we don't need the variable in the stack
+        mv.visitInsn(Opcodes.POP);  // We don't need the variable in the stack
         // Stack: [iterator]
 
         emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
@@ -204,7 +221,7 @@ public class EmitStatement {
         Label redoLabel = new Label();
         mv.visitLabel(redoLabel);
 
-        // restore 'local' environment if 'redo' was called
+        // Restore 'local' environment if 'redo' was called
         Local.localTeardown(localRecord, mv);
 
         emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
@@ -221,7 +238,7 @@ public class EmitStatement {
         // Add continue label
         mv.visitLabel(continueLabel);
 
-        // restore 'local' environment if 'next' was called
+        // Restore 'local' environment if 'next' was called
         Local.localTeardown(localRecord, mv);
 
         // Execute continue block if it exists
@@ -235,7 +252,7 @@ public class EmitStatement {
         // End of the loop
         mv.visitLabel(loopEnd);
 
-        // restore 'local' environment if 'last' was called
+        // Restore 'local' environment if 'last' was called
         Local.localTeardown(localRecord, mv);
 
         emitterVisitor.ctx.javaClassInfo.decrementStackLevel(1);
@@ -256,6 +273,12 @@ public class EmitStatement {
         emitterVisitor.ctx.logDebug("FOR1 end");
     }
 
+    /**
+     * Emits bytecode for a block of statements.
+     *
+     * @param emitterVisitor The visitor used for code emission.
+     * @param node The block node representing the block of statements.
+     */
     static void emitBlock(EmitterVisitor emitterVisitor, BlockNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
@@ -275,7 +298,7 @@ public class EmitStatement {
         // Add redo label
         mv.visitLabel(redoLabel);
 
-        // restore 'local' environment if 'redo' was called
+        // Restore 'local' environment if 'redo' was called
         Local.localTeardown(localRecord, mv);
 
         if (node.isLoop) {
@@ -316,7 +339,12 @@ public class EmitStatement {
         emitterVisitor.ctx.logDebug("generateCodeBlock end");
     }
 
-
+    /**
+     * Emits bytecode for a do-while loop.
+     *
+     * @param emitterVisitor The visitor used for code emission.
+     * @param node The for-loop node representing the do-while loop.
+     */
     static void emitDoWhile(EmitterVisitor emitterVisitor, For3Node node) {
         emitterVisitor.ctx.logDebug("DO-WHILE start");
         MethodVisitor mv = emitterVisitor.ctx.mv;
@@ -360,5 +388,4 @@ public class EmitStatement {
 
         emitterVisitor.ctx.logDebug("DO-WHILE end");
     }
-
 }
