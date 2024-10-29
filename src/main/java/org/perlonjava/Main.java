@@ -37,10 +37,10 @@ public class Main {
             if (parsedArgs.debugEnabled) {
                 // Print full JVM stack
                 t.printStackTrace();
+                System.out.println();
             }
 
             // Use the custom formatter to print the Perl message and stack trace
-            System.out.println();
             StringBuilder sb = new StringBuilder();
 
             Throwable innermostCause = findInnermostCause(t);
