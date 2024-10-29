@@ -50,7 +50,7 @@ public class GlobalContext {
         getGlobalVariable("main::b");    // initialize $b to "undef"
         getGlobalVariable("main::!");    // initialize $! to "undef"
         getGlobalVariable("main::,").set("");    // initialize $, to ""
-        getGlobalVariable("main::\\").set("");    // initialize $\ to ""
+        getGlobalVariable("main::\\").set(compilerOptions.outputRecordSeparator);    // initialize $\
         getGlobalVariable("main::/").set(compilerOptions.inputRecordSeparator); // initialize $/
         getGlobalVariable("main::$").set(ProcessHandle.current().pid()); // initialize `$$` to process id
         getGlobalVariable("main::0").set(compilerOptions.fileName);

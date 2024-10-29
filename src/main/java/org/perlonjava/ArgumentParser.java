@@ -157,6 +157,10 @@ public class ArgumentParser {
                 case 'g':
                     parsedArgs.inputRecordSeparator = null;
                     break;
+                case 'l':
+                    // Handle automatic line-ending processing
+                    index = handleLineEndingProcessing(args, parsedArgs, index, j, arg);
+                    break;
                 case 'e':
                     // Handle inline code specified with -e
                     index = handleInlineCode(args, parsedArgs, index, j, arg);
@@ -202,6 +206,35 @@ public class ArgumentParser {
         }
         return index;
     }
+
+    // Handle the -l switch
+    private static int handleLineEndingProcessing(String[] args, CompilerOptions parsedArgs, int index, int j, String arg) {
+        parsedArgs.lineEndingProcessing = true; // Mark that -l is used
+        String octnum = arg.substring(j + 1);
+
+        // Check if the octnum is empty or if the next argument is another switch
+        if (octnum.isEmpty()) {
+            // If the current argument doesn't provide an octal number, check the next argument
+            if (index + 1 < args.length && !args[index + 1].startsWith("-")) {
+                octnum = args[++index];
+            }
+        }
+
+        if (octnum.isEmpty() || !octnum.matches("[0-7]*")) {
+            // No valid octal number provided, use the input record separator
+            parsedArgs.outputRecordSeparator = parsedArgs.inputRecordSeparator;
+        } else {
+            try {
+                int separatorInt = Integer.parseInt(octnum, 8);
+                parsedArgs.outputRecordSeparator = Character.toString((char) separatorInt);
+            } catch (NumberFormatException e) {
+                System.err.println("Invalid output record separator: " + octnum);
+                System.exit(1);
+            }
+        }
+        return index;
+    }
+
 
     // handle the -F split pattern
     private static int handleSplitPattern(String[] args, CompilerOptions parsedArgs, int index, int j, String arg) {
@@ -462,12 +495,13 @@ public class ArgumentParser {
         if (parsedArgs.autoSplit) {
             autoSplit = " our @F = split(" + parsedArgs.splitPattern + "); ";
         }
+        String chompCode = parsedArgs.lineEndingProcessing ? "chomp; " : "";
         if (parsedArgs.processAndPrint) {
             // Wrap the code in a loop that processes and prints each line
-            parsedArgs.code = "while (<>) { " + autoSplit + parsedArgs.code + " } continue { print or die \"-p destination: $!\\n\"; }";
+            parsedArgs.code = "while (<>) { " + chompCode + autoSplit + parsedArgs.code + " } continue { print or die \"-p destination: $!\\n\"; }";
         } else if (parsedArgs.processOnly) {
             // Wrap the code in a loop that processes each line without printing
-            parsedArgs.code = "while (<>) { " + autoSplit + parsedArgs.code + " }";
+            parsedArgs.code = "while (<>) { " + chompCode + autoSplit + parsedArgs.code + " }";
         }
 
         StringBuilder useStatements = new StringBuilder();
@@ -569,6 +603,7 @@ public class ArgumentParser {
         public String fileName = null;
         public String inPlaceExtension = null; // For -i
         public String inputRecordSeparator = "\n";
+        public String outputRecordSeparator = null;
         public boolean autoSplit = false; // For -a
         public boolean useVersion = false; // For -E
         // Initialize @ARGV
@@ -576,6 +611,7 @@ public class ArgumentParser {
         public RuntimeArray inc = new RuntimeArray();
         public String splitPattern = "' '"; // Default split pattern for -a
         List<ModuleUseStatement> moduleUseStatements = new ArrayList<>(); // For -m -M
+        public boolean lineEndingProcessing = false; // For -l
 
         @Override
         public CompilerOptions clone() {

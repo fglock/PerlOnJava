@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
-use Test::More tests => 13;
+use Test::More tests => 15;
 use File::Temp qw(tempfile tempdir);
 use File::Spec;
 use File::Path qw(rmtree);
@@ -129,3 +129,24 @@ my $perl = 'java -jar target/perlonjava-1.0-SNAPSHOT.jar';
     like($output, qr/Usage: /, '-? switch displays help');
 }
 
+# Test -F (split pattern)
+{
+    my ($fh, $filename) = tempfile();
+    print $fh "Hello:World\nFoo:Bar\n";
+    close $fh;
+
+    my $output = `$perl -F: -ane ' print \$F[1] ' $filename`;
+    is($output, "World\nBar\n", '-F switch splits input lines based on pattern');
+    unlink $filename;
+}
+
+# Test -l (automatic line-ending processing)
+{
+    my ($fh, $filename) = tempfile();
+    print $fh "Hello\nWorld\n";
+    close $fh;
+
+    my $output = `$perl -lpe '\$_ = uc' $filename`;
+    is($output, "HELLO\nWORLD\n", '-l switch chomps input and appends output record separator');
+    unlink $filename;
+}
