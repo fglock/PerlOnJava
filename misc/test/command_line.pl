@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
-use Test::More tests => 15;
+use Test::More tests => 17;
 use File::Temp qw(tempfile tempdir);
 use File::Spec;
 use File::Path qw(rmtree);
@@ -149,4 +149,37 @@ my $perl = 'java -jar target/perlonjava-1.0-SNAPSHOT.jar';
     my $output = `$perl -lpe '\$_ = uc' $filename`;
     is($output, "HELLO\nWORLD\n", '-l switch chomps input and appends output record separator');
     unlink $filename;
+}
+
+# Test -x (discard leading garbage)
+{
+    my ($fh, $filename) = tempfile();
+    print $fh <<'END';
+This is some leading garbage text.
+More unrelated text.
+#!perl
+print "Extracted and executed!\n";
+END
+    close $fh;
+
+    my $output = `$perl -x $filename`;
+    is($output, "Extracted and executed!\n", '-x switch discards leading garbage and executes code');
+    unlink $filename;
+}
+
+# Test -x with directory change
+{
+    my $tempdir = tempdir(CLEANUP => 1);
+    my ($fh, $filename) = tempfile(DIR => $tempdir);
+    print $fh <<'END';
+Garbage text before the script.
+#!perl
+print "Running in the specified directory!\n";
+END
+    close $fh;
+
+    my $output = `$perl -x$tempdir $filename`;
+    is($output, "Running in the specified directory!\n", '-x switch changes directory and executes code');
+    unlink $filename;
+    rmtree($tempdir);
 }

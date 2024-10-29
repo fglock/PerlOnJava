@@ -28,7 +28,7 @@
 ### Command line switches
 
 - ✔️   Accept command line switches from the shebang line.
-- ✔️   Command line switches `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-?` are implemented.
+- ✔️   Command line switches `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-x`, `-?` are implemented.
 - ❌   Missing command line switches include:
   - `-s`: Rudimentary switch parsing.
   - `-T`: Taint checks.
@@ -45,7 +45,6 @@
   - `-f`: Suppresses execution of `~/.perlrc`.
   - `-C [number/list]`: Controls Unicode features.
   - `-S`: Uses the PATH environment variable to find the script.
-  - `-x[dir]`: Strips leading garbage before `#!perl`.
 
 ## Testing
 - ✔️   **TAP tests**: Running standard Perl testing protocol.
