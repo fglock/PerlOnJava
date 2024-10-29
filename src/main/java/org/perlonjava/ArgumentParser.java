@@ -666,9 +666,9 @@ public class ArgumentParser {
         public RuntimeArray argumentList = GlobalContext.getGlobalArray("main::ARGV");
         public RuntimeArray inc = new RuntimeArray();
         public String splitPattern = "' '"; // Default split pattern for -a
-        List<ModuleUseStatement> moduleUseStatements = new ArrayList<>(); // For -m -M
         public boolean lineEndingProcessing = false; // For -l
         public boolean discardLeadingGarbage = false; // For -x
+        List<ModuleUseStatement> moduleUseStatements = new ArrayList<>(); // For -m -M
 
         @Override
         public CompilerOptions clone() {
