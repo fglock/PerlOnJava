@@ -606,7 +606,7 @@ say "ok # rand() generates a number between 0 and 1";
 # Arctangent Function (atan2)
 
 # Arctangent of (1, 1) (should be π/4 or approximately 0.785398)
-my $c = atan2(1, 1);
+$c = atan2(1, 1);
 print "not " if abs($c - 0.785398) > 0.000001;
 say "ok # atan2(1, 1) is approximately 0.785398 (π/4)";
 

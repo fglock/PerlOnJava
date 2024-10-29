@@ -45,7 +45,12 @@ public class PrintVisitor implements Visitor {
         } else {
             node.left.accept(this);
         }
-        node.right.accept(this);
+        if (node.right == null) {
+            appendIndent();
+            sb.append("null\n");
+        } else {
+            node.right.accept(this);
+        }
         indentLevel--;
     }
 

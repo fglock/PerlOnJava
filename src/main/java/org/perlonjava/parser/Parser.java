@@ -455,10 +455,10 @@ public class Parser {
                 return null;
             default:
                 // Throw an exception for any unexpected token
-                throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, ctx.errorUtil);
+                throw new PerlCompilerException(tokenIndex, "syntax error", ctx.errorUtil);
         }
         // Throw an exception if no valid case was found
-        throw new PerlCompilerException(tokenIndex, "Unexpected token: " + token, ctx.errorUtil);
+        throw new PerlCompilerException(tokenIndex, "syntax error", ctx.errorUtil);
     }
 
     /**
@@ -577,6 +577,9 @@ public class Parser {
 
         if (INFIX_OP.contains(token.text)) {
             right = parseExpression(precedence);
+            if (right == null) {
+                throw new PerlCompilerException(tokenIndex, "syntax error", ctx.errorUtil);
+            }
             return new BinaryOperatorNode(token.text, left, right, tokenIndex);
         }
 
