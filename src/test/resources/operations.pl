@@ -490,3 +490,137 @@ print "not " if $result ne "0"; say "ok # unary minus on  results in 0";
 $result = -("123");
 print "not " if $result ne "-123"; say "ok # unary minus on 123 results in -123";
 
+###################
+# Unary Plus Operator
+
+# Unary plus on a positive number
+my $b = +5;
+print "not " if $b != 5;
+say "ok # +5 equals 5";
+
+# Unary plus on a negative number
+$b = +-5;
+print "not " if $b != -5;
+say "ok # +-5 equals -5";
+
+###################
+# Increment and Decrement Operators
+
+# Pre-increment
+$b = 5;
+++$b;
+print "not " if $b != 6;
+say "ok # ++5 equals 6";
+
+# Post-increment
+$b = 5;
+$b++;
+print "not " if $b != 6;
+say "ok # 5++ equals 6";
+
+# Pre-decrement
+$b = 5;
+--$b;
+print "not " if $b != 4;
+say "ok # --5 equals 4";
+
+# Post-decrement
+$b = 5;
+$b--;
+print "not " if $b != 4;
+say "ok # 5-- equals 4";
+
+###################
+# Floating-point Arithmetic
+
+# Floating-point addition
+my $c = 5.5 + 2.5;
+print "not " if $c != 8.0;
+say "ok # 5.5 + 2.5 equals 8.0";
+
+# Floating-point subtraction
+$c = 5.5 - 2.5;
+print "not " if $c != 3.0;
+say "ok # 5.5 - 2.5 equals 3.0";
+
+# Floating-point multiplication
+$c = 2.5 * 2.0;
+print "not " if $c != 5.0;
+say "ok # 2.5 * 2.0 equals 5.0";
+
+# Floating-point division
+$c = 5.0 / 2.0;
+print "not " if $c != 2.5;
+say "ok # 5.0 / 2.0 equals 2.5";
+
+###################
+# Integer Division
+
+# Integer division
+$c = int(5 / 2);
+print "not " if $c != 2;
+say "ok # int(5 / 2) equals 2";
+
+###################
+# Trigonometric Functions
+
+# Sine of 0
+$c = sin(0);
+print "not " if $c != 0;
+say "ok # sin(0) equals 0";
+
+# Cosine of 0
+$c = cos(0);
+print "not " if $c != 1;
+say "ok # cos(0) equals 1";
+
+###################
+# Square Root and Logarithms
+
+# Square root
+$c = sqrt(9);
+print "not " if $c != 3;
+say "ok # sqrt(9) equals 3";
+
+# Natural logarithm
+$c = log(exp(1));
+print "not " if $c != 1;
+say "ok # log(exp(1)) equals 1";
+
+###################
+# Absolute Value
+
+# Absolute value of a negative number
+$c = abs(-5);
+print "not " if $c != 5;
+say "ok # abs(-5) equals 5";
+
+###################
+# Random Number Generation
+
+# Random number generation
+$c = rand();
+print "not " if $c < 0 || $c >= 1;
+say "ok # rand() generates a number between 0 and 1";
+###################
+# Arctangent Function (atan2)
+
+# Arctangent of (1, 1) (should be π/4 or approximately 0.785398)
+my $c = atan2(1, 1);
+print "not " if abs($c - 0.785398) > 0.000001;
+say "ok # atan2(1, 1) is approximately 0.785398 (π/4)";
+
+# Arctangent of (0, 1) (should be 0)
+$c = atan2(0, 1);
+print "not " if abs($c - 0) > 0.000001;
+say "ok # atan2(0, 1) is 0";
+
+# Arctangent of (1, 0) (should be π/2 or approximately 1.570796)
+$c = atan2(1, 0);
+print "not " if abs($c - 1.570796) > 0.000001;
+say "ok # atan2(1, 0) is approximately 1.570796 (π/2)";
+
+# Arctangent of (-1, -1) (should be -3π/4 or approximately -2.356194)
+$c = atan2(-1, -1);
+print "not " if abs($c + 2.356194) > 0.000001;
+say "ok # atan2(-1, -1) is approximately -2.356194 (-3π/4)";
