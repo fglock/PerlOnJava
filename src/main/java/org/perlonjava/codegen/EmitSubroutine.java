@@ -13,7 +13,18 @@ import org.perlonjava.runtime.ScopedSymbolTable;
 import java.util.Arrays;
 import java.util.Map;
 
+/**
+ * The EmitSubroutine class is responsible for handling subroutine-related operations
+ * and generating the corresponding bytecode using ASM.
+ */
 public class EmitSubroutine {
+
+    /**
+     * Emits bytecode for a subroutine, including handling of closure variables.
+     *
+     * @param ctx The context used for code emission.
+     * @param node The subroutine node representing the subroutine.
+     */
     static void emitSubroutine(EmitterContext ctx, SubroutineNode node) {
         ctx.logDebug("SUB start");
         if (ctx.contextType == RuntimeContextType.VOID) {
@@ -21,11 +32,12 @@ public class EmitSubroutine {
         }
         MethodVisitor mv = ctx.mv;
 
-        // retrieve closure variable list
-        // alternately, scan the AST for variables and capture only the ones that are used
+        // Retrieve closure variable list
+        // Alternately, scan the AST for variables and capture only the ones that are used
         Map<Integer, String> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
         ctx.logDebug("AnonSub ctx.symbolTable.getAllVisibleVariables");
 
+        // Create a new symbol table for the subroutine
         ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
         newSymbolTable.enterScope();
         newSymbolTable.setCurrentPackage(ctx.symbolTable.getCurrentPackage());
@@ -35,16 +47,16 @@ public class EmitSubroutine {
         String[] newEnv = newSymbolTable.getVariableNames();
         ctx.logDebug("AnonSub " + newSymbolTable);
 
-        // create the new method
+        // Create the new method context
         EmitterContext subCtx =
                 new EmitterContext(
-                        new JavaClassInfo(), // internal java class name
-                        newSymbolTable.clone(), // closure symbolTable
-                        null, // method visitor
-                        null, // class writer
-                        RuntimeContextType.RUNTIME, // call context
-                        true, // is boxed
-                        ctx.errorUtil, // error message utility
+                        new JavaClassInfo(), // Internal Java class name
+                        newSymbolTable.clone(), // Closure symbolTable
+                        null, // Method visitor
+                        null, // Class writer
+                        RuntimeContextType.RUNTIME, // Call context
+                        true, // Is boxed
+                        ctx.errorUtil, // Error message utility
                         ctx.compilerOptions);
         Class<?> generatedClass =
                 EmitterMethodCreator.createClassWithMethod(
@@ -53,10 +65,10 @@ public class EmitSubroutine {
         String newClassNameDot = subCtx.javaClassInfo.javaClassName.replace('/', '.');
         ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + subCtx.javaClassInfo.javaClassName);
         ctx.logDebug("Generated class env:  " + Arrays.toString(newEnv));
-        RuntimeCode.anonSubs.put(subCtx.javaClassInfo.javaClassName, generatedClass); // cache the class
+        RuntimeCode.anonSubs.put(subCtx.javaClassInfo.javaClassName, generatedClass); // Cache the class
 
         /* The following ASM code is equivalent to:
-         *  // get the class:
+         *  // Get the class:
          *  Class<?> generatedClass = RuntimeCode.anonSubs.get("java.Class.Name");
          *  // Find the constructor:
          *  Constructor<?> constructor = generatedClass.getConstructor(RuntimeScalar.class, RuntimeScalar.class);
@@ -64,11 +76,11 @@ public class EmitSubroutine {
          *  Object instance = constructor.newInstance();
          *  // Find the apply method:
          *  Method applyMethod = generatedClass.getMethod("apply", RuntimeArray.class, int.class);
-         *  // construct a CODE variable:
+         *  // Construct a CODE variable:
          *  RuntimeScalar.new(applyMethod);
          */
 
-        int skipVariables = EmitterMethodCreator.skipVariables; // skip (this, @_, wantarray)
+        int skipVariables = EmitterMethodCreator.skipVariables; // Skip (this, @_, wantarray)
 
         // 1. Get the class from RuntimeCode.anonSubs
         mv.visitFieldInsn(Opcodes.GETSTATIC, "org/perlonjava/runtime/RuntimeCode", "anonSubs", "Ljava/util/HashMap;");
@@ -92,7 +104,7 @@ public class EmitSubroutine {
             mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
             mv.visitIntInsn(Opcodes.BIPUSH, i); // Push the index
 
-            // select Array/Hash/Scalar depending on env value
+            // Select Array/Hash/Scalar depending on env value
             String descriptor = EmitterMethodCreator.getVariableDescriptor(newEnv[i + skipVariables]);
 
             mv.visitLdcInsn(Type.getType(descriptor)); // Push the Class object for RuntimeScalar
@@ -114,7 +126,7 @@ public class EmitSubroutine {
 
         // Load the closure variables.
         // Here we translate the "local variable" index from the current symbol table to the new symbol table
-        int newIndex = 0;  // new variable index
+        int newIndex = 0;  // New variable index
         for (Integer currentIndex : visibleVariables.keySet()) {
             if (newIndex >= skipVariables) {
                 mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
@@ -139,7 +151,7 @@ public class EmitSubroutine {
                 Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeCode", "makeCodeObject", "(Ljava/lang/Object;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
         // Stack after this step: [Class, Constructor, RuntimeScalar]
-        mv.visitInsn(Opcodes.SWAP); // move the RuntimeScalar object up
+        mv.visitInsn(Opcodes.SWAP); // Move the RuntimeScalar object up
         mv.visitInsn(Opcodes.POP); // Remove the Constructor
 
         // 5. Clean up the stack if context is VOID
@@ -153,25 +165,28 @@ public class EmitSubroutine {
     }
 
     /**
-     * Handles the postfix `()` node.
+     * Handles the postfix `()` node, which applies a subroutine or function.
+     *
+     * @param emitterVisitor The visitor used for code emission.
+     * @param node The binary operator node representing the apply operation.
      */
     static void handleApplyOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         emitterVisitor.ctx.logDebug("handleApplyElementOperator " + node + " in context " + emitterVisitor.ctx.contextType);
         EmitterVisitor scalarVisitor =
-                emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
+                emitterVisitor.with(RuntimeContextType.SCALAR); // Execute operands in scalar context
 
-        node.left.accept(scalarVisitor); // target - left parameter: Code ref
-        node.right.accept(emitterVisitor.with(RuntimeContextType.LIST)); // right parameter: parameter list
+        node.left.accept(scalarVisitor); // Target - left parameter: Code ref
+        node.right.accept(emitterVisitor.with(RuntimeContextType.LIST)); // Right parameter: parameter list
 
         // Transform the value in the stack to RuntimeArray
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", true);
-        emitterVisitor.pushCallContext();   // push call context to stack
+        emitterVisitor.pushCallContext();   // Push call context to stack
         emitterVisitor.ctx.mv.visitMethodInsn(
                 Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/RuntimeScalar",
                 "apply",
                 "(Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
-                false); // generate an .apply() call
+                false); // Generate an .apply() call
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             // Transform the value in the stack to RuntimeScalar
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
@@ -182,7 +197,10 @@ public class EmitSubroutine {
     }
 
     /**
-     * Handles the `__SUB__` operator.
+     * Handles the `__SUB__` operator, which refers to the current subroutine.
+     *
+     * @param emitterVisitor The visitor used for code emission.
+     * @param node The operator node representing the `__SUB__` operation.
      */
     static void handleSelfCallOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         emitterVisitor.ctx.logDebug("handleSelfCallOperator " + node + " in context " + emitterVisitor.ctx.contextType);
