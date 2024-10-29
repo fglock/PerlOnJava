@@ -1,4 +1,4 @@
-package org.perlonjava.codegen;
+package org.perlonjava.runtime;
 
 /**
  * The {@code DynamicState} interface provides a contract for objects that

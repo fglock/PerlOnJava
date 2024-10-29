@@ -29,7 +29,7 @@ public class Local {
             dynamicIndex = ctx.symbolTable.allocateLocalVariable();
             // Get the current level of the dynamic variable stack and store it
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/codegen/DynamicVariableManager",
+                    "org/perlonjava/runtime/DynamicVariableManager",
                     "getLocalLevel",
                     "()I",
                     false);
@@ -52,7 +52,7 @@ public class Local {
             // Restore the dynamic variable stack to the recorded level
             mv.visitVarInsn(Opcodes.ILOAD, localRecord.dynamicIndex());
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/codegen/DynamicVariableManager",
+                    "org/perlonjava/runtime/DynamicVariableManager",
                     "popToLocalLevel",
                     "(I)V",
                     false);
