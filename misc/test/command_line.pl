@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
-use Test::More tests => 17;
+use Test::More tests => 18;
 use File::Temp qw(tempfile tempdir);
 use File::Spec;
 use File::Path qw(rmtree);
@@ -182,4 +182,19 @@ END
     is($output, "Running in the specified directory!\n", '-x switch changes directory and executes code');
     unlink $filename;
     rmtree($tempdir);
+}
+
+# Test -- (end of options)
+{
+    my ($fh, $filename) = tempfile();
+    print $fh <<'END';
+use strict;
+use warnings;
+print "Arguments: @ARGV\n";
+END
+    close $fh;
+
+    my $output = `$perl $filename -- arg1 arg2`;
+    is($output, "Arguments: -- arg1 arg2\n", '-- switch correctly handles end of options and script arguments');
+    unlink $filename;
 }
