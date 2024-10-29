@@ -171,6 +171,7 @@ public class EmitterMethodCreator implements Opcodes {
         // Prepare to visit the AST to generate bytecode
         EmitterVisitor visitor = new EmitterVisitor(ctx);
 
+        // Setup local variables and environment for the method
         Local.localRecord localRecord = Local.localSetup(ctx, ast, mv);
 
         if (useTryCatch) {
@@ -243,7 +244,7 @@ public class EmitterMethodCreator implements Opcodes {
             // End of try-catch block
             // --------------------------------
         } else {
-            // no try-catch
+            // No try-catch block is used
 
             ast.accept(visitor);
 
@@ -252,12 +253,13 @@ public class EmitterMethodCreator implements Opcodes {
             mv.visitLabel(ctx.javaClassInfo.returnLabel); // "return" from other places arrive here
         }
 
+        // Teardown local variables and environment after the method execution
         Local.localTeardown(localRecord, mv);
 
         // Transform the value in the stack to RuntimeList
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getList", "()Lorg/perlonjava/runtime/RuntimeList;", true);
 
-        mv.visitInsn(Opcodes.ARETURN); // returns an Object
+        mv.visitInsn(Opcodes.ARETURN); // Returns an Object
         mv.visitMaxs(0, 0); // Automatically computed
         mv.visitEnd();
 
@@ -266,7 +268,7 @@ public class EmitterMethodCreator implements Opcodes {
         byte[] classData = cw.toByteArray(); // Generate the bytecode
 
         if (ctx.compilerOptions.disassembleEnabled) {
-            // Disassemble the bytecode
+            // Disassemble the bytecode for debugging purposes
             ClassReader cr = new ClassReader(classData);
             StringWriter sw = new StringWriter();
             PrintWriter pw = new PrintWriter(sw);
@@ -291,5 +293,4 @@ public class EmitterMethodCreator implements Opcodes {
         // Define the class using the custom class loader
         return loader.defineClass(javaClassNameDot, classData);
     }
-
 }
