@@ -1,7 +1,5 @@
 package org.perlonjava.runtime;
 
-import org.perlonjava.codegen.DynamicState;
-
 import java.util.*;
 
 /**

@@ -571,13 +571,13 @@ public class EmitOperator {
         // save the old value
         if (lvalueContext == RuntimeContextType.LIST) {
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/codegen/DynamicVariableManager",
+                    "org/perlonjava/runtime/DynamicVariableManager",
                     "pushLocalVariable",
                     "(Lorg/perlonjava/runtime/RuntimeBaseEntity;)Lorg/perlonjava/runtime/RuntimeBaseEntity;",
                     false);
         } else {
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/codegen/DynamicVariableManager",
+                    "org/perlonjava/runtime/DynamicVariableManager",
                     "pushLocalVariable",
                     "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
                     false);

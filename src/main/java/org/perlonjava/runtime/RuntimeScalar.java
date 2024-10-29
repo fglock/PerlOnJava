@@ -1,7 +1,6 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.ArgumentParser;
-import org.perlonjava.codegen.DynamicState;
 import org.perlonjava.operators.MathOperators;
 import org.perlonjava.operators.Operator;
 import org.perlonjava.parser.NumberParser;
