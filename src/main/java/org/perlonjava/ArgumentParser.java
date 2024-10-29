@@ -198,10 +198,33 @@ public class ArgumentParser {
                     // Handle include directory specified with -I
                     index = handleIncludeDirectory(args, parsedArgs, index, j, arg);
                     return index;
+                case 'x':
+                    parsedArgs.discardLeadingGarbage = true;
+                    index = handleEmbeddedProgram(args, parsedArgs, index, j, arg);
+                    return index;
                 default:
                     System.err.println("Unrecognized switch: -" + switchChar + "  (-h will show valid options)");
                     System.exit(0);
                     break;
+            }
+        }
+        return index;
+    }
+
+    // Handle -x
+    private static int handleEmbeddedProgram(String[] args, CompilerOptions parsedArgs, int index, int j, String arg) {
+        String directory = null;
+        if (j < arg.length() - 1) {
+            directory = arg.substring(j + 1);
+        }
+
+        if (directory != null) {
+            try {
+                // Change to the specified directory
+                System.setProperty("user.dir", directory);
+            } catch (SecurityException e) {
+                System.err.println("Error: Unable to change directory to " + directory);
+                System.exit(1);
             }
         }
         return index;
@@ -490,6 +513,29 @@ public class ArgumentParser {
      * @param parsedArgs The CompilerOptions object to modify.
      */
     private static void modifyCodeBasedOnFlags(CompilerOptions parsedArgs) {
+
+        if (parsedArgs.discardLeadingGarbage) {
+            // '-x' extract Perl code after discarding leading garbage
+            String fileContent = parsedArgs.code;
+            String[] lines = fileContent.split("\n");
+            boolean perlCodeStarted = false;
+            StringBuilder perlCode = new StringBuilder();
+
+            for (String line : lines) {
+                if (perlCodeStarted) {
+                    perlCode.append(line).append("\n");
+                } else if (line.trim().equals("#!perl")) {
+                    perlCodeStarted = true;
+                }
+            }
+
+            if (!perlCodeStarted) {
+                System.err.println("Error: No Perl code found after discarding leading garbage.");
+                System.exit(1);
+            }
+            parsedArgs.code = perlCode.toString();
+        }
+
         String versionString = "v5.36.0";
         String autoSplit = "";
         if (parsedArgs.autoSplit) {
@@ -612,6 +658,7 @@ public class ArgumentParser {
         public String splitPattern = "' '"; // Default split pattern for -a
         List<ModuleUseStatement> moduleUseStatements = new ArrayList<>(); // For -m -M
         public boolean lineEndingProcessing = false; // For -l
+        public boolean discardLeadingGarbage = false; // For -x
 
         @Override
         public CompilerOptions clone() {
@@ -632,14 +679,22 @@ public class ArgumentParser {
                     "    tokenizeOnly=" + tokenizeOnly + ",\n" +
                     "    parseOnly=" + parseOnly + ",\n" +
                     "    compileOnly=" + compileOnly + ",\n" +
+                    "    processOnly=" + processOnly + ",\n" +
+                    "    processAndPrint=" + processAndPrint + ",\n" +
+                    "    inPlaceEdit=" + inPlaceEdit + ",\n" +
                     "    code='" + (code != null ? code : "null") + "',\n" +
                     "    fileName='" + ScalarUtils.printable(fileName) + "',\n" +
                     "    inPlaceExtension='" + ScalarUtils.printable(inPlaceExtension) + "',\n" +
-                    "    inPlaceEdit=" + inPlaceEdit + ",\n" +
                     "    inputRecordSeparator=" + ScalarUtils.printable(inputRecordSeparator) + ",\n" +
+                    "    outputRecordSeparator=" + ScalarUtils.printable(outputRecordSeparator) + ",\n" +
+                    "    autoSplit=" + autoSplit + ",\n" +
+                    "    useVersion=" + useVersion + ",\n" +
+                    "    lineEndingProcessing=" + lineEndingProcessing + ",\n" +
+                    "    discardLeadingGarbage=" + discardLeadingGarbage + ",\n" +
                     "    splitPattern=" + ScalarUtils.printable(splitPattern) + ",\n" +
                     "    argumentList=" + argumentList + ",\n" +
-                    "    inc=" + inc + "\n" +
+                    "    inc=" + inc + ",\n" +
+                    "    moduleUseStatements=" + moduleUseStatements + "\n" +
                     "}";
         }
     }
