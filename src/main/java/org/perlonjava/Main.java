@@ -34,8 +34,10 @@ public class Main {
                 System.out.println(parsedArgs.fileName + " syntax OK");
             }
         } catch (Throwable t) {
-            // Print full JVM stack
-            t.printStackTrace();
+            if (parsedArgs.debugEnabled) {
+                // Print full JVM stack
+                t.printStackTrace();
+            }
 
             // Use the custom formatter to print the Perl message and stack trace
             System.out.println();
