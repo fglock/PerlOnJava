@@ -28,7 +28,7 @@
 ### Command line switches
 
 - ✔️   Accept command line switches from the shebang line.
-- ✔️   Command line switches `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-m`, `-M`, `-g`, `-h`, `-?` are implemented.
+- ✔️   Command line switches `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-h`, `-?` are implemented.
 - ❌   Missing command line switches include:
   - `-s`: Rudimentary switch parsing.
   - `-T`: Taint checks.
@@ -42,7 +42,6 @@
   - `-w`: Enables warnings.
   - `-d[t][:debugger]`: Runs the program under the debugger.
   - `-D[number/list]`: Sets debugging flags.
-  - `-Fpattern`: Specifies the pattern for autosplit.
   - `-l[octal]`: Enables automatic line-ending processing.
   - `-f`: Suppresses execution of `~/.perlrc`.
   - `-C [number/list]`: Controls Unicode features.

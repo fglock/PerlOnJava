@@ -298,8 +298,11 @@ public class OperatorParser {
                 return new BinaryOperatorNode("bless", ref, className, currentIndex);
             case "split":
                 // RuntimeList split(RuntimeScalar quotedRegex, RuntimeScalar string, RuntimeScalar limitArg)
-                operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, true);
-                Node separator = ((ListNode) operand).elements.removeFirst();
+                operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, true);
+                Node separator =
+                        ((ListNode) operand).elements.isEmpty()
+                                ? new StringNode(" ", currentIndex)
+                                : ((ListNode) operand).elements.removeFirst();
                 if (separator instanceof OperatorNode) {
                     if (((OperatorNode) separator).operator.equals("matchRegex")) {
                         ((OperatorNode) separator).operator = "quoteRegex";
