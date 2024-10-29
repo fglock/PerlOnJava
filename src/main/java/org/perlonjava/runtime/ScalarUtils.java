@@ -2,8 +2,6 @@ package org.perlonjava.runtime;
 
 import org.perlonjava.parser.NumberParser;
 
-import java.util.stream.Collectors;
-
 /**
  * Utility class for scalar operations in the Perlon Java runtime.
  */

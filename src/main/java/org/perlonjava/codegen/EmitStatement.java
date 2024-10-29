@@ -175,6 +175,9 @@ public class EmitStatement {
         node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "iterator", "()Ljava/util/Iterator;", true);
 
+        // Setup 'local' environment if needed
+        Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv);
+
         // Start of the loop
         mv.visitLabel(loopStart);
 
@@ -201,6 +204,9 @@ public class EmitStatement {
         Label redoLabel = new Label();
         mv.visitLabel(redoLabel);
 
+        // restore 'local' environment if 'redo' was called
+        Local.localTeardown(localRecord, mv);
+
         emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
                 node.labelName,
                 continueLabel,
@@ -215,6 +221,9 @@ public class EmitStatement {
         // Add continue label
         mv.visitLabel(continueLabel);
 
+        // restore 'local' environment if 'next' was called
+        Local.localTeardown(localRecord, mv);
+
         // Execute continue block if it exists
         if (node.continueBlock != null) {
             node.continueBlock.accept(emitterVisitor.with(RuntimeContextType.VOID));
@@ -225,6 +234,9 @@ public class EmitStatement {
 
         // End of the loop
         mv.visitLabel(loopEnd);
+
+        // restore 'local' environment if 'last' was called
+        Local.localTeardown(localRecord, mv);
 
         emitterVisitor.ctx.javaClassInfo.decrementStackLevel(1);
 
@@ -257,10 +269,14 @@ public class EmitStatement {
         Label redoLabel = new Label();
         Label nextLabel = new Label();
 
+        // Setup 'local' environment if needed
         Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv);
 
         // Add redo label
         mv.visitLabel(redoLabel);
+
+        // restore 'local' environment if 'redo' was called
+        Local.localTeardown(localRecord, mv);
 
         if (node.isLoop) {
             emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
@@ -291,7 +307,7 @@ public class EmitStatement {
             emitterVisitor.ctx.javaClassInfo.popLoopLabels();
         }
 
-        // Add next label
+        // Add 'next', 'last' label
         mv.visitLabel(nextLabel);
 
         Local.localTeardown(localRecord, mv);

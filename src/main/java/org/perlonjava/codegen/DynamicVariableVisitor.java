@@ -32,30 +32,26 @@ public class DynamicVariableVisitor implements Visitor {
 
     @Override
     public void visit(For1Node node) {
-        if (!node.useNewScope) {
-            node.variable.accept(this);
-            node.list.accept(this);
-            node.body.accept(this);
-            if (node.continueBlock != null) {
-                node.continueBlock.accept(this);
-            }
+        node.variable.accept(this);
+        node.list.accept(this);
+        node.body.accept(this);
+        if (node.continueBlock != null) {
+            node.continueBlock.accept(this);
         }
     }
 
     @Override
     public void visit(For3Node node) {
-        if (!node.useNewScope) {
-            if (node.initialization != null) {
-                node.initialization.accept(this);
-            }
-            if (node.condition != null) {
-                node.condition.accept(this);
-            }
-            if (node.increment != null) {
-                node.increment.accept(this);
-            }
-            node.body.accept(this);
+        if (node.initialization != null) {
+            node.initialization.accept(this);
         }
+        if (node.condition != null) {
+            node.condition.accept(this);
+        }
+        if (node.increment != null) {
+            node.increment.accept(this);
+        }
+        node.body.accept(this);
     }
 
     // Implement other visit methods for nodes that can contain OperatorNodes
