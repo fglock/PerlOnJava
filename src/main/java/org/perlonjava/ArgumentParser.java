@@ -301,6 +301,7 @@ public class ArgumentParser {
     private static int handleModuleSwitch(String[] args, CompilerOptions parsedArgs, int index, int j, String arg, char switchChar) {
         String moduleName = null;
         String moduleArgs = null;
+        boolean useNo = false;
 
         if (j < arg.length() - 1) {
             moduleName = arg.substring(j + 1);
@@ -311,6 +312,12 @@ public class ArgumentParser {
             System.exit(1);
         }
 
+        // Check if the first character of the module name is a dash
+        if (moduleName.startsWith("-")) {
+            useNo = true;
+            moduleName = moduleName.substring(1); // Remove the dash
+        }
+
         // Check for '=' to handle arguments
         int equalsIndex = moduleName.indexOf('=');
         if (equalsIndex != -1) {
@@ -318,7 +325,7 @@ public class ArgumentParser {
             moduleName = moduleName.substring(0, equalsIndex);
         }
 
-        parsedArgs.moduleUseStatements.add(new ModuleUseStatement(switchChar, moduleName, moduleArgs));
+        parsedArgs.moduleUseStatements.add(new ModuleUseStatement(switchChar, moduleName, moduleArgs, useNo));
         return index;
     }
 
@@ -589,15 +596,18 @@ public class ArgumentParser {
         char type; // 'm' or 'M'
         String moduleName;
         String args;
+        boolean useNo; // New field to indicate 'use' or 'no'
 
-        ModuleUseStatement(char type, String moduleName, String args) {
+        ModuleUseStatement(char type, String moduleName, String args, boolean useNo) {
             this.type = type;
             this.moduleName = moduleName;
             this.args = args;
+            this.useNo = useNo;
         }
 
         @Override
         public String toString() {
+            String useOrNo = useNo ? "no" : "use";
             if (args != null) {
                 // Split the arguments by comma and wrap each in quotes
                 String[] splitArgs = args.split(",");
@@ -608,9 +618,9 @@ public class ArgumentParser {
                         formattedArgs.append(", ");
                     }
                 }
-                return "use " + moduleName + " (" + formattedArgs + ");";
+                return useOrNo + " " + moduleName + " (" + formattedArgs + ");";
             }
-            return type == 'm' ? "use " + moduleName + " ();" : "use " + moduleName + ";";
+            return useOrNo + " " + moduleName + (type == 'm' ? " ();" : ";");
         }
     }
 
