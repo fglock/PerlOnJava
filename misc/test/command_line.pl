@@ -1,13 +1,14 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
-use Test::More tests => 18;
+use Test::More tests => 20;
 use File::Temp qw(tempfile tempdir);
 use File::Spec;
 use File::Path qw(rmtree);
 
-my $perl = 'java -jar target/perlonjava-1.0-SNAPSHOT.jar';
-# my $perl = 'perl';
+my $perl;
+$perl = 'perl';
+$perl = 'java -jar target/perlonjava-1.0-SNAPSHOT.jar';
 
 # Test -c (compile only)
 {
@@ -196,5 +197,19 @@ END
 
     my $output = `$perl $filename -- arg1 arg2`;
     is($output, "Arguments: -- arg1 arg2\n", '-- switch correctly handles end of options and script arguments');
+    unlink $filename;
+}
+
+# Test -g (slurp mode)
+{
+    my ($fh, $filename) = tempfile();
+    print $fh "Hello\nWorld\n";
+    close $fh;
+
+    my $output = `$perl -ne 'print length' $filename`;
+    is($output, "66", '-n switch processes each line without printing');
+
+    $output = `$perl -gne 'print length' $filename`;
+    is($output, "12", '-g switch reads all input in one go');
     unlink $filename;
 }
