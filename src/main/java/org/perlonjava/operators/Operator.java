@@ -596,6 +596,9 @@ public class Operator {
 
     public static RuntimeDataProvider die(RuntimeDataProvider value, RuntimeScalar message) {
         String out = value.toString();
+        if (out.isEmpty()) {
+            out = "Died";
+        }
         if (!out.endsWith("\n")) {
             out += message.toString();
         }
@@ -604,6 +607,9 @@ public class Operator {
 
     public static RuntimeDataProvider warn(RuntimeDataProvider value, RuntimeScalar message) {
         String out = value.toString();
+        if (out.isEmpty()) {
+            out = "Warning: something's wrong";
+        }
         if (!out.endsWith("\n")) {
             out += message.toString();
         }
