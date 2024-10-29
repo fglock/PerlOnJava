@@ -123,6 +123,16 @@ sub test_return {
 test_return();
 say $global_var eq "original" ? "ok # local variable restored after return" : "not ok";
 
+# New test cases for 3-argument for loop
+$global_var = "original";
+{
+    for (my $i = 0; $i < 3; $i++) {
+        local $global_var = "3-arg for scope";
+        say $global_var eq "3-arg for scope" ? "ok # local variable in 3-arg for loop" : "not ok";
+    }
+}
+say $global_var eq "original" ? "ok # local variable restored after 3-arg for loop" : "not ok";
+
 __END__
 
 #----- TODO --------
