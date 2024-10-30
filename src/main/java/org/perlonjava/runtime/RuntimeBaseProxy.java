@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import java.util.Stack;
+
 /**
  * An abstract class that serves as a proxy for a RuntimeScalar object.
  * It provides methods to manipulate and access the underlying scalar value.
@@ -9,6 +11,8 @@ package org.perlonjava.runtime;
  * Note: The value is created with the value `undef`.
  */
 public abstract class RuntimeBaseProxy extends RuntimeScalar {
+    private static final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
+
     // The underlying scalar value that this proxy represents.
     RuntimeScalar lvalue;
 
@@ -32,6 +36,48 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         this.type = lvalue.type;
         this.value = lvalue.value;
         return lvalue;
+    }
+
+    /**
+     * Saves the current state of the RuntimeScalar instance.
+     *
+     * <p>This method creates a snapshot of the current type and value of the scalar,
+     * and pushes it onto a static stack for later restoration.
+     */
+    @Override
+    public void dynamicSaveState() {
+        // Create a new RuntimeScalar to save the current state
+        RuntimeScalar currentState = new RuntimeScalar();
+        // Copy the current type and value to the new state
+        currentState.type = this.type;
+        currentState.value = this.value;
+        currentState.blessId = this.blessId;
+        // Push the current state onto the stack
+        dynamicStateStack.push(currentState);
+        // Clear the current type and value
+        this.type = RuntimeScalarType.UNDEF;
+        this.value = null;
+        this.blessId = 0;
+        if (this.value != null) {
+            this.lvalue.undefine();
+        }
+    }
+
+    /**
+     * Restores the most recently saved state of the RuntimeScalar instance.
+     *
+     * <p>This method pops the most recent state from the static stack and restores
+     * the type and value to the current scalar. If no state is saved, it does nothing.
+     */
+    @Override
+    public void dynamicRestoreState() {
+        if (!dynamicStateStack.isEmpty()) {
+            // Pop the most recent saved state from the stack
+            RuntimeScalar previousState = dynamicStateStack.pop();
+            // Restore the type, value from the saved state
+            this.set(previousState);
+            this.blessId = previousState.blessId;
+        }
     }
 
     /**
