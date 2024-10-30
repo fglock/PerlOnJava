@@ -411,10 +411,27 @@ public class EmitStatement {
 
         // Exception handler
         mv.visitLabel(catchBlock);
-        // Store the exception in the catch parameter
-        // TODO - create the 'my' variable
-        String catchVariableName = ((IdentifierNode) node.catchParameter).name; // Cast to appropriate type
-        mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.symbolTable.getVariableIndex(catchVariableName));
+
+        // --------- Store the exception in the catch parameter ---------
+        // Convert the exception to a string
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/ErrorMessageUtil",
+                "stringifyException",
+                "(Ljava/lang/Exception;)Ljava/lang/String;", false);
+        // Transform catch parameter to 'my'
+        OperatorNode catchParameter = new OperatorNode("my", node.catchParameter, node.tokenIndex);
+        // Create the lexical variable for the catch parameter, push it to the stack
+        catchParameter.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        mv.visitInsn(Opcodes.SWAP);
+        mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/RuntimeScalar",
+                "set",
+                "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                false);
+        mv.visitInsn(Opcodes.POP);
+        // --------- end of store the catch parameter ---------
+
         node.catchBlock.accept(emitterVisitor.with(RuntimeContextType.VOID));
 
         // Finally block
