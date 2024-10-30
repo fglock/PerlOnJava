@@ -31,7 +31,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     @Override
     public RuntimeScalar set(RuntimeScalar value) {
         vivify(); // Ensure the scalar is initialized.
-        lvalue.set(value);
+        this.lvalue.set(value);
         this.type = lvalue.type;
         this.value = lvalue.value;
         return lvalue;

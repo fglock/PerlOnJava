@@ -87,6 +87,8 @@ public class RuntimeHashProxy extends RuntimeBaseProxy {
             } else {
                 // Restore the type, value from the saved state
                 this.set(previousState);
+                this.lvalue.blessId = previousState.blessId;
+                this.blessId = previousState.blessId;
             }
         }
     }
