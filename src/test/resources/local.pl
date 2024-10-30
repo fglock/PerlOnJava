@@ -170,6 +170,14 @@ say $global_hash{key} eq 'value' ? "ok # local hash element restored" : "not ok"
 }
 say !defined($global_hash{key_new}) ? "ok # local hash element restored" : "not ok # <$global_hash{key_new}>";
 
+# Test for new local array element
+{
+    local $global_array[10] = 'temporary_value';
+    say $global_array[10] eq 'temporary_value' ? "ok # local array element changed" : "not ok";
+}
+print "not " if scalar(@global_array) >= 10;
+say "ok # local array element restored, array size " . scalar(@global_array);
+
 __END__
 
 #----- TODO --------
