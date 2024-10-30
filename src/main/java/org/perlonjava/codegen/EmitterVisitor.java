@@ -412,6 +412,9 @@ public class EmitterVisitor implements Visitor {
             case "~":
                 handleUnaryBuiltin(node, "bitwiseNot");
                 break;
+            case "~.":
+                handleUnaryBuiltin(node, "bitwiseNotDot");
+                break;
             case "!":
             case "not":
                 handleUnaryBuiltin(node, "not");

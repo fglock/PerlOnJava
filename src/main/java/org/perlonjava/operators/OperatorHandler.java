@@ -40,6 +40,10 @@ public class OperatorHandler {
         put("<<", "shiftLeft", "org/perlonjava/operators/BitwiseOperators");
         put(">>", "shiftRight", "org/perlonjava/operators/BitwiseOperators");
         put("bitwiseNot", "bitwiseNot", "org/perlonjava/operators/BitwiseOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("&.", "bitwiseAndDot", "org/perlonjava/operators/BitwiseOperators");
+        put("|.", "bitwiseOrDot", "org/perlonjava/operators/BitwiseOperators");
+        put("^.", "bitwiseXorDot", "org/perlonjava/operators/BitwiseOperators");
+        put("bitwiseNotDot", "bitwiseNotDot", "org/perlonjava/operators/BitwiseOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         // Compare
         put("<", "lessThan", "org/perlonjava/operators/CompareOperators");
@@ -85,11 +89,8 @@ public class OperatorHandler {
         // Misc
         put(".", "stringConcat");
         put("x", "repeat");
-        put("&.", "bitwiseStringAnd");
         put("&&", "logicalAnd");
-        put("|.", "bitwiseStringOr");
         put("||", "logicalOr");
-        put("^.", "bitwiseStringXor");
         put("//", "logicalDefinedOr");
         put("isa", "isa");
         put("bless", "bless");
