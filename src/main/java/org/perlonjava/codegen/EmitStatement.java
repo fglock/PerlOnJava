@@ -403,7 +403,7 @@ public class EmitStatement {
 
         // Start of try block
         mv.visitLabel(tryStart);
-        node.tryBlock.accept(emitterVisitor.with(RuntimeContextType.VOID));
+        node.tryBlock.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         mv.visitLabel(tryEnd);
 
         // Jump to finally block if try completes without exception
@@ -424,7 +424,7 @@ public class EmitStatement {
         catchParameter.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         mv.visitInsn(Opcodes.SWAP);
         mv.visitMethodInsn(
-                Opcodes.INVOKESTATIC,
+                Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/RuntimeScalar",
                 "set",
                 "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
@@ -432,7 +432,7 @@ public class EmitStatement {
         mv.visitInsn(Opcodes.POP);
         // --------- end of store the catch parameter ---------
 
-        node.catchBlock.accept(emitterVisitor.with(RuntimeContextType.VOID));
+        node.catchBlock.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
 
         // Finally block
         mv.visitLabel(finallyStart);
@@ -442,7 +442,12 @@ public class EmitStatement {
         mv.visitLabel(finallyEnd);
 
         // Define the try-catch block
-        mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Throwable");
+        mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Exception");
+
+        // If the context is VOID, clear the stack
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+            mv.visitInsn(Opcodes.POP);
+        }
 
         emitterVisitor.ctx.logDebug("emitTryCatch end");
     }
