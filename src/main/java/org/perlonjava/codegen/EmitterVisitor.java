@@ -625,23 +625,7 @@ public class EmitterVisitor implements Visitor {
     }
 
     @Override
-    public void visit(TryNode node) {
-        ctx.logDebug("visit(TryNode) - Placeholder for try-catch-finally emission");
-
-        // Placeholder for emitting try-catch-finally block
-        // TODO: Implement the logic to emit bytecode for try-catch-finally
-
-        // For now, just log the presence of the try-catch-finally structure
-        if (node.tryBlock != null) {
-            ctx.logDebug("Try block present");
-        }
-        if (node.catchBlock != null) {
-            ctx.logDebug("Catch block present");
-        }
-        if (node.finallyBlock != null) {
-            ctx.logDebug("Finally block present");
-        }
-    }
+    public void visit(TryNode node) { EmitStatement.emitTryCatch(ctx, node); }
 
     @Override
     public void visit(SubroutineNode node) {
@@ -652,7 +636,6 @@ public class EmitterVisitor implements Visitor {
     public void visit(For1Node node) {
         EmitStatement.emitFor1(this, node);
     }
-
 
     @Override
     public void visit(For3Node node) {
