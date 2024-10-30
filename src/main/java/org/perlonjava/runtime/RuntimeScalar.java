@@ -349,7 +349,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 }
                 yield ((RuntimeCode) value).toStringRef();
             }
-            default -> "REF(" + value.hashCode() + ")";
+            default -> "REF(0x" + value.hashCode() + ")";
         };
     }
 

@@ -180,7 +180,7 @@ public class RuntimeCode implements RuntimeScalarReference {
      * @return a string representing the CODE reference
      */
     public String toStringRef() {
-        return "CODE(" + this.hashCode() + ")";
+        return "CODE(0x" + this.hashCode() + ")";
     }
 
     /**

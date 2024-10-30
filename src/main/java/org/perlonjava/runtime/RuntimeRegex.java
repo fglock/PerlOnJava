@@ -378,7 +378,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
      * @return A string representing the regex reference.
      */
     public String toStringRef() {
-        return "REF(" + this.hashCode() + ")";
+        return "REF(0x" + this.hashCode() + ")";
     }
 
     /**

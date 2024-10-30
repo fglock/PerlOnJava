@@ -409,11 +409,11 @@ public class RuntimeIO implements RuntimeScalarReference {
     }
 
     public String toString() {
-        return "GLOB(" + this.hashCode() + ")";
+        return "GLOB(0x" + this.hashCode() + ")";
     }
 
     public String toStringRef() {
-        return "IO(" + this.hashCode() + ")";
+        return "IO(0x" + this.hashCode() + ")";
     }
 
     public int getIntRef() {
