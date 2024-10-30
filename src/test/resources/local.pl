@@ -163,6 +163,13 @@ say $global_array[0] == 1 ? "ok # local array element restored" : "not ok";
 }
 say $global_hash{key} eq 'value' ? "ok # local hash element restored" : "not ok";
 
+# Test for new local hash element
+{
+    local $global_hash{key_new} = 'temporary_value';
+    say $global_hash{key_new} eq 'temporary_value' ? "ok # local hash element changed" : "not ok";
+}
+say !defined($global_hash{key_new}) ? "ok # local hash element restored" : "not ok # <$global_hash{key_new}>";
+
 __END__
 
 #----- TODO --------

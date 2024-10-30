@@ -3,6 +3,8 @@ use strict;
 use warnings;
 use feature 'say';
 
+use Data::Dumper;
+
 # Test die
 sub test_die {
     my $result;
@@ -60,7 +62,5 @@ print "not " if $sig_die_result !~ "Caught SIG DIE: This is a SIG DIE test"; say
 my $sig_warn_result = test_sig_warn();
 print "not " if $sig_warn_result !~ "Caught SIG WARN: This is a SIG WARN test"; say "ok # SIG WARN works";
 
-# Reset $SIG because we going to execute other test files in the same process
-# use Data::Dumper;
+# XXX BUG in RuntimeBaseProxy: $SIG now contains keys for both __DIE__ and __WARN__
 # print Dumper \%SIG;
-%SIG = ();
