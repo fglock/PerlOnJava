@@ -69,6 +69,7 @@
     - Added `$.`, `${^LAST_FH}` special variables.
     - Added command line switches `-E`, `-p`, `-n`, `-i`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-l`, `-x`, `-?`.
     - Added `select(filehandle)` operator, `ARGVOUT` filehandle.
+    - Added `~.`, `&.`, `|.`, `^.` operators.
     - Work in progress: 
         - `state` variables
         - `socket` and related operators
