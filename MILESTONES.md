@@ -71,8 +71,9 @@
     - Added `select(filehandle)` operator, `ARGVOUT` filehandle.
     - Added `~.`, `&.`, `|.`, `^.` operators.
     - Work in progress: 
-        - `state` variables
-        - `socket` and related operators
+        - `state` variables.
+        - `socket` and related operators.
+        - `try catch` statement.
     - Stretch goals
         - Add support for concurrency and parallelism, such as threads and async/await.
         - Enhance security features, including sandboxing and input validation.

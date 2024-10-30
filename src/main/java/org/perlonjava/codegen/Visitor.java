@@ -118,6 +118,11 @@ public interface Visitor {
      */
     void visit(SubroutineNode node);
 
-    // Add other node types as needed
+    /**
+     * Visit a TryNode.
+     *
+     * @param node the TryNode to visit
+     */
+    void visit(TryNode node);
 }
 

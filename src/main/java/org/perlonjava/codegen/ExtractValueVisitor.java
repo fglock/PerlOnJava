@@ -122,4 +122,22 @@ public class ExtractValueVisitor implements Visitor {
             node.elseBranch.accept(this);
         }
     }
+
+    @Override
+    public void visit(TryNode node) {
+        // Visit the try block
+        if (node.tryBlock != null) {
+            node.tryBlock.accept(this);
+        }
+
+        // Visit the catch block
+        if (node.catchBlock != null) {
+            node.catchBlock.accept(this);
+        }
+
+        // Visit the finally block, if it exists
+        if (node.finallyBlock != null) {
+            node.finallyBlock.accept(this);
+        }
+    }
 }
