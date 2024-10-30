@@ -312,6 +312,15 @@ public class PrintVisitor implements Visitor {
         }
         indentLevel--;
 
+        // Visit the catch parameter
+        if (node.catchParameter != null) {
+            appendIndent();
+            sb.append("CatchParameter:\n");
+            indentLevel++;
+            node.catchParameter.accept(this);
+            indentLevel--;
+        }
+
         // Visit the catch block
         appendIndent();
         sb.append("CatchBlock:\n");
