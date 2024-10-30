@@ -19,7 +19,7 @@ public class EmitOperator {
      * Handles the 'readdir' operator, which reads directory contents.
      *
      * @param emitterVisitor The visitor used for code emission.
-     * @param node The operator node representing the 'readdir' operation.
+     * @param node           The operator node representing the 'readdir' operation.
      */
     static void handleReaddirOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
@@ -45,7 +45,7 @@ public class EmitOperator {
      * Handles the 'mkdir' operator, which creates directories.
      *
      * @param emitterVisitor The visitor used for code emission.
-     * @param node The operator node representing the 'mkdir' operation.
+     * @param node           The operator node representing the 'mkdir' operation.
      */
     static void handleMkdirOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
@@ -70,7 +70,7 @@ public class EmitOperator {
      * Handles the 'each' operator, which iterates over elements.
      *
      * @param emitterVisitor The visitor used for code emission.
-     * @param node The operator node representing the 'each' operation.
+     * @param node           The operator node representing the 'each' operation.
      */
     static void handleEachOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         String operator = node.operator;
@@ -88,7 +88,7 @@ public class EmitOperator {
      * Handles the 'keys' operator, which retrieves keys from a data structure.
      *
      * @param emitterVisitor The visitor used for code emission.
-     * @param node The operator node representing the 'keys' operation.
+     * @param node           The operator node representing the 'keys' operation.
      */
     static void handleKeysOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         String operator = node.operator;
@@ -112,7 +112,7 @@ public class EmitOperator {
      * Handles the 'readline' operator for reading lines from a file handle.
      *
      * @param emitterVisitor The visitor used for code emission.
-     * @param node The binary operator node representing the 'readline' operation.
+     * @param node           The binary operator node representing the 'readline' operation.
      */
     static void handleReadlineOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         String operator = node.operator;

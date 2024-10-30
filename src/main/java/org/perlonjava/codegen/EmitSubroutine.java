@@ -22,7 +22,7 @@ public class EmitSubroutine {
     /**
      * Emits bytecode for a subroutine, including handling of closure variables.
      *
-     * @param ctx The context used for code emission.
+     * @param ctx  The context used for code emission.
      * @param node The subroutine node representing the subroutine.
      */
     static void emitSubroutine(EmitterContext ctx, SubroutineNode node) {
@@ -168,7 +168,7 @@ public class EmitSubroutine {
      * Handles the postfix `()` node, which applies a subroutine or function.
      *
      * @param emitterVisitor The visitor used for code emission.
-     * @param node The binary operator node representing the apply operation.
+     * @param node           The binary operator node representing the apply operation.
      */
     static void handleApplyOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         emitterVisitor.ctx.logDebug("handleApplyElementOperator " + node + " in context " + emitterVisitor.ctx.contextType);
@@ -200,7 +200,7 @@ public class EmitSubroutine {
      * Handles the `__SUB__` operator, which refers to the current subroutine.
      *
      * @param emitterVisitor The visitor used for code emission.
-     * @param node The operator node representing the `__SUB__` operation.
+     * @param node           The operator node representing the `__SUB__` operation.
      */
     static void handleSelfCallOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         emitterVisitor.ctx.logDebug("handleSelfCallOperator " + node + " in context " + emitterVisitor.ctx.contextType);

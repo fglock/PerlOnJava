@@ -20,7 +20,7 @@ public class EmitLogicalOperator {
      * Emits bytecode for the flip-flop operator, which is used in range-like conditions.
      *
      * @param emitterVisitor The visitor used for code emission.
-     * @param node The binary operator node representing the flip-flop operation.
+     * @param node           The binary operator node representing the flip-flop operation.
      */
     static void emitFlipFlopOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         EmitterContext ctx = emitterVisitor.ctx;
@@ -49,9 +49,9 @@ public class EmitLogicalOperator {
      * Emits bytecode for logical assignment operators such as `||=` and `&&=`.
      *
      * @param emitterVisitor The visitor used for code emission.
-     * @param node The binary operator node representing the logical assignment operation.
-     * @param compareOpcode The opcode used for comparison (e.g., IFEQ for `&&=`).
-     * @param getBoolean The method name to convert the result to a boolean.
+     * @param node           The binary operator node representing the logical assignment operation.
+     * @param compareOpcode  The opcode used for comparison (e.g., IFEQ for `&&=`).
+     * @param getBoolean     The method name to convert the result to a boolean.
      */
     static void emitLogicalAssign(EmitterVisitor emitterVisitor, BinaryOperatorNode node, int compareOpcode, String getBoolean) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
@@ -94,9 +94,9 @@ public class EmitLogicalOperator {
      * Emits bytecode for logical operators such as `||` and `&&`.
      *
      * @param emitterVisitor The visitor used for code emission.
-     * @param node The binary operator node representing the logical operation.
-     * @param compareOpcode The opcode used for comparison (e.g., IFEQ for `&&`).
-     * @param getBoolean The method name to convert the result to a boolean.
+     * @param node           The binary operator node representing the logical operation.
+     * @param compareOpcode  The opcode used for comparison (e.g., IFEQ for `&&`).
+     * @param getBoolean     The method name to convert the result to a boolean.
      */
     static void emitLogicalOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node, int compareOpcode, String getBoolean) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
@@ -129,7 +129,7 @@ public class EmitLogicalOperator {
      * Emits bytecode for the ternary operator (condition ? trueExpr : falseExpr).
      *
      * @param emitterVisitor The visitor used for code emission.
-     * @param node The ternary operator node representing the operation.
+     * @param node           The ternary operator node representing the operation.
      */
     static void emitTernaryOperator(EmitterVisitor emitterVisitor, TernaryOperatorNode node) {
         emitterVisitor.ctx.logDebug("TERNARY_OP start");

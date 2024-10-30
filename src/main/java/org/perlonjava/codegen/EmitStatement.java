@@ -18,7 +18,7 @@ public class EmitStatement {
      * Emits bytecode for an if statement, including support for 'unless'.
      *
      * @param emitterVisitor The visitor used for code emission.
-     * @param node The if node representing the if statement.
+     * @param node           The if node representing the if statement.
      */
     static void emitIf(EmitterVisitor emitterVisitor, IfNode node) {
         emitterVisitor.ctx.logDebug("IF start: " + node.operator);
@@ -71,7 +71,7 @@ public class EmitStatement {
      * Emits bytecode for a for-loop with initialization, condition, and increment (C-style for loop).
      *
      * @param emitterVisitor The visitor used for code emission.
-     * @param node The for-loop node representing the loop.
+     * @param node           The for-loop node representing the loop.
      */
     static void emitFor3(EmitterVisitor emitterVisitor, For3Node node) {
         if (node.isDoWhile) {
@@ -171,7 +171,7 @@ public class EmitStatement {
      * Emits bytecode for a foreach loop.
      *
      * @param emitterVisitor The visitor used for code emission.
-     * @param node The foreach node representing the loop.
+     * @param node           The foreach node representing the loop.
      */
     static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
         emitterVisitor.ctx.logDebug("FOR1 start");
@@ -277,7 +277,7 @@ public class EmitStatement {
      * Emits bytecode for a block of statements.
      *
      * @param emitterVisitor The visitor used for code emission.
-     * @param node The block node representing the block of statements.
+     * @param node           The block node representing the block of statements.
      */
     static void emitBlock(EmitterVisitor emitterVisitor, BlockNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
@@ -343,7 +343,7 @@ public class EmitStatement {
      * Emits bytecode for a do-while loop.
      *
      * @param emitterVisitor The visitor used for code emission.
-     * @param node The for-loop node representing the do-while loop.
+     * @param node           The for-loop node representing the do-while loop.
      */
     static void emitDoWhile(EmitterVisitor emitterVisitor, For3Node node) {
         emitterVisitor.ctx.logDebug("DO-WHILE start");

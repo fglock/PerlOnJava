@@ -17,7 +17,7 @@ public class EmitRegex {
      * This method processes the binary operator node representing the binding operation.
      *
      * @param emitterVisitor The visitor used to emit bytecode.
-     * @param node The binary operator node representing the binding regex operation.
+     * @param node           The binary operator node representing the binding regex operation.
      */
     static void handleBindRegex(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         //
@@ -61,7 +61,7 @@ public class EmitRegex {
      * Handles the non-binding regex operation by wrapping the operation in a "not" and "scalar" context.
      *
      * @param emitterVisitor The visitor used to emit bytecode.
-     * @param node The binary operator node representing the non-binding regex operation.
+     * @param node           The binary operator node representing the non-binding regex operation.
      */
     static void handleNotBindRegex(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         emitterVisitor.visit(
@@ -81,7 +81,7 @@ public class EmitRegex {
      * Handles various regex operations such as transliteration, replacement, and quoting.
      *
      * @param emitterVisitor The visitor used to emit bytecode.
-     * @param node The operator node representing the regex operation.
+     * @param node           The operator node representing the regex operation.
      */
     static void handleRegex(EmitterVisitor emitterVisitor, OperatorNode node) {
         ListNode operand = (ListNode) node.operand;
