@@ -279,6 +279,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     public RuntimeScalar set(RuntimeScalar value) {
         this.type = value.type;
         this.value = value.value;
+        this.blessId = value.blessId;
         return this;
     }
 
