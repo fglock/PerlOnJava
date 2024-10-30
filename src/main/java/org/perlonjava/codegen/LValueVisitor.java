@@ -139,5 +139,11 @@ public class LValueVisitor implements Visitor {
     public void visit(HashLiteralNode node) {
         context = RuntimeContextType.VOID;
     }
+
+    @Override
+    public void visit(TryNode node) {
+        // A TryNode is not an L-value, so set context to VOID
+        context = RuntimeContextType.VOID;
+    }
 }
 

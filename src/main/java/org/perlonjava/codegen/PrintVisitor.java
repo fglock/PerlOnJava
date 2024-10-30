@@ -297,6 +297,40 @@ public class PrintVisitor implements Visitor {
         indentLevel--;
     }
 
-    // Add other visit methods as needed
+    @Override
+    public void visit(TryNode node) {
+        appendIndent();
+        sb.append("TryNode:\n");
+        indentLevel++;
+
+        // Visit the try block
+        appendIndent();
+        sb.append("TryBlock:\n");
+        indentLevel++;
+        if (node.tryBlock != null) {
+            node.tryBlock.accept(this);
+        }
+        indentLevel--;
+
+        // Visit the catch block
+        appendIndent();
+        sb.append("CatchBlock:\n");
+        indentLevel++;
+        if (node.catchBlock != null) {
+            node.catchBlock.accept(this);
+        }
+        indentLevel--;
+
+        // Visit the finally block, if it exists
+        if (node.finallyBlock != null) {
+            appendIndent();
+            sb.append("FinallyBlock:\n");
+            indentLevel++;
+            node.finallyBlock.accept(this);
+            indentLevel--;
+        }
+
+        indentLevel--;
+    }
 }
 
