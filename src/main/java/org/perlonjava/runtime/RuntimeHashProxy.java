@@ -1,11 +1,15 @@
 package org.perlonjava.runtime;
 
+import java.util.Stack;
+
 /**
  * RuntimeHashProxy acts as a proxy for accessing elements within a RuntimeHash.
  * It provides a mechanism to lazily initialize (vivify) elements in the hash
  * when they are accessed.
  */
 public class RuntimeHashProxy extends RuntimeBaseProxy {
+    private static final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
+
     // Reference to the parent RuntimeHash
     private final RuntimeHash parent;
     // Key associated with this proxy in the parent hash
@@ -38,6 +42,52 @@ public class RuntimeHashProxy extends RuntimeBaseProxy {
             }
             // Retrieve the element associated with the key
             lvalue = parent.elements.get(key);
+        }
+    }
+
+    /**
+     * Saves the current state of the RuntimeScalar instance.
+     *
+     * <p>This method creates a snapshot of the current type and value of the scalar,
+     * and pushes it onto a static stack for later restoration.
+     */
+    @Override
+    public void dynamicSaveState() {
+        // Create a new RuntimeScalar to save the current state
+        if (this.lvalue == null) {
+            dynamicStateStack.push(null);
+        } else {
+            RuntimeScalar currentState = new RuntimeScalar();
+            // Copy the current type and value to the new state
+            currentState.type = this.lvalue.type;
+            currentState.value = this.lvalue.value;
+            currentState.blessId = this.lvalue.blessId;
+            dynamicStateStack.push(currentState);
+            // Clear the current type and value
+            this.undefine();
+        }
+    }
+
+    /**
+     * Restores the most recently saved state of the RuntimeScalar instance.
+     *
+     * <p>This method pops the most recent state from the static stack and restores
+     * the type and value to the current scalar. If no state is saved, it does nothing.
+     */
+    @Override
+    public void dynamicRestoreState() {
+        if (!dynamicStateStack.isEmpty()) {
+            // Pop the most recent saved state from the stack
+            RuntimeScalar previousState = dynamicStateStack.pop();
+            if (previousState == null) {
+                parent.elements.remove(key);
+                this.lvalue = null;
+                this.type = RuntimeScalarType.UNDEF;
+                this.value = null;
+            } else {
+                // Restore the type, value from the saved state
+                this.set(previousState);
+            }
         }
     }
 }
