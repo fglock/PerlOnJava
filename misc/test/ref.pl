@@ -33,7 +33,9 @@ print \$s, "\n";
 bless $v, "XYZ";
 print "$v\n";
 print "$x\n";
-print \$s, "\n"
+print \$s, "\n";
+my $s2 = $s;
+print \$s2, " # copy ignores bless\n";
 }
 
 {
