@@ -625,7 +625,7 @@ public class EmitterVisitor implements Visitor {
     }
 
     @Override
-    public void visit(TryNode node) { EmitStatement.emitTryCatch(ctx, node); }
+    public void visit(TryNode node) { EmitStatement.emitTryCatch(this, node); }
 
     @Override
     public void visit(SubroutineNode node) {

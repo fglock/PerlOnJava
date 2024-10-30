@@ -389,21 +389,44 @@ public class EmitStatement {
         emitterVisitor.ctx.logDebug("DO-WHILE end");
     }
 
-    static void emitTryCatch(EmitterContext ctx, TryNode node) {
-        ctx.logDebug("visit(TryNode) - Placeholder for try-catch-finally emission");
+    static void emitTryCatch(EmitterVisitor emitterVisitor, TryNode node) {
+        emitterVisitor.ctx.logDebug("emitTryCatch start");
 
-        // Placeholder for emitting try-catch-finally block
-        // TODO: Implement the logic to emit bytecode for try-catch-finally
+        MethodVisitor mv = emitterVisitor.ctx.mv;
 
-        // For now, just log the presence of the try-catch-finally structure
-        if (node.tryBlock != null) {
-            ctx.logDebug("Try block present");
-        }
-        if (node.catchBlock != null) {
-            ctx.logDebug("Catch block present");
-        }
+        // Labels for try-catch-finally
+        Label tryStart = new Label();
+        Label tryEnd = new Label();
+        Label catchBlock = new Label();
+        Label finallyStart = new Label();
+        Label finallyEnd = new Label();
+
+        // Start of try block
+        mv.visitLabel(tryStart);
+        node.tryBlock.accept(emitterVisitor.with(RuntimeContextType.VOID));
+        mv.visitLabel(tryEnd);
+
+        // Jump to finally block if try completes without exception
+        mv.visitJumpInsn(Opcodes.GOTO, finallyStart);
+
+        // Exception handler
+        mv.visitLabel(catchBlock);
+        // Store the exception in the catch parameter
+        // TODO - create the 'my' variable
+        String catchVariableName = ((IdentifierNode) node.catchParameter).name; // Cast to appropriate type
+        mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.symbolTable.getVariableIndex(catchVariableName));
+        node.catchBlock.accept(emitterVisitor.with(RuntimeContextType.VOID));
+
+        // Finally block
+        mv.visitLabel(finallyStart);
         if (node.finallyBlock != null) {
-            ctx.logDebug("Finally block present");
+            node.finallyBlock.accept(emitterVisitor.with(RuntimeContextType.VOID));
         }
+        mv.visitLabel(finallyEnd);
+
+        // Define the try-catch block
+        mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Throwable");
+
+        emitterVisitor.ctx.logDebug("emitTryCatch end");
     }
 }
