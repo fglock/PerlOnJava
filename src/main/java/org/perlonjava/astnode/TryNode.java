@@ -32,10 +32,10 @@ public class TryNode extends AbstractNode {
     /**
      * Constructs a new TryNode with the specified blocks and catch parameter.
      *
-     * @param tryBlock      the block of code to try
+     * @param tryBlock       the block of code to try
      * @param catchParameter the parameter for the catch block
-     * @param catchBlock    the block of code to execute in case of an exception
-     * @param finallyBlock  the block of code to execute after try and catch blocks
+     * @param catchBlock     the block of code to execute in case of an exception
+     * @param finallyBlock   the block of code to execute after try and catch blocks
      */
     public TryNode(Node tryBlock, Node catchParameter, Node catchBlock, Node finallyBlock, int tokenIndex) {
         this.tryBlock = tryBlock;

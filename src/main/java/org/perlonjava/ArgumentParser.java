@@ -384,7 +384,7 @@ public class ArgumentParser {
         }
         return index;
     }
-    
+
     /**
      * Handles the input record separator specified with the -0 switch.
      * This switch allows specifying a custom input record separator for processing files.

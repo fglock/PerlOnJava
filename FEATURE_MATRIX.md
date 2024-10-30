@@ -196,7 +196,8 @@
 - ✔️   **Code references**: Code references like `\&subr`, `\&$subname`, `\&{$subname}`, are implemented.
 - ✔️   **Special literals**: `__PACKAGE__`, `__FILE__`, `__LINE__`
 - ✔️   **`die` related operators**: `die`, `warn`, `exit` are supported.
-- ❌  **`die` related features**: `$SIG{__DIE__}`, `$SIG{__WARN__}`, `PROPAGATE` are not yet supported.
+- ✔️   **`die` related features**: `$SIG{__DIE__}`, `$SIG{__WARN__}`
+- ❌  **`PROPAGATE`**: `PROPAGATE` method is not yet supported.
 - ❌  **`version` objects**: Version objects are not yet supported.
 - 🚧  **`require` operator**: The `require` operator is partially implemented; version checks are not implemented.
 - 🚧  **`use` and `no` statements**: Module imports and version check via `use` and `no` are partially implemented; version checks are not implemented..
