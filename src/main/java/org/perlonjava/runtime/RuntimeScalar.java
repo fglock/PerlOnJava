@@ -341,7 +341,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public String toStringRef() {
         String ref = switch (type) {
-            case UNDEF -> "REF(0x14500834042)";
+            case UNDEF -> "SCALAR(0x14500834042)";
             case CODE -> ((RuntimeCode) value).toStringRef();
             case GLOB -> {
                 if (value == null) {
@@ -349,7 +349,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 }
                 yield ((RuntimeCode) value).toStringRef();
             }
-            default -> "REF(0x" + value.hashCode() + ")";
+            default -> "SCALAR(0x" + value.hashCode() + ")";
         };
         return (blessId == 0
                 ? ref
