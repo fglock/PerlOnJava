@@ -77,7 +77,7 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
      * @return A string representation of the typeglob reference.
      */
     public String toStringRef() {
-        return "GLOB(" + this.hashCode() + ")";
+        return "GLOB(0x" + this.hashCode() + ")";
     }
 
     /**
