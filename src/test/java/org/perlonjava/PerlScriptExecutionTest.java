@@ -106,8 +106,21 @@ public class PerlScriptExecutionTest {
 
             // Capture and verify the output
             String output = outputStream.toString();
-            assertFalse(output.lines().anyMatch(line -> line.contains("not ok")),
-                    "Output should not contain 'not ok' in " + filename);
+            int lineNumber = 0;
+            boolean errorFound = false;
+
+            for (String line : output.lines().toList()) {
+                lineNumber++;
+                if (line.contains("not ok")) {
+                    errorFound = true;
+                    fail("Output contains 'not ok' in " + filename + " at line " + lineNumber);
+                    break;
+                }
+            }
+
+            if (!errorFound) {
+                assertFalse(errorFound, "Output should not contain 'not ok' in " + filename);
+            }
         } catch (Exception e) {
             e.printStackTrace();
             fail("Execution of " + filename + " failed: " + e.getMessage());
