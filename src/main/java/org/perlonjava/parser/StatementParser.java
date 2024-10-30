@@ -178,6 +178,41 @@ public class StatementParser {
     }
 
     /**
+     * Parses a try-catch-finally statement.
+     *
+     * @param parser The Parser instance
+     * @return A TryNode representing the try-catch-finally statement
+     */
+    public static Node parseTryStatement(Parser parser) {
+        TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "try"
+
+        // Parse the try block
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+        Node tryBlock = parser.parseBlock();
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+
+        // Parse the catch block
+        TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "catch"
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+        Node catchParameter = parser.parseExpression(0); // Parse the exception variable
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+        Node catchBlock = parser.parseBlock();
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+
+        // Parse the optional finally block
+        Node finallyBlock = null;
+        if (TokenUtils.peek(parser).text.equals("finally")) {
+            TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "finally"
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+            finallyBlock = parser.parseBlock();
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+        }
+
+        return new TryNode(tryBlock, catchParameter, catchBlock, finallyBlock, parser.tokenIndex);
+    }
+
+    /**
      * Parses a use or no declaration.
      *
      * @param parser The Parser instance

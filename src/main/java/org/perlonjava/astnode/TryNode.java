@@ -14,6 +14,11 @@ public class TryNode extends AbstractNode {
     public final Node tryBlock;
 
     /**
+     * The parameter for the catch block (e.g., exception variable).
+     */
+    public final Node catchParameter;
+
+    /**
      * The block of code to execute in case of an exception.
      */
     public final Node catchBlock;
@@ -25,15 +30,17 @@ public class TryNode extends AbstractNode {
     public final Node finallyBlock;
 
     /**
-     * Constructs a new TryNode with the specified blocks.
+     * Constructs a new TryNode with the specified blocks and catch parameter.
      *
-     * @param tryBlock    the block of code to try
-     * @param catchBlock  the block of code to execute in case of an exception
-     * @param finallyBlock the block of code to execute after try and catch blocks
+     * @param tryBlock      the block of code to try
+     * @param catchParameter the parameter for the catch block
+     * @param catchBlock    the block of code to execute in case of an exception
+     * @param finallyBlock  the block of code to execute after try and catch blocks
      */
-    public TryNode(Node tryBlock, Node catchBlock, Node finallyBlock, int tokenIndex) {
+    public TryNode(Node tryBlock, Node catchParameter, Node catchBlock, Node finallyBlock, int tokenIndex) {
         this.tryBlock = tryBlock;
         this.catchBlock = catchBlock;
+        this.catchParameter = catchParameter;
         this.finallyBlock = finallyBlock;
         this.tokenIndex = tokenIndex;
     }

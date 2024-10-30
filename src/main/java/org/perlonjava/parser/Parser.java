@@ -143,6 +143,8 @@ public class Parser {
                 case "while":
                 case "until":
                     return StatementParser.parseWhileStatement(this, label);
+                case "try":
+                    return StatementParser.parseTryStatement(this);
                 case "package":
                     return StatementParser.parsePackageDeclaration(this, token);
                 case "use":
