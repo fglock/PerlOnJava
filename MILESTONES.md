@@ -70,10 +70,10 @@
     - Added command line switches `-E`, `-p`, `-n`, `-i`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-l`, `-x`, `-?`.
     - Added `select(filehandle)` operator, `ARGVOUT` filehandle.
     - Added `~.`, `&.`, `|.`, `^.` operators.
+    - Added `try catch` statement.
     - Work in progress: 
         - `state` variables.
         - `socket` and related operators.
-        - `try catch` statement.
     - Stretch goals
         - Add support for concurrency and parallelism, such as threads and async/await.
         - Enhance security features, including sandboxing and input validation.
