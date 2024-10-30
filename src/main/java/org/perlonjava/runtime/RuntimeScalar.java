@@ -340,7 +340,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public String toStringRef() {
-        return switch (type) {
+        String ref = switch (type) {
             case UNDEF -> "REF(0x14500834042)";
             case CODE -> ((RuntimeCode) value).toStringRef();
             case GLOB -> {
@@ -351,6 +351,9 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             }
             default -> "REF(0x" + value.hashCode() + ")";
         };
+        return (blessId == 0
+                ? ref
+                : NameNormalizer.getBlessStr(blessId) + "=" + ref);
     }
 
     public int getIntRef() {
