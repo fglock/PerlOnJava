@@ -180,7 +180,14 @@ public class RuntimeCode implements RuntimeScalarReference {
      * @return a string representing the CODE reference
      */
     public String toStringRef() {
-        return "CODE(0x" + this.hashCode() + ")";
+        String ref = "CODE(0x" + this.hashCode() + ")";
+
+        // XXX TODO code reference can be blessed
+        // return (blessId == 0
+        //         ? ref
+        //         : NameNormalizer.getBlessStr(blessId) + "=" + ref);
+
+        return ref;
     }
 
     /**

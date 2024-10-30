@@ -413,7 +413,14 @@ public class RuntimeIO implements RuntimeScalarReference {
     }
 
     public String toStringRef() {
-        return "IO(0x" + this.hashCode() + ")";
+        String ref = "IO(0x" + this.hashCode() + ")";
+
+        // XXX TODO IO reference can be blessed
+        // return (blessId == 0
+        //         ? ref
+        //         : NameNormalizer.getBlessStr(blessId) + "=" + ref);
+
+        return ref;
     }
 
     public int getIntRef() {
