@@ -61,4 +61,6 @@ my $sig_warn_result = test_sig_warn();
 print "not " if $sig_warn_result !~ "Caught SIG WARN: This is a SIG WARN test"; say "ok # SIG WARN works";
 
 # Reset $SIG because we going to execute other test files in the same process
+# use Data::Dumper;
+# print Dumper \%SIG;
 %SIG = ();

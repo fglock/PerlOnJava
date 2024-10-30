@@ -133,6 +133,36 @@ $global_var = "original";
 }
 say $global_var eq "original" ? "ok # local variable restored after 3-arg for loop" : "not ok";
 
+# Test for local array with modifications
+{
+    local @global_array = (7, 8, 9);
+    $global_array[0] = 10;
+    say @global_array == 3 && $global_array[0] == 10 ? "ok # local array modified" : "not ok";
+}
+say @global_array == 3 && $global_array[0] == 1 ? "ok # local array restored after modification" : "not ok";
+
+# Test for local hash with modifications
+{
+    local %global_hash = (another_key => 'another_value');
+    $global_hash{another_key} = 'modified_value';
+    say exists $global_hash{another_key} && $global_hash{another_key} eq 'modified_value' ? "ok # local hash modified" : "not ok";
+}
+say exists $global_hash{key} ? "ok # local hash restored after modification" : "not ok";
+
+# Test for local array element
+{
+    local $global_array[0] = 10;
+    say $global_array[0] == 10 ? "ok # local array element changed" : "not ok";
+}
+say $global_array[0] == 1 ? "ok # local array element restored" : "not ok";
+
+# Test for local hash element
+{
+    local $global_hash{key} = 'temporary_value';
+    say $global_hash{key} eq 'temporary_value' ? "ok # local hash element changed" : "not ok";
+}
+say $global_hash{key} eq 'value' ? "ok # local hash element restored" : "not ok";
+
 __END__
 
 #----- TODO --------
