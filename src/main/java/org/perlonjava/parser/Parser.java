@@ -48,8 +48,8 @@ public class Parser {
         addOperatorsToMap(8, "..", "...");
         addOperatorsToMap(9, "||", "^^", "//");
         addOperatorsToMap(10, "&&");
-        addOperatorsToMap(11, "|", "^");
-        addOperatorsToMap(12, "&");
+        addOperatorsToMap(11, "|", "^", "|.", "^.");
+        addOperatorsToMap(12, "&", "&.");
         addOperatorsToMap(13, "==", "!=", "<=>", "eq", "ne", "cmp");
         addOperatorsToMap(14, "<", ">", "<=", ">=", "lt", "gt", "le", "ge");
         addOperatorsToMap(15, "isa");
@@ -58,7 +58,7 @@ public class Parser {
         addOperatorsToMap(18, "+", "-", ".");
         addOperatorsToMap(19, "*", "/", "%", "x");
         addOperatorsToMap(20, "=~", "!~");
-        addOperatorsToMap(21, "!", "~", "\\");
+        addOperatorsToMap(21, "!", "~", "~.", "\\");
         addOperatorsToMap(22, "**");
         addOperatorsToMap(23, "++", "--");
         addOperatorsToMap(24, "->");
