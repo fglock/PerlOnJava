@@ -177,6 +177,7 @@
 - ✔️   **`while` `until` Statement modifiers**: `last`, `redo`, `next` give an error `Can't "last" outside a loop block`.
 - ✔️   **`for` `foreach` Statement modifiers**: Loop modifiers for `for` and `foreach` are implemented.
 - ✔️   **`continue` blocks**: `continue` blocks in looks are implemented.
+- ✔️   **`try`/`catch`** try-catch is supported.
 - ✔️   **`eval` string with closure variables**: `eval` in string context with closures is supported.
 - ✔️   **`eval` string sets `$@` on error; returns `undef`**: `eval` sets `$@` on error and returns `undef`.
 - ✔️   **`eval` block**: `eval` blocks are implemented.
@@ -261,7 +262,6 @@
 - ❌  **subs** pragma
 - ❌  **defer** feature
 - ❌  **postderef** feature
-- ❌  **try/catch** syntax feature
 
 
 ## Non-strict and Obsolete Features
