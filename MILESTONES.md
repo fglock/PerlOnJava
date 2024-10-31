@@ -71,6 +71,7 @@
     - Added `select(filehandle)` operator, `ARGVOUT` filehandle.
     - Added `~.`, `&.`, `|.`, `^.` operators.
     - Added `try catch` statement.
+    - Added Scalar::Util module: `blessed`, `reftype`.
     - Work in progress: 
         - `state` variables.
         - `socket` and related operators.

@@ -22,7 +22,7 @@ print "not " if $result ne "<345>"; say "ok # named subroutine with typeglob, no
 
 # named subroutine with Symbol assignment
 
-my $sym_ref = Symbol::qualify_to_ref("A", "B");
+my $sym_ref = qualify_to_ref("A", "B");
 say "# x is " . \&x;    # x is CODE
 say "# sym_ref is " . $sym_ref;  # sym_ref is GLOB
 *$sym_ref = \&x;

@@ -483,6 +483,21 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return this;
     }
 
+    public RuntimeScalar blessed() {
+        return switch (type) {
+            case REFERENCE:
+            case ARRAYREFERENCE:
+            case HASHREFERENCE: {
+                int id = ((RuntimeBaseEntity) value).blessId;
+                yield (id != 0
+                        ? new RuntimeScalar(NameNormalizer.getBlessStr(id))
+                        : scalarUndef);
+            }
+            default:
+                yield scalarUndef;
+        };
+    }
+
     public RuntimeScalar ref() {
         String str;
         int blessId;
