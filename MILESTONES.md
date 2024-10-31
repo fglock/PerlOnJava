@@ -85,6 +85,7 @@
   - Work in progress:
     - `state` variables.
     - `socket` and related operators.
+    - v-strings.
   - Stretch goals
     - Add support for concurrency and parallelism, such as threads and async/await.
     - Enhance security features, including sandboxing and input validation.

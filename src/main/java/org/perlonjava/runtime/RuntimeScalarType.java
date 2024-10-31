@@ -12,5 +12,6 @@ public enum RuntimeScalarType {
     REGEX,
     ARRAYREFERENCE,
     HASHREFERENCE,
-    GLOBREFERENCE
+    GLOBREFERENCE,
+    VSTRING
 }

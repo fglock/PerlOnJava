@@ -208,6 +208,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case DOUBLE -> (int) ((double) value);
             case STRING -> NumberParser.parseNumber(this).getInt();
             case UNDEF -> 0;
+            case VSTRING -> 0;
             default -> ((RuntimeScalarReference) value).getIntRef();
         };
     }
@@ -218,6 +219,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case DOUBLE -> (long) ((double) value);
             case STRING -> NumberParser.parseNumber(this).getLong();
             case UNDEF -> 0L;
+            case VSTRING -> 0L;
             default -> ((RuntimeScalarReference) value).getIntRef();
         };
     }
@@ -228,6 +230,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case DOUBLE -> (double) this.value;
             case STRING -> NumberParser.parseNumber(this).getDouble();
             case UNDEF -> 0.0;
+            case VSTRING -> 0.0;
             default -> ((RuntimeScalarReference) value).getDoubleRef();
         };
     }
@@ -241,6 +244,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 yield !s.isEmpty() && !s.equals("0");
             }
             case UNDEF -> false;
+            case VSTRING -> true;
             default -> ((RuntimeScalarReference) value).getBooleanRef();
         };
     }
