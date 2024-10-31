@@ -248,7 +248,7 @@
 - ✔️   **Data::Dumper**: Data::Dumper is ported with small adjustments, to work in `strict` mode.
 - ✔️   **Exporter**: `@EXPORT_OK`, `@EXPORT`, `%EXPORT_TAGS` are implemented; only subroutines can be exported.
 - ✔️   **strict**: `strict` pragma is set to ignore `no strict`, the compiler works always in `strict` mode. `no strict` might work in a future version.
-- ✔️   **Scalar::Util**: `blessed`, `reftype` are implemented.
+- ✔️   **Scalar::Util**: `blessed`, `reftype`, `set_prototype` are implemented.
 - ❌  **feature** pragma
 - ❌  **version** pragma
 - ❌  **experimental** pragma

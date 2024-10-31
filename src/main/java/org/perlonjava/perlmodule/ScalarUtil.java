@@ -1,9 +1,6 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.RuntimeScalarType;
+import org.perlonjava.runtime.*;
 
 /**
  * Utility class for Scalar operations in Perl.
@@ -241,7 +238,7 @@ public class ScalarUtil extends PerlModuleBase {
     }
 
     /**
-     * Placeholder for the set_prototype functionality.
+     * Sets the prototype for a subroutine.
      *
      * @param args The arguments passed to the method.
      * @param ctx  The context in which the method is called.
@@ -251,9 +248,21 @@ public class ScalarUtil extends PerlModuleBase {
         if (args.size() != 2) {
             throw new IllegalStateException("Bad number of arguments for set_prototype() method");
         }
-        // Placeholder for set_prototype functionality
+
+        RuntimeScalar scalar = args.get(0);
+        RuntimeScalar prototypeScalar = args.get(1);
+
+        if (scalar.type != RuntimeScalarType.CODE) {
+            throw new IllegalArgumentException("First argument must be a CODE reference");
+        }
+
+        RuntimeCode runtimeCode = (RuntimeCode) scalar.value;
+
+        runtimeCode.prototype = prototypeScalar.toString();
+
         return new RuntimeScalar().getList();
     }
+
 
     /**
      * Placeholder for the tainted functionality.
