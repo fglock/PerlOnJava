@@ -244,10 +244,11 @@
 
 ## Perl Modules, Pragmas, Features
 - ✔️   **UNIVERSAL**: `isa`, `can`, `DOES` are implemented. `VERSION` is not implemented yet. `isa` operator is implemented.
-- ✔️   **Symbol**: `qualify` and `qualify_to_ref` are implemented. `Symbol::import` is not implemented yet.
+- ✔️   **Symbol**: `qualify` and `qualify_to_ref` are implemented.
 - ✔️   **Data::Dumper**: Data::Dumper is ported with small adjustments, to work in `strict` mode.
 - ✔️   **Exporter**: `@EXPORT_OK`, `@EXPORT`, `%EXPORT_TAGS` are implemented; only subroutines can be exported.
 - ✔️   **strict**: `strict` pragma is set to ignore `no strict`, the compiler works always in `strict` mode. `no strict` might work in a future version.
+- ✔️   **Scalar::Util**: `blessed`, `reftype` are implemented.
 - ❌  **feature** pragma
 - ❌  **version** pragma
 - ❌  **experimental** pragma
@@ -322,7 +323,7 @@ Here’s an alternative approach using the Symbol module:
         my $callpkg = caller(0);
     
         # Dynamically assign the Dumper function to the caller's namespace
-        my $sym_ref = Symbol::qualify_to_ref('Dumper', $callpkg);
+        my $sym_ref = qualify_to_ref('Dumper', $callpkg);
         *$sym_ref = \&Dumper;
     
         return;

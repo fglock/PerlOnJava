@@ -2,6 +2,7 @@ package org.perlonjava.runtime;
 
 import org.perlonjava.ArgumentParser;
 import org.perlonjava.perlmodule.Exporter;
+import org.perlonjava.perlmodule.ScalarUtil;
 import org.perlonjava.perlmodule.Symbol;
 import org.perlonjava.perlmodule.Universal;
 
@@ -100,8 +101,9 @@ public class GlobalContext {
         // Initialize built-in Perl classes
         DiamondIO.initialize(compilerOptions);
         Universal.initialize();
-        Symbol.initialize();
         Exporter.initialize();
+        Symbol.initialize();
+        ScalarUtil.initialize();
 
         // Reset method cache after initializing UNIVERSAL
         InheritanceResolver.invalidateCache();

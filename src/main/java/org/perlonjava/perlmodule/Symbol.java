@@ -4,8 +4,7 @@ import org.perlonjava.runtime.*;
 
 import java.lang.reflect.Method;
 
-import static org.perlonjava.runtime.GlobalContext.getGlobalCodeRef;
-import static org.perlonjava.runtime.GlobalContext.getGlobalHash;
+import static org.perlonjava.runtime.GlobalContext.*;
 
 public class Symbol {
 
@@ -15,11 +14,35 @@ public class Symbol {
         // Set %INC
         getGlobalHash("main::INC").put("Symbol.pm", new RuntimeScalar("Symbol.pm"));
 
+        // Define @EXPORT array
+        RuntimeArray export = getGlobalArray("Symbol::EXPORT");
+        export.push(new RuntimeScalar("gensym"));
+        export.push(new RuntimeScalar("ungensym"));
+        export.push(new RuntimeScalar("qualify"));
+        export.push(new RuntimeScalar("qualify_to_ref"));
+
+        // Define @EXPORT_OK array
+        RuntimeArray exportOk = getGlobalArray("Symbol::EXPORT_OK");
+        exportOk.push(new RuntimeScalar("delete_package"));
+        exportOk.push(new RuntimeScalar("geniosym"));
+
         try {
-            // load Symbol methods into Perl namespace
+            // Load Symbol methods into Perl namespace
             Class<?> clazz = Symbol.class;
             RuntimeScalar instance = new RuntimeScalar();
             Method mm;
+
+            mm = clazz.getMethod("importSymbols", RuntimeArray.class, int.class);
+            getGlobalCodeRef("Symbol::import").set(new RuntimeScalar(
+                    new RuntimeCode(mm, instance, "*")));
+
+            mm = clazz.getMethod("gensym", RuntimeArray.class, int.class);
+            getGlobalCodeRef("Symbol::gensym").set(new RuntimeScalar(
+                    new RuntimeCode(mm, instance, "")));
+
+            mm = clazz.getMethod("ungensym", RuntimeArray.class, int.class);
+            getGlobalCodeRef("Symbol::ungensym").set(new RuntimeScalar(
+                    new RuntimeCode(mm, instance, "$")));
 
             mm = clazz.getMethod("qualify_to_ref", RuntimeArray.class, int.class);
             getGlobalCodeRef("Symbol::qualify_to_ref").set(new RuntimeScalar(
@@ -29,9 +52,49 @@ public class Symbol {
             getGlobalCodeRef("Symbol::qualify").set(new RuntimeScalar(
                     new RuntimeCode(mm, instance, "$;$")));
 
+            mm = clazz.getMethod("delete_package", RuntimeArray.class, int.class);
+            getGlobalCodeRef("Symbol::delete_package").set(new RuntimeScalar(
+                    new RuntimeCode(mm, instance, "$")));
+
+            mm = clazz.getMethod("geniosym", RuntimeArray.class, int.class);
+            getGlobalCodeRef("Symbol::geniosym").set(new RuntimeScalar(
+                    new RuntimeCode(mm, instance, "")));
+
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Symbol method: " + e.getMessage());
         }
+    }
+
+    public static RuntimeList importSymbols(RuntimeArray args, int ctx) {
+        // Use the Exporter class to import symbols
+        return Exporter.importSymbols(args, ctx);
+    }
+
+    public static RuntimeList gensym(RuntimeArray args, int ctx) {
+        // Placeholder for gensym functionality
+        // return new RuntimeScalar(new RuntimeGlob("GEN" + System.nanoTime())).getList();
+        throw new PerlCompilerException("not implemented");
+    }
+
+    public static RuntimeList ungensym(RuntimeArray args, int ctx) {
+        if (args.size() != 1) {
+            throw new IllegalStateException("Bad number of arguments for ungensym()");
+        }
+        // Placeholder for ungensym functionality
+        return new RuntimeScalar().getList();
+    }
+    public static RuntimeList delete_package(RuntimeArray args, int ctx) {
+        if (args.size() != 1) {
+            throw new IllegalStateException("Bad number of arguments for delete_package()");
+        }
+        // Placeholder for delete_package functionality
+        return new RuntimeScalar().getList();
+    }
+
+    public static RuntimeList geniosym(RuntimeArray args, int ctx) {
+        // Placeholder for geniosym functionality
+        // return new RuntimeScalar(new RuntimeGlob("IO" + System.nanoTime())).getList();
+        throw new PerlCompilerException("not implemented");
     }
 
     //    "Symbol::qualify" turns unqualified symbol names into qualified variable
