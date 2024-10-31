@@ -10,8 +10,7 @@
   - Regex `m?pat?` match-once and the `reset()` operator are implemented.
   - Regex `\G` and the `pos` operator are implemented.
   - Regex `@-`, `@+`, `%+`, `%-` special variables are implemented.
-  - Regex `` Codebase context from file MILESTONES.md:
-  - `{text}`, ````` special variables are implemented.
+  - Regex `` $` ``, `$&`, `$'` special variables are implemented.
   - Regex performance comparable to Perl; optimized regex variables.
   - Regex matching plain strings: `$var =~ "Test"`.
   - Added `__SUB__` keyword; `readpipe`.
