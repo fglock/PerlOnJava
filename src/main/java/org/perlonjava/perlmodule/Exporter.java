@@ -6,60 +6,78 @@ import java.lang.reflect.Method;
 
 import static org.perlonjava.runtime.GlobalContext.*;
 
+/**
+ * The Exporter class is responsible for managing the export of symbols from one Perl package to another.
+ * It mimics the behavior of Perl's Exporter module, allowing symbols to be imported into other namespaces.
+ */
 public class Exporter {
 
+    /**
+     * Initializes the Exporter class by setting up the necessary global variables and methods.
+     * This includes setting the %INC hash and loading the Exporter methods into the Perl namespace.
+     */
     public static void initialize() {
         // Initialize Exporter class
 
-        // Set %INC
+        // Set %INC to indicate that Exporter.pm has been loaded
         getGlobalHash("main::INC").put("Exporter.pm", new RuntimeScalar("Exporter.pm"));
 
         try {
-            // load Exporter methods into Perl namespace
+            // Load Exporter methods into Perl namespace
             Class<?> clazz = Exporter.class;
             RuntimeScalar instance = new RuntimeScalar();
             Method mm;
 
+            // Get the importSymbols method and set it as a global code reference for Exporter::import
             mm = clazz.getMethod("importSymbols", RuntimeArray.class, int.class);
             getGlobalCodeRef("Exporter::import").set(new RuntimeScalar(
                     new RuntimeCode(mm, instance, null)));
 
-            // set up @EXPORTER::EXPORT_OK = ("import");
+            // Set up @EXPORTER::EXPORT_OK = ("import");
             getGlobalArray("Exporter::EXPORT_OK").push(new RuntimeScalar("import"));
         } catch (Exception e) {
             System.err.println("Warning: Failed to initialize Exporter: " + e.getMessage());
         }
     }
 
+    /**
+     * Imports symbols from a specified package into the caller's namespace.
+     *
+     * @param args The arguments specifying the package and symbols to import.
+     * @param ctx  The context in which the import is being performed.
+     * @return A RuntimeList representing the result of the import operation.
+     * @throws PerlCompilerException if there are issues with the import process.
+     */
     public static RuntimeList importSymbols(RuntimeArray args, int ctx) {
         if (args.size() < 1) {
             throw new PerlCompilerException("Not enough arguments for import");
         }
 
-        // System.out.println("importSymbols: " + args);
+        // Extract the package name from the arguments
         RuntimeScalar packageScalar = args.shift();
         String packageName = packageScalar.scalar().toString();
-        // System.out.println("Importing symbols from package " + packageName);
 
+        // Determine the caller's namespace
         RuntimeList callerList = RuntimeScalar.caller(new RuntimeList(), RuntimeContextType.SCALAR);
         String caller = callerList.scalar().toString();
 
+        // Retrieve the export lists and tags from the package
         RuntimeArray export = GlobalContext.getGlobalArray(packageScalar + "::EXPORT");
         RuntimeArray exportOk = GlobalContext.getGlobalArray(packageScalar + "::EXPORT_OK");
         RuntimeHash exportTags = GlobalContext.getGlobalHash(packageScalar + "::EXPORT_TAGS");
-        // System.out.println("export: " + packageScalar + "::EXPORT " + export);
-        // System.out.println("exportOk: " + exportOk);
 
+        // If no specific symbols are requested, default to exporting all symbols in @EXPORT
         if (args.size() == 0) {
             args = export;
         }
 
+        // Process the requested symbols and tags
         RuntimeArray tagArray = new RuntimeArray();
         for (RuntimeScalar symbolObj : args.elements) {
             String symbolString = symbolObj.toString();
 
             if (symbolString.startsWith(":")) {
-                // This is a tag
+                // This is a tag, retrieve the associated symbols
                 String tagName = symbolString.substring(1);
                 RuntimeArray tagSymbols = exportTags.get(tagName).arrayDeref();
                 if (tagSymbols != null) {
@@ -72,9 +90,9 @@ public class Exporter {
             }
         }
 
+        // Import the requested symbols into the caller's namespace
         for (RuntimeBaseEntity symbolObj : tagArray.elements) {
             String symbolString = symbolObj.toString();
-            // System.out.println("Importing symbol " + symbolString);
 
             boolean isExported = export.elements.stream()
                     .anyMatch(e -> e.toString().equals(symbolString));
@@ -82,6 +100,7 @@ public class Exporter {
                     .anyMatch(e -> e.toString().equals(symbolString));
 
             if (isExported || isExportOk) {
+                // Retrieve the code reference for the symbol and set it in the caller's namespace
                 RuntimeScalar symbolRef = getGlobalCodeRef(packageName + "::" + symbolString);
                 if (symbolRef.type == RuntimeScalarType.CODE) {
                     getGlobalCodeRef(caller + "::" + symbolString).set(symbolRef);

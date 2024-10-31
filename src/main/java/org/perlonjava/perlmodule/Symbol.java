@@ -2,80 +2,63 @@ package org.perlonjava.perlmodule;
 
 import org.perlonjava.runtime.*;
 
-import java.lang.reflect.Method;
+/**
+ * The Symbol class provides functionalities for symbol manipulation in a Perl-like environment.
+ * It extends PerlModuleBase to leverage module initialization and method registration.
+ */
+public class Symbol extends PerlModuleBase {
 
-import static org.perlonjava.runtime.GlobalContext.*;
+    /**
+     * Constructor for Symbol.
+     * Initializes the module with the name "Symbol".
+     */
+    public Symbol() {
+        super("Symbol");
+    }
 
-public class Symbol {
-
+    /**
+     * Static initializer to set up the Symbol module.
+     * This method initializes the exporter and defines the symbols that can be exported.
+     */
     public static void initialize() {
-        // Initialize Symbol class
-
-        // Set %INC
-        getGlobalHash("main::INC").put("Symbol.pm", new RuntimeScalar("Symbol.pm"));
-
-        // Define @EXPORT array
-        RuntimeArray export = getGlobalArray("Symbol::EXPORT");
-        export.push(new RuntimeScalar("gensym"));
-        export.push(new RuntimeScalar("ungensym"));
-        export.push(new RuntimeScalar("qualify"));
-        export.push(new RuntimeScalar("qualify_to_ref"));
-
-        // Define @EXPORT_OK array
-        RuntimeArray exportOk = getGlobalArray("Symbol::EXPORT_OK");
-        exportOk.push(new RuntimeScalar("delete_package"));
-        exportOk.push(new RuntimeScalar("geniosym"));
-
+        Symbol symbol = new Symbol();
+        symbol.initializeExporter();
+        symbol.defineExport("EXPORT", "gensym", "ungensym", "qualify", "qualify_to_ref");
+        symbol.defineExport("EXPORT_OK", "delete_package", "geniosym");
         try {
-            // Load Symbol methods into Perl namespace
-            Class<?> clazz = Symbol.class;
-            RuntimeScalar instance = new RuntimeScalar();
-            Method mm;
-
-            mm = clazz.getMethod("importSymbols", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Symbol::import").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "*")));
-
-            mm = clazz.getMethod("gensym", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Symbol::gensym").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "")));
-
-            mm = clazz.getMethod("ungensym", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Symbol::ungensym").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "$")));
-
-            mm = clazz.getMethod("qualify_to_ref", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Symbol::qualify_to_ref").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "$;$")));
-
-            mm = clazz.getMethod("qualify", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Symbol::qualify").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "$;$")));
-
-            mm = clazz.getMethod("delete_package", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Symbol::delete_package").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "$")));
-
-            mm = clazz.getMethod("geniosym", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Symbol::geniosym").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "")));
-
+            // Register methods with their respective signatures
+            symbol.registerMethod("gensym", "");
+            symbol.registerMethod("ungensym", "$");
+            symbol.registerMethod("qualify_to_ref", "$;$");
+            symbol.registerMethod("qualify", "$;$");
+            symbol.registerMethod("delete_package", "$");
+            symbol.registerMethod("geniosym", "");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Symbol method: " + e.getMessage());
         }
     }
 
-    public static RuntimeList importSymbols(RuntimeArray args, int ctx) {
-        // Use the Exporter class to import symbols
-        return Exporter.importSymbols(args, ctx);
-    }
-
+    /**
+     * Placeholder for the gensym functionality.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList.
+     * @throws PerlCompilerException if the method is not implemented.
+     */
     public static RuntimeList gensym(RuntimeArray args, int ctx) {
         // Placeholder for gensym functionality
         // return new RuntimeScalar(new RuntimeGlob("GEN" + System.nanoTime())).getList();
         throw new PerlCompilerException("not implemented");
     }
 
+    /**
+     * Placeholder for the ungensym functionality.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList.
+     */
     public static RuntimeList ungensym(RuntimeArray args, int ctx) {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for ungensym()");
@@ -83,6 +66,14 @@ public class Symbol {
         // Placeholder for ungensym functionality
         return new RuntimeScalar().getList();
     }
+
+    /**
+     * Placeholder for the delete_package functionality.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList.
+     */
     public static RuntimeList delete_package(RuntimeArray args, int ctx) {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for delete_package()");
@@ -91,21 +82,28 @@ public class Symbol {
         return new RuntimeScalar().getList();
     }
 
+    /**
+     * Placeholder for the geniosym functionality.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList.
+     * @throws PerlCompilerException if the method is not implemented.
+     */
     public static RuntimeList geniosym(RuntimeArray args, int ctx) {
         // Placeholder for geniosym functionality
         // return new RuntimeScalar(new RuntimeGlob("IO" + System.nanoTime())).getList();
         throw new PerlCompilerException("not implemented");
     }
 
-    //    "Symbol::qualify" turns unqualified symbol names into qualified variable
-//    names (e.g. "myvar" -> "MyPackage::myvar"). If it is given a second
-//    parameter, "qualify" uses it as the default package; otherwise, it uses
-//    the package of its caller. Regardless, global variable names (e.g.
-//    "STDOUT", "ENV", "SIG") are always qualified with "main::".
-//
-//    Qualification applies only to symbol names (strings). References are
-//    left unchanged under the assumption that they are glob references, which
-//    are qualified by their nature.
+    /**
+     * Qualifies a symbol name with a package name.
+     * If no package name is provided, defaults to the caller's package.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList containing the qualified symbol name.
+     */
     public static RuntimeList qualify(RuntimeArray args, int ctx) {
         if (args.size() < 1 || args.size() > 2) {
             throw new IllegalStateException("Bad number of arguments for qualify()");
@@ -131,9 +129,13 @@ public class Symbol {
         return list;
     }
 
-    //    "Symbol::qualify_to_ref" is just like "Symbol::qualify" except that it
-//    returns a glob ref rather than a symbol name, so you can use the result
-//    even if "use strict 'refs'" is in effect.
+    /**
+     * Qualifies a symbol name with a package name and returns a glob reference.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList containing the qualified glob reference.
+     */
     public static RuntimeList qualify_to_ref(RuntimeArray args, int ctx) {
         if (args.size() < 1 || args.size() > 2) {
             throw new IllegalStateException("Bad number of arguments for qualify_to_ref()");
@@ -151,5 +153,4 @@ public class Symbol {
         list.elements.add(result);
         return list;
     }
-
 }

@@ -1,113 +1,62 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.RuntimeArray;
+import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.RuntimeScalarType;
 
-import java.lang.reflect.Method;
+/**
+ * Utility class for Scalar operations in Perl.
+ * Extends PerlModuleBase to leverage module initialization and method registration.
+ */
+public class ScalarUtil extends PerlModuleBase {
 
-import static org.perlonjava.runtime.GlobalContext.getGlobalCodeRef;
-import static org.perlonjava.runtime.GlobalContext.getGlobalHash;
+    /**
+     * Constructor for ScalarUtil.
+     * Initializes the module with the name "Scalar::Util".
+     */
+    public ScalarUtil() {
+        super("Scalar::Util");
+    }
 
-public class ScalarUtil {
-
+    /**
+     * Static initializer to set up the Scalar::Util module.
+     * This method initializes the exporter and defines the symbols that can be exported.
+     */
     public static void initialize() {
-        // Initialize Scalar::Util class
-
-        // Set %INC to indicate the module is loaded
-        getGlobalHash("main::INC").put("Scalar/Util.pm", new RuntimeScalar("Scalar/Util.pm"));
-
-        // Define @EXPORT_OK array
-        RuntimeArray exportOk = GlobalContext.getGlobalArray("Scalar::Util::EXPORT_OK");
-        exportOk.push(new RuntimeScalar("blessed"));
-        exportOk.push(new RuntimeScalar("refaddr"));
-        exportOk.push(new RuntimeScalar("reftype"));
-        exportOk.push(new RuntimeScalar("weaken"));
-        exportOk.push(new RuntimeScalar("unweaken"));
-        exportOk.push(new RuntimeScalar("isweak"));
-        exportOk.push(new RuntimeScalar("dualvar"));
-        exportOk.push(new RuntimeScalar("isdual"));
-        exportOk.push(new RuntimeScalar("isvstring"));
-        exportOk.push(new RuntimeScalar("looks_like_number"));
-        exportOk.push(new RuntimeScalar("openhandle"));
-        exportOk.push(new RuntimeScalar("readonly"));
-        exportOk.push(new RuntimeScalar("set_prototype"));
-        exportOk.push(new RuntimeScalar("tainted"));
-
+        ScalarUtil scalarUtil = new ScalarUtil();
+        scalarUtil.initializeExporter(); // Use the base class method to initialize the exporter
+        scalarUtil.defineExport("EXPORT_OK", "blessed", "refaddr", "reftype", "weaken", "unweaken", "isweak",
+                "dualvar", "isdual", "isvstring", "looks_like_number", "openhandle", "readonly",
+                "set_prototype", "tainted");
         try {
-            // Load Scalar::Util methods into Perl namespace
-            Class<?> clazz = ScalarUtil.class;
-            RuntimeScalar instance = new RuntimeScalar();
-            Method mm;
-
-            mm = clazz.getMethod("importSymbols", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Scalar::Util::import").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "*")));
-
-            mm = clazz.getMethod("blessed", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Scalar::Util::blessed").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "$")));
-
-            mm = clazz.getMethod("refaddr", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Scalar::Util::refaddr").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "$")));
-
-            mm = clazz.getMethod("reftype", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Scalar::Util::reftype").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "$")));
-
-            mm = clazz.getMethod("weaken", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Scalar::Util::weaken").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "$")));
-
-            mm = clazz.getMethod("unweaken", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Scalar::Util::unweaken").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "$")));
-
-            mm = clazz.getMethod("isweak", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Scalar::Util::isweak").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "$")));
-
-            mm = clazz.getMethod("dualvar", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Scalar::Util::dualvar").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "$$")));
-
-            mm = clazz.getMethod("isdual", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Scalar::Util::isdual").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "$")));
-
-            mm = clazz.getMethod("isvstring", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Scalar::Util::isvstring").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "$")));
-
-            mm = clazz.getMethod("looks_like_number", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Scalar::Util::looks_like_number").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "$")));
-
-            mm = clazz.getMethod("openhandle", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Scalar::Util::openhandle").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "$")));
-
-            mm = clazz.getMethod("readonly", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Scalar::Util::readonly").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "$")));
-
-            mm = clazz.getMethod("set_prototype", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Scalar::Util::set_prototype").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "$$")));
-
-            mm = clazz.getMethod("tainted", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Scalar::Util::tainted").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, "$")));
-
+            // Register methods with their respective signatures
+            scalarUtil.registerMethod("blessed", "$");
+            scalarUtil.registerMethod("refaddr", "$");
+            scalarUtil.registerMethod("reftype", "$");
+            scalarUtil.registerMethod("weaken", "$");
+            scalarUtil.registerMethod("unweaken", "$");
+            scalarUtil.registerMethod("isweak", "$");
+            scalarUtil.registerMethod("dualvar", "$");
+            scalarUtil.registerMethod("isdual", "$");
+            scalarUtil.registerMethod("isvstring", "$");
+            scalarUtil.registerMethod("looks_like_number", "$");
+            scalarUtil.registerMethod("openhandle", "$");
+            scalarUtil.registerMethod("readonly", "$");
+            scalarUtil.registerMethod("set_prototype", "$");
+            scalarUtil.registerMethod("tainted", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Scalar::Util method: " + e.getMessage());
         }
     }
 
-    public static RuntimeList importSymbols(RuntimeArray args, int ctx) {
-        // Use the Exporter class to import symbols
-        return Exporter.importSymbols(args, ctx);
-    }
-
+    /**
+     * Checks if a scalar is blessed and returns the blessing information.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList containing the blessing information.
+     */
     public static RuntimeList blessed(RuntimeArray args, int ctx) {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for blessed() method");
@@ -117,6 +66,13 @@ public class ScalarUtil {
         return scalar.blessed().getList();
     }
 
+    /**
+     * Returns the memory address of a reference.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList containing the memory address.
+     */
     public static RuntimeList refaddr(RuntimeArray args, int ctx) {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for refaddr() method");
@@ -125,6 +81,13 @@ public class ScalarUtil {
         return new RuntimeScalar(System.identityHashCode(scalar)).getList();
     }
 
+    /**
+     * Returns the type of reference.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList containing the reference type.
+     */
     public static RuntimeList reftype(RuntimeArray args, int ctx) {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for reftype() method");
@@ -141,6 +104,13 @@ public class ScalarUtil {
         return new RuntimeScalar(type).getList();
     }
 
+    /**
+     * Placeholder for the weaken functionality.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList.
+     */
     public static RuntimeList weaken(RuntimeArray args, int ctx) {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for weaken() method");
@@ -149,6 +119,13 @@ public class ScalarUtil {
         return new RuntimeScalar().getList();
     }
 
+    /**
+     * Placeholder for the unweaken functionality.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList.
+     */
     public static RuntimeList unweaken(RuntimeArray args, int ctx) {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for unweaken() method");
@@ -157,6 +134,13 @@ public class ScalarUtil {
         return new RuntimeScalar().getList();
     }
 
+    /**
+     * Placeholder for the isweak functionality.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList indicating if the reference is weak.
+     */
     public static RuntimeList isweak(RuntimeArray args, int ctx) {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for isweak() method");
@@ -165,6 +149,13 @@ public class ScalarUtil {
         return new RuntimeScalar(false).getList();
     }
 
+    /**
+     * Placeholder for the dualvar functionality.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList.
+     */
     public static RuntimeList dualvar(RuntimeArray args, int ctx) {
         if (args.size() != 2) {
             throw new IllegalStateException("Bad number of arguments for dualvar() method");
@@ -173,6 +164,13 @@ public class ScalarUtil {
         return new RuntimeScalar().getList();
     }
 
+    /**
+     * Placeholder for the isdual functionality.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList indicating if the scalar is dual.
+     */
     public static RuntimeList isdual(RuntimeArray args, int ctx) {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for isdual() method");
@@ -181,6 +179,13 @@ public class ScalarUtil {
         return new RuntimeScalar(false).getList();
     }
 
+    /**
+     * Placeholder for the isvstring functionality.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList indicating if the scalar is a vstring.
+     */
     public static RuntimeList isvstring(RuntimeArray args, int ctx) {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for isvstring() method");
@@ -189,6 +194,13 @@ public class ScalarUtil {
         return new RuntimeScalar(false).getList();
     }
 
+    /**
+     * Checks if a scalar looks like a number.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList indicating if the scalar looks like a number.
+     */
     public static RuntimeList looks_like_number(RuntimeArray args, int ctx) {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for looks_like_number() method");
@@ -198,6 +210,13 @@ public class ScalarUtil {
         return new RuntimeScalar(isNumber).getList();
     }
 
+    /**
+     * Placeholder for the openhandle functionality.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList indicating if the scalar is an open handle.
+     */
     public static RuntimeList openhandle(RuntimeArray args, int ctx) {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for openhandle() method");
@@ -206,6 +225,13 @@ public class ScalarUtil {
         return new RuntimeScalar(false).getList();
     }
 
+    /**
+     * Placeholder for the readonly functionality.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList indicating if the scalar is readonly.
+     */
     public static RuntimeList readonly(RuntimeArray args, int ctx) {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for readonly() method");
@@ -214,6 +240,13 @@ public class ScalarUtil {
         return new RuntimeScalar(false).getList();
     }
 
+    /**
+     * Placeholder for the set_prototype functionality.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList.
+     */
     public static RuntimeList set_prototype(RuntimeArray args, int ctx) {
         if (args.size() != 2) {
             throw new IllegalStateException("Bad number of arguments for set_prototype() method");
@@ -222,6 +255,13 @@ public class ScalarUtil {
         return new RuntimeScalar().getList();
     }
 
+    /**
+     * Placeholder for the tainted functionality.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList indicating if the scalar is tainted.
+     */
     public static RuntimeList tainted(RuntimeArray args, int ctx) {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for tainted() method");

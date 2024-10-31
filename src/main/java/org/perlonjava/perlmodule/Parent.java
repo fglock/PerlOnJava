@@ -6,20 +6,29 @@ import java.lang.reflect.Method;
 
 import static org.perlonjava.runtime.GlobalContext.*;
 
+/**
+ * The Parent class is responsible for managing inheritance in Perl-like modules.
+ * It mimics the behavior of Perl's parent module, allowing classes to inherit from other classes.
+ */
 public class Parent {
 
+    /**
+     * Initializes the Parent class by setting up the necessary global variables and methods.
+     * This includes setting the %INC hash and loading the parent methods into the Perl namespace.
+     */
     public static void initialize() {
         // Initialize `parent` class
 
-        // Set %INC
+        // Set %INC to indicate that parent.pm has been loaded
         getGlobalHash("main::INC").put("parent.pm", new RuntimeScalar("parent.pm"));
 
         try {
-            // load parent methods into Perl namespace
+            // Load parent methods into Perl namespace
             Class<?> clazz = Parent.class;
             RuntimeScalar instance = new RuntimeScalar();
             Method mm;
 
+            // Get the importParent method and set it as a global code reference for parent::import
             mm = clazz.getMethod("importParent", RuntimeArray.class, int.class);
             getGlobalCodeRef("parent::import").set(new RuntimeScalar(
                     new RuntimeCode(mm, instance, null)));
@@ -29,27 +38,40 @@ public class Parent {
         }
     }
 
+    /**
+     * Imports parent classes into the caller's namespace, effectively setting up inheritance.
+     *
+     * @param args The arguments specifying the parent classes to inherit from.
+     * @param ctx  The context in which the import is being performed.
+     * @return A RuntimeList representing the result of the import operation.
+     * @throws PerlCompilerException if there are issues with the import process.
+     */
     public static RuntimeList importParent(RuntimeArray args, int ctx) {
         if (args.size() < 1) {
             throw new PerlCompilerException("Not enough arguments for parent::import");
         }
 
+        // Extract the package name from the arguments
         RuntimeScalar packageScalar = args.shift();
         String packageName = packageScalar.scalar().toString();
 
+        // Determine the caller's namespace
         RuntimeList callerList = RuntimeScalar.caller(new RuntimeList(), RuntimeContextType.SCALAR);
         String inheritor = callerList.scalar().toString();
 
+        // Check for the -norequire option
         boolean noRequire = false;
         if (args.size() > 0 && args.get(0).toString().equals("-norequire")) {
             noRequire = true;
             args.shift();
         }
 
+        // Process each parent class specified in the arguments
         for (RuntimeScalar parentClass : args.elements) {
             String parentClassName = parentClass.toString();
 
             if (!noRequire) {
+                // Require the parent class file unless -norequire is specified
                 String filename = parentClassName.replace("::", "/").replace("'", "/") + ".pm";
                 RuntimeScalar ret = new RuntimeScalar(filename).require();
             }
@@ -62,4 +84,3 @@ public class Parent {
         return new RuntimeList();
     }
 }
-
