@@ -236,17 +236,8 @@ public class ListParser {
         } else if (Parser.INFIX_OP.contains(token.text) || token.text.equals(",")) {
             parser.ctx.logDebug("parseZeroOrMoreList infix `" + token.text + "` followed by `" + nextToken.text + "`");
             if (token.text.equals("<") || token.text.equals("<<")) {
-                try {
-                    // Looks like `print <*.*>`
-                    parser.tokenIndex = previousIndex + 1;
-                    Node node = OperatorParser.parseDiamondOperator(parser, token);
-                    parser.ctx.logDebug("parseZeroOrMoreList looks like <glob> " + node);
-                } catch (PerlCompilerException e) {
-                    // Does not look like <*.*>
-                    parser.ctx.logDebug("parseZeroOrMoreList not like <glob>");
-                    isEmptyList = true;
-                }
-                parser.ctx.logDebug("parseZeroOrMoreList CONTINUE");
+                // Looks like diamond operator
+                parser.ctx.logDebug("parseZeroOrMoreList looks like <>");
             } else if (token.text.equals("&")) {
                 // Looks like a subroutine call, not an infix `&`
                 parser.ctx.logDebug("parseZeroOrMoreList looks like subroutine call");
