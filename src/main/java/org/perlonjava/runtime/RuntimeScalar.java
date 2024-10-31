@@ -979,7 +979,14 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             URL resource = RuntimeScalar.class.getResource(resourcePath);
             // System.out.println("Found resource " + resource);
             if (resource != null) {
-                fullName = Paths.get(resource.getPath());
+
+                String path = resource.getPath();
+                // Remove leading slash if on Windows
+                if (System.getProperty("os.name").toLowerCase().contains("win") && path.startsWith("/")) {
+                    path = path.substring(1);
+                }
+                fullName = Paths.get(path);
+
                 try (InputStream is = resource.openStream();
                      BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
                     StringBuilder content = new StringBuilder();
