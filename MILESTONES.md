@@ -73,6 +73,7 @@
     - Added `try catch` statement.
     - Added Scalar::Util module: `blessed`, `reftype`.
     - Work in progress: 
+        - CI/CD runs in Ubuntu and Windows
         - `state` variables.
         - `socket` and related operators.
     - Stretch goals
