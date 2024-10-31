@@ -232,10 +232,22 @@ public class ListParser {
                 && token1.type == LexerTokenType.IDENTIFIER
                 && token1.text.length() == 1) {
             // -d, -e, -f, -l, -p, -x
-            isEmptyList = false;
+            parser.ctx.logDebug("parseZeroOrMoreList looks like file test operator");
         } else if (Parser.INFIX_OP.contains(token.text) || token.text.equals(",")) {
             parser.ctx.logDebug("parseZeroOrMoreList infix `" + token.text + "` followed by `" + nextToken.text + "`");
-            if (token.text.equals("&")) {
+            if (token.text.equals("<") || token.text.equals("<<")) {
+                try {
+                    // Looks like `print <*.*>`
+                    parser.tokenIndex = previousIndex + 1;
+                    Node node = OperatorParser.parseDiamondOperator(parser, token);
+                    parser.ctx.logDebug("parseZeroOrMoreList looks like <glob> " + node);
+                } catch (PerlCompilerException e) {
+                    // Does not look like <*.*>
+                    parser.ctx.logDebug("parseZeroOrMoreList not like <glob>");
+                    isEmptyList = true;
+                }
+                parser.ctx.logDebug("parseZeroOrMoreList CONTINUE");
+            } else if (token.text.equals("&")) {
                 // Looks like a subroutine call, not an infix `&`
                 parser.ctx.logDebug("parseZeroOrMoreList looks like subroutine call");
             } else if (token.text.equals("%") && (nextToken.text.equals("$") || nextToken.type == LexerTokenType.IDENTIFIER)) {

@@ -7,7 +7,7 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.operators.OperatorHandler;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
-import org.perlonjava.runtime.ScalarGlobOperator;
+import org.perlonjava.operators.ScalarGlobOperator;
 
 /**
  * The EmitOperator class is responsible for handling various operators
@@ -474,6 +474,7 @@ public class EmitOperator {
     // Handles the 'glob' built-in function, which performs filename expansion.
     static void handleGlobBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
+        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
 
         // Generate unique IDs for this glob instance
         int globId = ScalarGlobOperator.currentId++;
@@ -484,7 +485,13 @@ public class EmitOperator {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         emitterVisitor.pushCallContext();
         // Invoke the static method for evaluating the glob pattern.
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/ScalarGlobOperator", "evaluate", "(ILorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
+        mv.visitMethodInsn(
+                operatorHandler.getMethodType(),
+                operatorHandler.getClassName(),
+                operatorHandler.getMethodName(),
+                operatorHandler.getDescriptor(),
+                false
+        );
 
         // If the context is VOID, pop the result from the stack.
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
