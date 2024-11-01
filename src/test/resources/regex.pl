@@ -10,6 +10,11 @@ my $pattern = qr/World/;
 my $match = $string =~ $pattern;
 print "not " if !$match; say "ok # 'Hello World' matches 'World'";
 
+my $ref = ref($pattern);
+print "not " if $ref ne "Regexp"; say "ok # ref <$ref>";
+$ref = ref(\$pattern);
+print "not " if $ref ne "REF"; say "ok # ref <$ref>";
+
 # Test special variables $`, $&, $'
 print "not " if $` ne 'Hello '; say "ok # \$` is 'Hello ' <$`>";
 print "not " if $& ne 'World'; say "ok # \$& is 'World' <$&>";

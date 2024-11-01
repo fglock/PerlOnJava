@@ -56,7 +56,7 @@
 - ✔️   **`local` variable declaration**: Dynamic variables are implemented.
 - ❌  **`state` variable declaration**: Support for state variable changes is missing.
 - ✔️   **Variable assignment**: Basic variable assignment is implemented.
-- ✔️   **Basic types**: Support for integers, doubles, strings, CODE, and undef is present.
+- ✔️   **Basic types**: Support for integers, doubles, strings, v-strings, regex, CODE, undef, references is present.
 - ✔️   **String Interpolation**: Both array and scalar string interpolation are supported.
 - ✔️   **String Interpolation escapes**: Handles escape sequences like `\n` within interpolated strings.
 - ✔️   **String numification**: Strings can be converted to numbers automatically.

@@ -514,9 +514,18 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case GLOB:
                 str = "GLOB";
                 break;
+            case REGEX:
+                str = "Regexp";
+                break;
             case REFERENCE:
+                String ref = "REF";
+                if (value instanceof RuntimeScalar scalar) {
+                    if (scalar.type == RuntimeScalarType.VSTRING) {
+                        ref = "VSTRING";
+                    }
+                }
                 blessId = ((RuntimeBaseEntity) value).blessId;
-                str = blessId == 0 ? "REF" : NameNormalizer.getBlessStr(blessId);
+                str = blessId == 0 ? ref : NameNormalizer.getBlessStr(blessId);
                 break;
             case ARRAYREFERENCE:
                 blessId = ((RuntimeBaseEntity) value).blessId;

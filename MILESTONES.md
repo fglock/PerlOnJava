@@ -81,11 +81,11 @@
   - Added `~.`, `&.`, `|.`, `^.` operators.
   - Added `try catch` statement.
   - Added Scalar::Util module: `blessed`, `reftype`.
+  - Added v-strings.
   - CI/CD runs in Ubuntu and Windows
   - Work in progress:
     - `state` variables.
     - `socket` and related operators.
-    - v-strings.
   - Stretch goals
     - Add support for concurrency and parallelism, such as threads and async/await.
     - Enhance security features, including sandboxing and input validation.
