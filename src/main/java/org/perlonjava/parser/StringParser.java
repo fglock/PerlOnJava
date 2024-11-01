@@ -589,6 +589,9 @@ public class StringParser {
         // Start constructing the v-string
         StringBuilder vStringBuilder = new StringBuilder();
 
+        if (vStringPart.startsWith("v")) {
+            vStringPart = vStringPart.substring(1);
+        }
         try {
             // Convert the initial part to a character and append it
             int charCode = Integer.parseInt(vStringPart);

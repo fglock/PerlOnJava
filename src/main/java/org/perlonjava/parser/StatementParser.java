@@ -8,6 +8,8 @@ import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 
+import static org.perlonjava.parser.StringParser.parseVstring;
+
 /**
  * The StatementParser class is responsible for parsing various types of statements
  * in the Perl-like language, including while loops, for loops, if statements,
@@ -242,7 +244,7 @@ public class StatementParser {
         // Parse Version string; throw away the result
         // TODO use the Version string
         // TODO call Module->VERSION(12.34)
-        String version = parseOptionalPackageVersion(parser);
+        Node version = parseOptionalPackageVersion(parser);
         parser.ctx.logDebug("use version: " + version);
         if (version != null) {
             // `use` statement can terminate after Version
@@ -325,7 +327,8 @@ public class StatementParser {
 
         // Parse Version string
         // XXX use the Version string
-        String version = parseOptionalPackageVersion(parser);
+        Node version = parseOptionalPackageVersion(parser);
+        parser.ctx.logDebug("package version: " + version);
 
         BlockNode block = parseOptionalPackageBlock(parser, nameNode, packageNode);
         if (block != null) return block;
@@ -369,45 +372,12 @@ public class StatementParser {
      * @param parser The Parser instance
      * @return A String representing the package version, or null if not present
      */
-    public static String parseOptionalPackageVersion(Parser parser) {
+    public static Node parseOptionalPackageVersion(Parser parser) {
         LexerToken token;
         token = TokenUtils.peek(parser);
-        if (token.type == LexerTokenType.NUMBER) {
-            Node versionNode = NumberParser.parseNumber(parser, TokenUtils.consume(parser));
-            if (versionNode instanceof NumberNode) {
-                return ((NumberNode) versionNode).value;
-            }
-            // TODO version string 1.2.3
-            // return NumberParser.parseNumber(parser, TokenUtils.consume(parser)).value;
-        } else if (token.text.startsWith("v")) {
-            // parseDottedDecimalVersion
-            StringBuilder version = new StringBuilder(token.text); // start with 'v'
-            TokenUtils.consume(parser);
-
-            int componentCount = 0;
-
-            // Loop through components separated by '.'
-            while (true) {
-                if (!TokenUtils.peek(parser).text.equals(".")) {
-                    if (componentCount < 2) { // Ensures at least 3 components (v1.2.3)
-                        throw new PerlCompilerException(parser.tokenIndex, "Dotted-decimal version must have at least 3 components", parser.ctx.errorUtil);
-                    } else {
-                        break; // Stop if there's no '.' and we have enough components
-                    }
-                }
-
-                version.append(TokenUtils.consume(parser).text); // consume '.'
-
-                if (TokenUtils.peek(parser).type == LexerTokenType.NUMBER) {
-                    version.append(TokenUtils.consume(parser).text); // consume number
-                    componentCount++;
-                } else {
-                    throw new PerlCompilerException(parser.tokenIndex, "Invalid dotted-decimal format", parser.ctx.errorUtil);
-                }
-            }
-
-            parser.ctx.logDebug("Dotted-decimal Version: " + version);
-            return version.toString();
+        if ((token.type == LexerTokenType.NUMBER) || (token.text.startsWith("v"))) {
+            Node versionNode = parseVstring(parser, token.text, parser.tokenIndex);
+            return versionNode;
         }
         return null;
     }

@@ -46,7 +46,6 @@ public class SubroutineParser {
 
         if (subName.startsWith("v") && subName.matches("^v\\d+$")) {
             if (parser.tokens.get(parser.tokenIndex).text.equals(".") || !subExists) {
-                subName = subName.substring(1);
                 return StringParser.parseVstring(parser, subName, currentIndex);
             }
         }
