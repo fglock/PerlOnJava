@@ -1,7 +1,10 @@
 package org.perlonjava.codegen;
 
 import org.perlonjava.astnode.*;
+import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.RuntimeScalarType;
 
 public class ExtractValueVisitor implements Visitor {
     private final RuntimeList values = new RuntimeList();
@@ -19,7 +22,11 @@ public class ExtractValueVisitor implements Visitor {
 
     @Override
     public void visit(StringNode node) {
-        values.add(node.value);
+        RuntimeScalar scalar = new RuntimeScalar(node.value);
+        if (node.isVString) {
+            scalar.type = RuntimeScalarType.VSTRING;
+        }
+        values.add(scalar);
     }
 
     @Override
