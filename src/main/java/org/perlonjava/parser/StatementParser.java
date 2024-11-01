@@ -247,6 +247,25 @@ public class StatementParser {
         Node version = parseOptionalPackageVersion(parser);
         parser.ctx.logDebug("use version: " + version);
         if (version != null) {
+
+//            // Extract version string using ExtractValueVisitor
+//            RuntimeList versionValues = ExtractValueVisitor.getValues(version);
+//            if (!versionValues.elements.isEmpty()) {
+//                String versionString = versionValues.elements.get(0).toString();
+//
+//                // Call Module->VERSION(versionString)
+//                if (packageName != null) {
+//                    RuntimeArray versionArgs = new RuntimeArray();
+//                    versionArgs.push(new RuntimeScalar(packageName));
+//                    versionArgs.push(new RuntimeScalar(versionString));
+//                    try {
+//                        Universal.VERSION(versionArgs, RuntimeContextType.SCALAR);
+//                    } catch (PerlCompilerException e) {
+//                        throw new PerlCompilerException(parser.tokenIndex, "Version check failed: " + e.getMessage(), parser.ctx.errorUtil);
+//                    }
+//                }
+//            }
+
             // `use` statement can terminate after Version
             token = TokenUtils.peek(parser);
             if (token.type == LexerTokenType.EOF || token.text.equals("}") || token.text.equals(";")) {
