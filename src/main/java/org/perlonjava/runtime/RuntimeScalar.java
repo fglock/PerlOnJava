@@ -338,6 +338,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case UNDEF -> "";
             case GLOB -> value.toString();
             case REGEX -> value.toString();
+            case VSTRING -> (String) value;
             default -> ((RuntimeScalarReference) value).toStringRef();
         };
     }
@@ -352,6 +353,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 }
                 yield ((RuntimeCode) value).toStringRef();
             }
+            case VSTRING -> "VSTRING(0x" + value.hashCode() + ")";
             default -> "SCALAR(0x" + value.hashCode() + ")";
         };
         return (blessId == 0
