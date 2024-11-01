@@ -198,7 +198,7 @@ public class Universal extends PerlModuleBase {
         if (hasVersion.toString().isEmpty()) {
             throw new PerlCompilerException(perlClassName + " does not define $" + perlClassName + "::VERSION--version check failed");
         }
-        
+
         if (!wantVersion.getDefinedBoolean()) {
             return hasVersion.getList();
         }

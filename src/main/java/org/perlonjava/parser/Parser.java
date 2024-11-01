@@ -134,6 +134,12 @@ public class Parser {
 
         if (token.type == LexerTokenType.IDENTIFIER) {
             switch (token.text) {
+                case "BEGIN":
+                case "CHECK":
+                case "END":
+                case "INIT":
+                case "UNITCHECK":
+                    throw new PerlCompilerException(tokenIndex, "Not implemented", ctx.errorUtil);
                 case "if":
                 case "unless":
                     return StatementParser.parseIfStatement(this);

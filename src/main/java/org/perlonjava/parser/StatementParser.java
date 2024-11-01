@@ -11,7 +11,6 @@ import org.perlonjava.runtime.*;
 import static org.perlonjava.parser.NumberParser.parseNumber;
 import static org.perlonjava.parser.StringParser.parseVstring;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
-import static org.perlonjava.runtime.ScalarUtils.printable;
 
 /**
  * The StatementParser class is responsible for parsing various types of statements

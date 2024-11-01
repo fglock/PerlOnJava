@@ -34,8 +34,8 @@ public class StringNode extends AbstractNode {
     /**
      * Constructs a new StringNode with the specified string value and v-string flag.
      *
-     * @param value the string value to be stored in this node
-     * @param isVString flag indicating whether this is a v-string
+     * @param value      the string value to be stored in this node
+     * @param isVString  flag indicating whether this is a v-string
      * @param tokenIndex the index of the token
      */
     public StringNode(String value, boolean isVString, int tokenIndex) {
