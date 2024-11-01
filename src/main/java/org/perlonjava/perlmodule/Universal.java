@@ -196,24 +196,27 @@ public class Universal extends PerlModuleBase {
         String versionVariableName = NameNormalizer.normalizeVariableName("VERSION", perlClassName);
         RuntimeScalar hasVersion = GlobalContext.getGlobalVariable(versionVariableName);
 
-        String packageVersion = compareVersion(hasVersion, wantVersion, perlClassName);
+        if (!wantVersion.getDefinedBoolean()) {
+            return hasVersion.getList();
+        }
 
+        RuntimeScalar packageVersion = compareVersion(hasVersion, wantVersion, perlClassName);
         return new RuntimeScalar(packageVersion).getList();
     }
 
-    public static String compareVersion(RuntimeScalar hasVersion, RuntimeScalar wantVersion, String perlClassName) {
-        String packageVersion = normalizeVersion(hasVersion);
+    public static RuntimeScalar compareVersion(RuntimeScalar hasVersion, RuntimeScalar wantVersion, String perlClassName) {
+        String hasStr = normalizeVersion(hasVersion);
         // If REQUIRE is provided, compare versions
         if (wantVersion.getDefinedBoolean()) {
-            String requireVersion = normalizeVersion(wantVersion);
-            if (!isLaxVersion(packageVersion) || !isLaxVersion(requireVersion)) {
+            String wantStr = normalizeVersion(wantVersion);
+            if (!isLaxVersion(hasStr) || !isLaxVersion(wantStr)) {
                 throw new PerlCompilerException("Either package version or REQUIRE is not a lax version number");
             }
-            if (compareVersions(packageVersion, requireVersion) < 0) {
-                throw new PerlCompilerException(perlClassName + " version " + requireVersion + " required--this is only version " + packageVersion);
+            if (compareVersions(hasStr, wantStr) < 0) {
+                throw new PerlCompilerException(perlClassName + " version " + wantStr + " required--this is only version " + hasVersion);
             }
         }
-        return packageVersion;
+        return hasVersion;
     }
 
     private static String normalizeVersion(RuntimeScalar wantVersion) {
@@ -224,12 +227,18 @@ public class Universal extends PerlModuleBase {
         if (wantVersion.type == RuntimeScalarType.VSTRING) {
             normalizedVersion = toDottedString(normalizedVersion);
         } else {
+            normalizedVersion = normalizedVersion.replaceAll("_", "");
             String[] parts = normalizedVersion.split("\\.");
             if (parts.length < 3) {
                 String major = parts[0];
-                String minor = parts.length > 1 ? parts[1] + "000000": "000000";
-                String patch = minor.substring(3, 6);
-                minor = minor.substring(0, 3);
+                String minor = parts.length > 1 ? parts[1] : "0";
+                String patch = minor.length() > 3 ? minor.substring(3) : "0";
+                if (minor.length() > 3) {
+                    minor = minor.substring(0, 3);
+                }
+                if (patch.length() > 3) {
+                    patch = patch.substring(0, 3);
+                }
                 int majorNumber = Integer.parseInt(major);
                 int minorNumber = Integer.parseInt(minor);
                 int patchNumber = Integer.parseInt(patch);
