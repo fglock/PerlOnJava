@@ -585,6 +585,47 @@ public class StringParser {
         return new OperatorNode(operator, list, rawStr.index);
     }
 
+    static StringNode parseVstring(Parser parser, String vStringPart, int currentIndex) {
+        // Start constructing the v-string
+        StringBuilder vStringBuilder = new StringBuilder();
+
+        try {
+            // Convert the initial part to a character and append it
+            int charCode = Integer.parseInt(vStringPart);
+            vStringBuilder.append((char) charCode);
+        } catch (NumberFormatException e) {
+            throw new PerlCompilerException(currentIndex, "Invalid v-string format: " + vStringPart, parser.ctx.errorUtil);
+        }
+
+        // Continue parsing while the next token is a dot followed immediately by a number
+        while (true) {
+            // Get the next immediate token without skipping whitespace
+            LexerToken nextToken = parser.tokens.get(parser.tokenIndex);
+
+            // Check if the next token is a dot
+            if (nextToken.text.equals(".")) {
+                // Get the token immediately following the dot
+                LexerToken numberToken = parser.tokens.get(parser.tokenIndex + 1);
+
+                // Ensure the token after the dot is a number
+                if (numberToken.type == LexerTokenType.NUMBER) {
+                    // Consume the dot
+                    TokenUtils.consume(parser);
+                    // Consume the number, convert it to a character, and append it
+                    int charCode = Integer.parseInt(TokenUtils.consume(parser).text);
+                    vStringBuilder.append((char) charCode);
+                } else {
+                    break; // Exit the loop if the next token is not a number
+                }
+            } else {
+                break; // Exit the loop if the next token is not a dot
+            }
+        }
+
+        // Create a StringNode with the constructed v-string
+        return new StringNode(vStringBuilder.toString(), true, currentIndex);
+    }
+
     /**
      * Class to represent the parsed string and its position in the tokens list.
      */

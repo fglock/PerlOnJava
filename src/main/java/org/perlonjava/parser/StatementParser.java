@@ -373,7 +373,12 @@ public class StatementParser {
         LexerToken token;
         token = TokenUtils.peek(parser);
         if (token.type == LexerTokenType.NUMBER) {
-            return NumberParser.parseNumber(parser, TokenUtils.consume(parser)).value;
+            Node versionNode = NumberParser.parseNumber(parser, TokenUtils.consume(parser));
+            if (versionNode instanceof NumberNode) {
+                return ((NumberNode) versionNode).value;
+            }
+            // TODO version string 1.2.3
+            // return NumberParser.parseNumber(parser, TokenUtils.consume(parser)).value;
         } else if (token.text.startsWith("v")) {
             // parseDottedDecimalVersion
             StringBuilder version = new StringBuilder(token.text); // start with 'v'
