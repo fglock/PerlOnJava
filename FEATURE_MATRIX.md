@@ -29,7 +29,7 @@
 
 - ✔️   Accept command line switches from the shebang line.
 - ✔️   Command line switches `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-x`, `-?` are implemented.
-- ❌   Missing command line switches include:
+- ❌  Missing command line switches include:
   - `-s`: Rudimentary switch parsing.
   - `-T`: Taint checks.
   - `-t`: Taint checks with warnings.
@@ -165,6 +165,8 @@
 - ❌  **Perl-specific Regex Features**: Some features like `/xx` `/ee` are missing.
 - ❌  **Dynamically-scoped regex variables**: Regex variables are not dynamically-scoped.
 - ❌  **Code blocks**: `(?{ code })` in regex is not implemented.
+- ❌  Missing regex features include:
+  - `(?^` embedded pattern-match modifier, shorthand equivalent to "d-imnsx"
 
 ## Statements and Special Operators
 - ✔️   **Context void, scalar, list**: Contexts for void, scalar, and list are supported.
