@@ -44,6 +44,38 @@ public class SubroutineParser {
         }
         parser.ctx.logDebug("SubroutineCall exists " + subExists + " prototype `" + prototype + "` attributes " + attributes);
 
+        if (!subExists && subName.startsWith("v")) {
+            // Start constructing the v-string
+            StringBuilder vStringBuilder = new StringBuilder(subName);
+
+            // Continue parsing while the next token is a dot followed immediately by a number
+            while (true) {
+                // Get the next immediate token without skipping whitespace
+                LexerToken nextToken = parser.tokens.get(parser.tokenIndex);
+
+                // Check if the next token is a dot
+                if (nextToken.text.equals(".")) {
+                    // Get the token immediately following the dot
+                    LexerToken numberToken = parser.tokens.get(parser.tokenIndex + 1);
+
+                    // Ensure the token after the dot is a number
+                    if (numberToken.type == LexerTokenType.NUMBER) {
+                        // Consume the dot
+                        TokenUtils.consume(parser);
+                        // Consume the number and append it to the v-string
+                        vStringBuilder.append(".").append(TokenUtils.consume(parser).text);
+                    } else {
+                        break; // Exit the loop if the next token is not a number
+                    }
+                } else {
+                    break; // Exit the loop if the next token is not a dot
+                }
+            }
+
+            // Create a StringNode with the constructed v-string
+            return new StringNode(vStringBuilder.toString(), true, currentIndex);
+        }
+
         // Check if the subroutine call has parentheses
         boolean hasParentheses = TokenUtils.peek(parser).text.equals("(");
         if (!subExists && !hasParentheses) {
