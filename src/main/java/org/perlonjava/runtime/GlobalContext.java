@@ -20,6 +20,9 @@ import static org.perlonjava.runtime.RuntimeIO.initStdHandles;
  */
 public class GlobalContext {
 
+    public static final String perlVersion = "v5.38.0";
+    public static final String perlVersionOld = "5.038000";
+
     // Global variables and subroutines
     private static final Map<String, RuntimeScalar> globalVariables = new HashMap<>();
     private static final Map<String, RuntimeArray> globalArrays = new HashMap<>();
@@ -44,6 +47,7 @@ public class GlobalContext {
             getGlobalVariable(varName);
         }
         getGlobalVariable("main::" + Character.toString('O' - 'A' + 1)).set("jvm");    // initialize $^O to "jvm"
+        getGlobalVariable("main::]").set(perlVersionOld);    // initialize $] to Perl version
         getGlobalVariable("main::@").set("");    // initialize $@ to ""
         getGlobalVariable("main::_");    // initialize $_ to "undef"
         getGlobalVariable("main::\"").set(" ");    // initialize $" to " "

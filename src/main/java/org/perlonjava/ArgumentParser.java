@@ -11,6 +11,8 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.perlonjava.runtime.GlobalContext.perlVersion;
+
 /**
  * The ArgumentParser class is responsible for parsing command-line arguments
  * and configuring the CompilerOptions accordingly. It handles various flags
@@ -574,7 +576,6 @@ public class ArgumentParser {
             parsedArgs.code = perlCode.toString();
         }
 
-        String versionString = "v5.36.0";
         String autoSplit = "";
         if (parsedArgs.autoSplit) {
             autoSplit = " our @F = split(" + parsedArgs.splitPattern + "); ";
@@ -590,7 +591,7 @@ public class ArgumentParser {
 
         StringBuilder useStatements = new StringBuilder();
         if (parsedArgs.useVersion) {
-            useStatements.append("use ").append(versionString).append(";\n");
+            useStatements.append("use ").append(perlVersion).append(";\n");
         }
         for (ModuleUseStatement moduleStatement : parsedArgs.moduleUseStatements) {
             useStatements.append(moduleStatement.toString()).append("\n");
