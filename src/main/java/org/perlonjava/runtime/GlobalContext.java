@@ -44,7 +44,7 @@ public class GlobalContext {
             getGlobalVariable(varName);
         }
         getGlobalVariable("main::" + Character.toString('O' - 'A' + 1)).set("jvm");    // initialize $^O to "jvm"
-        getGlobalVariable("main::@");    // initialize $@ to "undef"
+        getGlobalVariable("main::@").set("");    // initialize $@ to ""
         getGlobalVariable("main::_");    // initialize $_ to "undef"
         getGlobalVariable("main::\"").set(" ");    // initialize $" to " "
         getGlobalVariable("main::a");    // initialize $a to "undef"
