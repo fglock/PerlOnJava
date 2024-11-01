@@ -5,6 +5,7 @@ import org.perlonjava.runtime.*;
 import java.util.List;
 
 import static org.perlonjava.runtime.GlobalContext.getGlobalCodeRef;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
  * The Universal class provides methods that are universally available to all objects in a Perl-like environment.
@@ -165,7 +166,7 @@ public class Universal extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for VERSION() method");
         }
         RuntimeScalar object = args.get(0);
-        String requireVersion = args.size() == 2 ? args.get(1).toString() : null;
+        RuntimeScalar wantVersion = args.size() == 2 ? args.get(1) : scalarUndef;
 
         // Retrieve Perl class name
         String perlClassName;
@@ -193,16 +194,18 @@ public class Universal extends PerlModuleBase {
 
         // Retrieve the $VERSION variable from the package
         String versionVariableName = NameNormalizer.normalizeVariableName("VERSION", perlClassName);
-        RuntimeScalar versionScalar = GlobalContext.getGlobalVariable(versionVariableName);
+        RuntimeScalar hasVersion = GlobalContext.getGlobalVariable(versionVariableName);
 
-        if (versionScalar == null || versionScalar.type != RuntimeScalarType.STRING) {
-            throw new PerlCompilerException("Package version is not defined or not a valid string");
-        }
+        String packageVersion = compareVersion(hasVersion, wantVersion, perlClassName);
 
-        String packageVersion = versionScalar.toString();
+        return new RuntimeScalar(packageVersion).getList();
+    }
 
+    public static String compareVersion(RuntimeScalar hasVersion, RuntimeScalar wantVersion, String perlClassName) {
+        String packageVersion = normalizeVersion(hasVersion);
         // If REQUIRE is provided, compare versions
-        if (requireVersion != null) {
+        if (wantVersion.getDefinedBoolean()) {
+            String requireVersion = normalizeVersion(wantVersion);
             if (!isLaxVersion(packageVersion) || !isLaxVersion(requireVersion)) {
                 throw new PerlCompilerException("Either package version or REQUIRE is not a lax version number");
             }
@@ -210,8 +213,44 @@ public class Universal extends PerlModuleBase {
                 throw new PerlCompilerException(perlClassName + " version " + requireVersion + " required--this is only version " + packageVersion);
             }
         }
+        return packageVersion;
+    }
 
-        return new RuntimeScalar(packageVersion).getList();
+    private static String normalizeVersion(RuntimeScalar wantVersion) {
+        String normalizedVersion = wantVersion.toString();
+        if (normalizedVersion.startsWith("v")) {
+            normalizedVersion = normalizedVersion.substring(1);
+        }
+        if (wantVersion.type == RuntimeScalarType.VSTRING) {
+            normalizedVersion = toDottedString(normalizedVersion);
+        } else {
+            String[] parts = normalizedVersion.split("\\.");
+            if (parts.length < 3) {
+                String major = parts[0];
+                String minor = parts.length > 1 ? parts[1] + "000000": "000000";
+                String patch = minor.substring(3, 6);
+                minor = minor.substring(0, 3);
+                int majorNumber = Integer.parseInt(major);
+                int minorNumber = Integer.parseInt(minor);
+                int patchNumber = Integer.parseInt(patch);
+                normalizedVersion = String.format("%d.%d.%d", majorNumber, minorNumber, patchNumber);
+            }
+        }
+        return normalizedVersion;
+    }
+
+    public static String toDottedString(String input) {
+        StringBuilder result = new StringBuilder();
+
+        for (int i = 0; i < input.length(); i++) {
+            int value = input.charAt(i);
+            if (i > 0) {
+                result.append(".");
+            }
+            result.append(value);
+        }
+
+        return result.toString();
     }
 
     /**

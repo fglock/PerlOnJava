@@ -11,6 +11,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.perlonjava.runtime.ScalarUtils.printable;
+
 /*
  * StringParser is used to parse domain-specific languages within Perl, such as Regex and string interpolation.
  *
@@ -624,6 +626,8 @@ public class StringParser {
                 break; // Exit the loop if the next token is not a dot
             }
         }
+
+        parser.ctx.logDebug("v-string: <" + printable(vStringBuilder.toString()) + "> next:" + TokenUtils.peek(parser));
 
         // Create a StringNode with the constructed v-string
         return new StringNode(vStringBuilder.toString(), true, currentIndex);

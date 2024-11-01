@@ -8,7 +8,9 @@ import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 
+import static org.perlonjava.parser.NumberParser.parseNumber;
 import static org.perlonjava.parser.StringParser.parseVstring;
+import static org.perlonjava.runtime.ScalarUtils.printable;
 
 /**
  * The StatementParser class is responsible for parsing various types of statements
@@ -245,14 +247,26 @@ public class StatementParser {
         // TODO use the Version string
         // TODO call Module->VERSION(12.34)
         Node version = parseOptionalPackageVersion(parser);
-        parser.ctx.logDebug("use version: " + version);
+        parser.ctx.logDebug("use version: " + version + " next:" + TokenUtils.peek(parser));
         if (version != null) {
 
-//            // Extract version string using ExtractValueVisitor
-//            RuntimeList versionValues = ExtractValueVisitor.getValues(version);
-//            if (!versionValues.elements.isEmpty()) {
-//                String versionString = versionValues.elements.get(0).toString();
-//
+            // Extract version string using ExtractValueVisitor
+            RuntimeList versionValues = ExtractValueVisitor.getValues(version);
+            if (!versionValues.elements.isEmpty()) {
+                // String versionString = versionValues.elements.getFirst().toString();
+                // parser.ctx.logDebug("use version String: " + printable(versionString));
+                RuntimeScalar versionScalar = (RuntimeScalar) versionValues.elements.getFirst();
+                if (packageName == null) {
+                    parser.ctx.logDebug("use version: check Perl version");
+                    Universal.compareVersion(
+                            new RuntimeScalar(GlobalContext.perlVersion),
+                            versionScalar,
+                            "Perl");
+                } else {
+                    parser.ctx.logDebug("use version: check package version");
+
+                }
+
 //                // Call Module->VERSION(versionString)
 //                if (packageName != null) {
 //                    RuntimeArray versionArgs = new RuntimeArray();
@@ -264,7 +278,7 @@ public class StatementParser {
 //                        throw new PerlCompilerException(parser.tokenIndex, "Version check failed: " + e.getMessage(), parser.ctx.errorUtil);
 //                    }
 //                }
-//            }
+            }
 
             // `use` statement can terminate after Version
             token = TokenUtils.peek(parser);
@@ -394,9 +408,11 @@ public class StatementParser {
     public static Node parseOptionalPackageVersion(Parser parser) {
         LexerToken token;
         token = TokenUtils.peek(parser);
-        if ((token.type == LexerTokenType.NUMBER) || (token.text.startsWith("v"))) {
-            Node versionNode = parseVstring(parser, token.text, parser.tokenIndex);
-            return versionNode;
+        if (token.type == LexerTokenType.NUMBER) {
+            return parseNumber(parser, TokenUtils.consume(parser));
+        }
+        if (token.type == LexerTokenType.IDENTIFIER && token.text.matches("v\\d+")) {
+            return parseVstring(parser, TokenUtils.consume(parser).text, parser.tokenIndex);
         }
         return null;
     }
