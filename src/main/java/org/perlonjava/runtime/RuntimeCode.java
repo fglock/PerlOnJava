@@ -129,7 +129,7 @@ public class RuntimeCode implements RuntimeScalarReference {
             generatedClass = EmitterMethodCreator.createClassWithMethod(
                     evalCtx,
                     ast,
-                    true  // use try-catch
+                    false
             );
         }
         return generatedClass;

@@ -599,7 +599,7 @@ public class Operator {
         String out = value.toString();
         if (out.isEmpty()) {
             RuntimeScalar err = getGlobalVariable("main::@");
-            if (err.getDefinedBoolean()) {
+            if (!err.toString().isEmpty()) {
                 out = err + "\t...propagated";
             } else {
                 out = "Died";

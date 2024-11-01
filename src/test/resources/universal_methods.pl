@@ -70,7 +70,6 @@ print "not " if $derived_obj->VERSION() ne '1.1';
 say "ok # derived_obj VERSION is 1.1";
 
 # Test VERSION() with REQUIRE
-$@ = "";
 eval { $base_obj->VERSION('0.9') };
 print "not " if $@;
 say "ok # base_obj VERSION >= 0.9";
@@ -81,7 +80,6 @@ say "ok # base_obj VERSION < 1.1";
 print "not " if $@ !~ /MyBase version 1.1 required/;
 say "ok # base_obj VERSION < 1.1 message <" . substr($@, 0, 30) . ">";
 
-$@ = "";
 $derived_obj->VERSION('1.0');
 eval { $derived_obj->VERSION('1.0') };
 print "not " if $@;
