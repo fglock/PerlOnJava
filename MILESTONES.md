@@ -80,7 +80,8 @@
   - Added `select(filehandle)` operator, `ARGVOUT` filehandle.
   - Added `~.`, `&.`, `|.`, `^.` operators.
   - Added `try catch` statement.
-  - Added Scalar::Util module: `blessed`, `reftype`.
+  - Added Scalar::Util: `blessed`, `reftype`.
+  - Added UNIVERSAL: `VERSION`.
   - Added v-strings.
   - CI/CD runs in Ubuntu and Windows
   - Work in progress:

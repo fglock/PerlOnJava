@@ -6,6 +6,8 @@ import org.perlonjava.lexer.LexerTokenType;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.perlonjava.runtime.ExceptionFormatter.findInnermostCause;
+
 /**
  * Utility class for generating error messages with context from a list of tokens.
  */
@@ -64,33 +66,25 @@ public class ErrorMessageUtil {
      * @param e the Exception object
      */
     public static String stringifyException(Exception e) {
-        StackTraceElement[] stackTrace = e.getStackTrace();
-        if (stackTrace.length > 0) {
-            StackTraceElement element = stackTrace[0];
-            String fileName = element.getFileName();
-            int lineNumber = element.getLineNumber();
-            return String.format("%s at %s:%d\n", e.getMessage(), fileName, lineNumber);
-        } else {
-            return e.getMessage();
-        }
+        return stringifyException((Throwable) e);
     }
 
-    public static void main(String[] args) {
-        // Example usage
-        List<LexerToken> tokens = new ArrayList<>();
-        tokens.add(new LexerToken(LexerTokenType.IDENTIFIER, "my"));
-        tokens.add(new LexerToken(LexerTokenType.IDENTIFIER, "$var"));
-        tokens.add(new LexerToken(LexerTokenType.NEWLINE, "\n"));
-        tokens.add(new LexerToken(LexerTokenType.OPERATOR, "="));
-        tokens.add(new LexerToken(LexerTokenType.IDENTIFIER, "42"));
-        tokens.add(new LexerToken(LexerTokenType.IDENTIFIER, ";"));
+    public static String stringifyException(Throwable t) {
+        // Use the custom formatter to print the Perl message and stack trace
+        StringBuilder sb = new StringBuilder();
 
-        // Create an instance of ErrorMessageUtil with the file name and token list
-        ErrorMessageUtil errorMessageUtil = new ErrorMessageUtil("example_file.txt", tokens);
+        Throwable innermostCause = findInnermostCause(t);
+        String message = innermostCause.getMessage();
+        sb.append(message);
+        if (!message.endsWith("\n")) {
+            sb.append("\n");
+        }
 
-        // Generate an error message for a specific token index
-        String message = errorMessageUtil.errorMessage(4, "Syntax error");
-        System.out.println(message);
+        for (ArrayList<String> line : ExceptionFormatter.formatException(t)) {
+            sb.append("        ").append(line.get(0)).append(" at ").append(line.get(1)).append(" line ").append(line.get(2)).append("\n");
+        }
+        String errorMessage = sb.toString();
+        return errorMessage;
     }
 
     /**

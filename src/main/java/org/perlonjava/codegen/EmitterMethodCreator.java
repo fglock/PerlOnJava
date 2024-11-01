@@ -196,6 +196,15 @@ public class EmitterMethodCreator implements Opcodes {
 
             ast.accept(visitor);
 
+//            // XXX TODO - eval-BLOCK works, but eval-STRING fails
+//            // Set $@ to an empty string if no exception occurs
+//            mv.visitLdcInsn("main::@");
+//            mv.visitLdcInsn("");
+//            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+//                    "org/perlonjava/runtime/GlobalContext",
+//                    "setGlobalVariable",
+//                    "(Ljava/lang/String;Ljava/lang/String;)V", false);
+
             // Handle the return value
             ctx.logDebug("Return the last value");
             mv.visitLabel(ctx.javaClassInfo.returnLabel); // "return" from other places arrive here

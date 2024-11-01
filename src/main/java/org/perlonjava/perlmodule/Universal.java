@@ -31,6 +31,7 @@ public class Universal extends PerlModuleBase {
             universal.registerMethod("can", "$");
             universal.registerMethod("isa", "$");
             universal.registerMethod("DOES", "$");
+            universal.registerMethod("VERSION", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing UNIVERSAL method: " + e.getMessage());
         }
@@ -148,5 +149,100 @@ public class Universal extends PerlModuleBase {
      */
     public static RuntimeList DOES(RuntimeArray args, int ctx) {
         return isa(args, ctx);
+    }
+
+    /**
+     * Retrieves the version of the package the object is blessed into.
+     * If a REQUIRE argument is provided, it compares the package version with REQUIRE.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeScalar representing the version.
+     * @throws PerlCompilerException if the version comparison fails.
+     */
+    public static RuntimeList VERSION(RuntimeArray args, int ctx) {
+        if (args.size() < 1 || args.size() > 2) {
+            throw new IllegalStateException("Bad number of arguments for VERSION() method");
+        }
+        RuntimeScalar object = args.get(0);
+        String requireVersion = args.size() == 2 ? args.get(1).toString() : null;
+
+        // Retrieve Perl class name
+        String perlClassName;
+        switch (object.type) {
+            case REFERENCE:
+            case ARRAYREFERENCE:
+            case HASHREFERENCE:
+                int blessId = ((RuntimeBaseEntity) object.value).blessId;
+                if (blessId == 0) {
+                    throw new PerlCompilerException("Object is not blessed into a package");
+                }
+                perlClassName = NameNormalizer.getBlessStr(blessId);
+                break;
+            case UNDEF:
+                throw new PerlCompilerException("Object is undefined");
+            default:
+                perlClassName = object.toString();
+                if (perlClassName.isEmpty()) {
+                    throw new PerlCompilerException("Object is not blessed into a package");
+                }
+                if (perlClassName.endsWith("::")) {
+                    perlClassName = perlClassName.substring(0, perlClassName.length() - 2);
+                }
+        }
+
+        // Retrieve the $VERSION variable from the package
+        String versionVariableName = NameNormalizer.normalizeVariableName("VERSION", perlClassName);
+        RuntimeScalar versionScalar = GlobalContext.getGlobalVariable(versionVariableName);
+
+        if (versionScalar == null || versionScalar.type != RuntimeScalarType.STRING) {
+            throw new PerlCompilerException("Package version is not defined or not a valid string");
+        }
+
+        String packageVersion = versionScalar.toString();
+
+        // If REQUIRE is provided, compare versions
+        if (requireVersion != null) {
+            if (!isLaxVersion(packageVersion) || !isLaxVersion(requireVersion)) {
+                throw new PerlCompilerException("Either package version or REQUIRE is not a lax version number");
+            }
+            if (compareVersions(packageVersion, requireVersion) < 0) {
+                throw new PerlCompilerException(perlClassName + " version " + requireVersion + " required--this is only version " + packageVersion);
+            }
+        }
+
+        return new RuntimeScalar(packageVersion).getList();
+    }
+
+    /**
+     * Checks if a version string is a lax version number.
+     *
+     * @param version The version string to check.
+     * @return True if the version is a lax version number, false otherwise.
+     */
+    private static boolean isLaxVersion(String version) {
+        // Implement a simple check for lax version numbers
+        return version.matches("\\d+(\\.\\d+)*");
+    }
+
+    /**
+     * Compares two version strings.
+     *
+     * @param v1 The first version string.
+     * @param v2 The second version string.
+     * @return A negative integer, zero, or a positive integer as the first version is less than, equal to, or greater than the second.
+     */
+    private static int compareVersions(String v1, String v2) {
+        String[] v1Parts = v1.split("\\.");
+        String[] v2Parts = v2.split("\\.");
+        int length = Math.max(v1Parts.length, v2Parts.length);
+        for (int i = 0; i < length; i++) {
+            int v1Part = i < v1Parts.length ? Integer.parseInt(v1Parts[i]) : 0;
+            int v2Part = i < v2Parts.length ? Integer.parseInt(v2Parts[i]) : 0;
+            if (v1Part != v2Part) {
+                return v1Part - v2Part;
+            }
+        }
+        return 0;
     }
 }
