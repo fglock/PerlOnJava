@@ -5,9 +5,9 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.operators.OperatorHandler;
+import org.perlonjava.operators.ScalarGlobOperator;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
-import org.perlonjava.operators.ScalarGlobOperator;
 
 /**
  * The EmitOperator class is responsible for handling various operators

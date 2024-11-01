@@ -1,7 +1,5 @@
 package org.perlonjava.runtime;
 
-import java.util.Stack;
-
 /**
  * An abstract class that serves as a proxy for a RuntimeScalar object.
  * It provides methods to manipulate and access the underlying scalar value.

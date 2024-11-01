@@ -385,7 +385,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
         }
 
         // Construct the Perl-like regex string with flags
-        return "(?" + flagString.toString() + ":" + pattern.toString() + ")";
+        return "(?" + flagString + ":" + pattern + ")";
     }
 
     /**

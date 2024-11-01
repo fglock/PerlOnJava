@@ -238,6 +238,9 @@ public class ListParser {
             if (token.text.equals("<") || token.text.equals("<<")) {
                 // Looks like diamond operator
                 parser.ctx.logDebug("parseZeroOrMoreList looks like <>");
+            } else if (token.text.equals("+")) {
+                // Looks like a prefix `+`, not an infix `+`
+                parser.ctx.logDebug("parseZeroOrMoreList looks like prefix plus");
             } else if (token.text.equals("&")) {
                 // Looks like a subroutine call, not an infix `&`
                 parser.ctx.logDebug("parseZeroOrMoreList looks like subroutine call");

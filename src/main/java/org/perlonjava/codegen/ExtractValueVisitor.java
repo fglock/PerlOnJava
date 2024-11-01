@@ -1,7 +1,6 @@
 package org.perlonjava.codegen;
 
 import org.perlonjava.astnode.*;
-import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarType;
