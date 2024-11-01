@@ -368,8 +368,24 @@ public class RuntimeRegex implements RuntimeScalarReference {
 
     @Override
     public String toString() {
-        // TODO add (?idmsux-idmsux:X) around the regex
-        return pattern.toString();
+        // Extract the flags from the pattern
+        int flags = pattern.flags();
+        StringBuilder flagString = new StringBuilder();
+
+        if ((flags & MULTILINE) != 0) flagString.append('m');
+        if ((flags & DOTALL) != 0) flagString.append('s');
+        if ((flags & CASE_INSENSITIVE) != 0) flagString.append('i');
+        if ((flags & COMMENTS) != 0) flagString.append('x');
+
+        // Check if no flags are set
+        if (flagString.length() == 0) {
+            // XXX TODO Java regex doesn't support '^'
+            // return "(?^:" + pattern.toString() + ")";
+            return pattern.toString();
+        }
+
+        // Construct the Perl-like regex string with flags
+        return "(?" + flagString.toString() + ":" + pattern.toString() + ")";
     }
 
     /**
