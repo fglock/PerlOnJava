@@ -39,8 +39,10 @@ public class NumberParser {
      * @param token  The LexerToken representing the number.
      * @return A NumberNode representing the parsed number.
      */
-    public static NumberNode parseNumber(Parser parser, LexerToken token) {
-        StringBuilder number = new StringBuilder(token.text);
+    public static Node parseNumber(Parser parser, LexerToken token) {
+        String firstPart = token.text;
+        int currentIndex = parser.tokenIndex;
+        StringBuilder number = new StringBuilder(firstPart);
 
         // Check for binary, octal, or hexadecimal prefixes
         if (token.text.startsWith("0")) {
@@ -72,6 +74,17 @@ public class NumberParser {
                 number.append(TokenUtils.consume(parser).text); // consume digits after '.'
             }
         }
+
+        // Check for v-string (extra dot followed by a number)
+        if (parser.tokens.get(parser.tokenIndex).text.equals(".")) {
+            LexerToken nextToken = parser.tokens.get(parser.tokenIndex + 1);
+            if (nextToken.type == LexerTokenType.NUMBER) {
+                // It's a v-string, use StringParser to parse it
+                parser.tokenIndex = currentIndex; // backtrack to the start of the number
+                return StringParser.parseVstring(parser, firstPart, parser.tokenIndex);
+            }
+        }
+
         // Check for exponent part
         checkNumberExponent(parser, number);
 
