@@ -10,6 +10,7 @@ import org.perlonjava.runtime.*;
 
 import static org.perlonjava.parser.NumberParser.parseNumber;
 import static org.perlonjava.parser.StringParser.parseVstring;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 import static org.perlonjava.runtime.ScalarUtils.printable;
 
 /**
@@ -243,47 +244,31 @@ public class StatementParser {
             ctx.logDebug("use fullName: " + fullName);
         }
 
-        // Parse Version string; throw away the result
-        // TODO use the Version string
-        // TODO call Module->VERSION(12.34)
-        Node version = parseOptionalPackageVersion(parser);
-        parser.ctx.logDebug("use version: " + version + " next:" + TokenUtils.peek(parser));
-        if (version != null) {
-
+        // Parse Version string
+        RuntimeScalar versionScalar = scalarUndef;
+        Node versionNode = parseOptionalPackageVersion(parser);
+        if (versionNode != null) {
+            parser.ctx.logDebug("use version: " + versionNode + " next:" + TokenUtils.peek(parser));
             // Extract version string using ExtractValueVisitor
-            RuntimeList versionValues = ExtractValueVisitor.getValues(version);
+            RuntimeList versionValues = ExtractValueVisitor.getValues(versionNode);
             if (!versionValues.elements.isEmpty()) {
                 // String versionString = versionValues.elements.getFirst().toString();
                 // parser.ctx.logDebug("use version String: " + printable(versionString));
-                RuntimeScalar versionScalar = (RuntimeScalar) versionValues.elements.getFirst();
+                versionScalar = (RuntimeScalar) versionValues.elements.getFirst();
                 if (packageName == null) {
                     parser.ctx.logDebug("use version: check Perl version");
                     Universal.compareVersion(
                             new RuntimeScalar(GlobalContext.perlVersion),
                             versionScalar,
                             "Perl");
-                } else {
-                    parser.ctx.logDebug("use version: check package version");
-
                 }
-
-//                // Call Module->VERSION(versionString)
-//                if (packageName != null) {
-//                    RuntimeArray versionArgs = new RuntimeArray();
-//                    versionArgs.push(new RuntimeScalar(packageName));
-//                    versionArgs.push(new RuntimeScalar(versionString));
-//                    try {
-//                        Universal.VERSION(versionArgs, RuntimeContextType.SCALAR);
-//                    } catch (PerlCompilerException e) {
-//                        throw new PerlCompilerException(parser.tokenIndex, "Version check failed: " + e.getMessage(), parser.ctx.errorUtil);
-//                    }
-//                }
             }
-
-            // `use` statement can terminate after Version
-            token = TokenUtils.peek(parser);
-            if (token.type == LexerTokenType.EOF || token.text.equals("}") || token.text.equals(";")) {
-                return new ListNode(parser.tokenIndex);
+            if (packageName == null) {
+                // `use` statement can terminate after Version
+                token = TokenUtils.peek(parser);
+                if (token.type == LexerTokenType.EOF || token.text.equals("}") || token.text.equals(";")) {
+                    return new ListNode(parser.tokenIndex);
+                }
             }
         }
 
@@ -305,8 +290,18 @@ public class StatementParser {
                     ctx.errorUtil.getLineNumber(parser.tokenIndex));
 
             ctx.logDebug("Use statement: " + fullName + " called from " + CallerStack.peek());
+            // execute 'require(fullName)'
             RuntimeScalar ret = new RuntimeScalar(fullName).require();
             ctx.logDebug("Use statement return: " + ret);
+
+            if (versionNode != null) {
+                // check module version
+                parser.ctx.logDebug("use version: check module version");
+                RuntimeArray args = new RuntimeArray();
+                args.push(new RuntimeScalar(packageName));
+                args.push(versionScalar);
+                Universal.VERSION(args, RuntimeContextType.SCALAR);
+            }
 
             // call Module->import( LIST )
             // or Module->unimport( LIST )

@@ -64,7 +64,7 @@ say "ok # derived_obj DOES MyDerived";
 
 # Test VERSION() method
 print "not " if $base_obj->VERSION() ne '1.0';
-say "ok # base_obj VERSION is 1.0";
+say "ok # base_obj VERSION is 1.0 <" . $base_obj->VERSION() . ">";
 
 print "not " if $derived_obj->VERSION() ne '1.1';
 say "ok # derived_obj VERSION is 1.1";
@@ -77,7 +77,7 @@ say "ok # base_obj VERSION >= 0.9";
 eval { $base_obj->VERSION('1.1') };
 print "not " if !$@;
 say "ok # base_obj VERSION < 1.1";
-print "not " if $@ !~ /MyBase version 1.1 required/;
+print "not " if $@ !~ /MyBase version 1.1(?:.0) required/;
 say "ok # base_obj VERSION < 1.1 message <" . substr($@, 0, 30) . ">";
 
 $derived_obj->VERSION('1.0');
@@ -88,6 +88,6 @@ say "ok # derived_obj VERSION >= 1.0 <$@>";
 eval { $derived_obj->VERSION('1.2') };
 print "not " if !$@;
 say "ok # derived_obj VERSION < 1.2";
-print "not " if $@ !~ /MyDerived version 1.2 required/;
+print "not " if $@ !~ /MyDerived version 1.2(?:.0) required/;
 say "ok # base_obj VERSION < 1.2 message <" . substr($@, 0, 30) . ">";
 
