@@ -1,11 +1,7 @@
 package org.perlonjava;
 
-import org.perlonjava.runtime.ExceptionFormatter;
+import org.perlonjava.runtime.ErrorMessageUtil;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
-
-import java.util.ArrayList;
-
-import static org.perlonjava.runtime.ExceptionFormatter.findInnermostCause;
 
 /**
  * The Main class serves as the entry point for the Perl-to-Java bytecode compiler and runtime
@@ -40,23 +36,12 @@ public class Main {
                 System.out.println();
             }
 
-            // Use the custom formatter to print the Perl message and stack trace
-            StringBuilder sb = new StringBuilder();
-
-            Throwable innermostCause = findInnermostCause(t);
-            String message = innermostCause.getMessage();
-            sb.append(message);
-            if (!message.endsWith("\n")) {
-                sb.append("\n");
-            }
-
-            for (ArrayList<String> line : ExceptionFormatter.formatException(t)) {
-                sb.append("        ").append(line.get(0)).append(" at ").append(line.get(1)).append(" line ").append(line.get(2)).append("\n");
-            }
-            System.out.println(sb);
+            String errorMessage = ErrorMessageUtil.stringifyException(t);
+            System.out.println(errorMessage);
 
             System.exit(1);
         }
     }
+
 }
 

@@ -113,7 +113,7 @@ public class PerlScriptExecutionTest {
                 lineNumber++;
                 if (line.contains("not ok")) {
                     errorFound = true;
-                    fail("Output contains 'not ok' in " + filename + " at line " + lineNumber);
+                    fail("Output contains 'not ok' in " + filename + " at line " + lineNumber + ": " + line);
                     break;
                 }
             }
