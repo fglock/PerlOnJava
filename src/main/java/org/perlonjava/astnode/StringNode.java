@@ -2,6 +2,8 @@ package org.perlonjava.astnode;
 
 import org.perlonjava.codegen.Visitor;
 
+import static org.perlonjava.runtime.ScalarUtils.printable;
+
 /**
  * The StringNode class represents a node in the abstract syntax tree (AST) that holds
  * a string value. This class implements the Node interface, allowing it to be visited
@@ -14,6 +16,11 @@ public class StringNode extends AbstractNode {
     public final String value;
 
     /**
+     * Flag indicating whether this node represents a v-string.
+     */
+    public final boolean isVString;
+
+    /**
      * Constructs a new StringNode with the specified string value.
      *
      * @param value the string value to be stored in this node
@@ -21,6 +28,20 @@ public class StringNode extends AbstractNode {
     public StringNode(String value, int tokenIndex) {
         this.value = value;
         this.tokenIndex = tokenIndex;
+        this.isVString = false;
+    }
+
+    /**
+     * Constructs a new StringNode with the specified string value and v-string flag.
+     *
+     * @param value the string value to be stored in this node
+     * @param tokenIndex the index of the token
+     * @param isVString flag indicating whether this is a v-string
+     */
+    public StringNode(String value, int tokenIndex, boolean isVString) {
+        this.value = value;
+        this.tokenIndex = tokenIndex;
+        this.isVString = isVString;
     }
 
     /**
@@ -30,7 +51,7 @@ public class StringNode extends AbstractNode {
      */
     @Override
     public String toString() {
-        return "String(" + value + ")";
+        return "String(" + printable(value) + ")";
     }
 
     /**

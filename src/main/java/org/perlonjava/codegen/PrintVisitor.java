@@ -2,6 +2,8 @@ package org.perlonjava.codegen;
 
 import org.perlonjava.astnode.*;
 
+import static org.perlonjava.runtime.ScalarUtils.printable;
+
 /*
  *
  * Usage:
@@ -239,7 +241,11 @@ public class PrintVisitor implements Visitor {
     @Override
     public void visit(StringNode node) {
         appendIndent();
-        sb.append("StringNode: '").append(node.value).append("'\n");
+        sb.append("StringNode: '").append(printable(node.value)).append("'");
+        if (node.isVString) {
+            sb.append(", isVString=true");
+        }
+        sb.append("\n");
     }
 
     @Override
