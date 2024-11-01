@@ -78,7 +78,7 @@
 - ✔️   **Special variables**: `@ISA` is implemented.
 - ✔️   **Multiple Inheritance**: C3 method resolution is implemented.
 - ✔️   **Method caching**: Method resolution is cached.
-- ❌  **Version check**: Method `VERSION ( [ REQUIRE ] )` is not yet implemented.
+- ✔️   **Version check**: Method `VERSION ( [ REQUIRE ] )` is implemented.
 - ❌  **Inheritance**: `SUPER` is not yet implemented.
 - ❌  **Autoload**: `AUTOLOAD` mechanism is not yet implemented.
 
@@ -200,9 +200,8 @@
 - ✔️   **`die` related operators**: `die`, `warn`, `exit` are supported.
 - ✔️   **`die` related features**: `$SIG{__DIE__}`, `$SIG{__WARN__}`
 - ❌  **`PROPAGATE`**: `PROPAGATE` method is not yet supported.
-- ❌  **`version` objects**: Version objects are not yet supported.
 - 🚧  **`require` operator**: The `require` operator is partially implemented; version checks are not implemented.
-- 🚧  **`use` and `no` statements**: Module imports and version check via `use` and `no` are partially implemented; version checks are not implemented..
+- 🚧  **`use` and `no` statements**: Module imports and version check via `use` and `no` are partially implemented; version checks are implemented.
 - ✔️   **`caller` operator**: `caller` returns ($package, $filename, $line). The remaining results are undef. This means we don't include subroutine names in error messages yet.
 - ✔️   **Import methods**: `import`, `unimport` works.
 - ✔️   **`__SUB__`**: The `__SUB__` keyword works.
@@ -252,7 +251,7 @@
 - ✔️   **strict**: `strict` pragma is set to ignore `no strict`, the compiler works always in `strict` mode. `no strict` might work in a future version.
 - ✔️   **Scalar::Util**: `blessed`, `reftype`, `set_prototype` are implemented.
 - ❌  **feature** pragma
-- ❌  **version** pragma
+- ❌  **version** pragma: version objects are not yet supported.
 - ❌  **experimental** pragma
 - ❌  **constant** pragma
 - ❌  **parent** pragma
