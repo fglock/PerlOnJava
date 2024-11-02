@@ -7,11 +7,12 @@ import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.GlobalContext;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.SpecialBlock;
 
 import java.util.*;
 
 import static org.perlonjava.parser.TokenUtils.peek;
-import static org.perlonjava.runtime.GlobalContext.endBlockArray;
+import static org.perlonjava.runtime.SpecialBlock.endBlockArray;
 
 public class Parser {
     public static final Set<String> TERMINATORS =
@@ -147,7 +148,7 @@ public class Parser {
                     TokenUtils.consume(this, LexerTokenType.OPERATOR, "}");
 
                     // $global::endBlocks[$index] = sub { ... }
-                    int index = GlobalContext.endBlockIndex++;
+                    int index = SpecialBlock.endBlockIndex++;
                     return new BinaryOperatorNode("=",
                             new BinaryOperatorNode("[",
                                     new OperatorNode("$",

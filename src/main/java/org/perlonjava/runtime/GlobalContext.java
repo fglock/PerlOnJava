@@ -6,7 +6,6 @@ import org.perlonjava.perlmodule.ScalarUtil;
 import org.perlonjava.perlmodule.Symbol;
 import org.perlonjava.perlmodule.Universal;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,19 +33,12 @@ public class GlobalContext {
     // Regular expression for regex variables like $main::1
     static Pattern regexVariablePattern = Pattern.compile("^main::(\\d+)$");
 
-    // Special blocks
-    public static int endBlockIndex = 0;
-    public static final String endBlockArray = Character.toString(0) + "::EndBlocks";
-
     /**
      * Initializes global variables, arrays, hashes, and other entities.
      *
      * @param compilerOptions The compiler options used for initialization.
      */
     public static void initializeGlobals(ArgumentParser.CompilerOptions compilerOptions) {
-
-        // Initialize END block list
-        getGlobalArray(endBlockArray);
 
         // Initialize scalar variables
         for (char c = 'A'; c <= 'Z'; c++) {

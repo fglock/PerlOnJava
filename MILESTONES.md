@@ -83,6 +83,7 @@
   - Added Scalar::Util: `blessed`, `reftype`.
   - Added UNIVERSAL: `VERSION`.
   - Added v-strings.
+  - Added END blocks.
   - CI/CD runs in Ubuntu and Windows
   - Work in progress:
     - `state` variables.
