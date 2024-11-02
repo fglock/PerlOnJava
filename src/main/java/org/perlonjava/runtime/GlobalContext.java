@@ -36,7 +36,7 @@ public class GlobalContext {
 
     // Special blocks
     public static int endBlockIndex = 0;
-    public static final RuntimeArray endBlocks = new RuntimeArray();
+    public static final String endBlockArray = Character.toString(0) + "::EndBlocks";
 
     /**
      * Initializes global variables, arrays, hashes, and other entities.
@@ -44,6 +44,9 @@ public class GlobalContext {
      * @param compilerOptions The compiler options used for initialization.
      */
     public static void initializeGlobals(ArgumentParser.CompilerOptions compilerOptions) {
+
+        // Initialize END block list
+        getGlobalArray(endBlockArray);
 
         // Initialize scalar variables
         for (char c = 'A'; c <= 'Z'; c++) {

@@ -11,6 +11,7 @@ import org.perlonjava.runtime.PerlCompilerException;
 import java.util.*;
 
 import static org.perlonjava.parser.TokenUtils.peek;
+import static org.perlonjava.runtime.GlobalContext.endBlockArray;
 
 public class Parser {
     public static final Set<String> TERMINATORS =
@@ -147,11 +148,20 @@ public class Parser {
 
                     // $global::endBlocks[$index] = sub { ... }
                     int index = GlobalContext.endBlockIndex++;
-                    SubroutineNode sub = new SubroutineNode(
-                            null, null,
-                            null, block, false, currentIndex);
-
-                    return sub;
+                    return new BinaryOperatorNode("=",
+                            new BinaryOperatorNode("[",
+                                    new OperatorNode("$",
+                                            new IdentifierNode(endBlockArray, currentIndex),
+                                            currentIndex),
+                                    new ArrayLiteralNode(
+                                            List.of(new NumberNode(String.valueOf(index), currentIndex)),
+                                            currentIndex),
+                                    currentIndex),
+                            new SubroutineNode(
+                                    null, null,
+                                    null, block, false, currentIndex),
+                            currentIndex
+                    );
                 case "if":
                 case "unless":
                     return StatementParser.parseIfStatement(this);
