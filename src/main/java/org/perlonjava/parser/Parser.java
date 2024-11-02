@@ -144,6 +144,9 @@ public class Parser {
                     TokenUtils.consume(this, LexerTokenType.OPERATOR, "{");
                     BlockNode block = parseBlock();
                     TokenUtils.consume(this, LexerTokenType.OPERATOR, "}");
+
+                    // $global::endBlocks[$index] = sub { ... }
+                    int index = GlobalContext.endBlockIndex++;
                     SubroutineNode sub = new SubroutineNode(
                             null, null,
                             null, block, false, currentIndex);

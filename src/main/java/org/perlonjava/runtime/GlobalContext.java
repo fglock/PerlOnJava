@@ -35,7 +35,8 @@ public class GlobalContext {
     static Pattern regexVariablePattern = Pattern.compile("^main::(\\d+)$");
 
     // Special blocks
-    private static final ArrayList<RuntimeScalar> endBlocks = new ArrayList<>();
+    public static int endBlockIndex = 0;
+    public static final RuntimeArray endBlocks = new RuntimeArray();
 
     /**
      * Initializes global variables, arrays, hashes, and other entities.
