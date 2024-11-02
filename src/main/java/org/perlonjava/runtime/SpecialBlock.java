@@ -13,7 +13,7 @@ public class SpecialBlock {
     }
 
     public static void runEndBlocks() {
-        for (RuntimeScalar block : getGlobalArray(SpecialBlock.endBlockArray).elements) {
+        for (RuntimeScalar block : getGlobalArray(SpecialBlock.endBlockArray).elements.reversed()) {
             if (block.getDefinedBoolean()) {
                 block.apply(new RuntimeArray(), RuntimeContextType.VOID);
                 block.undefine();
