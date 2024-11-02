@@ -6,6 +6,7 @@ import org.perlonjava.perlmodule.ScalarUtil;
 import org.perlonjava.perlmodule.Symbol;
 import org.perlonjava.perlmodule.Universal;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,9 @@ public class GlobalContext {
 
     // Regular expression for regex variables like $main::1
     static Pattern regexVariablePattern = Pattern.compile("^main::(\\d+)$");
+
+    // Special blocks
+    private static final ArrayList<RuntimeScalar> endBlocks = new ArrayList<>();
 
     /**
      * Initializes global variables, arrays, hashes, and other entities.
