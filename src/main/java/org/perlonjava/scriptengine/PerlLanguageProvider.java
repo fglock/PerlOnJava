@@ -14,6 +14,8 @@ import java.lang.invoke.*;
 import java.lang.reflect.Constructor;
 import java.util.List;
 
+import static org.perlonjava.runtime.SpecialBlock.runEndBlocks;
+
 /**
  * The PerlLanguageProvider class is responsible for executing Perl code within the Java environment.
  * It provides methods to execute, tokenize, compile, and parse Perl code.
@@ -130,10 +132,19 @@ public class PerlLanguageProvider {
         RuntimeList result;
         try {
             result = (RuntimeList) invoker.invoke(instance, new RuntimeArray(), RuntimeContextType.SCALAR);
+            try {
+                // Flush STDOUT, STDERR, STDIN
+                RuntimeIO.flushFileHandles();
+                runEndBlocks();
+            } catch (Throwable endException) {
+                String errorMessage = ErrorMessageUtil.stringifyException(endException);
+                System.out.println(errorMessage);
+                System.out.println("END failed--call queue aborted.");
+            }
         } catch (Throwable t) {
             // Flush STDOUT, STDERR, STDIN
             RuntimeIO.flushFileHandles();
-
+            runEndBlocks();
             throw new RuntimeException(t);
         }
         // Flush STDOUT, STDERR, STDIN
