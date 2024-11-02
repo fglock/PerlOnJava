@@ -34,6 +34,14 @@ public class OperatorParser {
             // create default block for `sort`: { $a cmp $b }
             block = new BlockNode(List.of(new BinaryOperatorNode("cmp", new OperatorNode("$", new IdentifierNode("main::a", parser.tokenIndex), parser.tokenIndex), new OperatorNode("$", new IdentifierNode("main::b", parser.tokenIndex), parser.tokenIndex), parser.tokenIndex)), parser.tokenIndex);
         }
+        if (block == null) {
+            // use the first argument as block: 'map ord, 1,2,3'
+            if (!operand.elements.isEmpty()) {
+                block = new BlockNode(
+                        List.of(operand.elements.removeFirst()),
+                        parser.tokenIndex);
+            }
+        }
         if (block instanceof BlockNode) {
             block = new SubroutineNode(null, null, null, block, false, parser.tokenIndex);
         }
