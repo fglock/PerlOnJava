@@ -12,7 +12,7 @@ import org.perlonjava.runtime.SpecialBlock;
 import java.util.*;
 
 import static org.perlonjava.parser.TokenUtils.peek;
-import static org.perlonjava.runtime.SpecialBlock.endBlockArray;
+import static org.perlonjava.runtime.SpecialBlock.endBlockArrayName;
 
 public class Parser {
     public static final Set<String> TERMINATORS =
@@ -148,11 +148,11 @@ public class Parser {
                     TokenUtils.consume(this, LexerTokenType.OPERATOR, "}");
 
                     // $global::endBlocks[$index] = sub { ... }
-                    int index = SpecialBlock.endBlockIndex++;
+                    int index = SpecialBlock.getEndBlockIndex();
                     return new BinaryOperatorNode("=",
                             new BinaryOperatorNode("[",
                                     new OperatorNode("$",
-                                            new IdentifierNode(endBlockArray, currentIndex),
+                                            new IdentifierNode(endBlockArrayName, currentIndex),
                                             currentIndex),
                                     new ArrayLiteralNode(
                                             List.of(new NumberNode(String.valueOf(index), currentIndex)),
