@@ -4,7 +4,23 @@ import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
+import java.util.List;
+
 public class TokenUtils {
+
+    public static String toText(List<LexerToken> tokens, int codeStart, int codeEnd) {
+        StringBuilder sb = new StringBuilder();
+        codeStart = Math.max(codeStart, 0);
+        codeEnd = Math.min(codeEnd, tokens.size() - 1);
+        for (int i = codeStart; i <= codeEnd; i++) {
+            LexerToken tok = tokens.get(i);
+            if (tok.type != LexerTokenType.EOF) {
+                sb.append(tok.text);
+            }
+        }
+        return sb.toString();
+    }
+
     public static LexerToken peek(Parser parser) {
         parser.tokenIndex = Whitespace.skipWhitespace(parser.tokenIndex, parser.tokens);
         if (parser.tokenIndex >= parser.tokens.size()) {

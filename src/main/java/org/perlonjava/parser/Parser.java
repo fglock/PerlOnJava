@@ -148,13 +148,9 @@ public class Parser {
                     TokenUtils.consume(this, LexerTokenType.OPERATOR, "}");
                     int codeEnd = tokenIndex;
 
-                    StringBuilder sb = new StringBuilder("sub ");
-                    for (int i = codeStart; i < codeEnd; i++) {
-                        sb.append(tokens.get(i).text);
-                    }
-                    ctx.logDebug("special block " + blockName + " <<<" + sb + ">>>");
                     ArgumentParser.CompilerOptions parsedArgs = ctx.compilerOptions.clone();
-                    parsedArgs.code = sb.toString();
+                    parsedArgs.code = "sub " + TokenUtils.toText(tokens, codeStart, codeEnd - 1);
+                    ctx.logDebug("special block " + blockName + " <<<" + parsedArgs.code + ">>>");
                     try {
                         RuntimeList result = PerlLanguageProvider.executePerlCode(parsedArgs, false);
                         RuntimeScalar codeRef = (RuntimeScalar) result.elements.getFirst();
