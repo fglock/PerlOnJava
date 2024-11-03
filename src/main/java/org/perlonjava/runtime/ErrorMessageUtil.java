@@ -2,6 +2,7 @@ package org.perlonjava.runtime;
 
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.parser.TokenUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -99,16 +100,7 @@ public class ErrorMessageUtil {
         int line = getLineNumber(index);
 
         // Retrieve the string context around the error by collecting tokens near the specified index
-        List<String> near = new ArrayList<>();
-        for (int i = Math.max(0, index - 4); i <= Math.min(tokens.size() - 1, index + 2); i++) {
-            LexerToken tok = tokens.get(i);
-            if (tok != null && tok.type != LexerTokenType.EOF) {
-                near.add(tok.text);
-            }
-        }
-
-        // Join the collected tokens into a single string
-        String nearString = String.join("", near);
+        String nearString = TokenUtils.toText(tokens, index - 4, index + 2);
 
         // Return the formatted error message with the file name, line number, and context
         return message + " at " + fileName + " line " + line + ", near " + errorMessageQuote(nearString) + "\n";
