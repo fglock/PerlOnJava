@@ -37,7 +37,7 @@ public class PerlScriptEngine extends AbstractScriptEngine {
             options.fileName = "<STDIN>";
             options.code = script;
 
-            RuntimeList result = PerlLanguageProvider.executePerlCode(options);
+            RuntimeList result = PerlLanguageProvider.executePerlCode(options, true);
             return result != null ? result.toString() : null;
         } catch (Throwable t) {
             ScriptException scriptException = new ScriptException("Error executing Perl script: " + t.getMessage());

@@ -102,7 +102,7 @@ public class PerlScriptExecutionTest {
             options.inc.push(new RuntimeScalar("src/main/perl/lib"));
 
             // Execute the Perl code
-            PerlLanguageProvider.executePerlCode(options);
+            PerlLanguageProvider.executePerlCode(options, true);
 
             // Capture and verify the output
             String output = outputStream.toString();
