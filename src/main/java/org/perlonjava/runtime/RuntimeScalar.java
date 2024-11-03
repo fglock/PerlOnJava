@@ -1039,7 +1039,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
         RuntimeList result;
         try {
-            result = PerlLanguageProvider.executePerlCode(parsedArgs);
+            result = PerlLanguageProvider.executePerlCode(parsedArgs, false);
         } catch (Throwable t) {
             GlobalContext.setGlobalVariable("main::@", "Error in file " + parsedArgs.fileName +
                     "\n" + t);

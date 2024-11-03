@@ -48,7 +48,8 @@ public class PerlLanguageProvider {
      * @param compilerOptions Compiler flags, file name and source code
      * @return The result of the Perl code execution.
      */
-    public static RuntimeList executePerlCode(ArgumentParser.CompilerOptions compilerOptions) throws Exception {
+    public static RuntimeList executePerlCode(ArgumentParser.CompilerOptions compilerOptions,
+                                              boolean isMainProgram) throws Exception {
 
         ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
         // Enter a new scope in the symbol table and add special Perl variables
@@ -135,7 +136,9 @@ public class PerlLanguageProvider {
             try {
                 // Flush STDOUT, STDERR, STDIN
                 RuntimeIO.flushFileHandles();
-                runEndBlocks();
+                if (isMainProgram) {
+                    runEndBlocks();
+                }
             } catch (Throwable endException) {
                 String errorMessage = ErrorMessageUtil.stringifyException(endException);
                 System.out.println(errorMessage);
@@ -144,7 +147,9 @@ public class PerlLanguageProvider {
         } catch (Throwable t) {
             // Flush STDOUT, STDERR, STDIN
             RuntimeIO.flushFileHandles();
-            runEndBlocks();
+            if (isMainProgram) {
+                runEndBlocks();
+            }
             throw new RuntimeException(t);
         }
         // Flush STDOUT, STDERR, STDIN

@@ -57,7 +57,7 @@ public class PerlLanguageProviderExecutionTest {
 
         try {
             // Execute the Perl code
-            RuntimeList result = PerlLanguageProvider.executePerlCode(options);
+            RuntimeList result = PerlLanguageProvider.executePerlCode(options, true);
 
             // Verify the result
             assertNotNull(result, "Result should not be null");
@@ -85,6 +85,6 @@ public class PerlLanguageProviderExecutionTest {
         options.fileName = "test_error.pl";
 
         // Verify that an exception is thrown
-        assertThrows(Throwable.class, () -> PerlLanguageProvider.executePerlCode(options), "Expected an exception to be thrown");
+        assertThrows(Throwable.class, () -> PerlLanguageProvider.executePerlCode(options, true), "Expected an exception to be thrown");
     }
 }

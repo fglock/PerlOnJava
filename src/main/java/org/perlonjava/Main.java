@@ -24,7 +24,7 @@ public class Main {
         }
 
         try {
-            PerlLanguageProvider.executePerlCode(parsedArgs);
+            PerlLanguageProvider.executePerlCode(parsedArgs, true);
 
             if (parsedArgs.compileOnly) {
                 System.out.println(parsedArgs.fileName + " syntax OK");
