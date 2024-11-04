@@ -109,3 +109,7 @@ print "not " if $result ne "<404>"; say "ok # reference to subroutine with &$ref
 $result = &$ref_to_sub;
 print "not " if $result ne "<reference test>"; say "ok # reference to subroutine with &$ref_to_sub reused @_ and returned '$result'";
 
+# lvalue subroutine
+sub lv :lvalue { $result }
+lv = 13;
+print "not " if $result ne "13"; say "ok # lvalue subroutine call is assignable";

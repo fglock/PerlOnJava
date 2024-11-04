@@ -85,6 +85,7 @@
   - Added v-strings.
   - Added Infinity, -Infinity, NaN.
   - Added `\N{name}` operator for named characters in double quoted strings and in regex.
+  - Added lvalue subroutines.
   - CI/CD runs in Ubuntu and Windows
   - Work in progress:
     - `state` variables.

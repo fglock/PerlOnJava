@@ -144,7 +144,7 @@
 - ❌  **Subroutine signatures**: Formal parameters are not implemented.
 - ❌  **Inline "constant" subroutines optimization**: Optimization for inline constants is not yet implemented.
 - ❌  **Subroutine attributes**: Subroutine attributes are not yet supported.
-- ❌  **`lvalue` subroutines**: Subroutines with attribute `:lvalue` are not yet supported.
+- ✔️   **`lvalue` subroutines**: Subroutines with attribute `:lvalue` are supported.
 - ❌  **Lexical subroutines**: Subroutines declared `my`, `state`, or `our` are not yet supported.
 - ✔️   **CORE namespace**: `CORE` is implemented.
 - ❌  **CORE::GLOBAL namespace**: `CORE::GLOBAL` is not implemented.
