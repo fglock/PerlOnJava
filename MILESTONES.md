@@ -75,7 +75,7 @@
 - **v1.10.0**: Concurrency and Security Features
   - Planned release date: 2024-12-10
   - Error messages mimic those in Perl for consistency.
-  - Added `$.`, `$]`, `${^LAST_FH}`, `$SIG{__DIE__}`, `$SIG{__WARN__}` special variables.
+  - Added `$.`, `$]`, `$^V`, `${^LAST_FH}`, `$SIG{__DIE__}`, `$SIG{__WARN__}` special variables.
   - Added command line switches `-E`, `-p`, `-n`, `-i`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-l`, `-x`, `-?`.
   - Added `select(filehandle)` operator, `ARGVOUT` filehandle.
   - Added `~.`, `&.`, `|.`, `^.` operators.
