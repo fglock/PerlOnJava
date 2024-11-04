@@ -175,44 +175,6 @@ public class NumberParser {
         }
 
         if (result == null) {
-            // Check for Infinity, -Infinity, NaN
-            int trimmedLength = end - start;
-
-            // Optimization: Check length and first character before expensive string comparison
-            if (trimmedLength == 3 || trimmedLength == 4) {
-                String trimmedStr = str.substring(start, end);
-                // Direct character comparison for "NaN", "Inf", "-Inf"
-                char firstChar = trimmedStr.charAt(0);
-                if (firstChar == 'N' || firstChar == 'n') {
-                    if (trimmedStr.equalsIgnoreCase("NaN")) {
-                        result = new RuntimeScalar(Double.NaN);
-                    }
-                } else if (firstChar == 'I' || firstChar == 'i') {
-                    if (trimmedStr.equalsIgnoreCase("Inf")) {
-                        result = new RuntimeScalar(Double.POSITIVE_INFINITY);
-                    }
-                } else if (firstChar == '-') {
-                    if (trimmedStr.equalsIgnoreCase("-Inf")) {
-                        result = new RuntimeScalar(Double.NEGATIVE_INFINITY);
-                    }
-                }
-            } else if (trimmedLength == 8 || trimmedLength == 9) {
-                String trimmedStr = str.substring(start, end);
-                // Check for "Infinity" and "-Infinity"
-                char firstChar = trimmedStr.charAt(0);
-                if (firstChar == 'I' || firstChar == 'i') {
-                    if (trimmedStr.equalsIgnoreCase("Infinity")) {
-                        result = new RuntimeScalar(Double.POSITIVE_INFINITY);
-                    }
-                } else if (firstChar == '-') {
-                    if (trimmedStr.equalsIgnoreCase("-Infinity")) {
-                        result = new RuntimeScalar(Double.NEGATIVE_INFINITY);
-                    }
-                }
-            }
-        }
-
-        if (result == null) {
             boolean hasDecimal = false;
             boolean hasExponent = false;
             boolean isNegative = false;
@@ -225,48 +187,59 @@ public class NumberParser {
                 start++;
             }
 
-            for (int i = start; i < end; i++) {
-                char c = str.charAt(i);
-                if (Character.isDigit(c)) {
-                    numberEnd = i + 1;
-                } else if (c == '.' && !hasDecimal && !hasExponent) {
-                    hasDecimal = true;
-                    numberEnd = i + 1;
-                } else if ((c == 'e' || c == 'E') && !hasExponent) {
-                    hasExponent = true;
-                    exponentPos = i;
-                    if (i + 1 < end && (str.charAt(i + 1) == '-' || str.charAt(i + 1) == '+')) {
-                        i++;
+            if (end - start >= 3) {
+                if (str.regionMatches(true, start, "NaN", 0, 3)) {
+                    result = new RuntimeScalar(Double.NaN);
+                }
+                if (str.regionMatches(true, start, "Inf", 0, 3)) {
+                    result = new RuntimeScalar(isNegative ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
+                }
+            }
+
+            if (result == null) {
+                for (int i = start; i < end; i++) {
+                    char c = str.charAt(i);
+                    if (Character.isDigit(c)) {
+                        numberEnd = i + 1;
+                    } else if (c == '.' && !hasDecimal && !hasExponent) {
+                        hasDecimal = true;
+                        numberEnd = i + 1;
+                    } else if ((c == 'e' || c == 'E') && !hasExponent) {
+                        hasExponent = true;
+                        exponentPos = i;
+                        if (i + 1 < end && (str.charAt(i + 1) == '-' || str.charAt(i + 1) == '+')) {
+                            i++;
+                        }
+                    } else {
+                        break;
                     }
-                } else {
-                    break;
                 }
-            }
 
-            if (hasExponent && exponentPos == numberEnd - 1) {
-                // Invalid exponent, remove it
-                hasExponent = false;
-                numberEnd = exponentPos;
-            }
-
-            if (numberEnd == start) return getScalarInt(0);
-
-            try {
-                String numberStr = str.substring(start, numberEnd);
-                if (hasDecimal || hasExponent) {
-                    double value = Double.parseDouble(numberStr);
-                    result = new RuntimeScalar(isNegative ? -value : value);
-                } else {
-                    int value = Integer.parseInt(numberStr);
-                    result = getScalarInt(isNegative ? -value : value);
+                if (hasExponent && exponentPos == numberEnd - 1) {
+                    // Invalid exponent, remove it
+                    hasExponent = false;
+                    numberEnd = exponentPos;
                 }
-            } catch (NumberFormatException e) {
-                // If integer parsing fails, try parsing as double
+
+                if (numberEnd == start) return getScalarInt(0);
+
                 try {
-                    double value = Double.parseDouble(str.substring(start, numberEnd));
-                    result = new RuntimeScalar(isNegative ? -value : value);
-                } catch (NumberFormatException e2) {
-                    result = getScalarInt(0);
+                    String numberStr = str.substring(start, numberEnd);
+                    if (hasDecimal || hasExponent) {
+                        double value = Double.parseDouble(numberStr);
+                        result = new RuntimeScalar(isNegative ? -value : value);
+                    } else {
+                        int value = Integer.parseInt(numberStr);
+                        result = getScalarInt(isNegative ? -value : value);
+                    }
+                } catch (NumberFormatException e) {
+                    // If integer parsing fails, try parsing as double
+                    try {
+                        double value = Double.parseDouble(str.substring(start, numberEnd));
+                        result = new RuntimeScalar(isNegative ? -value : value);
+                    } catch (NumberFormatException e2) {
+                        result = getScalarInt(0);
+                    }
                 }
             }
         }

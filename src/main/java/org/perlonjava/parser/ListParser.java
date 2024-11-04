@@ -228,11 +228,10 @@ public class ListParser {
 
         if (token.type == LexerTokenType.EOF || Parser.LIST_TERMINATORS.contains(token.text)) {
             isEmptyList = true;
-        } else if (token.text.equals("-")
-                && token1.type == LexerTokenType.IDENTIFIER
-                && token1.text.length() == 1) {
+        } else if (token.text.equals("-")) {
             // -d, -e, -f, -l, -p, -x
-            parser.ctx.logDebug("parseZeroOrMoreList looks like file test operator");
+            // -$v
+            parser.ctx.logDebug("parseZeroOrMoreList looks like file test operator or unary minus");
         } else if (Parser.INFIX_OP.contains(token.text) || token.text.equals(",")) {
             parser.ctx.logDebug("parseZeroOrMoreList infix `" + token.text + "` followed by `" + nextToken.text + "`");
             if (token.text.equals("<") || token.text.equals("<<")) {
