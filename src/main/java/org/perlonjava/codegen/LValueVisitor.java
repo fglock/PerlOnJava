@@ -48,6 +48,11 @@ public class LValueVisitor implements Visitor {
             case "substr":
                 context = RuntimeContextType.SCALAR;
                 break;
+            case "(":
+                // l-value subroutine call
+                // XXX TODO - check for lvalue attribute
+                context = RuntimeContextType.SCALAR;
+                break;
             default:
                 context = RuntimeContextType.VOID;  // Not an L-value
         }
