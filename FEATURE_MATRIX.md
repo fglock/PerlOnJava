@@ -58,7 +58,7 @@
 - ✔️   **Variable assignment**: Basic variable assignment is implemented.
 - ✔️   **Basic types**: Support for integers, doubles, strings, v-strings, regex, CODE, undef, references is present.
 - ✔️   **String Interpolation**: Both array and scalar string interpolation are supported.
-- ✔️   **String Interpolation escapes**: Handles escape sequences like `\n` within interpolated strings.
+- ✔️   **String Interpolation escapes**: Handles escape sequences like `\n`, `\N{name}` within interpolated strings.
 - ✔️   **String numification**: Strings can be converted to numbers automatically.
 - ✔️   **Numbers with underscores**: Numbers with underscores (e.g., `1_000`) are supported.
 - ✔️   **Numbers in different bases**: Numbers in binary, hex, octal: `0b1010`, `0xAA`, `078`.
@@ -157,6 +157,7 @@
 - ✔️   **Transliteration**: `tr` and `y` transliteration operators are implemented.
 - ✔️   **`pos`**: `pos` operator is implemented.
 - ✔️   **`\G`**: `\G` operator in regex is implemented.
+- ✔️   **`\N{name}`**: `\N{name}` operator for named characters in regex is implemented.
 - ✔️   **lvalue `pos`**: lvalue `pos` operator is implemented.
 - ✔️   **`m?pat?`** one-time match is implemented.
 - ✔️   **`reset`** resetting one-time match is implemented
@@ -255,6 +256,7 @@
 - ✔️   **Exporter**: `@EXPORT_OK`, `@EXPORT`, `%EXPORT_TAGS` are implemented; only subroutines can be exported.
 - ✔️   **strict**: `strict` pragma is set to ignore `no strict`, the compiler works always in `strict` mode. `no strict` might work in a future version.
 - ✔️   **Scalar::Util**: `blessed`, `reftype`, `set_prototype` are implemented.
+- ❌  **utf8** pragma: utf8 is always on. Disabling utf8 might work in a future version.
 - ❌  **feature** pragma
 - ❌  **version** pragma: version objects are not yet supported.
 - ❌  **experimental** pragma
