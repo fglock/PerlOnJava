@@ -105,7 +105,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
         // Compile a regex pattern to find \N{name} constructs
         Pattern namedCharPattern = Pattern.compile("\\\\N\\{([^}]+)\\}");
         Matcher matcher = namedCharPattern.matcher(pattern);
-        StringBuffer result = new StringBuffer();
+        StringBuilder result = new StringBuilder();
 
         while (matcher.find()) {
             String name = matcher.group(1);
