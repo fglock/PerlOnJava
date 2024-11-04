@@ -60,8 +60,12 @@ public class OperatorParser {
         // Handle 'require' keyword which can be followed by a version, bareword or filename
         token = TokenUtils.peek(parser);
         Node operand;
-        if (token.type == LexerTokenType.IDENTIFIER) {
-            // TODO `require` version
+
+        // `require` version
+        if (token.type == LexerTokenType.NUMBER || token.text.matches("^v\\d+$")) {
+            TokenUtils.consume(parser);
+            operand = StringParser.parseVstring(parser, token.text, parser.tokenIndex);
+        } else if (token.type == LexerTokenType.IDENTIFIER) {
 
             // `require` module
             String moduleName = IdentifierParser.parseSubroutineIdentifier(parser);
