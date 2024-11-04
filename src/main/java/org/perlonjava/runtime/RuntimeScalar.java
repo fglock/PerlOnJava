@@ -948,6 +948,15 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     public RuntimeScalar require() {
         // https://perldoc.perl.org/functions/require
 
+        if (this.type == RuntimeScalarType.INTEGER || this.type == RuntimeScalarType.DOUBLE || this.type == RuntimeScalarType.VSTRING) {
+            // `require VERSION`
+            Universal.compareVersion(
+                    new RuntimeScalar(GlobalContext.perlVersion),
+                    this,
+                    "Perl");
+            return getScalarInt(1);
+        }
+
         // Look up the file name in %INC
         String fileName = this.toString();
         if (GlobalContext.getGlobalHash("main::INC").elements.containsKey(fileName)) {
