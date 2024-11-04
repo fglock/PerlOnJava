@@ -4,6 +4,8 @@ use feature 'say';
 # Test positive infinity
 my $x = "Inf";
 print "not " if (0 + $x) != "Inf"; say "ok # Positive infinity";
+print "not " if (-$x) != "-Inf"; say "ok # Negative infinity";
+print "not " if (0 - $x) != "-Inf"; say "ok # Negative infinity";
 
 # Test negative infinity
 $x = "-Inf";
