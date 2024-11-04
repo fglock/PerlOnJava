@@ -83,12 +83,12 @@
   - Added Scalar::Util: `blessed`, `reftype`.
   - Added UNIVERSAL: `VERSION`.
   - Added v-strings.
-  - Added `BEGIN`, `END` blocks.
   - CI/CD runs in Ubuntu and Windows
   - Work in progress:
     - `state` variables.
     - `socket` and related operators.
     - `use VERSION`, `require VERSION`.
+    - `BEGIN`, `END` blocks.
   - Stretch goals
     - Add support for concurrency and parallelism, such as threads and async/await.
     - Enhance security features, including sandboxing and input validation.
