@@ -172,8 +172,47 @@ public class NumberParser {
 
         if (start == end) {
             result = getScalarInt(0);
-        } else {
+        }
 
+        if (result == null) {
+            // Check for Infinity, -Infinity, NaN
+            int trimmedLength = end - start;
+
+            // Optimization: Check length and first character before expensive string comparison
+            if (trimmedLength == 3 || trimmedLength == 4) {
+                String trimmedStr = str.substring(start, end);
+                // Direct character comparison for "NaN", "Inf", "-Inf"
+                char firstChar = trimmedStr.charAt(0);
+                if (firstChar == 'N' || firstChar == 'n') {
+                    if (trimmedStr.equalsIgnoreCase("NaN")) {
+                        result = new RuntimeScalar(Double.NaN);
+                    }
+                } else if (firstChar == 'I' || firstChar == 'i') {
+                    if (trimmedStr.equalsIgnoreCase("Inf")) {
+                        result = new RuntimeScalar(Double.POSITIVE_INFINITY);
+                    }
+                } else if (firstChar == '-') {
+                    if (trimmedStr.equalsIgnoreCase("-Inf")) {
+                        result = new RuntimeScalar(Double.NEGATIVE_INFINITY);
+                    }
+                }
+            } else if (trimmedLength == 8 || trimmedLength == 9) {
+                String trimmedStr = str.substring(start, end);
+                // Check for "Infinity" and "-Infinity"
+                char firstChar = trimmedStr.charAt(0);
+                if (firstChar == 'I' || firstChar == 'i') {
+                    if (trimmedStr.equalsIgnoreCase("Infinity")) {
+                        result = new RuntimeScalar(Double.POSITIVE_INFINITY);
+                    }
+                } else if (firstChar == '-') {
+                    if (trimmedStr.equalsIgnoreCase("-Infinity")) {
+                        result = new RuntimeScalar(Double.NEGATIVE_INFINITY);
+                    }
+                }
+            }
+        }
+
+        if (result == null) {
             boolean hasDecimal = false;
             boolean hasExponent = false;
             boolean isNegative = false;
