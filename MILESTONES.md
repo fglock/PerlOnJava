@@ -2,6 +2,21 @@
 
 ### Completed Milestones
 
+- **v1.10.0**: Operators and Special Variables
+  - Error messages mimic those in Perl for consistency.
+  - Added `$.`, `$]`, `$^V`, `${^LAST_FH}`, `$SIG{__DIE__}`, `$SIG{__WARN__}` special variables.
+  - Added command line switches `-E`, `-p`, `-n`, `-i`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-l`, `-x`, `-?`.
+  - Added `select(filehandle)` operator, `ARGVOUT` filehandle.
+  - Added `~.`, `&.`, `|.`, `^.` operators.
+  - Added `try catch` statement.
+  - Added Scalar::Util: `blessed`, `reftype`.
+  - Added UNIVERSAL: `VERSION`.
+  - Added v-strings.
+  - Added Infinity, -Infinity, NaN.
+  - Added `\N{name}` operator for named characters in double quoted strings and in regex.
+  - Added lvalue subroutines.
+  - CI/CD runs in Ubuntu and Windows
+ 
 - **v1.9.0**: Operators and Special Variables
   - Added bitwise string operators.
   - Added lvalue `substr`, lvalue `vec`
@@ -72,21 +87,8 @@
 
 ### Upcoming Milestones
 
-- **v1.10.0**: Concurrency and Security Features
+- **v1.11.0**: Concurrency and Security Features
   - Planned release date: 2024-12-10
-  - Error messages mimic those in Perl for consistency.
-  - Added `$.`, `$]`, `$^V`, `${^LAST_FH}`, `$SIG{__DIE__}`, `$SIG{__WARN__}` special variables.
-  - Added command line switches `-E`, `-p`, `-n`, `-i`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-l`, `-x`, `-?`.
-  - Added `select(filehandle)` operator, `ARGVOUT` filehandle.
-  - Added `~.`, `&.`, `|.`, `^.` operators.
-  - Added `try catch` statement.
-  - Added Scalar::Util: `blessed`, `reftype`.
-  - Added UNIVERSAL: `VERSION`.
-  - Added v-strings.
-  - Added Infinity, -Infinity, NaN.
-  - Added `\N{name}` operator for named characters in double quoted strings and in regex.
-  - Added lvalue subroutines.
-  - CI/CD runs in Ubuntu and Windows
   - Work in progress:
     - `state` variables.
     - `socket` and related operators.
@@ -97,7 +99,7 @@
     - Enhance security features, including sandboxing and input validation.
     - Increase test coverage.
 
-- **v1.11.0**: External Integration and Advanced Data Manipulation
+- **v1.12.0**: External Integration and Advanced Data Manipulation
   - Integrate with external libraries and APIs for tasks like HTTP requests and database access.
   - Add advanced data manipulation features, such as JSON/XML parsing and data transformation.
   - Allow users to define their own operators and macros for greater flexibility.
