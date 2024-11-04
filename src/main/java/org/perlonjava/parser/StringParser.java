@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.perlonjava.runtime.ScalarUtils.printable;
+import com.ibm.icu.lang.UCharacter;
 
 /*
  * StringParser is used to parse domain-specific languages within Perl, such as Regex and string interpolation.
@@ -423,6 +424,32 @@ public class StringParser {
                     str.append((char) Integer.parseInt(unicodeSeq.toString().trim(), 16));
                 } else {
                     throw new PerlCompilerException(tokenIndex, "Expected '{' after \\x", ctx.errorUtil);
+                }
+                break;
+            case "N":
+                // Handle \N{name} for Unicode character names
+                token = tokens.get(parser.tokenIndex);
+                if (token.text.equals("{")) {
+                    parser.tokenIndex++;
+                    StringBuilder nameBuilder = new StringBuilder();
+                    while (true) {
+                        token = tokens.get(parser.tokenIndex++);
+                        if (token.type == LexerTokenType.EOF) {
+                            throw new PerlCompilerException(tokenIndex, "Expected '}' after \\N{", ctx.errorUtil);
+                        }
+                        if (token.text.equals("}")) {
+                            break;
+                        }
+                        nameBuilder.append(token.text);
+                    }
+                    String name = nameBuilder.toString().trim();
+                    int charCode = UCharacter.getCharFromName(name);
+                    if (charCode == -1) {
+                        throw new PerlCompilerException(tokenIndex, "Invalid Unicode character name: " + name, ctx.errorUtil);
+                    }
+                    str.append((char) charCode);
+                } else {
+                    throw new PerlCompilerException(tokenIndex, "Expected '{' after \\N", ctx.errorUtil);
                 }
                 break;
             default:

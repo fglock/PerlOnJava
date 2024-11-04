@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import com.ibm.icu.lang.UCharacter;
+
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,6 +84,9 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 // Remove \G from the pattern string for Java compilation
                 String javaPatternString = patternString.replace("\\G", "");
 
+                // Find \N{name} constructs
+                javaPatternString = replaceNamedCharacters(javaPatternString);
+
                 // Compile the regex pattern
                 regex.pattern = Pattern.compile(javaPatternString, flags);
             } catch (Exception e) {
@@ -94,6 +99,26 @@ public class RuntimeRegex implements RuntimeScalarReference {
             }
         }
         return regex;
+    }
+
+    private static String replaceNamedCharacters(String pattern) {
+        // Compile a regex pattern to find \N{name} constructs
+        Pattern namedCharPattern = Pattern.compile("\\\\N\\{([^}]+)\\}");
+        Matcher matcher = namedCharPattern.matcher(pattern);
+        StringBuffer result = new StringBuffer();
+
+        while (matcher.find()) {
+            String name = matcher.group(1);
+            int codePoint = UCharacter.getCharFromName(name);
+            if (codePoint != -1) {
+                // Replace the match with the corresponding Unicode character
+                matcher.appendReplacement(result, new String(Character.toChars(codePoint)));
+            } else {
+                throw new IllegalArgumentException("Invalid Unicode character name: " + name);
+            }
+        }
+        matcher.appendTail(result);
+        return result.toString();
     }
 
     /**
