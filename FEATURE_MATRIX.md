@@ -62,6 +62,7 @@
 - ✔️   **String numification**: Strings can be converted to numbers automatically.
 - ✔️   **Numbers with underscores**: Numbers with underscores (e.g., `1_000`) are supported.
 - ✔️   **Numbers in different bases**: Numbers in binary, hex, octal: `0b1010`, `0xAA`, `078`.
+- ✔️   **Infinity, -Infinity, NaN**: Special number values are implemented.
 - ✔️   **References**: References to variables and data structures are supported.
 - ✔️   **Autovivification**: Autovivification is implemented.
 - ✔️   **File handles**: Support for file handles is implemented.
