@@ -105,6 +105,7 @@
 - ✔️   **`study`, `srand`**: `study`, `srand` are implemented.
 - ✔️   **`chomp`**: `chomp` is implemented.
 - ✔️   **`select`**: `select(filehandle)` is implemented.
+- ✔️   **`sleep`**: `sleep` is implemented. It takes fractional seconds. `$SIG{ALRM}` is also implemented.
 - ✔️   **Vectors**: `vec` is implemented.
 - ❌  **Chained operators**: operations like `$x < $y <= $z` not yet implemented.
 - ✔️   **Lvalue `substr`**: Assignable Substring extraction is implemented.
