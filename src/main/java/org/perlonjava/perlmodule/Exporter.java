@@ -100,12 +100,18 @@ public class Exporter {
                     .anyMatch(e -> e.toString().equals(symbolString));
 
             if (isExported || isExportOk) {
-                // Retrieve the code reference for the symbol and set it in the caller's namespace
-                RuntimeScalar symbolRef = getGlobalCodeRef(packageName + "::" + symbolString);
-                if (symbolRef.type == RuntimeScalarType.CODE) {
-                    getGlobalCodeRef(caller + "::" + symbolString).set(symbolRef);
+                if (symbolString.startsWith("&")) {
+                    importFunction(packageName, caller, symbolString.substring(1));
+                } else if (symbolString.startsWith("$")) {
+                    importScalar(packageName, caller, symbolString.substring(1));
+                } else if (symbolString.startsWith("@")) {
+                    importArray(packageName, caller, symbolString.substring(1));
+                } else if (symbolString.startsWith("%")) {
+                    importHash(packageName, caller, symbolString.substring(1));
+                } else if (symbolString.startsWith("*")) {
+                    importTypeglob(packageName, caller, symbolString.substring(1));
                 } else {
-                    throw new PerlCompilerException("Subroutine " + symbolString + " not found in package " + packageName);
+                    importFunction(packageName, caller, symbolString);
                 }
             } else {
                 throw new PerlCompilerException("Subroutine " + symbolString + " not allowed for export in package " + packageName);
@@ -113,5 +119,37 @@ public class Exporter {
         }
 
         return new RuntimeList();
+    }
+
+    private static void importFunction(String packageName, String caller, String functionName) {
+        RuntimeScalar exportSymbol = getGlobalCodeRef(packageName + "::" + functionName);
+        if (exportSymbol.type == RuntimeScalarType.CODE) {
+            getGlobalCodeRef(caller + "::" + functionName).set(exportSymbol);
+        } else {
+            throw new PerlCompilerException("Function " + functionName + " not found in package " + packageName);
+        }
+    }
+
+    private static void importScalar(String packageName, String caller, String scalarName) {
+        RuntimeScalar exportScalar = getGlobalVariable(packageName + "::" + scalarName);
+        getGlobalVariable(caller + "::" + scalarName).set(exportScalar);
+    }
+
+    private static void importArray(String packageName, String caller, String arrayName) {
+        RuntimeArray exportArray = getGlobalArray(packageName + "::" + arrayName);
+        RuntimeArray array = getGlobalArray(caller + "::" + arrayName);
+        array.setFromList(exportArray.getList());
+    }
+
+    private static void importHash(String packageName, String caller, String hashName) {
+        RuntimeHash exportHash = getGlobalHash(packageName + "::" + hashName);
+        RuntimeHash hash = getGlobalHash(caller + "::" + hashName);
+        hash.setFromList(exportHash.getList());
+    }
+
+    private static void importTypeglob(String packageName, String caller, String typeglobName) {
+        // Handle typeglob import logic here
+        // This is a placeholder for typeglob handling
+        throw new PerlCompilerException("Typeglob import not implemented for " + typeglobName);
     }
 }
