@@ -83,8 +83,9 @@ public class OperatorHandler {
         put("closedir", "closedir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeScalar)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("rewinddir", "rewinddir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeScalar)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("telldir", "telldir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeScalar)Lorg/perlonjava/runtime/RuntimeScalar;");
-        put("readdir", "readdir", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;");
-        put("mkdir", "mkdir", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("readdir", "readdir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;");
+        put("mkdir", "mkdir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("seekdir", "seekdir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("glob", "evaluate", "org/perlonjava/operators/ScalarGlobOperator", "(ILorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;");
 
         // Misc
