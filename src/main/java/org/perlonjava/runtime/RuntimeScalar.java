@@ -3,6 +3,7 @@ package org.perlonjava.runtime;
 import org.perlonjava.ArgumentParser;
 import org.perlonjava.operators.MathOperators;
 import org.perlonjava.operators.Operator;
+import org.perlonjava.operators.WarnDie;
 import org.perlonjava.parser.NumberParser;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
@@ -942,7 +943,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
         if (s < 0) {
             getGlobalVariable("main::!").set("Invalid argument");
-            Operator.warn(
+            WarnDie.warn(
                     new RuntimeScalar(stringifyException(
                             new PerlCompilerException("sleep() with negative argument")
                     )),
