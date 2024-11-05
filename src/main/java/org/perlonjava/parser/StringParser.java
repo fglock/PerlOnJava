@@ -443,10 +443,22 @@ public class StringParser {
                         nameBuilder.append(token.text);
                     }
                     String name = nameBuilder.toString().trim();
-                    int charCode = UCharacter.getCharFromName(name);
-                    if (charCode == -1) {
-                        throw new PerlCompilerException(tokenIndex, "Invalid Unicode character name: " + name, ctx.errorUtil);
+
+                    int charCode;
+                    if (name.startsWith("U+")) {
+                        // Handle \N{U+263D} format
+                        try {
+                            charCode = Integer.parseInt(name.substring(2), 16);
+                        } catch (NumberFormatException e) {
+                            throw new PerlCompilerException(tokenIndex, "Invalid Unicode code point: " + name, ctx.errorUtil);
+                        }
+                    } else {
+                        charCode = UCharacter.getCharFromName(name);
+                        if (charCode == -1) {
+                            throw new PerlCompilerException(tokenIndex, "Invalid Unicode character name: " + name, ctx.errorUtil);
+                        }
                     }
+
                     str.append((char) charCode);
                 } else {
                     throw new PerlCompilerException(tokenIndex, "Expected '{' after \\N", ctx.errorUtil);

@@ -90,6 +90,7 @@
 - **v1.11.0**: Concurrency and Security Features
   - Planned release date: 2024-12-10
   - Added `$SIG{ALRM}`
+  - Added `\N{U+hex}` operator in double quoted strings and regex.
   - Work in progress:
     - `state` variables.
     - `socket` and related operators.

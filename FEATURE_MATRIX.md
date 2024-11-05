@@ -158,7 +158,7 @@
 - ✔️   **Transliteration**: `tr` and `y` transliteration operators are implemented.
 - ✔️   **`pos`**: `pos` operator is implemented.
 - ✔️   **`\G`**: `\G` operator in regex is implemented.
-- ✔️   **`\N{name}`**: `\N{name}` operator for named characters in regex is implemented.
+- ✔️   **`\N{name}`**: `\N{name}` and `\N{U+hex}` operator for named characters in regex is implemented.
 - ✔️   **lvalue `pos`**: lvalue `pos` operator is implemented.
 - ✔️   **`m?pat?`** one-time match is implemented.
 - ✔️   **`reset`** resetting one-time match is implemented

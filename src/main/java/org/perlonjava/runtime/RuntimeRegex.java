@@ -108,14 +108,24 @@ public class RuntimeRegex implements RuntimeScalarReference {
         StringBuilder result = new StringBuilder();
 
         while (matcher.find()) {
-            String name = matcher.group(1);
-            int codePoint = UCharacter.getCharFromName(name);
-            if (codePoint != -1) {
-                // Replace the match with the corresponding Unicode character
-                matcher.appendReplacement(result, new String(Character.toChars(codePoint)));
+            String name = matcher.group(1).trim();
+            int codePoint;
+            if (name.startsWith("U+")) {
+                // Handle \N{U+263D} format
+                try {
+                    codePoint = Integer.parseInt(name.substring(2), 16);
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException("Invalid Unicode code point: " + name);
+                }
             } else {
-                throw new IllegalArgumentException("Invalid Unicode character name: " + name);
+                codePoint = UCharacter.getCharFromName(name);
+                if (codePoint == -1) {
+                    throw new IllegalArgumentException("Invalid Unicode character name: " + name);
+                }
             }
+
+            // Replace the match with the escaped Unicode representation
+            matcher.appendReplacement(result, String.format("\\\\x{%X}", codePoint));
         }
         matcher.appendTail(result);
         return result.toString();
