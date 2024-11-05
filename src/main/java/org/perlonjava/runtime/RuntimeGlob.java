@@ -46,10 +46,24 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
                     GlobalContext.getGlobalIO(this.globName).set(value);
                 }
                 return value;
+            case ARRAYREFERENCE:
+                // Handle the case where a typeglob is assigned a reference to an array
+                if (value.value instanceof RuntimeArray) {
+                    GlobalContext.getGlobalArray(this.globName).setFromList(((RuntimeArray) value.value).getList());
+                }
+                return value;
+            case HASHREFERENCE:
+                if (value.value instanceof RuntimeHash) {
+                    GlobalContext.getGlobalHash(this.globName).setFromList(((RuntimeHash) value.value).getList());
+                }
+                return value;
+            case REFERENCE:
+                if (value.value instanceof RuntimeScalar) {
+                    GlobalContext.getGlobalVariable(this.globName).set(value);
+                }
+                return value;
         }
-        // XXX TODO
-        throw new IllegalStateException("typeglob assignment not implemented");
-        // return value;
+        throw new IllegalStateException("typeglob assignment not implemented for " + value.type);
     }
 
     /**
