@@ -254,7 +254,7 @@
 - ✔️   **UNIVERSAL**: `isa`, `can`, `DOES`, `VERSION` are implemented. `isa` operator is implemented.
 - ✔️   **Symbol**: `qualify` and `qualify_to_ref` are implemented.
 - ✔️   **Data::Dumper**: Data::Dumper is ported with small adjustments, to work in `strict` mode.
-- ✔️   **Exporter**: `@EXPORT_OK`, `@EXPORT`, `%EXPORT_TAGS` are implemented; only subroutines can be exported.
+- ✔️   **Exporter**: `@EXPORT_OK`, `@EXPORT`, `%EXPORT_TAGS` are implemented.
 - ✔️   **strict**: `strict` pragma is set to ignore `no strict`, the compiler works always in `strict` mode. `no strict` might work in a future version.
 - ✔️   **Scalar::Util**: `blessed`, `reftype`, `set_prototype` are implemented.
 - ❌  **utf8** pragma: utf8 is always on. Disabling utf8 might work in a future version.
