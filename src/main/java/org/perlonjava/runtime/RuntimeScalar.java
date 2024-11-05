@@ -18,6 +18,8 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
+import static org.perlonjava.runtime.ErrorMessageUtil.stringifyException;
+import static org.perlonjava.runtime.GlobalContext.getGlobalHash;
 import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
@@ -937,12 +939,31 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         RuntimeIO.flushFileHandles();
 
         long s = (long) this.getDouble() * 1000;
+
+        if (s < 0) {
+            getGlobalVariable("main::!").set("Invalid argument");
+            Operator.warn(
+                    new RuntimeScalar(stringifyException(
+                            new PerlCompilerException("sleep() with negative argument")
+                    )),
+                    new RuntimeScalar());
+            return getScalarInt(0);
+        }
+
+        long startTime = System.currentTimeMillis();
         try {
             TimeUnit.MILLISECONDS.sleep(s);
         } catch (InterruptedException e) {
-            // TODO
+            // Handle interruption if needed
+            RuntimeScalar alarmHandler = getGlobalHash("main::SIG").get("ALRM");
+            if (alarmHandler.getDefinedBoolean()) {
+                RuntimeArray args = new RuntimeArray();
+                alarmHandler.apply(args, RuntimeContextType.SCALAR);
+            }
         }
-        return new RuntimeScalar(s / 1000.0);
+        long endTime = System.currentTimeMillis();
+        long actualSleepTime = endTime - startTime;
+        return new RuntimeScalar(actualSleepTime / 1000.0);
     }
 
     public RuntimeScalar require() {
@@ -959,7 +980,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
         // Look up the file name in %INC
         String fileName = this.toString();
-        if (GlobalContext.getGlobalHash("main::INC").elements.containsKey(fileName)) {
+        if (getGlobalHash("main::INC").elements.containsKey(fileName)) {
             // module was already loaded
             return getScalarInt(1);
         }
@@ -1044,7 +1065,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         parsedArgs.code = code;
 
         // set %INC
-        GlobalContext.getGlobalHash("main::INC").put(fileName, new RuntimeScalar(parsedArgs.fileName));
+        getGlobalHash("main::INC").put(fileName, new RuntimeScalar(parsedArgs.fileName));
 
         RuntimeList result;
         try {

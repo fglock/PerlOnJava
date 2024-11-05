@@ -89,6 +89,7 @@
 
 - **v1.11.0**: Concurrency and Security Features
   - Planned release date: 2024-12-10
+  - Added `$SIG{ALRM}`
   - Work in progress:
     - `state` variables.
     - `socket` and related operators.
