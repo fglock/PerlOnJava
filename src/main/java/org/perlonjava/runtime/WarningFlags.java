@@ -5,7 +5,7 @@ import java.util.*;
 /**
  * A class to control lexical warnings flags based on a hierarchy of categories.
  */
-public class Warnings {
+public class WarningFlags {
     // A hierarchy of warning categories
     private static final Map<String, String[]> warningHierarchy = new HashMap<>();
 
@@ -23,11 +23,11 @@ public class Warnings {
     private final ScopedSymbolTable symbolTable;
 
     /**
-     * Constructs a Warnings object associated with a ScopedSymbolTable.
+     * Constructs a WarningFlags object associated with a ScopedSymbolTable.
      *
      * @param symbolTable The ScopedSymbolTable to manage warnings for.
      */
-    public Warnings(ScopedSymbolTable symbolTable) {
+    public WarningFlags(ScopedSymbolTable symbolTable) {
         this.symbolTable = symbolTable;
     }
 

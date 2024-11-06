@@ -36,13 +36,13 @@ public class ScopedSymbolTable {
     static {
         // Initialize warning bit positions
         int bitPosition = 0;
-        for (String warning : Warnings.getWarningList()) {
+        for (String warning : WarningFlags.getWarningList()) {
             warningBitPositions.put(warning, bitPosition++);
         }
 
         // Initialize feature bit positions
         bitPosition = 0;
-        for (String feature : Feature.getFeatureList()) {
+        for (String feature : FeatureFlags.getFeatureList()) {
             featureBitPositions.put(feature, bitPosition++);
         }
     }

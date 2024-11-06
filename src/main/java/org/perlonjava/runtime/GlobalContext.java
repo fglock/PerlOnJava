@@ -1,10 +1,7 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.ArgumentParser;
-import org.perlonjava.perlmodule.Exporter;
-import org.perlonjava.perlmodule.ScalarUtil;
-import org.perlonjava.perlmodule.Symbol;
-import org.perlonjava.perlmodule.Universal;
+import org.perlonjava.perlmodule.*;
 
 import java.util.HashMap;
 import java.util.List;
@@ -110,6 +107,7 @@ public class GlobalContext {
         Exporter.initialize();
         Symbol.initialize();
         ScalarUtil.initialize();
+        Feature.initialize();
 
         // Reset method cache after initializing UNIVERSAL
         InheritanceResolver.invalidateCache();
