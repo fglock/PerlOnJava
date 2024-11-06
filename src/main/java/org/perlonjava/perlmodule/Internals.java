@@ -21,9 +21,9 @@ public class Internals extends PerlModuleBase {
      * Static initializer to set up the module.
      */
     public static void initialize() {
-        Internals strict = new Internals();
+        Internals internals = new Internals();
         try {
-            strict.registerMethod("SvREADONLY", "svReadonly", ";$");
+            internals.registerMethod("SvREADONLY", "svReadonly", ";$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Internals method: " + e.getMessage());
         }
