@@ -9,12 +9,10 @@ public class ScopedSymbolTable {
     // A stack to manage nested scopes of symbol tables.
     private final Stack<SymbolTable> stack = new Stack<>();
     private final Stack<String> packageStack = new Stack<>();
-
-    // Cache for the getAllVisibleVariables method
-    private Map<Integer, String> visibleVariablesCache;
-
     // Stack to manage warning categories for each scope
     private final Stack<Map<String, Boolean>> warningCategoriesStack = new Stack<>();
+    // Cache for the getAllVisibleVariables method
+    private Map<Integer, String> visibleVariablesCache;
 
     /**
      * Constructs a ScopedSymbolTable.
