@@ -61,7 +61,7 @@ public class PerlLanguageProvider {
         // Create the compiler context
         EmitterContext ctx = new EmitterContext(
                 new JavaClassInfo(), // internal java class name
-                globalSymbolTable.clone(), // Top-level symbol table
+                globalSymbolTable.snapShot(), // Top-level symbol table
                 null, // Method visitor
                 null, // Class writer
                 RuntimeContextType.VOID, // Call context
@@ -106,7 +106,7 @@ public class PerlLanguageProvider {
         ctx.logDebug("createClassWithMethod");
         // Create a new instance of ErrorMessageUtil, resetting the line counter
         ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
-        ctx.symbolTable = globalSymbolTable.clone(); // reset the symbol table
+        ctx.symbolTable = globalSymbolTable.snapShot(); // reset the symbol table
         Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
                 ctx,
                 ast,

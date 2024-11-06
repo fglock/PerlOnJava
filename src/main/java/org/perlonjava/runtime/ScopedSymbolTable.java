@@ -247,7 +247,7 @@ public class ScopedSymbolTable {
      *
      * @return A cloned instance of ScopedSymbolTable.
      */
-    public ScopedSymbolTable clone() {
+    public ScopedSymbolTable snapShot() {
         ScopedSymbolTable st = new ScopedSymbolTable();
         st.enterScope();
 
