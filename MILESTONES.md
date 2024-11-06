@@ -99,6 +99,7 @@
     - `BEGIN`, `END` blocks.
     - lexical warnings.
     - lexical features.
+    - lexical strictness.
   - Stretch goals
     - Add support for concurrency and parallelism, such as threads and async/await.
     - Enhance security features, including sandboxing and input validation.
