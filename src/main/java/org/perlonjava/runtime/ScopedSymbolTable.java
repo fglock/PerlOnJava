@@ -260,11 +260,28 @@ public class ScopedSymbolTable {
     public ScopedSymbolTable clone() {
         ScopedSymbolTable st = new ScopedSymbolTable();
         st.enterScope();
+
+        // Clone visible variables
         Map<Integer, String> visibleVariables = this.getAllVisibleVariables();
         for (Integer index : visibleVariables.keySet()) {
             st.addVariable(visibleVariables.get(index));
         }
+
+        // Clone the current package
         st.setCurrentPackage(this.getCurrentPackage());
+
+        // Clone warning flags
+        st.warningFlagsStack.pop(); // Remove the initial value pushed by enterScope
+        st.warningFlagsStack.push(this.warningFlagsStack.peek());
+
+        // Clone feature flags
+        st.featureFlagsStack.pop(); // Remove the initial value pushed by enterScope
+        st.featureFlagsStack.push(this.featureFlagsStack.peek());
+
+        // Clone strict options
+        st.strictOptionsStack.pop(); // Remove the initial value pushed by enterScope
+        st.strictOptionsStack.push(this.strictOptionsStack.peek());
+
         return st;
     }
 

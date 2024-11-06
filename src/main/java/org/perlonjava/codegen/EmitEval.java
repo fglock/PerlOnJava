@@ -20,11 +20,11 @@ public class EmitEval {
      * @param node           The OperatorNode representing the eval operation
      */
     static void handleEvalOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
-        // Retrieve all visible variables for the closure
-        Map<Integer, String> visibleVariables = emitterVisitor.ctx.symbolTable.getAllVisibleVariables();
         emitterVisitor.ctx.logDebug("(eval) ctx.symbolTable.getAllVisibleVariables");
 
         // Create a new symbol table for the eval context
+        // Retrieve all visible variables for the closure
+        Map<Integer, String> visibleVariables = emitterVisitor.ctx.symbolTable.getAllVisibleVariables();
         ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
         newSymbolTable.enterScope();
         newSymbolTable.setCurrentPackage(emitterVisitor.ctx.symbolTable.getCurrentPackage());
