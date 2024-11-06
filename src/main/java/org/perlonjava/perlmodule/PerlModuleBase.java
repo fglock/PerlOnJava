@@ -38,6 +38,26 @@ public abstract class PerlModuleBase {
     }
 
     /**
+     * Registers a method in the Perl module with a different name than the Java method.
+     *
+     * @param perlMethodName The name of the method in Perl.
+     * @param javaMethodName The name of the method in Java.
+     * @param signature      The signature of the method.
+     * @throws NoSuchMethodException If the method does not exist.
+     */
+    protected void registerMethod(String perlMethodName, String javaMethodName, String signature) throws NoSuchMethodException {
+        // Create a new RuntimeScalar instance
+        RuntimeScalar instance = new RuntimeScalar();
+
+        // Retrieve the method from the current class using the Java method name
+        Method method = this.getClass().getMethod(javaMethodName, RuntimeArray.class, int.class);
+
+        // Set the method as a global code reference in the Perl namespace using the Perl method name
+        getGlobalCodeRef(moduleName + "::" + perlMethodName).set(new RuntimeScalar(
+                new RuntimeCode(method, instance, signature)));
+    }
+
+    /**
      * Registers a method in the Perl module.
      *
      * @param methodName The name of the method to register.
@@ -45,15 +65,7 @@ public abstract class PerlModuleBase {
      * @throws NoSuchMethodException If the method does not exist.
      */
     protected void registerMethod(String methodName, String signature) throws NoSuchMethodException {
-        // Create a new RuntimeScalar instance
-        RuntimeScalar instance = new RuntimeScalar();
-
-        // Retrieve the method from the current class
-        Method method = this.getClass().getMethod(methodName, RuntimeArray.class, int.class);
-
-        // Set the method as a global code reference in the Perl namespace
-        getGlobalCodeRef(moduleName + "::" + methodName).set(new RuntimeScalar(
-                new RuntimeCode(method, instance, signature)));
+        registerMethod(methodName, methodName, signature);
     }
 
     /**

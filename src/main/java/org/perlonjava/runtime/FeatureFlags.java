@@ -5,7 +5,7 @@ import java.util.*;
 /**
  * A class to control lexical feature flags based on a hierarchy of bundles.
  */
-public class Feature {
+public class FeatureFlags {
     // A hierarchy of feature bundles
     private static final Map<String, String[]> featureBundles = new HashMap<>();
 
@@ -33,11 +33,11 @@ public class Feature {
     private final ScopedSymbolTable symbolTable;
 
     /**
-     * Constructs a Feature object associated with a ScopedSymbolTable.
+     * Constructs a FeatureFlags object associated with a ScopedSymbolTable.
      *
      * @param symbolTable The ScopedSymbolTable to manage features for.
      */
-    public Feature(ScopedSymbolTable symbolTable) {
+    public FeatureFlags(ScopedSymbolTable symbolTable) {
         this.symbolTable = symbolTable;
     }
 
