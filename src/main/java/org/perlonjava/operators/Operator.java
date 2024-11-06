@@ -2,12 +2,15 @@ package org.perlonjava.operators;
 
 import org.perlonjava.runtime.*;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.IllegalFormatException;
+import java.util.Iterator;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.RuntimeScalarCache.getScalarBoolean;
 
 public class Operator {
 
