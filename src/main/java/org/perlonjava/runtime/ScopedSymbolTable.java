@@ -3,8 +3,8 @@ package org.perlonjava.runtime;
 import java.util.*;
 
 /**
- * A scoped symbol table that supports nested scopes for lexical variables, package declarations, warnings, and features.
- * This class manages the state of variables, warnings, and features across different scopes, allowing for nested and isolated environments.
+ * A scoped symbol table that supports nested scopes for lexical variables, package declarations, warnings, features, and strict options.
+ * This class manages the state of variables, warnings, features, and strict options across different scopes, allowing for nested and isolated environments.
  */
 public class ScopedSymbolTable {
     // A stack to manage nested scopes of symbol tables.
@@ -14,23 +14,37 @@ public class ScopedSymbolTable {
     private final Stack<Map<String, Boolean>> warningCategoriesStack = new Stack<>();
     // Stack to manage feature categories for each scope
     private final Stack<Map<String, Boolean>> featureCategoriesStack = new Stack<>();
+    // Stack to manage strict options for each scope
+    private final Stack<Integer> strictOptionsStack = new Stack<>();
     // Cache for the getAllVisibleVariables method
     private Map<Integer, String> visibleVariablesCache;
 
+    // Bitmask for strict options
+    private static final int STRICT_REFS = 0x00000002;
+    private static final int STRICT_SUBS = 0x00000200;
+    private static final int STRICT_VARS = 0x00000400;
+
+    // Bitmask for explicit strict options
+    private static final int EXPLICIT_STRICT_REFS = 0x00000020;
+    private static final int EXPLICIT_STRICT_SUBS = 0x00000040;
+    private static final int EXPLICIT_STRICT_VARS = 0x00000080;
+
     /**
      * Constructs a ScopedSymbolTable.
-     * Initializes the warning and feature categories stacks with an empty map for the global scope.
+     * Initializes the warning, feature categories, and strict options stacks with default values for the global scope.
      */
     public ScopedSymbolTable() {
         // Initialize the warning categories stack with an empty map for the global scope
         warningCategoriesStack.push(new HashMap<>());
         // Initialize the feature categories stack with an empty map for the global scope
         featureCategoriesStack.push(new HashMap<>());
+        // Initialize the strict options stack with 0 for the global scope
+        strictOptionsStack.push(0);
     }
 
     /**
      * Enters a new scope by pushing a new SymbolTable onto the stack.
-     * Copies the current state of warnings and features to the new scope.
+     * Copies the current state of warnings, features, and strict options to the new scope.
      */
     public void enterScope() {
         clearVisibleVariablesCache();
@@ -51,11 +65,13 @@ public class ScopedSymbolTable {
         warningCategoriesStack.push(new HashMap<>(warningCategoriesStack.peek()));
         // Push a copy of the current feature categories map onto the stack
         featureCategoriesStack.push(new HashMap<>(featureCategoriesStack.peek()));
+        // Push a copy of the current strict options onto the stack
+        strictOptionsStack.push(strictOptionsStack.peek());
     }
 
     /**
      * Exits the current scope by popping the top SymbolTable from the stack.
-     * Also removes the top state of warnings and features.
+     * Also removes the top state of warnings, features, and strict options.
      */
     public void exitScope() {
         clearVisibleVariablesCache();
@@ -63,6 +79,35 @@ public class ScopedSymbolTable {
         packageStack.pop();
         warningCategoriesStack.pop();
         featureCategoriesStack.pop();
+        strictOptionsStack.pop();
+    }
+    
+    /**
+     * Enables a strict option in the current scope.
+     *
+     * @param option The bitmask of the strict option to enable.
+     */
+    public void enableStrictOption(int option) {
+        strictOptionsStack.push(strictOptionsStack.pop() | option);
+    }
+
+    /**
+     * Disables a strict option in the current scope.
+     *
+     * @param option The bitmask of the strict option to disable.
+     */
+    public void disableStrictOption(int option) {
+        strictOptionsStack.push(strictOptionsStack.pop() & ~option);
+    }
+
+    /**
+     * Checks if a strict option is enabled in the current scope.
+     *
+     * @param option The bitmask of the strict option to check.
+     * @return True if the option is enabled, false otherwise.
+     */
+    public boolean isStrictOptionEnabled(int option) {
+        return (strictOptionsStack.peek() & option) != 0;
     }
 
     /**
