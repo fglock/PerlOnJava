@@ -7,17 +7,21 @@ import java.util.*;
  */
 public class ScopedSymbolTable {
     // A stack to manage nested scopes of symbol tables.
-    // SymbolTable is an inner class.
     private final Stack<SymbolTable> stack = new Stack<>();
     private final Stack<String> packageStack = new Stack<>();
 
     // Cache for the getAllVisibleVariables method
     private Map<Integer, String> visibleVariablesCache;
 
+    // Stack to manage warning categories for each scope
+    private final Stack<Map<String, Boolean>> warningCategoriesStack = new Stack<>();
+
     /**
      * Constructs a ScopedSymbolTable.
      */
     public ScopedSymbolTable() {
+        // Initialize the warning categories stack with an empty map for the global scope
+        warningCategoriesStack.push(new HashMap<>());
     }
 
     /**
@@ -37,6 +41,9 @@ public class ScopedSymbolTable {
         stack.push(new SymbolTable());
         stack.peek().index = lastIndex;
         packageStack.push(packageName);
+
+        // Push a copy of the current warning categories map onto the stack
+        warningCategoriesStack.push(new HashMap<>(warningCategoriesStack.peek()));
     }
 
     /**
@@ -46,6 +53,7 @@ public class ScopedSymbolTable {
         clearVisibleVariablesCache();
         stack.pop();
         packageStack.pop();
+        warningCategoriesStack.pop();
     }
 
     /**
@@ -221,10 +229,44 @@ public class ScopedSymbolTable {
         for (String pkg : packageStack) {
             sb.append("    ").append(pkg).append(",\n");
         }
-        sb.append("  ]\n");
+        sb.append("  ],\n");
+
+        sb.append("  warningCategories: {\n");
+        for (Map.Entry<String, Boolean> entry : warningCategoriesStack.peek().entrySet()) {
+            sb.append("    ").append(entry.getKey()).append(": ").append(entry.getValue()).append(",\n");
+        }
+        sb.append("  }\n");
 
         sb.append("}");
         return sb.toString();
+    }
+
+    /**
+     * Enables a warning category in the current scope.
+     *
+     * @param category The name of the warning category to enable.
+     */
+    public void enableWarningCategory(String category) {
+        warningCategoriesStack.peek().put(category, true);
+    }
+
+    /**
+     * Disables a warning category in the current scope.
+     *
+     * @param category The name of the warning category to disable.
+     */
+    public void disableWarningCategory(String category) {
+        warningCategoriesStack.peek().put(category, false);
+    }
+
+    /**
+     * Checks if a warning category is enabled in the current scope.
+     *
+     * @param category The name of the warning category to check.
+     * @return True if the category is enabled, false otherwise.
+     */
+    public boolean isWarningCategoryEnabled(String category) {
+        return warningCategoriesStack.peek().getOrDefault(category, false);
     }
 
     /**
