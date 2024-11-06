@@ -82,11 +82,11 @@ public class RuntimeCode implements RuntimeScalarReference {
     public static Class<?> evalStringHelper(RuntimeScalar code, String evalTag) throws Exception {
         // Retrieve the eval context that was saved at program compile-time
         EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
-        ScopedSymbolTable symbolTable = ctx.symbolTable.clone();
+        ScopedSymbolTable symbolTable = ctx.symbolTable.snapShot();
 
         EmitterContext evalCtx = new EmitterContext(
                 new JavaClassInfo(),  // internal java class name
-                ctx.symbolTable.clone(), // symbolTable
+                ctx.symbolTable.snapShot(), // symbolTable
                 null, // method visitor
                 null, // class writer
                 ctx.contextType, // call context
@@ -110,7 +110,7 @@ public class RuntimeCode implements RuntimeScalarReference {
 
             // Create a new instance of ErrorMessageUtil, resetting the line counter
             evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
-            evalCtx.symbolTable = symbolTable.clone(); // reset the symboltable
+            evalCtx.symbolTable = symbolTable.snapShot(); // reset the symboltable
             generatedClass = EmitterMethodCreator.createClassWithMethod(
                     evalCtx,
                     ast,
@@ -125,7 +125,7 @@ public class RuntimeCode implements RuntimeScalarReference {
             // In case of error return an "undef" ast and class
             ast = new OperatorNode("undef", null, 1);
             evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
-            evalCtx.symbolTable = symbolTable.clone(); // reset the symboltable
+            evalCtx.symbolTable = symbolTable.snapShot(); // reset the symboltable
             generatedClass = EmitterMethodCreator.createClassWithMethod(
                     evalCtx,
                     ast,

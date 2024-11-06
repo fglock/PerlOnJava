@@ -23,7 +23,7 @@ public class EmitEval {
         emitterVisitor.ctx.logDebug("(eval) ctx.symbolTable.getAllVisibleVariables");
 
         // Freeze the scoped symbol table for the eval context
-        ScopedSymbolTable newSymbolTable = emitterVisitor.ctx.symbolTable.clone();
+        ScopedSymbolTable newSymbolTable = emitterVisitor.ctx.symbolTable.snapShot();
 
         String[] newEnv = newSymbolTable.getVariableNames();
         emitterVisitor.ctx.logDebug("evalStringHelper " + newSymbolTable);

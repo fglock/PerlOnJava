@@ -38,7 +38,7 @@ public class EmitSubroutine {
         ctx.logDebug("AnonSub ctx.symbolTable.getAllVisibleVariables");
 
         // Create a new symbol table for the subroutine
-        ScopedSymbolTable newSymbolTable = ctx.symbolTable.clone();
+        ScopedSymbolTable newSymbolTable = ctx.symbolTable.snapShot();
 
         String[] newEnv = newSymbolTable.getVariableNames();
         ctx.logDebug("AnonSub " + newSymbolTable);
