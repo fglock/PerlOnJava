@@ -75,9 +75,9 @@ public class Feature {
         if (featureBundles.containsKey(bundle)) {
             for (String feature : featureBundles.get(bundle)) {
                 if (state) {
-                    symbolTable.enableWarningCategory(feature); // Assuming similar method for features
+                    symbolTable.enableFeatureCategory(feature);
                 } else {
-                    symbolTable.disableWarningCategory(feature); // Assuming similar method for features
+                    symbolTable.disableFeatureCategory(feature);
                 }
             }
         }
@@ -90,6 +90,6 @@ public class Feature {
      * @return True if the feature is enabled, false otherwise.
      */
     public boolean isFeatureEnabled(String feature) {
-        return symbolTable.isWarningCategoryEnabled(feature); // Assuming similar method for features
+        return symbolTable.isFeatureCategoryEnabled(feature);
     }
 }
