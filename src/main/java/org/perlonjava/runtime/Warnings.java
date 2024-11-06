@@ -32,6 +32,36 @@ public class Warnings {
         this.symbolTable = symbolTable;
     }
 
+    public void initializeEnabledWarnings() {
+        // Enable deprecated warnings
+        enableWarning("deprecated");
+        enableWarning("deprecated::apostrophe_as_package_separator");
+        enableWarning("deprecated::delimiter_will_be_paired");
+        enableWarning("deprecated::dot_in_inc");
+        enableWarning("deprecated::goto_construct");
+        enableWarning("deprecated::smartmatch");
+        enableWarning("deprecated::unicode_property_name");
+        enableWarning("deprecated::version_downgrade");
+
+        // Enable experimental warnings
+        enableWarning("experimental::args_array_with_signatures");
+        enableWarning("experimental::builtin");
+        enableWarning("experimental::class");
+        enableWarning("experimental::declared_refs");
+        enableWarning("experimental::defer");
+        enableWarning("experimental::extra_paired_delimiters");
+        enableWarning("experimental::private_use");
+        enableWarning("experimental::re_strict");
+        enableWarning("experimental::refaliasing");
+        enableWarning("experimental::try");
+        enableWarning("experimental::uniprop_wildcards");
+        enableWarning("experimental::vlb");
+
+        // Enable other warnings
+        enableWarning("glob");
+        enableWarning("locale");
+    }
+
     /**
      * Enables a warning category and its subcategories.
      *

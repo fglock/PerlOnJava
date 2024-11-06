@@ -111,7 +111,7 @@ sub report_enabled_warnings {
             }
             1;
         } or do {
-            print $@;
+            # print $@;
         };
 
         if (ref $categories->[$i + 1] eq 'ARRAY') {
