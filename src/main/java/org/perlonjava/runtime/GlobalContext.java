@@ -107,6 +107,7 @@ public class GlobalContext {
         Exporter.initialize();
         Symbol.initialize();
         ScalarUtil.initialize();
+        Strict.initialize();
         Feature.initialize();
         Warnings.initialize();
 
