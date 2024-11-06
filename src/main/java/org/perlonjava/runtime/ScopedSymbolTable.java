@@ -3,7 +3,8 @@ package org.perlonjava.runtime;
 import java.util.*;
 
 /**
- * A scoped symbol table that supports nested scopes for lexical variables and package declarations.
+ * A scoped symbol table that supports nested scopes for lexical variables, package declarations, warnings, and features.
+ * This class manages the state of variables, warnings, and features across different scopes, allowing for nested and isolated environments.
  */
 public class ScopedSymbolTable {
     // A stack to manage nested scopes of symbol tables.
@@ -11,19 +12,25 @@ public class ScopedSymbolTable {
     private final Stack<String> packageStack = new Stack<>();
     // Stack to manage warning categories for each scope
     private final Stack<Map<String, Boolean>> warningCategoriesStack = new Stack<>();
+    // Stack to manage feature categories for each scope
+    private final Stack<Map<String, Boolean>> featureCategoriesStack = new Stack<>();
     // Cache for the getAllVisibleVariables method
     private Map<Integer, String> visibleVariablesCache;
 
     /**
      * Constructs a ScopedSymbolTable.
+     * Initializes the warning and feature categories stacks with an empty map for the global scope.
      */
     public ScopedSymbolTable() {
         // Initialize the warning categories stack with an empty map for the global scope
         warningCategoriesStack.push(new HashMap<>());
+        // Initialize the feature categories stack with an empty map for the global scope
+        featureCategoriesStack.push(new HashMap<>());
     }
 
     /**
      * Enters a new scope by pushing a new SymbolTable onto the stack.
+     * Copies the current state of warnings and features to the new scope.
      */
     public void enterScope() {
         clearVisibleVariablesCache();
@@ -42,16 +49,20 @@ public class ScopedSymbolTable {
 
         // Push a copy of the current warning categories map onto the stack
         warningCategoriesStack.push(new HashMap<>(warningCategoriesStack.peek()));
+        // Push a copy of the current feature categories map onto the stack
+        featureCategoriesStack.push(new HashMap<>(featureCategoriesStack.peek()));
     }
 
     /**
      * Exits the current scope by popping the top SymbolTable from the stack.
+     * Also removes the top state of warnings and features.
      */
     public void exitScope() {
         clearVisibleVariablesCache();
         stack.pop();
         packageStack.pop();
         warningCategoriesStack.pop();
+        featureCategoriesStack.pop();
     }
 
     /**
@@ -160,7 +171,7 @@ public class ScopedSymbolTable {
     /**
      * Gets the current package scope.
      *
-     * @return The name of the current package, or null if no package is in scope.
+     * @return The name of the current package, or "main" if no package is in scope.
      */
     public String getCurrentPackage() {
         return packageStack.isEmpty() ? "main" : packageStack.peek();
@@ -179,7 +190,9 @@ public class ScopedSymbolTable {
     }
 
     /**
-     * clones the symbol table to be used at runtime - this is used by eval-string
+     * Clones the symbol table to be used at runtime - this is used by eval-string.
+     *
+     * @return A cloned instance of ScopedSymbolTable.
      */
     public ScopedSymbolTable clone() {
         ScopedSymbolTable st = new ScopedSymbolTable();
@@ -210,7 +223,9 @@ public class ScopedSymbolTable {
     }
 
     /**
-     * toString() method for debugging
+     * toString() method for debugging.
+     *
+     * @return A string representation of the ScopedSymbolTable.
      */
     @Override
     public String toString() {
@@ -233,11 +248,19 @@ public class ScopedSymbolTable {
         for (Map.Entry<String, Boolean> entry : warningCategoriesStack.peek().entrySet()) {
             sb.append("    ").append(entry.getKey()).append(": ").append(entry.getValue()).append(",\n");
         }
+        sb.append("  },\n");
+
+        sb.append("  featureCategories: {\n");
+        for (Map.Entry<String, Boolean> entry : featureCategoriesStack.peek().entrySet()) {
+            sb.append("    ").append(entry.getKey()).append(": ").append(entry.getValue()).append(",\n");
+        }
         sb.append("  }\n");
 
         sb.append("}");
         return sb.toString();
     }
+
+    // Methods for managing warnings
 
     /**
      * Enables a warning category in the current scope.
@@ -265,6 +288,36 @@ public class ScopedSymbolTable {
      */
     public boolean isWarningCategoryEnabled(String category) {
         return warningCategoriesStack.peek().getOrDefault(category, false);
+    }
+
+    // Methods for managing features
+
+    /**
+     * Enables a feature category in the current scope.
+     *
+     * @param feature The name of the feature category to enable.
+     */
+    public void enableFeatureCategory(String feature) {
+        featureCategoriesStack.peek().put(feature, true);
+    }
+
+    /**
+     * Disables a feature category in the current scope.
+     *
+     * @param feature The name of the feature category to disable.
+     */
+    public void disableFeatureCategory(String feature) {
+        featureCategoriesStack.peek().put(feature, false);
+    }
+
+    /**
+     * Checks if a feature category is enabled in the current scope.
+     *
+     * @param feature The name of the feature category to check.
+     * @return True if the feature is enabled, false otherwise.
+     */
+    public boolean isFeatureCategoryEnabled(String feature) {
+        return featureCategoriesStack.peek().getOrDefault(feature, false);
     }
 
     /**
