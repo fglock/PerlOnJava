@@ -25,6 +25,7 @@ class SymbolTable {
      */
     public int addVariable(String name) {
         // Check if the variable is not already in the table
+        // XXX TODO under 'no strict', we may need to allow variable redeclaration
         if (!table.containsKey(name)) {
             // Add the variable with a unique index
             table.put(name, index++);
