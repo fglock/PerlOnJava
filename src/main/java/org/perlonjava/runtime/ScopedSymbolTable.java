@@ -7,18 +7,6 @@ import java.util.*;
  * This class manages the state of variables, warnings, features, and strict options across different scopes, allowing for nested and isolated environments.
  */
 public class ScopedSymbolTable {
-    // A stack to manage nested scopes of symbol tables.
-    private final Stack<SymbolTable> stack = new Stack<>();
-    private final Stack<String> packageStack = new Stack<>();
-    // Stack to manage warning categories for each scope
-    private final Stack<Integer> warningFlagsStack = new Stack<>();
-    // Stack to manage feature categories for each scope
-    private final Stack<Integer> featureFlagsStack = new Stack<>();
-    // Stack to manage strict options for each scope
-    private final Stack<Integer> strictOptionsStack = new Stack<>();
-    // Cache for the getAllVisibleVariables method
-    private Map<Integer, String> visibleVariablesCache;
-
     // Mapping of warning and feature names to bit positions
     private static final Map<String, Integer> warningBitPositions = new HashMap<>();
     private static final Map<String, Integer> featureBitPositions = new HashMap<>();
@@ -37,6 +25,18 @@ public class ScopedSymbolTable {
         }
     }
 
+    // A stack to manage nested scopes of symbol tables.
+    private final Stack<SymbolTable> symbolTableStack = new Stack<>();
+    private final Stack<String> packageStack = new Stack<>();
+    // Stack to manage warning categories for each scope
+    private final Stack<Integer> warningFlagsStack = new Stack<>();
+    // Stack to manage feature categories for each scope
+    private final Stack<Integer> featureFlagsStack = new Stack<>();
+    // Stack to manage strict options for each scope
+    private final Stack<Integer> strictOptionsStack = new Stack<>();
+    // Cache for the getAllVisibleVariables method
+    private Map<Integer, String> visibleVariablesCache;
+
     /**
      * Constructs a ScopedSymbolTable.
      * Initializes the warning, feature categories, and strict options stacks with default values for the global scope.
@@ -48,6 +48,10 @@ public class ScopedSymbolTable {
         featureFlagsStack.push(0);
         // Initialize the strict options stack with 0 for the global scope
         strictOptionsStack.push(0);
+        // Initialize the package name
+        packageStack.push("main");
+        // Initialize an empty symbol table
+        symbolTableStack.push(new SymbolTable(0));
     }
 
     /**
@@ -57,18 +61,10 @@ public class ScopedSymbolTable {
     public void enterScope() {
         clearVisibleVariablesCache();
 
-        int lastIndex = 0;
-        String packageName = "main";
-        // If there are existing scopes, get the last index from the current scope
-        if (!stack.isEmpty()) {
-            lastIndex = stack.peek().index;
-            packageName = packageStack.peek();
-        }
         // Push a new SymbolTable onto the stack and set its index
-        stack.push(new SymbolTable());
-        stack.peek().index = lastIndex;
-        packageStack.push(packageName);
-
+        symbolTableStack.push(new SymbolTable(symbolTableStack.peek().index));
+        // Push a copy of the current package name onto the stack
+        packageStack.push(packageStack.peek());
         // Push a copy of the current warning categories map onto the stack
         warningFlagsStack.push(warningFlagsStack.peek());
         // Push a copy of the current feature categories map onto the stack
@@ -83,7 +79,7 @@ public class ScopedSymbolTable {
      */
     public void exitScope() {
         clearVisibleVariablesCache();
-        stack.pop();
+        symbolTableStack.pop();
         packageStack.pop();
         warningFlagsStack.pop();
         featureFlagsStack.pop();
@@ -126,7 +122,7 @@ public class ScopedSymbolTable {
      */
     public int addVariable(String name) {
         clearVisibleVariablesCache();
-        return stack.peek().addVariable(name);
+        return symbolTableStack.peek().addVariable(name);
     }
 
     /**
@@ -137,8 +133,8 @@ public class ScopedSymbolTable {
      */
     public int getVariableIndex(String name) {
         // Iterate from innermost scope to outermost
-        for (int i = stack.size() - 1; i >= 0; i--) {
-            int index = stack.get(i).getVariableIndex(name);
+        for (int i = symbolTableStack.size() - 1; i >= 0; i--) {
+            int index = symbolTableStack.get(i).getVariableIndex(name);
             if (index != -1) {
                 return index;
             }
@@ -162,7 +158,7 @@ public class ScopedSymbolTable {
      * @return The index of the variable, or -1 if the variable is not found in the current scope.
      */
     public int getVariableIndexInCurrentScope(String name) {
-        return stack.peek().getVariableIndex(name);
+        return symbolTableStack.peek().getVariableIndex(name);
     }
 
     /**
@@ -187,9 +183,9 @@ public class ScopedSymbolTable {
         Set<String> seenVariables = new HashSet<>();
 
         // Iterate from innermost scope (top of the stack) to outermost scope (bottom of the stack).
-        for (int i = stack.size() - 1; i >= 0; i--) {
+        for (int i = symbolTableStack.size() - 1; i >= 0; i--) {
             // Retrieve the symbol table for the current scope.
-            Map<String, Integer> scope = stack.get(i).table;
+            Map<String, Integer> scope = symbolTableStack.get(i).table;
 
             // Iterate through all variables in the current scope.
             for (Map.Entry<String, Integer> entry : scope.entrySet()) {
@@ -227,7 +223,7 @@ public class ScopedSymbolTable {
      * @return The name of the current package, or "main" if no package is in scope.
      */
     public String getCurrentPackage() {
-        return packageStack.isEmpty() ? "main" : packageStack.peek();
+        return packageStack.peek();
     }
 
     /**
@@ -236,9 +232,7 @@ public class ScopedSymbolTable {
      * @param packageName The name of the package to set as the current scope.
      */
     public void setCurrentPackage(String packageName) {
-        if (!packageStack.isEmpty()) {
-            packageStack.pop();
-        }
+        packageStack.pop();
         packageStack.push(packageName);
     }
 
@@ -284,12 +278,8 @@ public class ScopedSymbolTable {
      * @throws IllegalStateException if there is no current scope available for allocation.
      */
     public int allocateLocalVariable() {
-        // Ensure there's a current scope available for allocation
-        if (stack.isEmpty()) {
-            throw new IllegalStateException("No scope available for JVM local variable allocation.");
-        }
         // Allocate a new index in the current scope by incrementing the index counter
-        return stack.peek().index++;
+        return symbolTableStack.peek().index++;
     }
 
     /**
@@ -303,7 +293,7 @@ public class ScopedSymbolTable {
         sb.append("ScopedSymbolTable {\n");
 
         sb.append("  stack: [\n");
-        for (SymbolTable symbolTable : stack) {
+        for (SymbolTable symbolTable : symbolTableStack) {
             sb.append("    ").append(symbolTable.toString()).append(",\n");
         }
         sb.append("  ],\n");
@@ -380,57 +370,4 @@ public class ScopedSymbolTable {
         return bitPosition != null && (featureFlagsStack.peek() & (1 << bitPosition)) != 0;
     }
 
-    /**
-     * A simple symbol table that maps variable names to unique integer indices.
-     */
-    static class SymbolTable {
-        // A map to store variable names and their corresponding indices
-        public Map<String, Integer> table = new HashMap<>();
-
-        // A counter to generate unique indices for variables
-        public int index = 0;
-
-        /**
-         * Adds a variable to the symbol table if it does not already exist.
-         *
-         * @param name The name of the variable to add.
-         * @return The index of the variable in the symbol table.
-         */
-        public int addVariable(String name) {
-            // Check if the variable is not already in the table
-            if (!table.containsKey(name)) {
-                // Add the variable with a unique index
-                table.put(name, index++);
-            }
-            // Return the index of the variable
-            return table.get(name);
-        }
-
-        /**
-         * Retrieves the index of a variable from the symbol table.
-         *
-         * @param name The name of the variable to look up.
-         * @return The index of the variable, or -1 if the variable is not found.
-         */
-        public int getVariableIndex(String name) {
-            // Return the index of the variable, or -1 if not found
-            return table.getOrDefault(name, -1);
-        }
-
-        @Override
-        public String toString() {
-            StringBuilder sb = new StringBuilder();
-            sb.append("SymbolTable {\n");
-
-            sb.append("  table: {\n");
-            for (Map.Entry<String, Integer> entry : table.entrySet()) {
-                sb.append("    ").append(entry.getKey()).append(": ").append(entry.getValue()).append(",\n");
-            }
-            sb.append("  },\n");
-
-            sb.append("  index: ").append(index).append("\n");
-            sb.append("}");
-            return sb.toString();
-        }
-    }
 }
