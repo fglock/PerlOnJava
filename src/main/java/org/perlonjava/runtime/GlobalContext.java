@@ -108,6 +108,7 @@ public class GlobalContext {
         Symbol.initialize();
         ScalarUtil.initialize();
         Feature.initialize();
+        Warnings.initialize();
 
         // Reset method cache after initializing UNIVERSAL
         InheritanceResolver.invalidateCache();
