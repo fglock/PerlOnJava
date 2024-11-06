@@ -22,15 +22,9 @@ public class EmitEval {
     static void handleEvalOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         emitterVisitor.ctx.logDebug("(eval) ctx.symbolTable.getAllVisibleVariables");
 
-        // Create a new symbol table for the eval context
-        // Retrieve all visible variables for the closure
-        Map<Integer, String> visibleVariables = emitterVisitor.ctx.symbolTable.getAllVisibleVariables();
-        ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
-        newSymbolTable.enterScope();
-        newSymbolTable.setCurrentPackage(emitterVisitor.ctx.symbolTable.getCurrentPackage());
-        for (Integer index : visibleVariables.keySet()) {
-            newSymbolTable.addVariable(visibleVariables.get(index));
-        }
+        // Freeze the scoped symbol table for the eval context
+        ScopedSymbolTable newSymbolTable = emitterVisitor.ctx.symbolTable.clone();
+
         String[] newEnv = newSymbolTable.getVariableNames();
         emitterVisitor.ctx.logDebug("evalStringHelper " + newSymbolTable);
 
@@ -53,7 +47,7 @@ public class EmitEval {
         // symbol table and compiler options.
         EmitterContext evalCtx = new EmitterContext(
                 null, // internal java class name will be created at runtime
-                newSymbolTable.clone(),
+                newSymbolTable,
                 null, // method visitor
                 null, // class writer
                 emitterVisitor.ctx.contextType,

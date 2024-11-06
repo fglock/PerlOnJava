@@ -38,12 +38,8 @@ public class EmitSubroutine {
         ctx.logDebug("AnonSub ctx.symbolTable.getAllVisibleVariables");
 
         // Create a new symbol table for the subroutine
-        ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
-        newSymbolTable.enterScope();
-        newSymbolTable.setCurrentPackage(ctx.symbolTable.getCurrentPackage());
-        for (Integer index : visibleVariables.keySet()) {
-            newSymbolTable.addVariable(visibleVariables.get(index));
-        }
+        ScopedSymbolTable newSymbolTable = ctx.symbolTable.clone();
+
         String[] newEnv = newSymbolTable.getVariableNames();
         ctx.logDebug("AnonSub " + newSymbolTable);
 
@@ -51,7 +47,7 @@ public class EmitSubroutine {
         EmitterContext subCtx =
                 new EmitterContext(
                         new JavaClassInfo(), // Internal Java class name
-                        newSymbolTable.clone(), // Closure symbolTable
+                        newSymbolTable, // Closure symbolTable
                         null, // Method visitor
                         null, // Class writer
                         RuntimeContextType.RUNTIME, // Call context
