@@ -197,7 +197,7 @@
 - ✔️   **Ternary operator**: The ternary conditional operator is implemented.
 - ✔️   **Compound assignment operators**: Compound assignment operators are implemented.
 - ✔️   **`package` declaration**: `package BLOCK` is also supported.
-- ✔️   **Typeglob operations**: Operations like `*x = sub {}`, `*x = \@a` are supported.
+- ✔️   **Typeglob operations**: Operations like `*x = sub {}`, `*x = \@a`, `*x = *y` are supported.
 - ✔️   **Code references**: Code references like `\&subr`, `\&$subname`, `\&{$subname}`, are implemented.
 - ✔️   **Special literals**: `__PACKAGE__`, `__FILE__`, `__LINE__`
 - ✔️   **`die` related operators**: `die`, `warn`, `exit` are supported.

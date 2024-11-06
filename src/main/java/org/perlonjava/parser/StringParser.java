@@ -1,5 +1,6 @@
 package org.perlonjava.parser;
 
+import com.ibm.icu.lang.UCharacter;
 import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.Lexer;
@@ -12,7 +13,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.perlonjava.runtime.ScalarUtils.printable;
-import com.ibm.icu.lang.UCharacter;
 
 /*
  * StringParser is used to parse domain-specific languages within Perl, such as Regex and string interpolation.

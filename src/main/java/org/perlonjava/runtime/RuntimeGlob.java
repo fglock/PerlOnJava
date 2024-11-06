@@ -67,6 +67,37 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
     }
 
     /**
+     * Sets the current RuntimeScalar object to the values associated with the given RuntimeGlob.
+     * This method effectively implements the behavior of assigning one typeglob to another,
+     * similar to Perl's typeglob assignment.
+     *
+     * @param value The RuntimeGlob object whose associated values are to be assigned.
+     * @return The scalar value associated with the provided RuntimeGlob.
+     */
+    public RuntimeScalar set(RuntimeGlob value) {
+        // Retrieve the name of the glob from the provided RuntimeGlob object.
+        String globName = value.globName;
+
+        // Set the current scalar to the global code reference associated with the glob name.
+        this.set(GlobalContext.getGlobalCodeRef(globName));
+
+        // Set the current scalar to the global IO (input/output) reference associated with the glob name.
+        this.set(GlobalContext.getGlobalIO(globName));
+
+        // Set the current scalar to a reference of the global array associated with the glob name.
+        this.set(GlobalContext.getGlobalArray(globName).createReference());
+
+        // Set the current scalar to a reference of the global hash associated with the glob name.
+        this.set(GlobalContext.getGlobalHash(globName).createReference());
+
+        // Set the current scalar to a reference of the global variable associated with the glob name.
+        this.set(GlobalContext.getGlobalVariable(globName).createReference());
+
+        // Return the scalar value associated with the provided RuntimeGlob.
+        return value.scalar();
+    }
+
+    /**
      * Counts the number of elements in the typeglob.
      *
      * @return The number of elements, which is always 1 for a typeglob.
