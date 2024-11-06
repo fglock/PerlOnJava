@@ -46,7 +46,7 @@ public class Feature extends PerlModuleBase {
      * @return A RuntimeList.
      */
     public static RuntimeList useFeature(RuntimeArray args, int ctx) {
-        for (int i = 0; i < args.size(); i++) {
+        for (int i = 1; i < args.size(); i++) {
             String bundle = args.get(i).toString();
             featureManager.enableFeatureBundle(bundle);
         }
@@ -61,7 +61,7 @@ public class Feature extends PerlModuleBase {
      * @return A RuntimeList.
      */
     public static RuntimeList noFeature(RuntimeArray args, int ctx) {
-        for (int i = 0; i < args.size(); i++) {
+        for (int i = 1; i < args.size(); i++) {
             String bundle = args.get(i).toString();
             if (":all".equals(bundle)) {
                 for (String feature : FeatureFlags.getFeatureList()) {

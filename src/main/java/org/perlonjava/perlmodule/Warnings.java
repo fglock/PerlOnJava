@@ -44,7 +44,7 @@ public class Warnings extends PerlModuleBase {
      * @return A RuntimeList.
      */
     public static RuntimeList useWarnings(RuntimeArray args, int ctx) {
-        for (int i = 0; i < args.size(); i++) {
+        for (int i = 1; i < args.size(); i++) {
             String category = args.get(i).toString();
             if (category.startsWith("-")) {
                 warningManager.disableWarning(category.substring(1));
@@ -63,7 +63,7 @@ public class Warnings extends PerlModuleBase {
      * @return A RuntimeList.
      */
     public static RuntimeList noWarnings(RuntimeArray args, int ctx) {
-        for (int i = 0; i < args.size(); i++) {
+        for (int i = 1; i < args.size(); i++) {
             String category = args.get(i).toString();
             warningManager.disableWarning(category);
         }

@@ -19,16 +19,6 @@ public class ScopedSymbolTable {
     // Cache for the getAllVisibleVariables method
     private Map<Integer, String> visibleVariablesCache;
 
-    // Bitmask for strict options
-    private static final int STRICT_REFS = 0x00000002;
-    private static final int STRICT_SUBS = 0x00000200;
-    private static final int STRICT_VARS = 0x00000400;
-
-    // Bitmask for explicit strict options
-    private static final int EXPLICIT_STRICT_REFS = 0x00000020;
-    private static final int EXPLICIT_STRICT_SUBS = 0x00000040;
-    private static final int EXPLICIT_STRICT_VARS = 0x00000080;
-
     // Mapping of warning and feature names to bit positions
     private static final Map<String, Integer> warningBitPositions = new HashMap<>();
     private static final Map<String, Integer> featureBitPositions = new HashMap<>();
