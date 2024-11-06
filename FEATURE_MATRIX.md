@@ -257,6 +257,7 @@
 - ✔️   **Exporter**: `@EXPORT_OK`, `@EXPORT`, `%EXPORT_TAGS` are implemented.
 - ✔️   **strict**: `strict` pragma is set to ignore `no strict`, the compiler works always in `strict` mode. `no strict` might work in a future version.
 - ✔️   **Scalar::Util**: `blessed`, `reftype`, `set_prototype` are implemented.
+- ✔️   **Internals**: `Internals::SvREADONLY` is implemented as a no-op.
 - ❌  **utf8** pragma: utf8 is always on. Disabling utf8 might work in a future version.
 - ❌  **feature** pragma
 - ❌  **version** pragma: version objects are not yet supported.

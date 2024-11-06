@@ -92,6 +92,7 @@
   - Added `$SIG{ALRM}`
   - Added `\N{U+hex}` operator in double quoted strings and regex.
   - Improved Exporter.pm, glob assignment.
+  - Added `Internals::SvREADONLY`.
   - Work in progress:
     - `state` variables.
     - `socket` and related operators.
