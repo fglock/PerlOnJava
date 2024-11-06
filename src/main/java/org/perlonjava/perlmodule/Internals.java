@@ -37,6 +37,6 @@ public class Internals extends PerlModuleBase {
      * @return A RuntimeList.
      */
     public static RuntimeList svReadonly(RuntimeArray args, int ctx) {
-        return new RuntimeScalar().getList();
+        return new RuntimeList();
     }
 }
