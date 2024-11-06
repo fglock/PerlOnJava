@@ -1,7 +1,6 @@
 package org.perlonjava.runtime;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 /**
  * A class to control lexical warnings flags based on a hierarchy of categories.
@@ -108,5 +107,19 @@ public class Warnings {
      */
     public boolean isWarningEnabled(String category) {
         return symbolTable.isWarningCategoryEnabled(category);
+    }
+
+    /**
+     * Returns a list of all warning categories and subcategories.
+     *
+     * @return A list of all warning categories.
+     */
+    public static List<String> getWarningList() {
+        Set<String> warningSet = new HashSet<>();
+        for (Map.Entry<String, String[]> entry : warningHierarchy.entrySet()) {
+            warningSet.add(entry.getKey());
+            warningSet.addAll(Arrays.asList(entry.getValue()));
+        }
+        return new ArrayList<>(warningSet);
     }
 }

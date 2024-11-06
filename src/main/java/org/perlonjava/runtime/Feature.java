@@ -1,7 +1,6 @@
 package org.perlonjava.runtime;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 /**
  * A class to control lexical feature flags based on a hierarchy of bundles.
@@ -91,5 +90,18 @@ public class Feature {
      */
     public boolean isFeatureEnabled(String feature) {
         return symbolTable.isFeatureCategoryEnabled(feature);
+    }
+
+    /**
+     * Returns a list of all feature names.
+     *
+     * @return A list of all feature names.
+     */
+    public static List<String> getFeatureList() {
+        Set<String> featureSet = new HashSet<>();
+        for (Map.Entry<String, String[]> entry : featureBundles.entrySet()) {
+            featureSet.addAll(Arrays.asList(entry.getValue()));
+        }
+        return new ArrayList<>(featureSet);
     }
 }
