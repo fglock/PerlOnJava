@@ -11,9 +11,9 @@ public class ScopedSymbolTable {
     private final Stack<SymbolTable> stack = new Stack<>();
     private final Stack<String> packageStack = new Stack<>();
     // Stack to manage warning categories for each scope
-    private final Stack<Map<String, Boolean>> warningCategoriesStack = new Stack<>();
+    private final Stack<Integer> warningFlagsStack = new Stack<>();
     // Stack to manage feature categories for each scope
-    private final Stack<Map<String, Boolean>> featureCategoriesStack = new Stack<>();
+    private final Stack<Integer> featureFlagsStack = new Stack<>();
     // Stack to manage strict options for each scope
     private final Stack<Integer> strictOptionsStack = new Stack<>();
     // Cache for the getAllVisibleVariables method
@@ -29,15 +29,33 @@ public class ScopedSymbolTable {
     private static final int EXPLICIT_STRICT_SUBS = 0x00000040;
     private static final int EXPLICIT_STRICT_VARS = 0x00000080;
 
+    // Mapping of warning and feature names to bit positions
+    private static final Map<String, Integer> warningBitPositions = new HashMap<>();
+    private static final Map<String, Integer> featureBitPositions = new HashMap<>();
+
+    static {
+        // Initialize warning bit positions
+        int bitPosition = 0;
+        for (String warning : Warnings.getWarningList()) {
+            warningBitPositions.put(warning, bitPosition++);
+        }
+
+        // Initialize feature bit positions
+        bitPosition = 0;
+        for (String feature : Feature.getFeatureList()) {
+            featureBitPositions.put(feature, bitPosition++);
+        }
+    }
+
     /**
      * Constructs a ScopedSymbolTable.
      * Initializes the warning, feature categories, and strict options stacks with default values for the global scope.
      */
     public ScopedSymbolTable() {
         // Initialize the warning categories stack with an empty map for the global scope
-        warningCategoriesStack.push(new HashMap<>());
+        warningFlagsStack.push(0);
         // Initialize the feature categories stack with an empty map for the global scope
-        featureCategoriesStack.push(new HashMap<>());
+        featureFlagsStack.push(0);
         // Initialize the strict options stack with 0 for the global scope
         strictOptionsStack.push(0);
     }
@@ -62,9 +80,9 @@ public class ScopedSymbolTable {
         packageStack.push(packageName);
 
         // Push a copy of the current warning categories map onto the stack
-        warningCategoriesStack.push(new HashMap<>(warningCategoriesStack.peek()));
+        warningFlagsStack.push(warningFlagsStack.peek());
         // Push a copy of the current feature categories map onto the stack
-        featureCategoriesStack.push(new HashMap<>(featureCategoriesStack.peek()));
+        featureFlagsStack.push(featureFlagsStack.peek());
         // Push a copy of the current strict options onto the stack
         strictOptionsStack.push(strictOptionsStack.peek());
     }
@@ -77,11 +95,11 @@ public class ScopedSymbolTable {
         clearVisibleVariablesCache();
         stack.pop();
         packageStack.pop();
-        warningCategoriesStack.pop();
-        featureCategoriesStack.pop();
+        warningFlagsStack.pop();
+        featureFlagsStack.pop();
         strictOptionsStack.pop();
     }
-    
+
     /**
      * Enables a strict option in the current scope.
      *
@@ -290,14 +308,22 @@ public class ScopedSymbolTable {
         sb.append("  ],\n");
 
         sb.append("  warningCategories: {\n");
-        for (Map.Entry<String, Boolean> entry : warningCategoriesStack.peek().entrySet()) {
-            sb.append("    ").append(entry.getKey()).append(": ").append(entry.getValue()).append(",\n");
+        int warningFlags = warningFlagsStack.peek();
+        for (Map.Entry<String, Integer> entry : warningBitPositions.entrySet()) {
+            String warningName = entry.getKey();
+            int bitPosition = entry.getValue();
+            boolean isEnabled = (warningFlags & (1 << bitPosition)) != 0;
+            sb.append("    ").append(warningName).append(": ").append(isEnabled).append(",\n");
         }
         sb.append("  },\n");
 
         sb.append("  featureCategories: {\n");
-        for (Map.Entry<String, Boolean> entry : featureCategoriesStack.peek().entrySet()) {
-            sb.append("    ").append(entry.getKey()).append(": ").append(entry.getValue()).append(",\n");
+        int featureFlags = featureFlagsStack.peek();
+        for (Map.Entry<String, Integer> entry : featureBitPositions.entrySet()) {
+            String featureName = entry.getKey();
+            int bitPosition = entry.getValue();
+            boolean isEnabled = (featureFlags & (1 << bitPosition)) != 0;
+            sb.append("    ").append(featureName).append(": ").append(isEnabled).append(",\n");
         }
         sb.append("  }\n");
 
@@ -307,62 +333,44 @@ public class ScopedSymbolTable {
 
     // Methods for managing warnings
 
-    /**
-     * Enables a warning category in the current scope.
-     *
-     * @param category The name of the warning category to enable.
-     */
+    // Methods for managing warnings using bit positions
     public void enableWarningCategory(String category) {
-        warningCategoriesStack.peek().put(category, true);
+        Integer bitPosition = warningBitPositions.get(category);
+        if (bitPosition != null) {
+            warningFlagsStack.push(warningFlagsStack.pop() | (1 << bitPosition));
+        }
     }
 
-    /**
-     * Disables a warning category in the current scope.
-     *
-     * @param category The name of the warning category to disable.
-     */
     public void disableWarningCategory(String category) {
-        warningCategoriesStack.peek().put(category, false);
+        Integer bitPosition = warningBitPositions.get(category);
+        if (bitPosition != null) {
+            warningFlagsStack.push(warningFlagsStack.pop() & ~(1 << bitPosition));
+        }
     }
 
-    /**
-     * Checks if a warning category is enabled in the current scope.
-     *
-     * @param category The name of the warning category to check.
-     * @return True if the category is enabled, false otherwise.
-     */
     public boolean isWarningCategoryEnabled(String category) {
-        return warningCategoriesStack.peek().getOrDefault(category, false);
+        Integer bitPosition = warningBitPositions.get(category);
+        return bitPosition != null && (warningFlagsStack.peek() & (1 << bitPosition)) != 0;
     }
 
-    // Methods for managing features
-
-    /**
-     * Enables a feature category in the current scope.
-     *
-     * @param feature The name of the feature category to enable.
-     */
+    // Methods for managing features using bit positions
     public void enableFeatureCategory(String feature) {
-        featureCategoriesStack.peek().put(feature, true);
+        Integer bitPosition = featureBitPositions.get(feature);
+        if (bitPosition != null) {
+            featureFlagsStack.push(featureFlagsStack.pop() | (1 << bitPosition));
+        }
     }
 
-    /**
-     * Disables a feature category in the current scope.
-     *
-     * @param feature The name of the feature category to disable.
-     */
     public void disableFeatureCategory(String feature) {
-        featureCategoriesStack.peek().put(feature, false);
+        Integer bitPosition = featureBitPositions.get(feature);
+        if (bitPosition != null) {
+            featureFlagsStack.push(featureFlagsStack.pop() & ~(1 << bitPosition));
+        }
     }
 
-    /**
-     * Checks if a feature category is enabled in the current scope.
-     *
-     * @param feature The name of the feature category to check.
-     * @return True if the feature is enabled, false otherwise.
-     */
     public boolean isFeatureCategoryEnabled(String feature) {
-        return featureCategoriesStack.peek().getOrDefault(feature, false);
+        Integer bitPosition = featureBitPositions.get(feature);
+        return bitPosition != null && (featureFlagsStack.peek() & (1 << bitPosition)) != 0;
     }
 
     /**
