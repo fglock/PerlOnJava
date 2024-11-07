@@ -17,9 +17,9 @@
 #   Ensure that any new Perl scripts added to src/test/resources follow the project's testing conventions.
 #
 
-# use 5.32.0;
-# use feature 'say';
-# use feature 'isa';
+use 5.32.0;
+use feature 'say';
+use feature 'isa';
 
 # Test variable assignment and modification
 my $a = 15;

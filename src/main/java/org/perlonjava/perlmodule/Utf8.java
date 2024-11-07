@@ -39,9 +39,9 @@ public class Utf8 extends PerlModuleBase {
             utf8.registerMethod("downgrade", "$$");
             utf8.registerMethod("encode", "$");
             utf8.registerMethod("decode", "$");
-            utf8.registerMethod("native_to_unicode", "$");
-            utf8.registerMethod("unicode_to_native", "$");
-            utf8.registerMethod("is_utf8", "$");
+            utf8.registerMethod("native_to_unicode", "nativeToUnicode", "$");
+            utf8.registerMethod("unicode_to_native", "unicodeToNative", "$");
+            utf8.registerMethod("is_utf8", "isUtf8", "$");
             utf8.registerMethod("valid", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Utf8 method: " + e.getMessage());
@@ -104,10 +104,26 @@ public class Utf8 extends PerlModuleBase {
         RuntimeScalar scalar = args.get(0);
         boolean failOk = args.size() == 2 && args.get(1).getBoolean();
         String string = scalar.toString();
+
+        // Check if the string can be represented in ISO-8859-1
         try {
+            // Convert the string to ISO-8859-1 bytes
             byte[] bytes = string.getBytes(StandardCharsets.ISO_8859_1);
+            // Convert back to string to ensure the conversion is valid
             String decoded = new String(bytes, StandardCharsets.ISO_8859_1);
-            return new RuntimeScalar(string.equals(decoded)).getList();
+
+            // If the original string matches the decoded string, conversion is successful
+            if (string.equals(decoded)) {
+                // Ensure the UTF-8 flag is off by using the ISO-8859-1 encoding
+                scalar.set(new String(bytes, StandardCharsets.ISO_8859_1));
+                return new RuntimeScalar(true).getList();
+            } else {
+                // If the strings do not match, the conversion failed
+                if (failOk) {
+                    return new RuntimeScalar(false).getList();
+                }
+                throw new IllegalArgumentException("String contains characters that cannot be represented in ISO-8859-1");
+            }
         } catch (Exception e) {
             if (failOk) {
                 return new RuntimeScalar(false).getList();
@@ -115,6 +131,7 @@ public class Utf8 extends PerlModuleBase {
             throw new IllegalArgumentException("String cannot be represented in native encoding", e);
         }
     }
+
 
     /**
      * Converts the character sequence to the corresponding octet sequence in UTF-8.
