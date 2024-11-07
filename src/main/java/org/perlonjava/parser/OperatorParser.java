@@ -434,6 +434,12 @@ public class OperatorParser {
                 // Handle 'next'
                 operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
                 return new OperatorNode(token.text, operand, currentIndex);
+            case "goto":
+                // Handle 'goto' keyword as a unary operator with an operand;
+                // Parentheses are ignored.
+                // 'goto &x' creates 'return &x' instead, because we can't do a tail call
+                operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
+                return new OperatorNode("return", operand, currentIndex);
             case "return":
                 // Handle 'return' keyword as a unary operator with an operand;
                 // Parentheses are ignored.
