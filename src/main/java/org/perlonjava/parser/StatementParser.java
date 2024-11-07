@@ -244,8 +244,16 @@ public class StatementParser {
         }
 
         // Parse Version string
+        int currentIndex = parser.tokenIndex;
         RuntimeScalar versionScalar = scalarUndef;
         Node versionNode = parseOptionalPackageVersion(parser);
+        if (versionNode != null) {
+            if (TokenUtils.peek(parser).text.equals(",")) {
+                // no comma allowed after version
+                versionNode = null;
+                parser.tokenIndex = currentIndex; // backtrack
+            }
+        }
         if (versionNode != null) {
             parser.ctx.logDebug("use version: " + versionNode + " next:" + TokenUtils.peek(parser));
             // Extract version string using ExtractValueVisitor
