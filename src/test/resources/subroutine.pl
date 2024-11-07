@@ -113,3 +113,40 @@ print "not " if $result ne "<reference test>"; say "ok # reference to subroutine
 sub lv :lvalue { $result }
 lv = 13;
 print "not " if $result ne "13"; say "ok # lvalue subroutine call is assignable";
+
+# Tests for goto &sub
+
+sub original_sub {
+    return "original";
+}
+
+sub redirect_sub {
+    goto &original_sub;
+}
+
+$result = redirect_sub();
+print "not " if $result ne "original"; say "ok # goto &sub redirected to original_sub and returned '$result'";
+
+sub first_sub {
+    return "first";
+}
+
+sub second_sub {
+    goto &first_sub;
+}
+
+$result = second_sub();
+print "not " if $result ne "first"; say "ok # goto &sub redirected to first_sub and returned '$result'";
+
+# Test with parameters
+sub add_one {
+    my ($num) = @_;
+    return $num + 1;
+}
+
+sub add_one_redirect {
+    goto &add_one;
+}
+
+$result = add_one_redirect(5);
+print "not " if $result != 6; say "ok # goto &sub with parameters returned '$result'";

@@ -93,6 +93,7 @@
   - Added `\N{U+hex}` operator in double quoted strings and regex.
   - Improved Exporter.pm, glob assignment.
   - Added modules `constant`, `Internals` (`SvREADONLY`).
+  - Added `goto &name`; not a tail-call.
   - Work in progress:
     - `state` variables.
     - `socket` and related operators.

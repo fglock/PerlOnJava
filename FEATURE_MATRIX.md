@@ -238,7 +238,7 @@
 - ✔️   **loop control operators**: `next`, `last`, `redo` with labels are implemented.
 - ❌  **loop control operators**: `next`, `last`, `redo` with expression are not implemented.
 - ❌  **loop control operators**: `next`, `last`, `redo` going to a different place in the call stack are not implemented. Label searching in the call stack is missing.
-- ❌  **`goto` operator**: `goto &name` is not implemented.
+- ✔️   **`goto &name`**: `goto &name` is implemented. It is not a tail-call.
 - ❌  **`goto` operator**: `goto EXPR` and `goto LABEL` are not implemented.
 - ✔️   **setting `$_` in `while` loop with `<>`**: automatic setting `$_` in `while` loops is implemented.
 - ✔️   **`do BLOCK while`**: `do` executes once before the conditional is evaluated.
