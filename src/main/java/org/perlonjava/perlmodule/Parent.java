@@ -10,7 +10,15 @@ import static org.perlonjava.runtime.GlobalContext.*;
  * The Parent class is responsible for managing inheritance in Perl-like modules.
  * It mimics the behavior of Perl's parent module, allowing classes to inherit from other classes.
  */
-public class Parent {
+public class Parent extends PerlModuleBase {
+
+    /**
+     * Constructor for Parent.
+     * Initializes the module with the name "parent".
+     */
+    public Parent() {
+        super("parent");
+    }
 
     /**
      * Initializes the Parent class by setting up the necessary global variables and methods.
@@ -18,24 +26,15 @@ public class Parent {
      */
     public static void initialize() {
         // Initialize `parent` class
+        Parent parent = new Parent();
+        try {
+            parent.registerMethod("import", "importParent", ";$");
+        } catch (NoSuchMethodException e) {
+            System.err.println("Warning: Missing Parent method: " + e.getMessage());
+        }
 
         // Set %INC to indicate that parent.pm has been loaded
         getGlobalHash("main::INC").put("parent.pm", new RuntimeScalar("parent.pm"));
-
-        try {
-            // Load parent methods into Perl namespace
-            Class<?> clazz = Parent.class;
-            RuntimeScalar instance = new RuntimeScalar();
-            Method mm;
-
-            // Get the importParent method and set it as a global code reference for parent::import
-            mm = clazz.getMethod("importParent", RuntimeArray.class, int.class);
-            getGlobalCodeRef("parent::import").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, null)));
-
-        } catch (Exception e) {
-            System.err.println("Warning: Failed to initialize parent: " + e.getMessage());
-        }
     }
 
     /**

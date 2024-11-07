@@ -484,6 +484,10 @@ public class Parser {
                         }
                         // Unary minus
                         operand = parseExpression(getPrecedence(token.text) + 1);
+                        if (operand instanceof IdentifierNode identifierNode) {
+                            // "-name" return string
+                            return new StringNode("-" + identifierNode.name, tokenIndex);
+                        }
                         return new OperatorNode(token.text, operand, tokenIndex);
                 }
                 break;
