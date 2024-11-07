@@ -262,6 +262,7 @@
 - ✔️   **Internals**: `Internals::SvREADONLY` is implemented as a no-op.
 - ✔️   **parent** pragma
 - ✔️   **constant** pragma
+- ✔️   **if** pragma
 - 🚧  **utf8** pragma: utf8 is always on. Disabling utf8 might work in a future version.
 - 🚧  **feature** pragma
 - 🚧  **warnings** pragma
