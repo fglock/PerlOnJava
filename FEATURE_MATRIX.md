@@ -258,13 +258,13 @@
 - 🚧  **strict**: `strict` pragma is set to ignore `no strict`, the compiler works always in `strict` mode. `no strict` might work in a future version.
 - ✔️   **Scalar::Util**: `blessed`, `reftype`, `set_prototype` are implemented.
 - ✔️   **Internals**: `Internals::SvREADONLY` is implemented as a no-op.
+- ✔️   **parent** pragma
 - 🚧  **utf8** pragma: utf8 is always on. Disabling utf8 might work in a future version.
 - 🚧  **feature** pragma
 - 🚧  **warnings** pragma
 - ❌  **version** pragma: version objects are not yet supported.
 - ❌  **experimental** pragma
 - ❌  **constant** pragma
-- ❌  **parent** pragma
 - ❌  **mro** (Method Resolution Order) pragma. The compiler always use `C3` to linearize the inheritance hierarchy.
 - ❌  **attributes** pragma
 - ❌  **bignum, bigint, and bigrat** pragmas

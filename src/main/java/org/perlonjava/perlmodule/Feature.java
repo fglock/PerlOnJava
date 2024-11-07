@@ -12,7 +12,7 @@ public class Feature extends PerlModuleBase {
 
     /**
      * Constructor for FeatureFlags.
-     * Initializes the module with the name "FeatureFlags".
+     * Initializes the module with the name "feature".
      */
     public Feature() {
         super("feature");

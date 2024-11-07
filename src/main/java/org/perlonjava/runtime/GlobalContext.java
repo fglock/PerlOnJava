@@ -112,6 +112,7 @@ public class GlobalContext {
         Feature.initialize();
         Warnings.initialize();
         Internals.initialize();
+        Parent.initialize();
 
         // Reset method cache after initializing UNIVERSAL
         InheritanceResolver.invalidateCache();
