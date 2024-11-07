@@ -9,8 +9,6 @@ import org.perlonjava.runtime.RuntimeCode;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.ScopedSymbolTable;
 
-import java.util.Map;
-
 public class EmitEval {
     /**
      * Handles the emission of bytecode for the Perl 'eval' operator.

@@ -1,6 +1,9 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.RuntimeArray;
+import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.ScopedSymbolTable;
 
 /**
  * The Strict class provides functionalities similar to the Perl strict module.

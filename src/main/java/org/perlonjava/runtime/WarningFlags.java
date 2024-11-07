@@ -31,6 +31,20 @@ public class WarningFlags {
         this.symbolTable = symbolTable;
     }
 
+    /**
+     * Returns a list of all warning categories and subcategories.
+     *
+     * @return A list of all warning categories.
+     */
+    public static List<String> getWarningList() {
+        Set<String> warningSet = new HashSet<>();
+        for (Map.Entry<String, String[]> entry : warningHierarchy.entrySet()) {
+            warningSet.add(entry.getKey());
+            warningSet.addAll(Arrays.asList(entry.getValue()));
+        }
+        return new ArrayList<>(warningSet);
+    }
+
     public void initializeEnabledWarnings() {
         // Enable deprecated warnings
         enableWarning("deprecated");
@@ -107,19 +121,5 @@ public class WarningFlags {
      */
     public boolean isWarningEnabled(String category) {
         return symbolTable.isWarningCategoryEnabled(category);
-    }
-
-    /**
-     * Returns a list of all warning categories and subcategories.
-     *
-     * @return A list of all warning categories.
-     */
-    public static List<String> getWarningList() {
-        Set<String> warningSet = new HashSet<>();
-        for (Map.Entry<String, String[]> entry : warningHierarchy.entrySet()) {
-            warningSet.add(entry.getKey());
-            warningSet.addAll(Arrays.asList(entry.getValue()));
-        }
-        return new ArrayList<>(warningSet);
     }
 }
