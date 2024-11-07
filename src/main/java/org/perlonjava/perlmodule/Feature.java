@@ -1,10 +1,6 @@
 package org.perlonjava.perlmodule;
 
 import org.perlonjava.runtime.*;
-import org.perlonjava.runtime.FeatureFlags;
-
-import java.util.List;
-import java.util.ArrayList;
 
 /**
  * The FeatureFlags class provides functionalities similar to the Perl feature module.

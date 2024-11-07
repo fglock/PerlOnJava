@@ -41,6 +41,19 @@ public class FeatureFlags {
         this.symbolTable = symbolTable;
     }
 
+    /**
+     * Returns a list of all feature names.
+     *
+     * @return A list of all feature names.
+     */
+    public static List<String> getFeatureList() {
+        Set<String> featureSet = new HashSet<>();
+        for (Map.Entry<String, String[]> entry : featureBundles.entrySet()) {
+            featureSet.addAll(Arrays.asList(entry.getValue()));
+        }
+        return new ArrayList<>(featureSet);
+    }
+
     public void initializeEnabledFeatures() {
         // Enable default features
         enableFeatureBundle(":default");
@@ -90,18 +103,5 @@ public class FeatureFlags {
      */
     public boolean isFeatureEnabled(String feature) {
         return symbolTable.isFeatureCategoryEnabled(feature);
-    }
-
-    /**
-     * Returns a list of all feature names.
-     *
-     * @return A list of all feature names.
-     */
-    public static List<String> getFeatureList() {
-        Set<String> featureSet = new HashSet<>();
-        for (Map.Entry<String, String[]> entry : featureBundles.entrySet()) {
-            featureSet.addAll(Arrays.asList(entry.getValue()));
-        }
-        return new ArrayList<>(featureSet);
     }
 }

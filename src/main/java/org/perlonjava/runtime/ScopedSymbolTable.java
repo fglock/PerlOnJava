@@ -369,5 +369,4 @@ public class ScopedSymbolTable {
         Integer bitPosition = featureBitPositions.get(feature);
         return bitPosition != null && (featureFlagsStack.peek() & (1 << bitPosition)) != 0;
     }
-
 }
