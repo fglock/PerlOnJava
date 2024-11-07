@@ -435,9 +435,12 @@ public class OperatorParser {
                 operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
                 return new OperatorNode(token.text, operand, currentIndex);
             case "goto":
-                // Handle 'goto' keyword as a unary operator with an operand;
-                // Parentheses are ignored.
-                // 'goto &x' creates 'return &x' instead, because we can't do a tail call
+                // The 'goto' keyword is treated as a unary operator with an operand.
+                // In this context, parentheses around the operand are ignored.
+                // Since Java does not support direct tail call optimization or a 'goto' statement,
+                // we simulate the behavior by transforming 'goto &x' into 'return &x'.
+                // This effectively means that the control flow will return the result of the operand,
+                // mimicking the tail call by returning the result of another method call.
                 operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
                 return new OperatorNode("return", operand, currentIndex);
             case "return":
