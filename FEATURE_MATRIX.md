@@ -204,7 +204,8 @@
 - ✔️   **`die` related features**: `$SIG{__DIE__}`, `$SIG{__WARN__}`
 - ❌  **`PROPAGATE`**: `PROPAGATE` method is not yet supported.
 - ✔️   **`require` operator**: The `require` operator implemented; version checks are implemented.
-- 🚧  **`use` and `no` statements**: Module imports and version check via `use` and `no` are partially implemented; version checks are implemented.
+- ✔️   **`use` and `no` statements**: Module imports and version check via `use` and `no` are implemented; version checks are implemented.
+- ❌  **`use` and `no` statements**: Complex expressions in `use` are missing: `use constant PI => 4 * atan2(1, 1);`.
 - ✔️   **`caller` operator**: `caller` returns ($package, $filename, $line). The remaining results are undef. This means we don't include subroutine names in error messages yet.
 - ✔️   **Import methods**: `import`, `unimport` works.
 - ✔️   **`__SUB__`**: The `__SUB__` keyword works.
