@@ -263,18 +263,17 @@
 - ✔️   **parent** pragma
 - ✔️   **constant** pragma
 - ✔️   **if** pragma
+- ✔️   **lib** pragma
 - 🚧  **utf8** pragma: utf8 is always on. Disabling utf8 might work in a future version.
 - 🚧  **feature** pragma
 - 🚧  **warnings** pragma
 - ❌  **version** pragma: version objects are not yet supported.
 - ❌  **experimental** pragma
-- ❌  **constant** pragma
 - ❌  **mro** (Method Resolution Order) pragma. The compiler always use `C3` to linearize the inheritance hierarchy.
 - ❌  **attributes** pragma
 - ❌  **bignum, bigint, and bigrat** pragmas
 - ❌  **encoding** pragma
 - ❌  **integer** pragma
-- ❌  **lib** pragma
 - ❌  **re** pragma for regular expression options
 - ❌  **subs** pragma
 - ❌  **defer** feature
