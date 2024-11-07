@@ -92,7 +92,7 @@
   - Added `$SIG{ALRM}`
   - Added `\N{U+hex}` operator in double quoted strings and regex.
   - Improved Exporter.pm, glob assignment.
-  - Added modules: `constant`, `if`, `Internals` (`SvREADONLY`).
+  - Added modules: `constant`, `if`, `lib`, `Internals` (`SvREADONLY`).
   - Added `goto &name`; not a tail-call.
   - Work in progress:
     - `state` variables.
