@@ -131,6 +131,7 @@ public class EmitterVisitor implements Visitor {
                 return;
             case "close":
             case "readline":
+            case "fileno":
                 EmitOperator.handleReadlineOperator(this, node);
                 return;
             case "sprintf":

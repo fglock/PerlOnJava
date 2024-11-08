@@ -715,6 +715,45 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
     }
 
+    public RuntimeScalar fileno() {
+        RuntimeIO runtimeIO = this;
+
+        try {
+            int fd;
+            if (runtimeIO == stdin) {
+                fd = 0; // File descriptor for STDIN
+            } else if (runtimeIO == stdout) {
+                fd = 1; // File descriptor for STDOUT
+            } else if (runtimeIO == stderr) {
+                fd = 2; // File descriptor for STDERR
+            } else if (runtimeIO.fileChannel != null) {
+                // FileChannel does not directly expose a file descriptor in Java
+                fd = -1; // Placeholder for unsupported operation
+            } else if (runtimeIO.socket != null) {
+                // Get the file descriptor from the Socket
+                fd = runtimeIO.socket.getChannel().hashCode(); // Use hashCode as a proxy
+            } else if (runtimeIO.serverSocket != null) {
+                // Get the file descriptor from the ServerSocket
+                fd = runtimeIO.serverSocket.getChannel().hashCode(); // Use hashCode as a proxy
+            } else if (runtimeIO.directoryStream != null) {
+                // On systems with dirfd support, return the directory file descriptor
+                fd = -1; // Return -1 if not supported
+            } else if (runtimeIO.inputStream instanceof FileInputStream) {
+                // Attempt to get the file descriptor from FileInputStream
+                fd = ((FileInputStream) runtimeIO.inputStream).getFD().hashCode();
+            } else if (runtimeIO.outputStream instanceof FileOutputStream) {
+                // Attempt to get the file descriptor from FileOutputStream
+                fd = ((FileOutputStream) runtimeIO.outputStream).getFD().hashCode();
+            } else {
+                fd = -1; // No real file descriptor
+            }
+            return new RuntimeScalar(fd);
+        } catch (IOException e) {
+            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+            return scalarUndef;
+        }
+    }
+
     // Method to get the underlying Socket
     public Socket getSocket() {
         return this.socket;

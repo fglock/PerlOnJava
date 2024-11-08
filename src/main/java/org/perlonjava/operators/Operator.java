@@ -162,6 +162,11 @@ public class Operator {
         return fh.close();
     }
 
+    public static RuntimeScalar fileno(RuntimeScalar fileHandle) {
+        RuntimeIO fh = fileHandle.getRuntimeIO();
+        return fh.fileno();
+    }
+
     /**
      * Prints the elements to the specified file handle according to the format string.
      *
