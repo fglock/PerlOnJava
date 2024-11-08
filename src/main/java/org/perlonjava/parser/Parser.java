@@ -1,17 +1,14 @@
 package org.perlonjava.parser;
 
-import org.perlonjava.ArgumentParser;
 import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.*;
-import org.perlonjava.scriptengine.PerlLanguageProvider;
 
 import java.util.*;
 
 import static org.perlonjava.parser.TokenUtils.peek;
-import static org.perlonjava.runtime.SpecialBlock.saveEndBlock;
 
 public class Parser {
     public static final Set<String> TERMINATORS =
@@ -138,36 +135,9 @@ public class Parser {
                 case "CHECK":
                 case "INIT":
                 case "UNITCHECK":
-                    throw new PerlCompilerException(tokenIndex, "Not implemented", ctx.errorUtil);
                 case "BEGIN":
                 case "END":
-                    String blockName = TokenUtils.consume(this).text;
-                    int codeStart = tokenIndex;
-                    TokenUtils.consume(this, LexerTokenType.OPERATOR, "{");
-                    BlockNode block = parseBlock();
-                    TokenUtils.consume(this, LexerTokenType.OPERATOR, "}");
-                    int codeEnd = tokenIndex;
-
-                    ArgumentParser.CompilerOptions parsedArgs = ctx.compilerOptions.clone();
-                    parsedArgs.code = "sub " + TokenUtils.toText(tokens, codeStart, codeEnd - 1);
-                    ctx.logDebug("special block " + blockName + " <<<" + parsedArgs.code + ">>>");
-                    try {
-                        RuntimeList result = PerlLanguageProvider.executePerlCode(parsedArgs, false);
-                        RuntimeScalar codeRef = (RuntimeScalar) result.elements.getFirst();
-                        if (blockName.equals("BEGIN")) {
-                            codeRef.apply(new RuntimeArray(), RuntimeContextType.VOID);
-                        } else if (blockName.equals("END")) {
-                            saveEndBlock(codeRef);
-                        }
-                    } catch (Throwable t) {
-                        String message = t.getMessage();
-                        if (!message.endsWith("\n")) {
-                            message += "\n";
-                        }
-                        message += blockName + " failed--compilation aborted";
-                        throw new PerlCompilerException(tokenIndex, message, ctx.errorUtil);
-                    }
-                    return new OperatorNode("undef", null, tokenIndex);
+                    return SpecialBlock.parseSpecialBlock(this);
                 case "if":
                 case "unless":
                     return StatementParser.parseIfStatement(this);
