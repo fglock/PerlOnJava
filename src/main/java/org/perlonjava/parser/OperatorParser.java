@@ -388,6 +388,7 @@ public class OperatorParser {
             case "printf":
             case "print":
             case "say":
+            case "truncate":
                 // Handle 'print' keyword as a Binary operator with a FileHandle and List operands
                 ListNode printOperand = ListParser.parseZeroOrMoreList(parser, 0, false, true, true, false);
                 handle = printOperand.handle;
