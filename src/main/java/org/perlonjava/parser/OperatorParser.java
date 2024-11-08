@@ -353,6 +353,7 @@ public class OperatorParser {
             case "getc":
             case "open":
             case "close":
+            case "fileno":
                 // Handle 'open' keyword as a Binary operator with a FileHandle and List operands
                 operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
                 Node handle = null;
@@ -367,7 +368,8 @@ public class OperatorParser {
                         case "getc":
                             yield "main::STDIN";
                         case "open":
-                            throw new PerlCompilerException(parser.tokenIndex, "Not enough arguments for open", parser.ctx.errorUtil);
+                        case "fileno":
+                            throw new PerlCompilerException(parser.tokenIndex, "Not enough arguments for " + token.text, parser.ctx.errorUtil);
                         case "close":
                             yield "main::STDIN";    // XXX TODO use currently selected file handle
                         default:

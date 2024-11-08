@@ -104,7 +104,6 @@
 - ✔️   **`crypt` operator**: `crypt` is implemented.
 - ✔️   **`study`, `srand`**: `study`, `srand` are implemented.
 - ✔️   **`chomp`**: `chomp` is implemented.
-- ✔️   **`select`**: `select(filehandle)` is implemented.
 - ✔️   **`sleep`**: `sleep` is implemented. It takes fractional seconds. `$SIG{ALRM}` is also implemented.
 - ✔️   **Vectors**: `vec` is implemented.
 - ❌  **Chained operators**: operations like `$x < $y <= $z` not yet implemented.
@@ -190,8 +189,9 @@
 - ✔️   **`do` file**: File execution using `do` is implemented.
 - ✔️   **`print` operators**: `print`, `printf` and `say` statements are implemented, with support for file handles.
 - ✔️   **`printf` and `sprintf`**: String formatting is implemented.
-- ✔️   **I/O operators**: `open`, `readline`, `eof`, `close`, `unlink`, `readpipe` are implemented.
+- ✔️   **I/O operators**: `open`, `readline`, `eof`, `close`, `unlink`, `readpipe`, `fileno` are implemented.
 - ✔️   **`open`**: 2-argument `open` supported forms are: `<-`, `-`, `>-`, `filename`.
+- ✔️   **`select`**: `select(filehandle)` is implemented.
 - ✔️   **Short-circuit and, or**: Short-circuit logical operators are supported.
 - ✔️   **Low-precedence/high precedence operators**: Logical operators like `not`, `or`, `and` are supported.
 - ✔️   **Ternary operator**: The ternary conditional operator is implemented.
