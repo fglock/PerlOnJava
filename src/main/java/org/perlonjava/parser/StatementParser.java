@@ -63,6 +63,8 @@ public class StatementParser {
     public static Node parseForStatement(Parser parser, String label) {
         TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "for" or "foreach"
 
+        parser.ctx.symbolTable.enterScope();
+
         // Parse optional loop variable
         Node varNode = null;
         LexerToken token = TokenUtils.peek(parser); // "my" "$" "("
@@ -82,12 +84,16 @@ public class StatementParser {
             token = TokenUtils.peek(parser);
             if (token.text.equals(")")) {
                 // 1-argument for loop (foreach-like)
-                return parseOneArgumentForLoop(parser, label, varNode, initialization);
+                Node node = parseOneArgumentForLoop(parser, label, varNode, initialization);
+                parser.ctx.symbolTable.exitScope();
+                return node;
             }
         }
 
         // 3-argument for loop
-        return parseThreeArgumentForLoop(parser, label, varNode, initialization);
+        Node node = parseThreeArgumentForLoop(parser, label, varNode, initialization);
+        parser.ctx.symbolTable.exitScope();
+        return node;
     }
 
     /**
