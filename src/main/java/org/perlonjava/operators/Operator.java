@@ -167,6 +167,10 @@ public class Operator {
         return fh.fileno();
     }
 
+    public static RuntimeScalar truncate(RuntimeList runtimeList, RuntimeScalar fileHandle) {
+        return RuntimeIO.truncate(fileHandle, ((RuntimeScalar) runtimeList.elements.getFirst()).getLong());
+    }
+
     /**
      * Prints the elements to the specified file handle according to the format string.
      *

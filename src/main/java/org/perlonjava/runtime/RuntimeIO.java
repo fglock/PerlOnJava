@@ -470,6 +470,46 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
     }
 
+    /**
+     * Unified truncate method that handles both filename and file handle.
+     *
+     * @param scalar The RuntimeScalar representing either a filename or a file handle.
+     * @param length The length to truncate the file to.
+     * @return true if successful, false if an error occurs.
+     * @throws UnsupportedOperationException if truncate is not supported.
+     */
+    public static RuntimeScalar truncate(RuntimeScalar scalar, long length) {
+        if (scalar.type == RuntimeScalarType.STRING) {
+            // Handle as filename
+            String filename = scalar.toString();
+            Path filePath = Paths.get(filename);
+            try (FileChannel channel1 = FileChannel.open(filePath, StandardOpenOption.WRITE)) {
+                channel1.truncate(length);
+                return scalarTrue;
+            } catch (IOException e) {
+                System.err.println("Truncate operation failed: " + e.getMessage());
+                getGlobalVariable("main::!").set("Truncate operation failed: " + e.getMessage());
+                return scalarFalse;
+            }
+        } else if (scalar.type == RuntimeScalarType.GLOB || scalar.type == RuntimeScalarType.GLOBREFERENCE) {
+            // Handle as file handle
+            RuntimeIO runtimeIO = scalar.getRuntimeIO();
+            if (runtimeIO.fileChannel == null) {
+                throw new UnsupportedOperationException("No file channel available for truncation");
+            }
+            try {
+                runtimeIO.fileChannel.truncate(length);
+                return scalarTrue;
+            } catch (IOException e) {
+                System.err.println("Truncate operation failed: " + e.getMessage());
+                getGlobalVariable("main::!").set("Truncate operation failed: " + e.getMessage());
+                return scalarFalse;
+            }
+        } else {
+            throw new UnsupportedOperationException("Unsupported scalar type for truncate");
+        }
+    }
+
     // Method to read into a byte array
     public int read(byte[] buffer) {
         try {

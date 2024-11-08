@@ -104,6 +104,7 @@
     - lexical features.
     - lexical strictness.
     - lexical utf8 source code.
+    - `truncate` operator.
   - Stretch goals
     - Add support for concurrency and parallelism, such as threads and async/await.
     - Enhance security features, including sandboxing and input validation.
