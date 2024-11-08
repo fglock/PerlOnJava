@@ -122,7 +122,7 @@ public class ScopedSymbolTable {
      */
     public int addVariable(String name, String variableDeclType) {
         clearVisibleVariablesCache();
-        return symbolTableStack.peek().addVariable(name, variableDeclType);
+        return symbolTableStack.peek().addVariable(name, variableDeclType, getCurrentPackage());
     }
 
     /**

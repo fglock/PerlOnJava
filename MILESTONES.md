@@ -99,12 +99,12 @@
     - `state` variables.
     - `socket` and related operators.
     - `use VERSION`, `require VERSION`.
-    - `BEGIN`, `END` blocks.
+    - `BEGIN`, `END` blocks: state and my variables are not captured.
     - lexical warnings.
     - lexical features.
     - lexical strictness.
     - lexical utf8 source code.
-    - `truncate` operator.
+    - `truncate`, `seek` operators.
   - Stretch goals
     - Add support for concurrency and parallelism, such as threads and async/await.
     - Enhance security features, including sandboxing and input validation.
