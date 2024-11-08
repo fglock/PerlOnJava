@@ -6,12 +6,14 @@ import java.util.Map;
 /**
  * A simple symbol table that maps variable names to unique integer indices.
  */
-class SymbolTable {
+public class SymbolTable {
     // A map to store variable names and their corresponding indices
-    public Map<String, Integer> table = new HashMap<>();
+    public Map<String, SymbolEntry> variableIndex = new HashMap<>();
 
     // A counter to generate unique indices for variables
     public int index;
+
+    public record SymbolEntry(Integer index, String name, String decl) {}
 
     public SymbolTable(int index) {
         this.index = index;
@@ -23,15 +25,15 @@ class SymbolTable {
      * @param name The name of the variable to add.
      * @return The index of the variable in the symbol table.
      */
-    public int addVariable(String name) {
+    public int addVariable(String name, String variableDeclType) {
         // Check if the variable is not already in the table
         // XXX TODO under 'no strict', we may need to allow variable redeclaration
-        if (!table.containsKey(name)) {
+        if (!variableIndex.containsKey(name)) {
             // Add the variable with a unique index
-            table.put(name, index++);
+            variableIndex.put(name, new SymbolEntry(index++, name, variableDeclType));
         }
         // Return the index of the variable
-        return table.get(name);
+        return variableIndex.get(name).index;
     }
 
     /**
@@ -42,7 +44,7 @@ class SymbolTable {
      */
     public int getVariableIndex(String name) {
         // Return the index of the variable, or -1 if not found
-        return table.getOrDefault(name, -1);
+        return variableIndex.getOrDefault(name, new SymbolEntry(-1, "", null)).index;
     }
 
     @Override
@@ -50,9 +52,9 @@ class SymbolTable {
         StringBuilder sb = new StringBuilder();
         sb.append("SymbolTable {\n");
 
-        sb.append("  table: {\n");
-        for (Map.Entry<String, Integer> entry : table.entrySet()) {
-            sb.append("    ").append(entry.getKey()).append(": ").append(entry.getValue()).append(",\n");
+        sb.append("  variableIndex: {\n");
+        for (Map.Entry<String, SymbolEntry> entry : variableIndex.entrySet()) {
+            sb.append("    ").append(entry.getValue()).append(",\n");
         }
         sb.append("  },\n");
 

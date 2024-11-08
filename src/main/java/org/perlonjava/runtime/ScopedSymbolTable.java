@@ -35,7 +35,7 @@ public class ScopedSymbolTable {
     // Stack to manage strict options for each scope
     private final Stack<Integer> strictOptionsStack = new Stack<>();
     // Cache for the getAllVisibleVariables method
-    private Map<Integer, String> visibleVariablesCache;
+    private Map<Integer, SymbolTable.SymbolEntry> visibleVariablesCache;
 
     /**
      * Constructs a ScopedSymbolTable.
@@ -120,9 +120,9 @@ public class ScopedSymbolTable {
      * @param name The name of the variable to add.
      * @return The index of the variable in the current scope.
      */
-    public int addVariable(String name) {
+    public int addVariable(String name, String variableDeclType) {
         clearVisibleVariablesCache();
-        return symbolTableStack.peek().addVariable(name);
+        return symbolTableStack.peek().addVariable(name, variableDeclType);
     }
 
     /**
@@ -168,7 +168,7 @@ public class ScopedSymbolTable {
      *
      * @return A TreeMap of variable index to variable name for all visible variables.
      */
-    public Map<Integer, String> getAllVisibleVariables() {
+    public Map<Integer, SymbolTable.SymbolEntry> getAllVisibleVariables() {
         // Check if the result is already cached
         if (visibleVariablesCache != null) {
             return visibleVariablesCache;
@@ -176,7 +176,7 @@ public class ScopedSymbolTable {
 
         // TreeMap to store variable indices as keys and variable names as values.
         // TreeMap is used to keep the entries sorted by the keys (variable indices).
-        Map<Integer, String> visibleVariables = new TreeMap<>();
+        Map<Integer, SymbolTable.SymbolEntry> visibleVariables = new TreeMap<>();
 
         // HashSet to keep track of variable names that have already been added to visibleVariables.
         // This helps to avoid adding the same variable multiple times if it appears in multiple scopes.
@@ -185,14 +185,14 @@ public class ScopedSymbolTable {
         // Iterate from innermost scope (top of the stack) to outermost scope (bottom of the stack).
         for (int i = symbolTableStack.size() - 1; i >= 0; i--) {
             // Retrieve the symbol table for the current scope.
-            Map<String, Integer> scope = symbolTableStack.get(i).table;
+            Map<String, SymbolTable.SymbolEntry> scope = symbolTableStack.get(i).variableIndex;
 
             // Iterate through all variables in the current scope.
-            for (Map.Entry<String, Integer> entry : scope.entrySet()) {
+            for (Map.Entry<String, SymbolTable.SymbolEntry> entry : scope.entrySet()) {
                 // Check if the variable name has already been seen.
                 if (!seenVariables.contains(entry.getKey())) {
                     // If not seen, add the variable's index and name to visibleVariables.
-                    visibleVariables.put(entry.getValue(), entry.getKey());
+                    visibleVariables.put(entry.getValue().index(), entry.getValue());
 
                     // Mark the variable name as seen by adding it to seenVariables.
                     seenVariables.add(entry.getKey());
@@ -209,10 +209,10 @@ public class ScopedSymbolTable {
 
     // XXX TODO cache this
     public String[] getVariableNames() {
-        Map<Integer, String> visibleVariables = this.getAllVisibleVariables();
+        Map<Integer, SymbolTable.SymbolEntry> visibleVariables = this.getAllVisibleVariables();
         String[] vars = new String[visibleVariables.size()];
         for (Integer index : visibleVariables.keySet()) {
-            vars[index] = visibleVariables.get(index);
+            vars[index] = visibleVariables.get(index).name();
         }
         return vars;
     }
@@ -246,9 +246,9 @@ public class ScopedSymbolTable {
         st.enterScope();
 
         // Clone visible variables
-        Map<Integer, String> visibleVariables = this.getAllVisibleVariables();
+        Map<Integer, SymbolTable.SymbolEntry> visibleVariables = this.getAllVisibleVariables();
         for (Integer index : visibleVariables.keySet()) {
-            st.addVariable(visibleVariables.get(index));
+            st.addVariable(visibleVariables.get(index).name(), visibleVariables.get(index).decl());
         }
 
         // Clone the current package
