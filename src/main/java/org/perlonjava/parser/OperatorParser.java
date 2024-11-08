@@ -1,10 +1,13 @@
 package org.perlonjava.parser;
 
 import org.perlonjava.astnode.*;
+import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.RuntimeContextType;
+import org.perlonjava.runtime.ScopedSymbolTable;
 
 import java.util.List;
 
@@ -420,9 +423,7 @@ public class OperatorParser {
             case "our":
             case "state":
             case "my":
-                // Handle 'my' keyword as a unary operator with an operand
-                operand = parser.parsePrimary();
-                return new OperatorNode(token.text, operand, currentIndex);
+                return parseVariableDeclaration(parser, token.text, currentIndex);
             case "local":
                 // Handle 'local' keyword as a unary operator with an operand
                 if (peek(parser).text.equals("(")) {
@@ -473,6 +474,47 @@ public class OperatorParser {
                 return StringParser.parseRawString(parser, token.text);
         }
         return null;
+    }
+
+    private static void addVariableToScope(EmitterContext ctx, String operator, OperatorNode node) {
+        String sigil = node.operator;
+        if ("$@%".contains(sigil)) {
+            // not "undef"
+            Node identifierNode = node.operand;
+            if (identifierNode instanceof IdentifierNode) { // my $a
+                String name = ((IdentifierNode) identifierNode).name;
+                String var = sigil + name;
+                if (ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
+                    System.err.println(
+                            ctx.errorUtil.errorMessage(node.getIndex(),
+                                    "Warning: \"" + operator + "\" variable "
+                                            + var
+                                            + " masks earlier declaration in same ctx.symbolTable"));
+                }
+                int varIndex = ctx.symbolTable.addVariable(var);
+            }
+        }
+    }
+
+    private static OperatorNode parseVariableDeclaration(Parser parser, String operator, int currentIndex) {
+
+        // Create OperatorNode ($, @, %), ListNode (includes undef), SubroutineNode
+        Node operand = parser.parsePrimary();
+        parser.ctx.logDebug("parseVariableDeclaration " + operator + ": " + operand);
+
+        // Add variables to the scope
+        if (operand instanceof ListNode listNode) { // my ($a, $b)  our ($a, $b)
+            // process each item of the list; then returns the list
+            for (Node element : listNode.elements) {
+                if (element instanceof OperatorNode operandNode) {
+                    addVariableToScope(parser.ctx, operator, operandNode);
+                }
+            }
+        } else if (operand instanceof OperatorNode operandNode) {
+            addVariableToScope(parser.ctx, operator, operandNode);
+        }
+
+        return new OperatorNode(operator, operand, currentIndex);
     }
 
     private static OperatorNode parseOperatorWithOneOptionalArgument(Parser parser, LexerToken token) {
