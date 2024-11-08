@@ -189,7 +189,7 @@
 - ✔️   **`do` file**: File execution using `do` is implemented.
 - ✔️   **`print` operators**: `print`, `printf` and `say` statements are implemented, with support for file handles.
 - ✔️   **`printf` and `sprintf`**: String formatting is implemented.
-- ✔️   **I/O operators**: `open`, `readline`, `eof`, `close`, `unlink`, `readpipe`, `fileno` are implemented.
+- ✔️   **I/O operators**: `open`, `readline`, `eof`, `close`, `unlink`, `readpipe`, `fileno`, `getc` are implemented.
 - ✔️   **`open`**: 2-argument `open` supported forms are: `<-`, `-`, `>-`, `filename`.
 - ✔️   **`select`**: `select(filehandle)` is implemented.
 - ✔️   **Short-circuit and, or**: Short-circuit logical operators are supported.

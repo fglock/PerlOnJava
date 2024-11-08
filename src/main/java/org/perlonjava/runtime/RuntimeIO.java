@@ -436,36 +436,38 @@ public class RuntimeIO implements RuntimeScalarReference {
     }
 
     // Method to read a single character (getc equivalent)
-    public int getc() {
+    public RuntimeScalar getc() {
         try {
             if (fileChannel != null) {
                 singleCharBuffer.clear();
                 int bytesRead = fileChannel.read(singleCharBuffer);
                 if (bytesRead == -1) {
                     isEOF = true;
-                    return -1;
+                    return scalarUndef; // End of file
                 }
                 singleCharBuffer.flip();
-                return singleCharBuffer.get() & 0xFF;
+                char character = (char) (singleCharBuffer.get() & 0xFF);
+                return new RuntimeScalar(Character.toString(character));
             } else if (bufferedReader != null) {
                 int result = bufferedReader.read();
                 if (result == -1) {
                     isEOF = true;
+                    return scalarUndef; // End of file
                 }
-                return result;
+                return new RuntimeScalar(Character.toString((char) result));
             } else if (inputStream != null) {
                 int result = inputStream.read();
                 if (result == -1) {
                     isEOF = true;
+                    return scalarUndef; // End of file
                 }
-                return result;
+                return new RuntimeScalar(Character.toString((char) result));
             }
             throw new PerlCompilerException("No input source available");
         } catch (Exception e) {
-            System.err.println("File operation failed: " + e.getMessage());
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+            return scalarUndef; // Indicating an error
         }
-        return -1; // Indicating an error or EOF
     }
 
     // Method to read into a byte array

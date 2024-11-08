@@ -94,7 +94,7 @@
   - Improved Exporter.pm, glob assignment.
   - Added modules: `constant`, `if`, `lib`, `Internals` (`SvREADONLY`), `Carp`.
   - Added `goto &name`; not a tail-call.
-  - Added operators: `fileno`.
+  - Added operators: `fileno`, `getc`.
   - Work in progress:
     - `state` variables.
     - `socket` and related operators.
