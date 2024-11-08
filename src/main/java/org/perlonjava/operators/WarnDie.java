@@ -6,8 +6,8 @@ import static org.perlonjava.runtime.GlobalContext.getGlobalHash;
 import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
 
 public class WarnDie {
-    public static RuntimeDataProvider warn(RuntimeDataProvider value, RuntimeScalar message) {
-        String out = value.toString();
+    public static RuntimeDataProvider warn(RuntimeDataProvider message, RuntimeScalar where) {
+        String out = message.toString();
         if (out.isEmpty()) {
             RuntimeScalar err = getGlobalVariable("main::@");
             if (err.getDefinedBoolean()) {
@@ -17,7 +17,7 @@ public class WarnDie {
             }
         }
         if (!out.endsWith("\n")) {
-            out += message.toString();
+            out += where.toString();
         }
 
         RuntimeScalar sig = getGlobalHash("main::SIG").get("__WARN__");

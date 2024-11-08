@@ -114,7 +114,7 @@ public class StringParser {
             tokPos--;
             tokens.get(tokPos).text = remain.toString();  // Put the remaining string back in the tokens list
         }
-        return new ParsedString(index, tokPos, buffers, startDelim, endDelim);
+        return new ParsedString(index, tokPos, buffers, startDelim, endDelim, ' ', ' ');
     }
 
     public static ParsedString parseRawStrings(EmitterContext ctx, List<LexerToken> tokens, int tokenIndex, int stringCount) {
@@ -133,6 +133,8 @@ public class StringParser {
                 ParsedString ast2 = parseRawStringWithDelimiter(ctx, tokens, pos, false);
                 ast.buffers.add(ast2.buffers.getFirst());
                 ast.next = ast2.next;
+                ast.secondBufferStartDelim = ast2.startDelim;
+                ast.secondBufferEndDelim = ast2.endDelim;
                 pos = ast.next;
             }
         }
@@ -527,10 +529,14 @@ public class StringParser {
             ctx.logDebug("regex e-modifier: " + replaceStr);
             Parser blockParser = new Parser(ctx, new Lexer(replaceStr).tokenize());
             replace = blockParser.parseBlock();
-        } else {
+        } else if (rawStr.secondBufferStartDelim != '\'') {
             // handle string interpolaton
-            rawStr.buffers.removeFirst();   // shift replace to first position
-            replace = parseDoubleQuotedString(ctx, rawStr, false);
+            rawStr.buffers.removeFirst();   // consume the first buffer
+            replace = parseDoubleQuotedString(ctx, rawStr, true);
+        } else {
+            // handle single quoted string
+            rawStr.buffers.removeFirst();   // consume the first buffer
+            replace = parseSingleQuotedString(rawStr);
         }
 
         // If replace is not a plain string, make it an anonymous subroutine
@@ -681,13 +687,30 @@ public class StringParser {
         public ArrayList<String> buffers;  // Parsed string
         public char startDelim;
         public char endDelim;
+        public char secondBufferStartDelim;  // Start delimiter of the second buffer
+        public char secondBufferEndDelim;    // End delimiter of the second buffer
 
-        public ParsedString(int index, int next, ArrayList<String> buffers, char startDelim, char endDelim) {
+        public ParsedString(int index, int next, ArrayList<String> buffers, char startDelim, char endDelim, char secondBufferStartDelim, char secondBufferEndDelim) {
             this.index = index;
             this.next = next;
             this.buffers = buffers;
             this.startDelim = startDelim;
             this.endDelim = endDelim;
+            this.secondBufferStartDelim = secondBufferStartDelim;
+            this.secondBufferEndDelim = secondBufferEndDelim;
+        }
+
+        @Override
+        public String toString() {
+            return "ParsedString{" +
+                    "index=" + index +
+                    ", next=" + next +
+                    ", buffers=" + buffers +
+                    ", startDelim=" + startDelim +
+                    ", endDelim=" + endDelim +
+                    ", secondBufferStartDelim=" + secondBufferStartDelim +
+                    ", secondBufferEndDelim=" + secondBufferEndDelim +
+                    '}';
         }
     }
 }
