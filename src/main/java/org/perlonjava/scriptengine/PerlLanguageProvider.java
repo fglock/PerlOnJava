@@ -54,9 +54,9 @@ public class PerlLanguageProvider {
         ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
         // Enter a new scope in the symbol table and add special Perl variables
         globalSymbolTable.enterScope();
-        globalSymbolTable.addVariable("this"); // anon sub instance is local variable 0
-        globalSymbolTable.addVariable("@_"); // Argument list is local variable 1
-        globalSymbolTable.addVariable("wantarray"); // Call context is local variable 2
+        globalSymbolTable.addVariable("this", ""); // anon sub instance is local variable 0
+        globalSymbolTable.addVariable("@_", "our"); // Argument list is local variable 1
+        globalSymbolTable.addVariable("wantarray", ""); // Call context is local variable 2
 
         // Create the compiler context
         EmitterContext ctx = new EmitterContext(

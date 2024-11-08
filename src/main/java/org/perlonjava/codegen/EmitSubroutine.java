@@ -9,6 +9,7 @@ import org.perlonjava.astnode.SubroutineNode;
 import org.perlonjava.runtime.RuntimeCode;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.ScopedSymbolTable;
+import org.perlonjava.runtime.SymbolTable;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -34,7 +35,7 @@ public class EmitSubroutine {
 
         // Retrieve closure variable list
         // Alternately, scan the AST for variables and capture only the ones that are used
-        Map<Integer, String> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
+        Map<Integer, SymbolTable.SymbolEntry> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
         ctx.logDebug("AnonSub ctx.symbolTable.getAllVisibleVariables");
 
         // Create a new symbol table for the subroutine

@@ -245,7 +245,7 @@ public class EmitVariable {
                                                 + var
                                                 + " masks earlier declaration in same ctx.symbolTable"));
                     }
-                    int varIndex = emitterVisitor.ctx.symbolTable.addVariable(var);
+                    int varIndex = emitterVisitor.ctx.symbolTable.addVariable(var, operator);
                     // TODO optimization - SETVAR+MY can be combined
 
                     // Determine the class name based on the sigil

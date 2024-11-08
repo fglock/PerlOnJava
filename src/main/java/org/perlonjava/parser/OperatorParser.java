@@ -491,7 +491,7 @@ public class OperatorParser {
                                             + var
                                             + " masks earlier declaration in same ctx.symbolTable"));
                 }
-                int varIndex = ctx.symbolTable.addVariable(var);
+                int varIndex = ctx.symbolTable.addVariable(var, operator);
             }
         }
     }
