@@ -167,7 +167,7 @@ public class Operator {
         return fh.fileno();
     }
 
-    public static RuntimeScalar truncate(RuntimeList runtimeList, RuntimeScalar fileHandle) {
+    public static RuntimeScalar truncate(RuntimeScalar fileHandle, RuntimeList runtimeList) {
         return RuntimeIO.truncate(fileHandle, ((RuntimeScalar) runtimeList.elements.getFirst()).getLong());
     }
 

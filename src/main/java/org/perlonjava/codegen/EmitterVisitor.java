@@ -127,13 +127,13 @@ public class EmitterVisitor implements Visitor {
             case "printf":
             case "print":
             case "say":
-            case "truncate":
                 EmitOperator.handleSayOperator(this, node);
                 return;
             case "close":
             case "readline":
             case "fileno":
             case "getc":
+            case "truncate":
                 EmitOperator.handleReadlineOperator(this, node);
                 return;
             case "sprintf":

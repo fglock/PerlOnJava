@@ -354,6 +354,7 @@ public class OperatorParser {
             case "open":
             case "close":
             case "fileno":
+            case "truncate":
                 // Handle 'open' keyword as a Binary operator with a FileHandle and List operands
                 operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
                 Node handle = null;
@@ -388,7 +389,6 @@ public class OperatorParser {
             case "printf":
             case "print":
             case "say":
-            case "truncate":
                 // Handle 'print' keyword as a Binary operator with a FileHandle and List operands
                 ListNode printOperand = ListParser.parseZeroOrMoreList(parser, 0, false, true, true, false);
                 handle = printOperand.handle;
