@@ -116,6 +116,24 @@ public class EmitOperator {
      */
     static void handleReadlineOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         String operator = node.operator;
+        emitterVisitor.ctx.logDebug("handleReadlineOperator " + node);
+
+        if (operator.equals("truncate")) {
+            // Emit the File Handle or file name.
+            if (node.left instanceof OperatorNode || node.left instanceof StringNode) {
+                // If the left node is an operator, accept it in SCALAR context.
+                node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            } else {
+                // Otherwise, emit the file handle directly.
+                emitterVisitor.emitFileHandle(node.left);
+            }
+            node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/operators/Operator", operator,
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+            return;
+        }
 
         // Emit the File Handle
         if (node.left instanceof OperatorNode) {
@@ -126,7 +144,7 @@ public class EmitOperator {
             emitterVisitor.emitFileHandle(node.left);
         }
 
-        if (operator.equals("readline")) {
+       if (operator.equals("readline")) {
             // Push call context for SCALAR or LIST context.
             emitterVisitor.pushCallContext();
             // Invoke the static method for the operator.
