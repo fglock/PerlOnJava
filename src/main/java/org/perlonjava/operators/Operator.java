@@ -281,6 +281,11 @@ public class Operator {
         }
     }
 
+    public static RuntimeScalar getc(RuntimeScalar fileHandle) {
+        RuntimeIO fh = fileHandle.getRuntimeIO();
+        return fh.getc();
+    }
+
     /**
      * Reads EOF flag from a file handle.
      *
