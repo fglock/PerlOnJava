@@ -260,6 +260,7 @@
 - 🚧  **strict**: `strict` pragma is set to ignore `no strict`, the compiler works always in `strict` mode. `no strict` might work in a future version.
 - ✔️   **Scalar::Util**: `blessed`, `reftype`, `set_prototype` are implemented.
 - ✔️   **Internals**: `Internals::SvREADONLY` is implemented as a no-op.
+- ✔️   **Carp**: `carp`, `cluck`, `croak`, `confess`, `longmess`, `shortmess` are implemented.
 - ✔️   **parent** pragma
 - ✔️   **constant** pragma
 - ✔️   **if** pragma
