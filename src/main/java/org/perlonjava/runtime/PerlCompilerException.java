@@ -40,17 +40,19 @@ public class PerlCompilerException extends RuntimeException {
      */
     public PerlCompilerException(String message) {
         super(message);
+
+        if (message.endsWith("\n")) {
+            // Return the message as-is if it already ends with a newline
+            this.errorMessage = message;
+            return;
+        }
+
         // Retrieve caller information: package name, file name, line number
         RuntimeList caller = RuntimeScalar.caller(new RuntimeList(getScalarInt(0)), RuntimeContextType.LIST);
 
         // Check if caller information is available
         if (caller.size() < 3) {
-            // Append a newline to the message if it doesn't already end with one
-            if (!message.endsWith("\n")) {
-                this.errorMessage = message + "\n";
-            } else {
-                this.errorMessage = message;
-            }
+            this.errorMessage = message + "\n";
             return;
         }
 

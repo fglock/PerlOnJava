@@ -1,6 +1,9 @@
 package org.perlonjava.perlmodule;
 
+import org.perlonjava.operators.WarnDie;
 import org.perlonjava.runtime.*;
+
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarEmptyString;
 
 public class Carp extends PerlModuleBase {
 
@@ -72,7 +75,7 @@ public class Carp extends PerlModuleBase {
         if (die) {
             throw new PerlCompilerException(formattedMessage);
         } else {
-            System.err.println(formattedMessage);
+            WarnDie.warn(new RuntimeScalar(formattedMessage), scalarEmptyString);
             return new RuntimeList();
         }
     }

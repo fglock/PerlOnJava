@@ -3,6 +3,16 @@ use warnings;
 use Carp qw( carp cluck croak confess longmess shortmess );
 use feature 'say';
 
+sub printable {
+    my $str = join("", @_);
+    $str =~ s/\n/\n# /g;
+    return "# ${str}\n"
+};
+
+$SIG{__WARN__} = sub {
+    print printable("Warning: ", @_);
+};
+
 # Test carp (warn from the perspective of the caller)
 eval {
     carp "This is a carp warning";
