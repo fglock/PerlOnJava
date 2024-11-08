@@ -13,7 +13,7 @@ public class SymbolTable {
     // A counter to generate unique indices for variables
     public int index;
 
-    public record SymbolEntry(Integer index, String name, String decl) {}
+    public record SymbolEntry(Integer index, String name, String decl, String perlPackage) {}
 
     public SymbolTable(int index) {
         this.index = index;
@@ -25,12 +25,12 @@ public class SymbolTable {
      * @param name The name of the variable to add.
      * @return The index of the variable in the symbol table.
      */
-    public int addVariable(String name, String variableDeclType) {
+    public int addVariable(String name, String variableDeclType, String perlPackage) {
         // Check if the variable is not already in the table
         // XXX TODO under 'no strict', we may need to allow variable redeclaration
         if (!variableIndex.containsKey(name)) {
             // Add the variable with a unique index
-            variableIndex.put(name, new SymbolEntry(index++, name, variableDeclType));
+            variableIndex.put(name, new SymbolEntry(index++, name, variableDeclType, perlPackage));
         }
         // Return the index of the variable
         return variableIndex.get(name).index;
@@ -44,7 +44,7 @@ public class SymbolTable {
      */
     public int getVariableIndex(String name) {
         // Return the index of the variable, or -1 if not found
-        return variableIndex.getOrDefault(name, new SymbolEntry(-1, "", null)).index;
+        return variableIndex.getOrDefault(name, new SymbolEntry(-1, null, null, null)).index;
     }
 
     @Override
