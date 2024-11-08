@@ -29,7 +29,7 @@ print "not " unless $@ =~ /This is a croak error/; say "ok # croak error";
 eval {
     confess "This is a confess error";
 };
-print "not " unless $@ =~ /This is a confess error/; say "ok # confess error with backtrace <$@>";
+print "not " unless $@ =~ /This is a confess error/; say "ok # confess error with backtrace";
 
 # Test cluck (warn with stack backtrace)
 eval {
