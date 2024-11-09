@@ -13,11 +13,11 @@ public class SpecialBlock {
     }
 
     public static void saveInitBlock(RuntimeScalar codeRef) {
-        initBlocks.push(codeRef);
+        initBlocks.unshift(codeRef);
     }
 
     public static void saveCheckBlock(RuntimeScalar codeRef) {
-        checkBlocks.unshift(codeRef);  // runs in LIFO order
+        checkBlocks.push(codeRef);  // runs in LIFO order
     }
 
     public static void runEndBlocks() {
