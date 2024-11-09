@@ -99,7 +99,7 @@
     - `state` variables.
     - `socket` and related operators.
     - `use VERSION`, `require VERSION`.
-    - `BEGIN`, `END` blocks: state and my variables are not captured.
+    - `BEGIN`, `INIT`, `END` blocks: state and my variables are not captured.
     - lexical warnings.
     - lexical features.
     - lexical strictness.

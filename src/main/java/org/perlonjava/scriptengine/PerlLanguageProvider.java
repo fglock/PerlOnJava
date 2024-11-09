@@ -15,6 +15,7 @@ import java.lang.reflect.Constructor;
 import java.util.List;
 
 import static org.perlonjava.runtime.SpecialBlock.runEndBlocks;
+import static org.perlonjava.runtime.SpecialBlock.runInitBlocks;
 
 /**
  * The PerlLanguageProvider class is responsible for executing Perl code within the Java environment.
@@ -125,13 +126,17 @@ public class PerlLanguageProvider {
         // Define the method type
         MethodType methodType = MethodType.methodType(RuntimeList.class, RuntimeArray.class, int.class);
 
-        // Use invokedynamic to invoke the method
+        // Use invokedynamic to retrieve the method
         CallSite callSite = new ConstantCallSite(lookup.findVirtual(generatedClass, "apply", methodType));
         MethodHandle invoker = callSite.dynamicInvoker();
 
-        // Invoke the method
         RuntimeList result;
         try {
+            if (isMainProgram) {
+                runInitBlocks();
+            }
+
+            // Invoke the method
             result = (RuntimeList) invoker.invoke(instance, new RuntimeArray(), RuntimeContextType.SCALAR);
             try {
                 // Flush STDOUT, STDERR, STDIN

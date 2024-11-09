@@ -212,8 +212,8 @@
 - ✔️   **`__SUB__`**: The `__SUB__` keyword works.
 - 🚧  **`BEGIN` block**: `BEGIN` special block is implemented. `my` variable capture in BEGIN is not implemented.
 - 🚧  **`END` block**: `END` special block is implemented. `my` variable capture in END is not implemented.
+- 🚧  **`INIT`**: special block is implemented. `my` variable capture in INIT is not implemented.
 - ❌  **`CHECK`**: special block is missing.
-- ❌  **`INIT`**: special block is missing.
 - ❌  **`UNITCHECK`**: special block is missing.
 - ✔️   **Labels**: Labels are implemented.
 - ❌  **Here-docs**: Here-docs for multiline string literals are not yet implemented.
