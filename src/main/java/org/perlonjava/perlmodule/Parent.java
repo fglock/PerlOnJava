@@ -2,9 +2,8 @@ package org.perlonjava.perlmodule;
 
 import org.perlonjava.runtime.*;
 
-import java.lang.reflect.Method;
-
-import static org.perlonjava.runtime.GlobalContext.*;
+import static org.perlonjava.runtime.GlobalContext.getGlobalArray;
+import static org.perlonjava.runtime.GlobalContext.getGlobalHash;
 
 /**
  * The Parent class is responsible for managing inheritance in Perl-like modules.

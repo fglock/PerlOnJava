@@ -4,7 +4,9 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.GlobalContext;
+import org.perlonjava.runtime.NameNormalizer;
+import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.*;
 

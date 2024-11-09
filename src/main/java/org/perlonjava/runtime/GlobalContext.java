@@ -19,20 +19,17 @@ public class GlobalContext {
 
     public static final String perlVersion = "v5.38.0";
     public static final String perlVersionOld = "5.038000";
-
+    // Special variables internal names
+    public static final String LAST_FH = "main::" + Character.toString('L' - 'A' + 1) + "AST_FH"; // $^LAST_FH
+    public static final String GLOBAL_PHASE = "main::" + Character.toString('G' - 'A' + 1) + "LOBAL_PHASE"; // $^GLOBAL_PHASE
     // Global variables and subroutines
     private static final Map<String, RuntimeScalar> globalVariables = new HashMap<>();
     private static final Map<String, RuntimeArray> globalArrays = new HashMap<>();
     private static final Map<String, RuntimeHash> globalHashes = new HashMap<>();
     private static final Map<String, RuntimeScalar> globalCodeRefs = new HashMap<>();
     private static final Map<String, RuntimeScalar> globalIORefs = new HashMap<>();
-
     // Regular expression for regex variables like $main::1
     static Pattern regexVariablePattern = Pattern.compile("^main::(\\d+)$");
-
-    // Special variables internal names
-    public static final String LAST_FH = "main::" + Character.toString('L' - 'A' + 1) + "AST_FH"; // $^LAST_FH
-    public static final String GLOBAL_PHASE = "main::" + Character.toString('G' - 'A' + 1) + "LOBAL_PHASE"; // $^GLOBAL_PHASE
 
     /**
      * Initializes global variables, arrays, hashes, and other entities.
