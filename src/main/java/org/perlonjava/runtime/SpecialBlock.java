@@ -1,7 +1,5 @@
 package org.perlonjava.runtime;
 
-import static org.perlonjava.runtime.GlobalContext.getGlobalArray;
-
 public class SpecialBlock {
 
     public static RuntimeArray endBlocks = new RuntimeArray();

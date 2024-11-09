@@ -6,8 +6,6 @@ import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.RuntimeContextType;
-import org.perlonjava.runtime.ScopedSymbolTable;
 
 import java.util.List;
 

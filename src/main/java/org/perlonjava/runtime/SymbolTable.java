@@ -13,8 +13,6 @@ public class SymbolTable {
     // A counter to generate unique indices for variables
     public int index;
 
-    public record SymbolEntry(Integer index, String name, String decl, String perlPackage) {}
-
     public SymbolTable(int index) {
         this.index = index;
     }
@@ -61,5 +59,8 @@ public class SymbolTable {
         sb.append("  index: ").append(index).append("\n");
         sb.append("}");
         return sb.toString();
+    }
+
+    public record SymbolEntry(Integer index, String name, String decl, String perlPackage) {
     }
 }

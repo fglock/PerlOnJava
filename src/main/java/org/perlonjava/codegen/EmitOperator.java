@@ -144,7 +144,7 @@ public class EmitOperator {
             emitterVisitor.emitFileHandle(node.left);
         }
 
-       if (operator.equals("readline")) {
+        if (operator.equals("readline")) {
             // Push call context for SCALAR or LIST context.
             emitterVisitor.pushCallContext();
             // Invoke the static method for the operator.
