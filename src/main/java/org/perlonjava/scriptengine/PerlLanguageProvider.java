@@ -86,6 +86,7 @@ public class PerlLanguageProvider {
             for (LexerToken token : tokens) {
                 System.out.println(token);
             }
+            RuntimeIO.flushFileHandles();
             return null; // success
         }
         compilerOptions.code = null;    // Throw away the source code to spare memory
@@ -98,6 +99,7 @@ public class PerlLanguageProvider {
         if (ctx.compilerOptions.parseOnly) {
             // Printing the ast
             System.out.println(ast);
+            RuntimeIO.flushFileHandles();
             return null; // success
         }
         ctx.logDebug("-- AST:\n" + ast + "--\n");
@@ -116,6 +118,7 @@ public class PerlLanguageProvider {
             runCheckBlocks();
         }
         if (ctx.compilerOptions.compileOnly) {
+            RuntimeIO.flushFileHandles();
             return null; // success
         }
 
@@ -141,30 +144,27 @@ public class PerlLanguageProvider {
             // Invoke the method
             result = (RuntimeList) invoker.invoke(instance, new RuntimeArray(), RuntimeContextType.SCALAR);
             try {
-                // Flush STDOUT, STDERR, STDIN
-                RuntimeIO.flushFileHandles();
                 if (isMainProgram) {
                     runEndBlocks();
                 }
             } catch (Throwable endException) {
+                RuntimeIO.flushFileHandles();
                 String errorMessage = ErrorMessageUtil.stringifyException(endException);
                 System.out.println(errorMessage);
                 System.out.println("END failed--call queue aborted.");
             }
         } catch (Throwable t) {
-            // Flush STDOUT, STDERR, STDIN
-            RuntimeIO.flushFileHandles();
             if (isMainProgram) {
                 runEndBlocks();
             }
+            RuntimeIO.flushFileHandles();
             throw new RuntimeException(t);
         }
-        // Flush STDOUT, STDERR, STDIN
-        RuntimeIO.flushFileHandles();
 
         // Print the result of the execution
         ctx.logDebug("Result of generatedMethod: " + result);
 
+        RuntimeIO.flushFileHandles();
         return result;
     }
 }
