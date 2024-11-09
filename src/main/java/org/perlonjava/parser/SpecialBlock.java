@@ -29,6 +29,7 @@ public class SpecialBlock {
         String currentPackage = parser.ctx.symbolTable.getCurrentPackage();
 
         ArgumentParser.CompilerOptions parsedArgs = parser.ctx.compilerOptions.clone();
+        parsedArgs.compileOnly = false; // special blocks are always run
 
         StringBuilder codeSb = new StringBuilder();
         codeSb.append("local ${^GLOBAL_PHASE} = '").append(blockName).append("'; ");
