@@ -10,13 +10,14 @@ import org.perlonjava.scriptengine.PerlLanguageProvider;
 import java.util.Map;
 
 import static org.perlonjava.runtime.SpecialBlock.saveEndBlock;
+import static org.perlonjava.runtime.SpecialBlock.saveInitBlock;
 
 public class SpecialBlock {
 
     static OperatorNode parseSpecialBlock(Parser parser) {
         String blockName = TokenUtils.consume(parser).text;
 
-        if (blockName.equals("CHECK") || blockName.equals("INIT") || blockName.equals("UNITCHECK")) {
+        if (blockName.equals("CHECK") || blockName.equals("UNITCHECK")) {
             throw new PerlCompilerException(parser.tokenIndex, "Not implemented: " + blockName, parser.ctx.errorUtil);
         }
 
@@ -31,6 +32,7 @@ public class SpecialBlock {
         ArgumentParser.CompilerOptions parsedArgs = parser.ctx.compilerOptions.clone();
 
         StringBuilder codeSb = new StringBuilder();
+        codeSb.append("local ${^GLOBAL_PHASE} = '").append(blockName).append("'; ");
         codeSb.append("package ").append(currentPackage).append("; ");
 
         Map<Integer, SymbolTable.SymbolEntry> outerVars = parser.ctx.symbolTable.getAllVisibleVariables();
@@ -58,10 +60,10 @@ public class SpecialBlock {
         try {
             RuntimeList result = PerlLanguageProvider.executePerlCode(parsedArgs, false);
             RuntimeScalar codeRef = (RuntimeScalar) result.elements.getFirst();
-            if (blockName.equals("BEGIN")) {
-                codeRef.apply(new RuntimeArray(), RuntimeContextType.VOID);
-            } else if (blockName.equals("END")) {
-                saveEndBlock(codeRef);
+            switch (blockName) {
+                case "BEGIN" -> codeRef.apply(new RuntimeArray(), RuntimeContextType.VOID);
+                case "END" -> saveEndBlock(codeRef);
+                case "INIT" -> saveInitBlock(codeRef);
             }
         } catch (Throwable t) {
             String message = t.getMessage();

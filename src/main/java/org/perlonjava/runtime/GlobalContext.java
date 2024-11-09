@@ -30,6 +30,10 @@ public class GlobalContext {
     // Regular expression for regex variables like $main::1
     static Pattern regexVariablePattern = Pattern.compile("^main::(\\d+)$");
 
+    // Special variables internal names
+    public static final String LAST_FH = "main::" + Character.toString('L' - 'A' + 1) + "AST_FH"; // $^LAST_FH
+    public static final String GLOBAL_PHASE = "main::" + Character.toString('G' - 'A' + 1) + "LOBAL_PHASE"; // $^GLOBAL_PHASE
+
     /**
      * Initializes global variables, arrays, hashes, and other entities.
      *
@@ -58,12 +62,13 @@ public class GlobalContext {
         getGlobalVariable("main::/").set(compilerOptions.inputRecordSeparator); // initialize $/
         getGlobalVariable("main::$").set(ProcessHandle.current().pid()); // initialize `$$` to process id
         getGlobalVariable("main::0").set(compilerOptions.fileName);
+        getGlobalVariable(GLOBAL_PHASE).set(""); // ${^GLOBAL_PHASE}
 
         globalVariables.put("main::`", new ScalarSpecialVariable(ScalarSpecialVariable.Id.PREMATCH));
         globalVariables.put("main::&", new ScalarSpecialVariable(ScalarSpecialVariable.Id.MATCH));
         globalVariables.put("main::'", new ScalarSpecialVariable(ScalarSpecialVariable.Id.POSTMATCH));
-        globalVariables.put("main::" + Character.toString('L' - 'A' + 1) + "AST_FH", new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_FH)); // $^LAST_FH
         globalVariables.put("main::.", new ScalarSpecialVariable(ScalarSpecialVariable.Id.INPUT_LINE_NUMBER)); // $.
+        globalVariables.put(LAST_FH, new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_FH)); // $^LAST_FH
 
         // Initialize arrays
         getGlobalArray("main::+").elements = new ArraySpecialVariable(ArraySpecialVariable.Id.LAST_MATCH_END);  // regex @+
