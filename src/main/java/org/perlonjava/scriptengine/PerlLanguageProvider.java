@@ -67,7 +67,8 @@ public class PerlLanguageProvider {
                 RuntimeContextType.VOID, // Call context
                 true, // Is boxed
                 null,  // errorUtil
-                compilerOptions
+                compilerOptions,
+                new RuntimeArray()
         );
 
         if (!globalInitialized) {
@@ -114,6 +115,7 @@ public class PerlLanguageProvider {
                 ast,
                 false   // no try-catch
         );
+        runUnitcheckBlocks(ctx.unitcheckBlocks);
         if (isMainProgram) {
             runCheckBlocks();
         }

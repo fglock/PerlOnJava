@@ -14,6 +14,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
+import static org.perlonjava.runtime.SpecialBlock.runUnitcheckBlocks;
+
 /**
  * The RuntimeCode class represents a compiled code object in the runtime environment.
  * It provides functionality to compile, store, and execute Perl subroutines and eval strings.
@@ -92,7 +94,8 @@ public class RuntimeCode implements RuntimeScalarReference {
                 ctx.contextType, // call context
                 true, // is boxed
                 ctx.errorUtil, // error message utility
-                ctx.compilerOptions);
+                ctx.compilerOptions,
+                ctx.unitcheckBlocks);
         // evalCtx.logDebug("evalStringHelper EmitterContext: " + evalCtx);
         // evalCtx.logDebug("evalStringHelper Code: " + code);
 
@@ -116,6 +119,7 @@ public class RuntimeCode implements RuntimeScalarReference {
                     ast,
                     true  // use try-catch
             );
+            runUnitcheckBlocks(ctx.unitcheckBlocks);
         } catch (Exception e) {
             // Compilation error in eval-string
 

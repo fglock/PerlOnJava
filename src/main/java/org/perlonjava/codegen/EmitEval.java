@@ -5,6 +5,7 @@ import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.perlonjava.ArgumentParser;
 import org.perlonjava.astnode.OperatorNode;
+import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeCode;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.ScopedSymbolTable;
@@ -51,7 +52,8 @@ public class EmitEval {
                 emitterVisitor.ctx.contextType,
                 true, // is boxed
                 emitterVisitor.ctx.errorUtil,
-                compilerOptions);
+                compilerOptions,
+                new RuntimeArray());
         // Save the eval context in the static map RuntimeCode.evalContext
         RuntimeCode.evalContext.put(evalTag, evalCtx);
 

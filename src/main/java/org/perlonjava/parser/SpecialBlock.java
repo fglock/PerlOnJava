@@ -16,10 +16,6 @@ public class SpecialBlock {
     static OperatorNode parseSpecialBlock(Parser parser) {
         String blockName = TokenUtils.consume(parser).text;
 
-        if (blockName.equals("UNITCHECK")) {
-            throw new PerlCompilerException(parser.tokenIndex, "Not implemented: " + blockName, parser.ctx.errorUtil);
-        }
-
         int codeStart = parser.tokenIndex;
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
         BlockNode block = parser.parseBlock();
@@ -65,6 +61,7 @@ public class SpecialBlock {
                 case "END" -> saveEndBlock(codeRef);
                 case "INIT" -> saveInitBlock(codeRef);
                 case "CHECK" -> saveCheckBlock(codeRef);
+                case "UNITCHECK" -> parser.ctx.unitcheckBlocks.push(codeRef);
             }
         } catch (Throwable t) {
             String message = t.getMessage();

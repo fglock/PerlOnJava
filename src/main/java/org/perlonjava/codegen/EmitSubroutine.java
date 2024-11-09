@@ -54,7 +54,8 @@ public class EmitSubroutine {
                         RuntimeContextType.RUNTIME, // Call context
                         true, // Is boxed
                         ctx.errorUtil, // Error message utility
-                        ctx.compilerOptions);
+                        ctx.compilerOptions,
+                        null);
         Class<?> generatedClass =
                 EmitterMethodCreator.createClassWithMethod(
                         subCtx, node.block, node.useTryCatch

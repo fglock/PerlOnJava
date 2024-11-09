@@ -4,6 +4,7 @@ import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
 import org.perlonjava.ArgumentParser;
 import org.perlonjava.runtime.ErrorMessageUtil;
+import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.ScopedSymbolTable;
 
 import java.util.HashMap;
@@ -58,6 +59,11 @@ public class EmitterContext {
     public ErrorMessageUtil errorUtil;
 
     /**
+     * List of UNITCHECK blocks to execute after compilation phase
+     */
+    public RuntimeArray unitcheckBlocks;
+
+    /**
      * Constructs a new EmitterContext with the specified parameters.
      *
      * @param javaClassInfo   the name of the Java class being generated
@@ -68,6 +74,7 @@ public class EmitterContext {
      * @param isBoxed         indicates whether the context is for a boxed object (true) or a native object (false)
      * @param errorUtil       formats error messages with source code context
      * @param compilerOptions compiler flags, file name and source code
+     * @param unitcheckBlocks list of UNITCHECK blocks to execute after compilation phase
      */
     public EmitterContext(
             JavaClassInfo javaClassInfo,
@@ -77,7 +84,8 @@ public class EmitterContext {
             int contextType,
             boolean isBoxed,
             ErrorMessageUtil errorUtil,
-            ArgumentParser.CompilerOptions compilerOptions) {
+            ArgumentParser.CompilerOptions compilerOptions,
+            RuntimeArray unitcheckBlocks) {
         this.javaClassInfo = javaClassInfo;
         this.symbolTable = symbolTable;
         this.mv = mv;
@@ -86,6 +94,7 @@ public class EmitterContext {
         this.isBoxed = isBoxed;
         this.errorUtil = errorUtil;
         this.compilerOptions = compilerOptions;
+        this.unitcheckBlocks = unitcheckBlocks;
     }
 
     /**
@@ -105,7 +114,8 @@ public class EmitterContext {
         // Create a new context and cache it
         EmitterContext newContext = new EmitterContext(
                 this.javaClassInfo, this.symbolTable,
-                this.mv, this.cw, contextType, this.isBoxed, this.errorUtil, this.compilerOptions);
+                this.mv, this.cw, contextType, this.isBoxed, this.errorUtil, this.compilerOptions,
+                this.unitcheckBlocks);
         contextCache.put(contextType, newContext);
         return newContext;
     }
