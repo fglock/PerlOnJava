@@ -201,8 +201,9 @@
 - ✔️   **Typeglob operations**: Operations like `*x = sub {}`, `*x = \@a`, `*x = *y` are supported.
 - ✔️   **Code references**: Code references like `\&subr`, `\&$subname`, `\&{$subname}`, are implemented.
 - ✔️   **Special literals**: `__PACKAGE__`, `__FILE__`, `__LINE__`
-- ✔️   **`die` related operators**: `die`, `warn`, `exit` are supported.
+- ✔️   **`die`, `warn` operators**: `die`, `warn` are supported.
 - ✔️   **`die` related features**: `$SIG{__DIE__}`, `$SIG{__WARN__}`
+- ✔️   **`exit`**: `exit` is supported.
 - ❌  **`PROPAGATE`**: `PROPAGATE` method is not yet supported.
 - ✔️   **`require` operator**: The `require` operator implemented; version checks are implemented.
 - ✔️   **`use` and `no` statements**: Module imports and version check via `use` and `no` are implemented; version checks are implemented.

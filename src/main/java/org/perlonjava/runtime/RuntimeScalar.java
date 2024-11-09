@@ -23,6 +23,7 @@ import static org.perlonjava.runtime.ErrorMessageUtil.stringifyException;
 import static org.perlonjava.runtime.GlobalContext.getGlobalHash;
 import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.SpecialBlock.runEndBlocks;
 
 /**
  * The RuntimeScalar class simulates Perl scalar variables.
@@ -168,6 +169,15 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar exit() {
+        try {
+            runEndBlocks();
+        } catch (Throwable t) {
+            RuntimeIO.flushFileHandles();
+            String errorMessage = ErrorMessageUtil.stringifyException(t);
+            System.out.println(errorMessage);
+            System.exit(1);
+        }
+        RuntimeIO.flushFileHandles();
         System.exit(this.getInt());
         return new RuntimeScalar(); // This line will never be reached
     }
