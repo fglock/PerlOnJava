@@ -20,7 +20,7 @@ public class EmitterMethodCreator implements Opcodes {
     public static int skipVariables = 3;
 
     // Counter for generating unique class names
-    static int classCounter = 0;
+    public static int classCounter = 0;
 
     // Generate a unique internal class name
     public static String generateClassName() {
