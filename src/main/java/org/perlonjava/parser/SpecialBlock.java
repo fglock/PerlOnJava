@@ -73,6 +73,8 @@ public class SpecialBlock {
                         codeSb.append(" ").append(sigil).append("_BEGIN_::").append(beginVar).append(" = ").append(entry.name()).append("; ");
 
                         // Retrieve the value at run time:  "($v //= $init, undef $init);"
+                        // XXX This should run at the AST node where the variable is declared
+                        // XXX This should have global effect, in case more BEGIN blocks share the variable
                         elements.add(
                                 new BinaryOperatorNode("//=",
                                         new OperatorNode(sigil, new IdentifierNode(name, tokenIndex), tokenIndex),
