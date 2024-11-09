@@ -46,4 +46,13 @@ public class SpecialBlock {
             }
         }
     }
+
+    public static void runUnitcheckBlocks(RuntimeArray unitcheckBlocks) {
+        while (unitcheckBlocks.size() > 0) {
+            RuntimeScalar block = unitcheckBlocks.pop();
+            if (block.getDefinedBoolean()) {
+                block.apply(new RuntimeArray(), RuntimeContextType.VOID);
+            }
+        }
+    }
 }

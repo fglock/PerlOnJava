@@ -95,11 +95,11 @@
   - Added modules: `constant`, `if`, `lib`, `Internals` (`SvREADONLY`), `Carp`.
   - Added `goto &name`; not a tail-call.
   - Added operators: `fileno`, `getc`.
+  - Added `BEGIN`, `CHECK`, `UNITCHECK`, `INIT`, `END` blocks; state and my variables are not yet captured.
   - Work in progress:
     - `state` variables.
     - `socket` and related operators.
     - `use VERSION`, `require VERSION`.
-    - `BEGIN`, `CHECK`, `INIT`, `END` blocks: state and my variables are not captured.
     - lexical warnings.
     - lexical features.
     - lexical strictness.

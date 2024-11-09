@@ -214,7 +214,7 @@
 - 🚧  **`END` block**: `END` special block is implemented. `my` variable capture in END is not implemented.
 - 🚧  **`INIT`**: special block is implemented. `my` variable capture in INIT is not implemented.
 - 🚧  **`CHECK`**: special block is implemented. `my` variable capture in CHECK is not implemented.
-- ❌  **`UNITCHECK`**: special block is missing.
+- 🚧  **`UNITCHECK`**: special block is implemented. `my` variable capture in UNITCHECK is not implemented.
 - ✔️   **Labels**: Labels are implemented.
 - ❌  **Here-docs**: Here-docs for multiline string literals are not yet implemented.
 - ✔️   **`glob`**: `glob` operator is implemented.
