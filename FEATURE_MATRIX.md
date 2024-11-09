@@ -276,9 +276,9 @@
 - ❌  **bignum, bigint, and bigrat** pragmas
 - ❌  **encoding** pragma
 - ❌  **integer** pragma
-- ❌  **re** pragma for regular expression options
+- ❌  **re** pragma for regular expression options.
 - ❌  **subs** pragma
-- ❌  **defer** feature
+- ❌  **defer** feature: `defer` blocks are not implemented.
 - ❌  **postderef** feature
 
 

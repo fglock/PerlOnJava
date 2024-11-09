@@ -89,7 +89,7 @@
 
 - **v1.11.0**: Concurrency and Security Features
   - Planned release date: 2024-12-10
-  - Added `$SIG{ALRM}`
+  - Added `$SIG{ALRM}`, `${^GLOBAL_PHASE}`.
   - Added `\N{U+hex}` operator in double quoted strings and regex.
   - Improved Exporter.pm, glob assignment.
   - Added modules: `constant`, `if`, `lib`, `Internals` (`SvREADONLY`), `Carp`.
