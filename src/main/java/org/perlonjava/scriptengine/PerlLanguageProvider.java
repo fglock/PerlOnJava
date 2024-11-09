@@ -14,8 +14,7 @@ import java.lang.invoke.*;
 import java.lang.reflect.Constructor;
 import java.util.List;
 
-import static org.perlonjava.runtime.SpecialBlock.runEndBlocks;
-import static org.perlonjava.runtime.SpecialBlock.runInitBlocks;
+import static org.perlonjava.runtime.SpecialBlock.*;
 
 /**
  * The PerlLanguageProvider class is responsible for executing Perl code within the Java environment.
@@ -113,6 +112,9 @@ public class PerlLanguageProvider {
                 ast,
                 false   // no try-catch
         );
+        if (isMainProgram) {
+            runCheckBlocks();
+        }
         if (ctx.compilerOptions.compileOnly) {
             return null; // success
         }

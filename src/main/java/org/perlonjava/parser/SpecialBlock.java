@@ -9,15 +9,14 @@ import org.perlonjava.scriptengine.PerlLanguageProvider;
 
 import java.util.Map;
 
-import static org.perlonjava.runtime.SpecialBlock.saveEndBlock;
-import static org.perlonjava.runtime.SpecialBlock.saveInitBlock;
+import static org.perlonjava.runtime.SpecialBlock.*;
 
 public class SpecialBlock {
 
     static OperatorNode parseSpecialBlock(Parser parser) {
         String blockName = TokenUtils.consume(parser).text;
 
-        if (blockName.equals("CHECK") || blockName.equals("UNITCHECK")) {
+        if (blockName.equals("UNITCHECK")) {
             throw new PerlCompilerException(parser.tokenIndex, "Not implemented: " + blockName, parser.ctx.errorUtil);
         }
 
@@ -64,6 +63,7 @@ public class SpecialBlock {
                 case "BEGIN" -> codeRef.apply(new RuntimeArray(), RuntimeContextType.VOID);
                 case "END" -> saveEndBlock(codeRef);
                 case "INIT" -> saveInitBlock(codeRef);
+                case "CHECK" -> saveCheckBlock(codeRef);
             }
         } catch (Throwable t) {
             String message = t.getMessage();
