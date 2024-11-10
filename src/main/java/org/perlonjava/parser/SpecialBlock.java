@@ -62,6 +62,7 @@ public class SpecialBlock {
                     }
                     String sigil = entry.name().substring(0,1);
                     // Save the value from the global variable in "my" variable
+                    // XXX This should be an "alias" operation
                     codeSb.append(entry.decl()).append(" ").append(entry.name())
                             .append(" = ")
                             .append(sigil).append(beginPackagePrefix).append(ast.id)
@@ -78,6 +79,7 @@ public class SpecialBlock {
                     OperatorNode ast = entry.ast();
                     String sigil = entry.name().substring(0,1);
                     // Save the value from the "my" variable in the global variable
+                    // XXX If we perform an "alias" operation previously, this is not needed
                     codeSb.append(" ")
                             .append(sigil).append(beginPackagePrefix).append(ast.id)
                             .append(" = ")
