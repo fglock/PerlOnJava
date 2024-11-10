@@ -17,6 +17,8 @@ import static org.perlonjava.runtime.SpecialBlock.*;
 
 public class SpecialBlock {
 
+    static final String beginPackagePrefix = "_BEGIN_::_BEGIN_";
+
     static Node parseSpecialBlock(Parser parser) {
         String blockName = TokenUtils.consume(parser).text;
 
@@ -32,8 +34,6 @@ public class SpecialBlock {
         ArgumentParser.CompilerOptions parsedArgs = parser.ctx.compilerOptions.clone();
         parsedArgs.compileOnly = false; // special blocks are always run
 
-        Node returnNode;
-
         StringBuilder codeSb = new StringBuilder();
         codeSb.append("local ${^GLOBAL_PHASE} = '").append(blockName).append("'; ");
         codeSb.append("package ").append(currentPackage).append("; ");
@@ -41,45 +41,52 @@ public class SpecialBlock {
         Map<Integer, SymbolTable.SymbolEntry> outerVars = parser.ctx.symbolTable.getAllVisibleVariables();
         for (SymbolTable.SymbolEntry entry : outerVars.values()) {
             // Creating `our $var;` entries avoids the "requires explicit package name" error
-            // XXX This doesn't do the right thing if the variable is declared with "my" or "state"
             if (!entry.name().equals("@_") && !entry.decl().isEmpty()) {
-                boolean samePackage = !(entry.decl().equals("our")) || (currentPackage.equals(entry.perlPackage()));
-                if (!samePackage) {
-                    // "our" variable was declared in a different package
-                    codeSb.append("package ").append(entry.perlPackage()).append("; ");
-                }
-                codeSb.append(entry.decl()).append(" ").append(entry.name()).append("; ");
-                if (!samePackage) {
-                    codeSb.append("package ").append(currentPackage).append("; ");
+                if (entry.decl().equals("our")) {
+                    // "our" variable
+                    boolean samePackage = currentPackage.equals(entry.perlPackage());
+                    if (!samePackage) {
+                        // "our" variable was declared in a different package
+                        codeSb.append("package ").append(entry.perlPackage()).append("; ");
+                    }
+                    codeSb.append(entry.decl()).append(" ").append(entry.name()).append("; ");
+                    if (!samePackage) {
+                        codeSb.append("package ").append(currentPackage).append("; ");
+                    }
+                } else {
+                    // "my" or "state" variable
+                    // Retrieve the variable id from the AST; create a new id if needed
+                    OperatorNode ast = entry.ast();
+                    if (ast.id == 0) {
+                        ast.id = EmitterMethodCreator.classCounter++;
+                    }
+                    String sigil = entry.name().substring(0,1);
+                    // Save the value from the global variable in "my" variable
+                    codeSb.append(entry.decl()).append(" ").append(entry.name())
+                            .append(" = ")
+                            .append(sigil).append(beginPackagePrefix).append(ast.id)
+                            .append("; ");
                 }
             }
         }
         if (blockName.equals("BEGIN")) {
             codeSb.append(blockText);
             // save the values of lexical variables and initialize them at run time
-            int tokenIndex = parser.tokenIndex;
-            List<Node> elements = new ArrayList<>();
-            returnNode = new ListNode(elements, tokenIndex); // this will be the run time Node
             for (SymbolTable.SymbolEntry entry : outerVars.values()) {
                 if (entry.decl().equals("my") || entry.decl().equals("state")) {
-                    // Retrieve the variable id from the AST; create a new id if needed
-                    OperatorNode ast = entry.ast();
-                    if (ast.id == 0) {
-                        ast.id = EmitterMethodCreator.classCounter++;
-                    }
                     // Generate a global temp variable name
+                    OperatorNode ast = entry.ast();
                     String sigil = entry.name().substring(0,1);
-                    String name = entry.name().substring(1);
-                    String beginVar = "_BEGIN_" + ast.id;
-                    String beginPackage = "_BEGIN_::";
                     // Save the value from the "my" variable in the global variable
-                    codeSb.append(" ").append(sigil).append("_BEGIN_::").append(beginVar).append(" = ").append(entry.name()).append("; ");
+                    codeSb.append(" ")
+                            .append(sigil).append(beginPackagePrefix).append(ast.id)
+                            .append(" = ")
+                            .append(entry.name()).append("; ");
                 }
             }
         } else {
             // Not BEGIN - return a sub to execute later
             codeSb.append("sub ").append(blockText);
-            returnNode = new OperatorNode("undef", null, parser.tokenIndex);
         }
 
         parsedArgs.code = codeSb.toString();
@@ -112,11 +119,11 @@ public class SpecialBlock {
             throw new PerlCompilerException(parser.tokenIndex, message, parser.ctx.errorUtil);
         }
 
-        return returnNode;
+        return new OperatorNode("undef", null, parser.tokenIndex);
     }
 
     public static RuntimeBaseEntity retrieveBeginVariable(String sigil, int id) {
-        String beginVar = "_BEGIN_::_BEGIN_" + id;
+        String beginVar = beginPackagePrefix + id;
         return switch (sigil) {
             case "$" -> {
                 RuntimeScalar temp = removeGlobalVariable(beginVar);
