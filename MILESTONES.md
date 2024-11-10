@@ -95,7 +95,7 @@
   - Added modules: `constant`, `if`, `lib`, `Internals` (`SvREADONLY`), `Carp`.
   - Added `goto &name`; not a tail-call.
   - Added operators: `fileno`, `getc`.
-  - Added `BEGIN`, `CHECK`, `UNITCHECK`, `INIT`, `END` blocks; state and my variables are not yet captured.
+  - Added `BEGIN`, `CHECK`, `UNITCHECK`, `INIT`, `END` blocks.
   - Work in progress:
     - `state` variables.
     - `socket` and related operators.
