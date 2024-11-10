@@ -267,7 +267,7 @@ public class EmitVariable {
                                     false);
                         } else {
                             // The variable was initialized by a BEGIN block
-                            ctx.mv.visitLdcInsn(sigil);
+                            ctx.mv.visitLdcInsn(var);
                             ctx.mv.visitLdcInsn(sigilNode.id);
                             ctx.mv.visitMethodInsn(
                                     Opcodes.INVOKESTATIC,

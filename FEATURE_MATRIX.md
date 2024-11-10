@@ -211,11 +211,11 @@
 - ✔️   **`caller` operator**: `caller` returns ($package, $filename, $line). The remaining results are undef. This means we don't include subroutine names in error messages yet.
 - ✔️   **Import methods**: `import`, `unimport` works.
 - ✔️   **`__SUB__`**: The `__SUB__` keyword works.
-- 🚧  **`BEGIN` block**: `BEGIN` special block is implemented. `my` variable capture in BEGIN is not implemented.
-- 🚧  **`END` block**: `END` special block is implemented. `my` variable capture in END is not implemented.
-- 🚧  **`INIT`**: special block is implemented. `my` variable capture in INIT is not implemented.
-- 🚧  **`CHECK`**: special block is implemented. `my` variable capture in CHECK is not implemented.
-- 🚧  **`UNITCHECK`**: special block is implemented. `my` variable capture in UNITCHECK is not implemented.
+- ✔️   **`BEGIN` block**: `BEGIN` special block is implemented.
+- ✔️   **`END` block**: `END` special block is implemented.
+- ✔️   **`INIT`**: special block is implemented.
+- ✔️   **`CHECK`**: special block is implemented.
+- ✔️   **`UNITCHECK`**: special block is implemented.
 - ✔️   **Labels**: Labels are implemented.
 - ❌  **Here-docs**: Here-docs for multiline string literals are not yet implemented.
 - ✔️   **`glob`**: `glob` operator is implemented.
