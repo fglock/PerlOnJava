@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.astnode.OperatorNode;
+
 import java.util.*;
 
 /**
@@ -120,9 +122,9 @@ public class ScopedSymbolTable {
      * @param name The name of the variable to add.
      * @return The index of the variable in the current scope.
      */
-    public int addVariable(String name, String variableDeclType) {
+    public int addVariable(String name, String variableDeclType, OperatorNode ast) {
         clearVisibleVariablesCache();
-        return symbolTableStack.peek().addVariable(name, variableDeclType, getCurrentPackage());
+        return symbolTableStack.peek().addVariable(name, variableDeclType, getCurrentPackage(), ast);
     }
 
     /**
@@ -248,7 +250,8 @@ public class ScopedSymbolTable {
         // Clone visible variables
         Map<Integer, SymbolTable.SymbolEntry> visibleVariables = this.getAllVisibleVariables();
         for (Integer index : visibleVariables.keySet()) {
-            st.addVariable(visibleVariables.get(index).name(), visibleVariables.get(index).decl());
+            SymbolTable.SymbolEntry entry = visibleVariables.get(index);
+            st.addVariable(entry.name(), entry.decl(), entry.ast());
         }
 
         // Clone the current package

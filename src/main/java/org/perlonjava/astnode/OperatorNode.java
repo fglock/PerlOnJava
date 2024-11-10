@@ -16,6 +16,11 @@ public class OperatorNode extends AbstractNode {
      * The operator represented by this node.
      */
     public String operator;
+    /**
+     * Node id is used by some operations.
+     * BEGIN blocks mark captured variables using this id.
+     */
+    public int id = 0;
 
     /**
      * Constructs a new OperatorNode with the specified operator and operand.

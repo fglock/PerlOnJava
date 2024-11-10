@@ -170,6 +170,10 @@ public class GlobalContext {
         return globalVariables.containsKey(key);
     }
 
+    public static RuntimeScalar removeGlobalVariable(String key) {
+        return globalVariables.remove(key);
+    }
+
     /**
      * Retrieves a global array by its key, initializing it if necessary.
      *
@@ -195,6 +199,10 @@ public class GlobalContext {
         return globalArrays.containsKey(key);
     }
 
+    public static RuntimeArray removeGlobalArray(String key) {
+        return globalArrays.remove(key);
+    }
+
     /**
      * Retrieves a global hash by its key, initializing it if necessary.
      *
@@ -218,6 +226,10 @@ public class GlobalContext {
      */
     public static boolean existsGlobalHash(String key) {
         return globalHashes.containsKey(key);
+    }
+
+    public static RuntimeHash removeGlobalHash(String key) {
+        return globalHashes.remove(key);
     }
 
     /**
