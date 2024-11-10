@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.astnode.OperatorNode;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -23,12 +25,12 @@ public class SymbolTable {
      * @param name The name of the variable to add.
      * @return The index of the variable in the symbol table.
      */
-    public int addVariable(String name, String variableDeclType, String perlPackage) {
+    public int addVariable(String name, String variableDeclType, String perlPackage, OperatorNode ast) {
         // Check if the variable is not already in the table
         // XXX TODO under 'no strict', we may need to allow variable redeclaration
         if (!variableIndex.containsKey(name)) {
             // Add the variable with a unique index
-            variableIndex.put(name, new SymbolEntry(index++, name, variableDeclType, perlPackage));
+            variableIndex.put(name, new SymbolEntry(index++, name, variableDeclType, perlPackage, ast));
         }
         // Return the index of the variable
         return variableIndex.get(name).index;
@@ -42,7 +44,7 @@ public class SymbolTable {
      */
     public int getVariableIndex(String name) {
         // Return the index of the variable, or -1 if not found
-        return variableIndex.getOrDefault(name, new SymbolEntry(-1, null, null, null)).index;
+        return variableIndex.getOrDefault(name, new SymbolEntry(-1, null, null, null, null)).index;
     }
 
     @Override
@@ -61,6 +63,11 @@ public class SymbolTable {
         return sb.toString();
     }
 
-    public record SymbolEntry(Integer index, String name, String decl, String perlPackage) {
-    }
+    public record SymbolEntry(
+            Integer index,
+            String name,
+            String decl,
+            String perlPackage,
+            OperatorNode ast
+    ) {}
 }

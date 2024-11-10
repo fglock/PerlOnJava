@@ -216,6 +216,8 @@ public class EmitVariable {
     }
 
     static void handleMyOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
+        EmitterContext ctx = emitterVisitor.ctx;
+
         String operator = node.operator;
         if (node.operand instanceof ListNode listNode) { // my ($a, $b)  our ($a, $b)
             // process each item of the list; then returns the list
@@ -245,7 +247,7 @@ public class EmitVariable {
                                                 + var
                                                 + " masks earlier declaration in same ctx.symbolTable"));
                     }
-                    int varIndex = emitterVisitor.ctx.symbolTable.addVariable(var, operator);
+                    int varIndex = emitterVisitor.ctx.symbolTable.addVariable(var, operator, sigilNode);
                     // TODO optimization - SETVAR+MY can be combined
 
                     // Determine the class name based on the sigil
@@ -253,15 +255,28 @@ public class EmitVariable {
 
                     if (operator.equals("my")) {
                         // "my":
-                        // Create a new instance of the determined class
-                        emitterVisitor.ctx.mv.visitTypeInsn(Opcodes.NEW, className);
-                        emitterVisitor.ctx.mv.visitInsn(Opcodes.DUP);
-                        emitterVisitor.ctx.mv.visitMethodInsn(
-                                Opcodes.INVOKESPECIAL,
-                                className,
-                                "<init>",
-                                "()V",
-                                false);
+                        if (sigilNode.id == 0) {
+                            // Create a new instance of the determined class
+                            ctx.mv.visitTypeInsn(Opcodes.NEW, className);
+                            ctx.mv.visitInsn(Opcodes.DUP);
+                            ctx.mv.visitMethodInsn(
+                                    Opcodes.INVOKESPECIAL,
+                                    className,
+                                    "<init>",
+                                    "()V",
+                                    false);
+                        } else {
+                            // The variable was initialized by a BEGIN block
+                            ctx.mv.visitLdcInsn(sigil);
+                            ctx.mv.visitLdcInsn(sigilNode.id);
+                            ctx.mv.visitMethodInsn(
+                                    Opcodes.INVOKESTATIC,
+                                    "org/perlonjava/parser/SpecialBlock",
+                                    "retrieveBeginVariable",
+                                    "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeBaseEntity;",
+                                    false);
+
+                        }
                     } else if (operator.equals("state")) {
                         // "state":
                         // Fetch a state variable from State context

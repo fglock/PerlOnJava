@@ -1,5 +1,6 @@
 package org.perlonjava.parser;
 
+import org.objectweb.asm.Opcodes;
 import org.perlonjava.ArgumentParser;
 import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.EmitterMethodCreator;
@@ -11,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.perlonjava.runtime.GlobalContext.*;
 import static org.perlonjava.runtime.SpecialBlock.*;
 
 public class SpecialBlock {
@@ -60,32 +62,18 @@ public class SpecialBlock {
             returnNode = new ListNode(elements, tokenIndex); // this will be the run time Node
             for (SymbolTable.SymbolEntry entry : outerVars.values()) {
                 if (entry.decl().equals("my") || entry.decl().equals("state")) {
-                    String sigil = entry.name().substring(0,1);
-                    // XXX TODO sigil "@", "%" not implemented
-                    if (sigil.equals("$")) {
-
-                        // Generate a unique variable name
-                        String name = entry.name().substring(1);
-                        String beginVar = "_BEGIN_" + EmitterMethodCreator.classCounter++;
-                        String beginPackage = "_BEGIN_::";
-
-                        // Save the value in a global variable
-                        codeSb.append(" ").append(sigil).append("_BEGIN_::").append(beginVar).append(" = ").append(entry.name()).append("; ");
-
-                        // Retrieve the value at run time:  "($v //= $init, undef $init);"
-                        // XXX This should run at the AST node where the variable is declared
-                        // XXX This should have global effect, in case more BEGIN blocks share the variable
-                        elements.add(
-                                new BinaryOperatorNode("//=",
-                                        new OperatorNode(sigil, new IdentifierNode(name, tokenIndex), tokenIndex),
-                                        new OperatorNode(sigil, new IdentifierNode(beginPackage + beginVar, tokenIndex), tokenIndex),
-                                        tokenIndex));
-                        elements.add(
-                                new OperatorNode("undef",
-                                        ListNode.makeList(
-                                                new OperatorNode(sigil, new IdentifierNode(beginPackage + beginVar, tokenIndex), tokenIndex)),
-                                        tokenIndex));
+                    // Retrieve the variable id from the AST; create a new id if needed
+                    OperatorNode ast = entry.ast();
+                    if (ast.id == 0) {
+                        ast.id = EmitterMethodCreator.classCounter++;
                     }
+                    // Generate a global temp variable name
+                    String sigil = entry.name().substring(0,1);
+                    String name = entry.name().substring(1);
+                    String beginVar = "_BEGIN_" + ast.id;
+                    String beginPackage = "_BEGIN_::";
+                    // Save the value from the "my" variable in the global variable
+                    codeSb.append(" ").append(sigil).append("_BEGIN_::").append(beginVar).append(" = ").append(entry.name()).append("; ");
                 }
             }
         } else {
@@ -100,15 +88,22 @@ public class SpecialBlock {
 
         try {
             RuntimeList result = PerlLanguageProvider.executePerlCode(parsedArgs, false);
-            RuntimeScalar codeRef = (RuntimeScalar) result.elements.getFirst();
-            switch (blockName) {
-                // case "BEGIN" -> codeRef.apply(new RuntimeArray(), RuntimeContextType.VOID);
-                case "END" -> saveEndBlock(codeRef);
-                case "INIT" -> saveInitBlock(codeRef);
-                case "CHECK" -> saveCheckBlock(codeRef);
-                case "UNITCHECK" -> parser.ctx.unitcheckBlocks.push(codeRef);
+            if (!blockName.equals("BEGIN")) {
+                RuntimeScalar codeRef = (RuntimeScalar) result.elements.getFirst();
+                switch (blockName) {
+                    case "END" -> saveEndBlock(codeRef);
+                    case "INIT" -> saveInitBlock(codeRef);
+                    case "CHECK" -> saveCheckBlock(codeRef);
+                    case "UNITCHECK" -> parser.ctx.unitcheckBlocks.push(codeRef);
+                }
             }
         } catch (Throwable t) {
+            if (parsedArgs.debugEnabled) {
+                // Print full JVM stack
+                t.printStackTrace();
+                System.out.println();
+            }
+
             String message = t.getMessage();
             if (!message.endsWith("\n")) {
                 message += "\n";
@@ -118,5 +113,24 @@ public class SpecialBlock {
         }
 
         return returnNode;
+    }
+
+    public static RuntimeBaseEntity retrieveBeginVariable(String sigil, int id) {
+        String beginVar = "_BEGIN_::_BEGIN_" + id;
+        return switch (sigil) {
+            case "$" -> {
+                RuntimeScalar temp = removeGlobalVariable(beginVar);
+                yield temp == null ? new RuntimeScalar() : temp;
+            }
+            case "@" -> {
+                RuntimeArray temp = removeGlobalArray(beginVar);
+                yield temp == null ? new RuntimeArray() : temp;
+            }
+            case "%" -> {
+                RuntimeHash temp = removeGlobalHash(beginVar);
+                yield temp == null ? new RuntimeHash() : temp;
+            }
+            default -> null;
+        };
     }
 }
