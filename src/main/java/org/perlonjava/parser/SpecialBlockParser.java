@@ -14,37 +14,66 @@ import java.util.Map;
 import static org.perlonjava.runtime.GlobalContext.*;
 import static org.perlonjava.runtime.SpecialBlock.*;
 
+/**
+ * The SpecialBlockParser class is responsible for parsing and executing special blocks
+ * in Perl scripts, such as BEGIN, END, INIT, CHECK, and UNITCHECK blocks.
+ */
 public class SpecialBlockParser {
 
+    /**
+     * Parses a special block.
+     *
+     * @param parser The parser instance to use for parsing.
+     * @return A Node representing "undef".
+     */
     static Node parseSpecialBlock(Parser parser) {
+        // Consume the block name token
         String blockName = TokenUtils.consume(parser).text;
 
+        // Consume the opening brace '{'
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+        // Parse the block content
         BlockNode block = parser.parseBlock();
+        // Consume the closing brace '}'
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
+        // Execute the special block, throw away the result
         runSpecialBlock(parser, blockName, block);
 
+        // Return an undefined operator node
         return new OperatorNode("undef", null, parser.tokenIndex);
     }
 
+    /**
+     * Executes a special block with the given block phase and block AST.
+     *
+     * @param parser     The parser instance.
+     * @param blockPhase The phase of the block (e.g., BEGIN, END).
+     * @param block      The block AST to execute.
+     * @return A RuntimeList containing the result of the execution.
+     */
     static RuntimeList runSpecialBlock(Parser parser, String blockPhase, Node block) {
         int tokenIndex = parser.tokenIndex;
 
         // Create AST nodes for setting up the capture variables and package declaration
         List<Node> nodes = new ArrayList<>();
 
-        // emit:  local ${^GLOBAL_PHASE} = "BEGIN"
-        nodes.add(
-                new BinaryOperatorNode("=",
-                        new OperatorNode("local",
-                                new OperatorNode("$",
-                                        new IdentifierNode(Character.toString('G' - 'A' + 1) + "LOBAL_PHASE",
-                                                tokenIndex),
-                                        tokenIndex),
-                                tokenIndex),
-                        new StringNode(blockPhase, tokenIndex),
-                        tokenIndex));
+        if (block instanceof BlockNode blockNode) {
+            // Emit as first operation inside the block: local ${^GLOBAL_PHASE} = "BEGIN"
+            String phaseName = blockPhase.equals("BEGIN") || blockPhase.equals("UNITCHECK")
+                    ? "START"
+                    : blockPhase;
+            blockNode.elements.addFirst(
+                    new BinaryOperatorNode("=",
+                            new OperatorNode("local",
+                                    new OperatorNode("$",
+                                            new IdentifierNode("main::" + Character.toString('G' - 'A' + 1) + "LOBAL_PHASE",
+                                                    tokenIndex),
+                                            tokenIndex),
+                                    tokenIndex),
+                            new StringNode(phaseName, tokenIndex),
+                            tokenIndex));
+        }
 
         // Declare capture variables
         Map<Integer, SymbolTable.SymbolEntry> outerVars = parser.ctx.symbolTable.getAllVisibleVariables();
@@ -52,7 +81,7 @@ public class SpecialBlockParser {
             if (!entry.name().equals("@_") && !entry.decl().isEmpty()) {
                 if (entry.decl().equals("our")) {
                     // "our" variable lives in a Perl package
-                    // emit:  package PKG
+                    // Emit: package PKG
                     nodes.add(
                             new OperatorNode("package",
                                     new IdentifierNode(entry.perlPackage(), tokenIndex), tokenIndex));
@@ -63,12 +92,12 @@ public class SpecialBlockParser {
                     if (ast.id == 0) {
                         ast.id = EmitterMethodCreator.classCounter++;
                     }
-                    // emit:  package BEGIN_PKG
+                    // Emit: package BEGIN_PKG
                     nodes.add(
                             new OperatorNode("package",
                                     new IdentifierNode(beginPackage(ast.id), tokenIndex), tokenIndex));
                 }
-                // emit:  our $var
+                // Emit: our $var
                 nodes.add(
                         new OperatorNode(
                                 "our",
@@ -79,12 +108,11 @@ public class SpecialBlockParser {
                                 tokenIndex));
             }
         }
-        // emit:  package PKG
+        // Emit: package PKG
         nodes.add(
                 new OperatorNode("package",
                         new IdentifierNode(
                                 parser.ctx.symbolTable.getCurrentPackage(), tokenIndex), tokenIndex));
-
 
         if (blockPhase.equals("BEGIN")) {
             // BEGIN - execute immediately
@@ -103,7 +131,7 @@ public class SpecialBlockParser {
         }
 
         ArgumentParser.CompilerOptions parsedArgs = parser.ctx.compilerOptions.clone();
-        parsedArgs.compileOnly = false; // special blocks are always run
+        parsedArgs.compileOnly = false; // Special blocks are always run
         parser.ctx.logDebug("Special block captures " + parser.ctx.symbolTable.getAllVisibleVariables());
         RuntimeList result;
         try {
@@ -139,26 +167,60 @@ public class SpecialBlockParser {
         return result;
     }
 
+    /**
+     * Constructs a package name for storing compile-time variables, with the given ID.
+     *
+     * @param id The ID of the BEGIN block.
+     * @return The package name for the BEGIN block.
+     */
     static String beginPackage(int id) {
         return "PerlOnJava::_BEGIN_" + id;
     }
 
+    /**
+     * Constructs a compile-time variable name for a BEGIN block, with the given ID and name.
+     *
+     * @param id   The ID of the BEGIN block.
+     * @param name The name of the variable.
+     * @return The variable name for the BEGIN block.
+     */
     static String beginVariable(int id, String name) {
         return beginPackage(id) + "::" + name;
     }
 
+    /**
+     * Retrieves a compile-time scalar variable.
+     *
+     * @param var The name of the variable.
+     * @param id  The ID of the BEGIN block.
+     * @return The retrieved RuntimeScalar.
+     */
     public static RuntimeScalar retrieveBeginScalar(String var, int id) {
         String beginVar = beginVariable(id, var.substring(1));
         RuntimeScalar temp = removeGlobalVariable(beginVar);
         return temp == null ? new RuntimeScalar() : temp;
     }
 
+    /**
+     * Retrieves a compile-time array variable.
+     *
+     * @param var The name of the variable.
+     * @param id  The ID of the BEGIN block.
+     * @return The retrieved RuntimeArray.
+     */
     public static RuntimeArray retrieveBeginArray(String var, int id) {
         String beginVar = beginVariable(id, var.substring(1));
         RuntimeArray temp = removeGlobalArray(beginVar);
         return temp == null ? new RuntimeArray() : temp;
     }
 
+    /**
+     * Retrieves a compile-time hash variable.
+     *
+     * @param var The name of the variable.
+     * @param id  The ID of the BEGIN block.
+     * @return The retrieved RuntimeHash.
+     */
     public static RuntimeHash retrieveBeginHash(String var, int id) {
         String beginVar = beginVariable(id, var.substring(1));
         RuntimeHash temp = removeGlobalHash(beginVar);
