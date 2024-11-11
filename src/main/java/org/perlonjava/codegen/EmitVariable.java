@@ -284,7 +284,8 @@ public class EmitVariable {
                                     methodName = "retrieveBeginHash";
                                     methodDescriptor = "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeHash;";
                                 }
-                                default -> throw new IllegalArgumentException("Unsupported variable type: " + var.charAt(0));
+                                default ->
+                                        throw new IllegalArgumentException("Unsupported variable type: " + var.charAt(0));
                             }
 
                             ctx.mv.visitLdcInsn(var);

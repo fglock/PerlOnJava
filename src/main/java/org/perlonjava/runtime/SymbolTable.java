@@ -69,5 +69,6 @@ public class SymbolTable {
             String decl,
             String perlPackage,
             OperatorNode ast
-    ) {}
+    ) {
+    }
 }

@@ -37,14 +37,14 @@ public class SpecialBlockParser {
         // emit:  local ${^GLOBAL_PHASE} = "BEGIN"
         nodes.add(
                 new BinaryOperatorNode("=",
-                new OperatorNode("local",
-                    new OperatorNode("$",
-                        new IdentifierNode(Character.toString('G' - 'A' + 1) + "LOBAL_PHASE",
+                        new OperatorNode("local",
+                                new OperatorNode("$",
+                                        new IdentifierNode(Character.toString('G' - 'A' + 1) + "LOBAL_PHASE",
+                                                tokenIndex),
+                                        tokenIndex),
                                 tokenIndex),
-                            tokenIndex),
-                        tokenIndex),
-                new StringNode(blockPhase, tokenIndex),
-                tokenIndex));
+                        new StringNode(blockPhase, tokenIndex),
+                        tokenIndex));
 
         // Declare capture variables
         Map<Integer, SymbolTable.SymbolEntry> outerVars = parser.ctx.symbolTable.getAllVisibleVariables();
@@ -54,8 +54,8 @@ public class SpecialBlockParser {
                     // "our" variable lives in a Perl package
                     // emit:  package PKG
                     nodes.add(
-                        new OperatorNode("package",
-                                new IdentifierNode(entry.perlPackage(), tokenIndex), tokenIndex));
+                            new OperatorNode("package",
+                                    new IdentifierNode(entry.perlPackage(), tokenIndex), tokenIndex));
                 } else {
                     // "my" or "state" variable live in a special BEGIN package
                     // Retrieve the variable id from the AST; create a new id if needed
@@ -92,13 +92,13 @@ public class SpecialBlockParser {
         } else {
             // Not BEGIN - return a sub to execute later
             nodes.add(
-                new SubroutineNode(
-                        null,
-                        null,
-                        null,
-                        block,
-                        false,
-                        tokenIndex)
+                    new SubroutineNode(
+                            null,
+                            null,
+                            null,
+                            block,
+                            false,
+                            tokenIndex)
             );
         }
 
