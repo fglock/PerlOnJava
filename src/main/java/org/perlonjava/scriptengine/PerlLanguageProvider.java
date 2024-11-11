@@ -115,25 +115,80 @@ public class PerlLanguageProvider {
                 ast,
                 false   // no try-catch
         );
+        return executeGeneratedClass(generatedClass, ctx, isMainProgram);
+    }
+
+    /**
+     * Executes the given Perl code using a syntax tree and returns the result.
+     *
+     * @param ast             The abstract syntax tree representing the Perl code.
+     * @param compilerOptions Compiler flags, file name and source code.
+     * @return The result of the Perl code execution.
+     */
+    public static RuntimeList executePerlAST(Node ast,
+                                             ArgumentParser.CompilerOptions compilerOptions) throws Exception {
+
+        ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
+        globalSymbolTable.enterScope();
+        globalSymbolTable.addVariable("this", "", null);
+        globalSymbolTable.addVariable("@_", "our", null);
+        globalSymbolTable.addVariable("wantarray", "", null);
+
+        EmitterContext ctx = new EmitterContext(
+                new JavaClassInfo(),
+                globalSymbolTable.snapShot(),
+                null,
+                null,
+                RuntimeContextType.VOID,
+                true,
+                null,
+                compilerOptions,
+                new RuntimeArray()
+        );
+
+        if (!globalInitialized) {
+            GlobalContext.initializeGlobals(compilerOptions);
+            globalInitialized = true;
+        }
+
+        ctx.logDebug("Using provided AST");
+        ctx.logDebug("  call context " + ctx.contextType);
+
+        // Create the Java class from the AST
+        ctx.logDebug("createClassWithMethod");
+        ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, null);
+        ctx.symbolTable = globalSymbolTable.snapShot();
+        Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
+                ctx,
+                ast,
+                false
+        );
+
+        return executeGeneratedClass(generatedClass, ctx, false);
+    }
+
+    /**
+     * Common method to execute the generated class and return the result.
+     *
+     * @param generatedClass The generated Java class.
+     * @param ctx            The emitter context.
+     * @param isMainProgram  Indicates if this is the main program.
+     * @return The result of the Perl code execution.
+     */
+    private static RuntimeList executeGeneratedClass(Class<?> generatedClass, EmitterContext ctx, boolean isMainProgram) throws Exception {
         runUnitcheckBlocks(ctx.unitcheckBlocks);
         if (isMainProgram) {
             runCheckBlocks();
         }
         if (ctx.compilerOptions.compileOnly) {
             RuntimeIO.flushFileHandles();
-            return null; // success
+            return null;
         }
 
-        // Find the constructor
         Constructor<?> constructor = generatedClass.getConstructor();
-
-        // Instantiate the class
         Object instance = constructor.newInstance();
 
-        // Define the method type
         MethodType methodType = MethodType.methodType(RuntimeList.class, RuntimeArray.class, int.class);
-
-        // Use invokedynamic to retrieve the method
         CallSite callSite = new ConstantCallSite(lookup.findVirtual(generatedClass, "apply", methodType));
         MethodHandle invoker = callSite.dynamicInvoker();
 
@@ -143,7 +198,6 @@ public class PerlLanguageProvider {
                 runInitBlocks();
             }
 
-            // Invoke the method
             result = (RuntimeList) invoker.invoke(instance, new RuntimeArray(), RuntimeContextType.SCALAR);
             try {
                 if (isMainProgram) {
@@ -163,7 +217,6 @@ public class PerlLanguageProvider {
             throw new RuntimeException(t);
         }
 
-        // Print the result of the execution
         ctx.logDebug("Result of generatedMethod: " + result);
 
         RuntimeIO.flushFileHandles();

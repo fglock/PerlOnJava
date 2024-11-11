@@ -1,15 +1,14 @@
 package org.perlonjava.parser;
 
-import org.objectweb.asm.Opcodes;
 import org.perlonjava.ArgumentParser;
-import org.perlonjava.astnode.*;
+import org.perlonjava.astnode.BlockNode;
+import org.perlonjava.astnode.Node;
+import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.*;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 import static org.perlonjava.runtime.GlobalContext.*;
@@ -47,7 +46,7 @@ public class SpecialBlock {
                     if (ast.id == 0) {
                         ast.id = EmitterMethodCreator.classCounter++;
                     }
-                    String sigil = entry.name().substring(0,1);
+                    String sigil = entry.name().substring(0, 1);
                     codeSb.append("package ").append(beginPackage(ast.id)).append("; ");
                     // Alias the global variable to a lexical variable
                     codeSb.append("our ").append(entry.name()).append("; ");
@@ -57,7 +56,7 @@ public class SpecialBlock {
                         case "$" -> getGlobalVariable(beginVar);
                         case "@" -> getGlobalArray(beginVar);
                         case "%" -> getGlobalHash(beginVar);
-                    };
+                    }
                 }
             }
         }
@@ -117,7 +116,7 @@ public class SpecialBlock {
 
     public static RuntimeBaseEntity retrieveBeginVariable(String var, int id) {
         String beginVar = beginVariable(id, var.substring(1));
-        String sigil = var.substring(0,1);
+        String sigil = var.substring(0, 1);
         return switch (sigil) {
             case "$" -> {
                 RuntimeScalar temp = removeGlobalVariable(beginVar);
