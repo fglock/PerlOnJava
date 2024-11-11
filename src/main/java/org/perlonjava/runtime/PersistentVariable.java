@@ -30,16 +30,37 @@ public class PersistentVariable {
         return beginPackage(id) + "::" + name;
     }
 
-    public static RuntimeScalar initializeStateVariable(String var, int id, RuntimeScalar value) {
-        System.out.println("initializeStateVariable not implemented " + var + " " + id + " = " + value);
+    public static RuntimeScalar initializeStateVariable(RuntimeScalar codeRef, String var, int id, RuntimeScalar value) {
+        // System.out.println("initializeStateVariable not implemented " + var + " " + id + " = " + value);
 
         String beginVar = beginVariable(id, var.substring(1));
-        RuntimeScalar variable = getGlobalVariable(beginVar);
-        if (stateVariableInitialized.getOrDefault(beginVar, false)) {
-            stateVariableInitialized.put(beginVar, true);
-            variable.set(value);
+        if (!codeRef.getDefinedBoolean()) {
+            // top-level code doesn't have __SUB__
+            // System.out.println("initializeStateVariable top level " + codeRef);
+            RuntimeScalar variable = getGlobalVariable(beginVar);
+            if (stateVariableInitialized.getOrDefault(beginVar, false)) {
+                stateVariableInitialized.put(beginVar, true);
+                variable.set(value);
+            }
+            return variable;
+        } else {
+            // System.out.println("initializeStateVariable sub instance " + codeRef);
+            RuntimeCode code = (RuntimeCode) codeRef.value;
+            RuntimeScalar variable = code.stateVariable.get(beginVar);
+            if (variable == null) {
+                variable = new RuntimeScalar();
+                code.stateVariable.put(beginVar, variable);
+            }
+
+            Boolean initialized = code.stateVariableInitialized.get(beginVar);
+            if (initialized == null || !initialized) {
+                code.stateVariableInitialized.put(beginVar, true);
+                // System.out.println("initializeStateVariable set " + value);
+                variable.set(value);
+            }
+
+            return variable;
         }
-        return variable;
     }
 
     /**
@@ -49,23 +70,14 @@ public class PersistentVariable {
      * @param id  The ID of the variable.
      * @return The retrieved RuntimeScalar.
      */
-    public static RuntimeScalar retrieveStateScalar(Object codeObject, String var, int id) {
-        RuntimeScalar codeRef = null;
-        try {
-            // Retrieve the class of the provided code object
-            Class<?> clazz = codeObject.getClass();
-            // Get the __SUB__ instance field
-            Field field = clazz.getDeclaredField("__SUB__");
-            codeRef = (RuntimeScalar) field.get(codeObject);
-        } catch (Exception e) {
-            throw new PerlCompilerException("Error retrieving state variable " + var + ": " + e.getMessage());
-        }
-
+    public static RuntimeScalar retrieveStateScalar(RuntimeScalar codeRef, String var, int id) {
         String beginVar = beginVariable(id, var.substring(1));
-        if (codeRef == null) {
+        if (!codeRef.getDefinedBoolean()) {
             // top-level code doesn't have __SUB__
+            // System.out.println("retrieveStateScalar top level " + codeRef);
             return getGlobalVariable(beginVar);
         } else {
+            // System.out.println("retrieveStateScalar sub instance " + codeRef);
             RuntimeCode code = (RuntimeCode) codeRef.value;
             RuntimeScalar variable = code.stateVariable.get(beginVar);
             if (variable == null) {

@@ -149,7 +149,7 @@ public class RuntimeCode implements RuntimeScalarReference {
 
     // make sure we return a RuntimeScalar from __SUB__
     public static RuntimeScalar selfReferenceMaybeNull(RuntimeScalar codeRef) {
-        return codeRef  == null
+        return codeRef == null
                 ? scalarUndef
                 : codeRef;
     }

@@ -50,9 +50,10 @@ public class Internals extends PerlModuleBase {
      */
     public static RuntimeList initializeStateVariable(RuntimeArray args, int ctx) {
         RuntimeScalar var = PersistentVariable.initializeStateVariable(
-                args.get(0).toString(),
-                args.get(1).getInt(),
-                args.get(2));
+                args.get(0),
+                args.get(1).toString(),
+                args.get(2).getInt(),
+                args.get(3));
         return new RuntimeList();
     }
 }
