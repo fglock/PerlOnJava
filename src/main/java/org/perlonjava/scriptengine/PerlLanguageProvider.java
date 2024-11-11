@@ -122,10 +122,12 @@ public class PerlLanguageProvider {
      * Executes the given Perl code using a syntax tree and returns the result.
      *
      * @param ast             The abstract syntax tree representing the Perl code.
+     * @param tokens          The list of tokens representing the Perl code.
      * @param compilerOptions Compiler flags, file name and source code.
      * @return The result of the Perl code execution.
      */
     public static RuntimeList executePerlAST(Node ast,
+                                             List<LexerToken> tokens,
                                              ArgumentParser.CompilerOptions compilerOptions) throws Exception {
 
         ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
@@ -156,7 +158,7 @@ public class PerlLanguageProvider {
 
         // Create the Java class from the AST
         ctx.logDebug("createClassWithMethod");
-        ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, null);
+        ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
         ctx.symbolTable = globalSymbolTable.snapShot();
         Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
                 ctx,
