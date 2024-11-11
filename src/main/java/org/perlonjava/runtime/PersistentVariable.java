@@ -1,11 +1,14 @@
 package org.perlonjava.runtime;
 
+import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
 
 import static org.perlonjava.runtime.GlobalContext.*;
 
 public class PersistentVariable {
+    static Map<String, Boolean> stateVariableInitialized = new HashMap<>();
+
     /**
      * Constructs a package name for storing compile-time variables, with the given ID.
      *
@@ -27,10 +30,8 @@ public class PersistentVariable {
         return beginPackage(id) + "::" + name;
     }
 
-    static Map<String, Boolean> stateVariableInitialized = new HashMap<>();
-
     public static RuntimeScalar initializeStateVariable(String var, int id, RuntimeScalar value) {
-        System.out.println("initializeStateVariable " + var + " " + id + " = " + value);
+        System.out.println("initializeStateVariable not implemented " + var + " " + id + " = " + value);
 
         String beginVar = beginVariable(id, var.substring(1));
         RuntimeScalar variable = getGlobalVariable(beginVar);
@@ -41,16 +42,38 @@ public class PersistentVariable {
         return variable;
     }
 
-        /**
-         * Retrieves a "state" scalar variable.
-         *
-         * @param var The name of the variable.
-         * @param id  The ID of the variable.
-         * @return The retrieved RuntimeScalar.
-         */
-    public static RuntimeScalar retrieveStateScalar(String var, int id) {
+    /**
+     * Retrieves a "state" scalar variable.
+     *
+     * @param var The name of the variable.
+     * @param id  The ID of the variable.
+     * @return The retrieved RuntimeScalar.
+     */
+    public static RuntimeScalar retrieveStateScalar(Object codeObject, String var, int id) {
+        RuntimeScalar codeRef = null;
+        try {
+            // Retrieve the class of the provided code object
+            Class<?> clazz = codeObject.getClass();
+            // Get the __SUB__ instance field
+            Field field = clazz.getDeclaredField("__SUB__");
+            codeRef = (RuntimeScalar) field.get(codeObject);
+        } catch (Exception e) {
+            throw new PerlCompilerException("Error retrieving state variable " + var + ": " + e.getMessage());
+        }
+
         String beginVar = beginVariable(id, var.substring(1));
-        return getGlobalVariable(beginVar);
+        if (codeRef == null) {
+            // top-level code doesn't have __SUB__
+            return getGlobalVariable(beginVar);
+        } else {
+            RuntimeCode code = (RuntimeCode) codeRef.value;
+            RuntimeScalar variable = code.stateVariable.get(beginVar);
+            if (variable == null) {
+                variable = new RuntimeScalar();
+                code.stateVariable.put(beginVar, variable);
+            }
+            return variable;
+        }
     }
 
     /**

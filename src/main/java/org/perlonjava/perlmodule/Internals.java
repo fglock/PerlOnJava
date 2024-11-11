@@ -35,7 +35,7 @@ public class Internals extends PerlModuleBase {
      *
      * @param args The arguments passed to the method.
      * @param ctx  The context in which the method is called.
-     * @return     Empty list
+     * @return Empty list
      */
     public static RuntimeList svReadonly(RuntimeArray args, int ctx) {
         return new RuntimeList();
@@ -44,12 +44,11 @@ public class Internals extends PerlModuleBase {
     /**
      * Initialize a state variable exactly once
      *
-     * @param args  Args: variable name with sigil; persistent variable id; value to initialize.
-     * @param ctx   The context in which the method is called.
-     * @return      Empty list
+     * @param args Args: variable name with sigil; persistent variable id; value to initialize.
+     * @param ctx  The context in which the method is called.
+     * @return Empty list
      */
     public static RuntimeList initializeStateVariable(RuntimeArray args, int ctx) {
-        System.out.println("initializeStateVariable " + args);
         RuntimeScalar var = PersistentVariable.initializeStateVariable(
                 args.get(0).toString(),
                 args.get(1).getInt(),
