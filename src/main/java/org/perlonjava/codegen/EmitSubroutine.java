@@ -211,55 +211,24 @@ public class EmitSubroutine {
 
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
-        // Retrieve this.__SUB__
-        //
-        // Note: we have to use reflection.
-        // We can't use GETFIELD because we don't know the class name:
-        //
-        //     mv.visitFieldInsn(Opcodes.GETFIELD,
-        //         "???",    // The class containing the field (e.g., "com/example/MyClass")
-        //         "__SUB__",     // Field name
-        //         "Lorg/perlonjava/runtime/RuntimeScalar;");    // Field descriptor
-
+        String className = emitterVisitor.ctx.javaClassInfo.javaClassName;
 
         // Load 'this' (the current RuntimeCode instance)
         mv.visitVarInsn(Opcodes.ALOAD, 0); // Assuming 'this' is at index 0
 
-        // Duplicate the object reference since we'll need it twice
-        mv.visitInsn(Opcodes.DUP);
+        // Retrieve this.__SUB__
+        mv.visitFieldInsn(Opcodes.GETFIELD,
+                 className,    // The class containing the field (e.g., "com/example/MyClass")
+                "__SUB__",     // Field name
+                 "Lorg/perlonjava/runtime/RuntimeScalar;");    // Field descriptor
 
-        // Call getClass() on the object
+        // Create a Perl undef if the value in the stack is null
         mv.visitMethodInsn(
-                Opcodes.INVOKEVIRTUAL,
-                "java/lang/Object",
-                "getClass",
-                "()Ljava/lang/Class;",
-                false
-        );
-
-        // Load the field name as a constant
-        mv.visitLdcInsn("__SUB__");
-
-        // Call Class.getDeclaredField(String)
-        mv.visitMethodInsn(
-                Opcodes.INVOKEVIRTUAL,
-                "java/lang/Class",
-                "getDeclaredField",
-                "(Ljava/lang/String;)Ljava/lang/reflect/Field;",
-                false
-        );
-
-        // Get the field value (Field.get(Object))
-        mv.visitInsn(Opcodes.SWAP);  // Swap Field and target object
-        mv.visitMethodInsn(
-                Opcodes.INVOKEVIRTUAL,
-                "java/lang/reflect/Field",
-                "get",
-                "(Ljava/lang/Object;)Ljava/lang/Object;",
-                false
-        );
-
-        mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeScalar");
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/RuntimeCode",
+                "selfReferenceMaybeNull",
+                "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                false);
 
         // Now we have a RuntimeScalar representing the current subroutine (__SUB__)
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {

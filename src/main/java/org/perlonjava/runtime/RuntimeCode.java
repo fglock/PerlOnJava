@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 import static org.perlonjava.runtime.SpecialBlock.runUnitcheckBlocks;
 
 /**
@@ -144,6 +145,13 @@ public class RuntimeCode implements RuntimeScalarReference {
             );
         }
         return generatedClass;
+    }
+
+    // make sure we return a RuntimeScalar from __SUB__
+    public static RuntimeScalar selfReferenceMaybeNull(RuntimeScalar codeRef) {
+        return codeRef  == null
+                ? scalarUndef
+                : codeRef;
     }
 
     /**
