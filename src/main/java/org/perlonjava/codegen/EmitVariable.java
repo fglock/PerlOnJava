@@ -292,7 +292,7 @@ public class EmitVariable {
                             ctx.mv.visitLdcInsn(sigilNode.id);
                             ctx.mv.visitMethodInsn(
                                     Opcodes.INVOKESTATIC,
-                                    "org/perlonjava/parser/SpecialBlockParser",
+                                    "org/perlonjava/runtime/PersistentVariable",
                                     methodName,
                                     methodDescriptor,
                                     false);
