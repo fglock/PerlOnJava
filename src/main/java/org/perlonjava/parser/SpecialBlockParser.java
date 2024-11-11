@@ -19,12 +19,19 @@ public class SpecialBlockParser {
     static Node parseSpecialBlock(Parser parser) {
         String blockName = TokenUtils.consume(parser).text;
 
-        int codeStart = parser.tokenIndex;
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
         BlockNode block = parser.parseBlock();
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
-        // Create AST nodes for the additional code in codeSb
+        runSpecialBlock(parser, blockName, block);
+
+        return new OperatorNode("undef", null, parser.tokenIndex);
+    }
+
+    static RuntimeList runSpecialBlock(Parser parser, String blockPhase, Node block) {
+        int tokenIndex = parser.tokenIndex;
+
+        // Create AST nodes for setting up the capture variables and package declaration
         List<Node> nodes = new ArrayList<>();
 
         // emit:  local ${^GLOBAL_PHASE} = "BEGIN"
@@ -33,11 +40,11 @@ public class SpecialBlockParser {
                 new OperatorNode("local",
                     new OperatorNode("$",
                         new IdentifierNode(Character.toString('G' - 'A' + 1) + "LOBAL_PHASE",
-                                codeStart),
-                            codeStart),
-                        codeStart),
-                new StringNode(blockName, codeStart),
-                codeStart));
+                                tokenIndex),
+                            tokenIndex),
+                        tokenIndex),
+                new StringNode(blockPhase, tokenIndex),
+                tokenIndex));
 
         // Declare capture variables
         Map<Integer, SymbolTable.SymbolEntry> outerVars = parser.ctx.symbolTable.getAllVisibleVariables();
@@ -48,7 +55,7 @@ public class SpecialBlockParser {
                     // emit:  package PKG
                     nodes.add(
                         new OperatorNode("package",
-                                new IdentifierNode(entry.perlPackage(), codeStart), codeStart));
+                                new IdentifierNode(entry.perlPackage(), tokenIndex), tokenIndex));
                 } else {
                     // "my" or "state" variable live in a special BEGIN package
                     // Retrieve the variable id from the AST; create a new id if needed
@@ -59,7 +66,7 @@ public class SpecialBlockParser {
                     // emit:  package BEGIN_PKG
                     nodes.add(
                             new OperatorNode("package",
-                                    new IdentifierNode(beginPackage(ast.id), codeStart), codeStart));
+                                    new IdentifierNode(beginPackage(ast.id), tokenIndex), tokenIndex));
                 }
                 // emit:  our $var
                 nodes.add(
@@ -67,19 +74,19 @@ public class SpecialBlockParser {
                                 "our",
                                 new OperatorNode(
                                         entry.name().substring(0, 1),
-                                        new IdentifierNode(entry.name().substring(1), codeStart),
-                                        codeStart),
-                                codeStart));
+                                        new IdentifierNode(entry.name().substring(1), tokenIndex),
+                                        tokenIndex),
+                                tokenIndex));
             }
         }
         // emit:  package PKG
         nodes.add(
                 new OperatorNode("package",
                         new IdentifierNode(
-                                parser.ctx.symbolTable.getCurrentPackage(), codeStart), codeStart));
+                                parser.ctx.symbolTable.getCurrentPackage(), tokenIndex), tokenIndex));
 
 
-        if (blockName.equals("BEGIN")) {
+        if (blockPhase.equals("BEGIN")) {
             // BEGIN - execute immediately
             nodes.add(block);
         } else {
@@ -91,7 +98,7 @@ public class SpecialBlockParser {
                         null,
                         block,
                         false,
-                        codeStart)
+                        tokenIndex)
             );
         }
 
@@ -101,7 +108,7 @@ public class SpecialBlockParser {
         RuntimeList result;
         try {
             result = PerlLanguageProvider.executePerlAST(
-                    new BlockNode(nodes, codeStart),
+                    new BlockNode(nodes, tokenIndex),
                     parser.tokens,
                     parsedArgs);
         } catch (Throwable t) {
@@ -115,13 +122,13 @@ public class SpecialBlockParser {
             if (!message.endsWith("\n")) {
                 message += "\n";
             }
-            message += blockName + " failed--compilation aborted";
+            message += blockPhase + " failed--compilation aborted";
             throw new PerlCompilerException(parser.tokenIndex, message, parser.ctx.errorUtil);
         }
 
-        if (!blockName.equals("BEGIN")) {
+        if (!blockPhase.equals("BEGIN")) {
             RuntimeScalar codeRef = (RuntimeScalar) result.elements.getFirst();
-            switch (blockName) {
+            switch (blockPhase) {
                 case "END" -> saveEndBlock(codeRef);
                 case "INIT" -> saveInitBlock(codeRef);
                 case "CHECK" -> saveCheckBlock(codeRef);
@@ -129,7 +136,7 @@ public class SpecialBlockParser {
             }
         }
 
-        return new OperatorNode("undef", null, parser.tokenIndex);
+        return result;
     }
 
     static String beginPackage(int id) {

@@ -149,6 +149,10 @@ public class RuntimeCode implements RuntimeScalarReference {
      * @throws Exception if an error occurs during method retrieval
      */
     public static RuntimeScalar makeCodeObject(Object codeObject) throws Exception {
+        return makeCodeObject(codeObject, null);
+    }
+
+    public static RuntimeScalar makeCodeObject(Object codeObject, String prototype) throws Exception {
         // Retrieve the class of the provided code object
         Class<?> clazz = codeObject.getClass();
 
@@ -159,7 +163,7 @@ public class RuntimeCode implements RuntimeScalarReference {
         // Wrap the method and the code object in a RuntimeCode instance
         // This allows us to store both the method and the object it belongs to
         // Create a new RuntimeScalar instance to hold the CODE object
-        return new RuntimeScalar(new RuntimeCode(mm, codeObject));
+        return new RuntimeScalar(new RuntimeCode(mm, codeObject, prototype));
     }
 
     /**
