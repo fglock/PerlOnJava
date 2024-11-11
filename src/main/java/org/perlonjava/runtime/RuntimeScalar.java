@@ -705,6 +705,21 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return getScalarBoolean(!this.getBoolean());
     }
 
+    public RuntimeScalar prototype(String packageName) {
+        RuntimeScalar code = this;
+        if (code.type != RuntimeScalarType.CODE) {
+            String name = NameNormalizer.normalizeVariableName(code.toString(), packageName);
+            System.out.println("Looking for prototype: " + name);
+            code = GlobalContext.getGlobalCodeRef(name);
+        }
+        System.out.println("type: " + code.type);
+        if (code.type == RuntimeScalarType.CODE) {
+            System.out.println("prototype: " + ((RuntimeCode) code.value).prototype);
+            return new RuntimeScalar(((RuntimeCode) code.value).prototype);
+        }
+        return scalarUndef;
+    }
+
     public RuntimeScalar repeat(RuntimeScalar arg) {
         return (RuntimeScalar) Operator.repeat(this, arg, RuntimeContextType.SCALAR);
     }

@@ -9,6 +9,7 @@ import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 
 import static org.perlonjava.parser.NumberParser.parseNumber;
+import static org.perlonjava.parser.SpecialBlockParser.runSpecialBlock;
 import static org.perlonjava.parser.StringParser.parseVstring;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
@@ -318,7 +319,10 @@ public class StatementParser {
 
             // call Module->import( LIST )
             // or Module->unimport( LIST )
-            RuntimeList args = ExtractValueVisitor.getValues(list);
+
+            // Execute the argument list immediately
+            RuntimeList args = runSpecialBlock(parser, "BEGIN", list);
+
             ctx.logDebug("Use statement list: " + args);
             if (hasParentheses && args.size() == 0) {
                 // do not import

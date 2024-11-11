@@ -145,8 +145,14 @@ public class EmitSubroutine {
         // Stack after this step: [Class, Constructor, Object]
 
         // 4. Create a CODE variable using RuntimeCode.makeCodeObject
-        mv.visitMethodInsn(
-                Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeCode", "makeCodeObject", "(Ljava/lang/Object;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        if (node.prototype != null) {
+            mv.visitLdcInsn(node.prototype);
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeCode", "makeCodeObject", "(Ljava/lang/Object;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        } else {
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeCode", "makeCodeObject", "(Ljava/lang/Object;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        }
 
         // Stack after this step: [Class, Constructor, RuntimeScalar]
         mv.visitInsn(Opcodes.SWAP); // Move the RuntimeScalar object up

@@ -304,6 +304,14 @@ public class EmitterVisitor implements Visitor {
                     operator,
                     operatorHandler.getDescriptor(),
                     false);
+        } else if (operator.equals("prototype")) {
+            node.operand.accept(this.with(RuntimeContextType.SCALAR));
+            ctx.mv.visitLdcInsn(ctx.symbolTable.getCurrentPackage());
+            ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/RuntimeScalar",
+                    "prototype",
+                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
         } else {
             node.operand.accept(this.with(RuntimeContextType.SCALAR));
             if (operatorHandler != null) {
@@ -465,6 +473,7 @@ public class EmitterVisitor implements Visitor {
             case "rmdir":
             case "pos":
             case "select":
+            case "prototype":
                 handleUnaryBuiltin(node, operator);
                 break;
             case "chop":
