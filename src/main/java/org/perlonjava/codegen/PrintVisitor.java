@@ -33,7 +33,7 @@ public class PrintVisitor implements Visitor {
     @Override
     public void visit(IdentifierNode node) {
         appendIndent();
-        sb.append("IdentifierNode: ").append(node.name).append("\n");
+        sb.append("IdentifierNode: ").append(printable(node.name)).append("\n");
     }
 
     @Override
