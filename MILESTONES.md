@@ -96,6 +96,7 @@
   - Added `goto &name`; not a tail-call.
   - Added operators: `fileno`, `getc`, `prototype`.
   - Added `BEGIN`, `CHECK`, `UNITCHECK`, `INIT`, `END` blocks.
+  - Added subroutine hoisting: Invoking subroutines before their actual declaration in the code.
   - Work in progress:
     - `state` variables.
     - `socket` and related operators.

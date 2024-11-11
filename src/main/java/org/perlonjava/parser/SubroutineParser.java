@@ -8,6 +8,8 @@ import org.perlonjava.runtime.*;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.perlonjava.parser.SpecialBlockParser.runSpecialBlock;
+
 public class SubroutineParser {
     /**
      * Parses a subroutine call.
@@ -119,6 +121,15 @@ public class SubroutineParser {
             attributes.add(TokenUtils.consume(parser, LexerTokenType.IDENTIFIER).text);
         }
 
+        if (wantName && !TokenUtils.peek(parser).text.equals("{")) {
+            // A named subroutine can be predeclared without a block of code.
+            String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+            RuntimeCode codeRef = new RuntimeCode(prototype, attributes);
+            GlobalContext.getGlobalCodeRef(fullName).set(new RuntimeScalar(codeRef));
+            // return an empty AST list
+            return new ListNode(parser.tokenIndex);
+        }
+
         // After parsing name, prototype, and attributes, we expect an opening curly brace '{' to denote the start of the subroutine block.
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
 
@@ -142,21 +153,17 @@ public class SubroutineParser {
 
         if (subName != null) {
             // Additional steps for named subroutine:
+
+            // Create the subroutine immediately
+            RuntimeList result = runSpecialBlock(parser, "BEGIN", subroutineNode);
+            RuntimeScalar codeRef = (RuntimeScalar) result.elements.getFirst();
+
             // - register the subroutine in the namespace
-            // - add the typeglob assignment:  *name = sub () :attr {...}
-
-            // register the named subroutine
             String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
-            RuntimeCode codeRef = new RuntimeCode(prototype, attributes);
-            GlobalContext.getGlobalCodeRef(fullName).set(new RuntimeScalar(codeRef));
+            GlobalContext.getGlobalCodeRef(fullName).set(codeRef);
 
-            // return typeglob assignment
-            return new BinaryOperatorNode("=",
-                    new OperatorNode("*",
-                            new IdentifierNode(fullName, currentIndex),
-                            currentIndex),
-                    subroutineNode,
-                    currentIndex);
+            // return an empty AST list
+            return new ListNode(parser.tokenIndex);
         }
 
         // return anonymous subroutine
