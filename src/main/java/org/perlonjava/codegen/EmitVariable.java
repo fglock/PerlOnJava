@@ -299,16 +299,35 @@ public class EmitVariable {
                         }
                     } else if (operator.equals("state")) {
                         // "state":
-                        // Fetch a state variable from State context
-                        emitterVisitor.ctx.mv.visitLdcInsn(varIndex); // XXX TODO change to a global unique index
-                        switch (sigil) {
-                            case "$":
-                            case "@":
-                            case "%":
-                                break;
+
+                        // Determine the method to call and its descriptor based on the sigil
+                        String methodName;
+                        String methodDescriptor;
+                        switch (var.charAt(0)) {
+                            case '$' -> {
+                                methodName = "retrieveStateScalar";
+                                methodDescriptor = "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeScalar;";
+                            }
+                            case '@' -> {
+                                methodName = "retrieveStateArray";
+                                methodDescriptor = "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeArray;";
+                            }
+                            case '%' -> {
+                                methodName = "retrieveStateHash";
+                                methodDescriptor = "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeHash;";
+                            }
+                            default ->
+                                    throw new IllegalArgumentException("Unsupported variable type: " + var.charAt(0));
                         }
-                        throw new PerlCompilerException(
-                                node.tokenIndex, "Not implemented: " + node.operator, emitterVisitor.ctx.errorUtil);
+
+                        ctx.mv.visitLdcInsn(var);
+                        ctx.mv.visitLdcInsn(sigilNode.id);
+                        ctx.mv.visitMethodInsn(
+                                Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/PersistentVariable",
+                                methodName,
+                                methodDescriptor,
+                                false);
                     } else {
                         // "our":
                         // Create and fetch a global variable
