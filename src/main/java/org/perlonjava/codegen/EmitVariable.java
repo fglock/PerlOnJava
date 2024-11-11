@@ -191,6 +191,7 @@ public class EmitVariable {
                                             tokenIndex
                                     ),
                                     ListNode.makeList(
+                                            new OperatorNode("__SUB__", null, tokenIndex),
                                             new StringNode(sigil + nameNode.name, tokenIndex),
                                             new NumberNode(String.valueOf(varNode.id), tokenIndex),
                                             node.right
@@ -343,21 +344,23 @@ public class EmitVariable {
                         switch (var.charAt(0)) {
                             case '$' -> {
                                 methodName = "retrieveStateScalar";
-                                methodDescriptor = "(Ljava/lang/Object;Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeScalar;";
+                                methodDescriptor = "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeScalar;";
                             }
                             case '@' -> {
                                 methodName = "retrieveStateArray";
-                                methodDescriptor = "(Ljava/lang/Object;Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeArray;";
+                                methodDescriptor = "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeArray;";
                             }
                             case '%' -> {
                                 methodName = "retrieveStateHash";
-                                methodDescriptor = "(Ljava/lang/Object;Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeHash;";
+                                methodDescriptor = "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeHash;";
                             }
                             default ->
                                     throw new IllegalArgumentException("Unsupported variable type: " + var.charAt(0));
                         }
 
-                        ctx.mv.visitVarInsn(Opcodes.ALOAD, 0);  // this
+                        Node codeRef = new OperatorNode("__SUB__", null, node.tokenIndex);
+                        codeRef.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
                         ctx.mv.visitLdcInsn(var);
                         ctx.mv.visitLdcInsn(sigilNode.id);
                         ctx.mv.visitMethodInsn(
