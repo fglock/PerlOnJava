@@ -114,23 +114,21 @@ public class SpecialBlock {
         return beginPackage(id) + "::" + name;
     }
 
-    public static RuntimeBaseEntity retrieveBeginVariable(String var, int id) {
+    public static RuntimeScalar retrieveBeginScalar(String var, int id) {
         String beginVar = beginVariable(id, var.substring(1));
-        String sigil = var.substring(0, 1);
-        return switch (sigil) {
-            case "$" -> {
-                RuntimeScalar temp = removeGlobalVariable(beginVar);
-                yield temp == null ? new RuntimeScalar() : temp;
-            }
-            case "@" -> {
-                RuntimeArray temp = removeGlobalArray(beginVar);
-                yield temp == null ? new RuntimeArray() : temp;
-            }
-            case "%" -> {
-                RuntimeHash temp = removeGlobalHash(beginVar);
-                yield temp == null ? new RuntimeHash() : temp;
-            }
-            default -> null;
-        };
+        RuntimeScalar temp = removeGlobalVariable(beginVar);
+        return temp == null ? new RuntimeScalar() : temp;
+    }
+
+    public static RuntimeArray retrieveBeginArray(String var, int id) {
+        String beginVar = beginVariable(id, var.substring(1));
+        RuntimeArray temp = removeGlobalArray(beginVar);
+        return temp == null ? new RuntimeArray() : temp;
+    }
+
+    public static RuntimeHash retrieveBeginHash(String var, int id) {
+        String beginVar = beginVariable(id, var.substring(1));
+        RuntimeHash temp = removeGlobalHash(beginVar);
+        return temp == null ? new RuntimeHash() : temp;
     }
 }

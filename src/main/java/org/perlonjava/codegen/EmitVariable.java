@@ -267,15 +267,24 @@ public class EmitVariable {
                                     false);
                         } else {
                             // The variable was initialized by a BEGIN block
+
+                            // Determine the method to call based on the sigil
+                            String methodName;
+                            switch (var.charAt(0)) {
+                                case '$' -> methodName = "retrieveBeginScalar";
+                                case '@' -> methodName = "retrieveBeginArray";
+                                case '%' -> methodName = "retrieveBeginHash";
+                                default -> throw new IllegalArgumentException("Unsupported variable type: " + var.charAt(0));
+                            }
+
                             ctx.mv.visitLdcInsn(var);
                             ctx.mv.visitLdcInsn(sigilNode.id);
                             ctx.mv.visitMethodInsn(
                                     Opcodes.INVOKESTATIC,
                                     "org/perlonjava/parser/SpecialBlock",
-                                    "retrieveBeginVariable",
+                                    methodName,
                                     "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeBaseEntity;",
                                     false);
-
                         }
                     } else if (operator.equals("state")) {
                         // "state":
