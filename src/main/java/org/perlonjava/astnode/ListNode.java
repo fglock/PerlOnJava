@@ -58,6 +58,19 @@ public class ListNode extends AbstractNode {
         return leftList;
     }
 
+    public static ListNode makeList(Node left, Node right, Node more) {
+        ListNode leftList = ListNode.makeList(left, right);
+        leftList.elements.add(more);
+        return leftList;
+    }
+
+    public static ListNode makeList(Node left, Node right, Node more, Node more2) {
+        ListNode leftList = ListNode.makeList(left, right);
+        leftList.elements.add(more);
+        leftList.elements.add(more2);
+        return leftList;
+    }
+
     /**
      * Accepts a visitor that performs some operation on this node.
      * This method is part of the Visitor design pattern, which allows

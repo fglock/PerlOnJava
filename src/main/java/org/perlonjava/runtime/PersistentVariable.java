@@ -1,5 +1,8 @@
 package org.perlonjava.runtime;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import static org.perlonjava.runtime.GlobalContext.*;
 
 public class PersistentVariable {
@@ -24,13 +27,27 @@ public class PersistentVariable {
         return beginPackage(id) + "::" + name;
     }
 
-    /**
-     * Retrieves a "state" scalar variable.
-     *
-     * @param var The name of the variable.
-     * @param id  The ID of the variable.
-     * @return The retrieved RuntimeScalar.
-     */
+    static Map<String, Boolean> stateVariableInitialized = new HashMap<>();
+
+    public static RuntimeScalar initializeStateVariable(String var, int id, RuntimeScalar value) {
+        System.out.println("initializeStateVariable " + var + " " + id + " = " + value);
+
+        String beginVar = beginVariable(id, var.substring(1));
+        RuntimeScalar variable = getGlobalVariable(beginVar);
+        if (stateVariableInitialized.getOrDefault(beginVar, false)) {
+            stateVariableInitialized.put(beginVar, true);
+            variable.set(value);
+        }
+        return variable;
+    }
+
+        /**
+         * Retrieves a "state" scalar variable.
+         *
+         * @param var The name of the variable.
+         * @param id  The ID of the variable.
+         * @return The retrieved RuntimeScalar.
+         */
     public static RuntimeScalar retrieveStateScalar(String var, int id) {
         String beginVar = beginVariable(id, var.substring(1));
         return getGlobalVariable(beginVar);

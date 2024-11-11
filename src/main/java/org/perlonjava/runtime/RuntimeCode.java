@@ -9,10 +9,12 @@ import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.parser.Parser;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.perlonjava.runtime.SpecialBlock.runUnitcheckBlocks;
 
@@ -34,6 +36,11 @@ public class RuntimeCode implements RuntimeScalarReference {
     public String prototype;
     // Attributes associated with the subroutine
     public List<String> attributes = new ArrayList<>();
+
+    // State variables
+    static Map<String, Boolean> stateVariableInitialized = new HashMap<>();
+    static Map<String, RuntimeScalar> stateVariable = new HashMap<>();
+
 
     /**
      * Constructs a RuntimeCode instance with the specified prototype and attributes.
@@ -163,7 +170,13 @@ public class RuntimeCode implements RuntimeScalarReference {
         // Wrap the method and the code object in a RuntimeCode instance
         // This allows us to store both the method and the object it belongs to
         // Create a new RuntimeScalar instance to hold the CODE object
-        return new RuntimeScalar(new RuntimeCode(mm, codeObject, prototype));
+        RuntimeScalar codeRef = new RuntimeScalar(new RuntimeCode(mm, codeObject, prototype));
+
+        // Set the __SUB__ instance field
+        Field field = clazz.getDeclaredField("__SUB__");
+        field.set(codeObject, codeRef);
+
+        return codeRef;
     }
 
     /**
