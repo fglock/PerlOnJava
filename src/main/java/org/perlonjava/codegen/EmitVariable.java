@@ -8,8 +8,6 @@ import org.perlonjava.runtime.*;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.perlonjava.runtime.PersistentVariable.retrieveStateScalar;
-
 public class EmitVariable {
     private static void fetchGlobalVariable(EmitterContext ctx, boolean createIfNotExists, String sigil, String varName, int tokenIndex) {
 
@@ -345,20 +343,21 @@ public class EmitVariable {
                         switch (var.charAt(0)) {
                             case '$' -> {
                                 methodName = "retrieveStateScalar";
-                                methodDescriptor = "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeScalar;";
+                                methodDescriptor = "(Ljava/lang/Object;Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeScalar;";
                             }
                             case '@' -> {
                                 methodName = "retrieveStateArray";
-                                methodDescriptor = "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeArray;";
+                                methodDescriptor = "(Ljava/lang/Object;Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeArray;";
                             }
                             case '%' -> {
                                 methodName = "retrieveStateHash";
-                                methodDescriptor = "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeHash;";
+                                methodDescriptor = "(Ljava/lang/Object;Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeHash;";
                             }
                             default ->
                                     throw new IllegalArgumentException("Unsupported variable type: " + var.charAt(0));
                         }
 
+                        ctx.mv.visitVarInsn(Opcodes.ALOAD, 0);  // this
                         ctx.mv.visitLdcInsn(var);
                         ctx.mv.visitLdcInsn(sigilNode.id);
                         ctx.mv.visitMethodInsn(
