@@ -1,14 +1,14 @@
 package org.perlonjava.parser;
 
 import org.perlonjava.ArgumentParser;
-import org.perlonjava.astnode.BlockNode;
-import org.perlonjava.astnode.Node;
-import org.perlonjava.astnode.OperatorNode;
+import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.*;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import static org.perlonjava.runtime.GlobalContext.*;
@@ -23,61 +23,87 @@ public class SpecialBlockParser {
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
         BlockNode block = parser.parseBlock();
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
-        int codeEnd = parser.tokenIndex;
-        String blockText = TokenUtils.toText(parser.tokens, codeStart, codeEnd - 1);
 
-        String currentPackage = parser.ctx.symbolTable.getCurrentPackage();
+        // Create AST nodes for the additional code in codeSb
+        List<Node> nodes = new ArrayList<>();
 
-        StringBuilder codeSb = new StringBuilder();
-        codeSb.append("local ${^GLOBAL_PHASE} = '").append(blockName).append("'; ");
+        // emit:  local ${^GLOBAL_PHASE} = "BEGIN"
+        nodes.add(
+                new BinaryOperatorNode("=",
+                new OperatorNode("local",
+                    new OperatorNode("$",
+                        new IdentifierNode(Character.toString('G' - 'A' + 1) + "LOBAL_PHASE",
+                                codeStart),
+                            codeStart),
+                        codeStart),
+                new StringNode(blockName, codeStart),
+                codeStart));
 
+        // Declare capture variables
         Map<Integer, SymbolTable.SymbolEntry> outerVars = parser.ctx.symbolTable.getAllVisibleVariables();
         for (SymbolTable.SymbolEntry entry : outerVars.values()) {
-            // Creating `our $var;` entries avoids the "requires explicit package name" error
             if (!entry.name().equals("@_") && !entry.decl().isEmpty()) {
                 if (entry.decl().equals("our")) {
-                    // "our" variable
-                    codeSb.append("package ").append(entry.perlPackage()).append("; ");
-                    codeSb.append(entry.decl()).append(" ").append(entry.name()).append("; ");
+                    // "our" variable lives in a Perl package
+                    // emit:  package PKG
+                    nodes.add(
+                        new OperatorNode("package",
+                                new IdentifierNode(entry.perlPackage(), codeStart), codeStart));
                 } else {
-                    // "my" or "state" variable
+                    // "my" or "state" variable live in a special BEGIN package
                     // Retrieve the variable id from the AST; create a new id if needed
                     OperatorNode ast = entry.ast();
                     if (ast.id == 0) {
                         ast.id = EmitterMethodCreator.classCounter++;
                     }
-                    String sigil = entry.name().substring(0, 1);
-                    codeSb.append("package ").append(beginPackage(ast.id)).append("; ");
-                    // Alias the global variable to a lexical variable
-                    codeSb.append("our ").append(entry.name()).append("; ");
-                    // Instantiate the global variable
-                    String beginVar = beginVariable(ast.id, entry.name().substring(1));
-                    switch (sigil) {
-                        case "$" -> getGlobalVariable(beginVar);
-                        case "@" -> getGlobalArray(beginVar);
-                        case "%" -> getGlobalHash(beginVar);
-                    }
+                    // emit:  package BEGIN_PKG
+                    nodes.add(
+                            new OperatorNode("package",
+                                    new IdentifierNode(beginPackage(ast.id), codeStart), codeStart));
                 }
+                // emit:  our $var
+                nodes.add(
+                        new OperatorNode(
+                                "our",
+                                new OperatorNode(
+                                        entry.name().substring(0, 1),
+                                        new IdentifierNode(entry.name().substring(1), codeStart),
+                                        codeStart),
+                                codeStart));
             }
         }
-        codeSb.append("package ").append(currentPackage).append("; ");
+        // emit:  package PKG
+        nodes.add(
+                new OperatorNode("package",
+                        new IdentifierNode(
+                                parser.ctx.symbolTable.getCurrentPackage(), codeStart), codeStart));
+
 
         if (blockName.equals("BEGIN")) {
             // BEGIN - execute immediately
-            codeSb.append(blockText);
+            nodes.add(block);
         } else {
             // Not BEGIN - return a sub to execute later
-            codeSb.append("sub ").append(blockText);
+            nodes.add(
+                new SubroutineNode(
+                        null,
+                        null,
+                        null,
+                        block,
+                        false,
+                        codeStart)
+            );
         }
 
         ArgumentParser.CompilerOptions parsedArgs = parser.ctx.compilerOptions.clone();
         parsedArgs.compileOnly = false; // special blocks are always run
-        parsedArgs.code = codeSb.toString();
-        parser.ctx.logDebug("Special block " + blockName + " <<<" + parsedArgs.code + ">>>");
         parser.ctx.logDebug("Special block captures " + parser.ctx.symbolTable.getAllVisibleVariables());
         RuntimeList result;
         try {
-            result = PerlLanguageProvider.executePerlCode(parsedArgs, false);
+            result = PerlLanguageProvider.executePerlAST(
+                    new BlockNode(nodes, codeStart),
+                    parser.tokens,
+                    parsedArgs);
         } catch (Throwable t) {
             if (parsedArgs.debugEnabled) {
                 // Print full JVM stack
