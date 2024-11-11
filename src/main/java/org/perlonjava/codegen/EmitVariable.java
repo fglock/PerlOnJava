@@ -8,6 +8,8 @@ import org.perlonjava.runtime.*;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.perlonjava.runtime.PersistentVariable.retrieveStateScalar;
+
 public class EmitVariable {
     private static void fetchGlobalVariable(EmitterContext ctx, boolean createIfNotExists, String sigil, String varName, int tokenIndex) {
 
@@ -156,18 +158,55 @@ public class EmitVariable {
     }
 
     static void handleAssignOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        emitterVisitor.ctx.logDebug("SET " + node);
-        MethodVisitor mv = emitterVisitor.ctx.mv;
+        EmitterContext ctx = emitterVisitor.ctx;
+
+        ctx.logDebug("SET " + node);
+        MethodVisitor mv = ctx.mv;
         // Determine the assign type based on the left side.
         // Inspect the AST and get the L-value context: SCALAR or LIST
         int lvalueContext = LValueVisitor.getContext(node);
-        emitterVisitor.ctx.logDebug("SET Lvalue context: " + lvalueContext);
+        ctx.logDebug("SET Lvalue context: " + lvalueContext);
         // Execute the right side first: assignment is right-associative
         switch (lvalueContext) {
             case RuntimeContextType.SCALAR:
-                emitterVisitor.ctx.logDebug("SET right side scalar");
+                ctx.logDebug("SET right side scalar");
 
-                // TODO - special case where the left value is an operator or subroutine call:
+                if (node.left instanceof OperatorNode operatorNode && operatorNode.operator.equals("state")) {
+                    // This is a state variable initialization, it should run exactly once.
+                    ctx.logDebug("handleAssignOperator initialize state variable " + operatorNode);
+                    OperatorNode varNode = (OperatorNode) operatorNode.operand;
+                    IdentifierNode nameNode = (IdentifierNode) varNode.operand;
+                    String sigil = varNode.operator;
+
+                    // Emit: state $var // initializeState(id, value)
+                    int tokenIndex = node.tokenIndex;
+                    Node initStateVariable = new BinaryOperatorNode(
+                            "//",
+                            operatorNode,
+                            new BinaryOperatorNode(
+                                    "(",
+                                    new OperatorNode(
+                                            "&",
+                                            new IdentifierNode(
+                                                    "Internals::initialize_state_variable",
+                                                    tokenIndex),
+                                            tokenIndex
+                                    ),
+                                    ListNode.makeList(
+                                            new StringNode(sigil + nameNode.name, tokenIndex),
+                                            new NumberNode(String.valueOf(varNode.id), tokenIndex),
+                                            node.right
+                                    ),
+                                    tokenIndex
+                            ),
+                            tokenIndex
+                    );
+                    ctx.logDebug("handleAssignOperator initialize state variable " + initStateVariable);
+                    initStateVariable.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    break;
+                }
+
+                // The left value can be a variable, an operator or a subroutine call:
                 //   `pos`, `substr`, `vec`, `sub :lvalue`
 
                 node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the value

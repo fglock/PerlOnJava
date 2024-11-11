@@ -109,6 +109,9 @@ public class EmitterMethodCreator implements Opcodes {
             cw.visitField(Opcodes.ACC_PUBLIC, fieldName, descriptor, null, null).visitEnd();
         }
 
+        // Add instance field for __SUB__ code reference
+        cw.visitField(Opcodes.ACC_PUBLIC, "__SUB__", "Lorg/perlonjava/runtime/RuntimeScalar;", null, null).visitEnd();
+
         // Add a constructor with parameters for initializing the fields
         StringBuilder constructorDescriptor = new StringBuilder("(");
         for (int i = skipVariables; i < env.length; i++) {
