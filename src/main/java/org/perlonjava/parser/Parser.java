@@ -139,7 +139,7 @@ public class Parser {
                 case "UNITCHECK":
                 case "BEGIN":
                 case "END":
-                    return SpecialBlock.parseSpecialBlock(this);
+                    return SpecialBlockParser.parseSpecialBlock(this);
                 case "if":
                 case "unless":
                     return StatementParser.parseIfStatement(this);

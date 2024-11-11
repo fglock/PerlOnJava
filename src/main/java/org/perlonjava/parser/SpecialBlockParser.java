@@ -14,7 +14,7 @@ import java.util.Map;
 import static org.perlonjava.runtime.GlobalContext.*;
 import static org.perlonjava.runtime.SpecialBlock.*;
 
-public class SpecialBlock {
+public class SpecialBlockParser {
 
     static Node parseSpecialBlock(Parser parser) {
         String blockName = TokenUtils.consume(parser).text;
