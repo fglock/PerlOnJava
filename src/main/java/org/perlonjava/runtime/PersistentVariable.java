@@ -32,12 +32,32 @@ public class PersistentVariable {
      * @return The retrieved RuntimeScalar.
      */
     public static RuntimeScalar retrieveStateScalar(String var, int id) {
-
-        // TODO - if the variable declaration includes a "=" initializer,
-        //        the assignment should be executed only once.
-
         String beginVar = beginVariable(id, var.substring(1));
         return getGlobalVariable(beginVar);
+    }
+
+    /**
+     * Retrieves a "state" array variable.
+     *
+     * @param var The name of the variable.
+     * @param id  The ID of the variable.
+     * @return The retrieved RuntimeArray.
+     */
+    public static RuntimeArray retrieveStateArray(String var, int id) {
+        String beginVar = beginVariable(id, var.substring(1));
+        return getGlobalArray(beginVar);
+    }
+
+    /**
+     * Retrieves a "state" hash variable.
+     *
+     * @param var The name of the variable.
+     * @param id  The ID of the variable.
+     * @return The retrieved RuntimeHash.
+     */
+    public static RuntimeHash retrieveStateHash(String var, int id) {
+        String beginVar = beginVariable(id, var.substring(1));
+        return getGlobalHash(beginVar);
     }
 
     /**

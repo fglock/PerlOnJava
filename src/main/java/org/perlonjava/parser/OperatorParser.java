@@ -2,6 +2,7 @@ package org.perlonjava.parser;
 
 import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.EmitterContext;
+import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.NameNormalizer;
@@ -510,6 +511,14 @@ public class OperatorParser {
                 }
             }
         } else if (operand instanceof OperatorNode operandNode) {
+
+            if (operator.equals("state")) {
+                // Give the variable a persistent id (See: PersistentVariable.java)
+                if (operandNode.id == 0) {
+                    operandNode.id = EmitterMethodCreator.classCounter++;
+                }
+            }
+
             addVariableToScope(parser.ctx, operator, operandNode);
         }
 
