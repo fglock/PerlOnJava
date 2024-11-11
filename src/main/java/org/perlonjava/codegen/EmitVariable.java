@@ -268,12 +268,22 @@ public class EmitVariable {
                         } else {
                             // The variable was initialized by a BEGIN block
 
-                            // Determine the method to call based on the sigil
+                            // Determine the method to call and its descriptor based on the sigil
                             String methodName;
+                            String methodDescriptor;
                             switch (var.charAt(0)) {
-                                case '$' -> methodName = "retrieveBeginScalar";
-                                case '@' -> methodName = "retrieveBeginArray";
-                                case '%' -> methodName = "retrieveBeginHash";
+                                case '$' -> {
+                                    methodName = "retrieveBeginScalar";
+                                    methodDescriptor = "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeScalar;";
+                                }
+                                case '@' -> {
+                                    methodName = "retrieveBeginArray";
+                                    methodDescriptor = "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeArray;";
+                                }
+                                case '%' -> {
+                                    methodName = "retrieveBeginHash";
+                                    methodDescriptor = "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeHash;";
+                                }
                                 default -> throw new IllegalArgumentException("Unsupported variable type: " + var.charAt(0));
                             }
 
@@ -283,7 +293,7 @@ public class EmitVariable {
                                     Opcodes.INVOKESTATIC,
                                     "org/perlonjava/parser/SpecialBlock",
                                     methodName,
-                                    "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeBaseEntity;",
+                                    methodDescriptor,
                                     false);
                         }
                     } else if (operator.equals("state")) {
