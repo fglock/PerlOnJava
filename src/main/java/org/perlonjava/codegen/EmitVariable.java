@@ -265,19 +265,19 @@ public class EmitVariable {
             default -> throw new IllegalArgumentException("Unsupported variable type: " + sigil);
         };
         Node initStateVariable = new BinaryOperatorNode(
-                        "(",
-                        new OperatorNode(
-                                "&",
-                                new IdentifierNode(methodName, tokenIndex),
-                                tokenIndex
-                        ),
-                        ListNode.makeList(
-                                new OperatorNode("__SUB__", null, tokenIndex),
-                                new StringNode(sigil + nameNode.name, tokenIndex),
-                                new NumberNode(String.valueOf(varNode.id), tokenIndex),
-                                node.right
-                        ),
+                "(",
+                new OperatorNode(
+                        "&",
+                        new IdentifierNode(methodName, tokenIndex),
                         tokenIndex
+                ),
+                ListNode.makeList(
+                        new OperatorNode("__SUB__", null, tokenIndex),
+                        new StringNode(sigil + nameNode.name, tokenIndex),
+                        new NumberNode(String.valueOf(varNode.id), tokenIndex),
+                        node.right
+                ),
+                tokenIndex
         );
         ctx.logDebug("handleAssignOperator initialize state variable " + initStateVariable);
         // initStateVariable.accept(emitterVisitor.with(RuntimeContextType.VOID));
