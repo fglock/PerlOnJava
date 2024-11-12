@@ -170,39 +170,7 @@ public class EmitVariable {
                 ctx.logDebug("SET right side scalar");
 
                 if (node.left instanceof OperatorNode operatorNode && operatorNode.operator.equals("state")) {
-                    // This is a state variable initialization, it should run exactly once.
-                    ctx.logDebug("handleAssignOperator initialize state variable " + operatorNode);
-                    OperatorNode varNode = (OperatorNode) operatorNode.operand;
-                    IdentifierNode nameNode = (IdentifierNode) varNode.operand;
-                    String sigil = varNode.operator;
-
-                    // Emit: state $var // initializeState(id, value)
-                    int tokenIndex = node.tokenIndex;
-
-                    operatorNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
-
-                    Node initStateVariable = new BinaryOperatorNode(
-                                    "(",
-                                    new OperatorNode(
-                                            "&",
-                                            new IdentifierNode(
-                                                    "Internals::initialize_state_variable",
-                                                    tokenIndex),
-                                            tokenIndex
-                                    ),
-                                    ListNode.makeList(
-                                            new OperatorNode("__SUB__", null, tokenIndex),
-                                            new StringNode(sigil + nameNode.name, tokenIndex),
-                                            new NumberNode(String.valueOf(varNode.id), tokenIndex),
-                                            node.right
-                                    ),
-                                    tokenIndex
-                    );
-                    ctx.logDebug("handleAssignOperator initialize state variable " + initStateVariable);
-                    initStateVariable.accept(emitterVisitor.with(RuntimeContextType.VOID));
-
-                    varNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-
+                    emitStateInitialization(emitterVisitor, node, operatorNode, ctx);
                     break;
                 }
 
@@ -232,6 +200,12 @@ public class EmitVariable {
                 break;
             case RuntimeContextType.LIST:
                 emitterVisitor.ctx.logDebug("SET right side list");
+
+                if (node.left instanceof OperatorNode operatorNode && operatorNode.operator.equals("state")) {
+                    emitStateInitialization(emitterVisitor, node, operatorNode, ctx);
+                    break;
+                }
+
                 Node nodeRight = node.right;
                 // make sure the right node is a ListNode
                 if (!(nodeRight instanceof ListNode)) {
@@ -252,6 +226,66 @@ public class EmitVariable {
             mv.visitInsn(Opcodes.POP);
         }
         emitterVisitor.ctx.logDebug("SET end");
+    }
+
+    private static void emitStateInitialization(EmitterVisitor emitterVisitor, BinaryOperatorNode node, OperatorNode operatorNode, EmitterContext ctx) {
+        // This is a state variable initialization, it should run exactly once.
+        ctx.logDebug("handleAssignOperator initialize state variable " + operatorNode);
+        OperatorNode varNode = (OperatorNode) operatorNode.operand;
+        IdentifierNode nameNode = (IdentifierNode) varNode.operand;
+        String sigil = varNode.operator;
+
+        // Emit: state $var // initializeState(id, value)
+        int tokenIndex = node.tokenIndex;
+
+        operatorNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
+
+        Node testStateVariable = new BinaryOperatorNode(
+                "(",
+                new OperatorNode(
+                        "&",
+                        new IdentifierNode("Internals::is_initialized_state_variable", tokenIndex),
+                        tokenIndex
+                ),
+                ListNode.makeList(
+                        new OperatorNode("__SUB__", null, tokenIndex),
+                        new StringNode(sigil + nameNode.name, tokenIndex),
+                        new NumberNode(String.valueOf(varNode.id), tokenIndex)
+                ),
+                tokenIndex
+        );
+        ctx.logDebug("handleAssignOperator initialize state variable " + testStateVariable);
+        // testStateVariable.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+        // Determine the method to call and its descriptor based on the sigil
+        String methodName = switch (sigil) {
+            case "$" -> "Internals::initialize_state_variable";
+            case "@" -> "Internals::initialize_state_array";
+            case "%" -> "Internals::initialize_state_hash";
+            default -> throw new IllegalArgumentException("Unsupported variable type: " + sigil);
+        };
+        Node initStateVariable = new BinaryOperatorNode(
+                        "(",
+                        new OperatorNode(
+                                "&",
+                                new IdentifierNode(methodName, tokenIndex),
+                                tokenIndex
+                        ),
+                        ListNode.makeList(
+                                new OperatorNode("__SUB__", null, tokenIndex),
+                                new StringNode(sigil + nameNode.name, tokenIndex),
+                                new NumberNode(String.valueOf(varNode.id), tokenIndex),
+                                node.right
+                        ),
+                        tokenIndex
+        );
+        ctx.logDebug("handleAssignOperator initialize state variable " + initStateVariable);
+        // initStateVariable.accept(emitterVisitor.with(RuntimeContextType.VOID));
+
+        new BinaryOperatorNode("||", testStateVariable, initStateVariable, tokenIndex)
+                .accept(emitterVisitor.with(RuntimeContextType.VOID));
+
+        varNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
     }
 
     static void handleMyOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
