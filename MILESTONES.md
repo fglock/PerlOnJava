@@ -97,8 +97,8 @@
   - Added operators: `fileno`, `getc`, `prototype`.
   - Added `BEGIN`, `CHECK`, `UNITCHECK`, `INIT`, `END` blocks.
   - Added subroutine hoisting: Invoking subroutines before their actual declaration in the code.
+  - Added `state` variables.
   - Work in progress:
-    - `state` variables.
     - `socket` and related operators.
     - `use VERSION`, `require VERSION`.
     - lexical warnings.
