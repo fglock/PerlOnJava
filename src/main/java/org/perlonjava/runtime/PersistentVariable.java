@@ -2,10 +2,17 @@ package org.perlonjava.runtime;
 
 import static org.perlonjava.runtime.GlobalContext.*;
 
+/**
+ * The PersistentVariable class provides methods to construct and retrieve
+ * compile-time variables captured within BEGIN blocks. These variables
+ * are persistent to run time.
+ * The variables can be scalars, arrays, or hashes, and are identified by a unique ID and name.
+ */
 public class PersistentVariable {
 
     /**
      * Constructs a package name for storing compile-time variables, with the given ID.
+     * This package name is used at run time to import the variable to the lexical scope.
      *
      * @param id The ID of the BEGIN block.
      * @return The package name for the BEGIN block.
@@ -15,7 +22,9 @@ public class PersistentVariable {
     }
 
     /**
-     * Constructs a compile-time variable name for a BEGIN block, with the given ID and name.
+     * Constructs a compile-time variable name, with the given ID and name.
+     * This variable name is used to store and retrieve variables captured by a BEGIN block,
+     * that are persistent to run time.
      *
      * @param id   The ID of the BEGIN block.
      * @param name The name of the variable.
@@ -26,9 +35,10 @@ public class PersistentVariable {
     }
 
     /**
-     * Retrieves a compile-time scalar variable.
+     * Retrieves a compile-time scalar variable associated with a BEGIN block.
+     * If the variable does not exist, a new RuntimeScalar is returned.
      *
-     * @param var The name of the variable.
+     * @param var The name of the variable (prefixed with a character indicating type).
      * @param id  The ID of the BEGIN block.
      * @return The retrieved RuntimeScalar.
      */
@@ -39,9 +49,10 @@ public class PersistentVariable {
     }
 
     /**
-     * Retrieves a compile-time array variable.
+     * Retrieves a compile-time array variable associated with a BEGIN block.
+     * If the variable does not exist, a new RuntimeArray is returned.
      *
-     * @param var The name of the variable.
+     * @param var The name of the variable (prefixed with a character indicating type).
      * @param id  The ID of the BEGIN block.
      * @return The retrieved RuntimeArray.
      */
@@ -52,9 +63,10 @@ public class PersistentVariable {
     }
 
     /**
-     * Retrieves a compile-time hash variable.
+     * Retrieves a compile-time hash variable associated with a BEGIN block.
+     * If the variable does not exist, a new RuntimeHash is returned.
      *
-     * @param var The name of the variable.
+     * @param var The name of the variable (prefixed with a character indicating type).
      * @param id  The ID of the BEGIN block.
      * @return The retrieved RuntimeHash.
      */
