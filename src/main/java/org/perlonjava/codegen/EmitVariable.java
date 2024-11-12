@@ -400,7 +400,7 @@ public class EmitVariable {
                         ctx.mv.visitLdcInsn(sigilNode.id);
                         ctx.mv.visitMethodInsn(
                                 Opcodes.INVOKESTATIC,
-                                "org/perlonjava/runtime/PersistentVariable",
+                                "org/perlonjava/runtime/StateVariable",
                                 methodName,
                                 methodDescriptor,
                                 false);

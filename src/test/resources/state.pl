@@ -2,7 +2,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 9;
+use Test::More tests => 13;
 use feature 'state';
 
 # Function using a state variable
@@ -44,5 +44,27 @@ sub single_init {
 is(single_init(), 42, 'First call to single_init should return 42');
 is(single_init(), 43, 'Second call to single_init should return 43');
 
-done_testing();
+# Function using a state array
+sub state_array {
+    state @arr = (1, 2, 3);
+    push @arr, scalar @arr + 1;
+    return @arr;
+}
 
+# Test the state array
+is_deeply([state_array()], [1, 2, 3, 4], 'First call to state_array should return [1, 2, 3, 4]');
+is_deeply([state_array()], [1, 2, 3, 4, 5], 'Second call to state_array should return [1, 2, 3, 4, 5]');
+
+# Function using a state hash
+sub state_hash {
+    state %hash = (a => 1, b => 2);
+    $hash{c} = scalar (keys %hash) + 1;
+    # print "Current state of hash: ", join(", ", map { "$_ => $hash{$_}" } keys %hash), "\n";
+    return %hash;
+}
+
+# Test the state hash
+is_deeply({state_hash()}, {a => 1, b => 2, c => 3}, 'First call to state_hash should return {a => 1, b => 2, c => 3}');
+is_deeply({state_hash()}, {a => 1, b => 2, c => 4}, 'Second call to state_hash should return {a => 1, b => 2, c => 4}');
+
+done_testing();

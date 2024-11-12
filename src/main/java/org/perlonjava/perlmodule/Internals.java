@@ -1,9 +1,6 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.PersistentVariable;
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.*;
 
 /**
  * The Strict class provides functionalities similar to the Perl strict module.
@@ -52,7 +49,7 @@ public class Internals extends PerlModuleBase {
      * @return Empty list
      */
     public static RuntimeList initializeStateVariable(RuntimeArray args, int ctx) {
-        PersistentVariable.initializeStateVariable(
+        StateVariable.initializeStateVariable(
                 args.get(0),
                 args.get(1).toString(),
                 args.get(2).getInt(),
@@ -61,7 +58,7 @@ public class Internals extends PerlModuleBase {
     }
 
     public static RuntimeList initializeStateArray(RuntimeArray args, int ctx) {
-        PersistentVariable.initializeStateArray(
+        StateVariable.initializeStateArray(
                 args.shift(),
                 args.shift().toString(),
                 args.shift().getInt(),
@@ -70,7 +67,7 @@ public class Internals extends PerlModuleBase {
     }
 
     public static RuntimeList initializeStateHash(RuntimeArray args, int ctx) {
-        PersistentVariable.initializeStateHash(
+        StateVariable.initializeStateHash(
                 args.shift(),
                 args.shift().toString(),
                 args.shift().getInt(),
@@ -86,7 +83,7 @@ public class Internals extends PerlModuleBase {
      * @return RuntimeScalar with true or false.
      */
     public static RuntimeList isInitializedStateVariable(RuntimeArray args, int ctx) {
-        RuntimeScalar var = PersistentVariable.isInitializedStateVariable(
+        RuntimeScalar var = StateVariable.isInitializedStateVariable(
                 args.get(0),
                 args.get(1).toString(),
                 args.get(2).getInt());
