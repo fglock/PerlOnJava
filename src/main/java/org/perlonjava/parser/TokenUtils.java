@@ -6,8 +6,21 @@ import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.List;
 
+/**
+ * The TokenUtils class provides utility methods for handling and manipulating
+ * lexer tokens during parsing. It includes methods for converting tokens to text,
+ * peeking at the next token, and consuming tokens with specific types or text.
+ */
 public class TokenUtils {
 
+    /**
+     * Converts a range of tokens into a single string of text, excluding EOF tokens.
+     *
+     * @param tokens   The list of LexerToken objects to process.
+     * @param codeStart The starting index in the list of tokens.
+     * @param codeEnd   The ending index in the list of tokens.
+     * @return A string representing the concatenated text of the specified token range.
+     */
     public static String toText(List<LexerToken> tokens, int codeStart, int codeEnd) {
         StringBuilder sb = new StringBuilder();
         codeStart = Math.max(codeStart, 0);
@@ -21,6 +34,12 @@ public class TokenUtils {
         return sb.toString();
     }
 
+    /**
+     * Peeks at the next non-whitespace token in the parser's token list without consuming it.
+     *
+     * @param parser The parser containing the token list and current token index.
+     * @return The next non-whitespace LexerToken, or an EOF token if the end of the list is reached.
+     */
     public static LexerToken peek(Parser parser) {
         parser.tokenIndex = Whitespace.skipWhitespace(parser.tokenIndex, parser.tokens);
         if (parser.tokenIndex >= parser.tokens.size()) {
@@ -29,6 +48,13 @@ public class TokenUtils {
         return parser.tokens.get(parser.tokenIndex);
     }
 
+    /**
+     * Consumes a single character from the current token in the parser's token list.
+     * If the token contains only one character, it advances to the next token.
+     *
+     * @param parser The parser containing the token list and current token index.
+     * @return The consumed character as a string.
+     */
     public static String consumeChar(Parser parser) {
         String str;
         if (parser.tokenIndex >= parser.tokens.size()) {
@@ -48,6 +74,12 @@ public class TokenUtils {
         return str;
     }
 
+    /**
+     * Peeks at the next character in the current token in the parser's token list without consuming it.
+     *
+     * @param parser The parser containing the token list and current token index.
+     * @return The next character as a string, or an empty string if the end of the list is reached.
+     */
     public static String peekChar(Parser parser) {
         String str;
         if (parser.tokenIndex >= parser.tokens.size()) {
@@ -65,6 +97,12 @@ public class TokenUtils {
         return str;
     }
 
+    /**
+     * Consumes the next non-whitespace token in the parser's token list.
+     *
+     * @param parser The parser containing the token list and current token index.
+     * @return The consumed LexerToken, or an EOF token if the end of the list is reached.
+     */
     public static LexerToken consume(Parser parser) {
         parser.tokenIndex = Whitespace.skipWhitespace(parser.tokenIndex, parser.tokens);
         if (parser.tokenIndex >= parser.tokens.size()) {
@@ -73,6 +111,15 @@ public class TokenUtils {
         return parser.tokens.get(parser.tokenIndex++);
     }
 
+    /**
+     * Consumes the next non-whitespace token in the parser's token list and checks its type.
+     * Throws an exception if the token type does not match the expected type.
+     *
+     * @param parser The parser containing the token list and current token index.
+     * @param type   The expected LexerTokenType of the token to consume.
+     * @return The consumed LexerToken.
+     * @throws PerlCompilerException if the token type does not match the expected type.
+     */
     public static LexerToken consume(Parser parser, LexerTokenType type) {
         LexerToken token = consume(parser);
         if (token.type != type) {
@@ -82,6 +129,15 @@ public class TokenUtils {
         return token;
     }
 
+    /**
+     * Consumes the next non-whitespace token in the parser's token list and checks its type and text.
+     * Throws an exception if the token type or text does not match the expected values.
+     *
+     * @param parser The parser containing the token list and current token index.
+     * @param type   The expected LexerTokenType of the token to consume.
+     * @param text   The expected text of the token to consume.
+     * @throws PerlCompilerException if the token type or text does not match the expected values.
+     */
     public static void consume(Parser parser, LexerTokenType type, String text) {
         LexerToken token = consume(parser);
         if (token.type != type || !token.text.equals(text)) {
