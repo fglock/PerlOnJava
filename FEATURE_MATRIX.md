@@ -217,6 +217,7 @@
 - ✔️   **`UNITCHECK`**: special block is implemented.
 - ✔️   **Labels**: Labels are implemented.
 - ❌  **Here-docs**: Here-docs for multiline string literals are not yet implemented.
+- ❌  **Preprocessor**: `# line` directive is not yet implemented.
 - ✔️   **`glob`**: `glob` operator is implemented.
 - ✔️   **`<>`**: `<>` operator is implemented.
 - ✔️   **`<$fh>`**: `<$fh>` and `<STDIN>` operators are implemented.
