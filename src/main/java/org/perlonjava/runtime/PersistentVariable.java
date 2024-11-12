@@ -1,6 +1,5 @@
 package org.perlonjava.runtime;
 
-import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -61,15 +60,15 @@ public class PersistentVariable {
             // top-level code doesn't have __SUB__
             // System.out.println("initializeStateVariable top level " + codeRef);
             RuntimeScalar variable = getGlobalVariable(beginVar);
-                stateVariableInitialized.put(beginVar, true);
-                variable.set(value);
+            stateVariableInitialized.put(beginVar, true);
+            variable.set(value);
         } else {
             // System.out.println("initializeStateVariable sub instance " + codeRef);
             RuntimeCode code = (RuntimeCode) codeRef.value;
             RuntimeScalar variable = code.stateVariable.get(beginVar);
-                code.stateVariableInitialized.put(beginVar, true);
-                // System.out.println("initializeStateVariable set " + value);
-                variable.set(value);
+            code.stateVariableInitialized.put(beginVar, true);
+            // System.out.println("initializeStateVariable set " + value);
+            variable.set(value);
         }
     }
 
@@ -112,12 +111,12 @@ public class PersistentVariable {
     }
 
     /**
-         * Retrieves a "state" scalar variable.
-         *
-         * @param var The name of the variable.
-         * @param id  The ID of the variable.
-         * @return The retrieved RuntimeScalar.
-         */
+     * Retrieves a "state" scalar variable.
+     *
+     * @param var The name of the variable.
+     * @param id  The ID of the variable.
+     * @return The retrieved RuntimeScalar.
+     */
     public static RuntimeScalar retrieveStateScalar(RuntimeScalar codeRef, String var, int id) {
         String beginVar = beginVariable(id, var.substring(1));
         if (!codeRef.getDefinedBoolean()) {

@@ -218,9 +218,9 @@ public class EmitSubroutine {
 
         // Retrieve this.__SUB__
         mv.visitFieldInsn(Opcodes.GETFIELD,
-                 className,    // The class containing the field (e.g., "com/example/MyClass")
+                className,    // The class containing the field (e.g., "com/example/MyClass")
                 "__SUB__",     // Field name
-                 "Lorg/perlonjava/runtime/RuntimeScalar;");    // Field descriptor
+                "Lorg/perlonjava/runtime/RuntimeScalar;");    // Field descriptor
 
         // Create a Perl undef if the value in the stack is null
         mv.visitMethodInsn(
