@@ -49,22 +49,28 @@ public class StateVariable {
      * @param codeRef Reference to the runtime code context.
      * @param var     The name of the variable.
      * @param id      The ID of the variable.
+     */
+    public static void markInitializedStateVariable(RuntimeScalar codeRef, String var, int id) {
+        String beginVar = PersistentVariable.beginVariable(id, var.substring(1));
+        if (!codeRef.getDefinedBoolean()) {
+            stateVariableInitialized.put(beginVar, true);
+        } else {
+            RuntimeCode code = (RuntimeCode) codeRef.value;
+            code.stateVariableInitialized.put(beginVar, true);
+        }
+    }
+
+    /**
+     * Initializes a state scalar variable.
+     *
+     * @param codeRef Reference to the runtime code context.
+     * @param var     The name of the variable.
+     * @param id      The ID of the variable.
      * @param value   The value to initialize the variable with.
      */
     public static void initializeStateVariable(RuntimeScalar codeRef, String var, int id, RuntimeScalar value) {
-        String beginVar = PersistentVariable.beginVariable(id, var.substring(1));
-        if (!codeRef.getDefinedBoolean()) {
-            // Initialize global variable for top-level code.
-            RuntimeScalar variable = getGlobalVariable(beginVar);
-            stateVariableInitialized.put(beginVar, true);
-            variable.set(value);
-        } else {
-            // Initialize variable in the specific code context.
-            RuntimeCode code = (RuntimeCode) codeRef.value;
-            RuntimeScalar variable = code.stateVariable.get(beginVar);
-            code.stateVariableInitialized.put(beginVar, true);
-            variable.set(value);
-        }
+        retrieveStateScalar(codeRef, var, id).set(value);
+        markInitializedStateVariable(codeRef, var, id);
     }
 
     /**
@@ -76,19 +82,8 @@ public class StateVariable {
      * @param value   The value to initialize the array with.
      */
     public static void initializeStateArray(RuntimeScalar codeRef, String var, int id, RuntimeArray value) {
-        String beginVar = PersistentVariable.beginVariable(id, var.substring(1));
-        if (!codeRef.getDefinedBoolean()) {
-            // Initialize global array for top-level code.
-            RuntimeArray variable = getGlobalArray(beginVar);
-            stateVariableInitialized.put(beginVar, true);
-            variable.setFromList(value.getList());
-        } else {
-            // Initialize array in the specific code context.
-            RuntimeCode code = (RuntimeCode) codeRef.value;
-            RuntimeArray variable = code.stateArray.get(beginVar);
-            code.stateVariableInitialized.put(beginVar, true);
-            variable.setFromList(value.getList());
-        }
+        retrieveStateArray(codeRef, var, id).setFromList(value.getList());
+        markInitializedStateVariable(codeRef, var, id);
     }
 
     /**
@@ -100,19 +95,8 @@ public class StateVariable {
      * @param value   The value to initialize the hash with.
      */
     public static void initializeStateHash(RuntimeScalar codeRef, String var, int id, RuntimeArray value) {
-        String beginVar = PersistentVariable.beginVariable(id, var.substring(1));
-        if (!codeRef.getDefinedBoolean()) {
-            // Initialize global hash for top-level code.
-            RuntimeHash variable = getGlobalHash(beginVar);
-            stateVariableInitialized.put(beginVar, true);
-            variable.setFromList(value.getList());
-        } else {
-            // Initialize hash in the specific code context.
-            RuntimeCode code = (RuntimeCode) codeRef.value;
-            RuntimeHash variable = code.stateHash.get(beginVar);
-            code.stateVariableInitialized.put(beginVar, true);
-            variable.setFromList(value.getList());
-        }
+        retrieveStateHash(codeRef, var, id).setFromList(value.getList());
+        markInitializedStateVariable(codeRef, var, id);
     }
 
     /**
