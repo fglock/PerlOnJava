@@ -34,7 +34,7 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
         // System.out.println("glob set " + value.type);
         switch (value.type) {
             case CODE:
-                GlobalContext.getGlobalCodeRef(this.globName).set(value);
+                GlobalVariable.getGlobalCodeRef(this.globName).set(value);
 
                 // Invalidate the method resolution cache
                 InheritanceResolver.invalidateCache();
@@ -43,23 +43,23 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
             case GLOB:
                 if (value.value instanceof RuntimeIO) {
                     // *STDOUT = $new_handle
-                    GlobalContext.getGlobalIO(this.globName).set(value);
+                    GlobalVariable.getGlobalIO(this.globName).set(value);
                 }
                 return value;
             case ARRAYREFERENCE:
                 // Handle the case where a typeglob is assigned a reference to an array
                 if (value.value instanceof RuntimeArray) {
-                    GlobalContext.getGlobalArray(this.globName).setFromList(((RuntimeArray) value.value).getList());
+                    GlobalVariable.getGlobalArray(this.globName).setFromList(((RuntimeArray) value.value).getList());
                 }
                 return value;
             case HASHREFERENCE:
                 if (value.value instanceof RuntimeHash) {
-                    GlobalContext.getGlobalHash(this.globName).setFromList(((RuntimeHash) value.value).getList());
+                    GlobalVariable.getGlobalHash(this.globName).setFromList(((RuntimeHash) value.value).getList());
                 }
                 return value;
             case REFERENCE:
                 if (value.value instanceof RuntimeScalar) {
-                    GlobalContext.getGlobalVariable(this.globName).set(value);
+                    GlobalVariable.getGlobalVariable(this.globName).set(value);
                 }
                 return value;
         }
@@ -79,19 +79,19 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
         String globName = value.globName;
 
         // Set the current scalar to the global code reference associated with the glob name.
-        this.set(GlobalContext.getGlobalCodeRef(globName));
+        this.set(GlobalVariable.getGlobalCodeRef(globName));
 
         // Set the current scalar to the global IO (input/output) reference associated with the glob name.
-        this.set(GlobalContext.getGlobalIO(globName));
+        this.set(GlobalVariable.getGlobalIO(globName));
 
         // Set the current scalar to a reference of the global array associated with the glob name.
-        this.set(GlobalContext.getGlobalArray(globName).createReference());
+        this.set(GlobalVariable.getGlobalArray(globName).createReference());
 
         // Set the current scalar to a reference of the global hash associated with the glob name.
-        this.set(GlobalContext.getGlobalHash(globName).createReference());
+        this.set(GlobalVariable.getGlobalHash(globName).createReference());
 
         // Set the current scalar to a reference of the global variable associated with the glob name.
-        this.set(GlobalContext.getGlobalVariable(globName).createReference());
+        this.set(GlobalVariable.getGlobalVariable(globName).createReference());
 
         // Return the scalar value associated with the provided RuntimeGlob.
         return value.scalar();
@@ -311,7 +311,7 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
      */
     public RuntimeGlob undefine() {
         // Undefine CODE
-        GlobalContext.getGlobalCodeRef(this.globName).set(new RuntimeScalar());
+        GlobalVariable.getGlobalCodeRef(this.globName).set(new RuntimeScalar());
 
         // Invalidate the method resolution cache
         InheritanceResolver.invalidateCache();

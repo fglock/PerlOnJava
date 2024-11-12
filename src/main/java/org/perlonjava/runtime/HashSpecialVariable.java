@@ -11,7 +11,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 /**
  * HashSpecialVariable provides a dynamic view over named capturing groups
  * in a Matcher object, reflecting the current state of the Matcher.
- * This implements the Perl special variable %+.
+ * This implements the Perl special variables %+, %-.
  */
 public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 

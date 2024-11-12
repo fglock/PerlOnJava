@@ -4,8 +4,6 @@ import org.perlonjava.runtime.*;
 
 import java.lang.reflect.Method;
 
-import static org.perlonjava.runtime.GlobalContext.*;
-
 /**
  * The Exporter class is responsible for managing the export of symbols from one Perl package to another.
  * It mimics the behavior of Perl's Exporter module, allowing symbols to be imported into other namespaces.
@@ -20,7 +18,7 @@ public class Exporter {
         // Initialize Exporter class
 
         // Set %INC to indicate that Exporter.pm has been loaded
-        getGlobalHash("main::INC").put("Exporter.pm", new RuntimeScalar("Exporter.pm"));
+        GlobalVariable.getGlobalHash("main::INC").put("Exporter.pm", new RuntimeScalar("Exporter.pm"));
 
         try {
             // Load Exporter methods into Perl namespace
@@ -30,11 +28,11 @@ public class Exporter {
 
             // Get the importSymbols method and set it as a global code reference for Exporter::import
             mm = clazz.getMethod("importSymbols", RuntimeArray.class, int.class);
-            getGlobalCodeRef("Exporter::import").set(new RuntimeScalar(
+            GlobalVariable.getGlobalCodeRef("Exporter::import").set(new RuntimeScalar(
                     new RuntimeCode(mm, instance, null)));
 
             // Set up @EXPORTER::EXPORT_OK = ("import");
-            getGlobalArray("Exporter::EXPORT_OK").push(new RuntimeScalar("import"));
+            GlobalVariable.getGlobalArray("Exporter::EXPORT_OK").push(new RuntimeScalar("import"));
         } catch (Exception e) {
             System.err.println("Warning: Failed to initialize Exporter: " + e.getMessage());
         }
@@ -62,9 +60,9 @@ public class Exporter {
         String caller = callerList.scalar().toString();
 
         // Retrieve the export lists and tags from the package
-        RuntimeArray export = GlobalContext.getGlobalArray(packageScalar + "::EXPORT");
-        RuntimeArray exportOk = GlobalContext.getGlobalArray(packageScalar + "::EXPORT_OK");
-        RuntimeHash exportTags = GlobalContext.getGlobalHash(packageScalar + "::EXPORT_TAGS");
+        RuntimeArray export = GlobalVariable.getGlobalArray(packageScalar + "::EXPORT");
+        RuntimeArray exportOk = GlobalVariable.getGlobalArray(packageScalar + "::EXPORT_OK");
+        RuntimeHash exportTags = GlobalVariable.getGlobalHash(packageScalar + "::EXPORT_TAGS");
 
         // If no specific symbols are requested, default to exporting all symbols in @EXPORT
         if (args.size() == 0) {
@@ -122,28 +120,28 @@ public class Exporter {
     }
 
     private static void importFunction(String packageName, String caller, String functionName) {
-        RuntimeScalar exportSymbol = getGlobalCodeRef(packageName + "::" + functionName);
+        RuntimeScalar exportSymbol = GlobalVariable.getGlobalCodeRef(packageName + "::" + functionName);
         if (exportSymbol.type == RuntimeScalarType.CODE) {
-            getGlobalCodeRef(caller + "::" + functionName).set(exportSymbol);
+            GlobalVariable.getGlobalCodeRef(caller + "::" + functionName).set(exportSymbol);
         } else {
             throw new PerlCompilerException("Function " + functionName + " not found in package " + packageName);
         }
     }
 
     private static void importScalar(String packageName, String caller, String scalarName) {
-        RuntimeScalar exportScalar = getGlobalVariable(packageName + "::" + scalarName);
-        getGlobalVariable(caller + "::" + scalarName).set(exportScalar);
+        RuntimeScalar exportScalar = GlobalVariable.getGlobalVariable(packageName + "::" + scalarName);
+        GlobalVariable.getGlobalVariable(caller + "::" + scalarName).set(exportScalar);
     }
 
     private static void importArray(String packageName, String caller, String arrayName) {
-        RuntimeArray exportArray = getGlobalArray(packageName + "::" + arrayName);
-        RuntimeArray array = getGlobalArray(caller + "::" + arrayName);
+        RuntimeArray exportArray = GlobalVariable.getGlobalArray(packageName + "::" + arrayName);
+        RuntimeArray array = GlobalVariable.getGlobalArray(caller + "::" + arrayName);
         array.setFromList(exportArray.getList());
     }
 
     private static void importHash(String packageName, String caller, String hashName) {
-        RuntimeHash exportHash = getGlobalHash(packageName + "::" + hashName);
-        RuntimeHash hash = getGlobalHash(caller + "::" + hashName);
+        RuntimeHash exportHash = GlobalVariable.getGlobalHash(packageName + "::" + hashName);
+        RuntimeHash hash = GlobalVariable.getGlobalHash(caller + "::" + hashName);
         hash.setFromList(exportHash.getList());
     }
 

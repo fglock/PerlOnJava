@@ -1,12 +1,11 @@
 package org.perlonjava.perlmodule;
 
+import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeCode;
 import org.perlonjava.runtime.RuntimeScalar;
 
 import java.lang.reflect.Method;
-
-import static org.perlonjava.runtime.GlobalContext.*;
 
 /**
  * Abstract base class for Perl modules in the Java environment.
@@ -34,7 +33,7 @@ public abstract class PerlModuleBase {
      */
     private void initializeModule() {
         // Set %INC to indicate the module is loaded
-        getGlobalHash("main::INC").put(moduleName.replace("::", "/") + ".pm", new RuntimeScalar(moduleName + ".pm"));
+        GlobalVariable.getGlobalHash("main::INC").put(moduleName.replace("::", "/") + ".pm", new RuntimeScalar(moduleName + ".pm"));
     }
 
     /**
@@ -53,7 +52,7 @@ public abstract class PerlModuleBase {
         Method method = this.getClass().getMethod(javaMethodName, RuntimeArray.class, int.class);
 
         // Set the method as a global code reference in the Perl namespace using the Perl method name
-        getGlobalCodeRef(moduleName + "::" + perlMethodName).set(new RuntimeScalar(
+        GlobalVariable.getGlobalCodeRef(moduleName + "::" + perlMethodName).set(new RuntimeScalar(
                 new RuntimeCode(method, instance, signature)));
     }
 
@@ -76,7 +75,7 @@ public abstract class PerlModuleBase {
      */
     protected void defineExport(String exportType, String... symbols) {
         // Retrieve the global array for the specified export type
-        RuntimeArray exportArray = getGlobalArray(moduleName + "::" + exportType);
+        RuntimeArray exportArray = GlobalVariable.getGlobalArray(moduleName + "::" + exportType);
 
         // Add each symbol to the export array
         for (String symbol : symbols) {
@@ -100,7 +99,7 @@ public abstract class PerlModuleBase {
         }
 
         // Set the import method as a global code reference in the Perl namespace
-        getGlobalCodeRef(moduleName + "::import").set(new RuntimeScalar(
+        GlobalVariable.getGlobalCodeRef(moduleName + "::import").set(new RuntimeScalar(
                 new RuntimeCode(method, instance, null)));
     }
 }

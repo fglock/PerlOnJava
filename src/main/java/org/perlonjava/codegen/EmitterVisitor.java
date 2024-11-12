@@ -626,7 +626,7 @@ public class EmitterVisitor implements Visitor {
             ctx.mv.visitLdcInsn(name);
             ctx.mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/GlobalContext",
+                    "org/perlonjava/runtime/GlobalVariable",
                     "getGlobalIO",
                     "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
                     false);

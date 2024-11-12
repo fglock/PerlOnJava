@@ -201,7 +201,7 @@ public class EmitterMethodCreator implements Opcodes {
             mv.visitLdcInsn("main::@");
             mv.visitLdcInsn("");
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/GlobalContext",
+                    "org/perlonjava/runtime/GlobalVariable",
                     "setGlobalVariable",
                     "(Ljava/lang/String;Ljava/lang/String;)V", false);
 
@@ -233,11 +233,11 @@ public class EmitterMethodCreator implements Opcodes {
                     "stringifyException",
                     "(Ljava/lang/Exception;)Ljava/lang/String;", false);
 
-            // Set the global error variable "$@" using GlobalContext.setGlobalVariable(key, value)
+            // Set the global error variable "$@" using GlobalVariable.setGlobalVariable(key, value)
             mv.visitLdcInsn("main::@");
             mv.visitInsn(Opcodes.SWAP);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/GlobalContext",
+                    "org/perlonjava/runtime/GlobalVariable",
                     "setGlobalVariable",
                     "(Ljava/lang/String;Ljava/lang/String;)V", false);
 

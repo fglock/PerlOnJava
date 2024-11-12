@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
+import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarBoolean;
 
 public class Operator {
@@ -541,7 +541,7 @@ public class Operator {
         boolean allDeleted = true;
         RuntimeList fileList = value.getList();
         if (fileList.elements.isEmpty()) {
-            fileList.elements.add(GlobalContext.getGlobalVariable("main::_"));
+            fileList.elements.add(GlobalVariable.getGlobalVariable("main::_"));
         }
         Iterator<RuntimeScalar> iterator = fileList.iterator();
 
@@ -565,7 +565,7 @@ public class Operator {
 
             RuntimeList list = value.getList();
             if (list.elements.isEmpty()) {
-                list.elements.add(GlobalContext.getGlobalVariable("main::_"));
+                list.elements.add(GlobalVariable.getGlobalVariable("main::_"));
             }
 
             Iterator<RuntimeScalar> iterator = list.iterator();

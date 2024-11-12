@@ -3,7 +3,6 @@ package org.perlonjava.runtime;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.perlonjava.runtime.GlobalContext.*;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 
@@ -111,7 +110,7 @@ public class StateVariable {
         String beginVar = PersistentVariable.beginVariable(id, var.substring(1));
         if (!codeRef.getDefinedBoolean()) {
             // Retrieve global variable for top-level code.
-            return getGlobalVariable(beginVar);
+            return GlobalVariable.getGlobalVariable(beginVar);
         } else {
             // Retrieve variable in the specific code context.
             RuntimeCode code = (RuntimeCode) codeRef.value;
@@ -136,7 +135,7 @@ public class StateVariable {
         String beginVar = PersistentVariable.beginVariable(id, var.substring(1));
         if (!codeRef.getDefinedBoolean()) {
             // Retrieve global array for top-level code.
-            return getGlobalArray(beginVar);
+            return GlobalVariable.getGlobalArray(beginVar);
         } else {
             // Retrieve array in the specific code context.
             RuntimeCode code = (RuntimeCode) codeRef.value;
@@ -161,7 +160,7 @@ public class StateVariable {
         String beginVar = PersistentVariable.beginVariable(id, var.substring(1));
         if (!codeRef.getDefinedBoolean()) {
             // Retrieve global hash for top-level code.
-            return getGlobalHash(beginVar);
+            return GlobalVariable.getGlobalHash(beginVar);
         } else {
             // Retrieve hash in the specific code context.
             RuntimeCode code = (RuntimeCode) codeRef.value;

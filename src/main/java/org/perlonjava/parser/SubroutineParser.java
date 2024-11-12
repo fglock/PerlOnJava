@@ -35,12 +35,12 @@ public class SubroutineParser {
         IdentifierNode nameNode = new IdentifierNode(subName, parser.tokenIndex);
 
         // Check if the subroutine exists in the global namespace
-        boolean subExists = GlobalContext.existsGlobalCodeRef(fullName);
+        boolean subExists = GlobalVariable.existsGlobalCodeRef(fullName);
         String prototype = null;
         List<String> attributes = null;
         if (subExists) {
             // Fetch the subroutine reference
-            RuntimeScalar codeRef = GlobalContext.getGlobalCodeRef(fullName);
+            RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
             prototype = ((RuntimeCode) codeRef.value).prototype;
             attributes = ((RuntimeCode) codeRef.value).attributes;
         }
@@ -125,7 +125,7 @@ public class SubroutineParser {
             // A named subroutine can be predeclared without a block of code.
             String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
             RuntimeCode codeRef = new RuntimeCode(prototype, attributes);
-            GlobalContext.getGlobalCodeRef(fullName).set(new RuntimeScalar(codeRef));
+            GlobalVariable.getGlobalCodeRef(fullName).set(new RuntimeScalar(codeRef));
             // return an empty AST list
             return new ListNode(parser.tokenIndex);
         }
@@ -160,7 +160,7 @@ public class SubroutineParser {
 
             // - register the subroutine in the namespace
             String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
-            GlobalContext.getGlobalCodeRef(fullName).set(codeRef);
+            GlobalVariable.getGlobalCodeRef(fullName).set(codeRef);
 
             // return an empty AST list
             return new ListNode(parser.tokenIndex);

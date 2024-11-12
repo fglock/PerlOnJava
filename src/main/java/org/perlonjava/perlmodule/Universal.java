@@ -4,7 +4,7 @@ import org.perlonjava.runtime.*;
 
 import java.util.List;
 
-import static org.perlonjava.runtime.GlobalContext.getGlobalCodeRef;
+import static org.perlonjava.runtime.GlobalVariable.getGlobalCodeRef;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
@@ -87,7 +87,7 @@ public class Universal extends PerlModuleBase {
         // Get the linearized inheritance hierarchy using C3
         for (String className : InheritanceResolver.linearizeC3(perlClassName)) {
             String normalizedClassMethodName = NameNormalizer.normalizeVariableName(methodName, className);
-            if (GlobalContext.existsGlobalCodeRef(normalizedClassMethodName)) {
+            if (GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName)) {
                 // If the method is found, return it
                 return getGlobalCodeRef(normalizedClassMethodName).getList();
             }
@@ -194,7 +194,7 @@ public class Universal extends PerlModuleBase {
 
         // Retrieve the $VERSION variable from the package
         String versionVariableName = NameNormalizer.normalizeVariableName("VERSION", perlClassName);
-        RuntimeScalar hasVersion = GlobalContext.getGlobalVariable(versionVariableName);
+        RuntimeScalar hasVersion = GlobalVariable.getGlobalVariable(versionVariableName);
         if (hasVersion.toString().isEmpty()) {
             throw new PerlCompilerException(perlClassName + " does not define $" + perlClassName + "::VERSION--version check failed");
         }
