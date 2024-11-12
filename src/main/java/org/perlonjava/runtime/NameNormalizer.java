@@ -5,6 +5,11 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * The NameNormalizer class provides utility methods for normalizing Perl variable names
+ * and managing "blessed" class lookups. It includes caching mechanisms for efficient
+ * retrieval of previously normalized names and blessed IDs.
+ */
 public class NameNormalizer {
     // Cache to store previously normalized variables for faster lookup
     private static final Map<String, String> nameCache = new HashMap<>();
@@ -20,6 +25,13 @@ public class NameNormalizer {
         blessStrCache.add("");  // this starts with index 1
     }
 
+    /**
+     * Retrieves the unique ID associated with a "blessed" class name.
+     * If the class name is not already cached, it assigns a new ID.
+     *
+     * @param str The name of the class to be "blessed".
+     * @return The unique ID associated with the class name.
+     */
     public static int getBlessId(String str) {
         Integer id = blessIdCache.get(str);
         if (id == null) {
@@ -31,6 +43,12 @@ public class NameNormalizer {
         return id;
     }
 
+    /**
+     * Retrieves the class name associated with a given "blessed" ID.
+     *
+     * @param id The ID of the "blessed" class.
+     * @return The class name associated with the ID.
+     */
     public static String getBlessStr(int id) {
         return blessStrCache.get(id);
     }
@@ -81,6 +99,14 @@ public class NameNormalizer {
         return normalizedStr;
     }
 
+    /**
+     * Converts a Perl module name to a corresponding filename by replacing '::' with '/'
+     * and appending '.pm'.
+     *
+     * @param moduleName The name of the Perl module.
+     * @return The filename corresponding to the module name.
+     * @throws PerlCompilerException if the module name is null or empty.
+     */
     public static String moduleToFilename(String moduleName) {
         if (moduleName == null || moduleName.isEmpty()) {
             throw new PerlCompilerException("Module name cannot be null or empty");
