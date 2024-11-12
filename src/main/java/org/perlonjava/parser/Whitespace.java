@@ -58,6 +58,15 @@ public class Whitespace {
 
                 case OPERATOR:
                     if (token.text.equals("#")) {
+                        // Skip optional whitespace after '#'
+                        tokenIndex++;
+                        while (tokenIndex < tokens.size() && tokens.get(tokenIndex).type == LexerTokenType.WHITESPACE) {
+                            tokenIndex++;
+                        }
+                        // Check if it's a "# line" directive
+                        if (tokenIndex < tokens.size() && tokens.get(tokenIndex).text.equals("line")) {
+                            tokenIndex = parseLineDirective(tokenIndex, tokens);
+                        }
                         // Skip comment until end of line
                         while (tokenIndex < tokens.size() && tokens.get(tokenIndex).type != LexerTokenType.NEWLINE) {
                             tokenIndex++;
@@ -82,6 +91,44 @@ public class Whitespace {
 
                 default:
                     return tokenIndex; // Stop processing when a non-whitespace/non-comment token is found
+            }
+        }
+        return tokenIndex;
+    }
+
+    private static int parseLineDirective(int tokenIndex, List<LexerToken> tokens) {
+        tokenIndex++; // Skip 'line'
+        // Skip optional whitespace after 'line'
+        while (tokenIndex < tokens.size() && tokens.get(tokenIndex).type == LexerTokenType.WHITESPACE) {
+            tokenIndex++;
+        }
+        // Parse the line number
+        if (tokenIndex < tokens.size() && tokens.get(tokenIndex).type == LexerTokenType.NUMBER) {
+            String lineNumberStr = tokens.get(tokenIndex).text;
+            try {
+                int lineNumber = Integer.parseInt(lineNumberStr);
+                tokenIndex++;
+                // Skip optional whitespace before filename
+                while (tokenIndex < tokens.size() && tokens.get(tokenIndex).type == LexerTokenType.WHITESPACE) {
+                    tokenIndex++;
+                }
+                // Parse the filename enclosed in quotes
+                if (tokenIndex < tokens.size() && tokens.get(tokenIndex).type == LexerTokenType.OPERATOR && tokens.get(tokenIndex).text.equals("\"")) {
+                    tokenIndex++; // Skip opening quote
+                    StringBuilder filenameBuilder = new StringBuilder();
+                    while (tokenIndex < tokens.size() && !(tokens.get(tokenIndex).type == LexerTokenType.OPERATOR && tokens.get(tokenIndex).text.equals("\""))) {
+                        filenameBuilder.append(tokens.get(tokenIndex).text);
+                        tokenIndex++;
+                    }
+                    if (tokenIndex < tokens.size() && tokens.get(tokenIndex).type == LexerTokenType.OPERATOR && tokens.get(tokenIndex).text.equals("\"")) {
+                        tokenIndex++; // Skip closing quote
+                        String filename = filenameBuilder.toString();
+                        // Handle the line number and filename as needed
+                        // For example, update a state or context object
+                    }
+                }
+            } catch (NumberFormatException e) {
+                // Handle the error if the line number is not valid
             }
         }
         return tokenIndex;
