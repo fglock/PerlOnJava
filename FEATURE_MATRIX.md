@@ -53,8 +53,7 @@
 - ✔️   **`my` variable declaration**: Local variables can be declared using `my`.
 - ✔️   **`our` variable declaration**: Global variables can be declared using `our`.
 - ✔️   **`local` variable declaration**: Dynamic variables are implemented.
-- ❌  **`state` variable declaration**: Support for state variable changes is missing.
-- ❌  **`state` variable declaration**: state variables are initialized only once.
+- ✔️   **`state` variable declaration**: State variables are implemented. State variables are initialized only once.
 - ✔️   **Variable assignment**: Basic variable assignment is implemented.
 - ✔️   **Basic types**: Support for integers, doubles, strings, v-strings, regex, CODE, undef, references is present.
 - ✔️   **String Interpolation**: Both array and scalar string interpolation are supported.
