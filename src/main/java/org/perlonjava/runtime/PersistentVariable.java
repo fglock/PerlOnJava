@@ -95,9 +95,22 @@ public class PersistentVariable {
      * @param id  The ID of the variable.
      * @return The retrieved RuntimeArray.
      */
-    public static RuntimeArray retrieveStateArray(String var, int id) {
+    public static RuntimeArray retrieveStateArray(RuntimeScalar codeRef, String var, int id) {
         String beginVar = beginVariable(id, var.substring(1));
-        return getGlobalArray(beginVar);
+        if (!codeRef.getDefinedBoolean()) {
+            // top-level code doesn't have __SUB__
+            // System.out.println("retrieveStateArray top level " + codeRef);
+            return getGlobalArray(beginVar);
+        } else {
+            // System.out.println("retrieveStateArray sub instance " + codeRef);
+            RuntimeCode code = (RuntimeCode) codeRef.value;
+            RuntimeArray variable = code.stateArray.get(beginVar);
+            if (variable == null) {
+                variable = new RuntimeArray();
+                code.stateArray.put(beginVar, variable);
+            }
+            return variable;
+        }
     }
 
     /**
@@ -107,9 +120,22 @@ public class PersistentVariable {
      * @param id  The ID of the variable.
      * @return The retrieved RuntimeHash.
      */
-    public static RuntimeHash retrieveStateHash(String var, int id) {
+    public static RuntimeHash retrieveStateHash(RuntimeScalar codeRef, String var, int id) {
         String beginVar = beginVariable(id, var.substring(1));
-        return getGlobalHash(beginVar);
+        if (!codeRef.getDefinedBoolean()) {
+            // top-level code doesn't have __SUB__
+            // System.out.println("retrieveStateHash top level " + codeRef);
+            return getGlobalHash(beginVar);
+        } else {
+            // System.out.println("retrieveStateHash sub instance " + codeRef);
+            RuntimeCode code = (RuntimeCode) codeRef.value;
+            RuntimeHash variable = code.stateHash.get(beginVar);
+            if (variable == null) {
+                variable = new RuntimeHash();
+                code.stateHash.put(beginVar, variable);
+            }
+            return variable;
+        }
     }
 
     /**

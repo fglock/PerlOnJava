@@ -178,10 +178,10 @@ public class EmitVariable {
 
                     // Emit: state $var // initializeState(id, value)
                     int tokenIndex = node.tokenIndex;
+
+                    operatorNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
+
                     Node initStateVariable = new BinaryOperatorNode(
-                            "//",
-                            operatorNode,
-                            new BinaryOperatorNode(
                                     "(",
                                     new OperatorNode(
                                             "&",
@@ -197,11 +197,12 @@ public class EmitVariable {
                                             node.right
                                     ),
                                     tokenIndex
-                            ),
-                            tokenIndex
                     );
                     ctx.logDebug("handleAssignOperator initialize state variable " + initStateVariable);
-                    initStateVariable.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    initStateVariable.accept(emitterVisitor.with(RuntimeContextType.VOID));
+
+                    varNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
                     break;
                 }
 
