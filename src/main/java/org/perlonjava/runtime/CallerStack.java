@@ -3,13 +3,31 @@ package org.perlonjava.runtime;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * The CallerStack class implements a virtual calling stack used during parsing.
+ * It allows for the retrieval of the "calling sequence" of parsing modules, which can be
+ * used to present a stack trace to the user in case of an error. This is particularly useful
+ * for implementing the caller() function during operations like import() and unimport().
+ */
 public class CallerStack {
     private static final List<CallerInfo> callerStack = new ArrayList<>();
 
+    /**
+     * Pushes a new CallerInfo object onto the stack, representing a new entry in the calling sequence.
+     *
+     * @param packageName The name of the package where the call originated.
+     * @param filename    The name of the file where the call originated.
+     * @param line        The line number in the file where the call originated.
+     */
     public static void push(String packageName, String filename, int line) {
         callerStack.add(new CallerInfo(packageName, filename, line));
     }
 
+    /**
+     * Retrieves the most recent CallerInfo object from the stack without removing it.
+     *
+     * @return The most recent CallerInfo object, or null if the stack is empty.
+     */
     public static CallerInfo peek() {
         if (callerStack.isEmpty()) {
             return null;
@@ -17,6 +35,11 @@ public class CallerStack {
         return callerStack.getLast();
     }
 
+    /**
+     * Removes and returns the most recent CallerInfo object from the stack.
+     *
+     * @return The most recent CallerInfo object, or null if the stack is empty.
+     */
     public static CallerInfo pop() {
         if (callerStack.isEmpty()) {
             return null;
@@ -24,15 +47,31 @@ public class CallerStack {
         return callerStack.removeLast();
     }
 
+    /**
+     * Retrieves a copy of the current calling stack.
+     *
+     * @return A list containing all CallerInfo objects in the stack.
+     */
     public static List<CallerInfo> getStack() {
         return new ArrayList<>(callerStack);
     }
 
+    /**
+     * The CallerInfo class represents an entry in the calling stack, containing information
+     * about the package, filename, and line number of a call.
+     */
     public static class CallerInfo {
         public final String packageName;
         public final String filename;
         public final int line;
 
+        /**
+         * Constructs a new CallerInfo object with the specified package name, filename, and line number.
+         *
+         * @param packageName The name of the package where the call originated.
+         * @param filename    The name of the file where the call originated.
+         * @param line        The line number in the file where the call originated.
+         */
         public CallerInfo(String packageName, String filename, int line) {
             this.packageName = packageName;
             this.filename = filename;
