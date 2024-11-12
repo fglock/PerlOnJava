@@ -5,8 +5,23 @@ import org.perlonjava.lexer.LexerTokenType;
 
 import java.util.List;
 
+/**
+ * The Whitespace class provides utility methods for handling and skipping whitespace
+ * and comments in a list of lexer tokens. It is designed to navigate through tokens
+ * while ignoring irrelevant whitespace and comments, and handling special cases like
+ * POD sections and end-of-file markers.
+ */
 public class Whitespace {
 
+    /**
+     * Skips over whitespace, comments, and POD sections in the provided list of tokens,
+     * starting from the specified index. It returns the index of the next non-whitespace
+     * and non-comment token.
+     *
+     * @param tokenIndex The starting index in the list of tokens.
+     * @param tokens     The list of LexerToken objects to process.
+     * @return The index of the next non-whitespace and non-comment token.
+     */
     public static int skipWhitespace(int tokenIndex, List<LexerToken> tokens) {
         while (tokenIndex < tokens.size()) {
             LexerToken token = tokens.get(tokenIndex);
