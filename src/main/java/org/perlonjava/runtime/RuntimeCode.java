@@ -41,6 +41,8 @@ public class RuntimeCode implements RuntimeScalarReference {
     // State variables
     public Map<String, Boolean> stateVariableInitialized = new HashMap<>();
     public Map<String, RuntimeScalar> stateVariable = new HashMap<>();
+    public Map<String, RuntimeArray> stateArray = new HashMap<>();
+    public Map<String, RuntimeHash> stateHash = new HashMap<>();
 
 
     /**
