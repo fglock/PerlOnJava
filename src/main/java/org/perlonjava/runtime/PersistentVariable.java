@@ -1,7 +1,5 @@
 package org.perlonjava.runtime;
 
-import static org.perlonjava.runtime.GlobalContext.*;
-
 /**
  * The PersistentVariable class provides methods to construct and retrieve
  * compile-time variables captured within BEGIN blocks. These variables
@@ -44,7 +42,7 @@ public class PersistentVariable {
      */
     public static RuntimeScalar retrieveBeginScalar(String var, int id) {
         String beginVar = beginVariable(id, var.substring(1));
-        RuntimeScalar temp = removeGlobalVariable(beginVar);
+        RuntimeScalar temp = GlobalVariable.removeGlobalVariable(beginVar);
         return temp == null ? new RuntimeScalar() : temp;
     }
 
@@ -58,7 +56,7 @@ public class PersistentVariable {
      */
     public static RuntimeArray retrieveBeginArray(String var, int id) {
         String beginVar = beginVariable(id, var.substring(1));
-        RuntimeArray temp = removeGlobalArray(beginVar);
+        RuntimeArray temp = GlobalVariable.removeGlobalArray(beginVar);
         return temp == null ? new RuntimeArray() : temp;
     }
 
@@ -72,7 +70,7 @@ public class PersistentVariable {
      */
     public static RuntimeHash retrieveBeginHash(String var, int id) {
         String beginVar = beginVariable(id, var.substring(1));
-        RuntimeHash temp = removeGlobalHash(beginVar);
+        RuntimeHash temp = GlobalVariable.removeGlobalHash(beginVar);
         return temp == null ? new RuntimeHash() : temp;
     }
 }

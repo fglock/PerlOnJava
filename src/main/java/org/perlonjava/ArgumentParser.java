@@ -1,6 +1,6 @@
 package org.perlonjava;
 
-import org.perlonjava.runtime.GlobalContext;
+import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.ScalarUtils;
@@ -703,7 +703,7 @@ public class ArgumentParser {
         public boolean autoSplit = false; // For -a
         public boolean useVersion = false; // For -E
         // Initialize @ARGV
-        public RuntimeArray argumentList = GlobalContext.getGlobalArray("main::ARGV");
+        public RuntimeArray argumentList = GlobalVariable.getGlobalArray("main::ARGV");
         public RuntimeArray inc = new RuntimeArray();
         public String splitPattern = "' '"; // Default split pattern for -a
         public boolean lineEndingProcessing = false; // For -l

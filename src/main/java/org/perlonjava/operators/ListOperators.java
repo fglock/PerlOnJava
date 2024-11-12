@@ -5,7 +5,7 @@ import org.perlonjava.runtime.*;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
+import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 
 public class ListOperators {
     /**

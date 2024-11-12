@@ -2,8 +2,8 @@ package org.perlonjava.perlmodule;
 
 import org.perlonjava.runtime.*;
 
-import static org.perlonjava.runtime.GlobalContext.getGlobalArray;
-import static org.perlonjava.runtime.GlobalContext.getGlobalHash;
+import static org.perlonjava.runtime.GlobalVariable.getGlobalArray;
+import static org.perlonjava.runtime.GlobalVariable.getGlobalHash;
 
 /**
  * The Parent class is responsible for managing inheritance in Perl-like modules.

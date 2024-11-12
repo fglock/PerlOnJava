@@ -2,8 +2,8 @@ package org.perlonjava.operators;
 
 import org.perlonjava.runtime.*;
 
-import static org.perlonjava.runtime.GlobalContext.getGlobalHash;
-import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
+import static org.perlonjava.runtime.GlobalVariable.getGlobalHash;
+import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 
 public class WarnDie {
     public static RuntimeDataProvider warn(RuntimeDataProvider message, RuntimeScalar where) {

@@ -1,6 +1,6 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.GlobalContext;
+import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
@@ -47,7 +47,7 @@ public class Lib extends PerlModuleBase {
      * @return A RuntimeList.
      */
     public static RuntimeList useLib(RuntimeArray args, int ctx) {
-        RuntimeArray INC = GlobalContext.getGlobalArray("main::INC");
+        RuntimeArray INC = GlobalVariable.getGlobalArray("main::INC");
         initOrigInc(INC);
         for (int i = 1; i < args.size(); i++) {
             String dir = args.get(i).toString();
@@ -60,7 +60,7 @@ public class Lib extends PerlModuleBase {
 
     private static void initOrigInc(RuntimeArray INC) {
         if (ORIG_INC == null) {
-            ORIG_INC = GlobalContext.getGlobalArray("lib::ORIG_INC");
+            ORIG_INC = GlobalVariable.getGlobalArray("lib::ORIG_INC");
             for (RuntimeScalar elem : INC.elements) {
                 ORIG_INC.push(elem);
             }
@@ -75,7 +75,7 @@ public class Lib extends PerlModuleBase {
      * @return A RuntimeList.
      */
     public static RuntimeList noLib(RuntimeArray args, int ctx) {
-        RuntimeArray INC = GlobalContext.getGlobalArray("main::INC");
+        RuntimeArray INC = GlobalVariable.getGlobalArray("main::INC");
         initOrigInc(INC);
         for (int i = 1; i < args.size(); i++) {
             String dir = args.get(i).toString();

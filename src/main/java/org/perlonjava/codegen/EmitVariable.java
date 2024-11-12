@@ -14,30 +14,30 @@ public class EmitVariable {
         String var = NameNormalizer.normalizeVariableName(varName, ctx.symbolTable.getCurrentPackage());
         ctx.logDebug("GETVAR lookup global " + sigil + varName + " normalized to " + var + " createIfNotExists:" + createIfNotExists);
 
-        if (sigil.equals("$") && (createIfNotExists || GlobalContext.existsGlobalVariable(var))) {
+        if (sigil.equals("$") && (createIfNotExists || GlobalVariable.existsGlobalVariable(var))) {
             // fetch a global variable
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/GlobalContext",
+                    "org/perlonjava/runtime/GlobalVariable",
                     "getGlobalVariable",
                     "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
                     false);
-        } else if (sigil.equals("@") && (createIfNotExists || GlobalContext.existsGlobalArray(var))) {
+        } else if (sigil.equals("@") && (createIfNotExists || GlobalVariable.existsGlobalArray(var))) {
             // fetch a global variable
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/GlobalContext",
+                    "org/perlonjava/runtime/GlobalVariable",
                     "getGlobalArray",
                     "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeArray;",
                     false);
-        } else if (sigil.equals("%") && (createIfNotExists || GlobalContext.existsGlobalHash(var))) {
+        } else if (sigil.equals("%") && (createIfNotExists || GlobalVariable.existsGlobalHash(var))) {
             // fetch a global variable
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/GlobalContext",
+                    "org/perlonjava/runtime/GlobalVariable",
                     "getGlobalHash",
                     "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeHash;",
                     false);
@@ -85,7 +85,7 @@ public class EmitVariable {
                 mv.visitLdcInsn(fullName); // emit string
                 emitterVisitor.ctx.mv.visitMethodInsn(
                         Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/GlobalContext",
+                        "org/perlonjava/runtime/GlobalVariable",
                         "getGlobalCodeRef",
                         "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
                         false);

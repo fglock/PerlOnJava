@@ -20,8 +20,8 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 import static org.perlonjava.runtime.ErrorMessageUtil.stringifyException;
-import static org.perlonjava.runtime.GlobalContext.getGlobalHash;
-import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
+import static org.perlonjava.runtime.GlobalVariable.getGlobalHash;
+import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.SpecialBlock.runEndBlocks;
 
@@ -620,9 +620,9 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         // Iterate over the linearized classes to find the method
         for (String className : linearizedClasses) {
             String normalizedClassMethodName = NameNormalizer.normalizeVariableName(methodName, className);
-            if (GlobalContext.existsGlobalCodeRef(normalizedClassMethodName)) {
+            if (GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName)) {
                 // If the method is found, retrieve and apply it
-                RuntimeScalar codeRef = GlobalContext.getGlobalCodeRef(normalizedClassMethodName);
+                RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedClassMethodName);
 
                 // Save the method in the cache
                 InheritanceResolver.cacheMethod(normalizedMethodName, codeRef);
@@ -647,7 +647,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     public RuntimeScalar createCodeReference(String packageName) {
         String name = NameNormalizer.normalizeVariableName(this.toString(), packageName);
         // System.out.println("Creating code reference: " + name + " got: " + GlobalContext.getGlobalCodeRef(name));
-        return GlobalContext.getGlobalCodeRef(name);
+        return GlobalVariable.getGlobalCodeRef(name);
     }
 
     public RuntimeScalar undefine() {
@@ -710,7 +710,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (code.type != RuntimeScalarType.CODE) {
             String name = NameNormalizer.normalizeVariableName(code.toString(), packageName);
             System.out.println("Looking for prototype: " + name);
-            code = GlobalContext.getGlobalCodeRef(name);
+            code = GlobalVariable.getGlobalCodeRef(name);
         }
         System.out.println("type: " + code.type);
         if (code.type == RuntimeScalarType.CODE) {
@@ -1035,7 +1035,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             fullName = Files.exists(filePath) ? filePath : null;
         } else {
             // Otherwise, search in INC directories
-            List<RuntimeScalar> inc = GlobalContext.getGlobalArray("main::INC").elements;
+            List<RuntimeScalar> inc = GlobalVariable.getGlobalArray("main::INC").elements;
             for (RuntimeBaseEntity dir : inc) {
                 Path fullPath = Paths.get(dir.toString(), fileName);
                 if (Files.exists(fullPath)) {
@@ -1068,13 +1068,13 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                     // System.out.println("Content of " + resourcePath + ": " + content.toString());
                     code = content.toString();
                 } catch (IOException e1) {
-                    GlobalContext.setGlobalVariable("main::!", "No such file or directory");
+                    GlobalVariable.setGlobalVariable("main::!", "No such file or directory");
                     return new RuntimeScalar();
                 }
             }
         }
         if (fullName == null) {
-            GlobalContext.setGlobalVariable("main::!", "No such file or directory");
+            GlobalVariable.setGlobalVariable("main::!", "No such file or directory");
             return new RuntimeScalar();
         }
 
@@ -1084,7 +1084,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             try {
                 code = new String(Files.readAllBytes(Paths.get(parsedArgs.fileName)));
             } catch (IOException e) {
-                GlobalContext.setGlobalVariable("main::!", "Unable to read file " + parsedArgs.fileName);
+                GlobalVariable.setGlobalVariable("main::!", "Unable to read file " + parsedArgs.fileName);
                 return new RuntimeScalar();
             }
         }
@@ -1097,7 +1097,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         try {
             result = PerlLanguageProvider.executePerlCode(parsedArgs, false);
         } catch (Throwable t) {
-            GlobalContext.setGlobalVariable("main::@", "Error in file " + parsedArgs.fileName +
+            GlobalVariable.setGlobalVariable("main::@", "Error in file " + parsedArgs.fileName +
                     "\n" + t);
             return new RuntimeScalar();
         }
@@ -1130,13 +1130,13 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             // my $fh2 = \*STDOUT;
             // System.out.println("GLOBREFERENCE");
             String globName = ((RuntimeGlob) value).globName;
-            fh = (RuntimeIO) GlobalContext.getGlobalIO(globName).value;
+            fh = (RuntimeIO) GlobalVariable.getGlobalIO(globName).value;
         } else if (type == RuntimeScalarType.GLOB) {
             // my $fh = *STDOUT;
             if (value instanceof RuntimeGlob) {
                 // System.out.println("GLOB");
                 String globName = ((RuntimeGlob) value).globName;
-                fh = (RuntimeIO) GlobalContext.getGlobalIO(globName).value;
+                fh = (RuntimeIO) GlobalVariable.getGlobalIO(globName).value;
             } else {
                 // System.out.println("GLOB but IO");
                 fh = (RuntimeIO) value;

@@ -4,7 +4,7 @@ package org.perlonjava.runtime;
  * The SpecialBlock class manages different types of code blocks (end, init, check, and unitcheck)
  * that can be saved and executed in a specific order. This class provides methods to save and run
  * these blocks, ensuring they are executed based on their defined order and conditions.
- *
+ * <p>
  * The order of execution is influenced by how blocks are added:
  * - Blocks added with `push` are executed in Last-In-First-Out (LIFO) order.
  * - Blocks added with `unshift` are executed in First-In-First-Out (FIFO) order.

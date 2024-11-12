@@ -20,8 +20,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 
-import static org.perlonjava.runtime.GlobalContext.getGlobalIO;
-import static org.perlonjava.runtime.GlobalContext.getGlobalVariable;
+import static org.perlonjava.runtime.GlobalVariable.getGlobalIO;
+import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 public class RuntimeIO implements RuntimeScalarReference {
@@ -813,7 +813,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             }
             return RuntimeScalarCache.scalarTrue;
         } catch (IOException e) {
-            GlobalContext.setGlobalVariable("main::!", e.getMessage());
+            GlobalVariable.setGlobalVariable("main::!", e.getMessage());
             return RuntimeScalarCache.scalarFalse;
         }
     }
@@ -827,7 +827,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             this.socket.connect(new InetSocketAddress(address, port));
             return RuntimeScalarCache.scalarTrue;
         } catch (IOException e) {
-            GlobalContext.setGlobalVariable("main::!", e.getMessage());
+            GlobalVariable.setGlobalVariable("main::!", e.getMessage());
             return RuntimeScalarCache.scalarFalse;
         }
     }
@@ -841,7 +841,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             this.serverSocket.setReceiveBufferSize(backlog);
             return RuntimeScalarCache.scalarTrue;
         } catch (IOException e) {
-            GlobalContext.setGlobalVariable("main::!", e.getMessage());
+            GlobalVariable.setGlobalVariable("main::!", e.getMessage());
             return RuntimeScalarCache.scalarFalse;
         }
     }
@@ -859,7 +859,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             fileHandle.value = new RuntimeIO(clientSocket);
             return fileHandle;
         } catch (IOException e) {
-            GlobalContext.setGlobalVariable("main::!", e.getMessage());
+            GlobalVariable.setGlobalVariable("main::!", e.getMessage());
             return RuntimeScalarCache.scalarUndef;
         }
     }

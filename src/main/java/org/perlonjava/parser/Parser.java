@@ -4,7 +4,7 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.runtime.GlobalContext;
+import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 
@@ -677,7 +677,7 @@ public class Parser {
                     packageName = "main";
                 }
                 name = NameNormalizer.normalizeVariableName(name, packageName);
-                if (GlobalContext.existsGlobalIO(name)) {
+                if (GlobalVariable.existsGlobalIO(name)) {
                     // FileHandle name exists
                     fileHandle = new IdentifierNode(name, tokenIndex);
                 }
