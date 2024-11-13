@@ -64,7 +64,7 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
                 return value;
             case REFERENCE:
                 if (value.value instanceof RuntimeScalar) {
-                    GlobalVariable.getGlobalVariable(this.globName).set(value);
+                    GlobalVariable.getGlobalVariable(this.globName).set(value.scalarDeref());
                 }
                 return value;
         }
