@@ -191,6 +191,11 @@ public class EmitVariable {
                 boolean isGlob = false;
                 String leftDescriptor = "org/perlonjava/runtime/RuntimeScalar";
                 if (nodeLeft != null && nodeLeft.operator.equals("*")) {
+                    // glob:  *var
+
+                    // XXX TODO Identify a typeglob, formed by symbol table entry + key:
+                    //   $constant::{_CAN_PCS} = \$const;
+                    
                     leftDescriptor = "org/perlonjava/runtime/RuntimeGlob";
                     isGlob = true;
                 }
