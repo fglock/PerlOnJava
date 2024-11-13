@@ -112,6 +112,9 @@ public class Dereference {
 
                 if (identifierNode.name.endsWith("::")) {
                     // A typeglob, formed by symbol table entry + key:  $constant::{_CAN_PCS} = \$const;
+
+                    // XXX TODO Rewrite this using HashSpecialVariable
+
                     emitterVisitor.ctx.mv.visitLdcInsn(identifierNode.name); // emit string
 
                     // Make the {x} a List, then get the first element

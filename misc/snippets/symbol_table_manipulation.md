@@ -15,7 +15,30 @@ package MyPackage;
 
 # Create a scalar
 my $value = 42;
+Internals::SvREADONLY($value, 1);
 
 # Bind it in the symbol table
 $MyPackage::{CONSTANT} = \$value;
 ```
+
+Also:
+
+```
+# Create a scalar
+my $value = 42;
+Internals::SvREADONLY($value, 1);
+
+no strict 'refs';
+$symtab = \%{$pkg . '::'};
+
+$symtab->{$name} = \$value;
+```
+
+Also:
+
+```
+$symtab->{$name} = \@list;
+```
+
+
+

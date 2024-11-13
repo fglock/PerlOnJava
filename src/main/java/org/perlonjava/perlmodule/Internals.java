@@ -41,6 +41,10 @@ public class Internals extends PerlModuleBase {
      * @return Empty list
      */
     public static RuntimeList svReadonly(RuntimeArray args, int ctx) {
+
+        // XXX TODO rewrite this to emit a RuntimeScalarReadOnly
+        // It needs to happen at the emitter, because the variable container needs to be replaced.
+
         return new RuntimeList();
     }
 

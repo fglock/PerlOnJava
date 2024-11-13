@@ -23,7 +23,26 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
     }
 
     public static RuntimeGlob getSymbolTableGlob(String symbolTableName, RuntimeScalar symbolTableEntry) {
-        // A typeglob, formed by symbol table entry + key:  $constant::{_CAN_PCS} = \$const;
+        // A typeglob, formed by symbol table (stash) entry + key (slot):
+        //   $constant::{_CAN_PCS} = \$const;
+        // The overall effect is binding a constant at compile time that can be accessed without a sigil
+
+//        Then we can use _CAN_PCS without a sigil, because of how Perl resolves barewords at compile time.
+//        When Perl sees a bareword (like _CAN_PCS), it:
+//        - Checks if it's a subroutine name
+//        - Checks the symbol table for a typeglob entry
+//        - If it finds a reference in the symbol table, uses that value
+
+//        When you put an array reference in a symbol table slot
+//        where Perl expects to find a subroutine reference
+//        (\@list where a \&sub would normally be),
+//        Perl will automatically create a subroutine
+//        that returns that array value when called.
+//        The same trick works with scalar values too.
+
+        // XXX TODO Rewrite this using HashSpecialVariable.java
+        //  See: Dereference.java 116 for the caller
+
         return new RuntimeGlob(symbolTableName + symbolTableEntry.toString());
     }
 
