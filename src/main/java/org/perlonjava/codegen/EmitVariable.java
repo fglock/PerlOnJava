@@ -60,8 +60,8 @@ public class EmitVariable {
         }
         String sigil = node.operator;
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        if (node.operand instanceof IdentifierNode) { // $a @a %a
-            String name = ((IdentifierNode) node.operand).name;
+        if (node.operand instanceof IdentifierNode identifierNode) { // $a @a %a
+            String name = identifierNode.name;
             emitterVisitor.ctx.logDebug("GETVAR " + sigil + name);
 
             if (sigil.equals("*")) {

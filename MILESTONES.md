@@ -109,6 +109,7 @@
     - lexical utf8 source code.
     - `truncate`, `seek` operators.
     - preprocessor `# line` directive.
+    - typeglob, formed by symbol table entry + key:  $constant::{_CAN_PCS} = \$const;
   - Stretch goals
     - Add support for concurrency and parallelism, such as threads and async/await.
     - Enhance security features, including sandboxing and input validation.

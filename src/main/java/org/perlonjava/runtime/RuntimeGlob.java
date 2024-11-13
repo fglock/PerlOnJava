@@ -22,6 +22,11 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
         this.globName = globName;
     }
 
+    public static RuntimeGlob getSymbolTableGlob(String symbolTableName, RuntimeScalar symbolTableEntry) {
+        // A typeglob, formed by symbol table entry + key:  $constant::{_CAN_PCS} = \$const;
+        return new RuntimeGlob(symbolTableName + symbolTableEntry.toString());
+    }
+
     /**
      * Sets the value of the typeglob based on the type of the provided RuntimeScalar.
      * Supports setting CODE and GLOB types, with special handling for IO objects.
