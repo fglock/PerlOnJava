@@ -65,12 +65,14 @@
 - ✔️   **References**: References to variables and data structures are supported.
 - ✔️   **Autovivification**: Autovivification is implemented.
 - ✔️   **File handles**: Support for file handles is implemented.
+- ✔️   **`local` special cases**: `local` works for typeglobs and filehandles.
 - ❌  **Tied Scalars**: Support for tying scalars to classes is missing.
 - ❌  **Overload**: overloading Perl operations is missing.
 - ✔️   **Cached string/numeric conversions; dualvars**: Caching is implemented, but it doesn't use the Perl "dual variable" implementation.
 - ❌  **Unicode**: Support for non-Unicode strings is not implemented.
 - ❌  **Taint checks**: Support for taint checks is not implemented.
-- ❌  **`local` special cases**: `local` is missing for typeglobs and filehandles. Localization in for-loops is also missing.
+- ❌  **`local` special cases**: Variable localization in for-loops is missing.
+- ❌  **`local` special cases**: `local *HANDLE = *HANDLE` doesn't create a new typeglob.
 
 ## Objects
 - ✔️   **Objects**: Creating classes, method call syntax works.

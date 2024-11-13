@@ -42,6 +42,13 @@ public class DynamicVariableManager {
         return variable;
     }
 
+    public static RuntimeGlob pushLocalVariable(RuntimeGlob variable) {
+        // Save the current state of the variable and push it onto the stack.
+        variable.dynamicSaveState();
+        variableStack.push(variable);
+        return variable;
+    }
+
     /**
      * Pops dynamic variables from the stack until the stack size matches the specified target local level.
      * This is useful for restoring the stack to a previous state by removing any variables added after that state.
