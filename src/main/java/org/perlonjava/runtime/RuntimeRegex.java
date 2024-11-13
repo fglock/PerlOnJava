@@ -37,8 +37,8 @@ public class RuntimeRegex implements RuntimeScalarReference {
     };
 
     // Global matcher used for regex operations
-    public static Matcher globalMatcher;
-    public static String globalMatchString;
+    public static Matcher globalMatcher;    // Provides Perl regex variables like %+, %-
+    public static String globalMatchString; // Provides Perl regex variables like $&
 
     // Compiled regex pattern
     public Pattern pattern;
