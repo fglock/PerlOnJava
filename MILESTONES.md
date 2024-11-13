@@ -2,6 +2,17 @@
 
 ### Completed Milestones
 
+- **v1.11.0**: Compile-time Features
+  - Added `BEGIN`, `CHECK`, `UNITCHECK`, `INIT`, `END` blocks.
+  - Added subroutine hoisting: Invoking subroutines before their actual declaration in the code.
+  - Improved Exporter.pm, glob assignment.
+  - Added modules: `constant`, `if`, `lib`, `Internals` (`SvREADONLY`), `Carp`.
+  - Added `goto &name`; not a tail-call.
+  - Added `state` variables.
+  - Added `$SIG{ALRM}`, `${^GLOBAL_PHASE}`.
+  - Added operators: `fileno`, `getc`, `prototype`.
+  - Added `\N{U+hex}` operator in double quoted strings and regex.
+
 - **v1.10.0**: Operators and Special Variables
   - Error messages mimic those in Perl for consistency.
   - Added `$.`, `$]`, `$^V`, `${^LAST_FH}`, `$SIG{__DIE__}`, `$SIG{__WARN__}` special variables.
@@ -87,17 +98,8 @@
 
 ### Upcoming Milestones
 
-- **v1.11.0**: Concurrency and Security Features
+- **v1.12.0**: Concurrency and Security Features
   - Planned release date: 2024-12-10
-  - Added `$SIG{ALRM}`, `${^GLOBAL_PHASE}`.
-  - Added `\N{U+hex}` operator in double quoted strings and regex.
-  - Improved Exporter.pm, glob assignment.
-  - Added modules: `constant`, `if`, `lib`, `Internals` (`SvREADONLY`), `Carp`.
-  - Added `goto &name`; not a tail-call.
-  - Added operators: `fileno`, `getc`, `prototype`.
-  - Added `BEGIN`, `CHECK`, `UNITCHECK`, `INIT`, `END` blocks.
-  - Added subroutine hoisting: Invoking subroutines before their actual declaration in the code.
-  - Added `state` variables.
   - Work in progress:
     - `socket` and related operators.
     - `use VERSION`, `require VERSION`.
@@ -112,7 +114,7 @@
     - Enhance security features, including sandboxing and input validation.
     - Increase test coverage.
 
-- **v1.12.0**: External Integration and Advanced Data Manipulation
+- **v1.13.0**: External Integration and Advanced Data Manipulation
   - Integrate with external libraries and APIs for tasks like HTTP requests and database access.
   - Add advanced data manipulation features, such as JSON/XML parsing and data transformation.
   - Allow users to define their own operators and macros for greater flexibility.
