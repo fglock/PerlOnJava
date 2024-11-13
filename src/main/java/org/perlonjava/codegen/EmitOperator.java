@@ -622,8 +622,18 @@ public class EmitOperator {
         // emit the lvalue
         int lvalueContext = LValueVisitor.getContext(node.operand);
         node.operand.accept(emitterVisitor.with(lvalueContext));
+        boolean isTypeglob = false;
+        if (node.operand instanceof OperatorNode operatorNode && operatorNode.operator.equals("*")) {
+            isTypeglob = true;
+        }
         // save the old value
-        if (lvalueContext == RuntimeContextType.LIST) {
+        if (isTypeglob) {
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/DynamicVariableManager",
+                    "pushLocalVariable",
+                    "(Lorg/perlonjava/runtime/RuntimeGlob;)Lorg/perlonjava/runtime/RuntimeGlob;",
+                    false);
+        } else if (lvalueContext == RuntimeContextType.LIST) {
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/DynamicVariableManager",
                     "pushLocalVariable",

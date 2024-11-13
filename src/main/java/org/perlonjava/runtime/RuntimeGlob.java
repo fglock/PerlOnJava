@@ -173,10 +173,7 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
      * @return A RuntimeScalar representing the typeglob.
      */
     public RuntimeScalar scalar() {
-        RuntimeScalar ret = new RuntimeScalar();
-        ret.type = RuntimeScalarType.GLOB;
-        ret.value = this;
-        return ret;
+        return new RuntimeScalar(this);
     }
 
     /**
@@ -321,25 +318,26 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
     }
 
     /**
-     * Saves the current state of the instance.
-     *
-     * <p>This method creates a snapshot of the current value,
-     * and pushes it onto a static stack for later restoration. After saving, it clears
-     * the current elements and resets the value.
+     * Saves the current state of the typeglob.
      */
     @Override
     public void dynamicSaveState() {
-        throw new PerlCompilerException("not implemented: local GLOB");
+        GlobalVariable.getGlobalCodeRef(this.globName).dynamicSaveState();
+        GlobalVariable.getGlobalArray(this.globName).dynamicSaveState();
+        GlobalVariable.getGlobalHash(this.globName).dynamicSaveState();
+        GlobalVariable.getGlobalVariable(this.globName).dynamicSaveState();
+        GlobalVariable.getGlobalIO(this.globName).dynamicSaveState();
     }
 
     /**
-     * Restores the most recently saved state of the instance.
-     *
-     * <p>This method pops the most recent state from the static stack and restores
-     * the value. If no state is saved, it does nothing.
+     * Restores the most recently saved state of the typeglob.
      */
     @Override
     public void dynamicRestoreState() {
-        throw new PerlCompilerException("not implemented: local GLOB");
+        GlobalVariable.getGlobalIO(this.globName).dynamicRestoreState();
+        GlobalVariable.getGlobalVariable(this.globName).dynamicRestoreState();
+        GlobalVariable.getGlobalHash(this.globName).dynamicRestoreState();
+        GlobalVariable.getGlobalArray(this.globName).dynamicRestoreState();
+        GlobalVariable.getGlobalCodeRef(this.globName).dynamicRestoreState();
     }
 }

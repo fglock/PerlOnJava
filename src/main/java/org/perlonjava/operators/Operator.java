@@ -11,6 +11,7 @@ import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarBoolean;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
 
 public class Operator {
 
@@ -223,9 +224,14 @@ public class Operator {
         // Append the newline character
         sb.append(newline);
 
-        // Write the content to the file handle
-        RuntimeIO fh = fileHandle.getRuntimeIO();
-        return fh.write(sb.toString());
+        try {
+            // Write the content to the file handle
+            RuntimeIO fh = fileHandle.getRuntimeIO();
+            return fh.write(sb.toString());
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+            return scalarFalse;
+        }
     }
 
     /**
@@ -252,9 +258,14 @@ public class Operator {
         // Append the newline character
         sb.append("\n");
 
-        // Write the content to the file handle
-        RuntimeIO fh = fileHandle.getRuntimeIO();
-        return fh.write(sb.toString());
+        try {
+            // Write the content to the file handle
+            RuntimeIO fh = fileHandle.getRuntimeIO();
+            return fh.write(sb.toString());
+        } catch (Exception e) {
+            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+            return scalarFalse;
+        }
     }
 
     public static RuntimeScalar eof(RuntimeList runtimeList, RuntimeScalar fileHandle) {

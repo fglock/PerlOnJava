@@ -180,9 +180,17 @@ public class EmitVariable {
                 node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the value
                 node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the variable
 
+                OperatorNode nodeLeft = null;
+                if (node.left instanceof OperatorNode operatorNode) {
+                    nodeLeft = operatorNode;
+                    if (nodeLeft.operator.equals("local") && nodeLeft.operand instanceof OperatorNode localNode) {
+                        nodeLeft = localNode;  // local *var = ...
+                    }
+                }
+
                 boolean isGlob = false;
                 String leftDescriptor = "org/perlonjava/runtime/RuntimeScalar";
-                if (node.left instanceof OperatorNode && ((OperatorNode) node.left).operator.equals("*")) {
+                if (nodeLeft != null && nodeLeft.operator.equals("*")) {
                     leftDescriptor = "org/perlonjava/runtime/RuntimeGlob";
                     isGlob = true;
                 }
