@@ -40,8 +40,13 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
 //        that returns that array value when called.
 //        The same trick works with scalar values too.
 
-        // XXX TODO Rewrite this using HashSpecialVariable.java
-        //  See: Dereference.java 116 for the caller
+//        XXX TODO Rewrite this using HashSpecialVariable.java
+//        See: Dereference.java 116 for the caller
+//        perl -e ' use Data::Dumper; $xyz::var = 123; print Dumper [ keys %xyz:: ] '
+//        $VAR1 = [
+//           'var'
+//        ];
+
 
         return new RuntimeGlob(symbolTableName + symbolTableEntry.toString());
     }
