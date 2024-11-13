@@ -77,6 +77,10 @@ public class IdentifierParser {
         while (true) {
             // Check for various token types that can form part of an identifier
             if (token.type == LexerTokenType.OPERATOR || token.type == LexerTokenType.NUMBER || token.type == LexerTokenType.STRING) {
+                if (token.text.equals("{")) {
+                    // Finish because `${` is not a valid name (but `$[` is)
+                    return variableName.toString();
+                }
                 if (token.text.equals("$") && (nextToken.text.equals("$")
                         || nextToken.type == LexerTokenType.IDENTIFIER
                         || nextToken.type == LexerTokenType.NUMBER)) {
