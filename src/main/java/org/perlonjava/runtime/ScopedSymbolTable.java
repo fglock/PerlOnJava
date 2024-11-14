@@ -382,4 +382,27 @@ public class ScopedSymbolTable {
             return (featureFlagsStack.peek() & (1 << bitPosition)) != 0;
         }
     }
+
+    /**
+     * Copies the flags (warnings, features, and strict options) from another ScopedSymbolTable.
+     *
+     * @param source The source ScopedSymbolTable from which to copy the flags.
+     */
+    public void copyFlagsFrom(ScopedSymbolTable source) {
+        if (source == null) {
+            throw new IllegalArgumentException("Source ScopedSymbolTable cannot be null.");
+        }
+
+        // Copy warning flags
+        this.warningFlagsStack.pop();
+        this.warningFlagsStack.push(source.warningFlagsStack.peek());
+
+        // Copy feature flags
+        this.featureFlagsStack.pop();
+        this.featureFlagsStack.push(source.featureFlagsStack.peek());
+
+        // Copy strict options
+        this.strictOptionsStack.pop();
+        this.strictOptionsStack.push(source.strictOptionsStack.peek());
+    }
 }

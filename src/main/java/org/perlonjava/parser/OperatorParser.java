@@ -136,7 +136,12 @@ public class OperatorParser {
                         "$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
             }
         }
-        return new OperatorNode("eval", operand, parser.tokenIndex);
+        return new EvalOperatorNode(
+                "eval",
+                operand,
+                parser.ctx.symbolTable.snapShot(), // Freeze the scoped symbol table for the eval context
+                parser.tokenIndex
+        );
     }
 
     /**

@@ -4,6 +4,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.perlonjava.ArgumentParser;
+import org.perlonjava.astnode.EvalOperatorNode;
 import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeCode;
@@ -19,13 +20,20 @@ public class EmitEval {
      * @param node           The OperatorNode representing the eval operation
      */
     static void handleEvalOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
+        EmitterContext ctx = emitterVisitor.ctx;
+        MethodVisitor mv = ctx.mv;
+
         emitterVisitor.ctx.logDebug("(eval) ctx.symbolTable.getAllVisibleVariables");
 
         // Freeze the scoped symbol table for the eval context
         ScopedSymbolTable newSymbolTable = emitterVisitor.ctx.symbolTable.snapShot();
+        if (node instanceof EvalOperatorNode evalOperatorNode) {
+            // Replicate the flags from parse-time to the eval context
+            newSymbolTable.copyFlagsFrom(evalOperatorNode.getSymbolTable());
+        }
 
         String[] newEnv = newSymbolTable.getVariableNames();
-        emitterVisitor.ctx.logDebug("evalStringHelper " + newSymbolTable);
+        emitterVisitor.ctx.logDebug("evalStringHelper newSymbolTable: " + newSymbolTable);
 
         // Create compiler options for the eval context
         ArgumentParser.CompilerOptions compilerOptions = emitterVisitor.ctx.compilerOptions.clone();
@@ -60,8 +68,6 @@ public class EmitEval {
         // Emit code to push the eval string onto the stack
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         // Stack: [RuntimeScalar(String)]
-
-        MethodVisitor mv = emitterVisitor.ctx.mv;
 
         // Push the evalTag onto the stack
         mv.visitLdcInsn(evalTag);
