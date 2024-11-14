@@ -530,7 +530,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 str = "CODE";
                 break;
             case GLOB:
-                str = "GLOB";
+                str = "";
                 break;
             case REGEX:
                 str = "Regexp";
@@ -540,6 +540,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 if (value instanceof RuntimeScalar scalar) {
                     if (scalar.type == RuntimeScalarType.VSTRING) {
                         ref = "VSTRING";
+                    } else if (scalar.type == RuntimeScalarType.REGEX) {
+                        ref = "REF";
+                    } else {
+                        ref = "SCALAR";
                     }
                 }
                 blessId = ((RuntimeBaseEntity) value).blessId;
@@ -552,6 +556,9 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case HASHREFERENCE:
                 blessId = ((RuntimeBaseEntity) value).blessId;
                 str = blessId == 0 ? "HASH" : NameNormalizer.getBlessStr(blessId);
+                break;
+            case GLOBREFERENCE:
+                str = "GLOB";
                 break;
             default:
                 return scalarEmptyString;

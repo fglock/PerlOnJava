@@ -106,7 +106,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 
                     // Add the entry only if it's not already in the set of unique keys
                     if (uniqueKeys.add(entryKey)) {
-                        RuntimeGlob glob = new RuntimeGlob(entryKey);
+                        RuntimeGlob glob = new RuntimeGlob(key);
                         RuntimeScalar scalar = new RuntimeScalar(glob);
                         entries.add(new SimpleEntry<>(entryKey, scalar));
                     }
@@ -149,7 +149,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                         containsNamespace(GlobalVariable.globalCodeRefs, name) ||
                         containsNamespace(GlobalVariable.globalIORefs, name);
                 if (found) {
-                    return new RuntimeScalar(new RuntimeGlob(name));
+                    return new RuntimeScalar(new RuntimeGlob(namespace + name));
                 }
             }
         }
