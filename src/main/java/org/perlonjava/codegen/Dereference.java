@@ -110,34 +110,6 @@ public class Dereference {
                  *      StringNode: a
                  */
 
-                if (identifierNode.name.endsWith("::")) {
-                    // A typeglob, formed by symbol table entry + key:  $constant::{_CAN_PCS} = \$const;
-
-                    // XXX TODO Rewrite this using HashSpecialVariable
-
-                    emitterVisitor.ctx.mv.visitLdcInsn(identifierNode.name); // emit string
-
-                    // Make the {x} a List, then get the first element
-                    ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
-                    Node nodeZero = nodeRight.elements.getFirst();
-                    if (nodeZero instanceof IdentifierNode identifierNode1) {
-                        // Autoquote: convert IdentifierNode to StringNode:  {a} to {"a"}
-                        nodeZero = new StringNode(identifierNode1.name, identifierNode1.tokenIndex);
-                    }
-                    nodeZero.accept(scalarVisitor);
-
-                    emitterVisitor.ctx.mv.visitMethodInsn(
-                            Opcodes.INVOKESTATIC,
-                            "org/perlonjava/runtime/RuntimeGlob",
-                            "getSymbolTableGlob",
-                            "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeGlob;",
-                            false);
-                    if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-                        emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-                    }
-                    return;
-                }
-
                 // Rewrite the variable node from `$` to `%`
                 OperatorNode varNode = new OperatorNode("%", identifierNode, sigilNode.tokenIndex);
 

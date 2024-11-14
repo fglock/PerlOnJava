@@ -12,12 +12,19 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
  * HashSpecialVariable provides a dynamic view over named capturing groups
  * in a Matcher object, reflecting the current state of the Matcher.
  * This implements the Perl special variables %+, %-.
- * It also implements Perl "stash", which represents of namespace hash.
+ * It also implements Perl "stash".
+ * Stash is the hash that represents a package's symbol table,
+ * containing all the typeglobs for that package.
  */
 public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 
     // Mode of operation for this special variable
     private final HashSpecialVariable.Id mode;
+
+    public static HashSpecialVariable getStash(String namespace) {
+        // TODO Use namespace to get the stash
+        return new HashSpecialVariable(HashSpecialVariable.Id.STASH);
+    }
 
     /**
      * Constructs a HashSpecialVariable for the given Matcher.

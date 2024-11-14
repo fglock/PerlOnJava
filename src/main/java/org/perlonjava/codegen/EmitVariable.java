@@ -23,7 +23,9 @@ public class EmitVariable {
                     "getGlobalVariable",
                     "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
                     false);
-        } else if (sigil.equals("@") && (createIfNotExists || GlobalVariable.existsGlobalArray(var))) {
+            return;
+        }
+        if (sigil.equals("@") && (createIfNotExists || GlobalVariable.existsGlobalArray(var))) {
             // fetch a global variable
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
@@ -32,7 +34,9 @@ public class EmitVariable {
                     "getGlobalArray",
                     "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeArray;",
                     false);
-        } else if (sigil.equals("%") && (createIfNotExists || GlobalVariable.existsGlobalHash(var))) {
+            return;
+        }
+        if (sigil.equals("%") && (createIfNotExists || GlobalVariable.existsGlobalHash(var))) {
             // fetch a global variable
             ctx.mv.visitLdcInsn(var);
             ctx.mv.visitMethodInsn(
@@ -41,17 +45,32 @@ public class EmitVariable {
                     "getGlobalHash",
                     "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeHash;",
                     false);
-        } else {
-            // variable not found
-            throw new PerlCompilerException(
-                    tokenIndex,
-                    "Global symbol \""
-                            + sigil + varName
-                            + "\" requires explicit package name (did you forget to declare \"my "
-                            + sigil + varName
-                            + "\"?)",
-                    ctx.errorUtil);
+            return;
         }
+
+        if (sigil.equals("%") && var.endsWith("::")) {
+            // A stash
+            // Stash is the hash that represents a package's symbol table,
+            // containing all the typeglobs for that package.
+            ctx.mv.visitLdcInsn(var);
+            ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/HashSpecialVariable",
+                    "getStash",
+                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/HashSpecialVariable;",
+                    false);
+            return;
+        }
+
+        // variable not found
+        throw new PerlCompilerException(
+                tokenIndex,
+                "Global symbol \""
+                        + sigil + varName
+                        + "\" requires explicit package name (did you forget to declare \"my "
+                        + sigil + varName
+                        + "\"?)",
+                ctx.errorUtil);
     }
 
     static void handleVariableOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
