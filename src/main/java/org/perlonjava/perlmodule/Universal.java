@@ -222,7 +222,7 @@ public class Universal extends PerlModuleBase {
         return hasVersion;
     }
 
-    private static String normalizeVersion(RuntimeScalar wantVersion) {
+    public static String normalizeVersion(RuntimeScalar wantVersion) {
         String normalizedVersion = wantVersion.toString();
         if (normalizedVersion.startsWith("v")) {
             normalizedVersion = normalizedVersion.substring(1);

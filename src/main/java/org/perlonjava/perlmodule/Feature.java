@@ -10,7 +10,7 @@ import org.perlonjava.runtime.RuntimeScalar;
  */
 public class Feature extends PerlModuleBase {
 
-    private static final FeatureFlags featureManager = new FeatureFlags();
+    public static final FeatureFlags featureManager = new FeatureFlags();
 
     /**
      * Constructor for FeatureFlags.

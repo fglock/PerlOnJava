@@ -10,7 +10,10 @@ import org.perlonjava.runtime.*;
 
 import static org.perlonjava.parser.NumberParser.parseNumber;
 import static org.perlonjava.parser.SpecialBlockParser.runSpecialBlock;
+import static org.perlonjava.parser.SpecialBlockParser.setCurrentScope;
 import static org.perlonjava.parser.StringParser.parseVstring;
+import static org.perlonjava.perlmodule.Feature.featureManager;
+import static org.perlonjava.perlmodule.Universal.normalizeVersion;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
@@ -275,6 +278,12 @@ public class StatementParser {
                             new RuntimeScalar(GlobalContext.perlVersion),
                             versionScalar,
                             "Perl");
+
+                    // Enable/disable features based on Perl version
+                    setCurrentScope(parser.ctx.symbolTable);
+                    // ":5.34"
+                    String[] parts = normalizeVersion(versionScalar).split("\\.");
+                    featureManager.enableFeatureBundle(":" + parts[0] + "." + parts[1]);
                 }
             }
             if (packageName == null) {
