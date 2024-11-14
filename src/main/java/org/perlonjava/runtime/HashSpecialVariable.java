@@ -21,9 +21,12 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     // Mode of operation for this special variable
     private final HashSpecialVariable.Id mode;
 
-    public static HashSpecialVariable getStash(String namespace) {
+    public static RuntimeHash getStash(String namespace) {
         // TODO Use namespace to get the stash
-        return new HashSpecialVariable(HashSpecialVariable.Id.STASH);
+        System.out.println("HashSpecialVariable.getStash() " + namespace);
+        RuntimeHash stash = new RuntimeHash();
+        stash.elements = new HashSpecialVariable(HashSpecialVariable.Id.STASH);
+        return stash;
     }
 
     /**

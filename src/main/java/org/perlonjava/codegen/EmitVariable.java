@@ -25,6 +25,7 @@ public class EmitVariable {
                     false);
             return;
         }
+
         if (sigil.equals("@") && (createIfNotExists || GlobalVariable.existsGlobalArray(var))) {
             // fetch a global variable
             ctx.mv.visitLdcInsn(var);
@@ -33,17 +34,6 @@ public class EmitVariable {
                     "org/perlonjava/runtime/GlobalVariable",
                     "getGlobalArray",
                     "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeArray;",
-                    false);
-            return;
-        }
-        if (sigil.equals("%") && (createIfNotExists || GlobalVariable.existsGlobalHash(var))) {
-            // fetch a global variable
-            ctx.mv.visitLdcInsn(var);
-            ctx.mv.visitMethodInsn(
-                    Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/GlobalVariable",
-                    "getGlobalHash",
-                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeHash;",
                     false);
             return;
         }
@@ -57,7 +47,19 @@ public class EmitVariable {
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/HashSpecialVariable",
                     "getStash",
-                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/HashSpecialVariable;",
+                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeHash;",
+                    false);
+            return;
+        }
+
+        if (sigil.equals("%") && (createIfNotExists || GlobalVariable.existsGlobalHash(var))) {
+            // fetch a global variable
+            ctx.mv.visitLdcInsn(var);
+            ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/GlobalVariable",
+                    "getGlobalHash",
+                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeHash;",
                     false);
             return;
         }
