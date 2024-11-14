@@ -150,7 +150,10 @@ public class Parser {
                 case "until":
                     return StatementParser.parseWhileStatement(this, label);
                 case "try":
-                    return StatementParser.parseTryStatement(this);
+                    if (ctx.symbolTable.isFeatureCategoryEnabled("try")){
+                       return StatementParser.parseTryStatement(this);
+                    }
+                    break;
                 case "package":
                     return StatementParser.parsePackageDeclaration(this, token);
                 case "use":
@@ -380,12 +383,11 @@ public class Parser {
                 } else {
                     // Check if the operator is enabled in the current scope
                     String operator = token.text;
-                    switch (operator) {
-                        case "say":
-                        case "fc":
-                            operatorEnabled = ctx.symbolTable.isFeatureCategoryEnabled(operator);
-                            break;
-                    }
+                    operatorEnabled = switch (operator) {
+                        case "say", "fc", "isa", "state" -> ctx.symbolTable.isFeatureCategoryEnabled(operator);
+                        case "__SUB__" -> ctx.symbolTable.isFeatureCategoryEnabled("current_sub");
+                        default -> operatorEnabled;
+                    };
                 }
                 if (operatorEnabled) {
                     Node operation = OperatorParser.parseCoreOperator(this, token);

@@ -100,6 +100,7 @@
 
 - **v1.12.0**: Concurrency and Security Features
   - Planned release date: 2024-12-10
+  - "use features" implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`.
   - Work in progress:
     - `socket` and related operators.
     - `use VERSION`, `require VERSION`.
