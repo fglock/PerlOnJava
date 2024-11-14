@@ -106,8 +106,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 
                     // Add the entry only if it's not already in the set of unique keys
                     if (uniqueKeys.add(entryKey)) {
-                        RuntimeGlob glob = new RuntimeGlob(key);
-                        entries.add(new SimpleEntry<>(entryKey, glob));
+                        entries.add(new SimpleEntry<>(entryKey, new RuntimeGlob(key)));
                     }
                 }
             }
@@ -141,15 +140,13 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                 }
             }
         } else if (this.mode == Id.STASH) {
-            if (key instanceof String name) {
-                boolean found = containsNamespace(GlobalVariable.globalVariables, name) ||
-                        containsNamespace(GlobalVariable.globalArrays, name) ||
-                        containsNamespace(GlobalVariable.globalHashes, name) ||
-                        containsNamespace(GlobalVariable.globalCodeRefs, name) ||
-                        containsNamespace(GlobalVariable.globalIORefs, name);
-                if (found) {
-                    return new RuntimeGlob(namespace + name);
-                }
+            String prefix = namespace + key;
+            if (containsNamespace(GlobalVariable.globalVariables, prefix) ||
+                    containsNamespace(GlobalVariable.globalArrays, prefix) ||
+                    containsNamespace(GlobalVariable.globalHashes, prefix) ||
+                    containsNamespace(GlobalVariable.globalCodeRefs, prefix) ||
+                    containsNamespace(GlobalVariable.globalIORefs, prefix)) {
+                return new RuntimeGlob(prefix);
             }
         }
         return scalarUndef;
@@ -160,12 +157,11 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
      * This method is used in STASH mode to determine if a particular typeglob exists in the
      * global variables.
      *
-     * @param map  The map to check.
-     * @param name The typeglob name to match.
+     * @param map    The map to check.
+     * @param prefix The typeglob name to match.
      * @return True if a matching key is found, false otherwise.
      */
-    private boolean containsNamespace(Map<String, ?> map, String name) {
-        String prefix = namespace + name;
+    private boolean containsNamespace(Map<String, ?> map, String prefix) {
         for (String key : map.keySet()) {
             if (key.startsWith(prefix)) {
                 return true;
