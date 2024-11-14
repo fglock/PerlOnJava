@@ -209,6 +209,7 @@
 - ❌  **`PROPAGATE`**: `PROPAGATE` method is not yet supported.
 - ✔️   **`require` operator**: The `require` operator implemented; version checks are implemented.
 - ✔️   **`use` and `no` statements**: Module imports and version check via `use` and `no` are implemented; version checks are implemented. `use` arguments are executed at compile-time.
+- ✔️   **`use version`**: `use version` enables the corresponding features.
 - ✔️   **`caller` operator**: `caller` returns ($package, $filename, $line). The remaining results are undef. This means we don't include subroutine names in error messages yet.
 - ✔️   **Import methods**: `import`, `unimport` works.
 - ✔️   **`__SUB__`**: The `__SUB__` keyword works.
@@ -272,6 +273,7 @@
 - ✔️   **lib** pragma
 - 🚧  **utf8** pragma: utf8 is always on. Disabling utf8 might work in a future version.
 - 🚧  **feature** pragma
+  - Features implemented: `fc`, `say`.
 - 🚧  **warnings** pragma
 - ❌  **version** pragma: version objects are not yet supported.
 - ❌  **experimental** pragma
