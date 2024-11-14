@@ -15,6 +15,7 @@ import static org.perlonjava.runtime.RuntimeIO.initStdHandles;
 public class GlobalContext {
 
     public static final String perlVersion = "v5.38.0";
+    public static final String perlVersionNoV = "5.38.0";
     public static final String perlVersionOld = "5.038000";
     // Special variables internal names
     public static final String LAST_FH = "main::" + Character.toString('L' - 'A' + 1) + "AST_FH"; // $^LAST_FH

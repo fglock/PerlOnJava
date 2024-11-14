@@ -283,7 +283,16 @@ public class StatementParser {
                     setCurrentScope(parser.ctx.symbolTable);
                     // ":5.34"
                     String[] parts = normalizeVersion(versionScalar).split("\\.");
-                    featureManager.enableFeatureBundle(":" + parts[0] + "." + parts[1]);
+                    int majorVersion = Integer.parseInt(parts[0]);
+                    int minorVersion = Integer.parseInt(parts[1]);
+
+                    // If the minor version is odd, decrement it to make it even
+                    if (minorVersion % 2 != 0) {
+                        minorVersion--;
+                    }
+
+                    String closestVersion = ":" + majorVersion + "." + minorVersion;
+                    featureManager.enableFeatureBundle(closestVersion);
                 }
             }
             if (packageName == null) {

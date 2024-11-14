@@ -4,6 +4,8 @@ import org.perlonjava.astnode.OperatorNode;
 
 import java.util.*;
 
+import static org.perlonjava.runtime.GlobalContext.perlVersionNoV;
+
 /**
  * A scoped symbol table that supports nested scopes for lexical variables, package declarations, warnings, features, and strict options.
  * This class manages the state of variables, warnings, features, and strict options across different scopes, allowing for nested and isolated environments.
@@ -356,20 +358,28 @@ public class ScopedSymbolTable {
     // Methods for managing features using bit positions
     public void enableFeatureCategory(String feature) {
         Integer bitPosition = featureBitPositions.get(feature);
-        if (bitPosition != null) {
+        if (bitPosition == null) {
+            throw new PerlCompilerException("Feature \"" + feature + "\" is not supported by Perl " + perlVersionNoV);
+        } else {
             featureFlagsStack.push(featureFlagsStack.pop() | (1 << bitPosition));
         }
     }
 
     public void disableFeatureCategory(String feature) {
         Integer bitPosition = featureBitPositions.get(feature);
-        if (bitPosition != null) {
+        if (bitPosition == null) {
+            throw new PerlCompilerException("Feature \"" + feature + "\" is not supported by Perl " + perlVersionNoV);
+        } else {
             featureFlagsStack.push(featureFlagsStack.pop() & ~(1 << bitPosition));
         }
     }
 
     public boolean isFeatureCategoryEnabled(String feature) {
         Integer bitPosition = featureBitPositions.get(feature);
-        return bitPosition != null && (featureFlagsStack.peek() & (1 << bitPosition)) != 0;
+        if (bitPosition == null) {
+            throw new PerlCompilerException("Feature \"" + feature + "\" is not supported by Perl " + perlVersionNoV);
+        } else {
+            return (featureFlagsStack.peek() & (1 << bitPosition)) != 0;
+        }
     }
 }
