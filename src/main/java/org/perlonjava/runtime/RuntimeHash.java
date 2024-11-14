@@ -348,7 +348,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
      * @return A string in the format "HASH(hashCode)".
      */
     public String toStringRef() {
-        String ref = "HASH(0x" + this.hashCode() + ")";
+        String ref = "HASH(0x" + Integer.toHexString(this.hashCode()) + ")";
         return (blessId == 0
                 ? ref
                 : NameNormalizer.getBlessStr(blessId) + "=" + ref);

@@ -339,7 +339,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
      * @return A string representing the array reference.
      */
     public String toStringRef() {
-        String ref = "ARRAY(0x" + this.hashCode() + ")";
+        String ref = "ARRAY(0x" + Integer.toHexString(this.hashCode()) + ")";
         return (blessId == 0
                 ? ref
                 : NameNormalizer.getBlessStr(blessId) + "=" + ref);

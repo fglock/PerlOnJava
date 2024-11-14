@@ -24,6 +24,7 @@ import static org.perlonjava.runtime.GlobalVariable.getGlobalHash;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.SpecialBlock.runEndBlocks;
+import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 /**
  * The RuntimeScalar class simulates Perl scalar variables.
@@ -372,7 +373,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 yield ((RuntimeCode) value).toStringRef();
             }
             case VSTRING -> "VSTRING(0x" + value.hashCode() + ")";
-            default -> "SCALAR(0x" + value.hashCode() + ")";
+            default -> "SCALAR(0x" + "0x" + Integer.toHexString(value.hashCode()) + ")";
         };
         return (blessId == 0
                 ? ref
@@ -538,13 +539,11 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case REFERENCE:
                 String ref = "REF";
                 if (value instanceof RuntimeScalar scalar) {
-                    if (scalar.type == RuntimeScalarType.VSTRING) {
-                        ref = "VSTRING";
-                    } else if (scalar.type == RuntimeScalarType.REGEX) {
-                        ref = "REF";
-                    } else {
-                        ref = "SCALAR";
-                    }
+                    ref = switch (scalar.type) {
+                        case VSTRING -> "VSTRING";
+                        case REGEX, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE -> "REF";
+                        default -> "SCALAR";
+                    };
                 }
                 blessId = ((RuntimeBaseEntity) value).blessId;
                 str = blessId == 0 ? ref : NameNormalizer.getBlessStr(blessId);
