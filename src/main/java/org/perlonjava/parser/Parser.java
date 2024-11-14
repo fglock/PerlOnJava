@@ -371,14 +371,27 @@ public class Parser {
                     return new StringNode(token.text, tokenIndex);
                 }
 
+                boolean operatorEnabled = true;
+
                 // Try to parse a builtin operation; backtrack if it fails
                 if (token.text.equals("CORE") && nextTokenText.equals("::")) {
                     TokenUtils.consume(this);  // "::"
                     token = TokenUtils.consume(this); // operator
+                } else {
+                    // Check if the operator is enabled in the current scope
+                    String operator = token.text;
+                    switch (operator) {
+                        case "say":
+                        case "fc":
+                            operatorEnabled = ctx.symbolTable.isFeatureCategoryEnabled(operator);
+                            break;
+                    }
                 }
-                Node operation = OperatorParser.parseCoreOperator(this, token);
-                if (operation != null) {
-                    return operation;
+                if (operatorEnabled) {
+                    Node operation = OperatorParser.parseCoreOperator(this, token);
+                    if (operation != null) {
+                        return operation;
+                    }
                 }
 
                 // Handle any other identifier as a subroutine call or identifier node

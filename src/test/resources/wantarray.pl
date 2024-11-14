@@ -15,8 +15,8 @@
 #
 
 # use 5.32.0;
-# use feature 'say';
-# use feature 'isa';
+use feature 'say';
+use feature 'isa';
 
 ###################
 # wantarray Tests

@@ -90,6 +90,12 @@ public class FeatureFlags {
                     symbolTable.disableFeatureCategory(feature);
                 }
             }
+        } else {
+            if (state) {
+                symbolTable.enableFeatureCategory(bundle);
+            } else {
+                symbolTable.disableFeatureCategory(bundle);
+            }
         }
     }
 
