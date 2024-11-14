@@ -101,6 +101,7 @@
 - **v1.12.0**: Concurrency and Security Features
   - Planned release date: 2024-12-10
   - "use features" implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`.
+  - Stash can be accessed as a hash like `$namespace::{entry}`.
   - Work in progress:
     - `socket` and related operators.
     - `use VERSION`, `require VERSION`.
@@ -110,7 +111,7 @@
     - lexical utf8 source code.
     - `truncate`, `seek` operators.
     - preprocessor `# line` directive.
-    - "stashes"; typeglob, formed by symbol table entry + key:  $constant::{_CAN_PCS} = \$const;
+    - constants in globs:  $constant::{_CAN_PCS} = \$const;
   - Stretch goals
     - Add support for concurrency and parallelism, such as threads and async/await.
     - Enhance security features, including sandboxing and input validation.

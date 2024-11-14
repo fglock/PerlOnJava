@@ -61,6 +61,7 @@ print "not " if ref($regex_ref_ref) ne "REF"; say "ok # Regex reference type <" 
 my $vstring_ref = \$vstring;
 print "not " if ref($vstring_ref) ne "VSTRING"; say "ok # VSTRING reference type <" . ref($vstring_ref) . ">";
 
+{
 # Test stash entries (symbol table entries)
 my $stash_entry = *main::;
 print "not " if ref($stash_entry) ne ""; say "ok # Stash entry ref <" . ref($stash_entry) . ">";
@@ -71,4 +72,31 @@ print "not " if ref($stash_entry_ref) ne "GLOB"; say "ok # Stash entry ref <" . 
 ## Test stringification of stash entries
 ## XXX TODO
 ## print "not " if "$stash_entry" ne "*main::main::"; say "ok # Stash entry stringification <" . "$stash_entry" . ">";
+}
 
+{
+# Test stash entries (symbol table entries)
+# Note: $Testing::a was never used
+my $stash_entry = $Testing::{a};
+print "not " if defined($stash_entry); say "ok # Stash entry ref <" . ref($stash_entry) . ">";
+
+my $stash_entry_ref = \$Testing::{a};
+print "not " if ref($stash_entry_ref) ne "SCALAR"; say "ok # Stash entry ref <" . ref($stash_entry_ref) . ">";
+
+## Test stringification of stash entries
+print "not " if defined($stash_entry); say "ok # Stash entry stringification";
+}
+
+{
+# Test stash entries (symbol table entries)
+# Note: now $Testing2::a is being initialized
+$Testing2::a = 123;
+my $stash_entry = $Testing2::{a};
+print "not " if ref($stash_entry) ne ""; say "ok # Stash entry ref <" . ref($stash_entry) . ">";
+
+my $stash_entry_ref = \$Testing2::{a};
+print "not " if ref($stash_entry_ref) ne "GLOB"; say "ok # Stash entry ref <" . ref($stash_entry_ref) . ">";
+
+## Test stringification of stash entries
+print "not " if "$stash_entry" ne "*Testing2::a"; say "ok # Stash entry stringification <" . "$stash_entry" . ">";
+}

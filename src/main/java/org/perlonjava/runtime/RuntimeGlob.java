@@ -7,7 +7,7 @@ import java.util.Iterator;
  * all types of Perl variables (scalars, arrays, hashes, subroutines, filehandles) with the same name.
  * This class provides methods to manipulate and interact with typeglobs in the runtime environment.
  */
-public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarReference {
+public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference {
 
     // The name of the typeglob
     public String globName;
