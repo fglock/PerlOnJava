@@ -22,34 +22,21 @@ public class RuntimeGlob extends RuntimeBaseEntity implements RuntimeScalarRefer
         this.globName = globName;
     }
 
-    public static RuntimeGlob getSymbolTableGlob(String symbolTableName, RuntimeScalar symbolTableEntry) {
-        // A typeglob, formed by symbol table (stash) entry + key (slot):
-        //   $constant::{_CAN_PCS} = \$const;
-        // The overall effect is binding a constant at compile time that can be accessed without a sigil
-
-//        Then we can use _CAN_PCS without a sigil, because of how Perl resolves barewords at compile time.
-//        When Perl sees a bareword (like _CAN_PCS), it:
-//        - Checks if it's a subroutine name
-//        - Checks the symbol table for a typeglob entry
-//        - If it finds a reference in the symbol table, uses that value
-
-//        When you put an array reference in a symbol table slot
-//        where Perl expects to find a subroutine reference
-//        (\@list where a \&sub would normally be),
-//        Perl will automatically create a subroutine
-//        that returns that array value when called.
-//        The same trick works with scalar values too.
-
-//        XXX TODO Rewrite this using HashSpecialVariable.java
-//        See: Dereference.java 116 for the caller
-//        perl -e ' use Data::Dumper; $xyz::var = 123; print Dumper [ keys %xyz:: ] '
-//        $VAR1 = [
-//           'var'
-//        ];
-
-
-        return new RuntimeGlob(symbolTableName + symbolTableEntry.toString());
-    }
+// Note on Stash Operations:
+//
+// In Perl, a typeglob is a structure that holds a symbol table entry and a key (or slot).
+// An example of using a typeglob is:
+//   $constant::{_CAN_PCS} = \$const;
+// This line effectively binds a constant at compile time, allowing it to be accessed without a sigil.
+//
+// When Perl encounters a bareword (such as _CAN_PCS), it resolves it by:
+// 1. Checking if it matches a subroutine name.
+// 2. Looking up the symbol table for a corresponding typeglob entry.
+// 3. If a reference is found in the symbol table, Perl uses that value.
+//
+// Additionally, if you place an array reference in a symbol table slot where Perl expects a subroutine reference
+// (e.g., using \@list where a \&sub would normally be), Perl automatically creates a subroutine that returns
+// the array value when called. This behavior also applies to scalar values.
 
     /**
      * Sets the value of the typeglob based on the type of the provided RuntimeScalar.
