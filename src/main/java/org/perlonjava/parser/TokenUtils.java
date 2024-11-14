@@ -16,7 +16,7 @@ public class TokenUtils {
     /**
      * Converts a range of tokens into a single string of text, excluding EOF tokens.
      *
-     * @param tokens   The list of LexerToken objects to process.
+     * @param tokens    The list of LexerToken objects to process.
      * @param codeStart The starting index in the list of tokens.
      * @param codeEnd   The ending index in the list of tokens.
      * @return A string representing the concatenated text of the specified token range.

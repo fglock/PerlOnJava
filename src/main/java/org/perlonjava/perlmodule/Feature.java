@@ -1,14 +1,16 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.FeatureFlags;
+import org.perlonjava.runtime.RuntimeArray;
+import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.RuntimeScalar;
 
 /**
  * The FeatureFlags class provides functionalities similar to the Perl feature module.
  */
 public class Feature extends PerlModuleBase {
 
-    private static final ScopedSymbolTable symbolTable = new ScopedSymbolTable();
-    private static final FeatureFlags featureManager = new FeatureFlags(symbolTable);
+    private static final FeatureFlags featureManager = new FeatureFlags();
 
     /**
      * Constructor for FeatureFlags.

@@ -1,14 +1,16 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.RuntimeArray;
+import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.WarningFlags;
 
 /**
  * The Warnings class provides functionalities similar to the Perl warnings module.
  */
 public class Warnings extends PerlModuleBase {
 
-    private static final ScopedSymbolTable symbolTable = new ScopedSymbolTable();
-    private static final WarningFlags warningManager = new WarningFlags(symbolTable);
+    private static final WarningFlags warningManager = new WarningFlags();
 
     /**
      * Constructor for Warnings.

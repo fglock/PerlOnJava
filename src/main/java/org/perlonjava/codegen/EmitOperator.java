@@ -622,10 +622,7 @@ public class EmitOperator {
         // emit the lvalue
         int lvalueContext = LValueVisitor.getContext(node.operand);
         node.operand.accept(emitterVisitor.with(lvalueContext));
-        boolean isTypeglob = false;
-        if (node.operand instanceof OperatorNode operatorNode && operatorNode.operator.equals("*")) {
-            isTypeglob = true;
-        }
+        boolean isTypeglob = node.operand instanceof OperatorNode operatorNode && operatorNode.operator.equals("*");
         // save the old value
         if (isTypeglob) {
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,

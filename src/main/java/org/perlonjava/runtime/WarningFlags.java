@@ -2,6 +2,8 @@ package org.perlonjava.runtime;
 
 import java.util.*;
 
+import static org.perlonjava.parser.SpecialBlockParser.getCurrentScope;
+
 /**
  * A class to control lexical warnings flags based on a hierarchy of categories.
  */
@@ -20,15 +22,10 @@ public class WarningFlags {
         warningHierarchy.put("utf8", new String[]{"utf8::non_unicode", "utf8::nonchar", "utf8::surrogate"});
     }
 
-    private final ScopedSymbolTable symbolTable;
-
     /**
      * Constructs a WarningFlags object associated with a ScopedSymbolTable.
-     *
-     * @param symbolTable The ScopedSymbolTable to manage warnings for.
      */
-    public WarningFlags(ScopedSymbolTable symbolTable) {
-        this.symbolTable = symbolTable;
+    public WarningFlags() {
     }
 
     /**
@@ -100,6 +97,7 @@ public class WarningFlags {
      * @param state    The state to set (true for enabled, false for disabled).
      */
     private void setWarningState(String category, boolean state) {
+        ScopedSymbolTable symbolTable = getCurrentScope();
         if (state) {
             symbolTable.enableWarningCategory(category);
         } else {
@@ -120,6 +118,6 @@ public class WarningFlags {
      * @return True if the category is enabled, false otherwise.
      */
     public boolean isWarningEnabled(String category) {
-        return symbolTable.isWarningCategoryEnabled(category);
+        return getCurrentScope().isWarningCategoryEnabled(category);
     }
 }

@@ -5,6 +5,8 @@ import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.ScopedSymbolTable;
 
+import static org.perlonjava.parser.SpecialBlockParser.getCurrentScope;
+
 /**
  * The Strict class provides functionalities similar to the Perl strict module.
  */
@@ -19,8 +21,6 @@ public class Strict extends PerlModuleBase {
     public static final int EXPLICIT_STRICT_REFS = 0x00000020;
     public static final int EXPLICIT_STRICT_SUBS = 0x00000040;
     public static final int EXPLICIT_STRICT_VARS = 0x00000080;
-
-    private static final ScopedSymbolTable symbolTable = new ScopedSymbolTable();
 
     /**
      * Constructor for Strict.
@@ -51,6 +51,7 @@ public class Strict extends PerlModuleBase {
      * @return A RuntimeList.
      */
     public static RuntimeList useStrict(RuntimeArray args, int ctx) {
+        ScopedSymbolTable symbolTable = getCurrentScope();
         if (args.size() == 0) {
             // Enable all strict options if no specific category is provided
             symbolTable.enableStrictOption(STRICT_REFS | STRICT_SUBS | STRICT_VARS);
@@ -83,6 +84,7 @@ public class Strict extends PerlModuleBase {
      * @return A RuntimeList.
      */
     public static RuntimeList noStrict(RuntimeArray args, int ctx) {
+        ScopedSymbolTable symbolTable = getCurrentScope();
         for (int i = 1; i < args.size(); i++) {
             String category = args.get(i).toString();
             switch (category) {

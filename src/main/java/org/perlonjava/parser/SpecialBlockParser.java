@@ -19,6 +19,16 @@ import static org.perlonjava.runtime.SpecialBlock.*;
  */
 public class SpecialBlockParser {
 
+    private static ScopedSymbolTable symbolTable = new ScopedSymbolTable();
+
+    public static ScopedSymbolTable getCurrentScope() {
+        return symbolTable;
+    }
+
+    public static void setCurrentScope(ScopedSymbolTable st) {
+        symbolTable = st;
+    }
+
     /**
      * Parses a special block.
      *
@@ -134,6 +144,7 @@ public class SpecialBlockParser {
         parser.ctx.logDebug("Special block captures " + parser.ctx.symbolTable.getAllVisibleVariables());
         RuntimeList result;
         try {
+            setCurrentScope(parser.ctx.symbolTable);
             result = PerlLanguageProvider.executePerlAST(
                     new BlockNode(nodes, tokenIndex),
                     parser.tokens,

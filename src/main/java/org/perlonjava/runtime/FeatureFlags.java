@@ -2,6 +2,8 @@ package org.perlonjava.runtime;
 
 import java.util.*;
 
+import static org.perlonjava.parser.SpecialBlockParser.getCurrentScope;
+
 /**
  * A class to control lexical feature flags based on a hierarchy of bundles.
  */
@@ -30,15 +32,10 @@ public class FeatureFlags {
         featureBundles.put(":5.40", new String[]{"bitwise", "current_sub", "evalbytes", "fc", "isa", "module_true", "postderef_qq", "say", "signatures", "state", "try", "unicode_eval", "unicode_strings"});
     }
 
-    private final ScopedSymbolTable symbolTable;
-
     /**
      * Constructs a FeatureFlags object associated with a ScopedSymbolTable.
-     *
-     * @param symbolTable The ScopedSymbolTable to manage features for.
      */
-    public FeatureFlags(ScopedSymbolTable symbolTable) {
-        this.symbolTable = symbolTable;
+    public FeatureFlags() {
     }
 
     /**
@@ -84,6 +81,7 @@ public class FeatureFlags {
      * @param state  The state to set (true for enabled, false for disabled).
      */
     private void setFeatureState(String bundle, boolean state) {
+        ScopedSymbolTable symbolTable = getCurrentScope();
         if (featureBundles.containsKey(bundle)) {
             for (String feature : featureBundles.get(bundle)) {
                 if (state) {
@@ -102,6 +100,6 @@ public class FeatureFlags {
      * @return True if the feature is enabled, false otherwise.
      */
     public boolean isFeatureEnabled(String feature) {
-        return symbolTable.isFeatureCategoryEnabled(feature);
+        return getCurrentScope().isFeatureCategoryEnabled(feature);
     }
 }

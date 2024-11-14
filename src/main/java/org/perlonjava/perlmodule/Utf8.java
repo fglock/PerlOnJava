@@ -9,13 +9,14 @@ import org.perlonjava.runtime.ScopedSymbolTable;
 
 import java.nio.charset.StandardCharsets;
 
+import static org.perlonjava.parser.SpecialBlockParser.getCurrentScope;
+
 /**
  * The Utf8 class provides functionalities similar to the Perl utf8 pragma.
  */
 public class Utf8 extends PerlModuleBase {
 
     public static final int UTF8_PRAGMA_BIT_POSITION = 0x00800000;
-    private static final ScopedSymbolTable symbolTable = new ScopedSymbolTable();
 
     /**
      * Constructor for Utf8.
@@ -48,7 +49,6 @@ public class Utf8 extends PerlModuleBase {
         }
     }
 
-
     /**
      * Enables the UTF8 pragma.
      *
@@ -57,6 +57,7 @@ public class Utf8 extends PerlModuleBase {
      * @return A RuntimeList.
      */
     public static RuntimeList useUtf8(RuntimeArray args, int ctx) {
+        ScopedSymbolTable symbolTable = getCurrentScope();
         symbolTable.enableStrictOption(UTF8_PRAGMA_BIT_POSITION);
         return new RuntimeScalar().getList();
     }
@@ -69,6 +70,7 @@ public class Utf8 extends PerlModuleBase {
      * @return A RuntimeList.
      */
     public static RuntimeList noUtf8(RuntimeArray args, int ctx) {
+        ScopedSymbolTable symbolTable = getCurrentScope();
         symbolTable.disableStrictOption(UTF8_PRAGMA_BIT_POSITION);
         return new RuntimeScalar().getList();
     }
