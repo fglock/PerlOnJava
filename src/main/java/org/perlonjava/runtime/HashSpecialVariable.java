@@ -9,21 +9,29 @@ import java.util.regex.Matcher;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
- * HashSpecialVariable provides a dynamic view over named capturing groups
- * in a Matcher object, reflecting the current state of the Matcher.
- * This implements the Perl special variables %+, %-.
- * It also implements Perl "stash".
- * Stash is the hash that represents a package's symbol table,
- * containing all the typeglobs for that package.
+ * The HashSpecialVariable class mimics the behavior of Perl's special variables
+ * %+, %-, and the "stash".
+ * <p>
+ * In Perl, %+ and %- are used to access named capturing groups from regular expressions,
+ * while the stash represents a package's symbol table, containing all the typeglobs
+ * for that package.
+ * <p>
+ * This class extends AbstractMap to provide a map-like interface for accessing these
+ * special variables. Depending on the mode of operation, it can either provide access
+ * to named capturing groups or to the stash.
  */
 public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 
     // Mode of operation for this special variable
     private HashSpecialVariable.Id mode = null;
+
+    // Namespace for the stash, if any
     private String namespace = null;
 
     /**
      * Constructs a HashSpecialVariable for the given Matcher.
+     *
+     * @param mode The mode of operation, either CAPTURE_ALL or CAPTURE.
      */
     public HashSpecialVariable(HashSpecialVariable.Id mode) {
         this.mode = mode;
@@ -31,18 +39,35 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 
     /**
      * Constructs a HashSpecialVariable for the given Stash.
+     *
+     * @param mode      The mode of operation, which should be STASH.
+     * @param namespace The namespace to be used for the stash.
      */
     public HashSpecialVariable(HashSpecialVariable.Id mode, String namespace) {
         this.mode = mode;
         this.namespace = namespace;
     }
 
+    /**
+     * Retrieves the stash for a given namespace. The stash is a hash that represents
+     * a package's symbol table, containing all the typeglobs for that package.
+     *
+     * @param namespace The namespace for which the stash is to be retrieved.
+     * @return A RuntimeHash object representing the stash.
+     */
     public static RuntimeHash getStash(String namespace) {
         RuntimeHash stash = new RuntimeHash();
         stash.elements = new HashSpecialVariable(HashSpecialVariable.Id.STASH, namespace);
         return stash;
     }
 
+    /**
+     * Returns a set view of the mappings contained in this map. The set is dynamically
+     * constructed based on the current state of the Matcher or the global variables,
+     * depending on the mode of operation.
+     *
+     * @return A set of map entries representing the current state of the special variable.
+     */
     @Override
     public Set<Entry<String, RuntimeScalar>> entrySet() {
         Set<Entry<String, RuntimeScalar>> entries = new HashSet<>();
@@ -91,6 +116,17 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
         return entries;
     }
 
+    /**
+     * Retrieves the value associated with the specified key in this map. The behavior
+     * of this method depends on the mode of operation.
+     * <p>
+     * In CAPTURE_ALL or CAPTURE mode, it retrieves the value of the named capturing
+     * group from the Matcher. In STASH mode, it checks if the key exists in the global
+     * variables and returns a corresponding RuntimeScalar.
+     *
+     * @param key The key whose associated value is to be returned.
+     * @return The value associated with the specified key, or scalarUndef if not found.
+     */
     @Override
     public RuntimeScalar get(Object key) {
         if (this.mode == Id.CAPTURE_ALL || this.mode == Id.CAPTURE) {
@@ -121,10 +157,12 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     }
 
     /**
-     * Checks if any key in the map starts with the given namespace followed by "::".
+     * Checks if any key in the map starts with the given namespace followed by the typeglob name.
+     * This method is used in STASH mode to determine if a particular typeglob exists in the
+     * global variables.
      *
      * @param map  The map to check.
-     * @param name The namespace to match.
+     * @param name The typeglob name to match.
      * @return True if a matching key is found, false otherwise.
      */
     private boolean containsNamespace(Map<String, ?> map, String name) {
@@ -137,12 +175,10 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
         return false;
     }
 
-    /**
-     * Enum to represent the mode of operation for HashSpecialVariable.
-     */
+    // Enum to represent the mode of operation for HashSpecialVariable
     public enum Id {
-        CAPTURE_ALL,  // Perl %-
-        CAPTURE, // Perl %+
-        STASH
+        CAPTURE_ALL,  // Represents Perl %- for accessing all capturing groups
+        CAPTURE,      // Represents Perl %+ for accessing named capturing groups
+        STASH         // Represents the Perl stash for accessing the symbol table
     }
 }
