@@ -189,7 +189,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return A RuntimeScalar representing the typeglob.
      */
     public RuntimeScalar scalar() {
-        return new RuntimeScalar(this);
+        return this;
     }
 
     /**
