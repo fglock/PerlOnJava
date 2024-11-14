@@ -38,7 +38,6 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     }
 
     public static RuntimeHash getStash(String namespace) {
-        System.out.println("HashSpecialVariable.getStash() " + namespace);
         RuntimeHash stash = new RuntimeHash();
         stash.elements = new HashSpecialVariable(HashSpecialVariable.Id.STASH, namespace);
         return stash;
@@ -84,7 +83,6 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                     if (uniqueKeys.add(entryKey)) {
                         RuntimeGlob glob = new RuntimeGlob(entryKey);
                         RuntimeScalar scalar = new RuntimeScalar(glob);
-                        // System.out.println("Adding entry: " + entryKey + " with value: " + scalar);
                         entries.add(new SimpleEntry<>(entryKey, scalar));
                     }
                 }
@@ -108,14 +106,14 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                 }
             }
         } else if (this.mode == Id.STASH) {
-            if (this.mode == Id.STASH && key instanceof String namespace) {
-                // Check if any key in the global maps starts with the namespace followed by "::"
-                if (containsNamespace(GlobalVariable.globalVariables, namespace) ||
-                        containsNamespace(GlobalVariable.globalArrays, namespace) ||
-                        containsNamespace(GlobalVariable.globalHashes, namespace) ||
-                        containsNamespace(GlobalVariable.globalCodeRefs, namespace) ||
-                        containsNamespace(GlobalVariable.globalIORefs, namespace)) {
-                    return new RuntimeScalar(new RuntimeGlob(namespace));
+            if (key instanceof String name) {
+                boolean found = containsNamespace(GlobalVariable.globalVariables, name) ||
+                        containsNamespace(GlobalVariable.globalArrays, name) ||
+                        containsNamespace(GlobalVariable.globalHashes, name) ||
+                        containsNamespace(GlobalVariable.globalCodeRefs, name) ||
+                        containsNamespace(GlobalVariable.globalIORefs, name);
+                if (found) {
+                    return new RuntimeScalar(new RuntimeGlob(name));
                 }
             }
         }
@@ -125,32 +123,18 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     /**
      * Checks if any key in the map starts with the given namespace followed by "::".
      *
-     * @param map       The map to check.
-     * @param namespace The namespace to match.
+     * @param map  The map to check.
+     * @param name The namespace to match.
      * @return True if a matching key is found, false otherwise.
      */
-    private boolean containsNamespace(Map<String, ?> map, String namespace) {
-        String prefix = namespace + "::";
+    private boolean containsNamespace(Map<String, ?> map, String name) {
+        String prefix = namespace + name;
         for (String key : map.keySet()) {
             if (key.startsWith(prefix)) {
                 return true;
             }
         }
         return false;
-    }
-
-    /**
-     * Extracts the namespace from a key by taking the substring before the last "::".
-     *
-     * @param key The key from which to extract the namespace.
-     * @return The namespace part of the key, or null if no namespace is present.
-     */
-    private String extractNamespace(String key) {
-        int lastIndex = key.lastIndexOf("::");
-        if (lastIndex != -1) {
-            return key.substring(0, lastIndex);
-        }
-        return null;
     }
 
     /**
