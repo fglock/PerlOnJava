@@ -19,21 +19,29 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 
     // Mode of operation for this special variable
-    private final HashSpecialVariable.Id mode;
-
-    public static RuntimeHash getStash(String namespace) {
-        // TODO Use namespace to get the stash
-        System.out.println("HashSpecialVariable.getStash() " + namespace);
-        RuntimeHash stash = new RuntimeHash();
-        stash.elements = new HashSpecialVariable(HashSpecialVariable.Id.STASH);
-        return stash;
-    }
+    private HashSpecialVariable.Id mode = null;
+    private String namespace = null;
 
     /**
      * Constructs a HashSpecialVariable for the given Matcher.
      */
     public HashSpecialVariable(HashSpecialVariable.Id mode) {
         this.mode = mode;
+    }
+
+    /**
+     * Constructs a HashSpecialVariable for the given Stash.
+     */
+    public HashSpecialVariable(HashSpecialVariable.Id mode, String namespace) {
+        this.mode = mode;
+        this.namespace = namespace;
+    }
+
+    public static RuntimeHash getStash(String namespace) {
+        System.out.println("HashSpecialVariable.getStash() " + namespace);
+        RuntimeHash stash = new RuntimeHash();
+        stash.elements = new HashSpecialVariable(HashSpecialVariable.Id.STASH, namespace);
+        return stash;
     }
 
     @Override
@@ -60,10 +68,25 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             allKeys.addAll(GlobalVariable.globalIORefs.keySet());
 
             // Process each key to extract the namespace part
+            Set<String> uniqueKeys = new HashSet<>(); // Set to track unique keys
             for (String key : allKeys) {
-                String namespace = extractNamespace(key);
-                if (namespace != null) {
-                    entries.add(new SimpleEntry<>(namespace, new RuntimeScalar(namespace)));
+                if (key.startsWith(namespace)) {
+                    String remainingKey = key.substring(namespace.length());
+                    int nextSeparatorIndex = remainingKey.indexOf("::");
+                    String entryKey;
+                    if (nextSeparatorIndex == -1) {
+                        entryKey = remainingKey;
+                    } else {
+                        entryKey = remainingKey.substring(0, nextSeparatorIndex + 2);
+                    }
+
+                    // Add the entry only if it's not already in the set of unique keys
+                    if (uniqueKeys.add(entryKey)) {
+                        RuntimeGlob glob = new RuntimeGlob(entryKey);
+                        RuntimeScalar scalar = new RuntimeScalar(glob);
+                        // System.out.println("Adding entry: " + entryKey + " with value: " + scalar);
+                        entries.add(new SimpleEntry<>(entryKey, scalar));
+                    }
                 }
             }
         }
@@ -92,7 +115,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                         containsNamespace(GlobalVariable.globalHashes, namespace) ||
                         containsNamespace(GlobalVariable.globalCodeRefs, namespace) ||
                         containsNamespace(GlobalVariable.globalIORefs, namespace)) {
-                    return new RuntimeScalar(namespace);
+                    return new RuntimeScalar(new RuntimeGlob(namespace));
                 }
             }
         }
@@ -102,7 +125,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     /**
      * Checks if any key in the map starts with the given namespace followed by "::".
      *
-     * @param map The map to check.
+     * @param map       The map to check.
      * @param namespace The namespace to match.
      * @return True if a matching key is found, false otherwise.
      */
