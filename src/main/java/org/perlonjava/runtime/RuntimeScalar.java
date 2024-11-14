@@ -542,6 +542,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                     ref = switch (scalar.type) {
                         case VSTRING -> "VSTRING";
                         case REGEX, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE -> "REF";
+                        case GLOB -> "GLOB";
                         default -> "SCALAR";
                     };
                 }
