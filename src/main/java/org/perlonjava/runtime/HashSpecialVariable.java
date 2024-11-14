@@ -12,6 +12,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
  * HashSpecialVariable provides a dynamic view over named capturing groups
  * in a Matcher object, reflecting the current state of the Matcher.
  * This implements the Perl special variables %+, %-.
+ * It also implements Perl "stash", which represents of namespace hash.
  */
 public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 
@@ -27,14 +28,32 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 
     @Override
     public Set<Entry<String, RuntimeScalar>> entrySet() {
-        Matcher matcher = RuntimeRegex.globalMatcher;
         Set<Entry<String, RuntimeScalar>> entries = new HashSet<>();
-        if (matcher != null) {
-            Map<String, Integer> namedGroups = matcher.pattern().namedGroups();
-            for (String name : namedGroups.keySet()) {
-                String matchedValue = matcher.group(name);
-                if (matchedValue != null) {
-                    entries.add(new SimpleEntry<>(name, new RuntimeScalar(matchedValue)));
+        if (this.mode == Id.CAPTURE_ALL || this.mode == Id.CAPTURE) {
+            Matcher matcher = RuntimeRegex.globalMatcher;
+            if (matcher != null) {
+                Map<String, Integer> namedGroups = matcher.pattern().namedGroups();
+                for (String name : namedGroups.keySet()) {
+                    String matchedValue = matcher.group(name);
+                    if (matchedValue != null) {
+                        entries.add(new SimpleEntry<>(name, new RuntimeScalar(matchedValue)));
+                    }
+                }
+            }
+        } else if (this.mode == Id.STASH) {
+            // Collect all keys from GlobalVariable
+            Set<String> allKeys = new HashSet<>();
+            allKeys.addAll(GlobalVariable.globalVariables.keySet());
+            allKeys.addAll(GlobalVariable.globalArrays.keySet());
+            allKeys.addAll(GlobalVariable.globalHashes.keySet());
+            allKeys.addAll(GlobalVariable.globalCodeRefs.keySet());
+            allKeys.addAll(GlobalVariable.globalIORefs.keySet());
+
+            // Process each key to extract the namespace part
+            for (String key : allKeys) {
+                String namespace = extractNamespace(key);
+                if (namespace != null) {
+                    entries.add(new SimpleEntry<>(namespace, new RuntimeScalar(namespace)));
                 }
             }
         }
@@ -43,19 +62,62 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 
     @Override
     public RuntimeScalar get(Object key) {
-        Matcher matcher = RuntimeRegex.globalMatcher;
-        if (matcher != null && key instanceof String name) {
-            String matchedValue = matcher.group(name);
-            if (matchedValue != null) {
-                if (this.mode == Id.CAPTURE_ALL) {
-                    return new RuntimeArray(new RuntimeScalar(matchedValue)).createReference();
-                } else if (this.mode == Id.CAPTURE) {
-                    return new RuntimeScalar(matchedValue);
+        if (this.mode == Id.CAPTURE_ALL || this.mode == Id.CAPTURE) {
+            Matcher matcher = RuntimeRegex.globalMatcher;
+            if (matcher != null && key instanceof String name) {
+                String matchedValue = matcher.group(name);
+                if (matchedValue != null) {
+                    if (this.mode == Id.CAPTURE_ALL) {
+                        return new RuntimeArray(new RuntimeScalar(matchedValue)).createReference();
+                    } else {
+                        return new RuntimeScalar(matchedValue);
+                    }
                 }
-                return scalarUndef;
+            }
+        } else if (this.mode == Id.STASH) {
+            if (this.mode == Id.STASH && key instanceof String namespace) {
+                // Check if any key in the global maps starts with the namespace followed by "::"
+                if (containsNamespace(GlobalVariable.globalVariables, namespace) ||
+                        containsNamespace(GlobalVariable.globalArrays, namespace) ||
+                        containsNamespace(GlobalVariable.globalHashes, namespace) ||
+                        containsNamespace(GlobalVariable.globalCodeRefs, namespace) ||
+                        containsNamespace(GlobalVariable.globalIORefs, namespace)) {
+                    return new RuntimeScalar(namespace);
+                }
             }
         }
         return scalarUndef;
+    }
+
+    /**
+     * Checks if any key in the map starts with the given namespace followed by "::".
+     *
+     * @param map The map to check.
+     * @param namespace The namespace to match.
+     * @return True if a matching key is found, false otherwise.
+     */
+    private boolean containsNamespace(Map<String, ?> map, String namespace) {
+        String prefix = namespace + "::";
+        for (String key : map.keySet()) {
+            if (key.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Extracts the namespace from a key by taking the substring before the last "::".
+     *
+     * @param key The key from which to extract the namespace.
+     * @return The namespace part of the key, or null if no namespace is present.
+     */
+    private String extractNamespace(String key) {
+        int lastIndex = key.lastIndexOf("::");
+        if (lastIndex != -1) {
+            return key.substring(0, lastIndex);
+        }
+        return null;
     }
 
     /**
@@ -63,6 +125,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
      */
     public enum Id {
         CAPTURE_ALL,  // Perl %-
-        CAPTURE // Perl %+
+        CAPTURE, // Perl %+
+        STASH
     }
 }
