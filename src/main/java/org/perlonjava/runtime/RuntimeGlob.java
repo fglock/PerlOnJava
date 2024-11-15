@@ -223,15 +223,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     /**
-     * Adds itself to a RuntimeArray.
-     *
-     * @param array The RuntimeArray to which this typeglob will be added.
-     */
-    public void addToArray(RuntimeArray array) {
-        array.push(this.scalar());
-    }
-
-    /**
      * Adds itself to a RuntimeScalar.
      *
      * @param scalar The RuntimeScalar to which this typeglob will be added.
