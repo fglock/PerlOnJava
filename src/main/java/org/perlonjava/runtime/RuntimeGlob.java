@@ -20,6 +20,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      */
     public RuntimeGlob(String globName) {
         this.globName = globName;
+        // Initialize the RuntimeScalar fields
+        this.type = RuntimeScalarType.GLOB;
+        this.value = this;
     }
 
 // Note on Stash Operations:
