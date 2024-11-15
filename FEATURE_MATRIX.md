@@ -252,7 +252,7 @@
 ## Namespaces and Global Variables
 - ✔️   **Global variable infrastructure**: Support for global variables is implemented.
 - ✔️   **Namespaces**: Namespace support is present.
-- ✔️   **Stash**: Stash can be accessed as a hash like `$namespace::{entry}`.
+- ✔️   **Stash**: Stash can be accessed as a hash, like: `$namespace::{entry}`.
 - ✔️   **`@_` and `$@` special variables**: Special variables like `@_` and `$@` are supported.
 - ✔️   **Special variables**: The special variables `%ENV`, `@ARGV`, `@INC`, `$0`, `$_`, `$.`, `$]`, `$"`, `$\\`, `$,`, `$/`, `$$`, `$a`, `$b`, `$^O`, `$^V` are implemented.
 - ✔️   **I/O symbols**: `STDOUT`, `STDERR`, `STDIN`, `ARGV`, `ARGVOUT` are implemented.
