@@ -107,7 +107,7 @@ For a detailed feature list, see the [FEATURE_MATRIX.md](FEATURE_MATRIX.md).
 2. **Execute Something**:
 
     ```bash
-    java -jar target/perlonjava-1.0-SNAPSHOT.jar -e ' print 123 '
+    java -jar target/perlonjava-1.0-SNAPSHOT.jar -E ' print 123 '
     ```
 
 Setting `lib` path with `-I` to access Perl modules is optional. Standard modules are included in the jar file.
@@ -117,35 +117,35 @@ Setting `lib` path with `-I` to access Perl modules is optional. Standard module
 1. **Execute Emitting Debug Information**:
 
     ```bash
-    java -jar target/perlonjava-1.0-SNAPSHOT.jar --debug -e ' print 123 '
+    java -jar target/perlonjava-1.0-SNAPSHOT.jar --debug -E ' print 123 '
     ```
 
 2. **Compile Only; Can Be Combined with --debug**:
 
     ```bash
-    java -jar target/perlonjava-1.0-SNAPSHOT.jar -c -e ' print 123 '
+    java -jar target/perlonjava-1.0-SNAPSHOT.jar -c -E ' print 123 '
     ```
 
     ```bash
-    java -jar target/perlonjava-1.0-SNAPSHOT.jar --debug -c -e ' print 123 '
+    java -jar target/perlonjava-1.0-SNAPSHOT.jar --debug -c -E ' print 123 '
     ```
 
 3. **Execute and Emit Disassembled ASM Code**:
 
     ```bash
-    java -jar target/perlonjava-1.0-SNAPSHOT.jar --disassemble -e ' print 123 '
+    java -jar target/perlonjava-1.0-SNAPSHOT.jar --disassemble -E ' print 123 '
     ```
 
 4. **Run the Lexer Only**:
 
     ```bash
-    java -jar target/perlonjava-1.0-SNAPSHOT.jar --tokenize -e ' print 123 '
+    java -jar target/perlonjava-1.0-SNAPSHOT.jar --tokenize -E ' print 123 '
     ```
 
 5. **Run the Parser Only**:
 
     ```bash
-    java -jar target/perlonjava-1.0-SNAPSHOT.jar --parse -e ' print 123 '
+    java -jar target/perlonjava-1.0-SNAPSHOT.jar --parse -E ' print 123 '
     ```
 
 ## Internal Modules

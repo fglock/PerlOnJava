@@ -25,6 +25,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         this.value = this;
     }
 
+//    public RuntimeGlob() {
+//        this.globName = globName;
+//        // Initialize the RuntimeScalar fields
+//        this.type = RuntimeScalarType.UNDEF;
+//        this.value = this;
+//    }
+
 // Note on Stash Operations:
 //
 // In Perl, a typeglob is a structure that holds a symbol table entry and a key (or slot).
@@ -80,6 +87,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 if (value.value instanceof RuntimeScalar) {
                     GlobalVariable.getGlobalVariable(this.globName).set(value.scalarDeref());
                 }
+                return value;
+            case UNDEF:
                 return value;
         }
         throw new IllegalStateException("typeglob assignment not implemented for " + value.type);

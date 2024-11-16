@@ -83,6 +83,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                 }
             }
         } else if (this.mode == Id.STASH) {
+            // System.out.println("EntrySet ");
             // Collect all keys from GlobalVariable
             Set<String> allKeys = new HashSet<>();
             allKeys.addAll(GlobalVariable.globalVariables.keySet());
@@ -141,6 +142,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             }
         } else if (this.mode == Id.STASH) {
             String prefix = namespace + key;
+            // System.out.println("Get Key " + prefix);
             if (containsNamespace(GlobalVariable.globalVariables, prefix) ||
                     containsNamespace(GlobalVariable.globalArrays, prefix) ||
                     containsNamespace(GlobalVariable.globalHashes, prefix) ||
@@ -148,6 +150,23 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                     containsNamespace(GlobalVariable.globalIORefs, prefix)) {
                 return new RuntimeGlob(prefix);
             }
+            return new RuntimeGlob(prefix);
+        }
+        return scalarUndef;
+    }
+
+    @Override
+    public RuntimeScalar put(String key, RuntimeScalar value) {
+        if (this.mode == Id.STASH) {
+            String fullKey = namespace + key;
+            // System.out.println("Get Key " + fullKey + " value " + value);
+
+            RuntimeScalar oldValue = new RuntimeGlob(fullKey);
+            if (value.getDefinedBoolean()) {
+                oldValue.set(value);
+            }
+
+            return oldValue;
         }
         return scalarUndef;
     }
