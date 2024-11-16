@@ -291,7 +291,9 @@ public class StatementParser {
                         minorVersion--;
                     }
 
-                    String closestVersion = ":" + majorVersion + "." + minorVersion;
+                    String closestVersion = minorVersion < 10
+                            ? ":default"
+                            : ":" + majorVersion + "." + minorVersion;
                     featureManager.enableFeatureBundle(closestVersion);
                 }
             }
