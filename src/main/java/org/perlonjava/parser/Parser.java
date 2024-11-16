@@ -68,7 +68,7 @@ public class Parser {
     public final List<LexerToken> tokens;
     public int tokenIndex = 0;
     public boolean parsingForLoopVariable = false;
-    private boolean parsingTakeReference = false;
+    public boolean parsingTakeReference = false;
 
     public Parser(EmitterContext ctx, List<LexerToken> tokens) {
         this.ctx = ctx;

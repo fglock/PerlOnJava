@@ -6,6 +6,7 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.operators.OperatorHandler;
 import org.perlonjava.operators.ScalarGlobOperator;
+import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 
@@ -661,17 +662,36 @@ public class EmitOperator {
         String operator = node.operator;
         if (node.operand instanceof ListNode operand) {
             if (operand.elements.size() == 1) {
-                BinaryOperatorNode binop = (BinaryOperatorNode) operand.elements.get(0);
-                if (binop.operator.equals("{")) {
-                    // Handle hash element operator.
-                    Dereference.handleHashElementOperator(emitterVisitor, binop, operator);
-                    return;
-                }
-                if (binop.operator.equals("->")) {
-                    if (binop.right instanceof HashLiteralNode) { // ->{x}
-                        // Handle arrow hash dereference
-                        Dereference.handleArrowHashDeref(emitterVisitor, binop, operator);
+                if (operand.elements.getFirst() instanceof OperatorNode operatorNode) {
+                    if (operator.equals("exists") && operatorNode.operator.equals("&")) {
+                        emitterVisitor.ctx.logDebug("exists & " + operatorNode.operand);
+                        if (operatorNode.operand instanceof IdentifierNode identifierNode) {
+                            // exists &sub
+                            String name = identifierNode.name;
+                            String fullName = NameNormalizer.normalizeVariableName(name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
+                            emitterVisitor.ctx.mv.visitLdcInsn(fullName); // emit string
+                            emitterVisitor.ctx.mv.visitMethodInsn(
+                                    Opcodes.INVOKESTATIC,
+                                    "org/perlonjava/runtime/GlobalVariable",
+                                    "existsGlobalCodeRefAsScalar",
+                                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                                    false);
+                            return;
+                        }
+                    }
+                } else {
+                    BinaryOperatorNode binop = (BinaryOperatorNode) operand.elements.getFirst();
+                    if (binop.operator.equals("{")) {
+                        // Handle hash element operator.
+                        Dereference.handleHashElementOperator(emitterVisitor, binop, operator);
                         return;
+                    }
+                    if (binop.operator.equals("->")) {
+                        if (binop.right instanceof HashLiteralNode) { // ->{x}
+                            // Handle arrow hash dereference
+                            Dereference.handleArrowHashDeref(emitterVisitor, binop, operator);
+                            return;
+                        }
                     }
                 }
             }

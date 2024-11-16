@@ -102,6 +102,7 @@
   - Planned release date: 2024-12-10
   - "use features" implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`.
   - Stash can be accessed as a hash like `$namespace::{entry}`.
+  - Added `exists &sub`
   - Work in progress:
     - `socket` and related operators.
     - `use VERSION`, `require VERSION`.

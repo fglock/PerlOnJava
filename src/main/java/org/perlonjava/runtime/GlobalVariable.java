@@ -5,6 +5,9 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
+
 /**
  * The GlobalVariable class manages global variables, arrays, hashes, and references
  * within the runtime environment. It provides methods to retrieve, set, and check
@@ -173,6 +176,10 @@ public class GlobalVariable {
      */
     public static boolean existsGlobalCodeRef(String key) {
         return globalCodeRefs.containsKey(key);
+    }
+
+    public static RuntimeScalar existsGlobalCodeRefAsScalar(String key) {
+        return globalCodeRefs.containsKey(key) ? scalarTrue : scalarFalse;
     }
 
     /**
