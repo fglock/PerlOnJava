@@ -24,7 +24,6 @@ import static org.perlonjava.runtime.GlobalVariable.getGlobalHash;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.SpecialBlock.runEndBlocks;
-import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 /**
  * The RuntimeScalar class simulates Perl scalar variables.
@@ -115,13 +114,13 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         this.value = value;
     }
 
-    public RuntimeScalar(RuntimeGlob value) {
+    public RuntimeScalar(RuntimeGlob val) {
         if (value == null) {
             this.type = RuntimeScalarType.UNDEF;
         } else {
-            this.type = RuntimeScalarType.GLOB;
+            this.type = val.type;
         }
-        this.value = value;
+        this.value = val;
     }
 
     public static RuntimeScalar undef() {
@@ -336,9 +335,9 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return this;
     }
 
-    public RuntimeScalar set(RuntimeGlob value) {
-        this.type = RuntimeScalarType.GLOB;
-        this.value = value;
+    public RuntimeScalar set(RuntimeGlob val) {
+        this.type = val.type;
+        this.value = val;
         return this;
     }
 
@@ -725,12 +724,12 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         RuntimeScalar code = this;
         if (code.type != RuntimeScalarType.CODE) {
             String name = NameNormalizer.normalizeVariableName(code.toString(), packageName);
-            System.out.println("Looking for prototype: " + name);
+            // System.out.println("Looking for prototype: " + name);
             code = GlobalVariable.getGlobalCodeRef(name);
         }
-        System.out.println("type: " + code.type);
+        // System.out.println("type: " + code.type);
         if (code.type == RuntimeScalarType.CODE) {
-            System.out.println("prototype: " + ((RuntimeCode) code.value).prototype);
+            // System.out.println("prototype: " + ((RuntimeCode) code.value).prototype);
             return new RuntimeScalar(((RuntimeCode) code.value).prototype);
         }
         return scalarUndef;

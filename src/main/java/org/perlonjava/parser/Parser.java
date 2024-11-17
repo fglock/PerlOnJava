@@ -150,8 +150,8 @@ public class Parser {
                 case "until":
                     return StatementParser.parseWhileStatement(this, label);
                 case "try":
-                    if (ctx.symbolTable.isFeatureCategoryEnabled("try")){
-                       return StatementParser.parseTryStatement(this);
+                    if (ctx.symbolTable.isFeatureCategoryEnabled("try")) {
+                        return StatementParser.parseTryStatement(this);
                     }
                     break;
                 case "package":

@@ -25,29 +25,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         this.value = this;
     }
 
-//    public RuntimeGlob() {
-//        this.globName = globName;
-//        // Initialize the RuntimeScalar fields
-//        this.type = RuntimeScalarType.UNDEF;
-//        this.value = this;
-//    }
-
-// Note on Stash Operations:
-//
-// In Perl, a typeglob is a structure that holds a symbol table entry and a key (or slot).
-// An example of using a typeglob is:
-//   $constant::{_CAN_PCS} = \$const;
-// This line effectively binds a constant at compile time, allowing it to be accessed without a sigil.
-//
-// When Perl encounters a bareword (such as _CAN_PCS), it resolves it by:
-// 1. Checking if it matches a subroutine name.
-// 2. Looking up the symbol table for a corresponding typeglob entry.
-// 3. If a reference is found in the symbol table, Perl uses that value.
-//
-// Additionally, if you place an array reference in a symbol table slot where Perl expects a subroutine reference
-// (e.g., using \@list where a \&sub would normally be), Perl automatically creates a subroutine that returns
-// the array value when called. This behavior also applies to scalar values.
-
     /**
      * Sets the value of the typeglob based on the type of the provided RuntimeScalar.
      * Supports setting CODE and GLOB types, with special handling for IO objects.

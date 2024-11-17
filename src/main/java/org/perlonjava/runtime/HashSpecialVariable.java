@@ -56,8 +56,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
      * @return A RuntimeHash object representing the stash.
      */
     public static RuntimeHash getStash(String namespace) {
-        RuntimeHash stash = new RuntimeHash();
-        stash.elements = new HashSpecialVariable(HashSpecialVariable.Id.STASH, namespace);
+        RuntimeStash stash = new RuntimeStash(namespace);
         return stash;
     }
 
@@ -107,7 +106,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 
                     // Add the entry only if it's not already in the set of unique keys
                     if (uniqueKeys.add(entryKey)) {
-                        entries.add(new SimpleEntry<>(entryKey, new RuntimeGlob(key)));
+                        entries.add(new SimpleEntry<>(entryKey, new RuntimeStashEntry(key, true)));
                     }
                 }
             }
@@ -148,9 +147,9 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                     containsNamespace(GlobalVariable.globalHashes, prefix) ||
                     containsNamespace(GlobalVariable.globalCodeRefs, prefix) ||
                     containsNamespace(GlobalVariable.globalIORefs, prefix)) {
-                return new RuntimeGlob(prefix);
+                return new RuntimeStashEntry(prefix, true);
             }
-            return new RuntimeGlob(prefix);
+            return new RuntimeStashEntry(prefix, false);
         }
         return scalarUndef;
     }
@@ -161,7 +160,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             String fullKey = namespace + key;
             // System.out.println("Get Key " + fullKey + " value " + value);
 
-            RuntimeScalar oldValue = new RuntimeGlob(fullKey);
+            RuntimeScalar oldValue = new RuntimeStashEntry(fullKey, true);
             if (value.getDefinedBoolean()) {
                 oldValue.set(value);
             }

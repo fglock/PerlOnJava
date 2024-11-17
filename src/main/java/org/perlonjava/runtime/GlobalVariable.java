@@ -16,10 +16,10 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 public class GlobalVariable {
     // Global variables and subroutines
     static final Map<String, RuntimeScalar> globalVariables = new HashMap<>();
-     static final Map<String, RuntimeArray> globalArrays = new HashMap<>();
-     static final Map<String, RuntimeHash> globalHashes = new HashMap<>();
-     static final Map<String, RuntimeScalar> globalCodeRefs = new HashMap<>();
-     static final Map<String, RuntimeScalar> globalIORefs = new HashMap<>();
+    static final Map<String, RuntimeArray> globalArrays = new HashMap<>();
+    static final Map<String, RuntimeHash> globalHashes = new HashMap<>();
+    static final Map<String, RuntimeScalar> globalCodeRefs = new HashMap<>();
+    static final Map<String, RuntimeScalar> globalIORefs = new HashMap<>();
     // Regular expression for regex variables like $main::1
     static Pattern regexVariablePattern = Pattern.compile("^main::(\\d+)$");
 

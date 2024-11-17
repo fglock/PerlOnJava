@@ -44,6 +44,7 @@ public class RuntimeCode implements RuntimeScalarReference {
     public Map<String, RuntimeArray> stateArray = new HashMap<>();
     public Map<String, RuntimeHash> stateHash = new HashMap<>();
 
+    public RuntimeScalar constantValue;
 
     /**
      * Constructs a RuntimeCode instance with the specified prototype and attributes.
@@ -198,8 +199,13 @@ public class RuntimeCode implements RuntimeScalarReference {
      * @return the result of the subroutine execution as a RuntimeList
      */
     public RuntimeList apply(RuntimeArray a, int callContext) {
+        if (constantValue != null) {
+            // Alternative way to create constants like: `$constant::{_CAN_PCS} = \$const`
+            return new RuntimeList(constantValue);
+        }
         try {
-            return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
+            RuntimeList list = (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
+            return list;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

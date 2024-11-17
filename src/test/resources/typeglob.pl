@@ -15,6 +15,8 @@
 #
 
 # use 5.32.0;
+use strict;
+use warnings;
 use feature 'say';
 use feature 'isa';
 
@@ -30,4 +32,25 @@ print "not " if substr($fh2, 0, 5) ne "GLOB("; say "ok # typeglob reference stri
 eval 'print $fh "# 123\n";' or print "not "; say "ok # variable with typeglob can be used as file handle";
 
 eval 'print $fh2 "# 124\n";' or print "not "; say "ok # variable with typeglob reference can be used as file handle";
+
+my $res =
+eval q{
+    BEGIN { $main::{X1} = \123; }
+    return X1;
+};
+print "not " if $res ne 123;
+say "ok # reference in a code slot <$res> <" . substr($@, 0, 20) . ">";
+
+$res =
+eval q{
+    BEGIN { *main::X2 = \123; }
+    return X2;
+};
+print "not " if defined $res;
+say "ok # reference in a code slot <" . ($res // "") . "> <" . substr($@, 0, 20) . ">";
+
+# Bareword "X" not allowed while "strict subs" in use at -e line 2, near "\", X "
+say "not" if $@ !~ /^Bareword "X2" not allowed/;
+say "ok # error message <" . substr($@, 0, 20) . ">";
+
 
