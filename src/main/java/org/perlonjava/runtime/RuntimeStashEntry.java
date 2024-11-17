@@ -2,6 +2,7 @@ package org.perlonjava.runtime;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
+import static org.perlonjava.runtime.RuntimeScalarType.ARRAYREFERENCE;
 import static org.perlonjava.runtime.RuntimeScalarType.REFERENCE;
 
 /**
@@ -54,7 +55,16 @@ public class RuntimeStashEntry extends RuntimeGlob {
         if (value.type == REFERENCE) {
             if (value.value instanceof RuntimeScalar) {
                 RuntimeCode code = new RuntimeCode("", null);
-                code.constantValue = value.scalarDeref();
+                code.constantValue = value.scalarDeref().getList();
+                GlobalVariable.getGlobalCodeRef(this.globName).set(
+                        new RuntimeScalar(code));
+            }
+            return value;
+        }
+        if (value.type == ARRAYREFERENCE) {
+            if (value.value instanceof RuntimeArray) {
+                RuntimeCode code = new RuntimeCode("", null);
+                code.constantValue = value.arrayDeref().getList();
                 GlobalVariable.getGlobalCodeRef(this.globName).set(
                         new RuntimeScalar(code));
             }
@@ -76,12 +86,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
                     GlobalVariable.getGlobalIO(this.globName).set(value);
                 }
                 return value;
-            case ARRAYREFERENCE:
-                // Handle the case where a typeglob is assigned a reference to an array
-                if (value.value instanceof RuntimeArray) {
-                    GlobalVariable.getGlobalArray(this.globName).setFromList(((RuntimeArray) value.value).getList());
-                }
-                return value;
+            // Handle the case where a typeglob is assigned a reference to an array
             case HASHREFERENCE:
                 if (value.value instanceof RuntimeHash) {
                     GlobalVariable.getGlobalHash(this.globName).setFromList(((RuntimeHash) value.value).getList());

@@ -44,7 +44,7 @@ public class RuntimeCode implements RuntimeScalarReference {
     public Map<String, RuntimeArray> stateArray = new HashMap<>();
     public Map<String, RuntimeHash> stateHash = new HashMap<>();
 
-    public RuntimeScalar constantValue;
+    public RuntimeList constantValue;
 
     /**
      * Constructs a RuntimeCode instance with the specified prototype and attributes.
@@ -204,8 +204,7 @@ public class RuntimeCode implements RuntimeScalarReference {
             return new RuntimeList(constantValue);
         }
         try {
-            RuntimeList list = (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
-            return list;
+            return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

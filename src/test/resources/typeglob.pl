@@ -61,6 +61,17 @@ eval q{
     return _X1;
 };
 print "not " if $res ne 123;
-say "ok # reference in a code slot <$res> <" . substr($@, 0, 20) . ">";
+say "ok # scalar reference in a code slot <$res> <" . substr($@, 0, 20) . ">";
+}
+
+{
+package Testing2;
+my @res =
+eval q{
+    BEGIN { $Testing2::{_X1} = [123, 456]; }
+    return _X1;
+};
+print "not " if "@res" ne "123 456";
+say "ok # array reference in a code slot <@res> <" . substr($@, 0, 20) . ">";
 }
 
