@@ -53,4 +53,14 @@ say "ok # reference in a code slot <" . ($res // "") . "> <" . substr($@, 0, 20)
 say "not" if $@ !~ /^Bareword "X2" not allowed/;
 say "ok # error message <" . substr($@, 0, 20) . ">";
 
+{
+package Testing;
+my $res =
+eval q{
+    BEGIN { $Testing::{_X1} = \123; }
+    return _X1;
+};
+print "not " if $res ne 123;
+say "ok # reference in a code slot <$res> <" . substr($@, 0, 20) . ">";
+}
 

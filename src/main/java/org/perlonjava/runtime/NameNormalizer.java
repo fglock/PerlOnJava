@@ -70,7 +70,8 @@ public class NameNormalizer {
             return nameCache.get(cacheKey);
         }
 
-        if (!Character.isLetter(variable.charAt(0)) || SPECIAL_VARIABLES.contains(variable)) {
+        char firstLetter = variable.charAt(0);
+        if (variable.equals("_") || !(firstLetter == '_' || Character.isLetter(firstLetter)) || SPECIAL_VARIABLES.contains(variable)) {
             defaultPackage = "main";    // special variables are always in main
             if (variable.length() == 2 && variable.charAt(0) == '^' && variable.charAt(1) >= 'A' && variable.charAt(1) <= 'Z') {
                 // For $^A to $^Z, convert the second character to the corresponding ASCII control character.

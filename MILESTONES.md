@@ -102,6 +102,7 @@
   - Planned release date: 2024-12-10
   - "use features" implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`.
   - Stash can be accessed as a hash like `$namespace::{entry}`.
+  - Added stash constants:  $constant::{_CAN_PCS} = \$const;
   - Added `exists &sub`
   - Work in progress:
     - `socket` and related operators.
@@ -112,7 +113,6 @@
     - lexical utf8 source code.
     - `truncate`, `seek` operators.
     - preprocessor `# line` directive.
-    - Adding stash constants:  $constant::{_CAN_PCS} = \$const;
   - Stretch goals
     - Add support for concurrency and parallelism, such as threads and async/await.
     - Enhance security features, including sandboxing and input validation.
