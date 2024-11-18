@@ -274,8 +274,9 @@
 - ✔️   **if** pragma
 - ✔️   **lib** pragma
 - 🚧  **utf8** pragma: utf8 is always on. Disabling utf8 might work in a future version.
-- 🚧  **feature** pragma
-  - Features implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `bitwise`.
+- ✔️   **feature** pragma
+  - ✔️  Features implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `bitwise`.
+  - ❌ Features missing: `evalbytes`, `module_true`, `postderef_qq`, `signatures`, `unicode_eval`, `unicode_strings`
 - 🚧  **warnings** pragma
 - ❌  **version** pragma: version objects are not yet supported.
 - ❌  **experimental** pragma
