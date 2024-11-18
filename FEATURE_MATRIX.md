@@ -290,6 +290,7 @@
 - ❌  **subs** pragma
 - ❌  **defer** feature: `defer` blocks are not implemented.
 - ❌  **postderef** feature
+- ✔️   **File::Basename** use the same version as Perl.
 
 
 ## Non-strict and Obsolete Features
