@@ -253,7 +253,6 @@ public class OperatorParser {
             case "chop":
             case "chomp":
             case "length":
-            case "defined":
             case "localtime":
             case "gmtime":
             case "rmdir":
@@ -417,6 +416,7 @@ public class OperatorParser {
                 return new BinaryOperatorNode(token.text, handle, printOperand, currentIndex);
             case "delete":
             case "exists":
+            case "defined":
                 parser.parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
                 operand = ListParser.parseZeroOrOneList(parser, 1);
                 parser.parsingTakeReference = false;
