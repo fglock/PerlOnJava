@@ -444,12 +444,25 @@ public class Parser {
                     case "&":
                         return parseCoderefVariable(token);
                     case "!":
-                    case "~":
-                    case "~.":
                     case "+":
                         // Handle unary operators like `! +`
                         operand = parseExpression(getPrecedence(token.text) + 1);
                         return new OperatorNode(token.text, operand, tokenIndex);
+                    case "~":
+                    case "~.":
+                        // Handle unary operators like `~ ~.`
+                        String operator = token.text;
+                        if (ctx.symbolTable.isFeatureCategoryEnabled("bitwise")) {
+                            if (operator.equals("~")) {
+                                operator = "binary" + operator;
+                            }
+                        } else {
+                            if (operator.equals("~.")) {
+                                throw new PerlCompilerException(tokenIndex, "syntax error", ctx.errorUtil);
+                            }
+                        }
+                        operand = parseExpression(getPrecedence(token.text) + 1);
+                        return new OperatorNode(operator, operand, tokenIndex);
                     case "--":
                     case "++":
                         // Handle unary operators like `++`
@@ -460,7 +473,7 @@ public class Parser {
                         LexerToken nextToken = tokens.get(tokenIndex);
                         if (nextToken.type == LexerTokenType.IDENTIFIER && nextToken.text.length() == 1) {
                             // Handle `-d`
-                            String operator = "-" + nextToken.text;
+                            operator = "-" + nextToken.text;
                             tokenIndex++;
                             nextToken = peek(this);
                             if (nextToken.text.equals("_")) {
@@ -610,8 +623,14 @@ public class Parser {
             String operator = token.text;
             boolean operatorEnabled = switch (operator) {
                 case "isa" -> ctx.symbolTable.isFeatureCategoryEnabled("isa");
-                case "&.", "|.", "^.", "~.", "&.=", "|.=", "^.=", "~.=" ->
+                case "&.", "|.", "^.", "&.=", "|.=", "^.=" ->
                         ctx.symbolTable.isFeatureCategoryEnabled("bitwise");
+                case "&", "|", "^", "&=", "|=", "^=" -> {
+                    if (ctx.symbolTable.isFeatureCategoryEnabled("bitwise")) {
+                        operator = "binary" + operator;
+                    }
+                    yield true;
+                }
                 default -> true;
             };
             if (!operatorEnabled) {
