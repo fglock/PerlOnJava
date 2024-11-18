@@ -447,10 +447,13 @@ public class Parser {
                     case "~":
                     case "~.":
                     case "+":
+                        // Handle unary operators like `! +`
+                        operand = parseExpression(getPrecedence(token.text) + 1);
+                        return new OperatorNode(token.text, operand, tokenIndex);
                     case "--":
                     case "++":
-                        // Handle unary operators like `! + ++`
-                        operand = parseExpression(getPrecedence(token.text) + 1);
+                        // Handle unary operators like `++`
+                        operand = parseExpression(getPrecedence(token.text));
                         return new OperatorNode(token.text, operand, tokenIndex);
                     case "-":
                         // Handle unary operators like `- -d`
