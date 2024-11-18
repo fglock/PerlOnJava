@@ -384,7 +384,7 @@ public class Parser {
                     // Check if the operator is enabled in the current scope
                     String operator = token.text;
                     operatorEnabled = switch (operator) {
-                        case "say", "fc", "isa", "state" -> ctx.symbolTable.isFeatureCategoryEnabled(operator);
+                        case "say", "fc", "state" -> ctx.symbolTable.isFeatureCategoryEnabled(operator);
                         case "__SUB__" -> ctx.symbolTable.isFeatureCategoryEnabled("current_sub");
                         default -> operatorEnabled;
                     };
@@ -607,11 +607,22 @@ public class Parser {
         Node right;
 
         if (INFIX_OP.contains(token.text)) {
+            String operator = token.text;
+            boolean operatorEnabled = switch (operator) {
+                case "isa" -> ctx.symbolTable.isFeatureCategoryEnabled("isa");
+                case "&.", "|.", "^.", "~.", "&.=", "|.=", "^.=", "~.=" ->
+                        ctx.symbolTable.isFeatureCategoryEnabled("bitwise");
+                default -> true;
+            };
+            if (!operatorEnabled) {
+                throw new PerlCompilerException(tokenIndex, "syntax error", ctx.errorUtil);
+            }
+
             right = parseExpression(precedence);
             if (right == null) {
                 throw new PerlCompilerException(tokenIndex, "syntax error", ctx.errorUtil);
             }
-            return new BinaryOperatorNode(token.text, left, right, tokenIndex);
+            return new BinaryOperatorNode(operator, left, right, tokenIndex);
         }
 
         switch (token.text) {
