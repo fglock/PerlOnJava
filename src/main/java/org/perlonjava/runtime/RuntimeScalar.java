@@ -459,7 +459,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return switch (type) {
             case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as an HASH reference");
             case HASHREFERENCE -> (RuntimeHash) value;
-            default -> throw new PerlCompilerException("Variable does not contain an hash reference");
+            default -> throw new PerlCompilerException("Variable does not contain a hash reference");
         };
     }
 
