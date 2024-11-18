@@ -44,6 +44,10 @@ public class OperatorHandler {
         put("|.", "bitwiseOrDot", "org/perlonjava/operators/BitwiseOperators");
         put("^.", "bitwiseXorDot", "org/perlonjava/operators/BitwiseOperators");
         put("bitwiseNotDot", "bitwiseNotDot", "org/perlonjava/operators/BitwiseOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("binary&", "bitwiseAndBinary", "org/perlonjava/operators/BitwiseOperators");
+        put("binary|", "bitwiseOrBinary", "org/perlonjava/operators/BitwiseOperators");
+        put("binary^", "bitwiseXorBinary", "org/perlonjava/operators/BitwiseOperators");
+        put("bitwiseNotBinary", "bitwiseNotBinary", "org/perlonjava/operators/BitwiseOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         // Compare
         put("<", "lessThan", "org/perlonjava/operators/CompareOperators");

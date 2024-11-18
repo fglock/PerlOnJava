@@ -100,7 +100,7 @@
 
 - **v1.12.0**: Concurrency and Security Features
   - Planned release date: 2024-12-10
-  - "use features" implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`.
+  - "use features" implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `bitwise`.
   - Stash can be accessed as a hash like `$namespace::{entry}`.
   - Added stash constants:  $constant::{_CAN_PCS} = \$const;
   - Added `exists &sub`

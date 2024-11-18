@@ -160,16 +160,19 @@ public class EmitterVisitor implements Visitor {
             case "*=":
             case "&=":
             case "&.=":
+            case "binary&=":
             case "<<=":
             case "-=":
             case "/=":
             case "|=":
             case "|.=":
+            case "binary|=":
             case ">>=":
             case ".=":
             case "%=":
             case "^=":
             case "^.=":
+            case "binary^=":
             case "x=":
                 String newOp = operator.substring(0, operator.length() - 1);
                 OperatorHandler operatorHandler = OperatorHandler.get(newOp);
@@ -422,6 +425,9 @@ public class EmitterVisitor implements Visitor {
                 break;
             case "~":
                 handleUnaryBuiltin(node, "bitwiseNot");
+                break;
+            case "binary~":
+                handleUnaryBuiltin(node, "bitwiseNotBinary");
                 break;
             case "~.":
                 handleUnaryBuiltin(node, "bitwiseNotDot");
