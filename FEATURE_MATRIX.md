@@ -143,6 +143,7 @@
 - ✔️   **Named subroutines**: Support for named subroutines is implemented.
 - ✔️   **Calling context**: `wantarray` is implemented.
 - ✔️   **exists**: `exists &sub` is implemented.
+- ❌  **defined**: `defined &sub` is not implemented.
 - 🚧  **Subroutine prototypes**: Partial implementation of prototypes; some features are supported.
 - ❌  **Subroutine signatures**: Formal parameters are not implemented.
 - ❌  **Inline "constant" subroutines optimization**: Optimization for inline constants is not yet implemented.
