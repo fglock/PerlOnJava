@@ -20,6 +20,7 @@ public class GlobalContext {
     // Special variables internal names
     public static final String LAST_FH = "main::" + Character.toString('L' - 'A' + 1) + "AST_FH"; // $^LAST_FH
     public static final String GLOBAL_PHASE = "main::" + Character.toString('G' - 'A' + 1) + "LOBAL_PHASE"; // $^GLOBAL_PHASE
+    public static final String TAINT = "main::" + Character.toString('T' - 'A' + 1) + "AINT"; // $^TAINT
 
     /**
      * Initializes global variables, arrays, hashes, internal modules, file handles, and other entities.
@@ -50,6 +51,7 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::$").set(ProcessHandle.current().pid()); // initialize `$$` to process id
         GlobalVariable.getGlobalVariable("main::0").set(compilerOptions.fileName);
         GlobalVariable.getGlobalVariable(GLOBAL_PHASE).set(""); // ${^GLOBAL_PHASE}
+        GlobalVariable.getGlobalVariable(TAINT); // ${^TAINT}
 
         GlobalVariable.globalVariables.put("main::`", new ScalarSpecialVariable(ScalarSpecialVariable.Id.PREMATCH));
         GlobalVariable.globalVariables.put("main::&", new ScalarSpecialVariable(ScalarSpecialVariable.Id.MATCH));
