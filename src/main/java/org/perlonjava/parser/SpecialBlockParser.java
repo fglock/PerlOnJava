@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.perlonjava.runtime.GlobalContext.GLOBAL_PHASE;
 import static org.perlonjava.runtime.SpecialBlock.*;
 
 /**
@@ -76,8 +77,7 @@ public class SpecialBlockParser {
                     new BinaryOperatorNode("=",
                             new OperatorNode("local",
                                     new OperatorNode("$",
-                                            new IdentifierNode("main::" + Character.toString('G' - 'A' + 1) + "LOBAL_PHASE",
-                                                    tokenIndex),
+                                            new IdentifierNode(GLOBAL_PHASE, tokenIndex),
                                             tokenIndex),
                                     tokenIndex),
                             new StringNode(phaseName, tokenIndex),

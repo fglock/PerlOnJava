@@ -413,7 +413,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
         if ((flags & COMMENTS) != 0) flagString.append('x');
 
         // Check if no flags are set
-        if (flagString.length() == 0) {
+        if (flagString.isEmpty()) {
             // XXX TODO Java regex doesn't support '^'
             // return "(?^:" + pattern.toString() + ")";
             return pattern.toString();
