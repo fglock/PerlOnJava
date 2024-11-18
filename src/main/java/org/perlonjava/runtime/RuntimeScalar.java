@@ -672,6 +672,11 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar defined() {
+        if (type == RuntimeScalarType.GLOB && value == null) {
+            // getGlobalCodeRef returns an "empty glob" if the codeRef is not set
+            // XXX TODO implement a better response in getGlobalCodeRef
+            return scalarFalse;
+        }
         return getScalarBoolean(type != RuntimeScalarType.UNDEF);
     }
 

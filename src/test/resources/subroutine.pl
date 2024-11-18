@@ -23,6 +23,12 @@ say "ok # named subroutine with typeglob, no parameters, returned '$result'";
 @_ = ( 456, "ABC" );
 &x;
 
+print "not " if !exists &x; say "ok # subroutine exists";
+print "not " if !defined &x; say "ok # subroutine is defined";
+
+print "not " if exists &xnot; say "ok # subroutine !exists";
+print "not " if defined &xnot; say "ok # subroutine is !defined";
+
 # named subroutine with Symbol assignment
 
 my $sym_ref = qualify_to_ref( "A", "B" );
