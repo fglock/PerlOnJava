@@ -203,13 +203,14 @@ public class StringParser {
                     break;
                 case "$":
                 case "@":
-                    if (tokens.get(parser.tokenIndex).type == LexerTokenType.EOF) {
+                    LexerToken token1 = tokens.get(parser.tokenIndex);
+                    if (token1.type == LexerTokenType.EOF) {
                         // final $ or @
                         str.append(text);
                         break;
                     }
-                    if (tokens.get(parser.tokenIndex).type == LexerTokenType.WHITESPACE) {
-                        // space after $ or @
+                    if (token1.type == LexerTokenType.WHITESPACE || token1.text.equals(")")) {
+                        // space or `)` after $ or @
                         str.append(text);
                         break;
                     }
