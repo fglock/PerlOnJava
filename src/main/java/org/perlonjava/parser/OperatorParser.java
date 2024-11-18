@@ -10,6 +10,9 @@ import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.List;
 
+import static org.perlonjava.lexer.LexerTokenType.NEWLINE;
+import static org.perlonjava.lexer.LexerTokenType.WHITESPACE;
+import static org.perlonjava.parser.TokenUtils.consume;
 import static org.perlonjava.parser.TokenUtils.peek;
 
 /**
@@ -201,7 +204,7 @@ public class OperatorParser {
         return StringParser.parseRawString(parser, token.text);
     }
 
-    public static Node parseCoreOperator(Parser parser, LexerToken token) {
+    public static Node parseCoreOperator(Parser parser, LexerToken token, int startIndex) {
         Node operand;
         int currentIndex = parser.tokenIndex;
 
@@ -478,6 +481,18 @@ public class OperatorParser {
             case "s":
             case "m":
                 // Handle special-quoted domain-specific arguments
+                String operator = token.text;
+                // Skip whitespace, but not `#`
+                parser.tokenIndex = startIndex;
+                consume(parser);
+                while (parser.tokenIndex < parser.tokens.size()) {
+                    LexerToken token1 = parser.tokens.get(parser.tokenIndex);
+                    if (token1.type == WHITESPACE || token1.type == NEWLINE) {
+                        parser.tokenIndex++;
+                    } else {
+                        break;
+                    }
+                }
                 return StringParser.parseRawString(parser, token.text);
         }
         return null;

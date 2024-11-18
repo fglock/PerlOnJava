@@ -390,7 +390,7 @@ public class Parser {
                     };
                 }
                 if (operatorEnabled) {
-                    Node operation = OperatorParser.parseCoreOperator(this, token);
+                    Node operation = OperatorParser.parseCoreOperator(this, token, startIndex);
                     if (operation != null) {
                         return operation;
                     }
@@ -623,8 +623,7 @@ public class Parser {
             String operator = token.text;
             boolean operatorEnabled = switch (operator) {
                 case "isa" -> ctx.symbolTable.isFeatureCategoryEnabled("isa");
-                case "&.", "|.", "^.", "&.=", "|.=", "^.=" ->
-                        ctx.symbolTable.isFeatureCategoryEnabled("bitwise");
+                case "&.", "|.", "^.", "&.=", "|.=", "^.=" -> ctx.symbolTable.isFeatureCategoryEnabled("bitwise");
                 case "&", "|", "^", "&=", "|=", "^=" -> {
                     if (ctx.symbolTable.isFeatureCategoryEnabled("bitwise")) {
                         operator = "binary" + operator;
