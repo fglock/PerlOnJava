@@ -5,14 +5,14 @@ import org.perlonjava.runtime.*;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 /**
- * The Strict class provides functionalities similar to the Perl builtin module.
+ * The Builtin class provides functionalities similar to the Perl builtin module.
  */
-public class builtin extends PerlModuleBase {
+public class Builtin extends PerlModuleBase {
 
     /**
      * Constructor initializes the module.
      */
-    public builtin() {
+    public Builtin() {
         super("builtin");
     }
 
@@ -20,7 +20,7 @@ public class builtin extends PerlModuleBase {
      * Static initializer to set up the module.
      */
     public static void initialize() {
-        builtin internals = new builtin();
+        Builtin internals = new Builtin();
         try {
             internals.registerMethod("is_bool", "isBoolean", "$");
             internals.registerMethod("true", "scalarTrue", "");
