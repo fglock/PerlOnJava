@@ -42,9 +42,18 @@ print "not " if $iterated_count != $count;
 say "ok # Iterate operation";
 
 # Slice
+{
 my @slice = @hash{'key2', 'key3'};
 print "not " if @slice != 2 or $slice[0] ne 'value2' or $slice[1] ne 'value3';
 say "ok # Slice operation";
+}
+
+{
+my $hash = \%hash;
+my @slice = @$hash{'key2', 'key3'};
+print "not " if @slice != 2 or $slice[0] ne 'value2' or $slice[1] ne 'value3';
+say "ok # Slice operation";
+}
 
 # Slice delete
 delete @hash{'key2', 'key3'};

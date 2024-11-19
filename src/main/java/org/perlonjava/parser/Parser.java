@@ -712,7 +712,7 @@ public class Parser {
                         right = parsePrimary();
                         if (right instanceof HashLiteralNode) {
                             return new BinaryOperatorNode("{",
-                                    new OperatorNode("%", left, tokenIndex),
+                                    new OperatorNode("@", left, tokenIndex),
                                     right,
                                     tokenIndex);
                         } else if (right instanceof ArrayLiteralNode) {

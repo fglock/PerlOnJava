@@ -40,9 +40,18 @@ print "not " if @array != 6 or $array[2] != 10 or $array[3] != 11;
 say "ok # Splice operation";
 
 # Slice operation
+{
 my @slice = @array[1..3];
 print "not " if @slice != 3 or $slice[0] != 2 or $slice[2] != 11;
 say "ok # Slice operation";
+}
+
+{
+my $array = \@array;
+my @slice = @$array[1..3];
+print "not " if @slice != 3 or $slice[0] != 2 or $slice[2] != 11;
+say "ok # Slice operation";
+}
 
 # Negative indexing
 print "not " if $array[-1] != 5 or $array[-2] != 4;

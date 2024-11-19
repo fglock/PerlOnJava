@@ -50,7 +50,7 @@ public class Dereference {
                 }
                 return;
             }
-            if (sigil.equals("@") && sigilNode.operand instanceof IdentifierNode) {
+            if (sigil.equals("@")) {
                 /*  @a[10, 20]
                  *  BinaryOperatorNode: [
                  *    OperatorNode: @
@@ -135,7 +135,7 @@ public class Dereference {
                 }
                 return;
             }
-            if (sigil.equals("@") && sigilNode.operand instanceof IdentifierNode identifierNode) {
+            if (sigil.equals("@")) {
                 /*  @a{"a", "b"}
                  *  BinaryOperatorNode: {
                  *    OperatorNode: @
@@ -145,9 +145,9 @@ public class Dereference {
                  *      StringNode: b
                  */
                 // Rewrite the variable node from `@` to `%`
-                OperatorNode varNode = new OperatorNode("%", identifierNode, sigilNode.tokenIndex);
+                OperatorNode varNode = new OperatorNode("%", sigilNode.operand, sigilNode.tokenIndex);
 
-                emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) @var{} ");
+                emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) @var{} " + varNode);
                 varNode.accept(emitterVisitor.with(RuntimeContextType.LIST)); // target - left parameter
 
                 // emit the {x} as a RuntimeList
