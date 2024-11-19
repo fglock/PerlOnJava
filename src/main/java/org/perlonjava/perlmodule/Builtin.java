@@ -20,11 +20,11 @@ public class Builtin extends PerlModuleBase {
      * Static initializer to set up the module.
      */
     public static void initialize() {
-        Builtin internals = new Builtin();
+        Builtin builtin = new Builtin();
         try {
-            internals.registerMethod("is_bool", "isBoolean", "$");
-            internals.registerMethod("true", "scalarTrue", "");
-            internals.registerMethod("false", "scalarFalse", "");
+            builtin.registerMethod("is_bool", "isBoolean", "$");
+            builtin.registerMethod("true", "scalarTrue", "");
+            builtin.registerMethod("false", "scalarFalse", "");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Internals method: " + e.getMessage());
         }
