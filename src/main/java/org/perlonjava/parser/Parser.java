@@ -10,6 +10,7 @@ import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.*;
 
+import static org.perlonjava.parser.TokenUtils.consume;
 import static org.perlonjava.parser.TokenUtils.peek;
 
 public class Parser {
@@ -163,10 +164,20 @@ public class Parser {
                     // Must be followed by an identifier
                     tokenIndex++;
                     if (peek(this).type == LexerTokenType.IDENTIFIER) {
-                        return SubroutineParser.parseSubroutineDefinition(this, true);
+                        return SubroutineParser.parseSubroutineDefinition(this, true, "our");
                     }
                     // otherwise backtrack
                     tokenIndex = currentIndex;
+                    break;
+                case "our", "my", "state":
+                    String declaration = consume(this).text;
+                    if (consume(this).text.equals("sub") && peek(this).type == LexerTokenType.IDENTIFIER) {
+                        // my sub name
+                        return SubroutineParser.parseSubroutineDefinition(this, true, declaration);
+                    }
+                    // otherwise backtrack
+                    tokenIndex = currentIndex;
+                    break;
             }
         }
         if (token.type == LexerTokenType.OPERATOR) {

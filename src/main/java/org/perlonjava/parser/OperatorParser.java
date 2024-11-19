@@ -470,7 +470,7 @@ public class OperatorParser {
                 return parseRequire(parser);
             case "sub":
                 // Handle 'sub' keyword to parse an anonymous subroutine
-                return SubroutineParser.parseSubroutineDefinition(parser, false);
+                return SubroutineParser.parseSubroutineDefinition(parser, false, null);
             case "q":
             case "qq":
             case "qx":

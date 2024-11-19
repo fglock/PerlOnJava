@@ -357,6 +357,10 @@ public class ScopedSymbolTable {
 
     // Methods for managing features using bit positions
     public void enableFeatureCategory(String feature) {
+        if (isNoOpFeature(feature)) {
+            return;
+        }
+
         Integer bitPosition = featureBitPositions.get(feature);
         if (bitPosition == null) {
             throw new PerlCompilerException("Feature \"" + feature + "\" is not supported by Perl " + perlVersionNoV);
@@ -366,6 +370,10 @@ public class ScopedSymbolTable {
     }
 
     public void disableFeatureCategory(String feature) {
+        if (isNoOpFeature(feature)) {
+            return;
+        }
+
         Integer bitPosition = featureBitPositions.get(feature);
         if (bitPosition == null) {
             throw new PerlCompilerException("Feature \"" + feature + "\" is not supported by Perl " + perlVersionNoV);
@@ -375,12 +383,21 @@ public class ScopedSymbolTable {
     }
 
     public boolean isFeatureCategoryEnabled(String feature) {
+        if (isNoOpFeature(feature)) {
+            return true;
+        }
+
         Integer bitPosition = featureBitPositions.get(feature);
         if (bitPosition == null) {
             throw new PerlCompilerException("Feature \"" + feature + "\" is not supported by Perl " + perlVersionNoV);
         } else {
             return (featureFlagsStack.peek() & (1 << bitPosition)) != 0;
         }
+    }
+
+    private boolean isNoOpFeature(String feature) {
+        // no-op features
+        return feature.equals("postderef") || feature.equals("lexical_subs");
     }
 
     /**

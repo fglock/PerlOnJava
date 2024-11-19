@@ -85,7 +85,7 @@ public class SubroutineParser {
                 currentIndex);
     }
 
-    public static Node parseSubroutineDefinition(Parser parser, boolean wantName) {
+    public static Node parseSubroutineDefinition(Parser parser, boolean wantName, String declaration) {
         // This method is responsible for parsing an anonymous subroutine (a subroutine without a name)
         // or a named subroutine based on the 'wantName' flag.
         int currentIndex = parser.tokenIndex;
