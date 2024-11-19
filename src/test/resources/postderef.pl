@@ -9,9 +9,9 @@ use feature 'postderef';
     print "not " if "@arr" != "11 22 33";
     say "ok # Array postderef";
 
-    ## my @slice = $array_ref->@[ 2, 1 ];
-    ## print "not " if "@slice" != "33 22";
-    ## say "ok # Array postderef slice";
+    my @slice = $array_ref->@[ 2, 1 ];
+    print "not " if "@slice" != "33 22";
+    say "ok # Array postderef slice";
 }
 
 {
@@ -20,9 +20,9 @@ use feature 'postderef';
     print "not " if scalar(@arr) != 6 || !grep {$_ eq "aa"} @arr;
     say "ok # Hash postderef <@arr>";
 
-    ## my @slice = $hash_ref->@{ "cc", "bb" };
-    ## print "not " if "@slice" != "33 22";
-    ## say "ok # Hash postderef slice";
+    my @slice = $hash_ref->@{ "cc", "bb" };
+    print "not " if "@slice" != "33 22";
+    say "ok # Hash postderef slice";
 }
 
 my $x          = 123;

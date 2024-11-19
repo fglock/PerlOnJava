@@ -276,8 +276,8 @@
 - ✔️   **lib** pragma
 - 🚧  **utf8** pragma: utf8 is always on. Disabling utf8 might work in a future version.
 - ✔️   **feature** pragma
-  - ✔️  Features implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `bitwise`.
-  - ❌ Features missing: `evalbytes`, `module_true`, `postderef_qq`, `signatures`, `unicode_eval`, `unicode_strings`
+  - ✔️  Features implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `bitwise`, `postderef`.
+  - ❌ Features missing: `evalbytes`, `module_true`, `postderef_qq`, `signatures`, `unicode_eval`, `unicode_strings`, `defer`.
 - 🚧  **warnings** pragma
 - ❌  **version** pragma: version objects are not yet supported.
 - ❌  **experimental** pragma
@@ -288,8 +288,6 @@
 - ❌  **integer** pragma
 - ❌  **re** pragma for regular expression options.
 - ❌  **subs** pragma
-- ❌  **defer** feature: `defer` blocks are not implemented.
-- ❌  **postderef** feature
 - ✔️   **File::Basename** use the same version as Perl.
 
 
