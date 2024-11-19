@@ -29,9 +29,9 @@ public class Universal extends PerlModuleBase {
         Universal universal = new Universal();
         try {
             // Register methods with their respective signatures
-            universal.registerMethod("can", "$");
-            universal.registerMethod("isa", "$");
-            universal.registerMethod("DOES", "$");
+            universal.registerMethod("can", "$$");
+            universal.registerMethod("isa", "$$");
+            universal.registerMethod("DOES", "$$");
             universal.registerMethod("VERSION", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing UNIVERSAL method: " + e.getMessage());

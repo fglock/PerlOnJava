@@ -73,6 +73,7 @@
 - ❌  **Taint checks**: Support for taint checks is not implemented.
 - ❌  **`local` special cases**: Variable localization in for-loops is missing.
 - ❌  **`local` special cases**: `local *HANDLE = *HANDLE` doesn't create a new typeglob.
+- ❌  **Typeglob as hash**: `*$val{$k}` for `SCALAR`, `ARRAY`, `HASH` is not implemented.
 
 ## Objects
 - ✔️   **Objects**: Creating classes, method call syntax works.

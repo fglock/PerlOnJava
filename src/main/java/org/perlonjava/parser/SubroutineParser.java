@@ -41,8 +41,12 @@ public class SubroutineParser {
         if (subExists) {
             // Fetch the subroutine reference
             RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
-            prototype = ((RuntimeCode) codeRef.value).prototype;
-            attributes = ((RuntimeCode) codeRef.value).attributes;
+            if (codeRef.value == null) {
+                subExists = false;
+            } else {
+                prototype = ((RuntimeCode) codeRef.value).prototype;
+                attributes = ((RuntimeCode) codeRef.value).attributes;
+            }
         }
         parser.ctx.logDebug("SubroutineCall exists " + subExists + " prototype `" + prototype + "` attributes " + attributes);
 
