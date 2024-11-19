@@ -13,5 +13,6 @@ public enum RuntimeScalarType {
     ARRAYREFERENCE,
     HASHREFERENCE,
     GLOBREFERENCE,
-    VSTRING
+    VSTRING,
+    BOOLEAN
 }

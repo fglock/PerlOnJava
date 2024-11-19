@@ -51,8 +51,8 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
         this.i = b ? 1 : 0;
         this.s = b ? "1" : "";
         this.d = b ? 1 : 0;
-        this.value = i;
-        this.type = RuntimeScalarType.INTEGER;
+        this.value = b;
+        this.type = RuntimeScalarType.BOOLEAN;
     }
 
     /**

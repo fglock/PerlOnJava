@@ -82,12 +82,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar(boolean value) {
-        if (value) {
-            this.type = RuntimeScalarType.INTEGER;
-            this.value = 1;
-        } else {
-            this.type = RuntimeScalarType.UNDEF;
-        }
+            this.type = RuntimeScalarType.BOOLEAN;
+            this.value = value;
     }
 
     public RuntimeScalar(RuntimeScalar scalar) {
@@ -231,6 +227,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case STRING -> NumberParser.parseNumber(this).getInt();
             case UNDEF -> 0;
             case VSTRING -> 0;
+            case BOOLEAN -> (boolean) value ? 1 : 0;
             default -> ((RuntimeScalarReference) value).getIntRef();
         };
     }
@@ -242,6 +239,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case STRING -> NumberParser.parseNumber(this).getLong();
             case UNDEF -> 0L;
             case VSTRING -> 0L;
+            case BOOLEAN -> (boolean) value ? 1L : 0L;
             default -> ((RuntimeScalarReference) value).getIntRef();
         };
     }
@@ -253,6 +251,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case STRING -> NumberParser.parseNumber(this).getDouble();
             case UNDEF -> 0.0;
             case VSTRING -> 0.0;
+            case BOOLEAN -> (boolean) value ? 1.0D : 0.0D;
             default -> ((RuntimeScalarReference) value).getDoubleRef();
         };
     }
@@ -267,6 +266,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             }
             case UNDEF -> false;
             case VSTRING -> true;
+            case BOOLEAN -> (boolean) value;
             default -> ((RuntimeScalarReference) value).getBooleanRef();
         };
     }
@@ -361,6 +361,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case GLOB -> value.toString();
             case REGEX -> value.toString();
             case VSTRING -> (String) value;
+            case BOOLEAN -> (boolean) value ? "1" : "";
             default -> ((RuntimeScalarReference) value).toStringRef();
         };
     }
@@ -677,10 +678,21 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             // XXX TODO implement a better response in getGlobalCodeRef
             return scalarFalse;
         }
+        if (type == RuntimeScalarType.BOOLEAN) {
+            return (boolean) value ? scalarTrue : scalarFalse;
+        }
         return getScalarBoolean(type != RuntimeScalarType.UNDEF);
     }
 
     public boolean getDefinedBoolean() {
+        if (type == RuntimeScalarType.GLOB && value == null) {
+            // getGlobalCodeRef returns an "empty glob" if the codeRef is not set
+            // XXX TODO implement a better response in getGlobalCodeRef
+            return false;
+        }
+        if (type == RuntimeScalarType.BOOLEAN) {
+            return (boolean) value;
+        }
         return type != RuntimeScalarType.UNDEF;
     }
 
@@ -754,6 +766,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 return this;
             case STRING:
                 return ScalarUtils.stringIncrement(this);
+            case BOOLEAN:
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = this.getInt() + 1;
+                return this;
         }
         this.type = RuntimeScalarType.INTEGER;
         this.value = 1;
@@ -771,6 +787,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 break;
             case STRING:
                 ScalarUtils.stringIncrement(this);
+                break;
+            case BOOLEAN:
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = this.getInt() + 1;
                 break;
             default:
                 this.type = RuntimeScalarType.INTEGER;
@@ -791,6 +811,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 // Handle numeric decrement
                 this.set(NumberParser.parseNumber(this));
                 return this.preAutoDecrement();
+            case BOOLEAN:
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = this.getInt() - 1;
+                return this;
         }
         this.type = RuntimeScalarType.INTEGER;
         this.value = -1;
@@ -810,6 +834,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 // Handle numeric decrement
                 this.set(NumberParser.parseNumber(this));
                 this.preAutoDecrement();
+                break;
+            case BOOLEAN:
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = this.getInt() - 1;
                 break;
             default:
                 this.type = RuntimeScalarType.INTEGER;
@@ -1015,7 +1043,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     public RuntimeScalar require() {
         // https://perldoc.perl.org/functions/require
 
-        if (this.type == RuntimeScalarType.INTEGER || this.type == RuntimeScalarType.DOUBLE || this.type == RuntimeScalarType.VSTRING) {
+        if (this.type == RuntimeScalarType.INTEGER || this.type == RuntimeScalarType.DOUBLE || this.type == RuntimeScalarType.VSTRING || this.type == RuntimeScalarType.BOOLEAN) {
             // `require VERSION`
             Universal.compareVersion(
                     new RuntimeScalar(GlobalContext.perlVersion),
