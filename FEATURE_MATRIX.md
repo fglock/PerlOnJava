@@ -290,6 +290,8 @@
 - ❌  **re** pragma for regular expression options.
 - ❌  **subs** pragma
 - ✔️   **File::Basename** use the same version as Perl.
+- 🚧  **builtin** pragma:
+  - ✔️  Implemented: `true`, `false`, `is_bool`.
 
 
 ## Non-strict and Obsolete Features

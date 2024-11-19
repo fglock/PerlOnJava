@@ -105,6 +105,7 @@
   - Added stash constants:  `$constant::{_CAN_PCS} = \$const`;
   - Added `exists &sub`, `defined &sub`.
   - Added module `File::Basename`.
+  - Added `builtin` pragma: `true`, `false`, `is_bool`.
   - Work in progress:
     - `lexical_subs` feature.
     - `socket` and related operators.
