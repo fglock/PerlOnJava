@@ -614,8 +614,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
 
         // Method name can be:
-        // - Fully qualified
+        // - A short name (e.g., "new")
+        // - Fully qualified name
         // - A variable or dereference (e.g., $file->${ \'save' })
+        // - "SUPER::name"
 
         // Class name can be:
         // - A string
