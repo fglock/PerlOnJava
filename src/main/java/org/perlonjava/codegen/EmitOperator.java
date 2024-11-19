@@ -415,6 +415,9 @@ public class EmitOperator {
                 operatorHandler.getMethodName(),
                 operatorHandler.getDescriptor(),
                 false);
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+        }
         // If the context is VOID, pop the result from the stack.
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);

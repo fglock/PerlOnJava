@@ -189,6 +189,10 @@ public class Lexer {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "%=");
                     }
+                    if (position + 2 <= input.length && input[position + 1] == '*') {
+                        position += 2;
+                        return new LexerToken(LexerTokenType.OPERATOR, "%*");
+                    }
                     break;
                 case '&':
                     if (position + 3 <= input.length

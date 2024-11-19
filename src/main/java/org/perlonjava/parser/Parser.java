@@ -284,10 +284,12 @@ public class Parser {
                 switch (token.text) {
                     case "{":
                     case "(":
+                    case "[":
                         braceCount++;
                         break;
                     case ")":
                     case "}":
+                    case "]":
                         braceCount--;
                         break;
                     case ",":
@@ -694,6 +696,9 @@ public class Parser {
                     case "$*":
                         TokenUtils.consume(this);
                         return new OperatorNode("$", left, tokenIndex);
+                    case "%*":
+                        TokenUtils.consume(this);
+                        return new OperatorNode("%", left, tokenIndex);
                     case "&*":
                         TokenUtils.consume(this);
                         return new BinaryOperatorNode("(",
@@ -701,6 +706,13 @@ public class Parser {
                                 new OperatorNode("@",
                                         new IdentifierNode("_", tokenIndex), tokenIndex),
                                 tokenIndex);
+                    case "@":
+                        // ->@[0,-1];
+                        TokenUtils.consume(this);
+                        throw new PerlCompilerException(tokenIndex, "Not implemented ->@[slice]", ctx.errorUtil);
+//                        if (TokenUtils.peek(this).text.equals("[")) {
+//                        }
+//                        return new OperatorNode("@", left, tokenIndex);
                 }
                 parsingForLoopVariable = true;
                 right = parseExpression(precedence);
