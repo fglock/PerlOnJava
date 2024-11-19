@@ -106,6 +106,8 @@
   - Added `exists &sub`, `defined &sub`.
   - Added module `File::Basename`.
   - Work in progress:
+    - `postderef` feature.
+    - `lexical_subs` feature.
     - `socket` and related operators.
     - `use VERSION`, `require VERSION`.
     - lexical warnings.

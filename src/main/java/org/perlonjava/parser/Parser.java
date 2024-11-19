@@ -688,6 +688,19 @@ public class Parser {
                         TokenUtils.consume(this);
                         right = new ArrayLiteralNode(ListParser.parseList(this, "]", 1), tokenIndex);
                         return new BinaryOperatorNode(token.text, left, right, tokenIndex);
+                    case "@*":
+                        TokenUtils.consume(this);
+                        return new OperatorNode("@", left, tokenIndex);
+                    case "$*":
+                        TokenUtils.consume(this);
+                        return new OperatorNode("$", left, tokenIndex);
+                    case "&*":
+                        TokenUtils.consume(this);
+                        return new BinaryOperatorNode("(",
+                                left,
+                                new OperatorNode("@",
+                                        new IdentifierNode("_", tokenIndex), tokenIndex),
+                                tokenIndex);
                 }
                 parsingForLoopVariable = true;
                 right = parseExpression(precedence);

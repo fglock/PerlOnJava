@@ -86,6 +86,11 @@ public class SubroutineParser {
     }
 
     public static Node parseSubroutineDefinition(Parser parser, boolean wantName, String declaration) {
+
+        if (declaration != null && (declaration.equals("my") || declaration.equals("state"))) {
+            throw new PerlCompilerException("Not implemented: sub declaration `" + declaration + "`");
+        }
+
         // This method is responsible for parsing an anonymous subroutine (a subroutine without a name)
         // or a named subroutine based on the 'wantName' flag.
         int currentIndex = parser.tokenIndex;
