@@ -709,10 +709,20 @@ public class Parser {
                     case "@":
                         // ->@[0,-1];
                         TokenUtils.consume(this);
-                        throw new PerlCompilerException(tokenIndex, "Not implemented ->@[slice]", ctx.errorUtil);
-//                        if (TokenUtils.peek(this).text.equals("[")) {
-//                        }
-//                        return new OperatorNode("@", left, tokenIndex);
+                        right = parsePrimary();
+                        if (right instanceof HashLiteralNode) {
+                            return new BinaryOperatorNode("{",
+                                    new OperatorNode("%", left, tokenIndex),
+                                    right,
+                                    tokenIndex);
+                        } else if (right instanceof ArrayLiteralNode) {
+                            return new BinaryOperatorNode("[",
+                                    new OperatorNode("@", left, tokenIndex),
+                                    right,
+                                    tokenIndex);
+                        } else {
+                            throw new PerlCompilerException(tokenIndex, "syntax error", ctx.errorUtil);
+                        }
                 }
                 parsingForLoopVariable = true;
                 right = parseExpression(precedence);
