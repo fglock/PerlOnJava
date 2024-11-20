@@ -4,12 +4,10 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.perlonjava.astnode.BinaryOperatorNode;
+import org.perlonjava.astnode.IdentifierNode;
 import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.astnode.SubroutineNode;
-import org.perlonjava.runtime.RuntimeCode;
-import org.perlonjava.runtime.RuntimeContextType;
-import org.perlonjava.runtime.ScopedSymbolTable;
-import org.perlonjava.runtime.SymbolTable;
+import org.perlonjava.runtime.*;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -179,7 +177,16 @@ public class EmitSubroutine {
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // Execute operands in scalar context
 
+        String subroutineName = "";
+        if (node.left instanceof OperatorNode operatorNode && operatorNode.operator.equals("&")) {
+            if (operatorNode.operand instanceof IdentifierNode identifierNode) {
+                subroutineName = NameNormalizer.normalizeVariableName(identifierNode.name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
+                emitterVisitor.ctx.logDebug("handleApplyElementOperator subroutine " + subroutineName);
+            }
+        }
+
         node.left.accept(scalarVisitor); // Target - left parameter: Code ref
+        emitterVisitor.ctx.mv.visitLdcInsn(subroutineName);
         node.right.accept(emitterVisitor.with(RuntimeContextType.LIST)); // Right parameter: parameter list
 
         // Transform the value in the stack to RuntimeArray
@@ -189,7 +196,7 @@ public class EmitSubroutine {
                 Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/RuntimeScalar",
                 "apply",
-                "(Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
+                "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                 false); // Generate an .apply() call
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             // Transform the value in the stack to RuntimeScalar

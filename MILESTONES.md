@@ -108,8 +108,8 @@
   - Added `builtin` pragma: `true`, `false`, `is_bool`.
   - Added `re` pragma: `is_regexp`.
   - Added `SUPER::method` method resolution.
+  - Added `AUTOLOAD` default subroutine.
   - Work in progress:
-    - `AUTOLOAD` default subroutine.
     - `lexical_subs` feature.
     - `socket` and related operators.
     - `use VERSION`, `require VERSION`.

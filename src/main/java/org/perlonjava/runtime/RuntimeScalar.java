@@ -492,22 +492,29 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             return ((RuntimeCode) this.value).apply(a, callContext);
         } else {
             // If the type is not CODE, throw an exception indicating an invalid state
+            throw new PerlCompilerException("Not a CODE reference");
+        }
+    }
+
+    // Method to apply (execute) a subroutine reference
+    public RuntimeList apply(String subroutineName, RuntimeArray a, int callContext) {
+        // Check if the type of this RuntimeScalar is CODE
+        if (this.type == RuntimeScalarType.CODE) {
+            // Cast the value to RuntimeCode and call apply()
+            return ((RuntimeCode) this.value).apply(a, callContext);
+        } else {
+            // If the type is not CODE, throw an exception indicating an invalid state
 
             // Does AUTOLOAD exist?
-            RuntimeList callStack = caller(new RuntimeList(), RuntimeContextType.SCALAR);
-            if (callStack.size() > 0) {
-                // System.err.println("Call stack: " + callStack.elements.getFirst());
+            if (!subroutineName.isEmpty()) {
                 // Check if AUTOLOAD exists
-                String packageName = callStack.elements.getFirst().toString();
-                String fullName = packageName + "::AUTOLOAD";
+                String autoloadString = subroutineName.substring(0, subroutineName.lastIndexOf("::") + 2) + "AUTOLOAD";
                 // System.err.println("AUTOLOAD: " + fullName);
-                RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(fullName );
+                RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
                 if (autoload.getDefinedBoolean()) {
                     // System.err.println("AUTOLOAD exists: " + fullName);
                     // Set $AUTOLOAD name
-                    // XXX TODO - what is the subroutine name?
-                    String subroutineName = "my_subroutine";
-                    getGlobalVariable(fullName).set(packageName + "::" + subroutineName);
+                    getGlobalVariable(autoloadString).set(subroutineName);
                     // Call AUTOLOAD
                     return autoload.apply(a, callContext);
                 }

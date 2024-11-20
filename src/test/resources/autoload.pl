@@ -25,26 +25,15 @@ sub b {
 sub AUTOLOAD {
     our $AUTOLOAD;
     $test_count++;
-    ## if ($AUTOLOAD eq 'X::callme' && @_ == 1 && $_[0] == 123) {
-    ##     say "ok $test_count - autoloading: $AUTOLOAD <@_>";
-    ## } elsif ($AUTOLOAD eq 'X::another_missing_sub' && @_ == 1 && $_[0] == 456) {
-    ##     say "ok $test_count - autoloading: $AUTOLOAD <@_>";
-    ## } elsif ($AUTOLOAD eq 'X::yet_another_missing_sub' && @_ == 1 && $_[0] == 789) {
-    ##     say "ok $test_count - autoloading: $AUTOLOAD <@_>";
-    ## } else {
-    ##     say "not ok $test_count - unexpected AUTOLOAD call: $AUTOLOAD <@_>";
-    ## }
-
-    if (@_ == 1 && $_[0] == 123) {
+    if ($AUTOLOAD eq 'X::callme' && @_ == 1 && $_[0] == 123) {
         say "ok $test_count - autoloading: $AUTOLOAD <@_>";
-    } elsif (@_ == 1 && $_[0] == 456) {
+    } elsif ($AUTOLOAD eq 'X::another_missing_sub' && @_ == 1 && $_[0] == 456) {
         say "ok $test_count - autoloading: $AUTOLOAD <@_>";
-    } elsif (@_ == 1 && $_[0] == 789) {
+    } elsif ($AUTOLOAD eq 'X::yet_another_missing_sub' && @_ == 1 && $_[0] == 789) {
         say "ok $test_count - autoloading: $AUTOLOAD <@_>";
     } else {
         say "not ok $test_count - unexpected AUTOLOAD call: $AUTOLOAD <@_>";
     }
-
 }
 
 # Call the subroutines
