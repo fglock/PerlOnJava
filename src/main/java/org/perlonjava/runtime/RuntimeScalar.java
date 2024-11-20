@@ -377,7 +377,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 yield ((RuntimeCode) value).toStringRef();
             }
             case VSTRING -> "VSTRING(0x" + value.hashCode() + ")";
-            default -> "SCALAR(0x" + "0x" + Integer.toHexString(value.hashCode()) + ")";
+            default -> "SCALAR(0x" + Integer.toHexString(value.hashCode()) + ")";
         };
         return (blessId == 0
                 ? ref
