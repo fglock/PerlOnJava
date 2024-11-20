@@ -25,6 +25,18 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     }
 
     /**
+     * Constructs a RuntimeArray from a list of RuntimeScalar elements.
+     *
+     * <p>This constructor initializes the array with the elements provided in the list.
+     * It creates a new ArrayList to ensure the internal list is mutable.
+     *
+     * @param list The list of RuntimeScalar elements to initialize the array with.
+     */
+    public RuntimeArray(List<RuntimeScalar> list) {
+        this.elements = new ArrayList<>(list);
+    }
+
+    /**
      * Constructs a RuntimeArray from a RuntimeList.
      *
      * @param a The RuntimeList to initialize the array with.

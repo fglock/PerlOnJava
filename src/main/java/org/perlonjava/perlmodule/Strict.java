@@ -52,7 +52,7 @@ public class Strict extends PerlModuleBase {
      */
     public static RuntimeList useStrict(RuntimeArray args, int ctx) {
         ScopedSymbolTable symbolTable = getCurrentScope();
-        if (args.size() == 0) {
+        if (args.size() == 1) {
             // Enable all strict options if no specific category is provided
             symbolTable.enableStrictOption(STRICT_REFS | STRICT_SUBS | STRICT_VARS);
         } else {

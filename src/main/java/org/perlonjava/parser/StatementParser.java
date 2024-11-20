@@ -8,12 +8,16 @@ import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 
+import java.util.List;
+
 import static org.perlonjava.parser.NumberParser.parseNumber;
 import static org.perlonjava.parser.SpecialBlockParser.runSpecialBlock;
 import static org.perlonjava.parser.SpecialBlockParser.setCurrentScope;
 import static org.perlonjava.parser.StringParser.parseVstring;
 import static org.perlonjava.perlmodule.Feature.featureManager;
+import static org.perlonjava.perlmodule.Strict.useStrict;
 import static org.perlonjava.perlmodule.Universal.normalizeVersion;
+import static org.perlonjava.perlmodule.Warnings.useWarnings;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
@@ -295,6 +299,20 @@ public class StatementParser {
                             ? ":default"
                             : ":" + majorVersion + "." + minorVersion;
                     featureManager.enableFeatureBundle(closestVersion);
+
+                    if (minorVersion >= 12) {
+                        // If the specified Perl version is 5.12 or higher,
+                        // strictures are enabled lexically.
+                        useStrict(new RuntimeArray(
+                                List.of(new RuntimeScalar("strict"))), RuntimeContextType.VOID);
+                    }
+                    if (minorVersion >= 35) {
+                        // If the specified Perl version is 5.35.0 or higher,
+                        // warnings are enabled.
+                        useWarnings(new RuntimeArray(
+                                List.of(new RuntimeScalar("warnings"),
+                                        new RuntimeScalar("all"))), RuntimeContextType.VOID);
+                    }
                 }
             }
             if (packageName == null) {

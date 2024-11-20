@@ -82,8 +82,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar(boolean value) {
-            this.type = RuntimeScalarType.BOOLEAN;
-            this.value = value;
+        this.type = RuntimeScalarType.BOOLEAN;
+        this.value = value;
     }
 
     public RuntimeScalar(RuntimeScalar scalar) {
