@@ -358,7 +358,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case DOUBLE -> Double.toString((double) value);
             case STRING -> (String) value;
             case UNDEF -> "";
-            case GLOB -> value.toString();
+            case GLOB -> value == null ? "" : value.toString();
             case REGEX -> value.toString();
             case VSTRING -> (String) value;
             case BOOLEAN -> (boolean) value ? "1" : "";
@@ -407,6 +407,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 return ((RuntimeHash) value).get(index.toString());
             case STRING:
                 throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref");
+            case GLOB:
+                ((RuntimeGlob) value).hashDerefGet(index);
             default:
                 throw new PerlCompilerException("Not a HASH reference");
         }

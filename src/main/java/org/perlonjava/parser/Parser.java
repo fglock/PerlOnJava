@@ -614,7 +614,7 @@ public class Parser {
 
         // Not a variable name, not a block. This could be a dereference like @$a
         // Parse the expression with the appropriate precedence
-        operand = parseExpression(getPrecedence(sigil) + 1);
+        operand = parseExpression(getPrecedence("$") + 1);
         return new OperatorNode(sigil, operand, tokenIndex);
     }
 
