@@ -107,8 +107,8 @@
   - Added unmodified core Perl modules `File::Basename`, `Data::Dumper`.
   - Added `builtin` pragma: `true`, `false`, `is_bool`.
   - Added `re` pragma: `is_regexp`.
+  - Added `SUPER::method` method resolution.
   - Work in progress:
-    - `SUPER::method` method resolution.
     - `lexical_subs` feature.
     - `socket` and related operators.
     - `use VERSION`, `require VERSION`.

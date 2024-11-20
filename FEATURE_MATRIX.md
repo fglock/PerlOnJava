@@ -82,7 +82,7 @@
 - ✔️   **Multiple Inheritance**: C3 method resolution is implemented.
 - ✔️   **Method caching**: Method resolution is cached.
 - ✔️   **Version check**: Method `VERSION ( [ REQUIRE ] )` is implemented.
-- ❌  **Inheritance**: `SUPER` is not yet implemented.
+- ✔️   **Inheritance**: `SUPER::method` is implemented.
 - ❌  **Autoload**: `AUTOLOAD` mechanism is not yet implemented.
 
 ## Operators
