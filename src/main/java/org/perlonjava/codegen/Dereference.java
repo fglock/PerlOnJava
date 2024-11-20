@@ -225,6 +225,8 @@ public class Dereference {
 
             object.accept(scalarVisitor);
             method.accept(scalarVisitor);
+            emitterVisitor.ctx.mv.visitLdcInsn(emitterVisitor.ctx.symbolTable.getCurrentPackage());
+
             arguments.accept(emitterVisitor.with(RuntimeContextType.LIST)); // right parameter: parameter list
 
             // Transform the value in the stack to RuntimeArray
@@ -234,7 +236,7 @@ public class Dereference {
                     Opcodes.INVOKEVIRTUAL,
                     "org/perlonjava/runtime/RuntimeScalar",
                     "call",
-                    "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                     false); // generate an .call()
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
                 // Transform the value in the stack to RuntimeScalar
