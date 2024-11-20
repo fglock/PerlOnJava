@@ -78,7 +78,7 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
      */
     @Override
     void vivify() {
-        throw new RuntimeException("Can't modify constant item");
+        throw new RuntimeException("Modification of a read-only value attempted");
     }
 
     /**

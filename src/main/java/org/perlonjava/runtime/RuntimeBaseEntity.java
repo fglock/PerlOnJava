@@ -55,4 +55,8 @@ public abstract class RuntimeBaseEntity implements RuntimeDataProvider, DynamicS
      * @return the number of elements as an integer
      */
     public abstract int countElements();
+
+    public void setBlessId(int blessId) {
+        this.blessId = blessId;
+    }
 }

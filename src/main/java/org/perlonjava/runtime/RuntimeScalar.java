@@ -512,7 +512,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 if (str.isEmpty()) {
                     str = "main";
                 }
-                ((RuntimeBaseEntity) value).blessId = NameNormalizer.getBlessId(str);
+                ((RuntimeBaseEntity) value).setBlessId(NameNormalizer.getBlessId(str));
                 break;
             default:
                 throw new PerlCompilerException("Can't bless non-reference value");

@@ -174,4 +174,10 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         this.value = lvalue.value;
         return ret;
     }
+
+    public void setBlessId(int blessId) {
+        vivify();
+        lvalue.setBlessId(blessId);
+        this.blessId = blessId;
+    }
 }
