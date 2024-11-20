@@ -159,4 +159,19 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         this.value = lvalue.value;
         return ret;
     }
+
+    /**
+     * "Blesses" a Perl reference into an object by associating it with a class name.
+     * This method is used to convert a Perl reference into an object of a specified class.
+     *
+     * @param className A RuntimeScalar representing the name of the class to bless the reference into.
+     * @return A RuntimeScalar representing the blessed object.
+     */
+    public RuntimeScalar bless(RuntimeScalar className) {
+        vivify();
+        RuntimeScalar ret = lvalue.bless(className);
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return ret;
+    }
 }

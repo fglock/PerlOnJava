@@ -104,8 +104,9 @@
   - Stash can be accessed as a hash like `$namespace::{entry}`.
   - Added stash constants:  `$constant::{_CAN_PCS} = \$const`;
   - Added `exists &sub`, `defined &sub`.
-  - Added module `File::Basename`.
+  - Added unmodified core Perl modules `File::Basename`, `Data::Dumper`.
   - Added `builtin` pragma: `true`, `false`, `is_bool`.
+  - Added `re` pragma: `is_regexp`.
   - Work in progress:
     - `lexical_subs` feature.
     - `socket` and related operators.

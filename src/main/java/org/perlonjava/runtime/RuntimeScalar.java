@@ -496,7 +496,13 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
     }
 
-    // Method to "bless" a Perl reference into an object
+    /**
+     * "Blesses" a Perl reference into an object by associating it with a class name.
+     * This method is used to convert a Perl reference into an object of a specified class.
+     *
+     * @param className A RuntimeScalar representing the name of the class to bless the reference into.
+     * @return A RuntimeScalar representing the blessed object.
+     */
     public RuntimeScalar bless(RuntimeScalar className) {
         switch (type) {
             case REFERENCE:

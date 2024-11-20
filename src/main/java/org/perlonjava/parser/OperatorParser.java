@@ -429,6 +429,12 @@ public class OperatorParser {
             case "keys":
             case "each":
                 operand = parser.parsePrimary();
+                if (operand instanceof ListNode listNode) {
+                    if (listNode.elements.size()!= 1) {
+                        throw new PerlCompilerException(parser.tokenIndex, "Too many arguments for " + token.text, parser.ctx.errorUtil);
+                    }
+                    operand = listNode.elements.get(0);
+                }
                 return new OperatorNode(token.text, operand, currentIndex);
             case "our":
             case "state":
