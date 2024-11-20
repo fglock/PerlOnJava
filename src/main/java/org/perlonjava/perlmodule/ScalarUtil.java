@@ -59,7 +59,7 @@ public class ScalarUtil extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for blessed() method");
         }
         RuntimeScalar scalar = args.get(0);
-        System.out.println("ScalarUtil.blessed: " + scalar + " : " + scalar.blessId);
+        // System.out.println("ScalarUtil.blessed: " + scalar + " : " + scalar.blessId);
         return scalar.blessed().getList();
     }
 

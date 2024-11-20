@@ -163,6 +163,7 @@ public class SpecialBlockParser {
             message += blockPhase + " failed--compilation aborted";
             throw new PerlCompilerException(parser.tokenIndex, message, parser.ctx.errorUtil);
         }
+        GlobalVariable.getGlobalVariable("main::@").set("");
 
         if (!blockPhase.equals("BEGIN")) {
             RuntimeScalar codeRef = (RuntimeScalar) result.elements.getFirst();

@@ -208,7 +208,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
      * @throws PerlCompilerException Always thrown as 'keys' is not implemented.
      */
     public RuntimeArray keys() {
-        throw new PerlCompilerException("Type of arg 1 to values must be hash or array");
+        throw new PerlCompilerException("Type of arg 1 to keys must be hash or array");
     }
 
     /**

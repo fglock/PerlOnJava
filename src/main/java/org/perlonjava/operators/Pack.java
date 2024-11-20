@@ -74,7 +74,7 @@ public class Pack {
                         case 'S':
                             writeShort(output, value.getInt());
                             break;
-                        case 'L':
+                        case 'L', 'J':
                             writeLong(output, (long) value.getDouble());
                             break;
                         case 'N':

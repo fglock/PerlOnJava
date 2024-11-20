@@ -1159,7 +1159,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // keys() operator
     public RuntimeArray keys() {
-        throw new PerlCompilerException("Type of arg 1 to values must be hash or array");
+        throw new PerlCompilerException("Type of arg 1 to keys must be hash or array");
     }
 
     // values() operator

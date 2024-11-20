@@ -260,7 +260,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return Throws an IllegalStateException as typeglobs do not support keys.
      */
     public RuntimeArray keys() {
-        throw new IllegalStateException("Type of arg 1 to values must be hash or array");
+        throw new IllegalStateException("Type of arg 1 to keys must be hash or array");
     }
 
     /**
