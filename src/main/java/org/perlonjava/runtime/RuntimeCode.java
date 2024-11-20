@@ -210,6 +210,23 @@ public class RuntimeCode implements RuntimeScalarReference {
         }
     }
 
+    public RuntimeList apply(String subroutineName, RuntimeArray a, int callContext) {
+        if (constantValue != null) {
+            // Alternative way to create constants like: `$constant::{_CAN_PCS} = \$const`
+            return new RuntimeList(constantValue);
+        }
+        try {
+            return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
+        } catch (Exception e) {
+
+            if (!subroutineName.isEmpty() && this.methodObject == null) {
+                throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
+            }
+
+            throw new RuntimeException(e);
+        }
+    }
+
     /**
      * Returns a string representation of the CODE reference.
      *

@@ -501,7 +501,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         // Check if the type of this RuntimeScalar is CODE
         if (this.type == RuntimeScalarType.CODE) {
             // Cast the value to RuntimeCode and call apply()
-            return ((RuntimeCode) this.value).apply(a, callContext);
+            return ((RuntimeCode) this.value).apply(subroutineName, a, callContext);
         } else {
             // If the type is not CODE, throw an exception indicating an invalid state
 
@@ -518,6 +518,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                     // Call AUTOLOAD
                     return autoload.apply(a, callContext);
                 }
+            }
+
+            if (!subroutineName.isEmpty() && this.type == RuntimeScalarType.GLOB && this.value == null) {
+                throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
             }
 
             throw new PerlCompilerException("Not a CODE reference");
