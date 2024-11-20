@@ -83,7 +83,8 @@
 - ✔️   **Method caching**: Method resolution is cached.
 - ✔️   **Version check**: Method `VERSION ( [ REQUIRE ] )` is implemented.
 - ✔️   **Inheritance**: `SUPER::method` is implemented.
-- ❌  **Autoload**: `AUTOLOAD` mechanism is not yet implemented.
+- ✔️   **Autoload**: `AUTOLOAD` mechanism is implemented.
+- ❌  **Autoload**: `$AUTOLOAD` varable is not yet implemented.
 
 ## Operators
 - ✔️   **Simple arithmetic**: Operators like `+`, `-`, `*`, and `%` are supported.

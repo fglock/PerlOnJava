@@ -492,6 +492,27 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             return ((RuntimeCode) this.value).apply(a, callContext);
         } else {
             // If the type is not CODE, throw an exception indicating an invalid state
+
+            // Does AUTOLOAD exist?
+            RuntimeList callStack = caller(new RuntimeList(), RuntimeContextType.SCALAR);
+            if (callStack.size() > 0) {
+                // System.err.println("Call stack: " + callStack.elements.getFirst());
+                // Check if AUTOLOAD exists
+                String packageName = callStack.elements.getFirst().toString();
+                String fullName = packageName + "::AUTOLOAD";
+                // System.err.println("AUTOLOAD: " + fullName);
+                RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(fullName );
+                if (autoload.getDefinedBoolean()) {
+                    // System.err.println("AUTOLOAD exists: " + fullName);
+                    // Set $AUTOLOAD name
+                    // XXX TODO - what is the subroutine name?
+                    String subroutineName = "my_subroutine";
+                    getGlobalVariable(fullName).set(packageName + "::" + subroutineName);
+                    // Call AUTOLOAD
+                    return autoload.apply(a, callContext);
+                }
+            }
+
             throw new PerlCompilerException("Not a CODE reference");
         }
     }
