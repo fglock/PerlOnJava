@@ -287,8 +287,8 @@
 - ❌  **bignum, bigint, and bigrat** pragmas
 - ❌  **encoding** pragma
 - ❌  **integer** pragma
-- ❌  **re** pragma for regular expression options.
-- 🚧  **subs** pragma: Implemented `is_regexp`.
+- 🚧  **re** pragma for regular expression options: Implemented `is_regexp`.
+- ❌  **subs** pragma.
 - ✔️   **File::Basename** use the same version as Perl.
 - 🚧  **builtin** pragma:
   - ✔️  Implemented: `true`, `false`, `is_bool`.
