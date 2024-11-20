@@ -102,7 +102,17 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         return value.scalar();
     }
 
-    // Method to implement `*$v{CODE}`
+    /**
+     * Retrieves a reference or value associated with a specific key from a global variable.
+     *
+     * <p>This method implements the dereferencing operation for a glob hash, allowing access
+     * to various global entities such as CODE, IO, SCALAR, ARRAY, and HASH based on the
+     * provided index. It returns a reference or value corresponding to the key.
+     *
+     * @param index The scalar representing the key to dereference.
+     * @return A RuntimeScalar representing the dereferenced value or reference. If the key
+     *         is not recognized, an empty RuntimeScalar is returned.
+     */
     public RuntimeScalar hashDerefGet(RuntimeScalar index) {
         // System.out.println("glob hashDerefGet " + index.toString());
         return switch (index.toString()) {
