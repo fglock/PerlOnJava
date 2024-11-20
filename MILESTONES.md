@@ -108,6 +108,7 @@
   - Added `builtin` pragma: `true`, `false`, `is_bool`.
   - Added `re` pragma: `is_regexp`.
   - Work in progress:
+    - `SUPER::method` method resolution.
     - `lexical_subs` feature.
     - `socket` and related operators.
     - `use VERSION`, `require VERSION`.

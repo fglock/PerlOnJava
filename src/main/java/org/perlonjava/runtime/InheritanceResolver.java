@@ -49,6 +49,7 @@ public class InheritanceResolver {
      * @return A list of class names in the order of method resolution.
      */
     public static List<String> linearizeC3(String className) {
+        // System.out.println("linearizeC3: " + className);
         List<String> result = linearizedClassesCache.get(className);
         if (result == null) {
             Map<String, List<String>> isaMap = new HashMap<>();
@@ -57,6 +58,7 @@ public class InheritanceResolver {
             result.add("UNIVERSAL");
             linearizedClassesCache.put(className, result);
         }
+        // System.out.println("Linearized hierarchy for " + className + ": " + result);
         return result;
     }
 
@@ -79,6 +81,7 @@ public class InheritanceResolver {
         }
 
         isaMap.put(className, parents);
+        // System.out.println("ISA for " + className + ": " + parents);
 
         // Recursively populate for parent classes
         for (String parent : parents) {
@@ -116,7 +119,7 @@ public class InheritanceResolver {
             String candidate = null;
             for (List<String> linearization : linearizations) {
                 if (linearization.isEmpty()) continue;
-                candidate = linearization.getFirst();
+                candidate = linearization.get(0);
                 boolean isValidCandidate = true;
                 for (List<String> other : linearizations) {
                     if (other.indexOf(candidate) > 0) {
@@ -132,15 +135,17 @@ public class InheritanceResolver {
             }
 
             result.add(candidate);
+            // System.out.println("Selected candidate: " + candidate);
             for (List<String> linearization : linearizations) {
-                if (!linearization.isEmpty() && linearization.getFirst().equals(candidate)) {
-                    linearization.removeFirst();
+                if (!linearization.isEmpty() && linearization.get(0).equals(candidate)) {
+                    linearization.remove(0);
                 }
             }
             linearizations.removeIf(List::isEmpty);
         }
 
-        result.add(className);
+        // Ensure the current class is added at the beginning of the result
+        result.add(0, className);
         return result;
     }
 }
