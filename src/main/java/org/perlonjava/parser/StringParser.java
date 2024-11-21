@@ -212,8 +212,9 @@ public class StringParser {
                     if (token1.type == LexerTokenType.WHITESPACE
                             || token1.text.equals(")")
                             || token1.text.equals("%")
-                            || token1.text.equals("|")) {
-                        // space, `)`, `%`, `|` after $ or @
+                            || token1.text.equals("|")
+                            || token1.text.equals("\\")) {
+                        // space, `)`, `%`, `|`, `\` after $ or @
                         str.append(text);
                         break;
                     }
