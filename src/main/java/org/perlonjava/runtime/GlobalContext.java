@@ -112,6 +112,7 @@ public class GlobalContext {
         Carp.initialize();
         Re.initialize();
         Cwd.initialize();
+        FileSpec.initialize();
 
         // Reset method cache after initializing UNIVERSAL
         InheritanceResolver.invalidateCache();
