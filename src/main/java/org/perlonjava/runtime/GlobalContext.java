@@ -111,6 +111,7 @@ public class GlobalContext {
         Lib.initialize();
         Carp.initialize();
         Re.initialize();
+        Cwd.initialize();
 
         // Reset method cache after initializing UNIVERSAL
         InheritanceResolver.invalidateCache();

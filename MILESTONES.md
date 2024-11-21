@@ -100,11 +100,12 @@
 
 - **v1.12.0**: Concurrency and Security Features
   - Planned release date: 2024-12-10
-  - "use features" implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `bitwise`, `postderef`.
+  - "use feature" implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `bitwise`, `postderef`.
   - Stash can be accessed as a hash like `$namespace::{entry}`.
   - Added stash constants:  `$constant::{_CAN_PCS} = \$const`;
   - Added `exists &sub`, `defined &sub`.
   - Added unmodified core Perl modules `File::Basename`, `Data::Dumper`.
+  - Added `Cwd` module.
   - Added `builtin` pragma: `true`, `false`, `is_bool`.
   - Added `re` pragma: `is_regexp`.
   - Added `SUPER::method` method resolution.

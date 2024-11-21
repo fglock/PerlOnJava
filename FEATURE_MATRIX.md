@@ -271,6 +271,7 @@
 - ✔️   **Scalar::Util**: `blessed`, `reftype`, `set_prototype` are implemented.
 - ✔️   **Internals**: `Internals::SvREADONLY` is implemented as a no-op.
 - ✔️   **Carp**: `carp`, `cluck`, `croak`, `confess`, `longmess`, `shortmess` are implemented.
+- ✔️   **Cwd** module
 - ✔️   **parent** pragma
 - ✔️   **constant** pragma
 - ✔️   **if** pragma
