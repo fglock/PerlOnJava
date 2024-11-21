@@ -163,3 +163,95 @@ public class GlobalContext {
 ```
 
 
+# Alternative - Load modules on demand, at run time
+
+
+
+```
+// src/main/java/org/perlonjava/runtime/ModuleRegistry.java
+package org.perlonjava.runtime;
+
+import org.perlonjava.perlmodule.InitializableModule;
+
+import java.util.HashMap;
+import java.util.Map;
+
+public class ModuleRegistry {
+
+    private static final Map<String, String> moduleMap = new HashMap<>();
+
+    public static void registerModule(String moduleName, String className) {
+        moduleMap.put(moduleName, className);
+    }
+
+    public static InitializableModule loadModule(String moduleName) throws Exception {
+        String className = moduleMap.get(moduleName);
+        if (className == null) {
+            throw new IllegalArgumentException("Module not found: " + moduleName);
+        }
+
+        Class<?> moduleClass = Class.forName(className);
+        return (InitializableModule) moduleClass.getDeclaredConstructor().newInstance();
+    }
+}
+```
+
+
+
+```
+// src/main/java/org/perlonjava/perlmodule/ScalarUtil.java
+package org.perlonjava.perlmodule;
+
+import org.perlonjava.runtime.ModuleRegistry;
+
+public class ScalarUtil extends PerlModuleBase implements InitializableModule {
+
+    static {
+        // Register this module with the ModuleRegistry
+        ModuleRegistry.registerModule("Scalar::Util", ScalarUtil.class.getName());
+    }
+
+    public ScalarUtil() {
+        super("Scalar::Util");
+    }
+
+    @Override
+    public void initialize() {
+        // Existing initialization code
+        ScalarUtil.initialize();
+    }
+}
+```
+
+
+
+```
+public class ModuleLoader {
+
+    public static void main(String[] args) {
+        try {
+            // Load and initialize the Scalar::Util module on demand
+            InitializableModule scalarUtil = ModuleRegistry.loadModule("Scalar::Util");
+            scalarUtil.initialize();
+
+            // Load and initialize other modules as needed
+            // InitializableModule anotherModule = ModuleRegistry.loadModule("Another::Module");
+            // anotherModule.initialize();
+
+        } catch (Exception e) {
+            System.err.println("Error loading module: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+
+
+Modules from different jars can be loaded:
+
+```
+java -cp "app.jar:module1.jar:module2.jar" com.example.Main
+```
+
+
