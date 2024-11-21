@@ -11,12 +11,42 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
+import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 public class Directory {
+    public static RuntimeScalar chdir(RuntimeScalar runtimeScalar) {
+        //    chdir EXPR
+        //    chdir FILEHANDLE
+        //    chdir DIRHANDLE
+        //    chdir   Changes the working directory to EXPR, if possible. If EXPR is
+        //            omitted, changes to the directory specified by $ENV{HOME}, if
+        //            set; if not, changes to the directory specified by $ENV{LOGDIR}.
+        //            (Under VMS, the variable $ENV{'SYS$LOGIN'} is also checked, and
+        //            used if it is set.) If neither is set, "chdir" does nothing and
+        //            fails. It returns true on success, false otherwise. See the
+        //            example under "die".
+        //
+        //            On systems that support fchdir(2), you may pass a filehandle or
+        //            directory handle as the argument. On systems that don't support
+        //            fchdir(2), passing handles raises an exception.
+
+        String dirName = runtimeScalar.toString();
+
+        // XXX TODO set global directory, and use it as default in RuntimeIO commands
+//        try {
+//            Path path = Paths.get(dirName);
+//            // chdir();
+//            return scalarTrue;
+//        } catch (IOException e) {
+//            // Set $! (errno) in case of failure
+//            getGlobalVariable("main::!").set(e.getMessage());
+//            return scalarFalse;
+//        }
+        throw new PerlCompilerException("chdir() not implemented");
+    }
+
     public static RuntimeScalar rmdir(RuntimeScalar runtimeScalar) {
-        String dirName = runtimeScalar.value.toString();
+        String dirName = runtimeScalar.toString();
 
         try {
             Path path = Paths.get(dirName);

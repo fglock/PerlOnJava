@@ -482,6 +482,7 @@ public class EmitterVisitor implements Visitor {
             case "prototype":
             case "stat":
             case "lstat":
+            case "chdir":
                 handleUnaryBuiltin(node, operator);
                 break;
             case "chop":

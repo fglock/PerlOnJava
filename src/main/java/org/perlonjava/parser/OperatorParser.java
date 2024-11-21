@@ -267,6 +267,7 @@ public class OperatorParser {
             case "prototype":
             case "stat":
             case "lstat":
+            case "chdir":
                 return parseOperatorWithOneOptionalArgument(parser, token);
             case "readpipe":
                 // one optional argument

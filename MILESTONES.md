@@ -119,7 +119,8 @@
     - lexical features.
     - lexical strictness.
     - lexical utf8 source code.
-    - `truncate`, `seek` operators.
+    - `truncate`, `seek`, `chdir` operators.
+    - add tests for directory operators.
     - preprocessor `# line` directive.
     - `use subs`, `use vars`.
     - `Getopt::Long`.
