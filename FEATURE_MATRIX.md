@@ -107,6 +107,7 @@
 - ✔️   **`study`, `srand`**: `study`, `srand` are implemented.
 - ✔️   **`chomp`**: `chomp` is implemented.
 - ✔️   **`sleep`**: `sleep` is implemented. It takes fractional seconds. `$SIG{ALRM}` is also implemented.
+- ✔️   **`stat`**: `stat`, `lstat` are implemented. Some fields are not available in JVM and return `undef`.
 - ✔️   **Vectors**: `vec` is implemented.
 - ❌  **Chained operators**: operations like `$x < $y <= $z` not yet implemented.
 - ✔️   **Lvalue `substr`**: Assignable Substring extraction is implemented.

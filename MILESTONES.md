@@ -110,6 +110,7 @@
   - Added `re` pragma: `is_regexp`.
   - Added `SUPER::method` method resolution.
   - Added `AUTOLOAD` default subroutine.
+  - Added `stat`, `lstat` operators. Some fields are not available in JVM and return `undef`.
   - Work in progress:
     - `lexical_subs` feature.
     - `socket` and related operators.
