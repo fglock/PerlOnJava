@@ -105,7 +105,7 @@
   - Added stash constants:  `$constant::{_CAN_PCS} = \$const`;
   - Added `exists &sub`, `defined &sub`.
   - Added unmodified core Perl modules `File::Basename`, `Data::Dumper`.
-  - Added `Cwd` module.
+  - Added `Cwd`, `File::Spec` modules.
   - Added `builtin` pragma: `true`, `false`, `is_bool`.
   - Added `re` pragma: `is_regexp`.
   - Added `SUPER::method` method resolution.
