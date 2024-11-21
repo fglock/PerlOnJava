@@ -120,6 +120,8 @@
     - lexical utf8 source code.
     - `truncate`, `seek` operators.
     - preprocessor `# line` directive.
+    - `use subs`, `use vars`.
+    - `Getopt::Long`.
   - Stretch goals
     - Add support for concurrency and parallelism, such as threads and async/await.
     - Enhance security features, including sandboxing and input validation.
