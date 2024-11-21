@@ -167,15 +167,13 @@ public class EmitSubroutine {
     }
 
     /**
-     * Handles the postfix `()` node, which applies a subroutine or function.
+     * Handles the postfix `()` node, which runs a subroutine.
      *
      * @param emitterVisitor The visitor used for code emission.
      * @param node           The binary operator node representing the apply operation.
      */
     static void handleApplyOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         emitterVisitor.ctx.logDebug("handleApplyElementOperator " + node + " in context " + emitterVisitor.ctx.contextType);
-        EmitterVisitor scalarVisitor =
-                emitterVisitor.with(RuntimeContextType.SCALAR); // Execute operands in scalar context
 
         String subroutineName = "";
         if (node.left instanceof OperatorNode operatorNode && operatorNode.operator.equals("&")) {
@@ -185,7 +183,7 @@ public class EmitSubroutine {
             }
         }
 
-        node.left.accept(scalarVisitor); // Target - left parameter: Code ref
+        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // Target - left parameter: Code ref
         emitterVisitor.ctx.mv.visitLdcInsn(subroutineName);
         node.right.accept(emitterVisitor.with(RuntimeContextType.LIST)); // Right parameter: parameter list
 

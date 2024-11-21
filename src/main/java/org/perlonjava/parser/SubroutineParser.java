@@ -19,7 +19,7 @@ public class SubroutineParser {
      */
     static Node parseSubroutineCall(Parser parser) {
         // Parse the subroutine name as a complex identifier
-        // Alternately, this could be a v-string like v10.20.30   XXX TODO
+        // Alternately, this could be the start of a v-string like v10.20.30
         int currentIndex = parser.tokenIndex;
 
         String subName = IdentifierParser.parseSubroutineIdentifier(parser);
@@ -70,6 +70,11 @@ public class SubroutineParser {
             arguments = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
         } else if (prototype.isEmpty()) {
             // prototype is empty string
+            if (hasParentheses) {
+                // Consume "()" if present
+                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+                TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+            }
             arguments = new ListNode(parser.tokenIndex);
         } else if (prototype.equals("$")) {
             // prototype is `$`
