@@ -142,11 +142,7 @@ public class RuntimeIO implements RuntimeScalarReference {
     public static RuntimeIO open(String fileName, String mode) {
         RuntimeIO fh = new RuntimeIO();
         try {
-            // Get the base directory from the user.dir system property
-            String userDir = System.getProperty("user.dir");
-
-            // Construct the full file path relative to the user.dir
-            Path filePath = Paths.get(userDir, fileName);
+            Path filePath = getPath(fileName);
 
             Set<StandardOpenOption> options = fh.convertMode(mode);
             fh.fileChannel = FileChannel.open(filePath, options);
@@ -169,6 +165,15 @@ public class RuntimeIO implements RuntimeScalarReference {
             fh = null;
         }
         return fh;
+    }
+
+    public static Path getPath(String fileName) {
+        // Get the base directory from the user.dir system property
+        String userDir = System.getProperty("user.dir");
+
+        // Construct the full file path relative to the user.dir
+        Path filePath = Paths.get(userDir, fileName);
+        return filePath;
     }
 
     // Constructor for standard output and error streams
@@ -288,10 +293,7 @@ public class RuntimeIO implements RuntimeScalarReference {
 
         try {
             // Get the base directory from the user.dir system property
-            String userDir = System.getProperty("user.dir");
-
-            // Construct the full directory path relative to the user.dir
-            Path fullDirPath = Paths.get(userDir, dirPath);
+            Path fullDirPath = getPath(dirPath);
 
             DirectoryStream<Path> stream = Files.newDirectoryStream(fullDirPath);
             RuntimeIO dirIO = new RuntimeIO(stream);

@@ -1,8 +1,6 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.*;
 
 import java.io.File;
 import java.nio.file.Paths;
@@ -203,7 +201,7 @@ public class FileSpec extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for abs2rel() method");
         }
         String path = args.get(1).toString();
-        String base = args.size() == 3 ? args.get(2).toString() : Cwd.getcwd(new RuntimeArray(), ctx).elements.get(0).toString();
+        String base = args.size() == 3 ? args.get(2).toString() : System.getProperty("user.dir");
         String relPath = Paths.get(base).relativize(Paths.get(path)).toString();
         return new RuntimeScalar(relPath).getList();
     }
@@ -213,7 +211,7 @@ public class FileSpec extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for rel2abs() method");
         }
         String path = args.get(1).toString();
-        String base = args.size() == 3 ? args.get(2).toString() : Cwd.getcwd(new RuntimeArray(), ctx).elements.get(0).toString();
+        String base = args.size() == 3 ? args.get(2).toString() : System.getProperty("user.dir");
         String absPath = Paths.get(base, path).toAbsolutePath().normalize().toString();
         return new RuntimeScalar(absPath).getList();
     }

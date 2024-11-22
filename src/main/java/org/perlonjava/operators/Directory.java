@@ -34,11 +34,15 @@ public class Directory {
 
         String dirName = runtimeScalar.toString();
         File newDir = new File(dirName);
-        if (newDir.exists() && newDir.isDirectory()) {
-            System.setProperty("user.dir", newDir.getAbsolutePath());
+
+        // Resolve the directory to an absolute path
+        File absoluteDir = newDir.isAbsolute() ? newDir : new File(System.getProperty("user.dir"), dirName);
+
+        if (absoluteDir.exists() && absoluteDir.isDirectory()) {
+            System.setProperty("user.dir", absoluteDir.getAbsolutePath());
             return scalarTrue;
         } else {
-            getGlobalVariable("main::!").set("chdir failed: No such directory");
+            getGlobalVariable("main::!").set("chdir failed: No such directory '" + dirName + "'");
             return scalarFalse;
         }
     }

@@ -13,6 +13,7 @@ import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.Set;
 
+import static org.perlonjava.runtime.RuntimeIO.getPath;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
@@ -49,7 +50,7 @@ public class Stat {
     public static RuntimeList stat(RuntimeScalar arg) {
         RuntimeList res = new RuntimeList();
         try {
-            Path path = Paths.get(arg.toString());
+            Path path = getPath(arg.toString());
 
             // Basic file attributes (similar to some Perl stat fields)
             BasicFileAttributes basicAttr = Files.readAttributes(path, BasicFileAttributes.class);
@@ -67,7 +68,7 @@ public class Stat {
     public static RuntimeList lstat(RuntimeScalar arg) {
         RuntimeList res = new RuntimeList();
         try {
-            Path path = Paths.get(arg.toString());
+            Path path = getPath(arg.toString());
 
             // Basic attributes without following symlink
             BasicFileAttributes basicAttr = Files.readAttributes(path,
