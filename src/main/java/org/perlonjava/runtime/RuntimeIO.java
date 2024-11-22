@@ -142,8 +142,14 @@ public class RuntimeIO implements RuntimeScalarReference {
     public static RuntimeIO open(String fileName, String mode) {
         RuntimeIO fh = new RuntimeIO();
         try {
+            // Get the base directory from the user.dir system property
+            String userDir = System.getProperty("user.dir");
+
+            // Construct the full file path relative to the user.dir
+            Path filePath = Paths.get(userDir, fileName);
+
             Set<StandardOpenOption> options = fh.convertMode(mode);
-            fh.fileChannel = FileChannel.open(Paths.get(fileName), options);
+            fh.fileChannel = FileChannel.open(filePath, options);
 
             if (options.contains(StandardOpenOption.READ)) {
                 fh.bufferedReader = new BufferedReader(Channels.newReader(fh.fileChannel, StandardCharsets.UTF_8));
@@ -207,6 +213,11 @@ public class RuntimeIO implements RuntimeScalarReference {
         try {
             // Use ProcessBuilder to execute the command
             ProcessBuilder processBuilder = new ProcessBuilder(command.toString().split(" "));
+
+            // Set the working directory to the user.dir system property
+            String userDir = System.getProperty("user.dir");
+            processBuilder.directory(new File(userDir));
+
             process = processBuilder.start();
 
             // Capture standard output
