@@ -1,4 +1,18 @@
-Alternatives for DESTROY and auto-close
+# Alternatives for DESTROY and auto-close
+
+
+The key problem is about reference tracking:
+
+```
+my $file = IO::File->new("test.txt");
+push @global_array, $file;  # Now $file lives beyond its scope
+```
+
+Even though $file goes out of scope, it's still alive in @global_array. Java's garbage collection doesn't provide a way to make this visible (old JVMs had a way, but it was removed).
+
+Static analysis can only handle straightforward cases - it can't promise to handle DESTROY all the time.
+
+
 
 # Local
 
