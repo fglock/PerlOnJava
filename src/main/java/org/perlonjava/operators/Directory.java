@@ -12,7 +12,8 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 
 public class Directory {
     public static RuntimeScalar chdir(RuntimeScalar runtimeScalar) {

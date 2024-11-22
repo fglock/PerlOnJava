@@ -111,7 +111,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      *
      * @param index The scalar representing the key to dereference.
      * @return A RuntimeScalar representing the dereferenced value or reference. If the key
-     *         is not recognized, an empty RuntimeScalar is returned.
+     * is not recognized, an empty RuntimeScalar is returned.
      */
     public RuntimeScalar hashDerefGet(RuntimeScalar index) {
         // System.out.println("glob hashDerefGet " + index.toString());
@@ -119,7 +119,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case "CODE" -> GlobalVariable.getGlobalCodeRef(this.globName);
             case "IO" -> GlobalVariable.getGlobalIO(this.globName);
             case "SCALAR" -> GlobalVariable.getGlobalVariable(this.globName);
-            case "ARRAY" ->  GlobalVariable.getGlobalArray(this.globName).createReference();
+            case "ARRAY" -> GlobalVariable.getGlobalArray(this.globName).createReference();
             case "HASH" -> GlobalVariable.getGlobalHash(this.globName).createReference();
             default -> new RuntimeScalar();
         };

@@ -613,10 +613,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     /**
      * Call a method in a Perl-like class hierarchy using the C3 linearization algorithm.
      *
-     * @param method      The method to resolve.
+     * @param method         The method to resolve.
      * @param currentPackage The package to resolve SUPER::method in.
-     * @param args        The arguments to pass to the method.
-     * @param callContext The call context.
+     * @param args           The arguments to pass to the method.
+     * @param callContext    The call context.
      * @return The result of the method call.
      */
     public RuntimeList call(RuntimeScalar method,
