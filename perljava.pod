@@ -1,0 +1,257 @@
+=head1 NAME
+
+perljava - PerlOnJava Portability Guide
+
+=head1 SYNOPSIS
+
+This document provides guidelines for writing Perl scripts that are portable when compiled and executed using PerlOnJava, a Perl compiler that translates Perl code into Java bytecode for execution on the Java Virtual Machine (JVM).
+
+=head1 DESCRIPTION
+
+PerlOnJava allows Perl scripts to be integrated into Java environments by compiling them into Java bytecode. This document outlines considerations and best practices for ensuring that your Perl scripts are portable and compatible with the PerlOnJava compiler.
+
+=head2 Newlines
+
+PerlOnJava handles newlines in a manner consistent with the JVM. Ensure that your scripts account for newline differences across platforms by using Perl's built-in functions like C<chomp> and C<chop>. Be aware that newline handling may vary between Unix and Windows environments.
+
+=head2 File System
+
+=over 4
+
+=item *
+
+PerlOnJava supports basic file operations such as C<open>, C<readline>, and C<close>. However, some file test operators like C<-R>, C<-W>, and C<-X> are not implemented due to JVM limitations.
+
+=item *
+
+Use platform-independent file paths and avoid relying on case sensitivity, as file systems may differ between environments.
+
+=item *
+
+The C<stat> and C<lstat> functions are implemented, but some fields may return C<undef> due to JVM constraints.
+
+=back
+
+=head2 Command Execution
+
+=over 4
+
+=item *
+
+PerlOnJava supports executing Perl code dynamically using the C<eval> function.
+
+=item *
+
+External command execution should be handled with care, considering the JVM's limitations and the lack of direct system call support. Use Java's process execution capabilities for more complex needs.
+
+=back
+
+=head2 Character Sets and Encoding
+
+=over 4
+
+=item *
+
+Unicode support is limited in PerlOnJava. Non-Unicode strings are not fully supported, so ensure your scripts handle character encoding appropriately.
+
+=item *
+
+Use Perl's C<Encode> module where necessary to manage character encodings.
+
+=back
+
+=head2 Networking
+
+=over 4
+
+=item *
+
+PerlOnJava does not support low-level socket functions due to JVM constraints. Consider using Java's networking libraries for such functionality.
+
+=item *
+
+High-level networking operations should be implemented using Java's native capabilities.
+
+=back
+
+=head2 Time and Date
+
+=over 4
+
+=item *
+
+Time-related functions like C<time>, C<gmtime>, and C<localtime> are implemented. However, be aware of potential differences in time zone handling across platforms.
+
+=item *
+
+The C<sleep> function is implemented and supports fractional seconds.
+
+=back
+
+=head2 Modules and Libraries
+
+=over 4
+
+=item *
+
+PerlOnJava supports a subset of Perl modules and pragmas. Refer to the FEATURE_MATRIX.md for details on supported modules.
+
+=item *
+
+Avoid using XS modules or CPAN libraries that rely on C code, as they are not compatible with the JVM.
+
+=item *
+
+The C<strict> pragma is always enabled, and C<no strict> is ignored. Plan your code accordingly.
+
+=back
+
+=head2 Regular Expressions
+
+=over 4
+
+=item *
+
+Basic regex operations are supported, including C<qr//>, C<m//>, and C<s///>. However, some Perl-specific features are missing.
+
+=item *
+
+Java's regex engine limitations may affect regex behavior, particularly with named capture groups. Features like C</xx> and C</ee> are not supported.
+
+=back
+
+=head2 Scalars, Arrays, and Hashes
+
+=over 4
+
+=item *
+
+PerlOnJava supports scalar operations, including C<my>, C<our>, and C<local> declarations. Tied scalars are not supported.
+
+=item *
+
+Basic array and hash operations are implemented, including C<push>, C<pop>, C<keys>, and C<values>. Tied arrays and hashes are not supported.
+
+=item *
+
+Autovivification is supported, but ensure your code does not rely on Perl-specific behaviors not implemented in PerlOnJava.
+
+=back
+
+=head2 Subroutines
+
+=over 4
+
+=item *
+
+Named and anonymous subroutines are supported, including closures. Subroutine signatures and attributes are not implemented.
+
+=item *
+
+The C<CORE> namespace is available, but C<CORE::GLOBAL> is not implemented.
+
+=back
+
+=head2 Objects
+
+=over 4
+
+=item *
+
+Object-oriented features such as C<bless>, C<ref>, and C<@ISA> are supported. Multiple inheritance with C3 method resolution is implemented.
+
+=item *
+
+The C<AUTOLOAD> mechanism is available, but ensure compatibility with JVM constraints.
+
+=back
+
+=head2 Statements and Special Operators
+
+=over 4
+
+=item *
+
+Conditional statements like C<if>, C<unless>, and loops like C<for>, C<while> are supported.
+
+=item *
+
+Operators such as C<defined-or> (C<//>), string concatenation (C<.>), and logical operators are implemented.
+
+=item *
+
+The C<goto> operator is partially supported; C<goto LABEL> and C<goto EXPR> are not implemented.
+
+=back
+
+=head2 Object Destruction and the DESTROY Method
+
+In Perl, the C<DESTROY> method is used to clean up an object before it is garbage collected. This method is typically used to release resources such as file handles, database connections, or other system resources that the object may hold.
+
+=head3 Challenges with DESTROY in PerlOnJava
+
+PerlOnJava compiles Perl code into Java bytecode, which runs on the JVM. The JVM uses a garbage collection mechanism that differs from Perl's reference counting. This difference can lead to several challenges:
+
+=over 4
+
+=item 1.
+
+Timing of Object Destruction: In Perl, objects are destroyed immediately when their reference count drops to zero. In contrast, the JVM's garbage collector determines when to reclaim memory, which may not coincide with the exact moment an object becomes unreachable. This can delay the execution of the C<DESTROY> method, potentially leading to resource leaks if resources are not released promptly.
+
+=item 2.
+
+Resource Management: Since the JVM does not guarantee when or if the C<DESTROY> method will be called, relying on it for critical resource management can be problematic. Resources such as file handles or network connections should be explicitly managed using try-finally blocks or Java's try-with-resources statement to ensure they are released promptly.
+
+=item 3.
+
+Compatibility with Perl Modules: Some Perl modules rely on the C<DESTROY> method for cleanup. When using such modules with PerlOnJava, be aware that their behavior might differ due to the JVM's garbage collection. Modules like C<SelectSaver> and C<File::Temp> may not function as expected if they depend on timely destruction.
+
+=back
+
+=head3 Recommendations
+
+To mitigate issues related to object destruction in PerlOnJava, consider the following best practices:
+
+=over 4
+
+=item *
+
+Explicit Resource Management: Avoid relying solely on the C<DESTROY> method for resource cleanup. Instead, use explicit resource management techniques, such as closing file handles or database connections in a C<finally> block.
+
+=item *
+
+Use Java's Resource Management Features: Leverage Java's resource management features, such as try-with-resources, to ensure resources are released promptly and predictably.
+
+=item *
+
+Test and Validate: Thoroughly test your Perl scripts in the PerlOnJava environment to identify and address any issues related to object destruction and resource management.
+
+=back
+
+=head2 Platform-Specific Notes
+
+=over 4
+
+=item *
+
+PerlOnJava is designed to run on any platform that supports the JVM. However, be mindful of platform-specific behaviors and test your scripts across different environments to ensure compatibility.
+
+=item *
+
+JVM-specific limitations may affect certain Perl features, particularly those relying on low-level system interactions.
+
+=back
+
+=head1 SEE ALSO
+
+For more details on the PerlOnJava project, refer to the README.md and FEATURE_MATRIX.md files in the project repository.
+
+=head1 AUTHOR
+
+PerlOnJava Development Team
+
+=head1 COPYRIGHT AND LICENSE
+
+This document is licensed under the same terms as the Perl Artistic License 2.0.
+
+=cut
