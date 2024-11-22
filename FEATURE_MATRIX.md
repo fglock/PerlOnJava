@@ -307,6 +307,7 @@
 
 ## Features Probably Incompatible with JVM
 - ❌  **`DESTROY`**: Handling of object destruction may be incompatible with JVM garbage collection.
+  - Some modules that depend on `DESTROY`: `SelectSaver`, `File::Temp`.
 - ❌  **Perl `XS` code**: XS code interfacing with C is not supported on the JVM.
 - ❌  **Auto-close files**: File auto-close depends on handling of object destruction, may be incompatible with JVM garbage collection.
 - ❌  **Low-level socket functions**: accept, bind, connect, getpeername, getsockname, getsockopt, listen, recv, send, setsockopt, shutdown, socket, socketpair
