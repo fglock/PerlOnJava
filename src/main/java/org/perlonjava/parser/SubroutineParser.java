@@ -64,7 +64,7 @@ public class SubroutineParser {
         }
 
         // Handle the parameter list for the subroutine call
-        Node arguments;
+        ListNode arguments;
         if (prototype == null) {
             // no prototype
             arguments = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
@@ -82,6 +82,18 @@ public class SubroutineParser {
         } else if (prototype.equals(";$")) {
             // prototype is `;$`
             arguments = ListParser.parseZeroOrOneList(parser, 0);
+        } else if (prototype.equals("$;$")) {
+            // prototype is `$;$`
+            arguments = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
+            if (arguments.elements.size() > 2) {
+                throw new PerlCompilerException(parser.tokenIndex, "Too many arguments", parser.ctx.errorUtil);
+            }
+            // Cast parameter to scalar if the prototype is `$`
+            // TODO replace with a visitor
+            for (int i = 0; i < arguments.elements.size(); i++) {
+                Node element = arguments.elements.get(i);
+                arguments.elements.set(i, new OperatorNode("scalar", element, element.getIndex()));
+            }
         } else {
             // XXX TODO: Handle more prototypes or parameter variables
             arguments = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
