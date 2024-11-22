@@ -491,6 +491,7 @@ public class EmitterVisitor implements Visitor {
                 break;
             case "mkdir":
             case "opendir":
+            case "seekdir":
                 EmitOperator.handleMkdirOperator(this, node);
                 break;
             case "readdir":

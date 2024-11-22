@@ -426,7 +426,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             directoryStream.close();
             directoryStream = Files.newDirectoryStream(Paths.get(directoryPath));
             directoryIterator = directoryStream.iterator();
-            for (int i = 0; i < position && directoryIterator.hasNext(); i++) {
+            for (int i = 1; i < position && directoryIterator.hasNext(); i++) {
                 directoryIterator.next();
             }
             currentDirPosition = position;
@@ -437,7 +437,7 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     // Method to rewind the directory stream to the beginning (rewinddir equivalent)
     public void rewinddir() {
-        seekdir(0);
+        seekdir(1);
     }
 
     private Set<StandardOpenOption> convertMode(String mode) {

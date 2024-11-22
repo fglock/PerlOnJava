@@ -50,14 +50,10 @@ public class Cwd extends PerlModuleBase {
      * @return A RuntimeList containing the current working directory.
      */
     public static RuntimeList getcwd(RuntimeArray args, int ctx) {
-        try {
-            // Use getCanonicalPath to resolve any symbolic links or relative paths
-            String cwd = new File(".").getCanonicalPath();
-            return new RuntimeScalar(cwd).getList();
-        } catch (IOException e) {
-            System.err.println("Error retrieving current working directory: " + e.getMessage());
-            return new RuntimeScalar().getList(); // Return undef on error
-        }
+        // Use getCanonicalPath to resolve any symbolic links or relative paths
+        // String cwd = new File(".").getCanonicalPath();
+        String cwd = System.getProperty("user.dir");
+        return new RuntimeScalar(cwd).getList();
     }
 
     /**
@@ -86,9 +82,12 @@ public class Cwd extends PerlModuleBase {
      */
     public static RuntimeList abs_path(RuntimeArray args, int ctx) {
         try {
-            String path = args.size() > 0 ? args.get(0).toString() : ".";
-            // Use toRealPath to resolve symbolic links and get the absolute path
-            String absPath = Paths.get(path).toRealPath().toString();
+            // Get the base directory from the user.dir system property
+            String baseDir = System.getProperty("user.dir");
+            // Determine the path to resolve
+            String path = args.size() > 0 ? args.get(0).toString() : baseDir;
+            // Resolve the path relative to the base directory
+            String absPath = Paths.get(baseDir, path).toRealPath().toString();
             return new RuntimeScalar(absPath).getList();
         } catch (IOException e) {
             System.err.println("Error resolving absolute path: " + e.getMessage());

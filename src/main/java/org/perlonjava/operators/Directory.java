@@ -2,6 +2,7 @@ package org.perlonjava.operators;
 
 import org.perlonjava.runtime.*;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,18 +32,14 @@ public class Directory {
         //            fchdir(2), passing handles raises an exception.
 
         String dirName = runtimeScalar.toString();
-
-        // XXX TODO set global directory, and use it as default in RuntimeIO commands
-//        try {
-//            Path path = Paths.get(dirName);
-//            // chdir();
-//            return scalarTrue;
-//        } catch (IOException e) {
-//            // Set $! (errno) in case of failure
-//            getGlobalVariable("main::!").set(e.getMessage());
-//            return scalarFalse;
-//        }
-        throw new PerlCompilerException("chdir() not implemented");
+        File newDir = new File(dirName);
+        if (newDir.exists() && newDir.isDirectory()) {
+            System.setProperty("user.dir", newDir.getAbsolutePath());
+            return scalarTrue;
+        } else {
+            getGlobalVariable("main::!").set("chdir failed: No such directory");
+            return scalarFalse;
+        }
     }
 
     public static RuntimeScalar rmdir(RuntimeScalar runtimeScalar) {
@@ -116,7 +113,13 @@ public class Directory {
         return RuntimeIO.readdir(dirHandle, ctx);
     }
 
-    public static RuntimeScalar seekdir(RuntimeScalar dirHandle, RuntimeScalar position) {
+    public static RuntimeScalar seekdir(RuntimeList args) {
+        if (args.elements.size() != 2) {
+            throw new PerlCompilerException("Invalid arguments for seekdir");
+        }
+        RuntimeScalar dirHandle = (RuntimeScalar) args.elements.getFirst();
+        RuntimeScalar position = (RuntimeScalar) args.elements.getLast();
+
         if (dirHandle.type != RuntimeScalarType.GLOB) {
             throw new RuntimeException("Invalid directory handle");
         }
