@@ -287,8 +287,13 @@ public class RuntimeIO implements RuntimeScalarReference {
         String dirPath = args.elements.get(1).toString();
 
         try {
-            DirectoryStream<Path> stream = Files.newDirectoryStream(Paths.get(dirPath));
-            RuntimeIO dirIO = new RuntimeIO(stream);
+            // Get the base directory from the user.dir system property
+            String userDir = System.getProperty("user.dir");
+
+            // Construct the full directory path relative to the user.dir
+            Path fullDirPath = Paths.get(userDir, dirPath);
+
+            DirectoryStream<Path> stream = Files.newDirectoryStream(fullDirPath);            RuntimeIO dirIO = new RuntimeIO(stream);
             dirIO.directoryPath = dirPath;
             dirHandle.type = RuntimeScalarType.GLOB;
             dirHandle.value = dirIO;
