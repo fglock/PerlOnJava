@@ -494,7 +494,12 @@ public class Parser {
                                 TokenUtils.consume(this);
                                 operand = new IdentifierNode("_", tokenIndex);
                             } else {
-                                operand = parseExpression(getPrecedence("-d") + 1);
+                                operand = ListParser.parseZeroOrOneList(this, 0);
+                                if (((ListNode) operand).elements.isEmpty()) {
+                                    // create `$_` variable
+                                    operand = new OperatorNode(
+                                            "$", new IdentifierNode("_", this.tokenIndex), this.tokenIndex);
+                                }
                             }
                             return new OperatorNode(operator, operand, tokenIndex);
                         }

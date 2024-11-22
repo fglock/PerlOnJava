@@ -556,7 +556,7 @@ public class OperatorParser {
         return new OperatorNode(operator, operand, currentIndex);
     }
 
-    private static OperatorNode parseOperatorWithOneOptionalArgument(Parser parser, LexerToken token) {
+    static OperatorNode parseOperatorWithOneOptionalArgument(Parser parser, LexerToken token) {
         Node operand;
         // Handle operators with one optional argument
         String text = token.text;
