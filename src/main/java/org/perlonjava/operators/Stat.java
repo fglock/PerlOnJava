@@ -90,7 +90,7 @@ public class Stat {
         res.add(scalarUndef);                            // 0 dev (device number) - not directly available in Java
         res.add(scalarUndef);                            // 1 ino (inode number) - not directly available in Java
         res.add(getScalarInt(getPermissionsOctal(basicAttr, posixAttr))); // 2 mode (file mode/permissions)
-        res.add(scalarUndef);                            // 3 nlink (number of hard links) - not easily obtainable in standard Java
+        res.add(getScalarInt(1));                        // 3 nlink (number of hard links) - not easily obtainable in standard Java
         res.add(scalarUndef);                            // 4 uid (user ID) - posixAttr.owner().getName() returns String
         res.add(scalarUndef);                            // 5 gid (group ID) - posixAttr.group().getName() returns String
         res.add(scalarUndef);                            // 6 rdev (device identifier for special files) - not available

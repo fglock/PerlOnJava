@@ -292,6 +292,7 @@
 - 🚧  **re** pragma for regular expression options: Implemented `is_regexp`.
 - ❌  **subs** pragma.
 - ✔️   **File::Basename** use the same version as Perl.
+- ✔️   **File::Find** use the same version as Perl.
 - ✔️   **File::Spec** module.
 - ✔️   **File::Spec::Functions** module.
 - 🚧  **builtin** pragma:

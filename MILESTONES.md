@@ -104,7 +104,7 @@
   - Stash can be accessed as a hash like `$namespace::{entry}`.
   - Added stash constants:  `$constant::{_CAN_PCS} = \$const`;
   - Added `exists &sub`, `defined &sub`.
-  - Added unmodified core Perl modules `File::Basename`, `Data::Dumper`.
+  - Added unmodified core Perl modules `File::Basename`, `File::Find`, `Data::Dumper`.
   - Added `Cwd`, `File::Spec`, `File::Spec::Functions` modules.
   - Added `builtin` pragma: `true`, `false`, `is_bool`.
   - Added `re` pragma: `is_regexp`.
@@ -124,7 +124,6 @@
     - preprocessor `# line` directive.
     - `use subs`, `use vars`.
     - `Getopt::Long`.
-    - `File::Find`.
   - Stretch goals
     - Add support for concurrency and parallelism, such as threads and async/await.
     - Enhance security features, including sandboxing and input validation.
