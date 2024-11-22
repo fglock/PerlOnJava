@@ -13,6 +13,7 @@ import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.Set;
 
+import static org.perlonjava.operators.FileTestOperator.lastFileHandle;
 import static org.perlonjava.runtime.RuntimeIO.getPath;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
@@ -47,7 +48,16 @@ public class Stat {
         return permissions;
     }
 
+    public static RuntimeList statLastHandle() {
+        return stat(lastFileHandle);
+    }
+
+    public static RuntimeList lstatLastHandle() {
+        return lstat(lastFileHandle);
+    }
+
     public static RuntimeList stat(RuntimeScalar arg) {
+        lastFileHandle.set(arg);
         RuntimeList res = new RuntimeList();
         try {
             Path path = getPath(arg.toString());
@@ -66,6 +76,7 @@ public class Stat {
     }
 
     public static RuntimeList lstat(RuntimeScalar arg) {
+        lastFileHandle.set(arg);
         RuntimeList res = new RuntimeList();
         try {
             Path path = getPath(arg.toString());

@@ -265,9 +265,27 @@ public class OperatorParser {
             case "pos":
             case "select":
             case "prototype":
+            case "chdir":
+                return parseOperatorWithOneOptionalArgument(parser, token);
             case "stat":
             case "lstat":
-            case "chdir":
+                LexerToken nextToken = peek(parser);
+                boolean paren = false;
+                if (nextToken.text.equals("(")) {
+                    TokenUtils.consume(parser);
+                    nextToken = peek(parser);
+                    paren = true;
+                }
+                if (nextToken.text.equals("_")) {
+                    // Handle `stat _`
+                    TokenUtils.consume(parser);
+                    if (paren) {
+                        TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+                    }
+                    return new OperatorNode(token.text,
+                            new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
+                }
+                parser.tokenIndex = currentIndex;
                 return parseOperatorWithOneOptionalArgument(parser, token);
             case "readpipe":
                 // one optional argument

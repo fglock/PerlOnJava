@@ -315,6 +315,14 @@ public class EmitterVisitor implements Visitor {
                     "prototype",
                     "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
                     false);
+        } else if ((operator.equals("stat") || operator.equals("lstat"))
+                && (node.operand instanceof IdentifierNode && ((IdentifierNode) node.operand).name.equals("_"))) {
+                // `stat _`
+                ctx.mv.visitMethodInsn(
+                        Opcodes.INVOKESTATIC,
+                        "org/perlonjava/operators/Stat",
+                        operator + "LastHandle",
+                        "()Lorg/perlonjava/runtime/RuntimeList;", false);
         } else {
             node.operand.accept(this.with(RuntimeContextType.SCALAR));
             if (operatorHandler != null) {
