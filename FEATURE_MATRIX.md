@@ -291,12 +291,13 @@
 - ❌  **integer** pragma
 - 🚧  **re** pragma for regular expression options: Implemented `is_regexp`.
 - ❌  **subs** pragma.
+- 🚧  **builtin** pragma:
+  - ✔️  Implemented: `true`, `false`, `is_bool`.
 - ✔️   **File::Basename** use the same version as Perl.
 - ✔️   **File::Find** use the same version as Perl.
 - ✔️   **File::Spec** module.
 - ✔️   **File::Spec::Functions** module.
-- 🚧  **builtin** pragma:
-  - ✔️  Implemented: `true`, `false`, `is_bool`.
+- ✔️   **Term::ANSIColor** module.
 
 
 ## Non-strict and Obsolete Features

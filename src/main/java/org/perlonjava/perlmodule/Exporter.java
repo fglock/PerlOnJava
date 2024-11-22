@@ -8,28 +8,23 @@ import java.lang.reflect.Method;
  * The Exporter class is responsible for managing the export of symbols from one Perl package to another.
  * It mimics the behavior of Perl's Exporter module, allowing symbols to be imported into other namespaces.
  */
-public class Exporter {
+public class Exporter extends PerlModuleBase {
+
+    public Exporter() {
+        super("Exporter");
+    }
 
     /**
      * Initializes the Exporter class by setting up the necessary global variables and methods.
      * This includes setting the %INC hash and loading the Exporter methods into the Perl namespace.
      */
     public static void initialize() {
-        // Initialize Exporter class
-
-        // Set %INC to indicate that Exporter.pm has been loaded
-        GlobalVariable.getGlobalHash("main::INC").put("Exporter.pm", new RuntimeScalar("Exporter.pm"));
-
+        Exporter exporter = new Exporter();
         try {
             // Load Exporter methods into Perl namespace
-            Class<?> clazz = Exporter.class;
-            RuntimeScalar instance = new RuntimeScalar();
-            Method mm;
-
-            // Get the importSymbols method and set it as a global code reference for Exporter::import
-            mm = clazz.getMethod("importSymbols", RuntimeArray.class, int.class);
-            GlobalVariable.getGlobalCodeRef("Exporter::import").set(new RuntimeScalar(
-                    new RuntimeCode(mm, instance, null)));
+            exporter.registerMethod("import", "importSymbols", null);
+            exporter.registerMethod("export_tags", "exportTags", null);
+            exporter.registerMethod("export_ok_tags", "exportOkTags", null);
 
             // Set up @EXPORTER::EXPORT_OK = ("import");
             GlobalVariable.getGlobalArray("Exporter::EXPORT_OK").push(new RuntimeScalar("import"));
@@ -116,6 +111,36 @@ public class Exporter {
             }
         }
 
+        return new RuntimeList();
+    }
+
+    public static RuntimeList exportTags(RuntimeArray args, int ctx) {
+        // Extract the package name from caller
+        RuntimeScalar packageScalar = RuntimeScalar.caller(new RuntimeList(), RuntimeContextType.SCALAR).elements.getFirst().scalar();
+        // Retrieve the export lists and tags from the package
+        RuntimeArray export = GlobalVariable.getGlobalArray(packageScalar + "::EXPORT");
+        RuntimeHash exportTags = GlobalVariable.getGlobalHash(packageScalar + "::EXPORT_TAGS");
+        for (RuntimeBaseEntity elem : args.elements) {
+            RuntimeArray tags = exportTags.get(elem.toString()).arrayDeref();
+            for (RuntimeScalar tag : tags.elements) {
+                export.push(tag);
+            }
+        }
+        return new RuntimeList();
+    }
+
+    public static RuntimeList exportOkTags(RuntimeArray args, int ctx) {
+        // Extract the package name from caller
+        RuntimeScalar packageScalar = RuntimeScalar.caller(new RuntimeList(), RuntimeContextType.SCALAR).elements.getFirst().scalar();
+        // Retrieve the export lists and tags from the package
+        RuntimeArray exportOk = GlobalVariable.getGlobalArray(packageScalar + "::EXPORT_OK");
+        RuntimeHash exportTags = GlobalVariable.getGlobalHash(packageScalar + "::EXPORT_TAGS");
+        for (RuntimeBaseEntity elem : args.elements) {
+            RuntimeArray tags = exportTags.get(elem.toString()).arrayDeref();
+            for (RuntimeScalar tag : tags.elements) {
+                exportOk.push(tag);
+            }
+        }
         return new RuntimeList();
     }
 
