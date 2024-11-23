@@ -453,6 +453,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return switch (type) {
             case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
             case ARRAYREFERENCE -> (RuntimeArray) value;
+            case STRING -> throw new PerlCompilerException("Can't use string (\"" + this.toString() + "\") as an ARRAY ref while \"strict refs\" in use");
             default -> throw new PerlCompilerException("Not an ARRAY reference");
         };
     }
@@ -462,6 +463,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return switch (type) {
             case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as an HASH reference");
             case HASHREFERENCE -> (RuntimeHash) value;
+            case STRING -> throw new PerlCompilerException("Can't use string (\"" + this.toString() + "\") as a HASH ref while \"strict refs\" in use");
             default -> throw new PerlCompilerException("Variable does not contain a hash reference");
         };
     }
@@ -471,6 +473,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return switch (type) {
             case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as a SCALAR reference");
             case REFERENCE -> (RuntimeScalar) value;
+            case STRING -> throw new PerlCompilerException("Can't use string (\"" + this.toString() + "\") as a SCALAR ref while \"strict refs\" in use");
             default -> throw new PerlCompilerException("Variable does not contain a scalar reference");
         };
     }
@@ -480,6 +483,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return switch (type) {
             case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as a GLOB reference");
             case GLOB, GLOBREFERENCE -> (RuntimeGlob) value;
+            case STRING -> throw new PerlCompilerException("Can't use string (\"" + this.toString() + "\") as a symbol ref while \"strict refs\" in use");
             default -> throw new PerlCompilerException("Variable does not contain a glob reference");
         };
     }
