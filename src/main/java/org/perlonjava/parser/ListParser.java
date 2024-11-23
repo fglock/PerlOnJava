@@ -240,6 +240,9 @@ public class ListParser {
             } else if (token.text.equals("+")) {
                 // Looks like a prefix `+`, not an infix `+`
                 parser.ctx.logDebug("parseZeroOrMoreList looks like prefix plus");
+            } else if (token.text.equals("*")) {
+                // Looks like a prefix `*`, not an infix `*`
+                parser.ctx.logDebug("parseZeroOrMoreList looks like typeglob prefix");
             } else if (token.text.equals("&")) {
                 // Looks like a subroutine call, not an infix `&`
                 parser.ctx.logDebug("parseZeroOrMoreList looks like subroutine call");
