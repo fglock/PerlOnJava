@@ -52,18 +52,15 @@ public class NumberParser {
                 if (secondChar == 'b' || secondChar == 'B') {
                     // Binary number: 0b...
                     TokenUtils.consume(parser);
-                    int num = Integer.parseInt(letter.substring(1), 2);
-                    return new NumberNode(Integer.toString(num), parser.tokenIndex);
+                    return new NumberNode(Long.toString(Long.parseLong(letter.substring(1), 2)), parser.tokenIndex);
                 } else if (secondChar == 'x' || secondChar == 'X') {
                     // Hexadecimal number: 0x...
                     TokenUtils.consume(parser);
-                    int num = Integer.parseInt(letter.substring(1), 16);
-                    return new NumberNode(Integer.toString(num), parser.tokenIndex);
+                    return new NumberNode(Long.toString(Long.parseLong(letter.substring(1), 16)), parser.tokenIndex);
                 }
             } else {
                 // Octal number: 0...
-                int num = Integer.parseInt(token.text, 8);
-                return new NumberNode(Integer.toString(num), parser.tokenIndex);
+                return new NumberNode(Long.toString(Long.parseLong(token.text, 8)), parser.tokenIndex);
             }
         }
 
@@ -229,7 +226,7 @@ public class NumberParser {
                         double value = Double.parseDouble(numberStr);
                         result = new RuntimeScalar(isNegative ? -value : value);
                     } else {
-                        int value = Integer.parseInt(numberStr);
+                        long value = Long.parseLong(numberStr);
                         result = getScalarInt(isNegative ? -value : value);
                     }
                 } catch (NumberFormatException e) {
