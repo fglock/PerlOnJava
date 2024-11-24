@@ -165,12 +165,14 @@ public class SubroutineParser {
         // After the block, we expect a closing curly brace '}' to denote the end of the subroutine.
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
-        // Now we check if the next token is one of the illegal characters that cannot follow a subroutine.
-        // These are '(', '{', and '['. If any of these follow, we throw a syntax error.
-        LexerToken token = TokenUtils.peek(parser);
-        if (token.text.equals("(") || token.text.equals("{") || token.text.equals("[")) {
-            // Throw an exception indicating a syntax error.
-            throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+        if (subName == null) {
+            // Now we check if the next token is one of the illegal characters that cannot follow a subroutine.
+            // These are '(', '{', and '['. If any of these follow, we throw a syntax error.
+            LexerToken token = TokenUtils.peek(parser);
+            if (token.text.equals("(") || token.text.equals("{") || token.text.equals("[")) {
+                // Throw an exception indicating a syntax error.
+                throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+            }
         }
 
         // Finally, we create a new 'SubroutineNode' object with the parsed data: the name, prototype, attributes, block,
