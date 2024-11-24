@@ -592,7 +592,7 @@ public class StringParser {
 
     public static Node parseRawString(Parser parser, String operator) {
         // handle special quotes for operators: q qq qx qw // s/// m//
-        if (operator.equals("<") || operator.equals("<<") || operator.equals("'") || operator.equals("\"") || operator.equals("/") || operator.equals("//")
+        if (operator.equals("<") || operator.equals("<<") || operator.equals("'") || operator.equals("\"") || operator.equals("/") || operator.equals("//") || operator.equals("/=")
                 || operator.equals("`")) {
             parser.tokenIndex--;   // will reparse the quote
             if (operator.equals("<") || operator.equals("<<")) {
@@ -602,7 +602,7 @@ public class StringParser {
         ParsedString rawStr;
         int stringParts = switch (operator) {
             case "s", "tr", "y" -> 3;    // s{str}{str}modifier
-            case "m", "qr", "/", "//" -> 2;
+            case "m", "qr", "/", "//", "/=" -> 2;
             default -> 1;    // m{str}modifier
         };
         rawStr = parseRawStrings(parser.ctx, parser.tokens, parser.tokenIndex, stringParts);
@@ -619,6 +619,7 @@ public class StringParser {
             case "qr":
             case "/":
             case "//":
+            case "/=":
                 return parseRegexMatch(parser.ctx, operator, rawStr);
             case "s":
                 return parseRegexReplace(parser.ctx, rawStr);

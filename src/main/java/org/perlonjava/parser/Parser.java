@@ -439,6 +439,7 @@ public class Parser {
                     case "\"":
                     case "/":
                     case "//":
+                    case "/=":
                     case "`":
                         // Handle single and double-quoted strings
                         return StringParser.parseRawString(this, token.text);
