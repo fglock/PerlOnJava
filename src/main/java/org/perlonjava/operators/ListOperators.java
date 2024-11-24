@@ -64,13 +64,13 @@ public class ListOperators {
      * @return A new RuntimeList with the elements sorted according to the Perl comparator.
      * @throws RuntimeException If the Perl comparator subroutine throws an exception.
      */
-    public static RuntimeList sort(RuntimeList runtimeList, RuntimeScalar perlComparatorClosure) {
+    public static RuntimeList sort(RuntimeList runtimeList, RuntimeScalar perlComparatorClosure, String packageName) {
         // Create a new list from the elements of this RuntimeArray
         RuntimeArray array = new RuntimeArray();
         runtimeList.setArrayOfAlias(array);
 
-        RuntimeScalar varA = getGlobalVariable("main::a");
-        RuntimeScalar varB = getGlobalVariable("main::b");
+        RuntimeScalar varA = getGlobalVariable(packageName + "::a");
+        RuntimeScalar varB = getGlobalVariable(packageName + "::b");
         RuntimeArray comparatorArgs = new RuntimeArray();
 
         // Sort the new array using the Perl comparator subroutine

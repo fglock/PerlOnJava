@@ -408,6 +408,9 @@ public class EmitOperator {
         // Accept the right operand in LIST context and the left operand in SCALAR context.
         node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));  // list
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // subroutine
+        if (operator.equals("sort")) {
+            emitterVisitor.ctx.mv.visitLdcInsn(emitterVisitor.ctx.symbolTable.getCurrentPackage());
+        }
         // Invoke the static method for the operator.
         emitterVisitor.ctx.mv.visitMethodInsn(
                 operatorHandler.getMethodType(),

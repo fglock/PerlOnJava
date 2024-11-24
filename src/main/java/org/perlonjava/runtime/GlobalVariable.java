@@ -69,7 +69,9 @@ public class GlobalVariable {
      * @return True if the global variable exists, false otherwise.
      */
     public static boolean existsGlobalVariable(String key) {
-        return globalVariables.containsKey(key);
+        return globalVariables.containsKey(key)
+                || key.endsWith("::a")  // $a, $b always exist
+                || key.endsWith("::b");
     }
 
     /**
