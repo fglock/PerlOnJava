@@ -21,13 +21,51 @@ import static org.perlonjava.parser.TokenUtils.peek;
 public class OperatorParser {
 
     /**
-     * Parses map, grep, and sort operators.
+     * Parses sort operator.
      *
      * @param parser The Parser instance.
      * @param token  The current LexerToken.
      * @return A BinaryOperatorNode representing the parsed operator.
      */
-    static BinaryOperatorNode parseMapGrepSort(Parser parser, LexerToken token) {
+    static BinaryOperatorNode parseSort(Parser parser, LexerToken token) {
+        ListNode operand;
+        int currentIndex = parser.tokenIndex;
+        try {
+            // Handle 'sort' keyword as a Binary operator with a Code and List operands
+            operand = ListParser.parseZeroOrMoreList(parser, 1, true, false, false, false);
+        } catch (PerlCompilerException e) {
+            // sort $sub 1,2,3
+            parser.tokenIndex = currentIndex;
+            parser.parsingForLoopVariable = true;
+            Node var = parser.parsePrimary();
+            parser.parsingForLoopVariable = false;
+            operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
+            operand.handle = var;
+            parser.ctx.logDebug("parseSort: " + operand.handle + " : " + operand);
+        }
+
+        // transform:   { 123 }
+        // into:        sub { 123 }
+        Node block = operand.handle;
+        operand.handle = null;
+        if (block == null) {
+            // create default block for `sort`: { $a cmp $b }
+            block = new BlockNode(List.of(new BinaryOperatorNode("cmp", new OperatorNode("$", new IdentifierNode("main::a", parser.tokenIndex), parser.tokenIndex), new OperatorNode("$", new IdentifierNode("main::b", parser.tokenIndex), parser.tokenIndex), parser.tokenIndex)), parser.tokenIndex);
+        }
+        if (block instanceof BlockNode) {
+            block = new SubroutineNode(null, null, null, block, false, parser.tokenIndex);
+        }
+        return new BinaryOperatorNode(token.text, block, operand, parser.tokenIndex);
+    }
+
+    /**
+     * Parses map and grep operators.
+     *
+     * @param parser The Parser instance.
+     * @param token  The current LexerToken.
+     * @return A BinaryOperatorNode representing the parsed operator.
+     */
+    static BinaryOperatorNode parseMapGrep(Parser parser, LexerToken token) {
         ListNode operand;
         // Handle 'sort' keyword as a Binary operator with a Code and List operands
         operand = ListParser.parseZeroOrMoreList(parser, 1, true, false, false, false);
@@ -35,10 +73,6 @@ public class OperatorParser {
         // into:        sub { 123 }
         Node block = operand.handle;
         operand.handle = null;
-        if (block == null && token.text.equals("sort")) {
-            // create default block for `sort`: { $a cmp $b }
-            block = new BlockNode(List.of(new BinaryOperatorNode("cmp", new OperatorNode("$", new IdentifierNode("main::a", parser.tokenIndex), parser.tokenIndex), new OperatorNode("$", new IdentifierNode("main::b", parser.tokenIndex), parser.tokenIndex), parser.tokenIndex)), parser.tokenIndex);
-        }
         if (block == null) {
             // use the first argument as block: 'map ord, 1,2,3'
             if (!operand.elements.isEmpty()) {
@@ -362,9 +396,10 @@ public class OperatorParser {
                 separator = ((ListNode) operand).elements.removeFirst();
                 return new BinaryOperatorNode(token.text, separator, operand, currentIndex);
             case "sort":
+                return parseSort(parser, token);
             case "map":
             case "grep":
-                return parseMapGrepSort(parser, token);
+                return parseMapGrep(parser, token);
             case "pack":
                 // Handle operators with one or more arguments
                 operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
