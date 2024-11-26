@@ -89,6 +89,7 @@ For a detailed feature list, see the [FEATURE_MATRIX.md](FEATURE_MATRIX.md).
 - **JUnit**: For testing.
 - **ASM**: For bytecode manipulation.
 - **ICU4J**: For Unicode support.
+- **FASTJSON v2**: For JSON support.
 
 ### Notes
 
