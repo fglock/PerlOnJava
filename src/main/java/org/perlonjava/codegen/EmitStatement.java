@@ -122,7 +122,7 @@ public class EmitStatement {
                         continueLabel,
                         redoLabel,
                         endLabel,
-                        emitterVisitor.ctx.contextType);
+                        RuntimeContextType.VOID);
 
                 // Visit the loop body
                 node.body.accept(voidVisitor);
@@ -230,7 +230,7 @@ public class EmitStatement {
                 continueLabel,
                 redoLabel,
                 loopEnd,
-                emitterVisitor.ctx.contextType);
+                RuntimeContextType.VOID);
 
         // Visit the body of the loop
         node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
