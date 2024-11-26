@@ -1,7 +1,5 @@
 package org.perlonjava.runtime;
 
-import com.ibm.icu.lang.UCharacter;
-
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -9,6 +7,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static java.util.regex.Pattern.COMMENTS;
+import static org.perlonjava.runtime.RegexPreprocessor.preProcessRegex;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
@@ -81,23 +80,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 // Check for \G and set useGAssertion
                 regex.useGAssertion = patternString.contains("\\G");
 
-                // Remove \G from the pattern string for Java compilation
-                String javaPatternString = patternString.replace("\\G", "");
-
-                // Find \N{name} constructs
-                javaPatternString = replaceNamedCharacters(javaPatternString);
-
-                // Replace [:ascii:] with Java's \p{ASCII}
-                javaPatternString = javaPatternString.replace("[:ascii:]", "\\p{ASCII}");
-
-                // Replace [:^ascii:] with Java's \\P{ASCII}
-                javaPatternString = javaPatternString.replace("[:^ascii:]", "\\P{ASCII}");
-
-                // Replace [:^print:] with Java's \\P{Print}
-                javaPatternString = javaPatternString.replace("[:^print:]", "\\P{Print}");
-
-                // Replace [:print:] with Java's \\p{Print}
-                javaPatternString = javaPatternString.replace("[:print:]", "\\p{Print}");
+                String javaPatternString = preProcessRegex(patternString);
 
                 // Compile the regex pattern
                 regex.pattern = Pattern.compile(javaPatternString, flags);
@@ -111,36 +94,6 @@ public class RuntimeRegex implements RuntimeScalarReference {
             }
         }
         return regex;
-    }
-
-    private static String replaceNamedCharacters(String pattern) {
-        // Compile a regex pattern to find \N{name} constructs
-        Pattern namedCharPattern = Pattern.compile("\\\\N\\{([^}]+)\\}");
-        Matcher matcher = namedCharPattern.matcher(pattern);
-        StringBuilder result = new StringBuilder();
-
-        while (matcher.find()) {
-            String name = matcher.group(1).trim();
-            int codePoint;
-            if (name.startsWith("U+")) {
-                // Handle \N{U+263D} format
-                try {
-                    codePoint = Integer.parseInt(name.substring(2), 16);
-                } catch (NumberFormatException e) {
-                    throw new IllegalArgumentException("Invalid Unicode code point: " + name);
-                }
-            } else {
-                codePoint = UCharacter.getCharFromName(name);
-                if (codePoint == -1) {
-                    throw new IllegalArgumentException("Invalid Unicode character name: " + name);
-                }
-            }
-
-            // Replace the match with the escaped Unicode representation
-            matcher.appendReplacement(result, String.format("\\\\x{%X}", codePoint));
-        }
-        matcher.appendTail(result);
-        return result.toString();
     }
 
     /**

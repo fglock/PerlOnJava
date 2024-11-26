@@ -112,7 +112,7 @@
   - Added `AUTOLOAD` default subroutine.
   - Added `stat`, `lstat` operators. Some fields are not available in JVM and return `undef`.
   - Added directory operators.
-  - Added regex patterns: `[[:ascii:]]`, `[[:print:]]`.
+  - Added regex patterns: `[[:ascii:]]`, `[[:print:]]`, `(?#comment)`.
   - Work in progress:
     - `lexical_subs` feature.
     - `socket` and related operators.
