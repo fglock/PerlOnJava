@@ -6,6 +6,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONWriter;
 import org.perlonjava.runtime.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 public class Json extends PerlModuleBase {
@@ -189,10 +190,17 @@ public class Json extends PerlModuleBase {
             return array.createReference();
         } else if (json instanceof String) {
             return new RuntimeScalar((String) json);
-        } else if (json instanceof Number) {
-            return new RuntimeScalar(((Number) json).doubleValue());
+        } else if (json instanceof Integer) {
+            return new RuntimeScalar((Integer) json);
+        } else if (json instanceof Long) {
+            return new RuntimeScalar((Long) json);
+        } else if (json instanceof Double) {
+            return new RuntimeScalar((Double) json);
         } else if (json instanceof Boolean) {
             return new RuntimeScalar((Boolean) json);
+        } else if (json instanceof BigDecimal) {
+            // Convert BigDecimal to double
+            return new RuntimeScalar(((BigDecimal) json).doubleValue());
         } else {
             return new RuntimeScalar(); // Represents null or undefined
         }
