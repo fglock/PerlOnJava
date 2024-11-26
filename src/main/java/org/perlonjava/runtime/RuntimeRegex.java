@@ -88,16 +88,16 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 javaPatternString = replaceNamedCharacters(javaPatternString);
 
                 // Replace [:ascii:] with Java's \p{ASCII}
-                javaPatternString = javaPatternString.replace("[[:ascii:]]", "\\p{ASCII}");
+                javaPatternString = javaPatternString.replace("[:ascii:]", "\\p{ASCII}");
 
-                // Replace [:^ascii:] with Java's [\\P{ASCII}]
-                javaPatternString = javaPatternString.replace("[[:^ascii:]]", "[\\P{ASCII}]");
+                // Replace [:^ascii:] with Java's \\P{ASCII}
+                javaPatternString = javaPatternString.replace("[:^ascii:]", "\\P{ASCII}");
 
-                // Replace [:^print:] with Java's [\\P{Print}]
-                javaPatternString = javaPatternString.replace("[[:^print:]]", "[\\P{Print}]");
+                // Replace [:^print:] with Java's \\P{Print}
+                javaPatternString = javaPatternString.replace("[:^print:]", "\\P{Print}");
 
-                // Replace [:print:] with Java's [\\p{Print}]
-                javaPatternString = javaPatternString.replace("[[:print:]]", "[\\p{Print}]");
+                // Replace [:print:] with Java's \\p{Print}
+                javaPatternString = javaPatternString.replace("[:print:]", "\\p{Print}");
 
                 // Compile the regex pattern
                 regex.pattern = Pattern.compile(javaPatternString, flags);
