@@ -65,15 +65,15 @@ public class RegexPreprocessor {
     // regex escape rules:
     //
     // \[       as-is
-    // [xx xx]  becomes: [xx\ xx] - this will make sure space is a token, even when /x modifier is set
     // \120     becomes: \0120 - Java requires octal sequences to start with zero
     // \0       becomes: \00 - Java requires the extra zero
     // (?#...)  inline comment is removed
     // [xx \b xx]  becomes: (?:[xx xx]|\b) - java doesn't support \b as a character
+    // /xx flag:
+    //          [xx xx]  becomes: [xx\ xx] - this will make sure space is a token, even when /x modifier is set
     //
     // WIP:
     // named capture (?<one> ... ) replace underscore in name
-    // /xx flag
     private static String regex_escape(String s, boolean flag_xx) {
         // escape spaces in character classes
         final int length = s.length();

@@ -172,11 +172,13 @@
 - ✔️   **`[[:pattern:]]`**: `[[:ascii:]]`, `[[:print:]]` are implemented.
 - ✔️   **Matching plain strings**: `$var =~ "Test"` is implemented.
 - ✔️   **Inline comments**: `(?#comment)` in regex is implemented.
+- ✔️   **\b inside character class**: `[\b]` is supported in regex.
 - ❌  **Perl-specific Regex Features**: Some features like `/ee` are missing.
 - ❌  **Dynamically-scoped regex variables**: Regex variables are not dynamically-scoped.
 - ❌  **Code blocks**: `(?{ code })` in regex is not implemented.
 - ❌  Missing regex features include:
-  - `(?^` embedded pattern-match modifier, shorthand equivalent to "d-imnsx"
+  - `(?^` embedded pattern-match modifier, shorthand equivalent to "d-imnsx".
+  - `(?<test_field>test)` the name in named captures cannot have underscores.
 
 ## Statements and Special Operators
 - ✔️   **Context void, scalar, list**: Contexts for void, scalar, and list are supported.
