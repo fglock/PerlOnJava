@@ -117,6 +117,7 @@ public class EmitStatement {
 
             if (node.useNewScope) {
                 // Register next/redo/last labels
+                emitterVisitor.ctx.logDebug("FOR3 label: " + node.labelName);
                 emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
                         node.labelName,
                         continueLabel,

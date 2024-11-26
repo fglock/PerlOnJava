@@ -74,7 +74,7 @@ public class JavaClassInfo {
             return loopLabelStack.peek();
         }
         for (LoopLabels loopLabels : loopLabelStack) {
-            if (loopLabels.labelName.equals(labelName)) {
+            if (loopLabels.labelName != null && loopLabels.labelName.equals(labelName)) {
                 return loopLabels;
             }
         }
