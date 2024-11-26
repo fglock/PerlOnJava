@@ -758,6 +758,14 @@ public class EmitOperator {
         // Use StackLevelManager to emit POP instructions
         ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, loopLabels.asmStackLevel);
 
+        // add return value depending on context
+        if (loopLabels.context != RuntimeContextType.VOID) {
+            if (operator.equals("next") || operator.equals("last")) {
+                // If the context is not VOID, push "undef" to the stack
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", "undef", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            }
+        }
+
         // Determine the appropriate label to jump to.
         Label label = operator.equals("next") ? loopLabels.nextLabel
                 : operator.equals("last") ? loopLabels.lastLabel

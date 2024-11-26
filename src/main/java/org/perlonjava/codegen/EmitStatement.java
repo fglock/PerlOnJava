@@ -121,7 +121,8 @@ public class EmitStatement {
                         node.labelName,
                         continueLabel,
                         redoLabel,
-                        endLabel);
+                        endLabel,
+                        emitterVisitor.ctx.contextType);
 
                 // Visit the loop body
                 node.body.accept(voidVisitor);
@@ -228,7 +229,8 @@ public class EmitStatement {
                 node.labelName,
                 continueLabel,
                 redoLabel,
-                loopEnd);
+                loopEnd,
+                emitterVisitor.ctx.contextType);
 
         // Visit the body of the loop
         node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
@@ -282,7 +284,7 @@ public class EmitStatement {
     static void emitBlock(EmitterVisitor emitterVisitor, BlockNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
-        emitterVisitor.ctx.logDebug("generateCodeBlock start");
+        emitterVisitor.ctx.logDebug("generateCodeBlock start context:" + emitterVisitor.ctx.contextType);
         emitterVisitor.ctx.symbolTable.enterScope();
         EmitterVisitor voidVisitor =
                 emitterVisitor.with(RuntimeContextType.VOID); // statements in the middle of the block have context VOID
@@ -306,7 +308,8 @@ public class EmitStatement {
                     node.labelName,
                     nextLabel,
                     redoLabel,
-                    nextLabel);
+                    nextLabel,
+                    emitterVisitor.ctx.contextType);
         }
 
         for (int i = 0; i < list.size(); i++) {

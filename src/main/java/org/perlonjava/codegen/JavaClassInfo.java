@@ -1,6 +1,7 @@
 package org.perlonjava.codegen;
 
 import org.objectweb.asm.Label;
+import org.perlonjava.runtime.RuntimeContextType;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -51,8 +52,8 @@ public class JavaClassInfo {
      * @param redoLabel the label for redoing the current iteration
      * @param lastLabel the label for exiting the loop
      */
-    public void pushLoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel) {
-        loopLabelStack.push(new LoopLabels(labelName, nextLabel, redoLabel, lastLabel, stackLevelManager.getStackLevel()));
+    public void pushLoopLabels(String labelName, Label nextLabel, Label redoLabel, Label lastLabel, int context) {
+        loopLabelStack.push(new LoopLabels(labelName, nextLabel, redoLabel, lastLabel, stackLevelManager.getStackLevel(), context));
     }
 
     /**
