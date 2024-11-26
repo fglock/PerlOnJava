@@ -86,32 +86,30 @@ public class RegexPreprocessor {
             switch (c) {
                 case '\\':  // escape - \[ \120
                     sb.append(Character.toChars(c));
-                    if (offset < length) {
-                        offset++;
-                        int c2 = s.codePointAt(offset);
-                        if (c2 >= '1' && c2 <= '3') {
-                            if (offset < length + 1) {
-                                int off = offset;
-                                int c3 = s.codePointAt(off++);
-                                int c4 = s.codePointAt(off++);
-                                if ((c3 >= '0' && c3 <= '7') && (c4 >= '0' && c4 <= '7')) {
-                                    // a \000 octal sequence
-                                    sb.append('0');
-                                }
+                    offset++;
+                    int c2 = s.codePointAt(offset);
+                    if (c2 >= '1' && c2 <= '3') {
+                        if (offset < length + 1) {
+                            int off = offset;
+                            int c3 = s.codePointAt(off++);
+                            int c4 = s.codePointAt(off++);
+                            if ((c3 >= '0' && c3 <= '7') && (c4 >= '0' && c4 <= '7')) {
+                                // a \000 octal sequence
+                                sb.append('0');
                             }
-                        } else if (c2 == '0') {
-                            // rewrite \0 to \00
-                            sb.append('0');
                         }
-                        sb.append(Character.toChars(c2));
+                    } else if (c2 == '0') {
+                        // rewrite \0 to \00
+                        sb.append('0');
                     }
+                    sb.append(Character.toChars(c2));
                     break;
                 case '[':   // character class
                     int len = sb.length();
                     sb.append(Character.toChars(c));
                     offset++;
                     offset = _regex_character_class_escape(offset, s, sb, length, flag_xx, rejected);
-                    if (rejected.length() > 0) {
+                    if (!rejected.isEmpty()) {
                         // process \b inside character class
                         String subseq;
                         if ((sb.length() - len) == 2) {
@@ -128,7 +126,7 @@ public class RegexPreprocessor {
                 case '(':
                     boolean append = true;
                     if (offset < length - 3) {
-                        int c2 = s.codePointAt(offset + 1);
+                        c2 = s.codePointAt(offset + 1);
                         int c3 = s.codePointAt(offset + 2);
                         int c4 = s.codePointAt(offset + 3);
                         // System.out.println("regex_escape at (" + c2 + c3 + c4 );
@@ -198,34 +196,30 @@ public class RegexPreprocessor {
                     break;
                 case '\\':  // escape - \[ \120
 
-                    if (offset < length) {
-                        if (s.codePointAt(offset + 1) == 'b') {
-                            rejected.append("\\b");      // Java doesn't support \b inside [...]
-                            offset++;
-                            break;
-                        }
+                    if (s.codePointAt(offset + 1) == 'b') {
+                        rejected.append("\\b");      // Java doesn't support \b inside [...]
+                        offset++;
+                        break;
                     }
 
                     sb.append(Character.toChars(c));
-                    if (offset < length) {
-                        offset++;
-                        int c2 = s.codePointAt(offset);
-                        if (c2 >= '1' && c2 <= '3') {
-                            if (offset < length + 1) {
-                                int off = offset;
-                                int c3 = s.codePointAt(off++);
-                                int c4 = s.codePointAt(off++);
-                                if ((c3 >= '0' && c3 <= '7') && (c4 >= '0' && c4 <= '7')) {
-                                    // a \000 octal sequence
-                                    sb.append('0');
-                                }
+                    offset++;
+                    int c2 = s.codePointAt(offset);
+                    if (c2 >= '1' && c2 <= '3') {
+                        if (offset < length + 1) {
+                            int off = offset;
+                            int c3 = s.codePointAt(off++);
+                            int c4 = s.codePointAt(off++);
+                            if ((c3 >= '0' && c3 <= '7') && (c4 >= '0' && c4 <= '7')) {
+                                // a \000 octal sequence
+                                sb.append('0');
                             }
-                        } else if (c2 == '0') {
-                            // rewrite \0 to \00
-                            sb.append('0');
                         }
-                        sb.append(Character.toChars(c2));
+                    } else if (c2 == '0') {
+                        // rewrite \0 to \00
+                        sb.append('0');
                     }
+                    sb.append(Character.toChars(c2));
                     break;
                 case ' ':
                     if (flag_xx) {
