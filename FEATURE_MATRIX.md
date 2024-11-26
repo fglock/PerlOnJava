@@ -169,6 +169,7 @@
 - ✔️   **`reset`** resetting one-time match is implemented
 - ✔️   **`@-`, `@+`, `%+`, `%-` variables**: regex special variables are implemented
 - ✔️   **`$&` variables**: `` $` ``, `$&`, `$'` special variables are implemented
+- ✔️   **`[[:pattern:]]`**: `[[:ascii:]]`, `[[:print:]]` are implemented.
 - ✔️   **Matching plain strings**: `$var =~ "Test"` is implemented.
 - ❌  **Perl-specific Regex Features**: Some features like `/xx` `/ee` are missing.
 - ❌  **Dynamically-scoped regex variables**: Regex variables are not dynamically-scoped.

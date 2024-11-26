@@ -112,6 +112,7 @@
   - Added `AUTOLOAD` default subroutine.
   - Added `stat`, `lstat` operators. Some fields are not available in JVM and return `undef`.
   - Added directory operators.
+  - Added regex patterns: `[[:ascii:]]`, `[[:print:]]`.
   - Work in progress:
     - `lexical_subs` feature.
     - `socket` and related operators.
@@ -125,6 +126,7 @@
     - `use subs`, `use vars`.
     - `Getopt::Long`.
     - subroutine prototypes.
+    - `JSON` module.
   - Stretch goals
     - Add support for concurrency and parallelism, such as threads and async/await.
     - Enhance security features, including sandboxing and input validation.
