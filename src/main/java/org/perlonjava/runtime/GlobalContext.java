@@ -113,6 +113,7 @@ public class GlobalContext {
         Re.initialize();
         Cwd.initialize();
         FileSpec.initialize();
+        Json.initialize();
 
         // Reset method cache after initializing UNIVERSAL
         InheritanceResolver.invalidateCache();

@@ -21,6 +21,7 @@ dependencies {
     implementation 'org.ow2.asm:asm:9.7'
     implementation 'org.ow2.asm:asm-util:9.7'
     implementation 'com.ibm.icu:icu4j:71.1'
+    implementation 'com.alibaba.fastjson2:fastjson2:2.0.53'
 }
 
 testing {
