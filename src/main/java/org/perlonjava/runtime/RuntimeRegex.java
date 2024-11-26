@@ -76,11 +76,12 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 regex.isGlobalMatch = modifiers.contains("g");
                 regex.isNonDestructive = modifiers.contains("r");
                 regex.isMatchExactlyOnce = modifiers.contains("?");
+                boolean flag_xx = modifiers.contains("xx");
 
                 // Check for \G and set useGAssertion
                 regex.useGAssertion = patternString.contains("\\G");
 
-                String javaPatternString = preProcessRegex(patternString);
+                String javaPatternString = preProcessRegex(patternString, flag_xx);
 
                 // Compile the regex pattern
                 regex.pattern = Pattern.compile(javaPatternString, flags);

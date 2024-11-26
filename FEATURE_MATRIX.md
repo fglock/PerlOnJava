@@ -158,7 +158,7 @@
 
 ## Regular Expressions
 - ✔️   **Basic Matching**: Operators `qr//`, `m//`, `s///`, `split` are implemented.
-- ✔️   **Regex modifiers**: Modifiers `/i` `/m` `/s` `/g` `/r` `/e` `/x` are implemented.
+- ✔️   **Regex modifiers**: Modifiers `/i` `/m` `/s` `/g` `/r` `/e` `/x` `/xx` are implemented.
 - ✔️   **Special variables**: The special variables `$1`, `$2`... are implemented.
 - ✔️   **Transliteration**: `tr` and `y` transliteration operators are implemented.
 - ✔️   **`pos`**: `pos` operator is implemented.
@@ -172,7 +172,7 @@
 - ✔️   **`[[:pattern:]]`**: `[[:ascii:]]`, `[[:print:]]` are implemented.
 - ✔️   **Matching plain strings**: `$var =~ "Test"` is implemented.
 - ✔️   **Inline comments**: `(?#comment)` in regex is implemented.
-- ❌  **Perl-specific Regex Features**: Some features like `/xx` `/ee` are missing.
+- ❌  **Perl-specific Regex Features**: Some features like `/ee` are missing.
 - ❌  **Dynamically-scoped regex variables**: Regex variables are not dynamically-scoped.
 - ❌  **Code blocks**: `(?{ code })` in regex is not implemented.
 - ❌  Missing regex features include:

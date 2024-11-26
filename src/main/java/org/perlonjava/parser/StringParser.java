@@ -213,6 +213,7 @@ public class StringParser {
                             || token1.text.equals(")")
                             || token1.text.equals("%")
                             || token1.text.equals("|")
+                            || token1.text.equals("\"")
                             || token1.text.equals("\\")) {
                         // space, `)`, `%`, `|`, `\` after $ or @
                         str.append(text);

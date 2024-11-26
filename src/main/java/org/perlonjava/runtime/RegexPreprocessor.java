@@ -37,7 +37,7 @@ public class RegexPreprocessor {
         return result.toString();
     }
 
-    static String preProcessRegex(String patternString) {
+    static String preProcessRegex(String patternString, boolean flag_xx) {
         // Remove \G from the pattern string for Java compilation
         String javaPatternString = patternString.replace("\\G", "");
 
@@ -56,7 +56,7 @@ public class RegexPreprocessor {
         // Replace [:print:] with Java's \\p{Print}
         javaPatternString = javaPatternString.replace("[:print:]", "\\p{Print}");
 
-        javaPatternString = regex_escape(javaPatternString, false);
+        javaPatternString = regex_escape(javaPatternString, flag_xx);
 
         return javaPatternString;
     }
@@ -233,6 +233,10 @@ public class RegexPreprocessor {
                     } else {
                         sb.append("\\ ");   // make this space a "token", even inside /x
                     }
+                    break;
+                case '(', ')', '*', '?', '<', '>', '\'', '"', '$', '@', '#', '=', '&':
+                    sb.append('\\');
+                    sb.append(Character.toChars(c));
                     break;
                 default:
                     sb.append(Character.toChars(c));
