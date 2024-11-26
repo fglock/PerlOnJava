@@ -45,3 +45,11 @@ $pattern = qr/(Hello) (World)/;
 $substituted = $string =~ s/$pattern/$2, $1/r;
 print "not " if $substituted ne "World, Hello"; say "ok # 'Hello World' becomes 'World, Hello' with multiple captured groups <$substituted>";
 
+# Substitution with backslash
+$string = "Hello World\n";
+$pattern = qr/\n/;
+$replacement = "\\n";
+$substituted = $string =~ s/$pattern/$replacement/r;
+print "not " if $substituted ne "Hello World\\n"; say 'ok # \n becomes \\\\n with backslash';
+
+

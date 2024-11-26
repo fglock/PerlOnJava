@@ -328,6 +328,8 @@ public class RuntimeRegex implements RuntimeScalarReference {
             }
 
             if (replacementStr != null) {
+                replacementStr = replacementStr.replaceAll("\\\\", "\\\\\\\\");
+
                 // Append the text before the match and the replacement to the result buffer
                 matcher.appendReplacement(resultBuffer, replacementStr);
             }
