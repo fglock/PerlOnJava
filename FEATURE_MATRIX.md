@@ -278,6 +278,7 @@
 - ✔️   **Carp**: `carp`, `cluck`, `croak`, `confess`, `longmess`, `shortmess` are implemented.
 - ✔️   **Cwd** module
 - ✔️   **parent** pragma
+- ✔️   **base** pragma
 - ✔️   **constant** pragma
 - ✔️   **if** pragma
 - ✔️   **lib** pragma
