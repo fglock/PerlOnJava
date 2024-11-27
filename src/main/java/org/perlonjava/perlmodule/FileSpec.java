@@ -9,7 +9,11 @@ import java.util.List;
 
 /**
  * Utility class for File::Spec operations in Perl.
- * Extends PerlModuleBase to leverage module initialization and method registration.
+ * This class provides methods that mimic the behavior of Perl's File::Spec module,
+ * allowing for operations related to file path manipulation and environment-specific
+ * path handling.
+ *
+ * <p>Extends {@link PerlModuleBase} to leverage module initialization and method registration.</p>
  */
 public class FileSpec extends PerlModuleBase {
 
@@ -24,6 +28,7 @@ public class FileSpec extends PerlModuleBase {
     /**
      * Static initializer to set up the File::Spec module.
      * This method initializes the exporter and defines the symbols that can be exported.
+     * It also registers methods that can be called from the Perl environment.
      */
     public static void initialize() {
         FileSpec fileSpec = new FileSpec();
@@ -55,6 +60,13 @@ public class FileSpec extends PerlModuleBase {
         }
     }
 
+    /**
+     * Converts a path to a canonical form, removing redundant separators and up-level references.
+     *
+     * @param args The arguments passed from the Perl environment, where args[1] is the path.
+     * @param ctx The context in which the method is called.
+     * @return A {@link RuntimeList} containing the canonical path.
+     */
     public static RuntimeList canonpath(RuntimeArray args, int ctx) {
         if (args.size() != 2) {
             throw new IllegalStateException("Bad number of arguments for canonpath() method");
@@ -64,6 +76,13 @@ public class FileSpec extends PerlModuleBase {
         return new RuntimeScalar(canonPath).getList();
     }
 
+    /**
+     * Concatenates multiple directory names into a single path.
+     *
+     * @param args The arguments passed from the Perl environment, representing directory names.
+     * @param ctx The context in which the method is called.
+     * @return A {@link RuntimeList} containing the concatenated directory path.
+     */
     public static RuntimeList catdir(RuntimeArray args, int ctx) {
         StringBuilder path = new StringBuilder();
         for (int i = 1; i < args.size(); i++) {
@@ -73,24 +92,60 @@ public class FileSpec extends PerlModuleBase {
         return new RuntimeScalar(path.toString()).getList();
     }
 
+    /**
+     * Concatenates multiple file names into a single path.
+     * This method is an alias for {@link #catdir(RuntimeArray, int)}.
+     *
+     * @param args The arguments passed from the Perl environment, representing file names.
+     * @param ctx The context in which the method is called.
+     * @return A {@link RuntimeList} containing the concatenated file path.
+     */
     public static RuntimeList catfile(RuntimeArray args, int ctx) {
         return catdir(args, ctx);
     }
 
+    /**
+     * Returns the current directory symbol.
+     *
+     * @param args The arguments passed from the Perl environment.
+     * @param ctx The context in which the method is called.
+     * @return A {@link RuntimeList} containing the current directory symbol.
+     */
     public static RuntimeList curdir(RuntimeArray args, int ctx) {
         return new RuntimeScalar(".").getList();
     }
 
+    /**
+     * Returns the null device for the current operating system.
+     *
+     * @param args The arguments passed from the Perl environment.
+     * @param ctx The context in which the method is called.
+     * @return A {@link RuntimeList} containing the null device path.
+     */
     public static RuntimeList devnull(RuntimeArray args, int ctx) {
         String devNull = System.getProperty("os.name").toLowerCase().contains("win") ? "NUL" : "/dev/null";
         return new RuntimeScalar(devNull).getList();
     }
 
+    /**
+     * Returns the root directory for the current operating system.
+     *
+     * @param args The arguments passed from the Perl environment.
+     * @param ctx The context in which the method is called.
+     * @return A {@link RuntimeList} containing the root directory path.
+     */
     public static RuntimeList rootdir(RuntimeArray args, int ctx) {
         String rootDir = System.getProperty("os.name").toLowerCase().contains("win") ? "\\" : "/";
         return new RuntimeScalar(rootDir).getList();
     }
 
+    /**
+     * Returns the temporary directory path for the current operating system.
+     *
+     * @param args The arguments passed from the Perl environment.
+     * @param ctx The context in which the method is called.
+     * @return A {@link RuntimeList} containing the temporary directory path.
+     */
     public static RuntimeList tmpdir(RuntimeArray args, int ctx) {
         String tmpDir = System.getenv("TMPDIR");
         if (tmpDir == null || tmpDir.isEmpty()) {
@@ -99,10 +154,24 @@ public class FileSpec extends PerlModuleBase {
         return new RuntimeScalar(tmpDir).getList();
     }
 
+    /**
+     * Returns the parent directory symbol.
+     *
+     * @param args The arguments passed from the Perl environment.
+     * @param ctx The context in which the method is called.
+     * @return A {@link RuntimeList} containing the parent directory symbol.
+     */
     public static RuntimeList updir(RuntimeArray args, int ctx) {
         return new RuntimeScalar("..").getList();
     }
 
+    /**
+     * Filters out the current and parent directory symbols from a list of directory names.
+     *
+     * @param args The arguments passed from the Perl environment, representing directory names.
+     * @param ctx The context in which the method is called.
+     * @return A {@link RuntimeList} containing the filtered directory names.
+     */
     public static RuntimeList no_upwards(RuntimeArray args, int ctx) {
         List<RuntimeScalar> filtered = new ArrayList<>();
         for (int i = 1; i < args.size(); i++) {
@@ -114,11 +183,25 @@ public class FileSpec extends PerlModuleBase {
         return new RuntimeList(filtered);
     }
 
+    /**
+     * Determines if the current file system is case-tolerant.
+     *
+     * @param args The arguments passed from the Perl environment.
+     * @param ctx The context in which the method is called.
+     * @return A {@link RuntimeList} containing a boolean indicating case tolerance.
+     */
     public static RuntimeList case_tolerant(RuntimeArray args, int ctx) {
         boolean caseTolerant = System.getProperty("os.name").toLowerCase().contains("win");
         return new RuntimeScalar(caseTolerant).getList();
     }
 
+    /**
+     * Checks if a given file name is an absolute path.
+     *
+     * @param args The arguments passed from the Perl environment, where args[1] is the file name.
+     * @param ctx The context in which the method is called.
+     * @return A {@link RuntimeList} containing a boolean indicating if the path is absolute.
+     */
     public static RuntimeList file_name_is_absolute(RuntimeArray args, int ctx) {
         if (args.size() != 2) {
             throw new IllegalStateException("Bad number of arguments for file_name_is_absolute() method");
@@ -128,6 +211,13 @@ public class FileSpec extends PerlModuleBase {
         return new RuntimeScalar(isAbsolute).getList();
     }
 
+    /**
+     * Retrieves the system's PATH environment variable as a list of directories.
+     *
+     * @param args The arguments passed from the Perl environment.
+     * @param ctx The context in which the method is called.
+     * @return A {@link RuntimeList} containing the directories in the PATH.
+     */
     public static RuntimeList path(RuntimeArray args, int ctx) {
         String path = System.getenv("PATH");
         String[] paths = path != null ? path.split(File.pathSeparator) : new String[0];
@@ -138,10 +228,25 @@ public class FileSpec extends PerlModuleBase {
         return new RuntimeList(pathList);
     }
 
+    /**
+     * Joins multiple path components into a single path.
+     * This method is an alias for {@link #catfile(RuntimeArray, int)}.
+     *
+     * @param args The arguments passed from the Perl environment, representing path components.
+     * @param ctx The context in which the method is called.
+     * @return A {@link RuntimeList} containing the joined path.
+     */
     public static RuntimeList join(RuntimeArray args, int ctx) {
         return catfile(args, ctx);
     }
 
+    /**
+     * Splits a path into volume, directory, and file components.
+     *
+     * @param args The arguments passed from the Perl environment, where args[1] is the path and args[2] is optional.
+     * @param ctx The context in which the method is called.
+     * @return A {@link RuntimeList} containing the volume, directory, and file components.
+     */
     public static RuntimeList splitpath(RuntimeArray args, int ctx) {
         if (args.size() < 2 || args.size() > 3) {
             throw new IllegalStateException("Bad number of arguments for splitpath() method");
@@ -172,6 +277,13 @@ public class FileSpec extends PerlModuleBase {
                 List.of(new RuntimeScalar(volume), new RuntimeScalar(directory), new RuntimeScalar(file)));
     }
 
+    /**
+     * Splits a directory path into its individual components.
+     *
+     * @param args The arguments passed from the Perl environment, where args[1] is the directory path.
+     * @param ctx The context in which the method is called.
+     * @return A {@link RuntimeList} containing the directory components.
+     */
     public static RuntimeList splitdir(RuntimeArray args, int ctx) {
         if (args.size() != 2) {
             throw new IllegalStateException("Bad number of arguments for splitdir() method");
@@ -185,6 +297,13 @@ public class FileSpec extends PerlModuleBase {
         return new RuntimeList(dirList);
     }
 
+    /**
+     * Constructs a complete path from volume, directory, and file components.
+     *
+     * @param args The arguments passed from the Perl environment, where args[1] is the volume, args[2] is the directory, and args[3] is the file.
+     * @param ctx The context in which the method is called.
+     * @return A {@link RuntimeList} containing the constructed path.
+     */
     public static RuntimeList catpath(RuntimeArray args, int ctx) {
         if (args.size() != 4) {
             throw new IllegalStateException("Bad number of arguments for catpath() method");
@@ -196,6 +315,13 @@ public class FileSpec extends PerlModuleBase {
         return new RuntimeScalar(fullPath).getList();
     }
 
+    /**
+     * Converts an absolute path to a relative path based on a given base path.
+     *
+     * @param args The arguments passed from the Perl environment, where args[1] is the absolute path and args[2] is optional base path.
+     * @param ctx The context in which the method is called.
+     * @return A {@link RuntimeList} containing the relative path.
+     */
     public static RuntimeList abs2rel(RuntimeArray args, int ctx) {
         if (args.size() < 2 || args.size() > 3) {
             throw new IllegalStateException("Bad number of arguments for abs2rel() method");
@@ -206,6 +332,13 @@ public class FileSpec extends PerlModuleBase {
         return new RuntimeScalar(relPath).getList();
     }
 
+    /**
+     * Converts a relative path to an absolute path based on a given base path.
+     *
+     * @param args The arguments passed from the Perl environment, where args[1] is the relative path and args[2] is optional base path.
+     * @param ctx The context in which the method is called.
+     * @return A {@link RuntimeList} containing the absolute path.
+     */
     public static RuntimeList rel2abs(RuntimeArray args, int ctx) {
         if (args.size() < 2 || args.size() > 3) {
             throw new IllegalStateException("Bad number of arguments for rel2abs() method");
