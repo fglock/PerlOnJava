@@ -23,5 +23,19 @@ sub new {
     return bless \%args, $class;
 }
 
+sub get {
+    my ($self, $url, $args) = @_;
+    @_ == 2 || (@_ == 3 && ref $args eq 'HASH')
+      or die(q/Usage: $http->get(URL, [HASHREF])/ . "\n");
+    return $self->request('GET', $url, $args || {});
+}
+
+sub post {
+    my ($self, $url, $args) = @_;
+    @_ == 2 || (@_ == 3 && ref $args eq 'HASH')
+      or die(q/Usage: $http->get(URL, [HASHREF])/ . "\n");
+    return $self->request('POST', $url, $args || {});
+}
+
 1;
 

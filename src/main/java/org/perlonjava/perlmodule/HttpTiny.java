@@ -11,17 +11,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import static org.perlonjava.runtime.RuntimeHash.createHash;
 
 public class HttpTiny extends PerlModuleBase {
-    private static final String USER_AGENT = "HTTP-Tiny/0.090";
-    private static final long TIMEOUT = 60; // 60 seconds
-    private static final boolean VERIFY_SSL = true;
-    private static final RuntimeHash defaultHeaders = new RuntimeHash();
 
     public HttpTiny() {
         super("HTTP::Tiny", false);
@@ -32,39 +23,10 @@ public class HttpTiny extends PerlModuleBase {
         httpTiny.initializeExporter();
         httpTiny.defineExport("EXPORT", "new", "get", "post", "request");
         try {
-            httpTiny.registerMethod("get", "$");
-            httpTiny.registerMethod("post", "$");
             httpTiny.registerMethod("request", "$$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing HttpTiny method: " + e.getMessage());
         }
-    }
-
-    public static RuntimeList get(RuntimeArray args, int ctx) throws Exception {
-        if (args.size() != 2) {
-            throw new IllegalStateException("Bad number of arguments for HTTP::Tiny->get");
-        }
-        RuntimeScalar self = args.get(0);
-        RuntimeScalar url = args.get(1);
-        return request(new RuntimeArray(List.of(
-                self,
-                new RuntimeScalar("GET"),
-                url,
-                new RuntimeHash().createReference())), ctx);
-    }
-
-    public static RuntimeList post(RuntimeArray args, int ctx) throws Exception {
-        if (args.size() != 3) {
-            throw new IllegalStateException("Bad number of arguments for HTTP::Tiny->post");
-        }
-        RuntimeScalar self = args.get(0);
-        RuntimeScalar url = args.get(1);
-        RuntimeScalar content = args.get(2);
-        return request(new RuntimeArray(List.of(
-                self,
-                new RuntimeScalar("POST"),
-                url,
-                content)), ctx);
     }
 
     public static RuntimeList request(RuntimeArray args, int ctx) throws Exception {
