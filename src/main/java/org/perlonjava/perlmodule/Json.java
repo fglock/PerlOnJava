@@ -9,6 +9,8 @@ import org.perlonjava.runtime.*;
 import java.math.BigDecimal;
 import java.util.List;
 
+import static org.perlonjava.runtime.RuntimeScalarCache.*;
+
 public class Json extends PerlModuleBase {
 
     public Json() {
@@ -31,9 +33,24 @@ public class Json extends PerlModuleBase {
             json.registerMethod("new", "newInstance", "");
             json.registerMethod("encode", "$");
             json.registerMethod("decode", "$");
+            json.registerMethod("true", "getTrue", "$");
+            json.registerMethod("false", "getFalse", "$");
+            json.registerMethod("null", "getNull", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Json method: " + e.getMessage());
         }
+    }
+
+    public static RuntimeList getTrue(RuntimeArray args, int ctx) {
+        return scalarTrue.getList();
+    }
+
+    public static RuntimeList getFalse(RuntimeArray args, int ctx) {
+        return scalarFalse.getList();
+    }
+
+    public static RuntimeList getNull(RuntimeArray args, int ctx) {
+        return scalarUndef.getList();
     }
 
     public static RuntimeList encode_json(RuntimeArray args, int ctx) {
