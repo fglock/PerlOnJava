@@ -14,6 +14,7 @@ import java.lang.invoke.*;
 import java.lang.reflect.Constructor;
 import java.util.List;
 
+import static org.perlonjava.runtime.GlobalVariable.resetAllGlobals;
 import static org.perlonjava.runtime.SpecialBlock.*;
 
 /**
@@ -41,6 +42,11 @@ public class PerlLanguageProvider {
     // Lookup object for performing method handle operations
     private static final MethodHandles.Lookup lookup = MethodHandles.lookup();
     private static boolean globalInitialized = false;
+
+    public static void resetAll() {
+        globalInitialized = false;
+        resetAllGlobals();
+    }
 
     /**
      * Executes the given Perl code and returns the result.

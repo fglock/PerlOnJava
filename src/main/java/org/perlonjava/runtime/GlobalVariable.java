@@ -24,6 +24,17 @@ public class GlobalVariable {
     static Pattern regexVariablePattern = Pattern.compile("^main::(\\d+)$");
 
     /**
+     * Resets all global variables, arrays, hashes, code references, and IO references.
+     */
+    public static void resetAllGlobals() {
+        globalVariables.clear();
+        globalArrays.clear();
+        globalHashes.clear();
+        globalCodeRefs.clear();
+        globalIORefs.clear();
+    }
+
+    /**
      * Retrieves a global variable by its key, initializing it if necessary.
      * If the key matches a regex capture variable pattern, it initializes a special variable.
      *

@@ -21,6 +21,8 @@ import java.nio.file.Paths;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.perlonjava.runtime.GlobalVariable.resetAllGlobals;
+import static org.perlonjava.scriptengine.PerlLanguageProvider.resetAll;
 
 /**
  * Test class for executing Perl scripts and verifying their output.
@@ -92,6 +94,8 @@ public class PerlScriptExecutionTest {
         assertNotNull(inputStream, "Resource file not found: " + filename);
 
         try {
+            resetAll();
+
             // Read the content of the Perl script
             String content = new String(inputStream.readAllBytes());
             ArgumentParser.CompilerOptions options = new ArgumentParser.CompilerOptions();
