@@ -100,7 +100,7 @@
 
 - **v1.12.0**: Concurrency and Security Features
   - Planned release date: 2024-12-10
-  - Added unmodified core Perl modules `File::Basename`, `File::Find`, `Data::Dumper`, `Term::ANSIColor`.
+  - Added unmodified core Perl modules `File::Basename`, `File::Find`, `Data::Dumper`, `Term::ANSIColor`, `Time::Local`.
   - Added `Cwd`, `File::Spec`, `File::Spec::Functions` modules.
   - "use feature" implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `bitwise`, `postderef`.
   - Stash can be accessed as a hash like `$namespace::{entry}`.

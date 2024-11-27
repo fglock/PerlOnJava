@@ -303,6 +303,7 @@
 - ✔️   **File::Spec** module.
 - ✔️   **File::Spec::Functions** module.
 - ✔️   **Term::ANSIColor** module.
+- ✔️   **Time::Local** module.
 
 
 ## Non-strict and Obsolete Features

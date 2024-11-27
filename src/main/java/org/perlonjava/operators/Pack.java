@@ -71,6 +71,9 @@ public class Pack {
                         case 'C':
                             output.write(value.getInt() & 0xFF);
                             break;
+                        case 's':
+                            writeShortLittleEndian(output, value.getInt());
+                            break;
                         case 'S':
                             writeShort(output, value.getInt());
                             break;
