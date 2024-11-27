@@ -325,6 +325,12 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return this;
     }
 
+    public RuntimeScalar set(boolean value) {
+        this.type = RuntimeScalarType.BOOLEAN;
+        this.value = value;
+        return this;
+    }
+
     public RuntimeScalar set(String value) {
         if (value == null) {
             this.type = RuntimeScalarType.UNDEF;

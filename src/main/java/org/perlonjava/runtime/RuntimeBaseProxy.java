@@ -35,6 +35,26 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         return lvalue;
     }
 
+    @Override
+    public RuntimeScalar set(String value) {
+        return set(new RuntimeScalar(value));
+    }
+
+    @Override
+    public RuntimeScalar set(long value) {
+        return set(new RuntimeScalar(value));
+    }
+
+    @Override
+    public RuntimeScalar set(int value) {
+        return set(new RuntimeScalar(value));
+    }
+
+    @Override
+    public RuntimeScalar set(boolean value) {
+        return set(new RuntimeScalar(value));
+    }
+
     /**
      * Undefines the underlying scalar value.
      *

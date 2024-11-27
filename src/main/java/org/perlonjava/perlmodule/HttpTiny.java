@@ -19,16 +19,12 @@ import static org.perlonjava.runtime.RuntimeHash.createHash;
 
 public class HttpTiny extends PerlModuleBase {
     private static final String USER_AGENT = "HTTP-Tiny/0.090";
-    private static final int TIMEOUT = 60_000; // 60 seconds
+    private static final long TIMEOUT = 60; // 60 seconds
     private static final boolean VERIFY_SSL = true;
-
-    private final HttpClient client;
-    private final Map<String, String> defaultHeaders;
+    private static final RuntimeHash defaultHeaders = new RuntimeHash();
 
     public HttpTiny() {
         super("HTTP::Tiny");
-        this.defaultHeaders = new HashMap<>();
-        this.client = createHttpClient();
     }
 
     public static void initialize() {
@@ -50,8 +46,39 @@ public class HttpTiny extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for HTTP::Tiny->new");
         }
         RuntimeScalar className = args.shift();
-        RuntimeScalar instance = createHash(args).createReference();
+        RuntimeHash instanceHash = createHash(args);
+        RuntimeScalar instance = instanceHash.createReference();
         instance.bless(className);
+
+        //    *   "agent" — A user-agent string (defaults to 'HTTP-Tiny/$VERSION'). If
+        //        "agent" — ends in a space character, the default user-agent string
+        //        is appended.
+        String agent = instanceHash.get("agent").toString();
+        if (agent.isEmpty() || agent.endsWith(" ")) {
+            instanceHash.get("agent").set(agent + USER_AGENT);
+        }
+
+
+        //    *   "timeout" — Request timeout in seconds (default is 60) If a socket
+        //        open, read or write takes longer than the timeout, the request
+        //        response status code will be 599.
+        String timeout = instanceHash.get("timeout").toString();
+        if (timeout.isEmpty()) {
+            instanceHash.get("timeout").set(TIMEOUT);
+        }
+
+        //    *   "verify_SSL" — A boolean that indicates whether to validate the
+        //        TLS/SSL certificate of an "https" — connection (default is true).
+        if (!instanceHash.exists("verify_SSL").getBoolean()) {
+            instanceHash.get("verify_SSL").set(VERIFY_SSL);
+        }
+
+        //    *   "default_headers" — A hashref of default headers to apply to
+        //        requests
+        if (!instanceHash.get("default_headers").getBoolean()) {
+            instanceHash.get("default_headers").set(RuntimeHash.createHash(defaultHeaders).createReference());
+        }
+
         return instance.getList();
     }
 
@@ -92,6 +119,8 @@ public class HttpTiny extends PerlModuleBase {
         String url = args.get(2).toString();
         RuntimeHash options = args.size() > 3 ? args.get(3).hashDeref() : new RuntimeHash();
 
+        RuntimeHash instanceHash = self.hashDeref();
+
         // Handle options
         RuntimeHash headers = options.exists("headers").getBoolean()
                 ? options.get("headers").hashDeref() : new RuntimeHash();
@@ -103,7 +132,7 @@ public class HttpTiny extends PerlModuleBase {
                 .method(method, HttpRequest.BodyPublishers.ofString(content));
 
         // Set headers
-        requestBuilder.header("User-Agent", USER_AGENT);
+        requestBuilder.header("User-Agent", instanceHash.get("agent").toString());
         // requestBuilder.header("Connection", "keep-alive");
 
         // Add default and custom headers
@@ -114,8 +143,10 @@ public class HttpTiny extends PerlModuleBase {
         // Build and send request
         HttpRequest request = requestBuilder.build();
         try {
-            HttpTiny self1 = new HttpTiny();
-            HttpResponse<String> response = self1.client.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpClient client = createHttpClient(
+                    instanceHash.get("timeout").getLong(),
+                    instanceHash.get("verify_SSL").getBoolean());
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
             // Prepare response map
             RuntimeHash responseMap = new RuntimeHash();
@@ -152,12 +183,12 @@ public class HttpTiny extends PerlModuleBase {
         };
     }
 
-    private HttpClient createHttpClient() {
+    private static HttpClient createHttpClient(long timeout, boolean verifySSL) {
         HttpClient.Builder builder = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofMillis(TIMEOUT))
+                .connectTimeout(Duration.ofMillis(timeout * 1000L))
                 .version(HttpClient.Version.HTTP_1_1);
 
-        if (!VERIFY_SSL) {
+        if (!verifySSL) {
 //            try {
 //                builder.sslContext(createInsecureSSLContext())
 //                        .hostnameVerifier((hostname, session) -> true);
