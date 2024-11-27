@@ -13,21 +13,9 @@ public class RegexPreprocessor {
         // Remove \G from the pattern string for Java compilation
         String javaPatternString = patternString.replace("\\G", "");
 
-        // Replace [:ascii:] with Java's \p{ASCII}
-        javaPatternString = javaPatternString.replace("[:ascii:]", "\\p{ASCII}");
-
-        // Replace [:^ascii:] with Java's \\P{ASCII}
-        javaPatternString = javaPatternString.replace("[:^ascii:]", "\\P{ASCII}");
-
-        // Replace [:^print:] with Java's \\P{Print}
-        javaPatternString = javaPatternString.replace("[:^print:]", "\\P{Print}");
-
-        // Replace [:print:] with Java's \\p{Print}
-        javaPatternString = javaPatternString.replace("[:print:]", "\\p{Print}");
-
         javaPatternString = regex_escape(javaPatternString, flag_xx);
 
-        // System.out.println("javaPatternString: " + javaPatternString);
+        System.out.println("javaPatternString: " + javaPatternString);
         return javaPatternString;
     }
 
@@ -164,6 +152,8 @@ public class RegexPreprocessor {
         //      space    becomes: "\ " unless the /xx flag is used (flag_xx)
         //      \120     becomes: \0120 - Java requires octal sequences to start with zero
         //      \0       becomes: \00 - Java requires the extra zero
+        //      [:ascii:]  becomes: \p{ASCII}
+        //      [:^ascii:] becomes: \P{ASCII}
         //      \b       is rejected, Java doesn't support \b inside [...]
         boolean first = true;
         while (offset < length) {
@@ -178,7 +168,94 @@ public class RegexPreprocessor {
                         return offset;
                     }
                 case '[':
-                    sb.append("\\[");
+                    // Check for character class like [:ascii:]
+                    if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:ascii:]")) {
+                        sb.append("\\p{ASCII}");
+                        offset += 8; // Skip past [:ascii:]
+                    } else if (offset + 9 < length && s.substring(offset, offset + 10).equals("[:^ascii:]")) {
+                        sb.append("\\P{ASCII}");
+                        offset += 9; // Skip past [:^ascii:]
+                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:alpha:]")) {
+                        sb.append("\\p{Alpha}");
+                        offset += 7; // Skip past [:alpha:]
+                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^alpha:]")) {
+                        sb.append("\\P{Alpha}");
+                        offset += 8; // Skip past [:^alpha:]
+                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:alnum:]")) {
+                        sb.append("\\p{Alnum}");
+                        offset += 7; // Skip past [:alnum:]
+                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^alnum:]")) {
+                        sb.append("\\P{Alnum}");
+                        offset += 8; // Skip past [:^alnum:]
+                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:blank:]")) {
+                        sb.append("\\p{Blank}");
+                        offset += 7; // Skip past [:blank:]
+                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^blank:]")) {
+                        sb.append("\\P{Blank}");
+                        offset += 8; // Skip past [:^blank:]
+                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:cntrl:]")) {
+                        sb.append("\\p{Cntrl}");
+                        offset += 7; // Skip past [:cntrl:]
+                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^cntrl:]")) {
+                        sb.append("\\P{Cntrl}");
+                        offset += 8; // Skip past [:^cntrl:]
+                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:digit:]")) {
+                        sb.append("\\p{Digit}");
+                        offset += 7; // Skip past [:digit:]
+                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^digit:]")) {
+                        sb.append("\\P{Digit}");
+                        offset += 8; // Skip past [:^digit:]
+                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:graph:]")) {
+                        sb.append("\\p{Graph}");
+                        offset += 7; // Skip past [:graph:]
+                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^graph:]")) {
+                        sb.append("\\P{Graph}");
+                        offset += 8; // Skip past [:^graph:]
+                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:lower:]")) {
+                        sb.append("\\p{Lower}");
+                        offset += 7; // Skip past [:lower:]
+                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^lower:]")) {
+                        sb.append("\\P{Lower}");
+                        offset += 8; // Skip past [:^lower:]
+                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:print:]")) {
+                        sb.append("\\p{Print}");
+                        offset += 7; // Skip past [:print:]
+                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^print:]")) {
+                        sb.append("\\P{Print}");
+                        offset += 8; // Skip past [:^print:]
+                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:punct:]")) {
+                        sb.append("\\p{Punct}");
+                        offset += 7; // Skip past [:punct:]
+                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^punct:]")) {
+                        sb.append("\\P{Punct}");
+                        offset += 8; // Skip past [:^punct:]
+                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:space:]")) {
+                        sb.append("\\p{Space}");
+                        offset += 7; // Skip past [:space:]
+                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^space:]")) {
+                        sb.append("\\P{Space}");
+                        offset += 8; // Skip past [:^space:]
+                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:upper:]")) {
+                        sb.append("\\p{Upper}");
+                        offset += 7; // Skip past [:upper:]
+                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^upper:]")) {
+                        sb.append("\\P{Upper}");
+                        offset += 8; // Skip past [:^upper:]
+                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:word:]")) {
+                        sb.append("\\p{Alnum}_");
+                        offset += 7; // Skip past [:word:]
+                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^word:]")) {
+                        sb.append("\\P{Alnum}_");
+                        offset += 8; // Skip past [:^word:]
+                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:xdigit:]")) {
+                        sb.append("\\p{XDigit}");
+                        offset += 8; // Skip past [:xdigit:]
+                    } else if (offset + 9 < length && s.substring(offset, offset + 10).equals("[:^xdigit:]")) {
+                        sb.append("\\P{XDigit}");
+                        offset += 9; // Skip past [:^xdigit:]
+                    } else {
+                        sb.append("\\[");
+                    }
                     break;
                 case '\\':  // escape - \[ \120
 
