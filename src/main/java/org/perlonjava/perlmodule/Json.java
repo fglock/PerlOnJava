@@ -33,9 +33,9 @@ public class Json extends PerlModuleBase {
             json.registerMethod("new", "newInstance", "");
             json.registerMethod("encode", "$");
             json.registerMethod("decode", "$");
-            json.registerMethod("true", "getTrue", "$");
-            json.registerMethod("false", "getFalse", "$");
-            json.registerMethod("null", "getNull", "$");
+            json.registerMethod("true", "getTrue", "");
+            json.registerMethod("false", "getFalse", "");
+            json.registerMethod("null", "getNull", "");
             json.registerMethod("is_bool", "isBool", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Json method: " + e.getMessage());
