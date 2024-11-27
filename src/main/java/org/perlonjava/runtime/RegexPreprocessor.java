@@ -243,7 +243,7 @@ public class RegexPreprocessor {
     }
 
     private static int _regex_skip_comment(int offset, String s, int length) {
-        // [ ... ]
+        // comment (?# ... )
         int offset3 = offset;
         while (offset3 < length) {
             final int c3 = s.codePointAt(offset3);
