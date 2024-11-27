@@ -127,6 +127,7 @@
     - `Getopt::Long`.
     - subroutine prototypes.
     - `JSON` module.
+    - `HTTP::Tiny` module.
   - Stretch goals
     - Add support for concurrency and parallelism, such as threads and async/await.
     - Enhance security features, including sandboxing and input validation.

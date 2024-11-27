@@ -115,6 +115,7 @@ public class GlobalContext {
         Cwd.initialize();
         FileSpec.initialize();
         Json.initialize();
+        HttpTiny.initialize();
 
         // Reset method cache after initializing UNIVERSAL
         InheritanceResolver.invalidateCache();
