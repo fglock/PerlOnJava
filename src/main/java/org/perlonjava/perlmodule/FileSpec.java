@@ -22,7 +22,7 @@ public class FileSpec extends PerlModuleBase {
      * Initializes the module with the name "File::Spec".
      */
     public FileSpec() {
-        super("File::Spec");
+        super("File::Spec", false);
     }
 
     /**

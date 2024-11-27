@@ -22,7 +22,7 @@ public class Json extends PerlModuleBase {
      * Constructs a new {@code Json} instance and initializes the module with the name "JSON".
      */
     public Json() {
-        super("JSON");
+        super("JSON", false);
     }
 
     /**
@@ -41,7 +41,6 @@ public class Json extends PerlModuleBase {
             json.registerMethod("indent", "$");
             json.registerMethod("space_before", "$");
             json.registerMethod("space_after", "$");
-            json.registerMethod("new", "newInstance", "");
             json.registerMethod("encode", "$");
             json.registerMethod("decode", "$");
             json.registerMethod("true", "getTrue", "");
@@ -111,9 +110,10 @@ public class Json extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for encode_json");
         }
         RuntimeScalar perlData = args.get(0);
-        RuntimeScalar jsonObject = (RuntimeScalar) newInstance(
-                new RuntimeArray(new RuntimeScalar("JSON")),
-                RuntimeContextType.SCALAR).elements.getFirst();
+        RuntimeScalar jsonObject = (RuntimeScalar) GlobalVariable.getGlobalCodeRef("JSON::new").apply(
+                    new RuntimeArray(new RuntimeScalar("JSON")),
+                    RuntimeContextType.SCALAR)
+                        .elements.getFirst();
         return encode(
                 new RuntimeArray(List.of(jsonObject, perlData)),
                 RuntimeContextType.SCALAR);
@@ -219,24 +219,6 @@ public class Json extends PerlModuleBase {
      */
     public static RuntimeList from_json(RuntimeArray args, int ctx) {
         return decode_json(args, ctx);
-    }
-
-    /**
-     * Creates a new instance of a JSON object.
-     *
-     * @param args the runtime array containing the class name
-     * @param ctx  the runtime context
-     * @return a {@link RuntimeList} containing the new instance
-     * @throws IllegalStateException if the number of arguments is incorrect
-     */
-    public static RuntimeList newInstance(RuntimeArray args, int ctx) {
-        if (args.size() != 1) {
-            throw new IllegalStateException("Bad number of arguments for JSON->new");
-        }
-        RuntimeScalar className = args.get(0);
-        RuntimeScalar instance = new RuntimeHash().createReference();
-        instance.bless(className);
-        return instance.getList();
     }
 
     /**

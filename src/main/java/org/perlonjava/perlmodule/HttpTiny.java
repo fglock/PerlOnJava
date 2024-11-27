@@ -24,7 +24,7 @@ public class HttpTiny extends PerlModuleBase {
     private static final RuntimeHash defaultHeaders = new RuntimeHash();
 
     public HttpTiny() {
-        super("HTTP::Tiny");
+        super("HTTP::Tiny", false);
     }
 
     public static void initialize() {
@@ -32,54 +32,12 @@ public class HttpTiny extends PerlModuleBase {
         httpTiny.initializeExporter();
         httpTiny.defineExport("EXPORT", "new", "get", "post", "request");
         try {
-            httpTiny.registerMethod("new", "newInstance", "");
             httpTiny.registerMethod("get", "$");
             httpTiny.registerMethod("post", "$");
             httpTiny.registerMethod("request", "$$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing HttpTiny method: " + e.getMessage());
         }
-    }
-
-    public static RuntimeList newInstance(RuntimeArray args, int ctx) {
-        if (args.size() != 1) {
-            throw new IllegalStateException("Bad number of arguments for HTTP::Tiny->new");
-        }
-        RuntimeScalar className = args.shift();
-        RuntimeHash instanceHash = createHash(args);
-        RuntimeScalar instance = instanceHash.createReference();
-        instance.bless(className);
-
-        //    *   "agent" — A user-agent string (defaults to 'HTTP-Tiny/$VERSION'). If
-        //        "agent" — ends in a space character, the default user-agent string
-        //        is appended.
-        String agent = instanceHash.get("agent").toString();
-        if (agent.isEmpty() || agent.endsWith(" ")) {
-            instanceHash.get("agent").set(agent + USER_AGENT);
-        }
-
-
-        //    *   "timeout" — Request timeout in seconds (default is 60) If a socket
-        //        open, read or write takes longer than the timeout, the request
-        //        response status code will be 599.
-        String timeout = instanceHash.get("timeout").toString();
-        if (timeout.isEmpty()) {
-            instanceHash.get("timeout").set(TIMEOUT);
-        }
-
-        //    *   "verify_SSL" — A boolean that indicates whether to validate the
-        //        TLS/SSL certificate of an "https" — connection (default is true).
-        if (!instanceHash.exists("verify_SSL").getBoolean()) {
-            instanceHash.get("verify_SSL").set(VERIFY_SSL);
-        }
-
-        //    *   "default_headers" — A hashref of default headers to apply to
-        //        requests
-        if (!instanceHash.get("default_headers").getBoolean()) {
-            instanceHash.get("default_headers").set(RuntimeHash.createHash(defaultHeaders).createReference());
-        }
-
-        return instance.getList();
     }
 
     public static RuntimeList get(RuntimeArray args, int ctx) throws Exception {

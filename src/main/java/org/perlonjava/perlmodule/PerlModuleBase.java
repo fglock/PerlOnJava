@@ -27,6 +27,13 @@ public abstract class PerlModuleBase {
         initializeModule();
     }
 
+    public PerlModuleBase(String moduleName, boolean setInc) {
+        this.moduleName = moduleName;
+        if (setInc) {
+            initializeModule();
+        }
+    }
+
     /**
      * Initializes the Perl module by setting the %INC hash to indicate
      * that the module is loaded.
