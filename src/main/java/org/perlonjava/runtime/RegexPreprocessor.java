@@ -18,7 +18,6 @@ public class RegexPreprocessor {
     // \120     becomes: \0120 - Java requires octal sequences to start with zero
     // \0       becomes: \00 - Java requires the extra zero
     // (?#...)  inline comment is removed
-    // [xx \b xx]  becomes: (?:[xx xx]|\b) - Java doesn't support \b as a character
     // \N{name}    named Unicode character or character sequence
     // \N{U+263D}  Unicode character
     // \G       \G is removed, it is handled separately
@@ -30,6 +29,7 @@ public class RegexPreprocessor {
     //      [:ascii:]  becomes: \p{ASCII}
     //      [:^ascii:] becomes: \P{ASCII}
     //      \b       is moved, Java doesn't support \b inside [...]
+    //               [xx \b xx]  becomes: (?:[xx xx]|\b) - Java doesn't support \b as a character
     //
     // WIP:
     // named capture (?<one> ... ) replace underscore in name
