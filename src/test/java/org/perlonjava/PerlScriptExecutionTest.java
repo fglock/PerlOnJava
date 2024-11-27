@@ -42,7 +42,7 @@ public class PerlScriptExecutionTest {
      */
     static Stream<String> providePerlScripts() throws IOException {
         // Locate the specific resource directory containing Perl scripts
-        URL resourceUrl = PerlScriptExecutionTest.class.getClassLoader().getResource("array.pl");
+        URL resourceUrl = PerlScriptExecutionTest.class.getClassLoader().getResource("array.t");
         if (resourceUrl == null) {
             throw new IOException("Resource directory not found");
         }
@@ -55,7 +55,7 @@ public class PerlScriptExecutionTest {
 
         // Return a stream of filenames for all Perl scripts in the directory and subdirectories
         return Files.walk(resourcePath)
-                .filter(path -> path.toString().endsWith(".pl"))
+                .filter(path -> path.toString().endsWith(".t"))
                 .map(resourcePath::relativize) // Get the relative path to ensure subdirectory structure is preserved
                 .map(Path::toString);
     }
@@ -134,12 +134,12 @@ public class PerlScriptExecutionTest {
 
     /**
      * Test to verify the availability of a specific resource file.
-     * Ensures that the 'array.pl' file is present in the resources.
+     * Ensures that the 'array.t' file is present in the resources.
      */
     @Test
     void testResourceAvailability() {
-        // Check if the 'array.pl' resource file is available
-        InputStream inputStream = getClass().getClassLoader().getResourceAsStream("array.pl");
-        assertNotNull(inputStream, "Resource file 'array.pl' should be available");
+        // Check if the 'array.t' resource file is available
+        InputStream inputStream = getClass().getClassLoader().getResourceAsStream("array.t");
+        assertNotNull(inputStream, "Resource file 'array.t' should be available");
     }
 }
