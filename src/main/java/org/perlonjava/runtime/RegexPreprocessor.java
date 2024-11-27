@@ -7,19 +7,6 @@ import java.util.regex.Pattern;
 
 public class RegexPreprocessor {
 
-
-
-    static String preProcessRegex(String patternString, boolean flag_xx) {
-        // Remove \G from the pattern string for Java compilation
-        String javaPatternString = patternString.replace("\\G", "");
-
-        javaPatternString = regex_escape(javaPatternString, flag_xx);
-
-        System.out.println("javaPatternString: " + javaPatternString);
-        return javaPatternString;
-    }
-
-
     // regex escape rules:
     //
     // \[       as-is
@@ -31,17 +18,24 @@ public class RegexPreprocessor {
     //          [xx xx]  becomes: [xx\ xx] - this will make sure space is a token, even when /x modifier is set
     // \N{name}    named Unicode character or character sequence
     // \N{U+263D}  Unicode character
+    // \G       \G is removed
     //
     // WIP:
     // named capture (?<one> ... ) replace underscore in name
-    private static String regex_escape(String s, boolean flag_xx) {
-        // escape spaces in character classes
+    //
+    static String preProcessRegex(String s, boolean flag_xx) {
+        // System.out.println("javaPatternString: " + javaPatternString);
         final int length = s.length();
         int named_capture_count = 0;
         StringBuilder sb = new StringBuilder();
         StringBuilder rejected = new StringBuilder();
         // System.out.println("regex_escape " + s );
-        for (int offset = 0; offset < length; ) {
+        int offset = 0;
+        if (s.startsWith("\\G")) {
+            // Remove \G from the pattern string for Java compilation
+            offset += 2;
+        }
+        while (offset < length) {
             final int c = s.codePointAt(offset);
             switch (c) {
                 case '\\':  // escape - \[ \120
@@ -169,93 +163,7 @@ public class RegexPreprocessor {
                     }
                 case '[':
                     // Check for character class like [:ascii:]
-                    if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:ascii:]")) {
-                        sb.append("\\p{ASCII}");
-                        offset += 8; // Skip past [:ascii:]
-                    } else if (offset + 9 < length && s.substring(offset, offset + 10).equals("[:^ascii:]")) {
-                        sb.append("\\P{ASCII}");
-                        offset += 9; // Skip past [:^ascii:]
-                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:alpha:]")) {
-                        sb.append("\\p{Alpha}");
-                        offset += 7; // Skip past [:alpha:]
-                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^alpha:]")) {
-                        sb.append("\\P{Alpha}");
-                        offset += 8; // Skip past [:^alpha:]
-                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:alnum:]")) {
-                        sb.append("\\p{Alnum}");
-                        offset += 7; // Skip past [:alnum:]
-                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^alnum:]")) {
-                        sb.append("\\P{Alnum}");
-                        offset += 8; // Skip past [:^alnum:]
-                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:blank:]")) {
-                        sb.append("\\p{Blank}");
-                        offset += 7; // Skip past [:blank:]
-                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^blank:]")) {
-                        sb.append("\\P{Blank}");
-                        offset += 8; // Skip past [:^blank:]
-                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:cntrl:]")) {
-                        sb.append("\\p{Cntrl}");
-                        offset += 7; // Skip past [:cntrl:]
-                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^cntrl:]")) {
-                        sb.append("\\P{Cntrl}");
-                        offset += 8; // Skip past [:^cntrl:]
-                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:digit:]")) {
-                        sb.append("\\p{Digit}");
-                        offset += 7; // Skip past [:digit:]
-                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^digit:]")) {
-                        sb.append("\\P{Digit}");
-                        offset += 8; // Skip past [:^digit:]
-                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:graph:]")) {
-                        sb.append("\\p{Graph}");
-                        offset += 7; // Skip past [:graph:]
-                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^graph:]")) {
-                        sb.append("\\P{Graph}");
-                        offset += 8; // Skip past [:^graph:]
-                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:lower:]")) {
-                        sb.append("\\p{Lower}");
-                        offset += 7; // Skip past [:lower:]
-                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^lower:]")) {
-                        sb.append("\\P{Lower}");
-                        offset += 8; // Skip past [:^lower:]
-                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:print:]")) {
-                        sb.append("\\p{Print}");
-                        offset += 7; // Skip past [:print:]
-                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^print:]")) {
-                        sb.append("\\P{Print}");
-                        offset += 8; // Skip past [:^print:]
-                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:punct:]")) {
-                        sb.append("\\p{Punct}");
-                        offset += 7; // Skip past [:punct:]
-                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^punct:]")) {
-                        sb.append("\\P{Punct}");
-                        offset += 8; // Skip past [:^punct:]
-                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:space:]")) {
-                        sb.append("\\p{Space}");
-                        offset += 7; // Skip past [:space:]
-                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^space:]")) {
-                        sb.append("\\P{Space}");
-                        offset += 8; // Skip past [:^space:]
-                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:upper:]")) {
-                        sb.append("\\p{Upper}");
-                        offset += 7; // Skip past [:upper:]
-                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^upper:]")) {
-                        sb.append("\\P{Upper}");
-                        offset += 8; // Skip past [:^upper:]
-                    } else if (offset + 7 < length && s.substring(offset, offset + 8).equals("[:word:]")) {
-                        sb.append("\\p{Alnum}_");
-                        offset += 7; // Skip past [:word:]
-                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:^word:]")) {
-                        sb.append("\\P{Alnum}_");
-                        offset += 8; // Skip past [:^word:]
-                    } else if (offset + 8 < length && s.substring(offset, offset + 9).equals("[:xdigit:]")) {
-                        sb.append("\\p{XDigit}");
-                        offset += 8; // Skip past [:xdigit:]
-                    } else if (offset + 9 < length && s.substring(offset, offset + 10).equals("[:^xdigit:]")) {
-                        sb.append("\\P{XDigit}");
-                        offset += 9; // Skip past [:^xdigit:]
-                    } else {
-                        sb.append("\\[");
-                    }
+                    offset = handleCharacterClass(offset, s, sb, length);
                     break;
                 case '\\':  // escape - \[ \120
 
@@ -302,6 +210,51 @@ public class RegexPreprocessor {
             first = false;
             offset++;
         }
+        return offset;
+    }
+
+    private static int handleCharacterClass(int offset, String s, StringBuilder sb, int length) {
+        String[][] characterClasses = {
+                {"[:ascii:]", "\\p{ASCII}"},
+                {"[:^ascii:]", "\\P{ASCII}"},
+                {"[:alpha:]", "\\p{Alpha}"},
+                {"[:^alpha:]", "\\P{Alpha}"},
+                {"[:alnum:]", "\\p{Alnum}"},
+                {"[:^alnum:]", "\\P{Alnum}"},
+                {"[:blank:]", "\\p{Blank}"},
+                {"[:^blank:]", "\\P{Blank}"},
+                {"[:cntrl:]", "\\p{Cntrl}"},
+                {"[:^cntrl:]", "\\P{Cntrl}"},
+                {"[:digit:]", "\\p{Digit}"},
+                {"[:^digit:]", "\\P{Digit}"},
+                {"[:graph:]", "\\p{Graph}"},
+                {"[:^graph:]", "\\P{Graph}"},
+                {"[:lower:]", "\\p{Lower}"},
+                {"[:^lower:]", "\\P{Lower}"},
+                {"[:print:]", "\\p{Print}"},
+                {"[:^print:]", "\\P{Print}"},
+                {"[:punct:]", "\\p{Punct}"},
+                {"[:^punct:]", "\\P{Punct}"},
+                {"[:space:]", "\\p{Space}"},
+                {"[:^space:]", "\\P{Space}"},
+                {"[:upper:]", "\\p{Upper}"},
+                {"[:^upper:]", "\\P{Upper}"},
+                {"[:word:]", "\\p{Alnum}_"},
+                {"[:^word:]", "\\P{Alnum}_"},
+                {"[:xdigit:]", "\\p{XDigit}"},
+                {"[:^xdigit:]", "\\P{XDigit}"}
+        };
+
+        for (String[] characterClass : characterClasses) {
+            String className = characterClass[0];
+            String classReplacement = characterClass[1];
+            if (offset + className.length() - 1 < length && s.startsWith(className, offset)) {
+                sb.append(classReplacement);
+                return offset + className.length() - 1;
+            }
+        }
+
+        sb.append("\\[");
         return offset;
     }
 
