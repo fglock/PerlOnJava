@@ -53,10 +53,11 @@ public class PerlScriptExecutionTest {
             throw new RuntimeException(e);
         }
 
-        // Return a stream of filenames for all Perl scripts in the directory
+        // Return a stream of filenames for all Perl scripts in the directory and subdirectories
         return Files.walk(resourcePath)
                 .filter(path -> path.toString().endsWith(".pl"))
-                .map(path -> path.getFileName().toString());
+                .map(resourcePath::relativize) // Get the relative path to ensure subdirectory structure is preserved
+                .map(Path::toString);
     }
 
     /**
@@ -94,7 +95,7 @@ public class PerlScriptExecutionTest {
         assertNotNull(inputStream, "Resource file not found: " + filename);
 
         try {
-            resetAll();
+            PerlLanguageProvider.resetAll();
 
             // Read the content of the Perl script
             String content = new String(inputStream.readAllBytes());
