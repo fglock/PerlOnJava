@@ -98,9 +98,12 @@ public class Json extends PerlModuleBase {
         }
 
         // Post-process the JSON string for space_before and space_after
-        if (spaceBefore || spaceAfter) {
-            jsonString = jsonString.replaceAll(":", spaceBefore ? " : " : ":");
-            jsonString = jsonString.replaceAll(",", spaceAfter ? ", " : ",");
+        if (spaceBefore) {
+            jsonString = jsonString.replaceAll(":", " :");
+        }
+        if (spaceAfter) {
+            jsonString = jsonString.replaceAll(",", ", ");
+            jsonString = jsonString.replaceAll(":", ": ");
         }
 
         return new RuntimeScalar(jsonString).getList();
