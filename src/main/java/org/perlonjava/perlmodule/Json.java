@@ -36,9 +36,15 @@ public class Json extends PerlModuleBase {
             json.registerMethod("true", "getTrue", "$");
             json.registerMethod("false", "getFalse", "$");
             json.registerMethod("null", "getNull", "$");
+            json.registerMethod("is_bool", "isBool", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Json method: " + e.getMessage());
         }
+    }
+
+    public static RuntimeList isBool(RuntimeArray args, int ctx) {
+        RuntimeScalar res = args.get(0);
+        return getScalarBoolean(res.type == RuntimeScalarType.BOOLEAN).getList();
     }
 
     public static RuntimeList getTrue(RuntimeArray args, int ctx) {
