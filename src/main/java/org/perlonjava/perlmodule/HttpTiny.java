@@ -8,6 +8,8 @@ import org.perlonjava.runtime.RuntimeScalar;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
@@ -16,10 +18,12 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.attribute.FileTime;
 import java.security.cert.X509Certificate;
+import java.text.SimpleDateFormat;
 import java.time.Duration;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 
 public class HttpTiny extends PerlModuleBase {
 
@@ -32,7 +36,8 @@ public class HttpTiny extends PerlModuleBase {
         httpTiny.initializeExporter();
         httpTiny.defineExport("EXPORT", "new", "get", "post", "request");
         try {
-            httpTiny.registerMethod("request", "$$");
+            httpTiny.registerMethod("request", null);
+            httpTiny.registerMethod("mirror", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing HttpTiny method: " + e.getMessage());
         }
@@ -187,5 +192,61 @@ public class HttpTiny extends PerlModuleBase {
                 .map(String::trim)
                 .toList();
         return noProxyList.stream().anyMatch(host::endsWith);
+    }
+
+    public static RuntimeList mirror(RuntimeArray args, int ctx) throws Exception {
+        if (args.size() < 3) {
+            throw new IllegalStateException("Bad number of arguments for HTTP::Tiny->mirror");
+        }
+
+        RuntimeScalar self = args.get(0);
+        String url = args.get(1).toString();
+        String filePath = args.get(2).toString();
+        RuntimeHash options = args.size() > 3 ? args.get(3).hashDeref() : new RuntimeHash();
+
+        File file = new File(filePath);
+        if (file.exists()) {
+            // Set If-Modified-Since header
+            long lastModified = file.lastModified();
+            SimpleDateFormat dateFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z", Locale.US);
+            dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
+            String ifModifiedSince = dateFormat.format(new Date(lastModified));
+
+            RuntimeHash headers = options.exists("headers").getBoolean()
+                    ? options.get("headers").hashDeref() : new RuntimeHash();
+            headers.put("If-Modified-Since", new RuntimeScalar(ifModifiedSince));
+            options.put("headers", headers.createReference());
+        }
+
+        // Perform the request
+        RuntimeArray requestArgs = new RuntimeArray();
+        requestArgs.push(self);
+        requestArgs.push(new RuntimeScalar("GET"));
+        requestArgs.push(new RuntimeScalar(url));
+        requestArgs.push(options.createReference());
+
+        RuntimeList response = request(requestArgs, ctx);
+        RuntimeHash responseHash = ((RuntimeScalar) response.elements.get(0)).hashDeref();
+
+        // Check if the request was successful or not modified
+        boolean success = responseHash.get("success").getBoolean() || responseHash.get("status").getLong() == 304;
+        if (success && responseHash.get("status").getLong() != 304) {
+            // Write response content to file
+            try (FileOutputStream fos = new FileOutputStream(file)) {
+                fos.write(responseHash.get("content").toString().getBytes());
+            }
+
+            // Update file modification time if Last-Modified header is present
+            RuntimeHash headers = responseHash.get("headers").hashDeref();
+            if (headers.exists("last-modified").getBoolean()) {
+                String lastModifiedStr = headers.get("last-modified").toString();
+                SimpleDateFormat dateFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z", Locale.US);
+                dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
+                Date lastModifiedDate = dateFormat.parse(lastModifiedStr);
+                Files.setLastModifiedTime(file.toPath(), FileTime.fromMillis(lastModifiedDate.getTime()));
+            }
+        }
+
+        return response;
     }
 }

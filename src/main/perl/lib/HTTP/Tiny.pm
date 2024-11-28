@@ -302,46 +302,7 @@ sub post_form {
 #pod
 #pod =cut
 
-sub mirror {
-    die "Not implemented: mirror()";
-    # my ($self, $url, $file, $args) = @_;
-    # @_ == 3 || (@_ == 4 && ref $args eq 'HASH')
-    #   or _croak(q/Usage: $http->mirror(URL, FILE, [HASHREF])/ . "\n");
-
-    # if ( exists $args->{headers} ) {
-    #     my $headers = {};
-    #     while ( my ($key, $value) = each %{$args->{headers} || {}} ) {
-    #         $headers->{lc $key} = $value;
-    #     }
-    #     $args->{headers} = $headers;
-    # }
-
-    # if ( -e $file and my $mtime = (stat($file))[9] ) {
-    #     $args->{headers}{'if-modified-since'} ||= $self->_http_date($mtime);
-    # }
-    # my $tempfile = $file . int(rand(2**31));
-
-    # require Fcntl;
-    # sysopen my $fh, $tempfile, Fcntl::O_CREAT()|Fcntl::O_EXCL()|Fcntl::O_WRONLY()
-    #    or _croak(qq/Error: Could not create temporary file $tempfile for downloading: $!\n/);
-    # binmode $fh;
-    # $args->{data_callback} = sub { print {$fh} $_[0] };
-    # my $response = $self->request('GET', $url, $args);
-    # close $fh
-    #     or _croak(qq/Error: Caught error closing temporary file $tempfile: $!\n/);
-
-    # if ( $response->{success} ) {
-    #     rename $tempfile, $file
-    #         or _croak(qq/Error replacing $file with $tempfile: $!\n/);
-    #     my $lm = $response->{headers}{'last-modified'};
-    #     if ( $lm and my $mtime = $self->_parse_http_date($lm) ) {
-    #         utime $mtime, $mtime, $file;
-    #     }
-    # }
-    # $response->{success} ||= $response->{status} eq '304';
-    # unlink $tempfile;
-    # return $response;
-}
+# mirror() is implemented in Java
 
 #pod =method request
 #pod

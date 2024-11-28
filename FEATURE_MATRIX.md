@@ -306,7 +306,7 @@
 - ✔️   **Time::Local** module.
 - ✔️   **HTTP::Date** module.
 - ✔️   **HTTP::CookieJar** module.
-- 🚧  **HTTP::Tiny** `mirror` not implemented.
+- 🚧  **HTTP::Tiny** some features untested: proxy settings.
 
 
 ## Non-strict and Obsolete Features
