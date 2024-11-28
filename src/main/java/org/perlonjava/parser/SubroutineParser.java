@@ -42,7 +42,7 @@ public class SubroutineParser {
             // Fetch the subroutine reference
             RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
             if (codeRef.value == null) {
-                subExists = false;
+                // subExists = false;
             } else {
                 prototype = ((RuntimeCode) codeRef.value).prototype;
                 attributes = ((RuntimeCode) codeRef.value).attributes;

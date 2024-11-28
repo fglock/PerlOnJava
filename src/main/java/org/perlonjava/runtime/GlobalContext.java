@@ -99,6 +99,7 @@ public class GlobalContext {
         DiamondIO.initialize(compilerOptions);
         Universal.initialize();
         Vars.initialize();
+        Subs.initialize();
         Builtin.initialize();
         Exporter.initialize();
         Base.initialize();
