@@ -2,6 +2,22 @@
 
 ### Completed Milestones
 
+- **v2.0.0**: Towards a Complete Perl Port on the JVM
+  - Added unmodified core Perl modules `File::Basename`, `File::Find`, `Data::Dumper`, `Term::ANSIColor`, `Time::Local`, `HTTP::Date`, `HTTP::CookieJar`.
+  - Added `Cwd`, `File::Spec`, `File::Spec::Functions`, `HTTP::Tiny` modules.
+  - "use feature" implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `bitwise`, `postderef`.
+  - Stash can be accessed as a hash like `$namespace::{entry}`.
+  - Added stash constants:  `$constant::{_CAN_PCS} = \$const`;
+  - Added `exists &sub`, `defined &sub`.
+  - Added `builtin` pragma: `true`, `false`, `is_bool`.
+  - Added `re` pragma: `is_regexp`.
+  - Added `vars` pragma.
+  - Added `SUPER::method` method resolution.
+  - Added `AUTOLOAD` default subroutine.
+  - Added `stat`, `lstat` operators. Some fields are not available in JVM and return `undef`.
+  - Added directory operators.
+  - Added regex patterns: `[[:ascii:]]`, `[[:print:]]`, `(?#comment)`, and the `/xx` modifier.
+
 - **v1.11.0**: Compile-time Features
   - Added `BEGIN`, `CHECK`, `UNITCHECK`, `INIT`, `END` blocks.
   - Added subroutine hoisting: Invoking subroutines before their actual declaration in the code.
@@ -98,22 +114,8 @@
 
 ### Upcoming Milestones
 
-- **v1.12.0**: Concurrency and Security Features
+- **v2.1.0**: Core modules
   - Planned release date: 2024-12-10
-  - Added unmodified core Perl modules `File::Basename`, `File::Find`, `Data::Dumper`, `Term::ANSIColor`, `Time::Local`, `HTTP::Date`, `HTTP::CookieJar`.
-  - Added `Cwd`, `File::Spec`, `File::Spec::Functions`, `HTTP::Tiny` modules.
-  - "use feature" implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `bitwise`, `postderef`.
-  - Stash can be accessed as a hash like `$namespace::{entry}`.
-  - Added stash constants:  `$constant::{_CAN_PCS} = \$const`;
-  - Added `exists &sub`, `defined &sub`.
-  - Added `builtin` pragma: `true`, `false`, `is_bool`.
-  - Added `re` pragma: `is_regexp`.
-  - Added `vars` pragma.
-  - Added `SUPER::method` method resolution.
-  - Added `AUTOLOAD` default subroutine.
-  - Added `stat`, `lstat` operators. Some fields are not available in JVM and return `undef`.
-  - Added directory operators.
-  - Added regex patterns: `[[:ascii:]]`, `[[:print:]]`, `(?#comment)`, and the `/xx` modifier.
   - Work in progress:
     - `lexical_subs` feature.
     - `socket` and related operators.
@@ -128,17 +130,19 @@
     - `Getopt::Long`.
     - subroutine prototypes.
     - `JSON` module.
-  - Stretch goals
-    - Add support for concurrency and parallelism, such as threads and async/await.
-    - Enhance security features, including sandboxing and input validation.
-    - Increase test coverage.
 
-- **v1.13.0**: External Integration and Advanced Data Manipulation
+- **v3.0.0**: Concurrency and Security Features
+  - Add support for concurrency and parallelism, such as threads and async/await.
+  - Enhance security features, including sandboxing and input validation.
+  - Increase test coverage.
+
+- **v4.0.0**: External Integration and Advanced Data Manipulation
   - Integrate with external libraries and APIs for tasks like HTTP requests and database access.
   - Add advanced data manipulation features, such as JSON/XML parsing and data transformation.
   - Allow users to define their own operators and macros for greater flexibility.
 
-- **v2.0.0**: Major Release with Breaking Changes
+- **v5.0.0**: Major Release with Breaking Changes
   - Perform comprehensive refactoring and optimization.
   - Introduce significant new features and improvements.
   - Ensure full compliance with relevant standards and best practices.
+
