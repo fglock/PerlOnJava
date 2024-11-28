@@ -5,12 +5,21 @@ import org.perlonjava.runtime.RuntimeHash;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.net.ProxySelector;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.security.cert.X509Certificate;
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.List;
 
 public class HttpTiny extends PerlModuleBase {
 
@@ -63,9 +72,7 @@ public class HttpTiny extends PerlModuleBase {
         // Build and send request
         HttpRequest request = requestBuilder.build();
         try {
-            HttpClient client = createHttpClient(
-                    instanceHash.get("timeout").getLong(),
-                    instanceHash.get("verify_SSL").getBoolean());
+            HttpClient client = createHttpClient(instanceHash);
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
             // Prepare response map
@@ -103,20 +110,82 @@ public class HttpTiny extends PerlModuleBase {
         };
     }
 
-    private static HttpClient createHttpClient(long timeout, boolean verifySSL) {
+    private static HttpClient createHttpClient(RuntimeHash options) {
         HttpClient.Builder builder = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofMillis(timeout * 1000L))
+                .connectTimeout(Duration.ofMillis(options.get("timeout").getLong() * 1000L))
                 .version(HttpClient.Version.HTTP_1_1);
 
-        if (!verifySSL) {
-//            try {
-//                builder.sslContext(createInsecureSSLContext())
-//                        .hostnameVerifier((hostname, session) -> true);
-//            } catch (Exception e) {
-//                throw new RuntimeException("Failed to create insecure SSL context", e);
-//            }
+        // Configure SSL context if SSL verification is disabled
+        if (!options.get("verify_SSL").getBoolean()) {
+            try {
+                builder.sslContext(createInsecureSSLContext());
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to create insecure SSL context", e);
+            }
+        }
+
+        // Configure proxy settings
+        String httpProxy = options.exists("http_proxy").getBoolean() ? options.get("http_proxy").toString() : System.getenv("http_proxy");
+        String httpsProxy = options.exists("https_proxy").getBoolean() ? options.get("https_proxy").toString() : System.getenv("https_proxy");
+        String genericProxy = options.exists("proxy").getBoolean() ? options.get("proxy").toString() : System.getenv("all_proxy");
+        String noProxy = options.exists("no_proxy").getBoolean() ? options.get("no_proxy").toString() : System.getenv("no_proxy");
+
+        if (genericProxy != null) {
+            builder.proxy(ProxySelector.of(new InetSocketAddress(URI.create(genericProxy).getHost(), URI.create(genericProxy).getPort())));
+        } else if (httpProxy != null || httpsProxy != null) {
+            builder.proxy(new ProxySelector() {
+                @Override
+                public List<Proxy> select(URI uri) {
+                    if (shouldNotProxy(uri.getHost(), noProxy)) {
+                        return List.of(Proxy.NO_PROXY);
+                    }
+                    if ("http".equalsIgnoreCase(uri.getScheme()) && httpProxy != null) {
+                        return List.of(new Proxy(Proxy.Type.HTTP, new InetSocketAddress(URI.create(httpProxy).getHost(), URI.create(httpProxy).getPort())));
+                    } else if ("https".equalsIgnoreCase(uri.getScheme()) && httpsProxy != null) {
+                        return List.of(new Proxy(Proxy.Type.HTTP, new InetSocketAddress(URI.create(httpsProxy).getHost(), URI.create(httpsProxy).getPort())));
+                    }
+                    return List.of(Proxy.NO_PROXY);
+                }
+
+                @Override
+                public void connectFailed(URI uri, java.net.SocketAddress sa, IOException ioe) {
+                    System.err.println("Proxy connection failed: " + ioe.getMessage());
+                }
+            });
         }
 
         return builder.build();
+    }
+
+    private static SSLContext createInsecureSSLContext() throws Exception {
+        TrustManager[] trustAllCerts = new TrustManager[]{
+                new X509TrustManager() {
+                    public X509Certificate[] getAcceptedIssuers() {
+                        return new X509Certificate[0];
+                    }
+
+                    public void checkClientTrusted(X509Certificate[] certs, String authType) {
+                        // Trust all client certificates
+                    }
+
+                    public void checkServerTrusted(X509Certificate[] certs, String authType) {
+                        // Trust all server certificates
+                    }
+                }
+        };
+
+        SSLContext sslContext = SSLContext.getInstance("TLS");
+        sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
+        return sslContext;
+    }
+
+    private static boolean shouldNotProxy(String host, String noProxy) {
+        if (noProxy == null || noProxy.isEmpty()) {
+            return false;
+        }
+        List<String> noProxyList = Arrays.stream(noProxy.split(","))
+                .map(String::trim)
+                .toList();
+        return noProxyList.stream().anyMatch(host::endsWith);
     }
 }
