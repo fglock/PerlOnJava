@@ -475,9 +475,13 @@ public class OperatorParser {
                 return new BinaryOperatorNode(token.text, handle, printOperand, currentIndex);
             case "delete":
             case "exists":
-            case "defined":
                 parser.parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
                 operand = ListParser.parseZeroOrOneList(parser, 1);
+                parser.parsingTakeReference = false;
+                return new OperatorNode(token.text, operand, currentIndex);
+            case "defined":
+                parser.parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
+                operand = ListParser.parseZeroOrOneList(parser, 0);
                 parser.parsingTakeReference = false;
                 return new OperatorNode(token.text, operand, currentIndex);
             case "scalar":
