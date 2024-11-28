@@ -1,7 +1,6 @@
 package org.perlonjava.codegen;
 
 import org.objectweb.asm.Label;
-import org.perlonjava.runtime.RuntimeContextType;
 
 import java.util.ArrayDeque;
 import java.util.Deque;

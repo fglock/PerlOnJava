@@ -7,7 +7,6 @@ import com.alibaba.fastjson2.JSONWriter;
 import org.perlonjava.runtime.*;
 
 import java.math.BigDecimal;
-import java.util.List;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
@@ -111,9 +110,9 @@ public class Json extends PerlModuleBase {
         }
         RuntimeScalar perlData = args.get(0);
         RuntimeScalar jsonObject = (RuntimeScalar) GlobalVariable.getGlobalCodeRef("JSON::new").apply(
-                    new RuntimeArray(new RuntimeScalar("JSON")),
-                    RuntimeContextType.SCALAR)
-                        .elements.getFirst();
+                        new RuntimeArray(new RuntimeScalar("JSON")),
+                        RuntimeContextType.SCALAR)
+                .elements.getFirst();
         return encode(
                 new RuntimeArray(jsonObject, perlData),
                 RuntimeContextType.SCALAR);
@@ -230,7 +229,7 @@ public class Json extends PerlModuleBase {
      */
     public static RuntimeList pretty(RuntimeArray args, int ctx) {
         RuntimeScalar instance = args.get(0);
-        boolean enable = args.size() == 2 ? args.get(1).getBoolean() : true;
+        boolean enable = args.size() != 2 || args.get(1).getBoolean();
         RuntimeHash hash = instance.hashDeref();
         hash.get("indent").set(new RuntimeScalar(enable));
         hash.get("space_before").set(new RuntimeScalar(enable));
@@ -247,7 +246,7 @@ public class Json extends PerlModuleBase {
      */
     public static RuntimeList indent(RuntimeArray args, int ctx) {
         RuntimeScalar instance = args.get(0);
-        boolean enable = args.size() == 2 ? args.get(1).getBoolean() : true;
+        boolean enable = args.size() != 2 || args.get(1).getBoolean();
         RuntimeHash hash = instance.hashDeref();
         hash.get("indent").set(new RuntimeScalar(enable));
         return instance.getList();
@@ -275,7 +274,7 @@ public class Json extends PerlModuleBase {
      */
     public static RuntimeList space_before(RuntimeArray args, int ctx) {
         RuntimeScalar instance = args.get(0);
-        boolean enable = args.size() == 2 ? args.get(1).getBoolean() : true;
+        boolean enable = args.size() != 2 || args.get(1).getBoolean();
         RuntimeHash hash = instance.hashDeref();
         hash.get("space_before").set(new RuntimeScalar(enable));
         return instance.getList();
@@ -303,7 +302,7 @@ public class Json extends PerlModuleBase {
      */
     public static RuntimeList space_after(RuntimeArray args, int ctx) {
         RuntimeScalar instance = args.get(0);
-        boolean enable = args.size() == 2 ? args.get(1).getBoolean() : true;
+        boolean enable = args.size() != 2 || args.get(1).getBoolean();
         RuntimeHash hash = instance.hashDeref();
         hash.get("space_after").set(new RuntimeScalar(enable));
         return instance.getList();
@@ -329,16 +328,14 @@ public class Json extends PerlModuleBase {
      * @return a {@link RuntimeScalar} representing the JSON object
      */
     private static RuntimeScalar convertJsonToRuntimeScalar(Object json) {
-        if (json instanceof JSONObject) {
+        if (json instanceof JSONObject jsonObject) {
             RuntimeHash hash = new RuntimeHash();
-            JSONObject jsonObject = (JSONObject) json;
             for (String key : jsonObject.keySet()) {
                 hash.put(key, convertJsonToRuntimeScalar(jsonObject.get(key)));
             }
             return hash.createReference();
-        } else if (json instanceof JSONArray) {
+        } else if (json instanceof JSONArray jsonArray) {
             RuntimeArray array = new RuntimeArray();
-            JSONArray jsonArray = (JSONArray) json;
             for (int i = 0; i < jsonArray.size(); i++) {
                 array.elements.add(convertJsonToRuntimeScalar(jsonArray.get(i)));
             }

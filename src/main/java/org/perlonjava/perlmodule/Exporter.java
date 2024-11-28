@@ -2,8 +2,6 @@ package org.perlonjava.perlmodule;
 
 import org.perlonjava.runtime.*;
 
-import java.lang.reflect.Method;
-
 /**
  * The Exporter class is responsible for managing the export of symbols from one Perl package to another.
  * It mimics the behavior of Perl's Exporter module, allowing symbols to be imported into other namespaces.

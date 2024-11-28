@@ -8,8 +8,6 @@ import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 
-import java.util.List;
-
 import static org.perlonjava.parser.NumberParser.parseNumber;
 import static org.perlonjava.parser.SpecialBlockParser.runSpecialBlock;
 import static org.perlonjava.parser.SpecialBlockParser.setCurrentScope;

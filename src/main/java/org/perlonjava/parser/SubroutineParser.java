@@ -68,8 +68,7 @@ public class SubroutineParser {
         if (TokenUtils.peek(parser).text.equals("->")) {
             // method call without parentheses
             arguments = new ListNode(parser.tokenIndex);
-        }
-        else if (prototype == null) {
+        } else if (prototype == null) {
             // no prototype
             arguments = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
         } else if (prototype.isEmpty()) {
