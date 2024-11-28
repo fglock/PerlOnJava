@@ -305,6 +305,7 @@
 - ✔️   **Term::ANSIColor** module.
 - ✔️   **Time::Local** module.
 - ✔️   **HTTP::Date** module.
+- ✔️   **HTTP::CookieJar** module.
 
 
 ## Non-strict and Obsolete Features
