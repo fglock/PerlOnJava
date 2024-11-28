@@ -168,7 +168,7 @@
 - ✔️   **`m?pat?`** one-time match is implemented.
 - ✔️   **`reset`** resetting one-time match is implemented
 - ✔️   **`@-`, `@+`, `%+`, `%-` variables**: regex special variables are implemented
-- ✔️   **`$&` variables**: `` $` ``, `$&`, `$'` special variables are implemented
+- ✔️   **`$&` variables**: `` $` ``, `$&`, `$'`, `$+` special variables are implemented
 - ✔️   **`[[:pattern:]]`**: `[[:ascii:]]`, `[[:print:]]` are implemented.
 - ✔️   **Matching plain strings**: `$var =~ "Test"` is implemented.
 - ✔️   **Inline comments**: `(?#comment)` in regex is implemented.

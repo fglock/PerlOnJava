@@ -117,6 +117,7 @@
 - **v2.1.0**: Core modules
   - Planned release date: 2024-12-10
   - Added `subs` pragma.
+  - Added regex `$+` variable.
   - Work in progress:
     - `lexical_subs` feature.
     - `socket` and related operators.

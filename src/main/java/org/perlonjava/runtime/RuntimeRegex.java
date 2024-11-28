@@ -341,6 +341,14 @@ public class RuntimeRegex implements RuntimeScalarReference {
         return globalMatcher == null ? null : globalMatcher.group(group);
     }
 
+    public static String lastCaptureString() {
+        if (globalMatcher == null) {
+            return null;
+        }
+        int lastGroup = globalMatcher.groupCount();
+        return globalMatcher.group(lastGroup);
+    }
+
     public static RuntimeScalar matcherStart(int group) {
         if (globalMatcher == null) {
             return scalarUndef;
