@@ -282,6 +282,7 @@
 - ✔️   **constant** pragma
 - ✔️   **if** pragma
 - ✔️   **lib** pragma
+- ✔️   **vars** pragma
 - 🚧  **utf8** pragma: utf8 is always on. Disabling utf8 might work in a future version.
 - ✔️   **feature** pragma
   - ✔️  Features implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `bitwise`, `postderef`.

@@ -101,13 +101,14 @@
 - **v1.12.0**: Concurrency and Security Features
   - Planned release date: 2024-12-10
   - Added unmodified core Perl modules `File::Basename`, `File::Find`, `Data::Dumper`, `Term::ANSIColor`, `Time::Local`, `HTTP::Date`, `HTTP::CookieJar`.
-  - Added `Cwd`, `File::Spec`, `File::Spec::Functions` modules.
+  - Added `Cwd`, `File::Spec`, `File::Spec::Functions`, `HTTP::Tiny` modules.
   - "use feature" implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `bitwise`, `postderef`.
   - Stash can be accessed as a hash like `$namespace::{entry}`.
   - Added stash constants:  `$constant::{_CAN_PCS} = \$const`;
   - Added `exists &sub`, `defined &sub`.
   - Added `builtin` pragma: `true`, `false`, `is_bool`.
   - Added `re` pragma: `is_regexp`.
+  - Added `vars` pragma.
   - Added `SUPER::method` method resolution.
   - Added `AUTOLOAD` default subroutine.
   - Added `stat`, `lstat` operators. Some fields are not available in JVM and return `undef`.
@@ -123,11 +124,10 @@
     - lexical utf8 source code.
     - `truncate`, `seek` operators.
     - preprocessor `# line` directive.
-    - `use subs`, `use vars`.
+    - `use subs`.
     - `Getopt::Long`.
     - subroutine prototypes.
     - `JSON` module.
-    - `HTTP::Tiny` module.
   - Stretch goals
     - Add support for concurrency and parallelism, such as threads and async/await.
     - Enhance security features, including sandboxing and input validation.
