@@ -35,11 +35,22 @@ public class OperatorParser {
         } catch (PerlCompilerException e) {
             // sort $sub 1,2,3
             parser.tokenIndex = currentIndex;
+
+            boolean paren = false;
+            if (peek(parser).text.equals("(")) {
+                TokenUtils.consume(parser);
+                paren = true;
+            }
+
             parser.parsingForLoopVariable = true;
             Node var = parser.parsePrimary();
             parser.parsingForLoopVariable = false;
             operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
             operand.handle = var;
+
+            if (paren) {
+                TokenUtils.consume(parser, OPERATOR, ")");
+            }
             parser.ctx.logDebug("parseSort: " + operand.handle + " : " + operand);
         }
 
@@ -73,12 +84,23 @@ public class OperatorParser {
         } catch (PerlCompilerException e) {
             // map chr, 1,2,3
             parser.tokenIndex = currentIndex;
+
+            boolean paren = false;
+            if (peek(parser).text.equals("(")) {
+                TokenUtils.consume(parser);
+                paren = true;
+            }
+
             parser.parsingForLoopVariable = true;
             Node var = parser.parsePrimary();
             parser.parsingForLoopVariable = false;
             TokenUtils.consume(parser, OPERATOR, ",");
             operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
             operand.handle = new BlockNode(List.of(var), parser.tokenIndex);
+
+            if (paren) {
+                TokenUtils.consume(parser, OPERATOR, ")");
+            }
             parser.ctx.logDebug("parseMap: " + operand.handle + " : " + operand);
         }
 
