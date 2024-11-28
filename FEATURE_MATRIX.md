@@ -304,6 +304,7 @@
 - ✔️   **File::Spec::Functions** module.
 - ✔️   **Term::ANSIColor** module.
 - ✔️   **Time::Local** module.
+- ✔️   **HTTP::Date** module.
 
 
 ## Non-strict and Obsolete Features
