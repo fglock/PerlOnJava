@@ -210,6 +210,7 @@ public class StringParser {
                         break;
                     }
                     if (token1.type == LexerTokenType.WHITESPACE
+                            || token1.type == LexerTokenType.NEWLINE
                             || token1.text.equals(")")
                             || token1.text.equals("%")
                             || token1.text.equals("|")
