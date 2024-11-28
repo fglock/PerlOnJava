@@ -94,7 +94,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
     public RuntimeArray setFromList(RuntimeList value) {
         RuntimeHash hash = createHash(value);
         this.elements = hash.elements;
-        return new RuntimeArray(new RuntimeList(this));
+        return new RuntimeArray(this);
     }
 
     /**
@@ -291,10 +291,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
             hashIterator = iterator();
         }
         if (hashIterator.hasNext()) {
-            RuntimeList list = new RuntimeList();
-            list.elements.add(hashIterator.next());
-            list.elements.add(hashIterator.next());
-            return list;
+            return new RuntimeList(hashIterator.next(), hashIterator.next());
         }
         hashIterator = null;
         return new RuntimeList();

@@ -22,6 +22,16 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         this.elements = new ArrayList<>(list);
     }
 
+    public RuntimeList(RuntimeBaseEntity... values) {
+        this.elements = new ArrayList<>();
+        for (RuntimeBaseEntity value : values) {
+            Iterator<RuntimeScalar> iterator = value.iterator();
+            while (iterator.hasNext()) {
+                this.elements.add(iterator.next());
+            }
+        }
+    }
+
     /**
      * Constructs a RuntimeList with a single scalar value.
      *

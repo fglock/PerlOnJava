@@ -308,14 +308,14 @@ public class StatementParser {
                         // If the specified Perl version is 5.12 or higher,
                         // strictures are enabled lexically.
                         useStrict(new RuntimeArray(
-                                List.of(new RuntimeScalar("strict"))), RuntimeContextType.VOID);
+                                new RuntimeScalar("strict")), RuntimeContextType.VOID);
                     }
                     if (minorVersion >= 35) {
                         // If the specified Perl version is 5.35.0 or higher,
                         // warnings are enabled.
                         useWarnings(new RuntimeArray(
-                                List.of(new RuntimeScalar("warnings"),
-                                        new RuntimeScalar("all"))), RuntimeContextType.VOID);
+                                new RuntimeScalar("warnings"),
+                                new RuntimeScalar("all")), RuntimeContextType.VOID);
                     }
                 }
             }

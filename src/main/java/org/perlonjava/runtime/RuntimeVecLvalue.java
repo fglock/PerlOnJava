@@ -56,13 +56,10 @@ public class RuntimeVecLvalue extends RuntimeBaseProxy {
 
         int newValue = value.getInt();
 
-        // Create arguments for Vec.set method
-        RuntimeList args = new RuntimeList();
-        args.elements.add(lvalue);
-        args.elements.add(new RuntimeScalar(offset));
-        args.elements.add(new RuntimeScalar(bits));
-
         try {
+            // Create arguments for Vec.set method
+            RuntimeList args = new RuntimeList(
+                    lvalue, new RuntimeScalar(offset), new RuntimeScalar(bits));
             // Use Vec.set to update the parent string
             Vec.set(args, new RuntimeScalar(newValue));
         } catch (PerlCompilerException e) {

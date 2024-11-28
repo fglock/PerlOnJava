@@ -274,7 +274,7 @@ public class FileSpec extends PerlModuleBase {
         }
 
         return new RuntimeList(
-                List.of(new RuntimeScalar(volume), new RuntimeScalar(directory), new RuntimeScalar(file)));
+                new RuntimeScalar(volume), new RuntimeScalar(directory), new RuntimeScalar(file));
     }
 
     /**

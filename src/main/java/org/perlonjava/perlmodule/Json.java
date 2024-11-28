@@ -115,7 +115,7 @@ public class Json extends PerlModuleBase {
                     RuntimeContextType.SCALAR)
                         .elements.getFirst();
         return encode(
-                new RuntimeArray(List.of(jsonObject, perlData)),
+                new RuntimeArray(jsonObject, perlData),
                 RuntimeContextType.SCALAR);
     }
 

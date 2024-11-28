@@ -36,6 +36,16 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         this.elements = new ArrayList<>(list);
     }
 
+    public RuntimeArray(RuntimeBaseEntity... values) {
+        this.elements = new ArrayList<>();
+        for (RuntimeBaseEntity value : values) {
+            Iterator<RuntimeScalar> iterator = value.iterator();
+            while (iterator.hasNext()) {
+                this.elements.add(iterator.next());
+            }
+        }
+    }
+
     /**
      * Constructs a RuntimeArray from a RuntimeList.
      *
