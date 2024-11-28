@@ -273,44 +273,47 @@ public class Parser {
         TokenUtils.consume(this, LexerTokenType.OPERATOR, "{");
 
         int braceCount = 1; // Track nested braces
-        bracesLoop:
         while (braceCount > 0) {
             LexerToken token = TokenUtils.consume(this);
             ctx.logDebug("isHashLiteral " + token + " braceCount:" + braceCount);
             if (token.type == LexerTokenType.EOF) {
                 break; // not a hash literal;
             }
-            if (token.type == LexerTokenType.OPERATOR) {
-                switch (token.text) {
-                    case "{":
-                    case "(":
-                    case "[":
-                        braceCount++;
-                        break;
-                    case ")":
-                    case "}":
-                    case "]":
-                        braceCount--;
-                        break;
-                    case ",":
-                    case "=>":
-                        if (braceCount == 1) {
-                            ctx.logDebug("isHashLiteral TRUE");
-                            tokenIndex = currentIndex;
-                            return true; // Likely a hash literal
+            switch (token.text) {
+                case "{":
+                case "(":
+                case "[":
+                    braceCount++;
+                    break;
+                case ")":
+                case "}":
+                case "]":
+                    braceCount--;
+                    break;
+                default:
+                    if (braceCount == 1) {
+                        switch (token.text) {
+                            case ",":
+                            case "=>":
+                                ctx.logDebug("isHashLiteral TRUE");
+                                tokenIndex = currentIndex;
+                                return true; // Likely a hash literal
+                            case ";":
+                                tokenIndex = currentIndex;
+                                return false; // Likely a block
+                            case "for", "while", "if", "unless", "until", "foreach":
+                                if (!TokenUtils.peek(this).text.equals("=>")) {
+                                    ctx.logDebug("isHashLiteral FALSE");
+                                    tokenIndex = currentIndex;
+                                    return false; // Likely a block
+                                }
                         }
-                        break;
-                    case ";":
-                        if (braceCount == 1) {
-                            break bracesLoop; // Likely a block
-                        }
-                        break;
-                }
+                    }
             }
         }
-        ctx.logDebug("isHashLiteral FALSE");
+        ctx.logDebug("isHashLiteral undecided");
         tokenIndex = currentIndex;
-        return false;
+        return true;
     }
 
     /**

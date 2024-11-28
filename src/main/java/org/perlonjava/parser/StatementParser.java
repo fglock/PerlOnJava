@@ -87,7 +87,11 @@ public class StatementParser {
         // Parse the initialization part
         Node initialization = null;
         if (!TokenUtils.peek(parser).text.equals(";")) {
-            initialization = parser.parseExpression(0);
+            if (TokenUtils.peek(parser).text.equals(")")) {
+                initialization = new ListNode(parser.tokenIndex);
+            } else {
+                initialization = parser.parseExpression(0);
+            }
 
             token = TokenUtils.peek(parser);
             if (token.text.equals(")")) {
