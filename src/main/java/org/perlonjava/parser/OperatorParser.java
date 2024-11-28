@@ -10,8 +10,7 @@ import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.List;
 
-import static org.perlonjava.lexer.LexerTokenType.NEWLINE;
-import static org.perlonjava.lexer.LexerTokenType.WHITESPACE;
+import static org.perlonjava.lexer.LexerTokenType.*;
 import static org.perlonjava.parser.TokenUtils.consume;
 import static org.perlonjava.parser.TokenUtils.peek;
 
@@ -67,8 +66,22 @@ public class OperatorParser {
      */
     static BinaryOperatorNode parseMapGrep(Parser parser, LexerToken token) {
         ListNode operand;
-        // Handle 'sort' keyword as a Binary operator with a Code and List operands
-        operand = ListParser.parseZeroOrMoreList(parser, 1, true, false, false, false);
+        int currentIndex = parser.tokenIndex;
+        try {
+            // Handle 'map' keyword as a Binary operator with a Code and List operands
+            operand = ListParser.parseZeroOrMoreList(parser, 1, true, false, false, false);
+        } catch (PerlCompilerException e) {
+            // map chr, 1,2,3
+            parser.tokenIndex = currentIndex;
+            parser.parsingForLoopVariable = true;
+            Node var = parser.parsePrimary();
+            parser.parsingForLoopVariable = false;
+            TokenUtils.consume(parser, OPERATOR, ",");
+            operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
+            operand.handle = new BlockNode(List.of(var), parser.tokenIndex);
+            parser.ctx.logDebug("parseMap: " + operand.handle + " : " + operand);
+        }
+
         // transform:   { 123 }
         // into:        sub { 123 }
         Node block = operand.handle;
