@@ -483,6 +483,15 @@ public class OperatorParser {
                 parser.parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
                 operand = ListParser.parseZeroOrOneList(parser, 0);
                 parser.parsingTakeReference = false;
+                if (((ListNode)operand).elements.isEmpty()) {
+                    // `defined` without arguments means `defined $_`
+                    ((ListNode)operand).elements.add(
+                            new OperatorNode(
+                                    "$",
+                                    new IdentifierNode("_", parser.tokenIndex),
+                                    parser.tokenIndex)
+                    );
+                }
                 return new OperatorNode(token.text, operand, currentIndex);
             case "scalar":
             case "values":
