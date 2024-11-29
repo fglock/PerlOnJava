@@ -226,7 +226,8 @@ public class ListParser {
         LexerToken token1 = parser.tokens.get(parser.tokenIndex); // Next token including spaces
         LexerToken nextToken = TokenUtils.peek(parser);  // After spaces
 
-        if (token.type == LexerTokenType.EOF || Parser.LIST_TERMINATORS.contains(token.text)) {
+        if (token.type == LexerTokenType.EOF || Parser.LIST_TERMINATORS.contains(token.text)
+                || token.text.equals("->")) {
             isEmptyList = true;
         } else if (token.text.equals("-")) {
             // -d, -e, -f, -l, -p, -x
