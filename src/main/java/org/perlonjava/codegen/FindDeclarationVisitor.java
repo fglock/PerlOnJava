@@ -2,17 +2,13 @@ package org.perlonjava.codegen;
 
 import org.perlonjava.astnode.*;
 
-public class DynamicVariableVisitor implements Visitor {
+public class FindDeclarationVisitor implements Visitor {
     private boolean containsLocalOperator = false;
     private String operatorName = null;
     private OperatorNode operatorNode = null;
 
-    public static boolean containsLocalOperator(Node blockNode) {
-        return findOperator(blockNode, "local") != null;
-    }
-
     public static OperatorNode findOperator(Node blockNode, String operatorName) {
-        DynamicVariableVisitor visitor = new DynamicVariableVisitor();
+        FindDeclarationVisitor visitor = new FindDeclarationVisitor();
         visitor.operatorName = operatorName;
         blockNode.accept(visitor);
         return visitor.operatorNode;

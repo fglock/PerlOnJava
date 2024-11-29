@@ -105,7 +105,7 @@ public class EmitLogicalOperator {
 
         // check if the right operand contains a variable declaration,
         // if so, move the declaration outside of the logical operator
-        OperatorNode declaration = DynamicVariableVisitor.findOperator(node.right, "my");
+        OperatorNode declaration = FindDeclarationVisitor.findOperator(node.right, "my");
         if (declaration != null) {
             if (declaration.operand instanceof OperatorNode operatorNode) {
                 // emit bytecode for the declaration

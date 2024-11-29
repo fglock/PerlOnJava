@@ -22,7 +22,7 @@ public class Local {
      */
     static localRecord localSetup(EmitterContext ctx, Node ast, MethodVisitor mv) {
         // Check if the code contains a 'local' operator
-        boolean containsLocalOperator = DynamicVariableVisitor.containsLocalOperator(ast);
+        boolean containsLocalOperator = FindDeclarationVisitor.findOperator(ast, "local") != null;
         int dynamicIndex = -1;
         if (containsLocalOperator) {
             // Allocate a local variable to store the dynamic variable stack index
