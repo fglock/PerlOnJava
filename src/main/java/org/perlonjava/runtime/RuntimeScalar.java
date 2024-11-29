@@ -134,7 +134,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         if (!args.elements.isEmpty()) {
             frame = ((RuntimeScalar) args.elements.getFirst()).getInt();
         }
-        CallerStack.CallerInfo info = CallerStack.peek();
+        CallerStack.CallerInfo info = CallerStack.peek(0);
         if (info == null) {
             // Runtime stack trace
             Throwable t = new Throwable();

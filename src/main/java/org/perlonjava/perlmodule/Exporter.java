@@ -2,6 +2,9 @@ package org.perlonjava.perlmodule;
 
 import org.perlonjava.runtime.*;
 
+import static org.perlonjava.runtime.RuntimeContextType.SCALAR;
+import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
+
 /**
  * The Exporter class is responsible for managing the export of symbols from one Perl package to another.
  * It mimics the behavior of Perl's Exporter module, allowing symbols to be imported into other namespaces.
@@ -49,7 +52,7 @@ public class Exporter extends PerlModuleBase {
         String packageName = packageScalar.scalar().toString();
 
         // Determine the caller's namespace
-        RuntimeList callerList = RuntimeScalar.caller(new RuntimeList(), RuntimeContextType.SCALAR);
+        RuntimeList callerList = RuntimeScalar.caller(new RuntimeList(), SCALAR);
         String caller = callerList.scalar().toString();
 
         // Retrieve the export lists and tags from the package
@@ -61,6 +64,8 @@ public class Exporter extends PerlModuleBase {
         if (args.size() == 0) {
             args = export;
         }
+
+        String exportLevel = GlobalVariable.getGlobalVariable( "Exporter::ExportLevel").toString();
 
         // Process the requested symbols and tags
         RuntimeArray tagArray = new RuntimeArray();
@@ -90,6 +95,20 @@ public class Exporter extends PerlModuleBase {
             boolean isExportOk = exportOk.elements.stream()
                     .anyMatch(e -> e.toString().equals(symbolString));
 
+            if (!isExported && !isExportOk && !symbolString.matches("^[$@%*]")) {
+                // try with/without "&"
+                String finalSymbolString;
+                if (symbolString.startsWith("&")) {
+                    finalSymbolString = symbolString.substring(1);
+                } else {
+                    finalSymbolString = "&" + symbolString;
+                }
+                isExported = export.elements.stream()
+                        .anyMatch(e -> e.toString().equals(finalSymbolString));
+                isExportOk = exportOk.elements.stream()
+                        .anyMatch(e -> e.toString().equals(finalSymbolString));
+            }
+
             if (isExported || isExportOk) {
                 if (symbolString.startsWith("&")) {
                     importFunction(packageName, caller, symbolString.substring(1));
@@ -105,7 +124,7 @@ public class Exporter extends PerlModuleBase {
                     importFunction(packageName, caller, symbolString);
                 }
             } else {
-                throw new PerlCompilerException("Subroutine " + symbolString + " not allowed for export in package " + packageName);
+                throw new PerlCompilerException("Symbol " + symbolString + " not allowed for export in package " + packageName);
             }
         }
 
@@ -114,7 +133,7 @@ public class Exporter extends PerlModuleBase {
 
     public static RuntimeList exportTags(RuntimeArray args, int ctx) {
         // Extract the package name from caller
-        RuntimeScalar packageScalar = RuntimeScalar.caller(new RuntimeList(), RuntimeContextType.SCALAR).elements.getFirst().scalar();
+        RuntimeScalar packageScalar = RuntimeScalar.caller(new RuntimeList(), SCALAR).elements.getFirst().scalar();
         // Retrieve the export lists and tags from the package
         RuntimeArray export = GlobalVariable.getGlobalArray(packageScalar + "::EXPORT");
         RuntimeHash exportTags = GlobalVariable.getGlobalHash(packageScalar + "::EXPORT_TAGS");
@@ -129,7 +148,7 @@ public class Exporter extends PerlModuleBase {
 
     public static RuntimeList exportOkTags(RuntimeArray args, int ctx) {
         // Extract the package name from caller
-        RuntimeScalar packageScalar = RuntimeScalar.caller(new RuntimeList(), RuntimeContextType.SCALAR).elements.getFirst().scalar();
+        RuntimeScalar packageScalar = RuntimeScalar.caller(new RuntimeList(), SCALAR).elements.getFirst().scalar();
         // Retrieve the export lists and tags from the package
         RuntimeArray exportOk = GlobalVariable.getGlobalArray(packageScalar + "::EXPORT_OK");
         RuntimeHash exportTags = GlobalVariable.getGlobalHash(packageScalar + "::EXPORT_TAGS");

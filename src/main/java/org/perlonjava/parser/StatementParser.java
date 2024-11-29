@@ -343,7 +343,7 @@ public class StatementParser {
                     ctx.compilerOptions.fileName,
                     ctx.errorUtil.getLineNumber(parser.tokenIndex));
 
-            ctx.logDebug("Use statement: " + fullName + " called from " + CallerStack.peek());
+            ctx.logDebug("Use statement: " + fullName + " called from " + CallerStack.peek(0));
             // execute 'require(fullName)'
             RuntimeScalar ret = new RuntimeScalar(fullName).require();
             ctx.logDebug("Use statement return: " + ret);

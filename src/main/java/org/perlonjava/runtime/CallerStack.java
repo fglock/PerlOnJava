@@ -25,14 +25,19 @@ public class CallerStack {
 
     /**
      * Retrieves the most recent CallerInfo object from the stack without removing it.
+     * Zero is the most recent entry.
      *
      * @return The most recent CallerInfo object, or null if the stack is empty.
      */
-    public static CallerInfo peek() {
+    public static CallerInfo peek(int callFrame) {
         if (callerStack.isEmpty()) {
             return null;
         }
-        return callerStack.getLast();
+        int index = callerStack.size() - 1 - callFrame;
+        if (index < 0) {
+            return null;
+        }
+        return callerStack.get(index);
     }
 
     /**
