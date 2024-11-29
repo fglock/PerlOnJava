@@ -56,6 +56,11 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         throw new PerlCompilerException("Modification of a read-only value attempted");
     }
 
+    // Add itself to a RuntimeArray.
+    public void addToArray(RuntimeArray array) {
+        array.elements.add(new RuntimeScalar(this.getValueAsScalar()));
+    }
+
     /**
      * Adds the string value of this special variable to another scalar variable.
      *
