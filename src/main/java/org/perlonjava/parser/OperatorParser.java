@@ -490,24 +490,7 @@ public class OperatorParser {
             case "printf":
             case "print":
             case "say":
-                // Handle 'print' keyword as a Binary operator with a FileHandle and List operands
-                ListNode printOperand = ListParser.parseZeroOrMoreList(parser, 0, false, true, true, false);
-                handle = printOperand.handle;
-                printOperand.handle = null;
-                if (handle == null) {
-                    // `print` without arguments means `print to last selected filehandle`
-                    handle = new OperatorNode("select", new ListNode(currentIndex), currentIndex);
-                }
-                if (printOperand.elements.isEmpty()) {
-                    // `print` without arguments means `print $_`
-                    printOperand.elements.add(
-                            new OperatorNode(
-                                    "$",
-                                    new IdentifierNode("_", parser.tokenIndex),
-                                    parser.tokenIndex)
-                    );
-                }
-                return new BinaryOperatorNode(token.text, handle, printOperand, currentIndex);
+                return parsePrint(parser, token, currentIndex);
             case "delete":
             case "exists":
                 parser.parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
@@ -606,6 +589,52 @@ public class OperatorParser {
                 return StringParser.parseRawString(parser, token.text);
         }
         return null;
+    }
+
+    private static BinaryOperatorNode parsePrint(Parser parser, LexerToken token, int currentIndex) {
+        Node handle;
+        ListNode operand;
+        try {
+            // Handle 'print' keyword as a Binary operator with a FileHandle and List operands
+            operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, true, false);
+        } catch (PerlCompilerException e) {
+            // print $fh (1,2,3)
+            parser.tokenIndex = currentIndex;
+
+            boolean paren = false;
+            if (peek(parser).text.equals("(")) {
+                TokenUtils.consume(parser);
+                paren = true;
+            }
+
+            parser.parsingForLoopVariable = true;
+            Node var = parser.parsePrimary();
+            parser.parsingForLoopVariable = false;
+            operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
+            operand.handle = var;
+
+            if (paren) {
+                TokenUtils.consume(parser, OPERATOR, ")");
+            }
+            parser.ctx.logDebug("parsePrint: " + operand.handle + " : " + operand);
+        }
+
+        handle = operand.handle;
+        operand.handle = null;
+        if (handle == null) {
+            // `print` without arguments means `print to last selected filehandle`
+            handle = new OperatorNode("select", new ListNode(currentIndex), currentIndex);
+        }
+        if (operand.elements.isEmpty()) {
+            // `print` without arguments means `print $_`
+            operand.elements.add(
+                    new OperatorNode(
+                            "$",
+                            new IdentifierNode("_", parser.tokenIndex),
+                            parser.tokenIndex)
+            );
+        }
+        return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
     }
 
     private static void addVariableToScope(EmitterContext ctx, String operator, OperatorNode node) {
