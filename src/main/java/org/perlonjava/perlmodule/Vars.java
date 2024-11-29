@@ -52,6 +52,9 @@ public class Vars extends PerlModuleBase {
             } else if (variableString.startsWith("%")) {
                 // Create a hash variable
                 GlobalVariable.getGlobalHash(caller + "::" + variableString.substring(1));
+            } else if (variableString.startsWith("&")) {
+                // Create a code variable
+                GlobalVariable.getGlobalCodeRef(caller + "::" + variableString.substring(1));
             } else {
                 throw new PerlCompilerException("Invalid variable type: " + variableString);
             }
