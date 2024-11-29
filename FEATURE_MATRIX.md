@@ -304,6 +304,7 @@
 - ✔️   **File::Find** use the same version as Perl.
 - ✔️   **File::Spec** module.
 - ✔️   **File::Spec::Functions** module.
+- ✔️   **Getopt::Long** module.
 - ✔️   **Term::ANSIColor** module.
 - ✔️   **Time::Local** module.
 - ✔️   **HTTP::Date** module.

@@ -118,6 +118,7 @@
   - Planned release date: 2024-12-10
   - Added `subs` pragma.
   - Added regex `$+` variable.
+  - Added `Getopt::Long` module.
   - Work in progress:
     - `lexical_subs` feature.
     - `socket` and related operators.
@@ -128,7 +129,6 @@
     - lexical utf8 source code.
     - `truncate`, `seek` operators.
     - preprocessor `# line` directive.
-    - `Getopt::Long`.
     - subroutine prototypes.
     - `JSON` module.
 
