@@ -315,7 +315,8 @@
 - ❌  **Use string as a scalar reference**: Support for scalar references from strings is not yet implemented.
 - ❌  **`format` operator**: Format is not implemented.
 - ❌  **DBM file support**: `dbmclose`, `dbmopen` are not implemented.
-- ❌  **`reset("A-Z")`** resetting global variables is not implemented
+- ❌  **`reset("A-Z")`** resetting global variables is not implemented.
+- ❌  **Indirect object syntax** indirect object syntax is not implemented.
 
 ## Features Probably Incompatible with JVM
 - ❌  **`DESTROY`**: Handling of object destruction may be incompatible with JVM garbage collection.
