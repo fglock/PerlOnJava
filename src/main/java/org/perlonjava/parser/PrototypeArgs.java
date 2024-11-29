@@ -114,6 +114,8 @@ public class PrototypeArgs {
             }
         }
 
+        // TODO check for "Too many arguments" error
+
         if (hasParentheses) {
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
         }
