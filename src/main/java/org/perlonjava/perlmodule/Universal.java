@@ -5,7 +5,9 @@ import org.perlonjava.runtime.*;
 import java.util.List;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalCodeRef;
+import static org.perlonjava.runtime.RuntimeScalarCache.getScalarBoolean;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 /**
  * The Universal class provides methods that are universally available to all objects in a Perl-like environment.
@@ -112,13 +114,18 @@ public class Universal extends PerlModuleBase {
 
         // Retrieve Perl class name
         String perlClassName;
-        switch (object.type) {
+        RuntimeScalarType type = object.type;
+        switch (type) {
             case REFERENCE:
             case ARRAYREFERENCE:
             case HASHREFERENCE:
                 int blessId = ((RuntimeBaseEntity) object.value).blessId;
                 if (blessId == 0) {
-                    return new RuntimeScalar(false).getList();
+                    return getScalarBoolean(
+                            type == ARRAYREFERENCE && argString.equals("ARRAY")
+                                    || type == HASHREFERENCE && argString.equals("HASH")
+                                    || type == REFERENCE && argString.equals("SCALAR")
+                    ).getList();
                 }
                 perlClassName = NameNormalizer.getBlessStr(blessId);
                 break;
