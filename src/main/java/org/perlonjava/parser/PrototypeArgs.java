@@ -4,9 +4,11 @@ import org.perlonjava.astnode.ListNode;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.astnode.SubroutineNode;
-import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
+
+import static org.perlonjava.parser.ListParser.consumeCommas;
+import static org.perlonjava.parser.ListParser.isComma;
 
 public class PrototypeArgs {
 
@@ -36,14 +38,13 @@ public class PrototypeArgs {
                 } else if (prototype.startsWith("$")) {
                     // System.out.println("prototype consume $");
                     if (needComma) {
-                        LexerToken token = TokenUtils.peek(parser);
-                        if (!token.text.equals(",") && !token.text.equals("=>")) {
+                        if (!isComma(TokenUtils.peek(parser))) {
                             if (isOptional) {
                                 break;
                             }
                             throw new PerlCompilerException("syntax error, expected comma");
                         }
-                        TokenUtils.consume(parser);
+                        consumeCommas(parser);
                     }
                     ListNode argList = ListParser.parseZeroOrOneList(parser, 0);
                     if (argList.elements.size() == 0) {
@@ -52,19 +53,16 @@ public class PrototypeArgs {
                         }
                         throw new PerlCompilerException("syntax error, expected scalar");
                     }
-                    Node element = argList.elements.getFirst();
-                    Node scalarElement = new OperatorNode("scalar", element, element.getIndex());
-                    args.elements.add(scalarElement);
+                    args.elements.add(new OperatorNode("scalar", argList.elements.getFirst(), argList.elements.getFirst().getIndex()));
                     needComma = true;
                     prototype = prototype.substring(1);
                 } else if (prototype.startsWith("@")) {
                     // System.out.println("prototype consume @");
                     if (needComma) {
-                        LexerToken token = TokenUtils.peek(parser);
-                        if (!token.text.equals(",") && !token.text.equals("=>")) {
+                        if (!isComma(TokenUtils.peek(parser))) {
                             break;
                         }
-                        TokenUtils.consume(parser);
+                        consumeCommas(parser);
                     }
                     ListNode argList = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
                     for (Node element : argList.elements) {
@@ -75,20 +73,18 @@ public class PrototypeArgs {
                 } else if (prototype.startsWith("&")) {
                     // System.out.println("prototype consume &");
                     if (needComma) {
-                        LexerToken token = TokenUtils.peek(parser);
-                        if (!token.text.equals(",") && !token.text.equals("=>")) {
+                        if (!isComma(TokenUtils.peek(parser))) {
                             if (isOptional) {
                                 break;
                             }
                             throw new PerlCompilerException("syntax error, expected comma");
                         }
-                        TokenUtils.consume(parser);
+                        consumeCommas(parser);
                     }
                     if (TokenUtils.peek(parser).text.equals("{")) {
                         //  { ... }
                         TokenUtils.consume(parser);
-                        Node block = parser.parseBlock();
-                        block = new SubroutineNode(null, null, null, block, false, parser.tokenIndex);
+                        Node block = new SubroutineNode(null, null, null, parser.parseBlock(), false, parser.tokenIndex);
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
                         args.elements.add(block);
                         needComma = false;
@@ -101,8 +97,7 @@ public class PrototypeArgs {
                             }
                             throw new PerlCompilerException("syntax error, expected coderef");
                         }
-                        Node element = argList.elements.getFirst();
-                        args.elements.add(element);
+                        args.elements.add(argList.elements.getFirst());
                         needComma = true;
                     } else {
                         throw new PerlCompilerException("syntax error, expected block");

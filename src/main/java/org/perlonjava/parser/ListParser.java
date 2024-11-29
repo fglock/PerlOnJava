@@ -150,11 +150,8 @@ public class ListParser {
                     // Argument without parentheses
                     expr.elements.add(parser.parseExpression(parser.getPrecedence(",")));
                     token = TokenUtils.peek(parser);
-                    if (token.text.equals(",") || token.text.equals("=>")) {
-                        while (token.text.equals(",") || token.text.equals("=>")) {
-                            TokenUtils.consume(parser);
-                            token = TokenUtils.peek(parser);
-                        }
+                    if (isComma(token)) {
+                        token = consumeCommas(parser);
                     } else {
                         break;
                     }
@@ -171,6 +168,19 @@ public class ListParser {
             throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
         }
         return expr;
+    }
+
+    static boolean isComma(LexerToken token) {
+        return token.text.equals(",") || token.text.equals("=>");
+    }
+
+    static LexerToken consumeCommas(Parser parser) {
+        LexerToken token = TokenUtils.peek(parser);
+        while (isComma(token)) {
+            TokenUtils.consume(parser);
+            token = TokenUtils.peek(parser);
+        }
+        return token;
     }
 
     /**
