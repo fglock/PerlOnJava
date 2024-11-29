@@ -4,6 +4,7 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.BinaryOperatorNode;
+import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.astnode.TernaryOperatorNode;
 import org.perlonjava.operators.ScalarFlipFlopOperator;
 import org.perlonjava.runtime.RuntimeContextType;
@@ -101,6 +102,21 @@ public class EmitLogicalOperator {
     static void emitLogicalOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node, int compareOpcode, String getBoolean) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         Label endLabel = new Label(); // Label for the end of the operation
+
+        // check if the right operand contains a variable declaration,
+        // if so, move the declaration outside of the logical operator
+        OperatorNode declaration = DynamicVariableVisitor.findOperator(node.right, "my");
+        if (declaration != null) {
+            if (declaration.operand instanceof OperatorNode operatorNode) {
+                // emit bytecode for the declaration
+                declaration.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                // replace the declaration with it's operand
+                declaration.operator = operatorNode.operator;
+                declaration.operand = operatorNode.operand;
+            } else {
+                // TODO: find an example where this happens
+            }
+        }
 
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // target - left parameter
         // The left parameter is in the stack

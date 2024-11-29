@@ -11,7 +11,7 @@ public class OperatorNode extends AbstractNode {
     /**
      * The operand on which the operator is applied.
      */
-    public final Node operand;
+    public Node operand;
     /**
      * The operator represented by this node.
      */
