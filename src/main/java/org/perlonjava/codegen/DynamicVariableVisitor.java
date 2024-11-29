@@ -4,11 +4,18 @@ import org.perlonjava.astnode.*;
 
 public class DynamicVariableVisitor implements Visitor {
     private boolean containsLocalOperator = false;
+    private String operatorName = null;
+    private OperatorNode operatorNode = null;
 
     public static boolean containsLocalOperator(Node blockNode) {
+        return findOperator(blockNode, "local") != null;
+    }
+
+    public static OperatorNode findOperator(Node blockNode, String operatorName) {
         DynamicVariableVisitor visitor = new DynamicVariableVisitor();
+        visitor.operatorName = operatorName;
         blockNode.accept(visitor);
-        return visitor.containsLocalOperator;
+        return visitor.operatorNode;
     }
 
     @Override
@@ -25,8 +32,9 @@ public class DynamicVariableVisitor implements Visitor {
 
     @Override
     public void visit(OperatorNode node) {
-        if ("local".equals(node.operator)) {
+        if (this.operatorName.equals(node.operator)) {
             containsLocalOperator = true;
+            operatorNode = node;
         }
     }
 
