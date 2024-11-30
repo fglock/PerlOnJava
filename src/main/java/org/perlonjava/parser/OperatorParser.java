@@ -233,7 +233,7 @@ public class OperatorParser {
                 // Handle the case for <$fh>
                 parser.ctx.logDebug("diamond operator " + token.text + parser.tokens.get(parser.tokenIndex));
                 parser.tokenIndex++;
-                Node var = parser.parseVariable("$"); // Parse the variable following the dollar sign
+                Node var = Variable.parseVariable(parser, "$"); // Parse the variable following the dollar sign
                 parser.ctx.logDebug("diamond operator var " + var);
 
                 // Check if the next token is a closing angle bracket

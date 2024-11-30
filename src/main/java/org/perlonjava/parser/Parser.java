@@ -455,9 +455,9 @@ public class Parser {
                     case "@":
                     case "%":
                     case "*":
-                        return parseVariable(token.text);
+                        return Variable.parseVariable(this, token.text);
                     case "&":
-                        return parseCoderefVariable(token);
+                        return Variable.parseCoderefVariable(this, token);
                     case "!":
                     case "+":
                         // Handle unary operators like `! +`
@@ -523,106 +523,6 @@ public class Parser {
         }
         // Throw an exception if no valid case was found
         throw new PerlCompilerException(tokenIndex, "syntax error", ctx.errorUtil);
-    }
-
-    /**
-     * Parses a code reference variable, handling Perl's `&` code reference parsing rules.
-     * This method is responsible for parsing expressions that start with `&`, which in Perl
-     * can be used to refer to subroutines or to call them.
-     *
-     * @param token The lexer token representing the `&` operator.
-     * @return A Node representing the parsed code reference or subroutine call.
-     */
-    private Node parseCoderefVariable(LexerToken token) {
-        // Set a flag to allow parentheses after a variable, as in &$sub(...)
-        parsingForLoopVariable = true;
-        // Parse the variable following the `&` sigil
-        Node node = parseVariable(token.text);
-        // Reset the flag after parsing
-        parsingForLoopVariable = false;
-
-        // If we are parsing a reference (e.g., \&sub), return the node without adding parameters
-        if (parsingTakeReference) {
-            return node;
-        }
-
-        this.ctx.logDebug("parse & node: " + node);
-
-        // Check if the node is an OperatorNode with a BinaryOperatorNode operand
-        if (node instanceof OperatorNode operatorNode) {
-            if (operatorNode.operand instanceof BinaryOperatorNode binaryOperatorNode) {
-                // If the operator is `(`, return the BinaryOperatorNode directly
-                if (binaryOperatorNode.operator.equals("(")) {
-                    return binaryOperatorNode;
-                }
-            }
-        }
-
-        Node list;
-        // If the next token is not `(`, handle auto-call by transforming `&subr` to `&subr(@_)`
-        if (!peek(this).text.equals("(")) {
-            list = new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex);
-        } else {
-            // Otherwise, parse the list of arguments
-            list = ListParser.parseZeroOrMoreList(this,
-                    0,
-                    false,
-                    true,
-                    false,
-                    false);
-        }
-
-        // Handle cases where the node is an OperatorNode
-        if (node instanceof OperatorNode operatorNode) {
-            // If the operand is another OperatorNode, transform &$sub to $sub(@_)
-            if (operatorNode.operand instanceof OperatorNode) {
-                node = operatorNode.operand;
-            } else if (operatorNode.operand instanceof BlockNode blockNode) {
-                // If the operand is a BlockNode, transform &{$sub} to $sub(@_)
-                node = blockNode;
-            }
-        }
-
-        // Return a new BinaryOperatorNode representing the function call with arguments
-        return new BinaryOperatorNode("(", node, list, tokenIndex);
-    }
-
-    /**
-     * Parses a variable from the given lexer token.
-     *
-     * @param sigil The sigil that starts the variable.
-     * @return The parsed variable node.
-     * @throws PerlCompilerException If there is a syntax error.
-     */
-    public Node parseVariable(String sigil) {
-        Node operand;
-        String varName = IdentifierParser.parseComplexIdentifier(this);
-
-        if (varName != null) {
-            // Variable name is valid.
-            // Check for illegal characters after a variable
-            if (peek(this).text.equals("(") && !sigil.equals("&") && !parsingForLoopVariable) {
-                // Parentheses are only allowed after a variable in specific cases:
-                // - `for my $v (...`
-                // - `&name(...`
-                // - `obj->$name(...`
-                throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
-            }
-
-            // Create a Variable node
-            return new OperatorNode(sigil, new IdentifierNode(varName, tokenIndex), tokenIndex);
-        } else if (peek(this).text.equals("{")) {
-            // Handle curly brackets to parse a nested expression `${v}`
-            TokenUtils.consume(this); // Consume the '{'
-            Node block = parseBlock(); // Parse the block inside the curly brackets
-            TokenUtils.consume(this, LexerTokenType.OPERATOR, "}"); // Consume the '}'
-            return new OperatorNode(sigil, block, tokenIndex);
-        }
-
-        // Not a variable name, not a block. This could be a dereference like @$a
-        // Parse the expression with the appropriate precedence
-        operand = parseExpression(getPrecedence("$") + 1);
-        return new OperatorNode(sigil, operand, tokenIndex);
     }
 
     /**
