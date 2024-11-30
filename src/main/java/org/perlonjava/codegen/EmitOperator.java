@@ -17,7 +17,7 @@ import org.perlonjava.runtime.RuntimeContextType;
 public class EmitOperator {
 
     static void emitOperator(String operator, EmitterVisitor emitterVisitor) {
-        // Invoke the static method for the operator.
+        // Invoke the method for the operator.
         OperatorHandler operatorHandler = OperatorHandler.get(operator);
         emitterVisitor.ctx.mv.visitMethodInsn(
                 operatorHandler.getMethodType(),
@@ -54,7 +54,6 @@ public class EmitOperator {
     static void handleMkdirOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        // Invoke the static method for the operator.
         emitOperator(node.operator, emitterVisitor);
     }
 
@@ -238,8 +237,6 @@ public class EmitOperator {
         // Push the formatted line number as a message.
         Node message = new StringNode(emitterVisitor.ctx.errorUtil.errorMessage(node.tokenIndex, ""), node.tokenIndex);
         message.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-
-        // Invoke the static method for the operator.
         emitOperator(node.operator, emitterVisitor);
     }
 
@@ -251,7 +248,6 @@ public class EmitOperator {
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         emitterVisitor.pushCallContext();
-        // Invoke the static method for the operator.
         emitOperator(node.operator, emitterVisitor);
     }
 
@@ -261,7 +257,6 @@ public class EmitOperator {
         emitterVisitor.ctx.logDebug("handleCryptBuiltin " + node);
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        // Invoke the static method for the operator.
         emitOperator(node.operator, emitterVisitor);
     }
 
@@ -429,7 +424,6 @@ public class EmitOperator {
         // Accept the operand in SCALAR context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         emitterVisitor.pushCallContext();
-        // Invoke the static method for evaluating the glob pattern.
         emitOperator(node.operator, emitterVisitor);
     }
 
@@ -640,9 +634,7 @@ public class EmitOperator {
 
         String labelStr = null;
         ListNode labelNode = (ListNode) node.operand;
-        if (labelNode.elements.isEmpty()) {
-            // Handle 'next' without a label.
-        } else {
+        if (!labelNode.elements.isEmpty()) {
             // Handle 'next' with a label.
             Node arg = labelNode.elements.get(0);
             if (arg instanceof IdentifierNode) {
@@ -703,6 +695,5 @@ public class EmitOperator {
         // Accept the operand in RUNTIME context and jump to the return label.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
         emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
-        // TODO return (1,2), 3
     }
 }
