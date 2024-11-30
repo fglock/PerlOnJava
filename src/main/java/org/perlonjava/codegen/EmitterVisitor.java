@@ -283,13 +283,8 @@ public class EmitterVisitor implements Visitor {
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", operator, "(I)Lorg/perlonjava/runtime/RuntimeScalar;", false);
             } else if (operator.equals("times") || operator.equals("time")) {
                 // Call static RuntimeScalar method with no arguments; returns RuntimeList
-                mv.visitMethodInsn(
-                        operatorHandler.getMethodType(),
-                        operatorHandler.getClassName(),
-                        operator,
-                        operatorHandler.getDescriptor(),
-                        false
-                );
+                EmitOperator.emitOperator(operator, this);
+                return;
             } else {
                 // Call static RuntimeScalar method with no arguments
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
@@ -301,12 +296,8 @@ public class EmitterVisitor implements Visitor {
         } else if (operator.equals("gmtime") || operator.equals("localtime") || operator.equals("caller") || operator.equals("reset") || operator.equals("select")) {
             node.operand.accept(this.with(RuntimeContextType.LIST));
             pushCallContext();
-            mv.visitMethodInsn(
-                    operatorHandler.getMethodType(),
-                    operatorHandler.getClassName(),
-                    operator,
-                    operatorHandler.getDescriptor(),
-                    false);
+            EmitOperator.emitOperator(operator, this);
+            return;
         } else if (operator.equals("prototype")) {
             node.operand.accept(this.with(RuntimeContextType.SCALAR));
             ctx.mv.visitLdcInsn(ctx.symbolTable.getCurrentPackage());
@@ -326,12 +317,8 @@ public class EmitterVisitor implements Visitor {
         } else {
             node.operand.accept(this.with(RuntimeContextType.SCALAR));
             if (operatorHandler != null) {
-                mv.visitMethodInsn(
-                        operatorHandler.getMethodType(),
-                        operatorHandler.getClassName(),
-                        operator,
-                        operatorHandler.getDescriptor(),
-                        false);
+                EmitOperator.emitOperator(operator, this);
+                return;
             } else {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
             }
