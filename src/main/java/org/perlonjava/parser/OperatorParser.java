@@ -204,8 +204,7 @@ public class OperatorParser {
             operand = ListParser.parseZeroOrOneList(parser, 0);
             if (((ListNode) operand).elements.isEmpty()) {
                 // create `$_` variable
-                operand = new OperatorNode(
-                        "$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
+                operand = scalarUnderscore(parser);
             }
         }
         return new EvalOperatorNode(
@@ -361,8 +360,7 @@ public class OperatorParser {
                 operand = ListParser.parseZeroOrOneList(parser, 0);
                 if (((ListNode) operand).elements.isEmpty()) {
                     // create `$_` variable
-                    operand = new OperatorNode(
-                            "$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
+                    operand = scalarUnderscore(parser);
                 }
                 return new OperatorNode("qx", operand, parser.tokenIndex);
             case "unpack":
@@ -371,8 +369,7 @@ public class OperatorParser {
                 if (((ListNode) operand).elements.size() == 1) {
                     // create `$_` variable
                     ((ListNode) operand).elements.add(
-                            new OperatorNode(
-                                    "$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex)
+                            scalarUnderscore(parser)
                     );
                 }
                 return new OperatorNode(token.text, operand, parser.tokenIndex);
@@ -504,10 +501,7 @@ public class OperatorParser {
                 if (((ListNode) operand).elements.isEmpty()) {
                     // `defined` without arguments means `defined $_`
                     ((ListNode) operand).elements.add(
-                            new OperatorNode(
-                                    "$",
-                                    new IdentifierNode("_", parser.tokenIndex),
-                                    parser.tokenIndex)
+                            scalarUnderscore(parser)
                     );
                 }
                 return new OperatorNode(token.text, operand, currentIndex);
@@ -628,10 +622,7 @@ public class OperatorParser {
         if (operand.elements.isEmpty()) {
             // `print` without arguments means `print $_`
             operand.elements.add(
-                    new OperatorNode(
-                            "$",
-                            new IdentifierNode("_", parser.tokenIndex),
-                            parser.tokenIndex)
+                    scalarUnderscore(parser)
             );
         }
         return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
@@ -726,11 +717,15 @@ public class OperatorParser {
                     break;
                 default:
                     // create `$_` variable
-                    operand = new OperatorNode(
-                            "$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
+                    operand = scalarUnderscore(parser);
                     break;
             }
         }
         return new OperatorNode(text, operand, parser.tokenIndex);
+    }
+
+    static OperatorNode scalarUnderscore(Parser parser) {
+        return new OperatorNode(
+                "$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
     }
 }

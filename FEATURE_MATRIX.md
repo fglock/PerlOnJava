@@ -146,7 +146,7 @@
 - ✔️   **Calling context**: `wantarray` is implemented.
 - ✔️   **exists**: `exists &sub` is implemented.
 - ✔️   **defined**: `defined &sub` is implemented.
-- 🚧  **Subroutine prototypes**: Partial implementation of prototypes; `$`, `@`, `%`, `&`, `;`, empty string and undef are supported.
+- 🚧  **Subroutine prototypes**: Prototypes `$`, `@`, `%`, `&`, `;`, `_`, empty string and undef are supported.
 - ❌  **Subroutine signatures**: Formal parameters are not implemented.
 - ❌  **Inline "constant" subroutines optimization**: Optimization for inline constants is not yet implemented.
 - ❌  **Subroutine attributes**: Subroutine attributes are not yet supported.
