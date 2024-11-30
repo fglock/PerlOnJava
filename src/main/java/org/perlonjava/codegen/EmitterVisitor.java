@@ -232,16 +232,7 @@ public class EmitterVisitor implements Visitor {
 
         node.right.accept(scalarVisitor); // right parameter
         // stack: [left, right]
-        // perform the operation
-        ctx.mv.visitMethodInsn(
-                operatorHandler.getMethodType(),
-                operatorHandler.getClassName(),
-                operatorHandler.getMethodName(),
-                operatorHandler.getDescriptor(),
-                false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
+        EmitOperator.emitOperator(node.operator, this);
     }
 
     private void handleCompoundAssignment(BinaryOperatorNode node, OperatorHandler operatorHandler) {
