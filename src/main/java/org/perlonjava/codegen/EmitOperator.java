@@ -16,23 +16,13 @@ import org.perlonjava.runtime.RuntimeContextType;
  */
 public class EmitOperator {
 
-    /**
-     * Handles the 'readdir' operator, which reads directory contents.
-     *
-     * @param emitterVisitor The visitor used for code emission.
-     * @param node           The operator node representing the 'readdir' operation.
-     */
-    static void handleReaddirOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
-        MethodVisitor mv = emitterVisitor.ctx.mv;
-        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
-        // Accept the operand in SCALAR context.
-        node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        emitterVisitor.pushCallContext();
+    static void emitOperator(String operator, EmitterVisitor emitterVisitor) {
         // Invoke the static method for the operator.
-        mv.visitMethodInsn(
+        OperatorHandler operatorHandler = OperatorHandler.get(operator);
+        emitterVisitor.ctx.mv.visitMethodInsn(
                 operatorHandler.getMethodType(),
                 operatorHandler.getClassName(),
-                node.operator,
+                operatorHandler.getMethodName(),
                 operatorHandler.getDescriptor(),
                 false
         );
@@ -43,28 +33,29 @@ public class EmitOperator {
     }
 
     /**
+     * Handles the 'readdir' operator, which reads directory contents.
+     *
+     * @param emitterVisitor The visitor used for code emission.
+     * @param node           The operator node representing the 'readdir' operation.
+     */
+    static void handleReaddirOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
+        // Accept the operand in SCALAR context.
+        node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.pushCallContext();
+        emitOperator(node.operator, emitterVisitor);
+    }
+
+    /**
      * Handles the 'mkdir' operator, which creates directories.
      *
      * @param emitterVisitor The visitor used for code emission.
      * @param node           The operator node representing the 'mkdir' operation.
      */
     static void handleMkdirOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
-        MethodVisitor mv = emitterVisitor.ctx.mv;
-        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         // Invoke the static method for the operator.
-        mv.visitMethodInsn(
-                operatorHandler.getMethodType(),
-                operatorHandler.getClassName(),
-                node.operator,
-                operatorHandler.getDescriptor(),
-                false
-        );
-        // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        emitOperator(node.operator, emitterVisitor);
     }
 
     /**
@@ -197,7 +188,6 @@ public class EmitOperator {
     // Handles the 'index' built-in function, which finds the position of a substring.
     static void handleIndexBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
         if (node.operand instanceof ListNode operand) {
             if (!operand.elements.isEmpty()) {
@@ -212,17 +202,7 @@ public class EmitOperator {
                     new OperatorNode("undef", null, node.tokenIndex).accept(scalarVisitor);
                 }
                 // Invoke the virtual method for the operator.
-                mv.visitMethodInsn(
-                        operatorHandler.getMethodType(),
-                        operatorHandler.getClassName(),
-                        node.operator,
-                        operatorHandler.getDescriptor(),
-                        false
-                );
-                // If the context is VOID, pop the result from the stack.
-                if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-                    mv.visitInsn(Opcodes.POP);
-                }
+                emitOperator(node.operator, emitterVisitor);
                 return;
             }
         }
@@ -232,8 +212,6 @@ public class EmitOperator {
 
     // Handles the 'atan2' function, which calculates the arctangent of two numbers.
     static void handleAtan2(EmitterVisitor emitterVisitor, OperatorNode node) {
-        MethodVisitor mv = emitterVisitor.ctx.mv;
-        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
         if (node.operand instanceof ListNode operand) {
             if (operand.elements.size() == 2) {
@@ -241,17 +219,7 @@ public class EmitOperator {
                 operand.elements.get(0).accept(scalarVisitor);
                 operand.elements.get(1).accept(scalarVisitor);
                 // Invoke the virtual method for the operator.
-                mv.visitMethodInsn(
-                        operatorHandler.getMethodType(),
-                        operatorHandler.getClassName(),
-                        node.operator,
-                        operatorHandler.getDescriptor(),
-                        false
-                );
-                // If the context is VOID, pop the result from the stack.
-                if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-                    mv.visitInsn(Opcodes.POP);
-                }
+                emitOperator(node.operator, emitterVisitor);
                 return;
             }
         }
@@ -261,8 +229,6 @@ public class EmitOperator {
 
     // Handles the 'die' built-in function, which throws an exception.
     static void handleDieBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
-        MethodVisitor mv = emitterVisitor.ctx.mv;
-        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
         // Handle:  die LIST
         //   static RuntimeDataProvider die(RuntimeDataProvider value, int ctx)
         emitterVisitor.ctx.logDebug("handleDieBuiltin " + node);
@@ -274,23 +240,11 @@ public class EmitOperator {
         message.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
 
         // Invoke the static method for the operator.
-        mv.visitMethodInsn(
-                operatorHandler.getMethodType(),
-                operatorHandler.getClassName(),
-                node.operator,
-                operatorHandler.getDescriptor(),
-                false
-        );
-        // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        emitOperator(node.operator, emitterVisitor);
     }
 
     // Handles the 'reverse' built-in function, which reverses a list.
     static void handleReverseBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
-        MethodVisitor mv = emitterVisitor.ctx.mv;
-        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
         // Handle:  reverse LIST
         //   static RuntimeDataProvider reverse(RuntimeDataProvider value, int ctx)
         emitterVisitor.ctx.logDebug("handleReverseBuiltin " + node);
@@ -298,39 +252,17 @@ public class EmitOperator {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         emitterVisitor.pushCallContext();
         // Invoke the static method for the operator.
-        mv.visitMethodInsn(
-                operatorHandler.getMethodType(),
-                operatorHandler.getClassName(),
-                node.operator,
-                operatorHandler.getDescriptor(),
-                false
-        );
-        // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        emitOperator(node.operator, emitterVisitor);
     }
 
     // Handles the 'crypt' built-in function, which encrypts data.
     static void handleCryptBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
-        MethodVisitor mv = emitterVisitor.ctx.mv;
-        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
         // Handle:  crypt PLAINTEXT,SALT
         emitterVisitor.ctx.logDebug("handleCryptBuiltin " + node);
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         // Invoke the static method for the operator.
-        mv.visitMethodInsn(
-                operatorHandler.getMethodType(),
-                operatorHandler.getClassName(),
-                node.operator,
-                operatorHandler.getDescriptor(),
-                false
-        );
-        // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        emitOperator(node.operator, emitterVisitor);
     }
 
     // Handles the 'unpack' built-in function, which unpacks data from a string.
@@ -403,7 +335,6 @@ public class EmitOperator {
     // Handles the 'map' operator, which applies a function to each element of a list.
     static void handleMapOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         String operator = node.operator;
-        OperatorHandler operatorHandler = OperatorHandler.get(operator);
 
         // Accept the right operand in LIST context and the left operand in SCALAR context.
         node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));  // list
@@ -411,19 +342,9 @@ public class EmitOperator {
         if (operator.equals("sort")) {
             emitterVisitor.ctx.mv.visitLdcInsn(emitterVisitor.ctx.symbolTable.getCurrentPackage());
         }
-        // Invoke the static method for the operator.
-        emitterVisitor.ctx.mv.visitMethodInsn(
-                operatorHandler.getMethodType(),
-                operatorHandler.getClassName(),
-                operatorHandler.getMethodName(),
-                operatorHandler.getDescriptor(),
-                false);
+        emitOperator(node.operator, emitterVisitor);
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
-        }
-        // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
         }
     }
 
@@ -499,7 +420,6 @@ public class EmitOperator {
     // Handles the 'glob' built-in function, which performs filename expansion.
     static void handleGlobBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
 
         // Generate unique IDs for this glob instance
         int globId = ScalarGlobOperator.currentId++;
@@ -510,18 +430,7 @@ public class EmitOperator {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         emitterVisitor.pushCallContext();
         // Invoke the static method for evaluating the glob pattern.
-        mv.visitMethodInsn(
-                operatorHandler.getMethodType(),
-                operatorHandler.getClassName(),
-                operatorHandler.getMethodName(),
-                operatorHandler.getDescriptor(),
-                false
-        );
-
-        // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-        }
+        emitOperator(node.operator, emitterVisitor);
     }
 
     // Handles the 'vec' built-in function, which manipulates bits in a string.
@@ -572,7 +481,6 @@ public class EmitOperator {
 
     // Handles the 'repeat' operator, which repeats a string or list a specified number of times.
     static void handleRepeat(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        Node left = node.left;
         // Determine the context for the left operand.
         if (node.left instanceof ListNode) {
             node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));
