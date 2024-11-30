@@ -3,7 +3,6 @@ package org.perlonjava.perlmodule;
 import org.perlonjava.runtime.*;
 
 import static org.perlonjava.runtime.RuntimeContextType.SCALAR;
-import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 
 /**
  * The Exporter class is responsible for managing the export of symbols from one Perl package to another.
@@ -65,7 +64,7 @@ public class Exporter extends PerlModuleBase {
             args = export;
         }
 
-        String exportLevel = GlobalVariable.getGlobalVariable( "Exporter::ExportLevel").toString();
+        String exportLevel = GlobalVariable.getGlobalVariable("Exporter::ExportLevel").toString();
 
         // Process the requested symbols and tags
         RuntimeArray tagArray = new RuntimeArray();

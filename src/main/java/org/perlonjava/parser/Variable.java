@@ -53,7 +53,7 @@ public class Variable {
      * can be used to refer to subroutines or to call them.
      *
      * @param parser
-     * @param token The lexer token representing the `&` operator.
+     * @param token  The lexer token representing the `&` operator.
      * @return A Node representing the parsed code reference or subroutine call.
      */
     static Node parseCoderefVariable(Parser parser, LexerToken token) {
