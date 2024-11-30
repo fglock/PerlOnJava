@@ -56,8 +56,8 @@ public class PrototypeArgs {
                     args.elements.add(new OperatorNode("scalar", argList.elements.getFirst(), argList.elements.getFirst().getIndex()));
                     needComma = true;
                     prototype = prototype.substring(1);
-                } else if (prototype.startsWith("@")) {
-                    // System.out.println("prototype consume @");
+                } else if (prototype.startsWith("@") || prototype.startsWith("%")) {
+                    // System.out.println("prototype consume @ or %");
                     if (needComma) {
                         if (!isComma(TokenUtils.peek(parser))) {
                             break;
