@@ -120,7 +120,14 @@ public class SubroutineParser {
 
             String attrString = TokenUtils.consume(parser, LexerTokenType.IDENTIFIER).text;
             if (TokenUtils.peek(parser).text.equals("(")) {
-                attrString += ((StringNode) StringParser.parseRawString(parser, "q")).value;
+                String argString = ((StringNode) StringParser.parseRawString(parser, "q")).value;
+
+                if (attrString.equals("prototype")) {
+                    //  :prototype($)
+                    prototype = argString;
+                }
+
+                attrString += "(" + argString + ")";
             }
 
             // Consume the attribute name (an identifier) and add it to the attributes list.
