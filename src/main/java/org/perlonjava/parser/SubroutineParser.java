@@ -117,8 +117,14 @@ public class SubroutineParser {
         while (TokenUtils.peek(parser).text.equals(":")) {
             // Consume the colon operator.
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, ":");
+
+            String attrString = TokenUtils.consume(parser, LexerTokenType.IDENTIFIER).text;
+            if (TokenUtils.peek(parser).text.equals("(")) {
+                attrString += ((StringNode) StringParser.parseRawString(parser, "q")).value;
+            }
+
             // Consume the attribute name (an identifier) and add it to the attributes list.
-            attributes.add(TokenUtils.consume(parser, LexerTokenType.IDENTIFIER).text);
+            attributes.add(attrString);
         }
 
         if (wantName && !TokenUtils.peek(parser).text.equals("{")) {
