@@ -35,6 +35,8 @@ public class PrototypeArgs {
                 prototype = prototype.substring(1);
                 // System.out.println("prototype " + prototype + " needComma:" + needComma + " optional:" + isOptional);
                 switch (prototypeStart) {
+                    case " ", "\t", "\n":
+                        break;
                     case ";":
                         // System.out.println("prototype consume ;");
                         isOptional = true;
