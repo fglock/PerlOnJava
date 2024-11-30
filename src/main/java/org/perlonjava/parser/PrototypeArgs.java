@@ -58,6 +58,28 @@ public class PrototypeArgs {
                         args.elements.add(new OperatorNode("scalar", argList.elements.getFirst(), argList.elements.getFirst().getIndex()));
                         needComma = true;
                         break;
+                    case "*":
+                        // System.out.println("prototype consume *");
+                        if (needComma) {
+                            if (!isComma(TokenUtils.peek(parser))) {
+                                if (isOptional) {
+                                    break;
+                                }
+                                throw new PerlCompilerException("syntax error, expected comma");
+                            }
+                            consumeCommas(parser);
+                        }
+                        // TODO:   STDERR  /  *STDERR  /  \*STDERR  /  $fh  / my $fh
+                        Node argList5 = FileHandle.parseFileHandle(parser);
+                        if (argList5 == null) {
+                            if (isOptional) {
+                                break;
+                            }
+                            throw new PerlCompilerException("syntax error, expected file handle");
+                        }
+                        args.elements.add(argList5);
+                        needComma = true;
+                        break;
                     case "$":
                         // System.out.println("prototype consume $");
                         if (needComma) {

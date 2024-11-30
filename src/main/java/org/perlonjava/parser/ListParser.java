@@ -114,7 +114,7 @@ public class ListParser {
                 TokenUtils.consume(parser);
                 hasParen = true;
             }
-            expr.handle = parser.parseFileHandle();
+            expr.handle = FileHandle.parseFileHandle(parser);
             if (expr.handle == null || !parser.isSpaceAfterPrintBlock()) {
                 // Backtrack
                 parser.tokenIndex = currentIndex;

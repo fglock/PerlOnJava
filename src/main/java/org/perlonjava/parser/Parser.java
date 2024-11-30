@@ -4,8 +4,6 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.runtime.GlobalVariable;
-import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.*;
@@ -759,52 +757,6 @@ public class Parser {
                 return new OperatorNode(token.text + "postfix", left, tokenIndex);
         }
         throw new PerlCompilerException(tokenIndex, "Unexpected infix operator: " + token, ctx.errorUtil);
-    }
-
-    public Node parseFileHandle() {
-        boolean hasBracket = false;
-        if (peek(this).text.equals("{")) {
-            TokenUtils.consume(this);
-            hasBracket = true;
-        }
-        LexerToken token = peek(this);
-        Node fileHandle = null;
-        if (token.type == LexerTokenType.IDENTIFIER) {
-            // bareword
-            // Test for bareword like STDOUT, STDERR, FILE
-            String name = IdentifierParser.parseSubroutineIdentifier(this);
-            if (name != null) {
-                String packageName = ctx.symbolTable.getCurrentPackage();
-                if (name.equals("STDOUT") || name.equals("STDERR") || name.equals("STDIN")) {
-                    packageName = "main";
-                }
-                name = NameNormalizer.normalizeVariableName(name, packageName);
-                if (GlobalVariable.existsGlobalIO(name)) {
-                    // FileHandle name exists
-                    fileHandle = new IdentifierNode(name, tokenIndex);
-                }
-            }
-        } else if (token.text.equals("$")) {
-            // variable name
-            fileHandle = parsePrimary();
-            if (!hasBracket) {
-                // assert that is not followed by infix
-                String nextText = peek(this).text;
-                if (INFIX_OP.contains(nextText) || "{[".contains(nextText) || "->".equals(nextText)) {
-                    // print $fh + 2;  # not a file handle
-                    fileHandle = null;
-                }
-                // assert that list is not empty
-                if (ListParser.looksLikeEmptyList(this)) {
-                    // print $fh;  # not a file handle
-                    fileHandle = null;
-                }
-            }
-        }
-        if (hasBracket) {
-            TokenUtils.consume(this, LexerTokenType.OPERATOR, "}");
-        }
-        return fileHandle;
     }
 
     public boolean isSpaceAfterPrintBlock() {
