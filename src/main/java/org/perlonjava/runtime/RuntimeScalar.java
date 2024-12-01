@@ -2,7 +2,6 @@ package org.perlonjava.runtime;
 
 import org.perlonjava.ArgumentParser;
 import org.perlonjava.operators.Operator;
-import org.perlonjava.operators.WarnDie;
 import org.perlonjava.parser.NumberParser;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
@@ -16,9 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 
-import static org.perlonjava.runtime.ErrorMessageUtil.stringifyException;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalHash;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
@@ -948,37 +945,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             result = result * 16 + digit;
         }
         return getScalarInt(result);
-    }
-
-    public RuntimeScalar sleep() {
-        RuntimeIO.flushFileHandles();
-
-        long s = (long) this.getDouble() * 1000;
-
-        if (s < 0) {
-            getGlobalVariable("main::!").set("Invalid argument");
-            WarnDie.warn(
-                    new RuntimeScalar(stringifyException(
-                            new PerlCompilerException("sleep() with negative argument")
-                    )),
-                    new RuntimeScalar());
-            return getScalarInt(0);
-        }
-
-        long startTime = System.currentTimeMillis();
-        try {
-            TimeUnit.MILLISECONDS.sleep(s);
-        } catch (InterruptedException e) {
-            // Handle interruption if needed
-            RuntimeScalar alarmHandler = getGlobalHash("main::SIG").get("ALRM");
-            if (alarmHandler.getDefinedBoolean()) {
-                RuntimeArray args = new RuntimeArray();
-                alarmHandler.apply(args, RuntimeContextType.SCALAR);
-            }
-        }
-        long endTime = System.currentTimeMillis();
-        long actualSleepTime = endTime - startTime;
-        return new RuntimeScalar(actualSleepTime / 1000.0);
     }
 
     public RuntimeScalar require() {

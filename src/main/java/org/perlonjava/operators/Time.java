@@ -1,8 +1,6 @@
 package org.perlonjava.operators;
 
-import org.perlonjava.runtime.RuntimeContextType;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.*;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
@@ -11,6 +9,12 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.concurrent.TimeUnit;
+
+import static org.perlonjava.runtime.ErrorMessageUtil.stringifyException;
+import static org.perlonjava.runtime.GlobalVariable.getGlobalHash;
+import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 
 /**
  * The Time class provides utility methods for retrieving and formatting time-related information.
@@ -115,5 +119,36 @@ public class Time {
         res.add(date.getDayOfYear() - 1);
         res.add(date.getZone().getRules().isDaylightSavings(date.toInstant()) ? 1 : 0);
         return res;
+    }
+
+    public static RuntimeScalar sleep(RuntimeScalar runtimeScalar) {
+        RuntimeIO.flushFileHandles();
+
+        long s = (long) runtimeScalar.getDouble() * 1000;
+
+        if (s < 0) {
+            getGlobalVariable("main::!").set("Invalid argument");
+            WarnDie.warn(
+                    new RuntimeScalar(stringifyException(
+                            new PerlCompilerException("sleep() with negative argument")
+                    )),
+                    new RuntimeScalar());
+            return getScalarInt(0);
+        }
+
+        long startTime = System.currentTimeMillis();
+        try {
+            TimeUnit.MILLISECONDS.sleep(s);
+        } catch (InterruptedException e) {
+            // Handle interruption if needed
+            RuntimeScalar alarmHandler = getGlobalHash("main::SIG").get("ALRM");
+            if (alarmHandler.getDefinedBoolean()) {
+                RuntimeArray args = new RuntimeArray();
+                alarmHandler.apply(args, RuntimeContextType.SCALAR);
+            }
+        }
+        long endTime = System.currentTimeMillis();
+        long actualSleepTime = endTime - startTime;
+        return new RuntimeScalar(actualSleepTime / 1000.0);
     }
 }
