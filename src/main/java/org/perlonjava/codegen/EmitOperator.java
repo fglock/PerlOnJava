@@ -416,18 +416,9 @@ public class EmitOperator {
 
     // Handles the 'vec' built-in function, which manipulates bits in a string.
     static void handleVecBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
-        MethodVisitor mv = emitterVisitor.ctx.mv;
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        // Invoke the static method for the operator.
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/operators/Vec",
-                node.operator,
-                "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-        }
+        emitOperator(node.operator, emitterVisitor);
     }
 
     // Handles the 'range' operator, which creates a range of values.
