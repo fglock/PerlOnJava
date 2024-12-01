@@ -233,10 +233,10 @@ public class Dereference {
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", true);
             emitterVisitor.ctx.mv.visitLdcInsn(emitterVisitor.ctx.contextType);   // push call context to stack
             emitterVisitor.ctx.mv.visitMethodInsn(
-                    Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/RuntimeScalar",
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/RuntimeCode",
                     "call",
-                    "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                     false); // generate an .call()
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
                 // Transform the value in the stack to RuntimeScalar

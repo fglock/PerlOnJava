@@ -191,6 +191,131 @@ public class RuntimeCode implements RuntimeScalarReference {
     }
 
     /**
+     * Call a method in a Perl-like class hierarchy using the C3 linearization algorithm.
+     *
+     * @param runtimeScalar
+     * @param method         The method to resolve.
+     * @param currentPackage The package to resolve SUPER::method in.
+     * @param args           The arguments to pass to the method.
+     * @param callContext    The call context.
+     * @return The result of the method call.
+     */
+    public static RuntimeList call(RuntimeScalar runtimeScalar,
+                                   RuntimeScalar method,
+                                   String currentPackage,
+                                   RuntimeArray args,
+                                   int callContext) throws Exception {
+        // insert `this` into the parameter list
+        args.elements.addFirst(runtimeScalar);
+
+        // System.out.println("call ->" + method + " " + currentPackage + " " + args + " " + callContext);
+
+        if (method.type == RuntimeScalarType.CODE) {
+            // If method is a subroutine reference, just call it
+            return method.apply(args, callContext);
+        }
+
+        String methodName = method.toString();
+
+        // Retrieve Perl class name
+        String perlClassName;
+        switch (runtimeScalar.type) {
+            case REFERENCE:
+            case ARRAYREFERENCE:
+            case HASHREFERENCE:
+                int blessId = ((RuntimeBaseEntity) runtimeScalar.value).blessId;
+                if (blessId == 0) {
+                    throw new PerlCompilerException("Can't call method \"" + methodName + "\" on unblessed reference");
+                }
+                perlClassName = NameNormalizer.getBlessStr(blessId);
+                break;
+            case UNDEF:
+                throw new PerlCompilerException("Can't call method \"" + methodName + "\" on an undefined value");
+            default:
+                perlClassName = runtimeScalar.toString();
+                if (perlClassName.isEmpty()) {
+                    throw new PerlCompilerException("Can't call method \"" + methodName + "\" on an undefined value");
+                }
+                if (perlClassName.endsWith("::")) {
+                    perlClassName = perlClassName.substring(0, perlClassName.length() - 2);
+                }
+        }
+
+        // Method name can be:
+        // - A short name (e.g., "new")
+        // - Fully qualified name
+        // - A variable or dereference (e.g., $file->${ \'save' })
+        // - "SUPER::name"
+
+        // Class name can be:
+        // - A string
+        // - STDOUT
+        // - A subroutine (e.g., Class->new() is Class()->new() if Class is a subroutine)
+        // - Class::->new() is the same as Class->new()
+
+        // System.out.println("call perlClassName: " + perlClassName + " methodName: " + methodName);
+        if (methodName.startsWith("SUPER::")) {
+            // Remove the "SUPER::" prefix to get the actual method name
+            String superMethodName = methodName.substring(7);
+            // System.out.println("call SUPER:: " + superMethodName);
+
+            // Get the linearized inheritance hierarchy for the current package
+            List<String> linearizedClasses = InheritanceResolver.linearizeC3(currentPackage);
+
+            // Find the index of the current package in the linearized hierarchy
+            int currentIndex = linearizedClasses.indexOf(currentPackage);
+
+            // Iterate over the linearized classes starting from the class after the current package
+            for (int i = currentIndex + 1; i < linearizedClasses.size(); i++) {
+                String className = linearizedClasses.get(i);
+                String normalizedClassMethodName = NameNormalizer.normalizeVariableName(superMethodName, className);
+
+                if (GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName)) {
+                    // If the method is found, retrieve and apply it
+                    RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedClassMethodName);
+
+                    // Save the method in the cache
+                    InheritanceResolver.cacheMethod(normalizedClassMethodName, codeRef);
+
+                    return codeRef.apply(args, callContext);
+                }
+            }
+
+            // If the method is not found in any class, throw an exception
+            throw new PerlCompilerException("Can't locate object method \"" + superMethodName + "\" via package \"" + currentPackage + "\" (perhaps you forgot to load \"" + currentPackage + "\"?)");
+        }
+
+        // Check the method cache
+        String normalizedMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
+        RuntimeScalar cachedMethod = InheritanceResolver.getCachedMethod(normalizedMethodName);
+        if (cachedMethod != null) {
+            return cachedMethod.apply(args, callContext);
+        }
+
+        // Get the linearized inheritance hierarchy using C3
+        List<String> linearizedClasses = InheritanceResolver.linearizeC3(perlClassName);
+
+        // Iterate over the linearized classes to find the method
+        for (String className : linearizedClasses) {
+            String normalizedClassMethodName = NameNormalizer.normalizeVariableName(methodName, className);
+            // System.out.println("call normalizedClassMethodName: " + normalizedClassMethodName);
+            if (GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName)) {
+                // System.out.println("call GlobalVariable.getGlobalCodeRef: " + normalizedClassMethodName);
+                // If the method is found, retrieve and apply it
+                RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedClassMethodName);
+
+                // Save the method in the cache
+                InheritanceResolver.cacheMethod(normalizedMethodName, codeRef);
+
+                return codeRef.apply(args, callContext);
+            }
+        }
+
+        // If the method is not found in any class, throw an exception
+        throw new PerlCompilerException("Can't locate object method \"" + methodName + "\" via package \"" + perlClassName + "\" (perhaps you forgot to load \"" + perlClassName + "\"?)");
+    }
+
+    /**
      * Method to apply (execute) a subroutine reference.
      * Invokes the method associated with the code object, passing the RuntimeArray and RuntimeContextType as arguments.
      *
