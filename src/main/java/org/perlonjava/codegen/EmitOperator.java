@@ -24,7 +24,7 @@ public class EmitOperator {
                 operatorHandler.getClassName(),
                 operatorHandler.getMethodName(),
                 operatorHandler.getDescriptor(),
-                false
+                operatorHandler.getMethodType() == Opcodes.INVOKEINTERFACE
         );
         // If the context is VOID, pop the result from the stack.
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
@@ -64,15 +64,9 @@ public class EmitOperator {
      * @param node           The operator node representing the 'each' operation.
      */
     static void handleEachOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
-        String operator = node.operator;
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        // Invoke the interface method for the operator.
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", operator, "()Lorg/perlonjava/runtime/RuntimeList;", true);
-        // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        emitOperator(node.operator, emitterVisitor);
     }
 
     /**
@@ -85,17 +79,10 @@ public class EmitOperator {
         String operator = node.operator;
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        // Invoke the interface method for the operator.
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", operator, "()Lorg/perlonjava/runtime/RuntimeArray;", true);
-        // Handle different context types.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.LIST) {
-            // Do nothing for LIST context.
-        } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+        emitOperator(node.operator, emitterVisitor);
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             // Convert to scalar if in SCALAR context.
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
-        } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            // Pop the result if in VOID context.
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
         }
     }
 

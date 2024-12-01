@@ -124,6 +124,24 @@ public class OperatorHandler {
         put("sort", "sort",
                 "org/perlonjava/operators/ListOperators",
                 "(Lorg/perlonjava/runtime/RuntimeList;Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeList;");
+
+        operatorHandlers.put("each",
+                new OperatorHandler("org/perlonjava/runtime/RuntimeDataProvider",
+                        "each",
+                        Opcodes.INVOKEINTERFACE,
+                        "()Lorg/perlonjava/runtime/RuntimeList;"));
+        operatorHandlers.put("keys",
+                new OperatorHandler("org/perlonjava/runtime/RuntimeDataProvider",
+                        "keys",
+                        Opcodes.INVOKEINTERFACE,
+                        "()Lorg/perlonjava/runtime/RuntimeArray;"));
+        operatorHandlers.put("values",
+                new OperatorHandler("org/perlonjava/runtime/RuntimeDataProvider",
+                        "values",
+                        Opcodes.INVOKEINTERFACE,
+                        "()Lorg/perlonjava/runtime/RuntimeArray;"));
+
+
     }
 
     private final String className;
