@@ -511,7 +511,7 @@ public class Parser {
                             // "-name" return string
                             return new StringNode("-" + identifierNode.name, tokenIndex);
                         }
-                        return new OperatorNode(token.text, operand, tokenIndex);
+                        return new OperatorNode("unaryMinus", operand, tokenIndex);
                 }
                 break;
             case EOF:

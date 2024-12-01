@@ -403,7 +403,7 @@ public class EmitterVisitor implements Visitor {
             case "eval":
                 EmitEval.handleEvalOperator(this, node);
                 break;
-            case "-":
+            case "unaryMinus":
                 handleUnaryBuiltin(node, "unaryMinus");
                 break;
             case "+":

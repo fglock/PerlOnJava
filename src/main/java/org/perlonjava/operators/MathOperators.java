@@ -260,4 +260,33 @@ public class MathOperators {
             return new RuntimeScalar(Math.abs(arg1.getInt()));
         }
     }
+
+    public static RuntimeScalar unaryMinus(RuntimeScalar runtimeScalar) {
+        if (runtimeScalar.type == RuntimeScalarType.STRING) {
+            String input = runtimeScalar.toString();
+            if (input.length() < 2) {
+                if (input.isEmpty()) {
+                    return getScalarInt(0);
+                }
+                if (input.equals("-")) {
+                    return new RuntimeScalar("+");
+                }
+                if (input.equals("+")) {
+                    return new RuntimeScalar("-");
+                }
+            }
+            if (input.matches("^[-+]?[_A-Za-z].*")) {
+                if (input.startsWith("-")) {
+                    // Handle case where string starts with "-"
+                    return new RuntimeScalar("+" + input.substring(1));
+                } else if (input.startsWith("+")) {
+                    // Handle case where string starts with "+"
+                    return new RuntimeScalar("-" + input.substring(1));
+                } else {
+                    return new RuntimeScalar("-" + input);
+                }
+            }
+        }
+        return subtract(getScalarInt(0), runtimeScalar);
+    }
 }

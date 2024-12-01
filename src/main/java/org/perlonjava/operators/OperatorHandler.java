@@ -23,6 +23,7 @@ public class OperatorHandler {
         put("*", "multiply", "org/perlonjava/operators/MathOperators");
         put("/", "divide", "org/perlonjava/operators/MathOperators");
         put("%", "modulus", "org/perlonjava/operators/MathOperators");
+        put("unaryMinus", "unaryMinus", "org/perlonjava/operators/MathOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         put("log", "log", "org/perlonjava/operators/MathOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("sqrt", "sqrt", "org/perlonjava/operators/MathOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
