@@ -48,7 +48,7 @@ public class PerlCompilerException extends RuntimeException {
         }
 
         // Retrieve caller information: package name, file name, line number
-        RuntimeList caller = RuntimeScalar.caller(new RuntimeList(getScalarInt(0)), RuntimeContextType.LIST);
+        RuntimeList caller = RuntimeCode.caller(new RuntimeList(getScalarInt(0)), RuntimeContextType.LIST);
 
         // Check if caller information is available
         if (caller.size() < 3) {

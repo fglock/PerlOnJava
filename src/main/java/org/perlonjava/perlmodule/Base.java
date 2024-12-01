@@ -49,7 +49,7 @@ public class Base extends PerlModuleBase {
         String packageName = packageScalar.scalar().toString();
 
         // Determine the caller's namespace
-        RuntimeList callerList = RuntimeScalar.caller(new RuntimeList(), RuntimeContextType.SCALAR);
+        RuntimeList callerList = RuntimeCode.caller(new RuntimeList(), RuntimeContextType.SCALAR);
         String inheritor = callerList.scalar().toString();
 
         // Process each base class specified in the arguments

@@ -315,6 +315,40 @@ public class RuntimeCode implements RuntimeScalarReference {
         throw new PerlCompilerException("Can't locate object method \"" + methodName + "\" via package \"" + perlClassName + "\" (perhaps you forgot to load \"" + perlClassName + "\"?)");
     }
 
+    public static RuntimeList caller(RuntimeList args, int ctx) {
+        RuntimeList res = new RuntimeList();
+        int frame = 0;
+        if (!args.elements.isEmpty()) {
+            frame = ((RuntimeScalar) args.elements.getFirst()).getInt();
+        }
+        CallerStack.CallerInfo info = CallerStack.peek(0);
+        if (info == null) {
+            // Runtime stack trace
+            Throwable t = new Throwable();
+            ArrayList<ArrayList<String>> stackTrace = ExceptionFormatter.formatException(t);
+            frame++;  // frame 0 is the current method, so we need to increment it
+            if (frame >= 0 && frame < stackTrace.size()) {
+                if (ctx == RuntimeContextType.SCALAR) {
+                    res.add(new RuntimeScalar(stackTrace.get(frame).getFirst()));
+                } else {
+                    res.add(new RuntimeScalar(stackTrace.get(frame).get(0)));
+                    res.add(new RuntimeScalar(stackTrace.get(frame).get(1)));
+                    res.add(new RuntimeScalar(stackTrace.get(frame).get(2)));
+                }
+            }
+        } else {
+            // Compile-time stack trace
+            if (ctx == RuntimeContextType.SCALAR) {
+                res.add(new RuntimeScalar(info.packageName));
+            } else {
+                res.add(new RuntimeScalar(info.packageName));
+                res.add(new RuntimeScalar(info.filename));
+                res.add(new RuntimeScalar(info.line));
+            }
+        }
+        return res;
+    }
+
     /**
      * Method to apply (execute) a subroutine reference.
      * Invokes the method associated with the code object, passing the RuntimeArray and RuntimeContextType as arguments.

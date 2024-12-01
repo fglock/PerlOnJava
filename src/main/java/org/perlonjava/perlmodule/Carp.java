@@ -64,7 +64,7 @@ public class Carp extends PerlModuleBase {
             formattedMessage = ErrorMessageUtil.stringifyException(new Throwable(formattedMessage));
         } else {
             // Use caller to get context information
-            RuntimeList callerInfo = RuntimeScalar.caller(new RuntimeList(), RuntimeContextType.LIST);
+            RuntimeList callerInfo = RuntimeCode.caller(new RuntimeList(), RuntimeContextType.LIST);
             if (callerInfo.size() >= 3) {
                 String fileName = callerInfo.elements.get(1).toString();
                 int line = ((RuntimeScalar) callerInfo.elements.get(2)).getInt();

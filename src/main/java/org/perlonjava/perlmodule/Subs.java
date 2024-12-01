@@ -36,7 +36,7 @@ public class Subs extends PerlModuleBase {
         args.shift();
 
         // Determine the caller's namespace
-        RuntimeList callerList = RuntimeScalar.caller(new RuntimeList(), RuntimeContextType.SCALAR);
+        RuntimeList callerList = RuntimeCode.caller(new RuntimeList(), RuntimeContextType.SCALAR);
         String caller = callerList.scalar().toString();
 
         // Create the specified subroutine entries in the caller's namespace

@@ -54,7 +54,7 @@ public class Parent extends PerlModuleBase {
         String packageName = packageScalar.scalar().toString();
 
         // Determine the caller's namespace
-        RuntimeList callerList = RuntimeScalar.caller(new RuntimeList(), RuntimeContextType.SCALAR);
+        RuntimeList callerList = RuntimeCode.caller(new RuntimeList(), RuntimeContextType.SCALAR);
         String inheritor = callerList.scalar().toString();
 
         // Check for the -norequire option

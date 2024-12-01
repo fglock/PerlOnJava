@@ -124,40 +124,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 new RuntimeScalar(ctx == RuntimeContextType.LIST ? 1 : 0);
     }
 
-    public static RuntimeList caller(RuntimeList args, int ctx) {
-        RuntimeList res = new RuntimeList();
-        int frame = 0;
-        if (!args.elements.isEmpty()) {
-            frame = ((RuntimeScalar) args.elements.getFirst()).getInt();
-        }
-        CallerStack.CallerInfo info = CallerStack.peek(0);
-        if (info == null) {
-            // Runtime stack trace
-            Throwable t = new Throwable();
-            ArrayList<ArrayList<String>> stackTrace = ExceptionFormatter.formatException(t);
-            frame++;  // frame 0 is the current method, so we need to increment it
-            if (frame >= 0 && frame < stackTrace.size()) {
-                if (ctx == RuntimeContextType.SCALAR) {
-                    res.add(new RuntimeScalar(stackTrace.get(frame).getFirst()));
-                } else {
-                    res.add(new RuntimeScalar(stackTrace.get(frame).get(0)));
-                    res.add(new RuntimeScalar(stackTrace.get(frame).get(1)));
-                    res.add(new RuntimeScalar(stackTrace.get(frame).get(2)));
-                }
-            }
-        } else {
-            // Compile-time stack trace
-            if (ctx == RuntimeContextType.SCALAR) {
-                res.add(new RuntimeScalar(info.packageName));
-            } else {
-                res.add(new RuntimeScalar(info.packageName));
-                res.add(new RuntimeScalar(info.filename));
-                res.add(new RuntimeScalar(info.line));
-            }
-        }
-        return res;
-    }
-
     public static RuntimeList reset(RuntimeList args, int ctx) {
         if (args.elements.isEmpty()) {
             RuntimeRegex.reset();
