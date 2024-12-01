@@ -498,15 +498,9 @@ public class EmitOperator {
 
     // Handles the 'scalar' operator, which forces a list into scalar context.
     static void handleScalar(EmitterVisitor emitterVisitor, OperatorNode node) {
-        MethodVisitor mv = emitterVisitor.ctx.mv;
         // Accept the operand in SCALAR context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        // Invoke the interface method to convert to scalar.
-        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
-        // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-        }
+        emitOperator(node.operator, emitterVisitor);
     }
 
     // Handles the 'local' operator.

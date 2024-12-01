@@ -133,6 +133,11 @@ public class OperatorHandler {
                 "org/perlonjava/operators/ListOperators",
                 "(Lorg/perlonjava/runtime/RuntimeList;Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeList;");
 
+        operatorHandlers.put("scalar",
+                new OperatorHandler("org/perlonjava/runtime/RuntimeDataProvider",
+                        "scalar",
+                        Opcodes.INVOKEINTERFACE,
+                        "()Lorg/perlonjava/runtime/RuntimeScalar;"));
         operatorHandlers.put("each",
                 new OperatorHandler("org/perlonjava/runtime/RuntimeDataProvider",
                         "each",
