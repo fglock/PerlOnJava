@@ -50,6 +50,11 @@ public class OperatorHandler {
         put("binary^", "bitwiseXorBinary", "org/perlonjava/operators/BitwiseOperators");
         put("bitwiseNotBinary", "bitwiseNotBinary", "org/perlonjava/operators/BitwiseOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
+        // Scalar
+        put("ord", "ord", "org/perlonjava/operators/ScalarOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("oct", "oct", "org/perlonjava/operators/ScalarOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("hex", "hex", "org/perlonjava/operators/ScalarOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+
         // Compare
         put("<", "lessThan", "org/perlonjava/operators/CompareOperators");
         put("<=", "lessThanOrEqual", "org/perlonjava/operators/CompareOperators");
