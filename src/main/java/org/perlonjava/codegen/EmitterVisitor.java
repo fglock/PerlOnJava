@@ -425,50 +425,12 @@ public class EmitterVisitor implements Visitor {
             case "<>":
                 EmitOperator.handleDiamondBuiltin(this, node);
                 break;
-            case "abs":
-            case "defined":
-            case "doFile":
-            case "require":
-            case "length":
-            case "log":
-            case "sqrt":
-            case "cos":
-            case "sin":
-            case "exp":
-            case "quotemeta":
-            case "rand":
-            case "srand":
-            case "sleep":
-            case "study":
-            case "ref":
-            case "oct":
-            case "hex":
-            case "chr":
-            case "ord":
-            case "fc":
-            case "lc":
-            case "lcfirst":
-            case "uc":
-            case "ucfirst":
-            case "undef":
-            case "exit":
-            case "wantarray":
-            case "time":
-            case "times":
-            case "localtime":
-            case "gmtime":
-            case "caller":
-            case "reset":
-            case "rewinddir":
-            case "telldir":
-            case "closedir":
-            case "rmdir":
-            case "pos":
-            case "select":
-            case "prototype":
-            case "stat":
-            case "lstat":
-            case "chdir":
+            case "abs", "caller", "chdir", "chr", "closedir", "cos", "defined", "doFile", "exit",
+                 "exp", "fc", "gmtime", "hex", "lc", "lcfirst", "length", "localtime", "log",
+                 "lstat", "oct", "ord", "pos", "prototype", "quotemeta", "rand", "ref",
+                 "require", "reset", "rewinddir", "rmdir", "select", "sin", "sleep", "sqrt",
+                 "srand", "stat", "study", "telldir", "time", "times", "uc", "ucfirst", "undef",
+                 "wantarray":
                 handleUnaryBuiltin(node, operator);
                 break;
             case "chop":
