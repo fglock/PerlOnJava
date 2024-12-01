@@ -133,20 +133,13 @@ public class Parser {
 
         if (token.type == LexerTokenType.IDENTIFIER) {
             switch (token.text) {
-                case "CHECK":
-                case "INIT":
-                case "UNITCHECK":
-                case "BEGIN":
-                case "END":
+                case "CHECK", "INIT", "UNITCHECK", "BEGIN", "END":
                     return SpecialBlockParser.parseSpecialBlock(this);
-                case "if":
-                case "unless":
+                case "if", "unless":
                     return StatementParser.parseIfStatement(this);
-                case "for":
-                case "foreach":
+                case "for", "foreach":
                     return StatementParser.parseForStatement(this, label);
-                case "while":
-                case "until":
+                case "while", "until":
                     return StatementParser.parseWhileStatement(this, label);
                 case "try":
                     if (ctx.symbolTable.isFeatureCategoryEnabled("try")) {
@@ -155,8 +148,7 @@ public class Parser {
                     break;
                 case "package":
                     return StatementParser.parsePackageDeclaration(this, token);
-                case "use":
-                case "no":
+                case "use", "no":
                     return StatementParser.parseUseDeclaration(this, token);
                 case "sub":
                     // Must be followed by an identifier
@@ -212,8 +204,7 @@ public class Parser {
                     modifierExpression = parseExpression(0);
                     parseStatementTerminator();
                     return new BinaryOperatorNode("||", modifierExpression, expression, tokenIndex);
-                case "for":
-                case "foreach":
+                case "for", "foreach":
                     TokenUtils.consume(this);
                     modifierExpression = parseExpression(0);
                     parseStatementTerminator();
@@ -225,8 +216,7 @@ public class Parser {
                             expression,
                             null,
                             tokenIndex);
-                case "while":
-                case "until":
+                case "while", "until":
                     TokenUtils.consume(this);
                     modifierExpression = parseExpression(0);
                     parseStatementTerminator();
@@ -278,21 +268,16 @@ public class Parser {
                 break; // not a hash literal;
             }
             switch (token.text) {
-                case "{":
-                case "(":
-                case "[":
+                case "{", "(", "[":
                     braceCount++;
                     break;
-                case ")":
-                case "}":
-                case "]":
+                case ")", "}", "]":
                     braceCount--;
                     break;
                 default:
                     if (braceCount == 1) {
                         switch (token.text) {
-                            case ",":
-                            case "=>":
+                            case ",", "=>":
                                 ctx.logDebug("isHashLiteral TRUE");
                                 tokenIndex = currentIndex;
                                 return true; // Likely a hash literal
@@ -433,15 +418,9 @@ public class Parser {
                     case ".":
                         // Handle fractional numbers
                         return NumberParser.parseFractionalNumber(this);
-                    case "<":
-                    case "<<":
+                    case "<", "<<":
                         return OperatorParser.parseDiamondOperator(this, token);
-                    case "'":
-                    case "\"":
-                    case "/":
-                    case "//":
-                    case "/=":
-                    case "`":
+                    case "'", "\"", "/", "//", "/=", "`":
                         // Handle single and double-quoted strings
                         return StringParser.parseRawString(this, token.text);
                     case "\\":
@@ -450,21 +429,15 @@ public class Parser {
                         operand = parseExpression(getPrecedence(token.text) + 1);
                         parsingTakeReference = false;
                         return new OperatorNode(token.text, operand, tokenIndex);
-                    case "$":
-                    case "$#":
-                    case "@":
-                    case "%":
-                    case "*":
+                    case "$", "$#", "@", "%", "*":
                         return Variable.parseVariable(this, token.text);
                     case "&":
                         return Variable.parseCoderefVariable(this, token);
-                    case "!":
-                    case "+":
+                    case "!", "+":
                         // Handle unary operators like `! +`
                         operand = parseExpression(getPrecedence(token.text) + 1);
                         return new OperatorNode(token.text, operand, tokenIndex);
-                    case "~":
-                    case "~.":
+                    case "~", "~.":
                         // Handle unary operators like `~ ~.`
                         String operator = token.text;
                         if (ctx.symbolTable.isFeatureCategoryEnabled("bitwise")) {
@@ -672,25 +645,8 @@ public class Parser {
                 break;
             case OPERATOR:
                 switch (token.text) {
-                    case "[":
-                    case "\"":
-                    case "//":
-                    case "\\":
-                    case "`":
-                    case "$":
-                    case "$#":
-                    case "@":
-                    case "%":
-                    case "&":
-                    case "!":
-                    case "~":
-                    case "+":
-                    case "-":
-                    case "/":
-                    case "*":
-                    case ";":
-                    case "++":
-                    case "--":
+                    case "[", "\"", "//", "\\", "`", "$", "$#", "@", "%", "&", "!", "~",
+                         "+", "-", "/", "*", ";", "++", "--":
                         isSpace = true;
                         break;
                     case ".":
@@ -701,8 +657,7 @@ public class Parser {
                         }
                         tokenIndex = currentIndex;
                         break;
-                    case "(":
-                    case "'":
+                    case "(", "'":
                         // must have space before
                         TokenUtils.consume(this);
                         if (tokenIndex != currentIndex) {
