@@ -283,60 +283,20 @@ public class OperatorParser {
                 return new StringNode(parser.ctx.compilerOptions.fileName, parser.tokenIndex);
             case "__PACKAGE__":
                 return new StringNode(parser.ctx.symbolTable.getCurrentPackage(), parser.tokenIndex);
-            case "__SUB__":
-            case "time":
-            case "times":
-            case "fork":
-            case "wait":
-            case "wantarray":
+            case "__SUB__", "time", "times", "fork", "wait", "wantarray":
                 // Handle operators with zero arguments
                 return new OperatorNode(token.text, null, currentIndex);
             case "not":
                 // Handle 'not' keyword as a unary operator with an operand
                 operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
                 return new OperatorNode(token.text, operand, currentIndex);
-            case "abs":
-            case "log":
-            case "sqrt":
-            case "cos":
-            case "sin":
-            case "exp":
-            case "rand":
-            case "srand":
-            case "study":
-            case "undef":
-            case "exit":
-            case "quotemeta":
-            case "ref":
-            case "oct":
-            case "hex":
-            case "pop":
-            case "shift":
-            case "sleep":
-            case "int":
-            case "chr":
-            case "ord":
-            case "fc":
-            case "lc":
-            case "lcfirst":
-            case "uc":
-            case "ucfirst":
-            case "chop":
-            case "chomp":
-            case "length":
-            case "localtime":
-            case "gmtime":
-            case "rmdir":
-            case "glob":
-            case "caller":
-            case "reset":
-            case "pos":
-            case "select":
-            case "prototype":
-            case "chdir":
+            case "abs", "caller", "chdir", "chomp", "chop", "chr", "cos", "exit", "exp", "fc",
+                 "glob", "gmtime", "hex", "int", "lc", "lcfirst", "length", "localtime", "log",
+                 "oct", "ord", "pop", "pos", "prototype", "quotemeta", "rand", "ref", "reset",
+                 "rmdir", "select", "shift", "sin", "sleep", "sqrt", "srand", "study", "uc",
+                 "ucfirst", "undef":
                 return parseOperatorWithOneOptionalArgument(parser, token);
-            case "stat":
-            case "lstat":
+            case "stat", "lstat":
                 LexerToken nextToken = peek(parser);
                 boolean paren = false;
                 if (nextToken.text.equals("(")) {
@@ -558,15 +518,7 @@ public class OperatorParser {
             case "sub":
                 // Handle 'sub' keyword to parse an anonymous subroutine
                 return SubroutineParser.parseSubroutineDefinition(parser, false, null);
-            case "q":
-            case "qq":
-            case "qx":
-            case "qw":
-            case "qr":
-            case "tr":
-            case "y":
-            case "s":
-            case "m":
+            case "q", "qq", "qx", "qw", "qr", "tr", "y", "s", "m":
                 // Handle special-quoted domain-specific arguments
                 String operator = token.text;
                 // Skip whitespace, but not `#`
