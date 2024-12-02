@@ -411,27 +411,33 @@ public class Parser {
                         default -> operatorEnabled;
                     };
                 }
+
+                if (!calledWithCore && operatorEnabled && OVERRIDABLE_OP.contains(operator)) {
+                    // It is possible to override the core function by defining
+                    // a subroutine in the current package, or in CORE::GLOBAL::
+                    //
+                    // Optimization: only test this if an override was defined
+                    //
+
+                    if (existsGlobalCodeRef(ctx.symbolTable.getCurrentPackage() + "::" + operator)) {
+                        tokenIndex = startIndex;   // backtrack
+                        return SubroutineParser.parseSubroutineCall(this);
+                    }
+                    // if (existsGlobalCodeRef("CORE::GLOBAL::" + operator)) {
+                    //     tokenIndex = startIndex;   // backtrack
+                    //     return SubroutineParser.parseSubroutineCall(this);
+                    // }
+                }
+
                 if (operatorEnabled) {
                     Node operation = OperatorParser.parseCoreOperator(this, token, startIndex);
                     if (operation != null) {
-
-                        if (!calledWithCore && OVERRIDABLE_OP.contains(operator)) {
-                            // It is possible to override the core function by defining
-                            // a subroutine in the current package, or in CORE::GLOBAL::
-                            //
-                            // Optimization: only test this if an override was defined
-                            //
-                            // System.out.println("calledWithoutCore " +
-                            //         ctx.symbolTable.getCurrentPackage() + "::" + operator +
-                            //         " " + "CORE::GLOBAL::" + operator);
-                            // if (existsGlobalCodeRef(ctx.symbolTable.getCurrentPackage() + "::" + operator)
-                            // || existsGlobalCodeRef("CORE::GLOBAL::" + operator)) {
-                            //     System.out.println("has override: " + operation);
-                            // }
-                        }
-
                         return operation;
                     }
+                }
+
+                if (calledWithCore) {
+                    throw new PerlCompilerException(tokenIndex, "CORE::" + operator + " is not a keyword", ctx.errorUtil);
                 }
 
                 // Handle any other identifier as a subroutine call or identifier node
