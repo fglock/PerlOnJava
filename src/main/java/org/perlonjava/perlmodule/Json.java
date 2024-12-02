@@ -29,17 +29,10 @@ public class Json extends PerlModuleBase {
      */
     public static void initialize() {
         Json json = new Json();
-        json.initializeExporter();
-        json.defineExport("EXPORT", "encode_json", "decode_json", "to_json", "from_json");
         try {
             json.registerMethod("encode_json", "$");
             json.registerMethod("decode_json", "$");
-            json.registerMethod("to_json", "$");
-            json.registerMethod("from_json", "$");
             json.registerMethod("pretty", "$");
-            json.registerMethod("indent", "$");
-            json.registerMethod("space_before", "$");
-            json.registerMethod("space_after", "$");
             json.registerMethod("encode", "$");
             json.registerMethod("decode", "$");
             json.registerMethod("true", "getTrue", "");
@@ -199,28 +192,6 @@ public class Json extends PerlModuleBase {
     }
 
     /**
-     * Converts a Perl data structure to a JSON string.
-     *
-     * @param args the runtime array containing the Perl data structure
-     * @param ctx  the runtime context
-     * @return a {@link RuntimeList} containing the JSON string
-     */
-    public static RuntimeList to_json(RuntimeArray args, int ctx) {
-        return encode_json(args, ctx);
-    }
-
-    /**
-     * Converts a JSON string to a Perl data structure.
-     *
-     * @param args the runtime array containing the JSON string
-     * @param ctx  the runtime context
-     * @return a {@link RuntimeList} containing the Perl data structure
-     */
-    public static RuntimeList from_json(RuntimeArray args, int ctx) {
-        return decode_json(args, ctx);
-    }
-
-    /**
      * Enables or disables pretty printing for a JSON instance.
      *
      * @param args the runtime array containing the instance and optional enable flag
@@ -235,90 +206,6 @@ public class Json extends PerlModuleBase {
         hash.get("space_before").set(new RuntimeScalar(enable));
         hash.get("space_after").set(new RuntimeScalar(enable));
         return instance.getList();
-    }
-
-    /**
-     * Enables or disables indentation for a JSON instance.
-     *
-     * @param args the runtime array containing the instance and optional enable flag
-     * @param ctx  the runtime context
-     * @return a {@link RuntimeList} containing the updated instance
-     */
-    public static RuntimeList indent(RuntimeArray args, int ctx) {
-        RuntimeScalar instance = args.get(0);
-        boolean enable = args.size() != 2 || args.get(1).getBoolean();
-        RuntimeHash hash = instance.hashDeref();
-        hash.get("indent").set(new RuntimeScalar(enable));
-        return instance.getList();
-    }
-
-    /**
-     * Retrieves the indentation setting for a JSON instance.
-     *
-     * @param args the runtime array containing the instance
-     * @param ctx  the runtime context
-     * @return a {@link RuntimeList} containing the indentation setting
-     */
-    public static RuntimeList get_indent(RuntimeArray args, int ctx) {
-        RuntimeScalar instance = args.get(0);
-        RuntimeHash hash = instance.hashDeref();
-        return hash.get("indent").getList();
-    }
-
-    /**
-     * Enables or disables space before colons for a JSON instance.
-     *
-     * @param args the runtime array containing the instance and optional enable flag
-     * @param ctx  the runtime context
-     * @return a {@link RuntimeList} containing the updated instance
-     */
-    public static RuntimeList space_before(RuntimeArray args, int ctx) {
-        RuntimeScalar instance = args.get(0);
-        boolean enable = args.size() != 2 || args.get(1).getBoolean();
-        RuntimeHash hash = instance.hashDeref();
-        hash.get("space_before").set(new RuntimeScalar(enable));
-        return instance.getList();
-    }
-
-    /**
-     * Retrieves the space before setting for a JSON instance.
-     *
-     * @param args the runtime array containing the instance
-     * @param ctx  the runtime context
-     * @return a {@link RuntimeList} containing the space before setting
-     */
-    public static RuntimeList get_space_before(RuntimeArray args, int ctx) {
-        RuntimeScalar instance = args.get(0);
-        RuntimeHash hash = instance.hashDeref();
-        return hash.get("space_before").getList();
-    }
-
-    /**
-     * Enables or disables space after commas and colons for a JSON instance.
-     *
-     * @param args the runtime array containing the instance and optional enable flag
-     * @param ctx  the runtime context
-     * @return a {@link RuntimeList} containing the updated instance
-     */
-    public static RuntimeList space_after(RuntimeArray args, int ctx) {
-        RuntimeScalar instance = args.get(0);
-        boolean enable = args.size() != 2 || args.get(1).getBoolean();
-        RuntimeHash hash = instance.hashDeref();
-        hash.get("space_after").set(new RuntimeScalar(enable));
-        return instance.getList();
-    }
-
-    /**
-     * Retrieves the space after setting for a JSON instance.
-     *
-     * @param args the runtime array containing the instance
-     * @param ctx  the runtime context
-     * @return a {@link RuntimeList} containing the space after setting
-     */
-    public static RuntimeList get_space_after(RuntimeArray args, int ctx) {
-        RuntimeScalar instance = args.get(0);
-        RuntimeHash hash = instance.hashDeref();
-        return hash.get("space_after").getList();
     }
 
     /**

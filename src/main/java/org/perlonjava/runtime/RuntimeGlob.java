@@ -34,7 +34,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @throws IllegalStateException if the typeglob assignment is not implemented for the given type.
      */
     public RuntimeScalar set(RuntimeScalar value) {
-        // System.out.println("glob set " + value.type);
+        // System.out.println("glob set " + this.globName + " to " + value.type);
         switch (value.type) {
             case CODE:
                 GlobalVariable.getGlobalCodeRef(this.globName).set(value);
