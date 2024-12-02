@@ -94,7 +94,7 @@ public class EmitRegex {
                 operand.elements.getFirst().accept(scalarVisitor);
                 emitterVisitor.pushCallContext();
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/RuntimeIO",
+                        "org/perlonjava/operators/SystemOperator",
                         "systemCommand",
                         "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
 
