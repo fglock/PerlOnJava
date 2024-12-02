@@ -238,7 +238,7 @@
 - ❌  **Startup processing**: processing `$sitelib/sitecustomize.pl` at startup is not enabled.
 - ❌  **Smartmatch operator**: `~~` and `given`/`when` construct are not implemented.
 - ✔️   **File test operators**: `-R`, `-W`, `-X`, `-O` (for real uid/gid), this implementation assumes that the real user ID corresponds to the current user running the Java application.
-- ❌  **File test operators**: `-t` (tty check) is not implemented.
+- ✔️   **File test operators**: `-t` (tty check), this implementation assumes that the -t check is intended to determine if the program is running in a TTY-compatible environment.
 - ✔️   **File test operators**: `-p`, `-S`, `-b`, and `-c` are approximated using file names or paths, as Java doesn't provide direct equivalents.
 - ✔️   **File test operators**: `-k` (sticky bit) is approximated using the "others execute" permission, as Java doesn't have a direct equivalent.
 - ✔️   **File test operators**: `-T` and `-B` (text/binary check) are implemented using a heuristic similar to Perl's approach.

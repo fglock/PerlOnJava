@@ -133,6 +133,9 @@ public class FileTestOperator {
                             .lookupPrincipalByName(System.getProperty("user.name"));
                     yield getScalarBoolean(owner.equals(currentUser));
                 }
+                case "-t" ->
+                    // Check if the standard input is a TTY
+                    getScalarBoolean(System.console() != null);
                 default -> throw new UnsupportedOperationException("Unsupported file test operator: " + operator);
             };
         } catch (IOException e) {
