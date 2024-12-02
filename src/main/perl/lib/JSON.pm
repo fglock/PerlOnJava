@@ -141,5 +141,34 @@ BEGIN {
     }
 }
 
+# pretty printing
+
+sub pretty {
+    my ($self, $v) = @_;
+    my $enable = defined $v ? $v : 1;
+
+    if ($enable) { # indent_length(3) for JSON::XS compatibility
+        $self->indent(1)->space_before(1)->space_after(1);
+    }
+    else {
+        $self->indent(0)->space_before(0)->space_after(0);
+    }
+
+    $self;
+}
+
+# Functions
+
+my $JSON; # cache
+
+sub encode_json ($) { # encode
+    ($JSON ||= __PACKAGE__->new->utf8)->encode(@_);
+}
+
+
+sub decode_json { # decode
+    ($JSON ||= __PACKAGE__->new->utf8)->decode(@_);
+}
+
 1;
 

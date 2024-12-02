@@ -30,11 +30,8 @@ public class Json extends PerlModuleBase {
     public static void initialize() {
         Json json = new Json();
         try {
-            json.registerMethod("encode_json", "$");
-            json.registerMethod("decode_json", "$");
-            json.registerMethod("pretty", "$");
-            json.registerMethod("encode", "$");
-            json.registerMethod("decode", "$");
+            json.registerMethod("encode", null);
+            json.registerMethod("decode", null);
             json.registerMethod("true", "getTrue", "");
             json.registerMethod("false", "getFalse", "");
             json.registerMethod("null", "getNull", "");
@@ -90,28 +87,6 @@ public class Json extends PerlModuleBase {
     }
 
     /**
-     * Encodes a Perl data structure into a JSON string.
-     *
-     * @param args the runtime array containing the Perl data structure
-     * @param ctx  the runtime context
-     * @return a {@link RuntimeList} containing the JSON string
-     * @throws IllegalStateException if the number of arguments is incorrect
-     */
-    public static RuntimeList encode_json(RuntimeArray args, int ctx) {
-        if (args.size() != 1) {
-            throw new IllegalStateException("Bad number of arguments for encode_json");
-        }
-        RuntimeScalar perlData = args.get(0);
-        RuntimeScalar jsonObject = (RuntimeScalar) GlobalVariable.getGlobalCodeRef("JSON::new").apply(
-                        new RuntimeArray(new RuntimeScalar("JSON")),
-                        RuntimeContextType.SCALAR)
-                .elements.getFirst();
-        return encode(
-                new RuntimeArray(jsonObject, perlData),
-                RuntimeContextType.SCALAR);
-    }
-
-    /**
      * Encodes a Perl data structure into a JSON string with specific formatting options.
      *
      * @param args the runtime array containing the instance and Perl data structure
@@ -157,23 +132,6 @@ public class Json extends PerlModuleBase {
     }
 
     /**
-     * Decodes a JSON string into a Perl data structure.
-     *
-     * @param args the runtime array containing the JSON string
-     * @param ctx  the runtime context
-     * @return a {@link RuntimeList} containing the Perl data structure
-     * @throws IllegalStateException if the number of arguments is incorrect
-     */
-    public static RuntimeList decode_json(RuntimeArray args, int ctx) {
-        if (args.size() != 1) {
-            throw new IllegalStateException("Bad number of arguments for Json method");
-        }
-        RuntimeScalar jsonString = args.get(0);
-        Object json = JSON.parse(jsonString.toString());
-        return convertJsonToRuntimeScalar(json).getList();
-    }
-
-    /**
      * Decodes a JSON string into a Perl data structure with specific instance settings.
      *
      * @param args the runtime array containing the instance and JSON string
@@ -189,23 +147,6 @@ public class Json extends PerlModuleBase {
         RuntimeScalar jsonString = args.get(1);
         Object json = JSON.parse(jsonString.toString());
         return convertJsonToRuntimeScalar(json).getList();
-    }
-
-    /**
-     * Enables or disables pretty printing for a JSON instance.
-     *
-     * @param args the runtime array containing the instance and optional enable flag
-     * @param ctx  the runtime context
-     * @return a {@link RuntimeList} containing the updated instance
-     */
-    public static RuntimeList pretty(RuntimeArray args, int ctx) {
-        RuntimeScalar instance = args.get(0);
-        boolean enable = args.size() != 2 || args.get(1).getBoolean();
-        RuntimeHash hash = instance.hashDeref();
-        hash.get("indent").set(new RuntimeScalar(enable));
-        hash.get("space_before").set(new RuntimeScalar(enable));
-        hash.get("space_after").set(new RuntimeScalar(enable));
-        return instance.getList();
     }
 
     /**
