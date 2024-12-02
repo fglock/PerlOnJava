@@ -308,8 +308,11 @@
 - ✔️   **Term::ANSIColor** module.
 - ✔️   **Time::Local** module.
 - ✔️   **HTTP::Date** module.
-- ✔️   **HTTP::CookieJar** module.
 - 🚧  **HTTP::Tiny** some features untested: proxy settings.
+
+### Non-core modules
+- ✔️   **HTTP::CookieJar** module.
+- ✔️   **JSON** module.
 
 
 ## Non-strict and Obsolete Features

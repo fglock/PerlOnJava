@@ -118,7 +118,7 @@
   - Planned release date: 2024-12-10
   - Added `subs` pragma.
   - Added regex `$+` variable.
-  - Added `Getopt::Long` module.
+  - Added `Getopt::Long`, `JSON` modules.
   - Work in progress:
     - `lexical_subs` feature.
     - `socket` and related operators.
@@ -130,7 +130,6 @@
     - `truncate`, `seek` operators.
     - preprocessor `# line` directive.
     - subroutine prototypes.
-    - `JSON` module.
 
 - **v3.0.0**: Concurrency and Security Features
   - Add support for concurrency and parallelism, such as threads and async/await.
