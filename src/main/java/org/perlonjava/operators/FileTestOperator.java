@@ -9,6 +9,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.UserPrincipal;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeIO.getPath;
@@ -116,6 +117,22 @@ public class FileTestOperator {
                 case "-M", "-A", "-C" ->
                     // Get file time difference for modification (-M), access (-A), or creation (-C) time
                         getFileTimeDifference(path, operator);
+                case "-R" ->
+                    // Check if file is readable by the real user ID
+                        getScalarBoolean(Files.isReadable(path));
+                case "-W" ->
+                    // Check if file is writable by the real user ID
+                        getScalarBoolean(Files.isWritable(path));
+                case "-X" ->
+                    // Check if file is executable by the real user ID
+                        getScalarBoolean(Files.isExecutable(path));
+                case "-O" -> {
+                    // Check if file is owned by the current user
+                    UserPrincipal owner = Files.getOwner(path);
+                    UserPrincipal currentUser = path.getFileSystem().getUserPrincipalLookupService()
+                            .lookupPrincipalByName(System.getProperty("user.name"));
+                    yield getScalarBoolean(owner.equals(currentUser));
+                }
                 default -> throw new UnsupportedOperationException("Unsupported file test operator: " + operator);
             };
         } catch (IOException e) {
