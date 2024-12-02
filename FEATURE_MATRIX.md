@@ -73,6 +73,7 @@
 - ❌  **Taint checks**: Support for taint checks is not implemented.
 - ❌  **`local` special cases**: Variable localization in for-loops is missing.
 - ❌  **`local` special cases**: `local *HANDLE = *HANDLE` doesn't create a new typeglob.
+- ❌  **Variable attributes**: Variable attributes are not yet supported.
 
 ## Objects
 - ✔️   **Objects**: Creating classes, method call syntax works.
@@ -174,10 +175,10 @@
 - ✔️   **\b inside character class**: `[\b]` is supported in regex.
 - ❌  **Perl-specific Regex Features**: Some features like `/ee` are missing.
 - ❌  **Dynamically-scoped regex variables**: Regex variables are not dynamically-scoped.
-- ❌  **Code blocks**: `(?{ code })` in regex is not implemented.
 - ❌  Missing regex features include:
   - `(?^` embedded pattern-match modifier, shorthand equivalent to "d-imnsx".
   - `(?<test_field>test)` the name in named captures cannot have underscores.
+  - `(?{ code })` code blocks in regex is not implemented.
 
 ## Statements and Special Operators
 - ✔️   **Context void, scalar, list**: Contexts for void, scalar, and list are supported.
@@ -290,13 +291,13 @@
 - 🚧  **warnings** pragma
 - ❌  **version** pragma: version objects are not yet supported.
 - ❌  **experimental** pragma
-- ❌  **mro** (Method Resolution Order) pragma. The compiler always use `C3` to linearize the inheritance hierarchy.
+- 🚧  **mro** (Method Resolution Order) pragma. The compiler always use `C3` to linearize the inheritance hierarchy.
 - ❌  **attributes** pragma
 - ❌  **bignum, bigint, and bigrat** pragmas
 - ❌  **encoding** pragma
 - ❌  **integer** pragma
 - 🚧  **re** pragma for regular expression options: Implemented `is_regexp`.
-- ❌  **subs** pragma.
+- ✔️   **subs** pragma.
 - 🚧  **builtin** pragma:
   - ✔️  Implemented: `true`, `false`, `is_bool`.
 - ✔️   **File::Basename** use the same version as Perl.
