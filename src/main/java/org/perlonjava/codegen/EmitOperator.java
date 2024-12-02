@@ -46,37 +46,12 @@ public class EmitOperator {
     }
 
     /**
-     * Handles the 'mkdir' operator, which creates directories.
-     *
-     * @param emitterVisitor The visitor used for code emission.
-     * @param node           The operator node representing the 'mkdir' operation.
-     */
-    static void handleMkdirOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
-        // Accept the operand in LIST context.
-        node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        emitOperator(node.operator, emitterVisitor);
-    }
-
-    /**
-     * Handles the 'each' operator, which iterates over elements.
-     *
-     * @param emitterVisitor The visitor used for code emission.
-     * @param node           The operator node representing the 'each' operation.
-     */
-    static void handleEachOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
-        // Accept the operand in LIST context.
-        node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        emitOperator(node.operator, emitterVisitor);
-    }
-
-    /**
      * Handles the 'keys' operator, which retrieves keys from a data structure.
      *
      * @param emitterVisitor The visitor used for code emission.
      * @param node           The operator node representing the 'keys' operation.
      */
     static void handleKeysOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
-        String operator = node.operator;
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         emitOperator(node.operator, emitterVisitor);
@@ -238,15 +213,6 @@ public class EmitOperator {
         emitOperator(node.operator, emitterVisitor);
     }
 
-    // Handles the 'crypt' built-in function, which encrypts data.
-    static void handleCryptBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
-        // Handle:  crypt PLAINTEXT,SALT
-        emitterVisitor.ctx.logDebug("handleCryptBuiltin " + node);
-        // Accept the operand in LIST context.
-        node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        emitOperator(node.operator, emitterVisitor);
-    }
-
     // Handles the 'unpack' built-in function, which unpacks data from a string.
     static void handleUnpackBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Handle:  unpack TEMPLATE, EXPR
@@ -288,7 +254,7 @@ public class EmitOperator {
         emitterVisitor.ctx.logDebug("handleSpliceBuiltin " + node);
         Node args = node.operand;
         // Remove the first element from the list and accept it in LIST context.
-        Node operand = ((ListNode) args).elements.remove(0);
+        Node operand = ((ListNode) args).elements.removeFirst();
         operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         // Accept the remaining arguments in LIST context.
         args.accept(emitterVisitor.with(RuntimeContextType.LIST));
@@ -361,9 +327,9 @@ public class EmitOperator {
     // Handles the 'diamond' operator, which reads input from a file or standard input.
     static void handleDiamondBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        String argument = ((StringNode) ((ListNode) node.operand).elements.get(0)).value;
+        String argument = ((StringNode) ((ListNode) node.operand).elements.getFirst()).value;
         emitterVisitor.ctx.logDebug("visit diamond " + argument);
-        if (argument.equals("") || argument.equals("<>")) {
+        if (argument.isEmpty() || argument.equals("<>")) {
             // Handle null filehandle:  <>  <<>>
             node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
             emitterVisitor.pushCallContext();
@@ -608,7 +574,7 @@ public class EmitOperator {
         ListNode labelNode = (ListNode) node.operand;
         if (!labelNode.elements.isEmpty()) {
             // Handle 'next' with a label.
-            Node arg = labelNode.elements.get(0);
+            Node arg = labelNode.elements.getFirst();
             if (arg instanceof IdentifierNode) {
                 // Extract the label name.
                 labelStr = ((IdentifierNode) arg).name;

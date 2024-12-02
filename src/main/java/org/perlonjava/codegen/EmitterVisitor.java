@@ -384,9 +384,6 @@ public class EmitterVisitor implements Visitor {
             case "values":
                 EmitOperator.handleKeysOperator(this, node);
                 break;
-            case "each":
-                EmitOperator.handleEachOperator(this, node);
-                break;
             case "our":
             case "state":
             case "my":
@@ -437,11 +434,6 @@ public class EmitterVisitor implements Visitor {
             case "chomp":
                 EmitOperator.handleChompBuiltin(this, node);
                 break;
-            case "mkdir":
-            case "opendir":
-            case "seekdir":
-                EmitOperator.handleMkdirOperator(this, node);
-                break;
             case "readdir":
                 EmitOperator.handleReaddirOperator(this, node);
                 break;
@@ -451,9 +443,6 @@ public class EmitterVisitor implements Visitor {
             case "unpack":
                 EmitOperator.handleUnpackBuiltin(this, node);
                 break;
-            case "crypt":
-                EmitOperator.handleCryptBuiltin(this, node);
-                break;
             case "glob":
                 EmitOperator.handleGlobBuiltin(this, node);
                 break;
@@ -461,7 +450,12 @@ public class EmitterVisitor implements Visitor {
             case "index":
                 EmitOperator.handleIndexBuiltin(this, node);
                 break;
+            case "mkdir":
+            case "opendir":
+            case "seekdir":
+            case "crypt":
             case "vec":
+            case "each":
                 EmitOperator.handleVecBuiltin(this, node);
                 break;
             case "atan2":
