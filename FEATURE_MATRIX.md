@@ -16,6 +16,7 @@
 12. [Non-strict and Obsolete Features](#non-strict-and-obsolete-features)
 13. [Features Probably Incompatible with JVM](#features-probably-incompatible-with-jvm)
 14. [Language Differences and Workarounds](#language-differences-and-workarounds)
+15. [Optimizations](#optimizations)
 
 ## Compiler Usability
 - ✔️   **Perl-like compile-time error messages**: Error messages mimic those in Perl for consistency.
@@ -68,7 +69,6 @@
 - ✔️   **Typeglob as hash**: `*$val{$k}` for `SCALAR`, `ARRAY`, `HASH`, `CODE`, `IO` is implemented.
 - ❌  **Tied Scalars**: Support for tying scalars to classes is missing.
 - ❌  **Overload**: overloading Perl operations is missing.
-- ✔️   **Cached string/numeric conversions; dualvars**: Caching is implemented, but it doesn't use the Perl "dual variable" implementation.
 - ❌  **Unicode**: Support for non-Unicode strings is not implemented.
 - ❌  **Taint checks**: Support for taint checks is not implemented.
 - ❌  **`local` special cases**: Variable localization in for-loops is missing.
@@ -109,9 +109,9 @@
 - ✔️   **`sleep`**: `sleep` is implemented. It takes fractional seconds. `$SIG{ALRM}` is also implemented.
 - ✔️   **`stat`**: `stat`, `lstat` are implemented. Some fields are not available in JVM and return `undef`.
 - ✔️   **Vectors**: `vec` is implemented.
-- ❌  **Chained operators**: operations like `$x < $y <= $z` not yet implemented.
 - ✔️   **Lvalue `substr`**: Assignable Substring extraction is implemented.
 - ✔️   **Lvalue `vec`**: Assignable `vec` is implemented.
+- ❌  **Chained operators**: operations like `$x < $y <= $z` not yet implemented.
 
 ## Arrays, Hashes, and Lists
 - ✔️   **Array, Hash, and List infrastructure**: Basic infrastructure for arrays, hashes, and lists is implemented.
@@ -146,15 +146,14 @@
 - ✔️   **Calling context**: `wantarray` is implemented.
 - ✔️   **exists**: `exists &sub` is implemented.
 - ✔️   **defined**: `defined &sub` is implemented.
-- 🚧  **Subroutine prototypes**: Prototypes `$`, `@`, `%`, `&`, `;`, `_`, empty string and undef are supported.
-- ❌  **Subroutine signatures**: Formal parameters are not implemented.
-- ❌  **Inline "constant" subroutines optimization**: Optimization for inline constants is not yet implemented.
-- ❌  **Subroutine attributes**: Subroutine attributes are not yet supported.
-- ✔️   **`lvalue` subroutines**: Subroutines with attribute `:lvalue` are supported.
-- ❌  **Lexical subroutines**: Subroutines declared `my`, `state`, or `our` are not yet supported.
 - ✔️   **CORE namespace**: `CORE` is implemented.
 - ✔️   **CORE::GLOBAL namespace**: `CORE::GLOBAL` and core function overrides are implemented.
 - ✔️   **alternate subroutine call syntax**: `&$sub`, `&$sub(args)` syntax is implemented.
+- 🚧  **Subroutine prototypes**: Prototypes `$`, `@`, `%`, `&`, `;`, `_`, empty string and undef are supported.
+- ❌  **Subroutine signatures**: Formal parameters are not implemented.
+- 🚧  **Subroutine attributes**: `prototype` is implemented. Other subroutine attributes are not yet supported.
+- ✔️   **`lvalue` subroutines**: Subroutines with attribute `:lvalue` are supported.
+- ❌  **Lexical subroutines**: Subroutines declared `my`, `state`, or `our` are not yet supported.
 
 ## Regular Expressions
 - ✔️   **Basic Matching**: Operators `qr//`, `m//`, `s///`, `split` are implemented.
@@ -268,15 +267,10 @@
 - ❌  **Thread-safe `@_`, `$_`, and regex variables**: Thread safety for global special variables is missing.
 
 ## Perl Modules, Pragmas, Features
-- ✔️   **UNIVERSAL**: `isa`, `can`, `DOES`, `VERSION` are implemented. `isa` operator is implemented.
-- ✔️   **Symbol**: `qualify` and `qualify_to_ref` are implemented.
-- ✔️   **Data::Dumper**: use the same version as Perl.
-- ✔️   **Exporter**: `@EXPORT_OK`, `@EXPORT`, `%EXPORT_TAGS` are implemented.
+
+### Pragmas
+
 - 🚧  **strict**: `strict` pragma is set to ignore `no strict`, the compiler works always in `strict` mode. `no strict` might work in a future version.
-- ✔️   **Scalar::Util**: `blessed`, `reftype`, `set_prototype` are implemented.
-- ✔️   **Internals**: `Internals::SvREADONLY` is implemented as a no-op.
-- ✔️   **Carp**: `carp`, `cluck`, `croak`, `confess`, `longmess`, `shortmess` are implemented.
-- ✔️   **Cwd** module
 - ✔️   **parent** pragma
 - ✔️   **base** pragma
 - ✔️   **constant** pragma
@@ -300,6 +294,17 @@
 - ✔️   **subs** pragma.
 - 🚧  **builtin** pragma:
   - ✔️  Implemented: `true`, `false`, `is_bool`.
+
+### Core modules
+
+- ✔️   **UNIVERSAL**: `isa`, `can`, `DOES`, `VERSION` are implemented. `isa` operator is implemented.
+- ✔️   **Symbol**: `qualify` and `qualify_to_ref` are implemented.
+- ✔️   **Data::Dumper**: use the same version as Perl.
+- ✔️   **Exporter**: `@EXPORT_OK`, `@EXPORT`, `%EXPORT_TAGS` are implemented.
+- ✔️   **Scalar::Util**: `blessed`, `reftype`, `set_prototype` are implemented.
+- ✔️   **Internals**: `Internals::SvREADONLY` is implemented as a no-op.
+- ✔️   **Carp**: `carp`, `cluck`, `croak`, `confess`, `longmess`, `shortmess` are implemented.
+- ✔️   **Cwd** module
 - ✔️   **File::Basename** use the same version as Perl.
 - ✔️   **File::Find** use the same version as Perl.
 - ✔️   **File::Spec** module.
@@ -336,6 +341,7 @@
 - ❌  **Tail calls**: `goto` going to a different subroutine as a tail call is not supported.
 - ❌  **Regex differences**:
     - Java's regular expression engine does not support duplicate named capture groups. In Java, each named capturing group must have a unique name within a regular expression.
+
 
 ## Language Differences and Workarounds
 
@@ -381,4 +387,9 @@ Here’s an alternative approach using the Symbol module:
         return;
     }
 ```
+
+## Optimizations
+
+- ✔️   **Cached string/numeric conversions; dualvars**: Caching is implemented, but it doesn't use the Perl "dual variable" implementation.
+- ❌  **Inline "constant" subroutines optimization**: Optimization for inline constants is not yet implemented.
 
