@@ -119,6 +119,7 @@
   - Added `subs` pragma.
   - Added regex `$+` variable.
   - Added `Getopt::Long`, `JSON` modules.
+  - Added `-v` command line switch.
   - Work in progress:
     - `lexical_subs` feature.
     - `socket` and related operators.

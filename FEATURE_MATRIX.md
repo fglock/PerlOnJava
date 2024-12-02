@@ -27,7 +27,7 @@
 ### Command line switches
 
 - ✔️   Accept command line switches from the shebang line.
-- ✔️   Command line switches `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-x`, `-?` are implemented.
+- ✔️   Command line switches `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-x`, `-v`, `-?` are implemented.
 - ❌  Missing command line switches include:
   - `-s`: Rudimentary switch parsing.
   - `-T`: Taint checks.
@@ -36,7 +36,6 @@
   - `-U`: Allows unsafe operations.
   - `-W`: Enables all warnings.
   - `-X`: Disables all warnings.
-  - `-v`: Displays the version.
   - `-V[:configvar]`: Displays configuration information.
   - `-w`: Enables warnings.
   - `-d[t][:debugger]`: Runs the program under the debugger.

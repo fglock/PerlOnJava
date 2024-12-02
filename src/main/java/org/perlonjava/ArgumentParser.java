@@ -1,9 +1,6 @@
 package org.perlonjava;
 
-import org.perlonjava.runtime.GlobalVariable;
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.ScalarUtils;
+import org.perlonjava.runtime.*;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -200,6 +197,10 @@ public class ArgumentParser {
                     // Handle include directory specified with -I
                     index = handleIncludeDirectory(args, parsedArgs, index, j, arg);
                     return index;
+                case 'v':
+                    printVersionInfo();
+                    System.exit(0);
+                    break;
                 case 'x':
                     parsedArgs.discardLeadingGarbage = true;
                     index = handleEmbeddedProgram(args, parsedArgs, index, j, arg);
@@ -211,6 +212,22 @@ public class ArgumentParser {
             }
         }
         return index;
+    }
+
+    private static void printVersionInfo() {
+        String version = GlobalContext.perlVersionNoV;
+        System.out.println();
+        System.out.println("This is perl 5, version " + version + " built for JVM");
+        System.out.println();
+        System.out.println("Copyright 1987-2023, Larry Wall");
+        System.out.println();
+        System.out.println("Perl may be copied only under the terms of either the Artistic License or the");
+        System.out.println("GNU General Public License, which may be found in the Perl 5 source kit.");
+        System.out.println();
+        System.out.println("Complete documentation for Perl, including FAQ lists, should be found on");
+        System.out.println("this system using \"man perl\" or \"perldoc perl\". If you have access to the");
+        System.out.println("Internet, point your browser at https://www.perl.org/, the Perl Home Page");
+        System.out.println();
     }
 
     /**
