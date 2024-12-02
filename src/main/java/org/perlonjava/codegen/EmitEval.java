@@ -69,6 +69,17 @@ public class EmitEval {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         // Stack: [RuntimeScalar(String)]
 
+        if (node.operator.equals("evalbytes")) {
+            // Assert that the operand is bytes
+            ctx.mv.visitInsn(Opcodes.DUP);
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/RuntimeCode",
+                    "assertBytes",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;)V",
+                    false);
+        }
+
         // Push the evalTag onto the stack
         mv.visitLdcInsn(evalTag);
         // Stack: [RuntimeScalar(String), String]

@@ -397,7 +397,7 @@ public class EmitterVisitor implements Visitor {
             case "return":
                 EmitOperator.handleReturnOperator(this, node);
                 break;
-            case "eval":
+            case "eval", "evalbytes":
                 EmitEval.handleEvalOperator(this, node);
                 break;
             case "unaryMinus":

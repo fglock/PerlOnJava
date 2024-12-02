@@ -516,6 +516,7 @@ public class Parser {
             String operator = token.text;
             boolean operatorEnabled = switch (operator) {
                 case "isa" -> ctx.symbolTable.isFeatureCategoryEnabled("isa");
+                case "evalbytes" -> ctx.symbolTable.isFeatureCategoryEnabled("evalbytes");
                 case "&.", "|.", "^.", "&.=", "|.=", "^.=" -> ctx.symbolTable.isFeatureCategoryEnabled("bitwise");
                 case "&", "|", "^", "&=", "|=", "^=" -> {
                     if (ctx.symbolTable.isFeatureCategoryEnabled("bitwise")) {

@@ -184,7 +184,7 @@ public class OperatorParser {
      * @param parser The Parser instance.
      * @return An AbstractNode representing the parsed 'eval' operator.
      */
-    static AbstractNode parseEval(Parser parser) {
+    static AbstractNode parseEval(Parser parser, String operator) {
         Node block;
         Node operand;
         LexerToken token;
@@ -208,11 +208,10 @@ public class OperatorParser {
             }
         }
         return new EvalOperatorNode(
-                "eval",
+                operator,
                 operand,
                 parser.ctx.symbolTable.snapShot(), // Freeze the scoped symbol table for the eval context
-                parser.tokenIndex
-        );
+                parser.tokenIndex);
     }
 
     /**
@@ -509,8 +508,8 @@ public class OperatorParser {
                 // Parentheses are ignored.
                 operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
                 return new OperatorNode("return", operand, currentIndex);
-            case "eval":
-                return parseEval(parser);
+            case "eval", "evalbytes":
+                return parseEval(parser, token.text);
             case "do":
                 return parseDoOperator(parser);
             case "require":

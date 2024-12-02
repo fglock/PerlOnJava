@@ -120,7 +120,8 @@
   - Added regex `$+` variable.
   - Added `Getopt::Long`, `JSON` modules.
   - Added `-v` command line switch.
-  - Added File test operators: `-R`, `-W`, `-X`, `-O`.
+  - Added file test operators: `-R`, `-W`, `-X`, `-O`.
+  - Added feature flags: `evalbytes`.
   - Work in progress:
     - `lexical_subs` feature.
     - `socket` and related operators.
