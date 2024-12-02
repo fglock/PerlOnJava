@@ -394,21 +394,22 @@ public class Parser {
                     return new StringNode(token.text, tokenIndex);
                 }
 
-                boolean operatorEnabled = true;
+                boolean operatorEnabled = false;
                 boolean calledWithCore = false;
 
                 // Try to parse a builtin operation; backtrack if it fails
                 if (token.text.equals("CORE") && nextTokenText.equals("::")) {
                     calledWithCore = true;
+                    operatorEnabled = true;
                     TokenUtils.consume(this);  // "::"
                     token = TokenUtils.consume(this); // operator
                     operator = token.text;
-                } else {
+                } else if (!nextTokenText.equals("::")) {
                     // Check if the operator is enabled in the current scope
                     operatorEnabled = switch (operator) {
                         case "say", "fc", "state", "evalbytes" -> ctx.symbolTable.isFeatureCategoryEnabled(operator);
                         case "__SUB__" -> ctx.symbolTable.isFeatureCategoryEnabled("current_sub");
-                        default -> operatorEnabled;
+                        default -> true;
                     };
                 }
 
