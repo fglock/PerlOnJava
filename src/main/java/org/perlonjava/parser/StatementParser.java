@@ -5,6 +5,7 @@ import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.codegen.ExtractValueVisitor;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.operators.ModuleOperators;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 
@@ -345,7 +346,7 @@ public class StatementParser {
 
             ctx.logDebug("Use statement: " + fullName + " called from " + CallerStack.peek(0));
             // execute 'require(fullName)'
-            RuntimeScalar ret = new RuntimeScalar(fullName).require();
+            RuntimeScalar ret = ModuleOperators.require(new RuntimeScalar(fullName));
             ctx.logDebug("Use statement return: " + ret);
 
             if (versionNode != null) {

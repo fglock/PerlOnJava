@@ -101,6 +101,10 @@ public class OperatorHandler {
         put("opendir", "opendir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("glob", "evaluate", "org/perlonjava/operators/ScalarGlobOperator", "(ILorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;");
 
+        // Modules
+        put("doFile", "doFile", "org/perlonjava/operators/ModuleOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("require", "require", "org/perlonjava/operators/ModuleOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+
         // Misc
         put(".", "stringConcat");
         put("x", "repeat");

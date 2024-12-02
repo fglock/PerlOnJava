@@ -1,22 +1,14 @@
 package org.perlonjava.runtime;
 
-import org.perlonjava.ArgumentParser;
 import org.perlonjava.operators.Operator;
 import org.perlonjava.parser.NumberParser;
 import org.perlonjava.perlmodule.Universal;
-import org.perlonjava.scriptengine.PerlLanguageProvider;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.*;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
+import java.util.Random;
+import java.util.Stack;
 
-import static org.perlonjava.runtime.GlobalVariable.getGlobalHash;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.SpecialBlock.runEndBlocks;
@@ -662,90 +654,81 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar preAutoIncrement() {
         switch (type) {
-            case INTEGER:
-                this.value = (int) this.value + 1;
+            case INTEGER -> this.value = (int) this.value + 1;
+            case DOUBLE -> this.value = (double) this.value + 1;
+            case STRING -> {
+                this.value = ScalarUtils.stringIncrement(this);
                 return this;
-            case DOUBLE:
-                this.value = (double) this.value + 1;
-                return this;
-            case STRING:
-                return ScalarUtils.stringIncrement(this);
-            case BOOLEAN:
+            }
+            case BOOLEAN -> {
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = this.getInt() + 1;
-                return this;
+            }
+            default -> {
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = 1;
+            }
         }
-        this.type = RuntimeScalarType.INTEGER;
-        this.value = 1;
         return this;
     }
 
     public RuntimeScalar postAutoIncrement() {
         RuntimeScalar old = new RuntimeScalar().set(this);
         switch (type) {
-            case INTEGER:
-                this.value = (int) this.value + 1;
-                break;
-            case DOUBLE:
-                this.value = (double) this.value + 1;
-                break;
-            case STRING:
-                ScalarUtils.stringIncrement(this);
-                break;
-            case BOOLEAN:
+            case INTEGER -> this.value = (int) this.value + 1;
+            case DOUBLE -> this.value = (double) this.value + 1;
+            case STRING -> ScalarUtils.stringIncrement(this);
+            case BOOLEAN -> {
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = this.getInt() + 1;
-                break;
-            default:
+            }
+            default -> {
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
+            }
         }
         return old;
     }
 
     public RuntimeScalar preAutoDecrement() {
         switch (type) {
-            case INTEGER:
-                this.value = (int) this.value - 1;
-                return this;
-            case DOUBLE:
-                this.value = (double) this.value - 1;
-                return this;
-            case STRING:
+            case INTEGER -> this.value = (int) this.value - 1;
+            case DOUBLE -> this.value = (double) this.value - 1;
+            case STRING -> {
                 // Handle numeric decrement
                 this.set(NumberParser.parseNumber(this));
                 return this.preAutoDecrement();
-            case BOOLEAN:
+            }
+            case BOOLEAN -> {
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = this.getInt() - 1;
-                return this;
+            }
+            default -> {
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = -1;
+            }
         }
-        this.type = RuntimeScalarType.INTEGER;
-        this.value = -1;
         return this;
     }
 
     public RuntimeScalar postAutoDecrement() {
         RuntimeScalar old = new RuntimeScalar().set(this);
         switch (type) {
-            case INTEGER:
-                this.value = (int) this.value - 1;
-                break;
-            case DOUBLE:
-                this.value = (double) this.value - 1;
-                break;
-            case STRING:
+            case INTEGER -> this.value = (int) this.value - 1;
+            case DOUBLE -> this.value = (double) this.value - 1;
+            case STRING -> {
                 // Handle numeric decrement
                 this.set(NumberParser.parseNumber(this));
                 this.preAutoDecrement();
-                break;
-            case BOOLEAN:
+            }
+            case BOOLEAN -> {
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = this.getInt() - 1;
-                break;
-            default:
+            }
+            default -> {
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
+            }
         }
         return old;
     }
@@ -816,119 +799,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar chr() {
         return new RuntimeScalar(String.valueOf((char) this.getInt()));
-    }
-
-    public RuntimeScalar require() {
-        // https://perldoc.perl.org/functions/require
-
-        if (this.type == RuntimeScalarType.INTEGER || this.type == RuntimeScalarType.DOUBLE || this.type == RuntimeScalarType.VSTRING || this.type == RuntimeScalarType.BOOLEAN) {
-            // `require VERSION`
-            Universal.compareVersion(
-                    new RuntimeScalar(GlobalContext.perlVersion),
-                    this,
-                    "Perl");
-            return getScalarInt(1);
-        }
-
-        // Look up the file name in %INC
-        String fileName = this.toString();
-        if (getGlobalHash("main::INC").elements.containsKey(fileName)) {
-            // module was already loaded
-            return getScalarInt(1);
-        }
-
-        // Call `do` operator
-        RuntimeScalar result = this.doFile(); // `do "fileName"`
-        // Check if `do` returned a true value
-        if (!result.defined().getBoolean()) {
-            // `do FILE` returned undef
-            String err = getGlobalVariable("main::@").toString();
-            String ioErr = getGlobalVariable("main::!").toString();
-            throw new PerlCompilerException(err.isEmpty() ? "Can't locate " + fileName + ": " + ioErr : "Compilation failed in require: " + err);
-        }
-        return result;
-    }
-
-    public RuntimeScalar doFile() {
-        // `do` file
-        String fileName = this.toString();
-        Path fullName = null;
-        Path filePath = Paths.get(fileName);
-        String code = null;
-
-        // If the filename is an absolute path or starts with ./ or ../, use it directly
-        if (filePath.isAbsolute() || fileName.startsWith("./") || fileName.startsWith("../")) {
-            fullName = Files.exists(filePath) ? filePath : null;
-        } else {
-            // Otherwise, search in INC directories
-            List<RuntimeScalar> inc = GlobalVariable.getGlobalArray("main::INC").elements;
-            for (RuntimeBaseEntity dir : inc) {
-                Path fullPath = Paths.get(dir.toString(), fileName);
-                if (Files.exists(fullPath)) {
-                    fullName = fullPath;
-                    break;
-                }
-            }
-        }
-        if (fullName == null) {
-            // If not found in file system, try to find in jar at "src/main/perl/lib"
-            String resourcePath = "/lib/" + fileName;
-            URL resource = RuntimeScalar.class.getResource(resourcePath);
-            // System.out.println("Found resource " + resource);
-            if (resource != null) {
-
-                String path = resource.getPath();
-                // Remove leading slash if on Windows
-                if (System.getProperty("os.name").toLowerCase().contains("win") && path.startsWith("/")) {
-                    path = path.substring(1);
-                }
-                fullName = Paths.get(path);
-
-                try (InputStream is = resource.openStream();
-                     BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
-                    StringBuilder content = new StringBuilder();
-                    String line = null;
-                    while ((line = reader.readLine()) != null) {
-                        content.append(line).append("\n");
-                    }
-                    // System.out.println("Content of " + resourcePath + ": " + content.toString());
-                    code = content.toString();
-                } catch (IOException e1) {
-                    GlobalVariable.setGlobalVariable("main::!", "No such file or directory");
-                    return new RuntimeScalar();
-                }
-            }
-        }
-        if (fullName == null) {
-            GlobalVariable.setGlobalVariable("main::!", "No such file or directory");
-            return new RuntimeScalar();
-        }
-
-        ArgumentParser.CompilerOptions parsedArgs = new ArgumentParser.CompilerOptions();
-        parsedArgs.fileName = fullName.toString();
-        if (code == null) {
-            try {
-                code = new String(Files.readAllBytes(Paths.get(parsedArgs.fileName)));
-            } catch (IOException e) {
-                GlobalVariable.setGlobalVariable("main::!", "Unable to read file " + parsedArgs.fileName);
-                return new RuntimeScalar();
-            }
-        }
-        parsedArgs.code = code;
-
-        // set %INC
-        getGlobalHash("main::INC").put(fileName, new RuntimeScalar(parsedArgs.fileName));
-
-        RuntimeList result;
-        try {
-            result = PerlLanguageProvider.executePerlCode(parsedArgs, false);
-        } catch (Throwable t) {
-            GlobalVariable.setGlobalVariable("main::@", "Error in file " + parsedArgs.fileName +
-                    "\n" + t);
-            return new RuntimeScalar();
-        }
-
-        return result == null ? scalarUndef : result.scalar();
     }
 
     // keys() operator

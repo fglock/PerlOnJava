@@ -1,5 +1,6 @@
 package org.perlonjava.perlmodule;
 
+import org.perlonjava.operators.ModuleOperators;
 import org.perlonjava.runtime.*;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalArray;
@@ -64,7 +65,7 @@ public class Base extends PerlModuleBase {
             // Require the base class file
             String filename = baseClassName.replace("::", "/").replace("'", "/") + ".pm";
             try {
-                RuntimeScalar ret = new RuntimeScalar(filename).require();
+                RuntimeScalar ret = ModuleOperators.require(new RuntimeScalar(filename));
             } catch (Exception e) {
                 if (e.getMessage().contains("not found")) {
                     System.err.println("Base class package \"" + baseClassName + "\" is empty.");

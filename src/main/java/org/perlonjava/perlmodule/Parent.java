@@ -1,5 +1,6 @@
 package org.perlonjava.perlmodule;
 
+import org.perlonjava.operators.ModuleOperators;
 import org.perlonjava.runtime.*;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalArray;
@@ -71,7 +72,7 @@ public class Parent extends PerlModuleBase {
             if (!noRequire) {
                 // Require the parent class file unless -norequire is specified
                 String filename = parentClassName.replace("::", "/").replace("'", "/") + ".pm";
-                RuntimeScalar ret = new RuntimeScalar(filename).require();
+                RuntimeScalar ret = ModuleOperators.require(new RuntimeScalar(filename));
             }
 
             // Add the parent class to the @ISA array of the inheritor
