@@ -35,6 +35,25 @@ public class Parser {
             "=", "**=", "+=", "*=", "&=", "&.=", "<<=", "&&=", "-=", "/=", "|=", "|.=",
             ">>=", "||=", ".=", "%=", "^=", "^.=", "//=", "x=", "**", "?"
     );
+
+    // The list below was obtained by running this in the perl git:
+    // ack  'CORE::GLOBAL::\w+' | perl -n -e ' /CORE::GLOBAL::(\w+)/ && print $1, "\n" ' | sort -u
+    private static final Set<String> OVERRIDABLE_OP = Set.of(
+            "caller", "chdir", "close", "connect",
+            "die", "do",
+            "exit",
+            "fork",
+            "getpwuid", "glob",
+            "hex",
+            "kill",
+            "oct", "open",
+            "readline", "readpipe", "rename", "require",
+            "stat",
+            "time",
+            "uc",
+            "warn"
+    );
+
     private static final Map<String, Integer> precedenceMap = new HashMap<>();
 
     static {
@@ -396,7 +415,7 @@ public class Parser {
                     Node operation = OperatorParser.parseCoreOperator(this, token, startIndex);
                     if (operation != null) {
 
-                        if (!calledWithCore) {
+                        if (!calledWithCore && OVERRIDABLE_OP.contains(operator)) {
                             // It is possible to override the core function by defining
                             // a subroutine in the current package, or in CORE::GLOBAL::
                             //
