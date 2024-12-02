@@ -425,6 +425,7 @@ public class Parser {
                         return SubroutineParser.parseSubroutineCall(this);
                     }
                     // if (existsGlobalCodeRef("CORE::GLOBAL::" + operator)) {
+                    //     // ' BEGIN { *CORE::GLOBAL::hex = sub { 456 } } print hex("123"), "\n" '
                     //     tokenIndex = startIndex;   // backtrack
                     //     return SubroutineParser.parseSubroutineCall(this);
                     // }
