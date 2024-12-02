@@ -419,10 +419,10 @@ public class Parser {
                     // Optimization: only test this if an override was defined
                     //
 
-                    if (existsGlobalCodeRef(ctx.symbolTable.getCurrentPackage() + "::" + operator)) {
-                        tokenIndex = startIndex;   // backtrack
-                        return SubroutineParser.parseSubroutineCall(this);
-                    }
+                    // if (existsGlobalCodeRef(ctx.symbolTable.getCurrentPackage() + "::" + operator)) {
+                    //     tokenIndex = startIndex;   // backtrack
+                    //     return SubroutineParser.parseSubroutineCall(this);
+                    // }
                     // if (existsGlobalCodeRef("CORE::GLOBAL::" + operator)) {
                     //     tokenIndex = startIndex;   // backtrack
                     //     return SubroutineParser.parseSubroutineCall(this);
