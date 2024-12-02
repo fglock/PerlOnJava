@@ -10,6 +10,7 @@ import java.util.*;
 
 import static org.perlonjava.parser.TokenUtils.consume;
 import static org.perlonjava.parser.TokenUtils.peek;
+import static org.perlonjava.runtime.GlobalVariable.existsGlobalCodeRef;
 
 public class Parser {
     public static final Set<String> TERMINATORS =
@@ -363,6 +364,7 @@ public class Parser {
     public Node parsePrimary() {
         int startIndex = tokenIndex;
         LexerToken token = TokenUtils.consume(this); // Consume the next token from the input
+        String operator = token.text;
         Node operand;
 
         switch (token.type) {
@@ -374,14 +376,16 @@ public class Parser {
                 }
 
                 boolean operatorEnabled = true;
+                boolean calledWithCore = false;
 
                 // Try to parse a builtin operation; backtrack if it fails
                 if (token.text.equals("CORE") && nextTokenText.equals("::")) {
+                    calledWithCore = true;
                     TokenUtils.consume(this);  // "::"
                     token = TokenUtils.consume(this); // operator
+                    operator = token.text;
                 } else {
                     // Check if the operator is enabled in the current scope
-                    String operator = token.text;
                     operatorEnabled = switch (operator) {
                         case "say", "fc", "state", "evalbytes" -> ctx.symbolTable.isFeatureCategoryEnabled(operator);
                         case "__SUB__" -> ctx.symbolTable.isFeatureCategoryEnabled("current_sub");
@@ -391,6 +395,22 @@ public class Parser {
                 if (operatorEnabled) {
                     Node operation = OperatorParser.parseCoreOperator(this, token, startIndex);
                     if (operation != null) {
+
+                        if (!calledWithCore) {
+                            // It is possible to override the core function by defining
+                            // a subroutine in the current package, or in CORE::GLOBAL::
+                            //
+                            // Optimization: only test this if an override was defined
+                            //
+                            // System.out.println("calledWithoutCore " +
+                            //         ctx.symbolTable.getCurrentPackage() + "::" + operator +
+                            //         " " + "CORE::GLOBAL::" + operator);
+                            // if (existsGlobalCodeRef(ctx.symbolTable.getCurrentPackage() + "::" + operator)
+                            // || existsGlobalCodeRef("CORE::GLOBAL::" + operator)) {
+                            //     System.out.println("has override: " + operation);
+                            // }
+                        }
+
                         return operation;
                     }
                 }
@@ -439,7 +459,6 @@ public class Parser {
                         return new OperatorNode(token.text, operand, tokenIndex);
                     case "~", "~.":
                         // Handle unary operators like `~ ~.`
-                        String operator = token.text;
                         if (ctx.symbolTable.isFeatureCategoryEnabled("bitwise")) {
                             if (operator.equals("~")) {
                                 operator = "binary" + operator;
