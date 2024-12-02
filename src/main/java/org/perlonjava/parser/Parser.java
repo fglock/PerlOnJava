@@ -418,17 +418,21 @@ public class Parser {
                     //
                     // Optimization: only test this if an override was defined
                     //
-
                     if (existsGlobalCodeRef(ctx.symbolTable.getCurrentPackage() + "::" + operator)) {
                         // ' use subs "hex"; sub hex { 456 } print hex("123"), "\n" '
                         tokenIndex = startIndex;   // backtrack
                         return SubroutineParser.parseSubroutineCall(this);
                     }
-                    // if (existsGlobalCodeRef("CORE::GLOBAL::" + operator)) {
-                    //     // ' BEGIN { *CORE::GLOBAL::hex = sub { 456 } } print hex("123"), "\n" '
-                    //     tokenIndex = startIndex;   // backtrack
-                    //     return SubroutineParser.parseSubroutineCall(this);
-                    // }
+                    if (existsGlobalCodeRef("CORE::GLOBAL::" + operator)) {
+                        // ' BEGIN { *CORE::GLOBAL::hex = sub { 456 } } print hex("123"), "\n" '
+                        tokenIndex = startIndex;   // backtrack
+                        // Rewrite the subroutine name
+                        tokens.add(startIndex, new LexerToken(LexerTokenType.IDENTIFIER, "CORE"));
+                        tokens.add(startIndex+1, new LexerToken(LexerTokenType.OPERATOR, "::"));
+                        tokens.add(startIndex+2, new LexerToken(LexerTokenType.IDENTIFIER, "GLOBAL"));
+                        tokens.add(startIndex+3, new LexerToken(LexerTokenType.OPERATOR, "::"));
+                        return SubroutineParser.parseSubroutineCall(this);
+                    }
                 }
 
                 if (operatorEnabled) {

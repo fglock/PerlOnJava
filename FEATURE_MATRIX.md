@@ -153,7 +153,7 @@
 - ✔️   **`lvalue` subroutines**: Subroutines with attribute `:lvalue` are supported.
 - ❌  **Lexical subroutines**: Subroutines declared `my`, `state`, or `our` are not yet supported.
 - ✔️   **CORE namespace**: `CORE` is implemented.
-- ❌  **CORE::GLOBAL namespace**: `CORE::GLOBAL` and core function overrides are not implemented.
+- ✔️   **CORE::GLOBAL namespace**: `CORE::GLOBAL` and core function overrides are implemented.
 - ✔️   **alternate subroutine call syntax**: `&$sub`, `&$sub(args)` syntax is implemented.
 
 ## Regular Expressions

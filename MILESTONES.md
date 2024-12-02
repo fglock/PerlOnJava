@@ -122,6 +122,7 @@
   - Added `-v` command line switch.
   - Added file test operators: `-R`, `-W`, `-X`, `-O`, `-t`.
   - Added feature flags: `evalbytes`.
+  - Added `CORE::GLOBAL` and core function overrides
   - Work in progress:
     - `lexical_subs` feature.
     - `socket` and related operators.
@@ -133,7 +134,6 @@
     - `truncate`, `seek` operators.
     - preprocessor `# line` directive.
     - subroutine prototypes.
-    - CORE::GLOBAL and core function overrides
 
 - **v3.0.0**: Concurrency and Security Features
   - Add support for concurrency and parallelism, such as threads and async/await.
