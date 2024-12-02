@@ -383,7 +383,7 @@ public class Parser {
                     // Check if the operator is enabled in the current scope
                     String operator = token.text;
                     operatorEnabled = switch (operator) {
-                        case "say", "fc", "state" -> ctx.symbolTable.isFeatureCategoryEnabled(operator);
+                        case "say", "fc", "state", "evalbytes" -> ctx.symbolTable.isFeatureCategoryEnabled(operator);
                         case "__SUB__" -> ctx.symbolTable.isFeatureCategoryEnabled("current_sub");
                         default -> operatorEnabled;
                     };
@@ -516,7 +516,6 @@ public class Parser {
             String operator = token.text;
             boolean operatorEnabled = switch (operator) {
                 case "isa" -> ctx.symbolTable.isFeatureCategoryEnabled("isa");
-                case "evalbytes" -> ctx.symbolTable.isFeatureCategoryEnabled("evalbytes");
                 case "&.", "|.", "^.", "&.=", "|.=", "^.=" -> ctx.symbolTable.isFeatureCategoryEnabled("bitwise");
                 case "&", "|", "^", "&=", "|=", "^=" -> {
                     if (ctx.symbolTable.isFeatureCategoryEnabled("bitwise")) {
