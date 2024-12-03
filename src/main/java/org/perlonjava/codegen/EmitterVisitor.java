@@ -5,7 +5,6 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.operators.OperatorHandler;
 import org.perlonjava.runtime.NameNormalizer;
-import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.ScalarUtils;
 
@@ -71,110 +70,10 @@ public class EmitterVisitor implements Visitor {
 
     @Override
     public void visit(BinaryOperatorNode node) {
-        String operator = node.operator;
-        ctx.logDebug("visit(BinaryOperatorNode) " + operator + " in context " + ctx.contextType);
-
-        switch (operator) { // handle operators that support short-circuit or other special cases
-            case "||":
-            case "or":
-                EmitLogicalOperator.emitLogicalOperator(this, node, Opcodes.IFNE, "getBoolean");
-                return;
-            case "||=":
-                EmitLogicalOperator.emitLogicalAssign(this, node, Opcodes.IFNE, "getBoolean");
-                return;
-            case "&&":
-            case "and":
-                EmitLogicalOperator.emitLogicalOperator(this, node, Opcodes.IFEQ, "getBoolean");
-                return;
-            case "&&=":
-                EmitLogicalOperator.emitLogicalAssign(this, node, Opcodes.IFEQ, "getBoolean");
-                return;
-            case "//":
-                EmitLogicalOperator.emitLogicalOperator(this, node, Opcodes.IFNE, "getDefinedBoolean");
-                return;
-            case "//=":
-                EmitLogicalOperator.emitLogicalAssign(this, node, Opcodes.IFNE, "getDefinedBoolean");
-                return;
-            case "=":
-                EmitVariable.handleAssignOperator(this, node);
-                return;
-            case ".":
-                EmitOperator.handleConcatOperator(this, node);
-                return;
-            case "->":
-                Dereference.handleArrowOperator(this, node);
-                return;
-            case "[":
-                Dereference.handleArrayElementOperator(this, node);
-                return;
-            case "{":
-                Dereference.handleHashElementOperator(this, node, "get");
-                return;
-            case "(":
-                EmitSubroutine.handleApplyOperator(this, node);
-                return;
-            case "push":
-            case "unshift":
-                EmitOperator.handlePushOperator(this, node);
-                return;
-            case "map":
-            case "sort":
-            case "grep":
-                EmitOperator.handleMapOperator(this, node);
-                return;
-            case "eof", "open", "printf", "print", "say":
-                EmitOperator.handleSayOperator(this, node);
-                return;
-            case "close", "readline", "fileno", "getc", "truncate":
-                EmitOperator.handleReadlineOperator(this, node);
-                return;
-            case "sprintf":
-            case "substr":
-                EmitOperator.handleSubstr(this, node);
-                return;
-            case "x":
-                EmitOperator.handleRepeat(this, node);
-                return;
-            case "join", "split":
-                EmitOperator.handleSplitOperator(this, node);
-                return;
-            case "!~":
-                EmitRegex.handleNotBindRegex(this, node);
-                return;
-            case "=~":
-                EmitRegex.handleBindRegex(this, node);
-                return;
-            case "**=", "+=", "*=", "&=", "&.=", "binary&=", "<<=", "-=", "/=", "|=", "|.=",
-                 "binary|=", ">>=", ".=", "%=", "^=", "^.=", "binary^=", "x=":
-                String newOp = operator.substring(0, operator.length() - 1);
-                OperatorHandler operatorHandler = OperatorHandler.get(newOp);
-                if (operatorHandler != null) {
-                    handleCompoundAssignment(node, operatorHandler);
-                    return;
-                }
-                break;
-            case "...":
-                EmitLogicalOperator.emitFlipFlopOperator(this, node);
-                return;
-            case "..":
-                if (ctx.contextType == RuntimeContextType.SCALAR) {
-                    EmitLogicalOperator.emitFlipFlopOperator(this, node);
-                    return;
-                }
-                EmitOperator.handleRangeOperator(this, node);
-                return;
-        }
-
-        OperatorHandler operatorHandler = OperatorHandler.get(operator);
-        if (operatorHandler != null) {
-            handleBinaryOperator(node, operatorHandler);
-            return;
-        }
-
-        throw new PerlCompilerException(node.tokenIndex, "Unexpected infix operator: " + operator, ctx.errorUtil);
+        EmitBinaryOperatorNode.emitBinaryOperatorNode(this, node);
     }
 
-    private void handleBinaryOperator(BinaryOperatorNode node, OperatorHandler operatorHandler) {
+    void handleBinaryOperator(BinaryOperatorNode node, OperatorHandler operatorHandler) {
         EmitterVisitor scalarVisitor =
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
         node.left.accept(scalarVisitor); // target - left parameter
@@ -207,7 +106,7 @@ public class EmitterVisitor implements Visitor {
         EmitOperator.emitOperator(node.operator, this);
     }
 
-    private void handleCompoundAssignment(BinaryOperatorNode node, OperatorHandler operatorHandler) {
+    void handleCompoundAssignment(BinaryOperatorNode node, OperatorHandler operatorHandler) {
         // compound assignment operators like `+=`
         EmitterVisitor scalarVisitor =
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
@@ -234,7 +133,7 @@ public class EmitterVisitor implements Visitor {
      *
      * @param operator The name of the built-in method to call.
      */
-    private void handleUnaryBuiltin(OperatorNode node, String operator) {
+    void handleUnaryBuiltin(OperatorNode node, String operator) {
         MethodVisitor mv = ctx.mv;
         OperatorHandler operatorHandler = OperatorHandler.get(operator);
         if (node.operand == null) {
@@ -291,7 +190,7 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleArrayUnaryBuiltin(OperatorNode node, String operator) {
+    void handleArrayUnaryBuiltin(OperatorNode node, String operator) {
         // Handle:  $#array  $#$array_ref  shift @array  pop @array
         Node operand = node.operand;
         ctx.logDebug("handleArrayUnaryBuiltin " + operand);
@@ -305,7 +204,7 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
-    private void handleFileTestBuiltin(OperatorNode node) {
+    void handleFileTestBuiltin(OperatorNode node) {
         // Handle:  -d FILE
         String operator = node.operator;
         ctx.logDebug("handleFileTestBuiltin " + node);
@@ -335,150 +234,10 @@ public class EmitterVisitor implements Visitor {
 
     @Override
     public void visit(OperatorNode node) {
-        String operator = node.operator;
-        ctx.logDebug("visit(OperatorNode) " + operator + " in context " + ctx.contextType);
-
-        switch (operator) {
-            case "__SUB__":
-                EmitSubroutine.handleSelfCallOperator(this, node);
-                break;
-            case "package":
-                EmitOperator.handlePackageOperator(this, node);
-                break;
-            case "$", "@", "%", "*", "&":
-                EmitVariable.handleVariableOperator(this, node);
-                break;
-            case "keys":
-            case "values":
-                EmitOperator.handleKeysOperator(this, node);
-                break;
-            case "our":
-            case "state":
-            case "my":
-                EmitVariable.handleMyOperator(this, node);
-                break;
-            case "next":
-            case "redo":
-            case "last":
-                EmitOperator.handleNextOperator(ctx, node);
-                break;
-            case "return":
-                EmitOperator.handleReturnOperator(this, node);
-                break;
-            case "eval", "evalbytes":
-                EmitEval.handleEvalOperator(this, node);
-                break;
-            case "unaryMinus":
-                handleUnaryBuiltin(node, "unaryMinus");
-                break;
-            case "+":
-                EmitOperator.handleUnaryPlusOperator(this, node);
-                break;
-            case "~":
-                handleUnaryBuiltin(node, "bitwiseNot");
-                break;
-            case "binary~":
-                handleUnaryBuiltin(node, "bitwiseNotBinary");
-                break;
-            case "~.":
-                handleUnaryBuiltin(node, "bitwiseNotDot");
-                break;
-            case "!":
-            case "not":
-                handleUnaryBuiltin(node, "not");
-                break;
-            case "<>":
-                EmitOperator.handleDiamondBuiltin(this, node);
-                break;
-            case "abs", "caller", "chdir", "chr", "closedir", "cos", "defined", "doFile", "exit",
-                 "exp", "fc", "gmtime", "hex", "lc", "lcfirst", "length", "localtime", "log",
-                 "lstat", "oct", "ord", "pos", "prototype", "quotemeta", "rand", "ref",
-                 "require", "reset", "rewinddir", "rmdir", "select", "sin", "sleep", "sqrt",
-                 "srand", "stat", "study", "telldir", "time", "times", "uc", "ucfirst", "undef",
-                 "wantarray":
-                handleUnaryBuiltin(node, operator);
-                break;
-            case "chop":
-            case "chomp":
-                EmitOperator.handleChompBuiltin(this, node);
-                break;
-            case "readdir":
-                EmitOperator.handleReaddirOperator(this, node);
-                break;
-            case "glob":
-                EmitOperator.handleGlobBuiltin(this, node);
-                break;
-            case "rindex":
-            case "index":
-                EmitOperator.handleIndexBuiltin(this, node);
-                break;
-            case "pack", "unpack", "mkdir", "opendir", "seekdir", "crypt", "vec", "each":
-                EmitOperator.handleVecBuiltin(this, node);
-                break;
-            case "atan2":
-                EmitOperator.handleAtan2(this, node);
-                break;
-            case "scalar":
-                EmitOperator.handleScalar(this, node);
-                break;
-            case "delete":
-            case "exists":
-                EmitOperator.handleDeleteExists(this, node);
-                break;
-            case "local":
-                EmitOperator.handleLocal(this, node);
-                break;
-            case "int":
-                handleUnaryBuiltin(node, "integer");
-                break;
-            case "++":
-                handleUnaryBuiltin(node, "preAutoIncrement");
-                break;
-            case "--":
-                handleUnaryBuiltin(node, "preAutoDecrement");
-                break;
-            case "++postfix":
-                handleUnaryBuiltin(node, "postAutoIncrement");
-                break;
-            case "--postfix":
-                handleUnaryBuiltin(node, "postAutoDecrement");
-                break;
-            case "\\":
-                handleCreateReference(node);
-                break;
-            case "$#":
-                node = new OperatorNode("$#", new OperatorNode("@", node.operand, node.tokenIndex), node.tokenIndex);
-                handleArrayUnaryBuiltin(node, "indexLastElem");
-                break;
-            case "die":
-            case "warn":
-                EmitOperator.handleDieBuiltin(this, node);
-                break;
-            case "reverse":
-            case "unlink":
-                EmitOperator.handleReverseBuiltin(this, node);
-                break;
-            case "splice":
-                EmitOperator.handleSpliceBuiltin(this, node);
-                break;
-            case "pop":
-            case "shift":
-                handleArrayUnaryBuiltin(node, operator);
-                break;
-            case "matchRegex", "quoteRegex", "replaceRegex", "tr", "y", "qx":
-                EmitRegex.handleRegex(this, node);
-                break;
-            default:
-                if (operator.length() == 2 && operator.charAt(0) == '-') {
-                    // -d -e -f
-                    handleFileTestBuiltin(node);
-                    return;
-                }
-                throw new PerlCompilerException(node.tokenIndex, "Not implemented: operator: " + operator, ctx.errorUtil);
-        }
+        EmitOperatorNode.emitOperatorNode(this, node);
     }
 
-    private void handleCreateReference(OperatorNode node) {
+    void handleCreateReference(OperatorNode node) {
         MethodVisitor mv = ctx.mv;
         if (node.operand instanceof ListNode) {
             // operand is a list:  `\(1,2,3)`
