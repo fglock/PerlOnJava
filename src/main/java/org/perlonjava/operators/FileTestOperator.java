@@ -135,7 +135,7 @@ public class FileTestOperator {
                 }
                 case "-t" ->
                     // Check if the standard input is a TTY
-                    getScalarBoolean(System.console() != null);
+                        getScalarBoolean(System.console() != null);
                 default -> throw new UnsupportedOperationException("Unsupported file test operator: " + operator);
             };
         } catch (IOException e) {

@@ -43,7 +43,7 @@ public class OperatorParser {
             }
 
             parser.parsingForLoopVariable = true;
-            Node var = parser.parsePrimary();
+            Node var = ParsePrimary.parsePrimary(parser);
             parser.parsingForLoopVariable = false;
             operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
             operand.handle = var;
@@ -92,7 +92,7 @@ public class OperatorParser {
             }
 
             parser.parsingForLoopVariable = true;
-            Node var = parser.parsePrimary();
+            Node var = ParsePrimary.parsePrimary(parser);
             parser.parsingForLoopVariable = false;
             TokenUtils.consume(parser, OPERATOR, ",");
             operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
@@ -468,7 +468,7 @@ public class OperatorParser {
             case "values":
             case "keys":
             case "each":
-                operand = parser.parsePrimary();
+                operand = ParsePrimary.parsePrimary(parser);
                 if (operand instanceof ListNode listNode) {
                     if (listNode.elements.size() != 1) {
                         throw new PerlCompilerException(parser.tokenIndex, "Too many arguments for " + token.text, parser.ctx.errorUtil);
@@ -483,7 +483,7 @@ public class OperatorParser {
             case "local":
                 // Handle 'local' keyword as a unary operator with an operand
                 if (peek(parser).text.equals("(")) {
-                    operand = parser.parsePrimary();
+                    operand = ParsePrimary.parsePrimary(parser);
                 } else {
                     operand = parser.parseExpression(parser.getPrecedence("++"));
                 }
@@ -553,7 +553,7 @@ public class OperatorParser {
             }
 
             parser.parsingForLoopVariable = true;
-            Node var = parser.parsePrimary();
+            Node var = ParsePrimary.parsePrimary(parser);
             parser.parsingForLoopVariable = false;
             operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
             operand.handle = var;
@@ -602,7 +602,7 @@ public class OperatorParser {
     private static OperatorNode parseVariableDeclaration(Parser parser, String operator, int currentIndex) {
 
         // Create OperatorNode ($, @, %), ListNode (includes undef), SubroutineNode
-        Node operand = parser.parsePrimary();
+        Node operand = ParsePrimary.parsePrimary(parser);
         parser.ctx.logDebug("parseVariableDeclaration " + operator + ": " + operand);
 
         // Add variables to the scope

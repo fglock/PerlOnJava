@@ -1,0 +1,146 @@
+package org.perlonjava.parser;
+
+import org.perlonjava.astnode.*;
+import org.perlonjava.lexer.LexerToken;
+import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.runtime.PerlCompilerException;
+
+import static org.perlonjava.parser.TokenUtils.peek;
+
+public class ParseInfix {
+    /**
+     * Parses infix operators and their right-hand operands.
+     * This method handles binary operators, ternary operators, and special cases like method calls and subscripts.
+     *
+     * @param parser
+     * @param left       The left-hand operand of the infix operation.
+     * @param precedence The current precedence level for parsing.
+     * @return A node representing the parsed infix operation.
+     * @throws PerlCompilerException If there's an unexpected infix operator or syntax error.
+     */
+    public static Node parseInfixOperation(Parser parser, Node left, int precedence) {
+        LexerToken token = TokenUtils.consume(parser);
+
+        Node right;
+
+        if (Parser.INFIX_OP.contains(token.text)) {
+            String operator = token.text;
+            boolean operatorEnabled = switch (operator) {
+                case "isa" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("isa");
+                case "&.", "|.", "^.", "&.=", "|.=", "^.=" ->
+                        parser.ctx.symbolTable.isFeatureCategoryEnabled("bitwise");
+                case "&", "|", "^", "&=", "|=", "^=" -> {
+                    if (parser.ctx.symbolTable.isFeatureCategoryEnabled("bitwise")) {
+                        operator = "binary" + operator;
+                    }
+                    yield true;
+                }
+                default -> true;
+            };
+            if (!operatorEnabled) {
+                throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
+            }
+
+            right = parser.parseExpression(precedence);
+            if (right == null) {
+                throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
+            }
+            return new BinaryOperatorNode(operator, left, right, parser.tokenIndex);
+        }
+
+        switch (token.text) {
+            case ",":
+            case "=>":
+                if (token.text.equals("=>") && left instanceof IdentifierNode) {
+                    // Autoquote - Convert IdentifierNode to StringNode
+                    left = new StringNode(((IdentifierNode) left).name, ((IdentifierNode) left).tokenIndex);
+                }
+                token = peek(parser);
+                if (token.type == LexerTokenType.EOF || Parser.LIST_TERMINATORS.contains(token.text) || token.text.equals(",") || token.text.equals("=>")) {
+                    // "postfix" comma
+                    return ListNode.makeList(left);
+                }
+                right = parser.parseExpression(precedence);
+                return ListNode.makeList(left, right);
+            case "?":
+                Node middle = parser.parseExpression(0);
+                TokenUtils.consume(parser, LexerTokenType.OPERATOR, ":");
+                right = parser.parseExpression(precedence);
+                return new TernaryOperatorNode(token.text, left, middle, right, parser.tokenIndex);
+            case "->":
+                String nextText = peek(parser).text;
+                switch (nextText) {
+                    case "(":
+                        TokenUtils.consume(parser);
+                        right = new ListNode(ListParser.parseList(parser, ")", 0), parser.tokenIndex);
+                        return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
+                    case "{":
+                        TokenUtils.consume(parser);
+                        right = new HashLiteralNode(parser.parseHashSubscript(), parser.tokenIndex);
+                        return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
+                    case "[":
+                        TokenUtils.consume(parser);
+                        right = new ArrayLiteralNode(ListParser.parseList(parser, "]", 1), parser.tokenIndex);
+                        return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
+                    case "@*":
+                        TokenUtils.consume(parser);
+                        return new OperatorNode("@", left, parser.tokenIndex);
+                    case "$*":
+                        TokenUtils.consume(parser);
+                        return new OperatorNode("$", left, parser.tokenIndex);
+                    case "%*":
+                        TokenUtils.consume(parser);
+                        return new OperatorNode("%", left, parser.tokenIndex);
+                    case "&*":
+                        TokenUtils.consume(parser);
+                        return new BinaryOperatorNode("(",
+                                left,
+                                new OperatorNode("@",
+                                        new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex),
+                                parser.tokenIndex);
+                    case "@":
+                        // ->@[0,-1];
+                        TokenUtils.consume(parser);
+                        right = ParsePrimary.parsePrimary(parser);
+                        if (right instanceof HashLiteralNode) {
+                            return new BinaryOperatorNode("{",
+                                    new OperatorNode("@", left, parser.tokenIndex),
+                                    right,
+                                    parser.tokenIndex);
+                        } else if (right instanceof ArrayLiteralNode) {
+                            return new BinaryOperatorNode("[",
+                                    new OperatorNode("@", left, parser.tokenIndex),
+                                    right,
+                                    parser.tokenIndex);
+                        } else {
+                            throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
+                        }
+                }
+                parser.parsingForLoopVariable = true;
+                right = parser.parseExpression(precedence);
+                parser.parsingForLoopVariable = false;
+
+                if (right instanceof BinaryOperatorNode && ((BinaryOperatorNode) right).operator.equals("(")) {
+                    // right has parameter list
+                } else {
+                    // insert an empty parameter list
+                    right = new BinaryOperatorNode("(", right, new ListNode(parser.tokenIndex), parser.tokenIndex);
+                }
+
+                return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
+            case "(":
+                right = new ListNode(ListParser.parseList(parser, ")", 0), parser.tokenIndex);
+                return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
+            case "{":
+                right = new HashLiteralNode(parser.parseHashSubscript(), parser.tokenIndex);
+                return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
+            case "[":
+                right = new ArrayLiteralNode(ListParser.parseList(parser, "]", 1), parser.tokenIndex);
+                return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
+            case "--":
+            case "++":
+                return new OperatorNode(token.text + "postfix", left, parser.tokenIndex);
+        }
+        throw new PerlCompilerException(parser.tokenIndex, "Unexpected infix operator: " + token, parser.ctx.errorUtil);
+    }
+}

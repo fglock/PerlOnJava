@@ -77,7 +77,7 @@ public class StatementParser {
         LexerToken token = TokenUtils.peek(parser); // "my" "$" "("
         if (token.text.equals("my") || token.text.equals("$")) {
             parser.parsingForLoopVariable = true;
-            varNode = parser.parsePrimary();
+            varNode = ParsePrimary.parsePrimary(parser);
             parser.parsingForLoopVariable = false;
         }
 

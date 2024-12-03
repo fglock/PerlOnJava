@@ -1,6 +1,9 @@
 package org.perlonjava.parser;
 
-import org.perlonjava.astnode.*;
+import org.perlonjava.astnode.BlockNode;
+import org.perlonjava.astnode.IdentifierNode;
+import org.perlonjava.astnode.ListNode;
+import org.perlonjava.astnode.Node;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
@@ -8,9 +11,7 @@ import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.*;
 
-import static org.perlonjava.parser.TokenUtils.consume;
 import static org.perlonjava.parser.TokenUtils.peek;
-import static org.perlonjava.runtime.GlobalVariable.existsGlobalCodeRef;
 
 public class Parser {
     public static final Set<String> TERMINATORS =
@@ -34,24 +35,6 @@ public class Parser {
     private static final Set<String> RIGHT_ASSOC_OP = Set.of(
             "=", "**=", "+=", "*=", "&=", "&.=", "<<=", "&&=", "-=", "/=", "|=", "|.=",
             ">>=", "||=", ".=", "%=", "^=", "^.=", "//=", "x=", "**", "?"
-    );
-
-    // The list below was obtained by running this in the perl git:
-    // ack  'CORE::GLOBAL::\w+' | perl -n -e ' /CORE::GLOBAL::(\w+)/ && print $1, "\n" ' | sort -u
-    private static final Set<String> OVERRIDABLE_OP = Set.of(
-            "caller", "chdir", "close", "connect",
-            "die", "do",
-            "exit",
-            "fork",
-            "getpwuid", "glob",
-            "hex",
-            "kill",
-            "oct", "open",
-            "readline", "readpipe", "rename", "require",
-            "stat",
-            "time",
-            "uc",
-            "warn"
     );
 
     private static final Map<String, Integer> precedenceMap = new HashMap<>();
@@ -122,7 +105,7 @@ public class Parser {
             if (token.text.equals(";")) {
                 TokenUtils.consume(this);
             } else {
-                statements.add(parseStatement());
+                statements.add(ParseStatement.parseStatement(this));
             }
             token = peek(this);
         }
@@ -131,136 +114,6 @@ public class Parser {
         }
         ctx.symbolTable.exitScope();
         return new BlockNode(statements, currentIndex);
-    }
-
-    public Node parseStatement() {
-        int currentIndex = tokenIndex;
-        LexerToken token = peek(this);
-        ctx.logDebug("parseStatement `" + token.text + "`");
-
-        // check for label:
-        String label = null;
-        if (token.type == LexerTokenType.IDENTIFIER) {
-            String id = TokenUtils.consume(this).text;
-            if (peek(this).text.equals(":")) {
-                label = id;
-                TokenUtils.consume(this);
-                token = peek(this);
-            } else {
-                tokenIndex = currentIndex;  // backtrack
-            }
-        }
-
-        if (token.type == LexerTokenType.IDENTIFIER) {
-            switch (token.text) {
-                case "CHECK", "INIT", "UNITCHECK", "BEGIN", "END":
-                    return SpecialBlockParser.parseSpecialBlock(this);
-                case "if", "unless":
-                    return StatementParser.parseIfStatement(this);
-                case "for", "foreach":
-                    return StatementParser.parseForStatement(this, label);
-                case "while", "until":
-                    return StatementParser.parseWhileStatement(this, label);
-                case "try":
-                    if (ctx.symbolTable.isFeatureCategoryEnabled("try")) {
-                        return StatementParser.parseTryStatement(this);
-                    }
-                    break;
-                case "package":
-                    return StatementParser.parsePackageDeclaration(this, token);
-                case "use", "no":
-                    return StatementParser.parseUseDeclaration(this, token);
-                case "sub":
-                    // Must be followed by an identifier
-                    tokenIndex++;
-                    if (peek(this).type == LexerTokenType.IDENTIFIER) {
-                        return SubroutineParser.parseSubroutineDefinition(this, true, "our");
-                    }
-                    // otherwise backtrack
-                    tokenIndex = currentIndex;
-                    break;
-                case "our", "my", "state":
-                    String declaration = consume(this).text;
-                    if (consume(this).text.equals("sub") && peek(this).type == LexerTokenType.IDENTIFIER) {
-                        // my sub name
-                        return SubroutineParser.parseSubroutineDefinition(this, true, declaration);
-                    }
-                    // otherwise backtrack
-                    tokenIndex = currentIndex;
-                    break;
-            }
-        }
-        if (token.type == LexerTokenType.OPERATOR) {
-            switch (token.text) {
-                case "...":
-                    TokenUtils.consume(this);
-                    return new OperatorNode(
-                            "die",
-                            new StringNode("Unimplemented", tokenIndex),
-                            tokenIndex);
-                case "{":
-                    if (!isHashLiteral()) { // bare-block
-                        TokenUtils.consume(this, LexerTokenType.OPERATOR, "{");
-                        BlockNode block = parseBlock();
-                        block.isLoop = true;
-                        block.labelName = label;
-                        TokenUtils.consume(this, LexerTokenType.OPERATOR, "}");
-                        return block;
-                    }
-            }
-        }
-        Node expression = parseExpression(0);
-        token = peek(this);
-        if (token.type == LexerTokenType.IDENTIFIER) {
-            // statement modifier: if, for ...
-            switch (token.text) {
-                case "if":
-                    TokenUtils.consume(this);
-                    Node modifierExpression = parseExpression(0);
-                    parseStatementTerminator();
-                    return new BinaryOperatorNode("&&", modifierExpression, expression, tokenIndex);
-                case "unless":
-                    TokenUtils.consume(this);
-                    modifierExpression = parseExpression(0);
-                    parseStatementTerminator();
-                    return new BinaryOperatorNode("||", modifierExpression, expression, tokenIndex);
-                case "for", "foreach":
-                    TokenUtils.consume(this);
-                    modifierExpression = parseExpression(0);
-                    parseStatementTerminator();
-                    return new For1Node(
-                            null,
-                            false,
-                            new OperatorNode("$", new IdentifierNode("_", tokenIndex), tokenIndex),  // $_
-                            modifierExpression,
-                            expression,
-                            null,
-                            tokenIndex);
-                case "while", "until":
-                    TokenUtils.consume(this);
-                    modifierExpression = parseExpression(0);
-                    parseStatementTerminator();
-                    if (token.text.equals("until")) {
-                        modifierExpression = new OperatorNode("not", modifierExpression, modifierExpression.getIndex());
-                    }
-                    boolean isDoWhile = false;
-                    if (expression instanceof BlockNode) {
-                        // special case:  `do { BLOCK } while CONDITION`
-                        // executes the loop at least once
-                        ctx.logDebug("do-while " + expression);
-                        isDoWhile = true;
-                    }
-                    return new For3Node(null,
-                            false,
-                            null, modifierExpression,
-                            null, expression, null,
-                            isDoWhile,
-                            tokenIndex);
-            }
-            throw new PerlCompilerException(tokenIndex, "Not implemented: " + token, ctx.errorUtil);
-        }
-        parseStatementTerminator();
-        return expression;
     }
 
     public void parseStatementTerminator() {
@@ -333,7 +186,7 @@ public class Parser {
      */
     public Node parseExpression(int precedence) {
         // First, parse the primary expression (like a number or a variable).
-        Node left = parsePrimary();
+        Node left = ParsePrimary.parsePrimary(this);
 
         // Continuously process tokens until we reach the end of the expression.
         while (true) {
@@ -368,319 +221,16 @@ public class Parser {
             // If the operator is right associative (like exponentiation), parse it with lower precedence.
             if (RIGHT_ASSOC_OP.contains(token.text)) {
                 ctx.logDebug("parseExpression `" + token.text + "` precedence: " + tokenPrecedence + " right assoc");
-                left = parseInfixOperation(left, tokenPrecedence - 1); // Parse the right side with lower precedence.
+                left = ParseInfix.parseInfixOperation(this, left, tokenPrecedence - 1); // Parse the right side with lower precedence.
             } else {
                 // Otherwise, parse it normally with the same precedence.
                 ctx.logDebug("parseExpression `" + token.text + "` precedence: " + tokenPrecedence + " left assoc");
-                left = parseInfixOperation(left, tokenPrecedence);
+                left = ParseInfix.parseInfixOperation(this, left, tokenPrecedence);
             }
         }
 
         // Return the root node of the constructed expression tree.
         return left;
-    }
-
-    public Node parsePrimary() {
-        int startIndex = tokenIndex;
-        LexerToken token = TokenUtils.consume(this); // Consume the next token from the input
-        String operator = token.text;
-        Node operand;
-
-        switch (token.type) {
-            case IDENTIFIER:
-                String nextTokenText = peek(this).text;
-                if (nextTokenText.equals("=>")) {
-                    // Autoquote
-                    return new StringNode(token.text, tokenIndex);
-                }
-
-                boolean operatorEnabled = false;
-                boolean calledWithCore = false;
-
-                // Try to parse a builtin operation; backtrack if it fails
-                if (token.text.equals("CORE") && nextTokenText.equals("::")) {
-                    calledWithCore = true;
-                    operatorEnabled = true;
-                    TokenUtils.consume(this);  // "::"
-                    token = TokenUtils.consume(this); // operator
-                    operator = token.text;
-                } else if (!nextTokenText.equals("::")) {
-                    // Check if the operator is enabled in the current scope
-                    operatorEnabled = switch (operator) {
-                        case "say", "fc", "state", "evalbytes" -> ctx.symbolTable.isFeatureCategoryEnabled(operator);
-                        case "__SUB__" -> ctx.symbolTable.isFeatureCategoryEnabled("current_sub");
-                        default -> true;
-                    };
-                }
-
-                if (!calledWithCore && operatorEnabled && OVERRIDABLE_OP.contains(operator)) {
-                    // It is possible to override the core function by defining
-                    // a subroutine in the current package, or in CORE::GLOBAL::
-                    //
-                    // Optimization: only test this if an override was defined
-                    //
-                    if (existsGlobalCodeRef(ctx.symbolTable.getCurrentPackage() + "::" + operator)) {
-                        // ' use subs "hex"; sub hex { 456 } print hex("123"), "\n" '
-                        tokenIndex = startIndex;   // backtrack
-                        return SubroutineParser.parseSubroutineCall(this);
-                    }
-                    if (existsGlobalCodeRef("CORE::GLOBAL::" + operator)) {
-                        // ' BEGIN { *CORE::GLOBAL::hex = sub { 456 } } print hex("123"), "\n" '
-                        tokenIndex = startIndex;   // backtrack
-                        // Rewrite the subroutine name
-                        tokens.add(startIndex, new LexerToken(LexerTokenType.IDENTIFIER, "CORE"));
-                        tokens.add(startIndex+1, new LexerToken(LexerTokenType.OPERATOR, "::"));
-                        tokens.add(startIndex+2, new LexerToken(LexerTokenType.IDENTIFIER, "GLOBAL"));
-                        tokens.add(startIndex+3, new LexerToken(LexerTokenType.OPERATOR, "::"));
-                        return SubroutineParser.parseSubroutineCall(this);
-                    }
-                }
-
-                if (operatorEnabled) {
-                    Node operation = OperatorParser.parseCoreOperator(this, token, startIndex);
-                    if (operation != null) {
-                        return operation;
-                    }
-                }
-
-                if (calledWithCore) {
-                    throw new PerlCompilerException(tokenIndex, "CORE::" + operator + " is not a keyword", ctx.errorUtil);
-                }
-
-                // Handle any other identifier as a subroutine call or identifier node
-                tokenIndex = startIndex;   // backtrack
-                return SubroutineParser.parseSubroutineCall(this);
-            case NUMBER:
-                // Handle number literals
-                return NumberParser.parseNumber(this, token);
-            case STRING:
-                // Handle string literals
-                return new StringNode(token.text, tokenIndex);
-            case OPERATOR:
-                switch (token.text) {
-                    case "(":
-                        // Handle parentheses to parse a nested expression or to construct a list
-                        return new ListNode(ListParser.parseList(this, ")", 0), tokenIndex);
-                    case "{":
-                        // Handle curly brackets to parse a nested expression
-                        return new HashLiteralNode(ListParser.parseList(this, "}", 0), tokenIndex);
-                    case "[":
-                        // Handle square brackets to parse a nested expression
-                        return new ArrayLiteralNode(ListParser.parseList(this, "]", 0), tokenIndex);
-                    case ".":
-                        // Handle fractional numbers
-                        return NumberParser.parseFractionalNumber(this);
-                    case "<", "<<":
-                        return OperatorParser.parseDiamondOperator(this, token);
-                    case "'", "\"", "/", "//", "/=", "`":
-                        // Handle single and double-quoted strings
-                        return StringParser.parseRawString(this, token.text);
-                    case "\\":
-                        // Take reference
-                        parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
-                        operand = parseExpression(getPrecedence(token.text) + 1);
-                        parsingTakeReference = false;
-                        return new OperatorNode(token.text, operand, tokenIndex);
-                    case "$", "$#", "@", "%", "*":
-                        return Variable.parseVariable(this, token.text);
-                    case "&":
-                        return Variable.parseCoderefVariable(this, token);
-                    case "!", "+":
-                        // Handle unary operators like `! +`
-                        operand = parseExpression(getPrecedence(token.text) + 1);
-                        return new OperatorNode(token.text, operand, tokenIndex);
-                    case "~", "~.":
-                        // Handle unary operators like `~ ~.`
-                        if (ctx.symbolTable.isFeatureCategoryEnabled("bitwise")) {
-                            if (operator.equals("~")) {
-                                operator = "binary" + operator;
-                            }
-                        } else {
-                            if (operator.equals("~.")) {
-                                throw new PerlCompilerException(tokenIndex, "syntax error", ctx.errorUtil);
-                            }
-                        }
-                        operand = parseExpression(getPrecedence(token.text) + 1);
-                        return new OperatorNode(operator, operand, tokenIndex);
-                    case "--":
-                    case "++":
-                        // Handle unary operators like `++`
-                        operand = parseExpression(getPrecedence(token.text));
-                        return new OperatorNode(token.text, operand, tokenIndex);
-                    case "-":
-                        // Handle unary operators like `- -d`
-                        LexerToken nextToken = tokens.get(tokenIndex);
-                        if (nextToken.type == LexerTokenType.IDENTIFIER && nextToken.text.length() == 1) {
-                            // Handle `-d`
-                            operator = "-" + nextToken.text;
-                            tokenIndex++;
-                            nextToken = peek(this);
-                            if (nextToken.text.equals("_")) {
-                                // Handle `-f _`
-                                TokenUtils.consume(this);
-                                operand = new IdentifierNode("_", tokenIndex);
-                            } else {
-                                operand = ListParser.parseZeroOrOneList(this, 0);
-                                if (((ListNode) operand).elements.isEmpty()) {
-                                    // create `$_` variable
-                                    operand = new OperatorNode(
-                                            "$", new IdentifierNode("_", this.tokenIndex), this.tokenIndex);
-                                }
-                            }
-                            return new OperatorNode(operator, operand, tokenIndex);
-                        }
-                        // Unary minus
-                        operand = parseExpression(getPrecedence(token.text) + 1);
-                        if (operand instanceof IdentifierNode identifierNode) {
-                            // "-name" return string
-                            return new StringNode("-" + identifierNode.name, tokenIndex);
-                        }
-                        return new OperatorNode("unaryMinus", operand, tokenIndex);
-                }
-                break;
-            case EOF:
-                // Handle end of input
-                return null;
-            default:
-                // Throw an exception for any unexpected token
-                throw new PerlCompilerException(tokenIndex, "syntax error", ctx.errorUtil);
-        }
-        // Throw an exception if no valid case was found
-        throw new PerlCompilerException(tokenIndex, "syntax error", ctx.errorUtil);
-    }
-
-    /**
-     * Parses infix operators and their right-hand operands.
-     * This method handles binary operators, ternary operators, and special cases like method calls and subscripts.
-     *
-     * @param left       The left-hand operand of the infix operation.
-     * @param precedence The current precedence level for parsing.
-     * @return A node representing the parsed infix operation.
-     * @throws PerlCompilerException If there's an unexpected infix operator or syntax error.
-     */
-    public Node parseInfixOperation(Node left, int precedence) {
-        LexerToken token = TokenUtils.consume(this);
-
-        Node right;
-
-        if (INFIX_OP.contains(token.text)) {
-            String operator = token.text;
-            boolean operatorEnabled = switch (operator) {
-                case "isa" -> ctx.symbolTable.isFeatureCategoryEnabled("isa");
-                case "&.", "|.", "^.", "&.=", "|.=", "^.=" -> ctx.symbolTable.isFeatureCategoryEnabled("bitwise");
-                case "&", "|", "^", "&=", "|=", "^=" -> {
-                    if (ctx.symbolTable.isFeatureCategoryEnabled("bitwise")) {
-                        operator = "binary" + operator;
-                    }
-                    yield true;
-                }
-                default -> true;
-            };
-            if (!operatorEnabled) {
-                throw new PerlCompilerException(tokenIndex, "syntax error", ctx.errorUtil);
-            }
-
-            right = parseExpression(precedence);
-            if (right == null) {
-                throw new PerlCompilerException(tokenIndex, "syntax error", ctx.errorUtil);
-            }
-            return new BinaryOperatorNode(operator, left, right, tokenIndex);
-        }
-
-        switch (token.text) {
-            case ",":
-            case "=>":
-                if (token.text.equals("=>") && left instanceof IdentifierNode) {
-                    // Autoquote - Convert IdentifierNode to StringNode
-                    left = new StringNode(((IdentifierNode) left).name, ((IdentifierNode) left).tokenIndex);
-                }
-                token = peek(this);
-                if (token.type == LexerTokenType.EOF || LIST_TERMINATORS.contains(token.text) || token.text.equals(",") || token.text.equals("=>")) {
-                    // "postfix" comma
-                    return ListNode.makeList(left);
-                }
-                right = parseExpression(precedence);
-                return ListNode.makeList(left, right);
-            case "?":
-                Node middle = parseExpression(0);
-                TokenUtils.consume(this, LexerTokenType.OPERATOR, ":");
-                right = parseExpression(precedence);
-                return new TernaryOperatorNode(token.text, left, middle, right, tokenIndex);
-            case "->":
-                String nextText = peek(this).text;
-                switch (nextText) {
-                    case "(":
-                        TokenUtils.consume(this);
-                        right = new ListNode(ListParser.parseList(this, ")", 0), tokenIndex);
-                        return new BinaryOperatorNode(token.text, left, right, tokenIndex);
-                    case "{":
-                        TokenUtils.consume(this);
-                        right = new HashLiteralNode(parseHashSubscript(), tokenIndex);
-                        return new BinaryOperatorNode(token.text, left, right, tokenIndex);
-                    case "[":
-                        TokenUtils.consume(this);
-                        right = new ArrayLiteralNode(ListParser.parseList(this, "]", 1), tokenIndex);
-                        return new BinaryOperatorNode(token.text, left, right, tokenIndex);
-                    case "@*":
-                        TokenUtils.consume(this);
-                        return new OperatorNode("@", left, tokenIndex);
-                    case "$*":
-                        TokenUtils.consume(this);
-                        return new OperatorNode("$", left, tokenIndex);
-                    case "%*":
-                        TokenUtils.consume(this);
-                        return new OperatorNode("%", left, tokenIndex);
-                    case "&*":
-                        TokenUtils.consume(this);
-                        return new BinaryOperatorNode("(",
-                                left,
-                                new OperatorNode("@",
-                                        new IdentifierNode("_", tokenIndex), tokenIndex),
-                                tokenIndex);
-                    case "@":
-                        // ->@[0,-1];
-                        TokenUtils.consume(this);
-                        right = parsePrimary();
-                        if (right instanceof HashLiteralNode) {
-                            return new BinaryOperatorNode("{",
-                                    new OperatorNode("@", left, tokenIndex),
-                                    right,
-                                    tokenIndex);
-                        } else if (right instanceof ArrayLiteralNode) {
-                            return new BinaryOperatorNode("[",
-                                    new OperatorNode("@", left, tokenIndex),
-                                    right,
-                                    tokenIndex);
-                        } else {
-                            throw new PerlCompilerException(tokenIndex, "syntax error", ctx.errorUtil);
-                        }
-                }
-                parsingForLoopVariable = true;
-                right = parseExpression(precedence);
-                parsingForLoopVariable = false;
-
-                if (right instanceof BinaryOperatorNode && ((BinaryOperatorNode) right).operator.equals("(")) {
-                    // right has parameter list
-                } else {
-                    // insert an empty parameter list
-                    right = new BinaryOperatorNode("(", right, new ListNode(tokenIndex), tokenIndex);
-                }
-
-                return new BinaryOperatorNode(token.text, left, right, tokenIndex);
-            case "(":
-                right = new ListNode(ListParser.parseList(this, ")", 0), tokenIndex);
-                return new BinaryOperatorNode(token.text, left, right, tokenIndex);
-            case "{":
-                right = new HashLiteralNode(parseHashSubscript(), tokenIndex);
-                return new BinaryOperatorNode(token.text, left, right, tokenIndex);
-            case "[":
-                right = new ArrayLiteralNode(ListParser.parseList(this, "]", 1), tokenIndex);
-                return new BinaryOperatorNode(token.text, left, right, tokenIndex);
-            case "--":
-            case "++":
-                return new OperatorNode(token.text + "postfix", left, tokenIndex);
-        }
-        throw new PerlCompilerException(tokenIndex, "Unexpected infix operator: " + token, ctx.errorUtil);
     }
 
     public boolean isSpaceAfterPrintBlock() {
@@ -722,7 +272,7 @@ public class Parser {
         return isSpace;
     }
 
-    private List<Node> parseHashSubscript() {
+    List<Node> parseHashSubscript() {
         ctx.logDebug("parseHashSubscript start");
         int currentIndex = tokenIndex;
 

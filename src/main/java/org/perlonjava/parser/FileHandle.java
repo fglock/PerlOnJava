@@ -36,7 +36,7 @@ public class FileHandle {
             }
         } else if (token.text.equals("$")) {
             // variable name
-            fileHandle = parser.parsePrimary();
+            fileHandle = ParsePrimary.parsePrimary(parser);
             if (!hasBracket) {
                 // assert that is not followed by infix
                 String nextText = peek(parser).text;
