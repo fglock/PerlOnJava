@@ -382,7 +382,7 @@ public class StatementParser {
                         ctx.logDebug("Use call : " + importMethod + "(" + args + ")");
                         RuntimeArray importArgs = args.getArrayOfAlias();
                         importArgs.unshift(new RuntimeScalar(packageName));
-                        code.apply(importArgs, RuntimeContextType.SCALAR);
+                        RuntimeCode.apply(code, importArgs, RuntimeContextType.SCALAR);
                     }
                 }
             }

@@ -457,50 +457,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         };
     }
 
-    // Method to apply (execute) a subroutine reference
-    public RuntimeList apply(RuntimeArray a, int callContext) {
-        // Check if the type of this RuntimeScalar is CODE
-        if (this.type == RuntimeScalarType.CODE) {
-            // Cast the value to RuntimeCode and call apply()
-            return ((RuntimeCode) this.value).apply(a, callContext);
-        } else {
-            // If the type is not CODE, throw an exception indicating an invalid state
-            throw new PerlCompilerException("Not a CODE reference");
-        }
-    }
-
-    // Method to apply (execute) a subroutine reference
-    public RuntimeList apply(String subroutineName, RuntimeArray a, int callContext) {
-        // Check if the type of this RuntimeScalar is CODE
-        if (this.type == RuntimeScalarType.CODE) {
-            // Cast the value to RuntimeCode and call apply()
-            return ((RuntimeCode) this.value).apply(subroutineName, a, callContext);
-        } else {
-            // If the type is not CODE, throw an exception indicating an invalid state
-
-            // Does AUTOLOAD exist?
-            if (!subroutineName.isEmpty()) {
-                // Check if AUTOLOAD exists
-                String autoloadString = subroutineName.substring(0, subroutineName.lastIndexOf("::") + 2) + "AUTOLOAD";
-                // System.err.println("AUTOLOAD: " + fullName);
-                RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
-                if (autoload.getDefinedBoolean()) {
-                    // System.err.println("AUTOLOAD exists: " + fullName);
-                    // Set $AUTOLOAD name
-                    getGlobalVariable(autoloadString).set(subroutineName);
-                    // Call AUTOLOAD
-                    return autoload.apply(a, callContext);
-                }
-            }
-
-            if (!subroutineName.isEmpty() && this.type == RuntimeScalarType.GLOB && this.value == null) {
-                throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
-            }
-
-            throw new PerlCompilerException("Not a CODE reference");
-        }
-    }
-
     /**
      * "Blesses" a Perl reference into an object by associating it with a class name.
      * This method is used to convert a Perl reference into an object of a specified class.

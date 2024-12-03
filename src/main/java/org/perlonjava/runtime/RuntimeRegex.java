@@ -275,7 +275,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
             String replacementStr;
             if (replacementIsCode) {
                 // Evaluate the replacement as code
-                replacementStr = replacement.apply(new RuntimeArray(), RuntimeContextType.SCALAR).toString();
+                replacementStr = RuntimeCode.apply(replacement, new RuntimeArray(), RuntimeContextType.SCALAR).toString();
             } else {
                 // Replace the match with the replacement string
                 replacementStr = replacement.toString();

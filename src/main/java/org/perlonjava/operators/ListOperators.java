@@ -33,7 +33,7 @@ public class ListOperators {
                 var_.set(element);
 
                 // Apply the Perl map subroutine with the argument
-                RuntimeList result = perlMapClosure.apply(mapArgs, RuntimeContextType.LIST);
+                RuntimeList result = RuntimeCode.apply(perlMapClosure, mapArgs, RuntimeContextType.LIST);
 
                 // `result` list contains aliases to the original array;
                 // We need to make copies of the result elements
@@ -81,7 +81,7 @@ public class ListOperators {
                 varB.set(b);
 
                 // Apply the Perl comparator subroutine with the arguments
-                RuntimeList result = perlComparatorClosure.apply(comparatorArgs, RuntimeContextType.SCALAR);
+                RuntimeList result = RuntimeCode.apply(perlComparatorClosure, comparatorArgs, RuntimeContextType.SCALAR);
 
                 // Retrieve the comparison result and return it as an integer
                 return result.elements.get(0).scalar().getInt();
@@ -123,7 +123,7 @@ public class ListOperators {
                 var_.set(element);
 
                 // Apply the Perl filter subroutine with the argument
-                RuntimeList result = perlFilterClosure.apply(filterArgs, RuntimeContextType.SCALAR);
+                RuntimeList result = RuntimeCode.apply(perlFilterClosure, filterArgs, RuntimeContextType.SCALAR);
 
                 // Check the result of the filter subroutine
                 if (result.elements.getFirst().scalar().getBoolean()) {

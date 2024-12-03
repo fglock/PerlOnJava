@@ -45,7 +45,7 @@ public class WarnDie {
             int level = DynamicVariableManager.getLocalLevel();
             DynamicVariableManager.pushLocalVariable(sig);
 
-            RuntimeScalar res = sigHandler.apply(args, RuntimeContextType.SCALAR).scalar();
+            RuntimeScalar res = RuntimeCode.apply(sigHandler, args, RuntimeContextType.SCALAR).scalar();
 
             // Restore $SIG{__WARN__}
             DynamicVariableManager.popToLocalLevel(level);
@@ -89,7 +89,7 @@ public class WarnDie {
         if (sig.getDefinedBoolean()) {
             RuntimeArray args = new RuntimeArray();
             new RuntimeScalar(out).setArrayOfAlias(args);
-            return sig.apply(args, RuntimeContextType.SCALAR);
+            return RuntimeCode.apply(sig, args, RuntimeContextType.SCALAR);
         }
 
         throw new PerlCompilerException(out);

@@ -53,7 +53,7 @@ public class SpecialBlock {
         while (endBlocks.size() > 0) {
             RuntimeScalar block = endBlocks.pop();
             if (block.getDefinedBoolean()) {
-                block.apply(new RuntimeArray(), RuntimeContextType.VOID);
+                RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
             }
         }
     }
@@ -65,7 +65,7 @@ public class SpecialBlock {
         while (initBlocks.size() > 0) {
             RuntimeScalar block = initBlocks.pop();
             if (block.getDefinedBoolean()) {
-                block.apply(new RuntimeArray(), RuntimeContextType.VOID);
+                RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
             }
         }
     }
@@ -77,7 +77,7 @@ public class SpecialBlock {
         while (checkBlocks.size() > 0) {
             RuntimeScalar block = checkBlocks.pop();
             if (block.getDefinedBoolean()) {
-                block.apply(new RuntimeArray(), RuntimeContextType.VOID);
+                RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
             }
         }
     }
@@ -91,7 +91,7 @@ public class SpecialBlock {
         while (unitcheckBlocks.size() > 0) {
             RuntimeScalar block = unitcheckBlocks.pop();
             if (block.getDefinedBoolean()) {
-                block.apply(new RuntimeArray(), RuntimeContextType.VOID);
+                RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
             }
         }
     }

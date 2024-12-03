@@ -144,7 +144,7 @@ public class Time {
             RuntimeScalar alarmHandler = getGlobalHash("main::SIG").get("ALRM");
             if (alarmHandler.getDefinedBoolean()) {
                 RuntimeArray args = new RuntimeArray();
-                alarmHandler.apply(args, RuntimeContextType.SCALAR);
+                RuntimeCode.apply(alarmHandler, args, RuntimeContextType.SCALAR);
             }
         }
         long endTime = System.currentTimeMillis();

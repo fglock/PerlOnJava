@@ -167,10 +167,10 @@ public class EmitVariable {
                 mv.visitVarInsn(Opcodes.ALOAD, 1);  // push @_ to stack
                 emitterVisitor.pushCallContext();   // push call context to stack
                 mv.visitMethodInsn(
-                        Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/RuntimeScalar",
+                        Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/RuntimeCode",
                         "apply",
-                        "(Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
+                        "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                         false); // generate an .apply() call
                 return;
         }

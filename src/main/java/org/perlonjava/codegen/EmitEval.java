@@ -163,10 +163,10 @@ public class EmitEval {
 
         // Call the apply method to execute the eval
         mv.visitMethodInsn(
-                Opcodes.INVOKEVIRTUAL,
-                "org/perlonjava/runtime/RuntimeScalar",
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/RuntimeCode",
                 "apply",
-                "(Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
+                "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                 false);
         // Stack: [RuntimeList]
 

@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 import static org.perlonjava.runtime.SpecialBlock.runUnitcheckBlocks;
 
@@ -212,7 +213,7 @@ public class RuntimeCode implements RuntimeScalarReference {
 
         if (method.type == RuntimeScalarType.CODE) {
             // If method is a subroutine reference, just call it
-            return method.apply(args, callContext);
+            return apply(method, args, callContext);
         }
 
         String methodName = method.toString();
@@ -277,7 +278,7 @@ public class RuntimeCode implements RuntimeScalarReference {
                     // Save the method in the cache
                     InheritanceResolver.cacheMethod(normalizedClassMethodName, codeRef);
 
-                    return codeRef.apply(args, callContext);
+                    return apply(codeRef, args, callContext);
                 }
             }
 
@@ -289,7 +290,7 @@ public class RuntimeCode implements RuntimeScalarReference {
         String normalizedMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
         RuntimeScalar cachedMethod = InheritanceResolver.getCachedMethod(normalizedMethodName);
         if (cachedMethod != null) {
-            return cachedMethod.apply(args, callContext);
+            return apply(cachedMethod, args, callContext);
         }
 
         // Get the linearized inheritance hierarchy using C3
@@ -307,7 +308,7 @@ public class RuntimeCode implements RuntimeScalarReference {
                 // Save the method in the cache
                 InheritanceResolver.cacheMethod(normalizedMethodName, codeRef);
 
-                return codeRef.apply(args, callContext);
+                return apply(codeRef, args, callContext);
             }
         }
 
@@ -347,6 +348,50 @@ public class RuntimeCode implements RuntimeScalarReference {
             }
         }
         return res;
+    }
+
+    // Method to apply (execute) a subroutine reference
+    public static RuntimeList apply(RuntimeScalar runtimeScalar, RuntimeArray a, int callContext) {
+        // Check if the type of this RuntimeScalar is CODE
+        if (runtimeScalar.type == RuntimeScalarType.CODE) {
+            // Cast the value to RuntimeCode and call apply()
+            return ((RuntimeCode) runtimeScalar.value).apply(a, callContext);
+        } else {
+            // If the type is not CODE, throw an exception indicating an invalid state
+            throw new PerlCompilerException("Not a CODE reference");
+        }
+    }
+
+    // Method to apply (execute) a subroutine reference
+    public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeArray a, int callContext) {
+        // Check if the type of this RuntimeScalar is CODE
+        if (runtimeScalar.type == RuntimeScalarType.CODE) {
+            // Cast the value to RuntimeCode and call apply()
+            return ((RuntimeCode) runtimeScalar.value).apply(subroutineName, a, callContext);
+        } else {
+            // If the type is not CODE, throw an exception indicating an invalid state
+
+            // Does AUTOLOAD exist?
+            if (!subroutineName.isEmpty()) {
+                // Check if AUTOLOAD exists
+                String autoloadString = subroutineName.substring(0, subroutineName.lastIndexOf("::") + 2) + "AUTOLOAD";
+                // System.err.println("AUTOLOAD: " + fullName);
+                RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
+                if (autoload.getDefinedBoolean()) {
+                    // System.err.println("AUTOLOAD exists: " + fullName);
+                    // Set $AUTOLOAD name
+                    getGlobalVariable(autoloadString).set(subroutineName);
+                    // Call AUTOLOAD
+                    return apply(autoload, a, callContext);
+                }
+            }
+
+            if (!subroutineName.isEmpty() && runtimeScalar.type == RuntimeScalarType.GLOB && runtimeScalar.value == null) {
+                throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
+            }
+
+            throw new PerlCompilerException("Not a CODE reference");
+        }
     }
 
     /**
