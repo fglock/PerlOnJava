@@ -122,18 +122,10 @@ public class EmitterVisitor implements Visitor {
             case "grep":
                 EmitOperator.handleMapOperator(this, node);
                 return;
-            case "eof":
-            case "open":
-            case "printf":
-            case "print":
-            case "say":
+            case "eof", "open", "printf", "print", "say":
                 EmitOperator.handleSayOperator(this, node);
                 return;
-            case "close":
-            case "readline":
-            case "fileno":
-            case "getc":
-            case "truncate":
+            case "close", "readline", "fileno", "getc", "truncate":
                 EmitOperator.handleReadlineOperator(this, node);
                 return;
             case "sprintf":
@@ -155,25 +147,8 @@ public class EmitterVisitor implements Visitor {
             case "=~":
                 EmitRegex.handleBindRegex(this, node);
                 return;
-            case "**=":
-            case "+=":
-            case "*=":
-            case "&=":
-            case "&.=":
-            case "binary&=":
-            case "<<=":
-            case "-=":
-            case "/=":
-            case "|=":
-            case "|.=":
-            case "binary|=":
-            case ">>=":
-            case ".=":
-            case "%=":
-            case "^=":
-            case "^.=":
-            case "binary^=":
-            case "x=":
+            case "**=", "+=", "*=", "&=", "&.=", "binary&=", "<<=", "-=", "/=", "|=", "|.=",
+                 "binary|=", ">>=", ".=", "%=", "^=", "^.=", "binary^=", "x=":
                 String newOp = operator.substring(0, operator.length() - 1);
                 OperatorHandler operatorHandler = OperatorHandler.get(newOp);
                 if (operatorHandler != null) {
@@ -373,11 +348,7 @@ public class EmitterVisitor implements Visitor {
             case "package":
                 EmitOperator.handlePackageOperator(this, node);
                 break;
-            case "$":
-            case "@":
-            case "%":
-            case "*":
-            case "&":
+            case "$", "@", "%", "*", "&":
                 EmitVariable.handleVariableOperator(this, node);
                 break;
             case "keys":
@@ -437,12 +408,6 @@ public class EmitterVisitor implements Visitor {
             case "readdir":
                 EmitOperator.handleReaddirOperator(this, node);
                 break;
-            case "pack":
-                EmitOperator.handlePackBuiltin(this, node);
-                break;
-            case "unpack":
-                EmitOperator.handleUnpackBuiltin(this, node);
-                break;
             case "glob":
                 EmitOperator.handleGlobBuiltin(this, node);
                 break;
@@ -450,12 +415,7 @@ public class EmitterVisitor implements Visitor {
             case "index":
                 EmitOperator.handleIndexBuiltin(this, node);
                 break;
-            case "mkdir":
-            case "opendir":
-            case "seekdir":
-            case "crypt":
-            case "vec":
-            case "each":
+            case "pack", "unpack", "mkdir", "opendir", "seekdir", "crypt", "vec", "each":
                 EmitOperator.handleVecBuiltin(this, node);
                 break;
             case "atan2":
@@ -508,12 +468,7 @@ public class EmitterVisitor implements Visitor {
             case "shift":
                 handleArrayUnaryBuiltin(node, operator);
                 break;
-            case "matchRegex":
-            case "quoteRegex":
-            case "replaceRegex":
-            case "tr":
-            case "y":
-            case "qx":
+            case "matchRegex", "quoteRegex", "replaceRegex", "tr", "y", "qx":
                 EmitRegex.handleRegex(this, node);
                 break;
             default:

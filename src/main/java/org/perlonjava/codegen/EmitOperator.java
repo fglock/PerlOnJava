@@ -213,40 +213,6 @@ public class EmitOperator {
         emitOperator(node.operator, emitterVisitor);
     }
 
-    // Handles the 'unpack' built-in function, which unpacks data from a string.
-    static void handleUnpackBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
-        // Handle:  unpack TEMPLATE, EXPR
-        emitterVisitor.ctx.logDebug("handleUnpackBuiltin " + node);
-        // Accept the operand in LIST context.
-        node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        // Invoke the static method for the operator.
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Unpack",
-                node.operator,
-                "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;",
-                false);
-        // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    // Handles the 'pack' built-in function, which packs data into a string.
-    static void handlePackBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
-        // Handle:  pack TEMPLATE, LIST
-        emitterVisitor.ctx.logDebug("handlePackBuiltin " + node);
-        // Accept the operand in LIST context.
-        node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        // Invoke the static method for the operator.
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Pack",
-                node.operator,
-                "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                false);
-        // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
     // Handles the 'splice' built-in function, which modifies an array.
     static void handleSpliceBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Handle:  splice @array, LIST
