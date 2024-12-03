@@ -56,7 +56,7 @@ public class NumberParser {
                 } else if (secondChar == 'x' || secondChar == 'X') {
                     // Hexadecimal number: 0x...
                     TokenUtils.consume(parser);
-                    return new NumberNode(Long.toString(Long.parseLong(letter.substring(1), 16)), parser.tokenIndex);
+                    return parseHexadecimalNumber(parser, letter.substring(1));
                 }
             } else {
                 // Octal number: 0...
@@ -87,6 +87,84 @@ public class NumberParser {
 
         return new NumberNode(number.toString(), parser.tokenIndex);
     }
+
+    /**
+     * Parses a hexadecimal number, including support for hexadecimal floating-point.
+     *
+     * @param parser  The Parser instance.
+     * @param hexPart The initial part of the hexadecimal number.
+     * @return A NumberNode representing the parsed number.
+     */
+    private static Node parseHexadecimalNumber(Parser parser, String hexPart) {
+        StringBuilder number = new StringBuilder(hexPart);
+
+        // Check for fractional part
+        if (parser.tokens.get(parser.tokenIndex).text.equals(".")) {
+            number.append(TokenUtils.consume(parser).text); // consume '.'
+            while (isHexDigit(parser.tokens.get(parser.tokenIndex).text) || parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NUMBER) {
+                number.append(TokenUtils.consume(parser).text); // consume hex digits after '.'
+            }
+        }
+
+        // Check for 'p' exponent part, including cases like "ap"
+        String currentTokenText = parser.tokens.get(parser.tokenIndex).text;
+        if (currentTokenText.toLowerCase().endsWith("p")) {
+            int pIndex = currentTokenText.toLowerCase().indexOf('p');
+            number.append(currentTokenText, 0, pIndex); // append any preceding hex digits
+            TokenUtils.consume(parser); // consume the token containing 'p'
+            number.append("p"); // append 'p' to the number
+
+            // Check for optional sign
+            if (parser.tokens.get(parser.tokenIndex).text.equals("-") || parser.tokens.get(parser.tokenIndex).text.equals("+")) {
+                number.append(TokenUtils.consume(parser).text); // consume '-' or '+'
+            }
+
+            // Consume exponent digits
+            if (parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NUMBER) {
+                number.append(TokenUtils.consume(parser).text);
+            } else {
+                throw new PerlCompilerException(parser.tokenIndex, "Malformed hexadecimal floating-point number", parser.ctx.errorUtil);
+            }
+        }
+        
+        try {
+            // Convert the hexadecimal number to a double
+            double value = parseHexToDouble(number.toString());
+            return new NumberNode(Double.toString(value), parser.tokenIndex);
+        } catch (NumberFormatException e) {
+            System.err.println("NumberFormatException: " + e.getMessage());
+            throw new PerlCompilerException(parser.tokenIndex, "Invalid hexadecimal number", parser.ctx.errorUtil);
+        }
+    }
+
+    private static boolean isHexDigit(String text) {
+        return text.matches("[0-9a-fA-F]");
+    }
+
+    private static double parseHexToDouble(String hex) {
+        String[] parts = hex.split("\\.");
+        long integerPart = Long.parseLong(parts[0], 16);
+        double fractionalPart = 0.0;
+
+        if (parts.length > 1) {
+            String fraction = parts[1];
+            for (int i = 0; i < fraction.length(); i++) {
+                fractionalPart += Character.digit(fraction.charAt(i), 16) / Math.pow(16, i + 1);
+            }
+        }
+
+        // Extract exponent part if present
+        int exponentIndex = hex.toLowerCase().indexOf('p');
+        int exponent = 0;
+        if (exponentIndex != -1) {
+            String exponentPart = hex.substring(exponentIndex + 1);
+            exponent = Integer.parseInt(exponentPart);
+        }
+
+        double value = integerPart + fractionalPart;
+        return value * Math.pow(2, exponent);
+    }
+
 
     /**
      * Parses a fractional number starting with a decimal point.
@@ -249,3 +327,4 @@ public class NumberParser {
         return result;
     }
 }
+

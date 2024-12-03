@@ -122,7 +122,8 @@
   - Added `-v` command line switch.
   - Added file test operators: `-R`, `-W`, `-X`, `-O`, `-t`.
   - Added feature flags: `evalbytes`.
-  - Added `CORE::GLOBAL` and core function overrides
+  - Added `CORE::GLOBAL` and core function overrides.
+  - Added hexadecimal floating point numbers.
   - Work in progress:
     - `lexical_subs` feature.
     - `socket` and related operators.

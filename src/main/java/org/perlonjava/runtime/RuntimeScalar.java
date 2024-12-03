@@ -313,7 +313,14 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     public String toString() {
         return switch (type) {
             case INTEGER -> Integer.toString((int) value);
-            case DOUBLE -> Double.toString((double) value);
+            case DOUBLE -> {
+                String doubleString = Double.toString((double) value);
+                // Remove trailing ".0" if present
+                if (doubleString.endsWith(".0")) {
+                    doubleString = doubleString.substring(0, doubleString.length() - 2);
+                }
+                yield doubleString;
+            }
             case STRING -> (String) value;
             case UNDEF -> "";
             case GLOB -> value == null ? "" : value.toString();

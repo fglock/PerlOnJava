@@ -62,6 +62,7 @@
 - ✔️   **Numbers with underscores**: Numbers with underscores (e.g., `1_000`) are supported.
 - ✔️   **Numbers in different bases**: Numbers in binary, hex, octal: `0b1010`, `0xAA`, `078`.
 - ✔️   **Infinity, -Infinity, NaN**: Special number values are implemented.
+- ✔️   **Hexadecimal floating point**: Numbers like 0x1.999aP-4 are supported.
 - ✔️   **References**: References to variables and data structures are supported.
 - ✔️   **Autovivification**: Autovivification is implemented.
 - ✔️   **File handles**: Support for file handles is implemented.

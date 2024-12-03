@@ -62,7 +62,7 @@ public class StackLevelManager {
      * stack level. This ensures the stack is balanced when control flow
      * instructions like GOTO are executed.
      *
-     * @param mv the MethodVisitor used to emit the bytecode instructions.
+     * @param mv               the MethodVisitor used to emit the bytecode instructions.
      * @param targetStackLevel the desired stack level to adjust to.
      */
     public void emitPopInstructions(MethodVisitor mv, int targetStackLevel) {
