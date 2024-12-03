@@ -201,6 +201,10 @@ public class ArgumentParser {
                     printVersionInfo();
                     System.exit(0);
                     break;
+                case 'V':
+                    printExtendedVersionInfo();
+                    System.exit(0);
+                    break;
                 case 'x':
                     parsedArgs.discardLeadingGarbage = true;
                     index = handleEmbeddedProgram(args, parsedArgs, index, j, arg);
@@ -228,6 +232,15 @@ public class ArgumentParser {
         System.out.println("this system using \"man perl\" or \"perldoc perl\". If you have access to the");
         System.out.println("Internet, point your browser at https://www.perl.org/, the Perl Home Page");
         System.out.println();
+    }
+
+    private static void printExtendedVersionInfo() {
+        String version = GlobalContext.perlVersionNoV;
+        System.out.println("Summary of my perl5 (" + version + ") configuration:");
+        System.out.println();
+        System.out.println("  JVM properties:");
+        System.getProperties().forEach((key, value) ->
+                System.out.println("    " + key + ": " + value));
     }
 
     /**

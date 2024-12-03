@@ -119,7 +119,7 @@
   - Added `subs` pragma.
   - Added regex `$+` variable.
   - Added `Getopt::Long`, `JSON` modules.
-  - Added `-v` command line switch.
+  - Added command line switches: `-v`, `-V` .
   - Added file test operators: `-R`, `-W`, `-X`, `-O`, `-t`.
   - Added feature flags: `evalbytes`.
   - Added `CORE::GLOBAL` and core function overrides.
