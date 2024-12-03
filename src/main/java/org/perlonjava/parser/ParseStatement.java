@@ -8,13 +8,24 @@ import org.perlonjava.runtime.PerlCompilerException;
 import static org.perlonjava.parser.TokenUtils.consume;
 import static org.perlonjava.parser.TokenUtils.peek;
 
+/**
+ * The ParseStatement class is responsible for parsing individual statements in the source code.
+ * It handles various types of statements such as control structures, declarations, and expressions.
+ */
 public class ParseStatement {
+
+    /**
+     * Parses a single statement from the parser's token stream.
+     *
+     * @param parser The parser instance used for parsing.
+     * @return A Node representing the parsed statement.
+     */
     public static Node parseStatement(Parser parser) {
         int currentIndex = parser.tokenIndex;
         LexerToken token = peek(parser);
         parser.ctx.logDebug("parseStatement `" + token.text + "`");
 
-        // check for label:
+        // Check for label:
         String label = null;
         if (token.type == LexerTokenType.IDENTIFIER) {
             String id = TokenUtils.consume(parser).text;
@@ -23,45 +34,53 @@ public class ParseStatement {
                 TokenUtils.consume(parser);
                 token = peek(parser);
             } else {
-                parser.tokenIndex = currentIndex;  // backtrack
+                parser.tokenIndex = currentIndex;  // Backtrack
             }
         }
 
         if (token.type == LexerTokenType.IDENTIFIER) {
             switch (token.text) {
                 case "CHECK", "INIT", "UNITCHECK", "BEGIN", "END":
+                    // Parse special block statements
                     return SpecialBlockParser.parseSpecialBlock(parser);
                 case "if", "unless":
+                    // Parse conditional statements
                     return StatementParser.parseIfStatement(parser);
                 case "for", "foreach":
+                    // Parse loop statements
                     return StatementParser.parseForStatement(parser, label);
                 case "while", "until":
+                    // Parse while/until loop statements
                     return StatementParser.parseWhileStatement(parser, label);
                 case "try":
+                    // Parse try-catch statements if the feature is enabled
                     if (parser.ctx.symbolTable.isFeatureCategoryEnabled("try")) {
                         return StatementParser.parseTryStatement(parser);
                     }
                     break;
                 case "package":
+                    // Parse package declarations
                     return StatementParser.parsePackageDeclaration(parser, token);
                 case "use", "no":
+                    // Parse use/no declarations
                     return StatementParser.parseUseDeclaration(parser, token);
                 case "sub":
-                    // Must be followed by an identifier
+                    // Parse subroutine definitions
                     parser.tokenIndex++;
                     if (peek(parser).type == LexerTokenType.IDENTIFIER) {
                         return SubroutineParser.parseSubroutineDefinition(parser, true, "our");
                     }
-                    // otherwise backtrack
+                    // Otherwise backtrack
                     parser.tokenIndex = currentIndex;
                     break;
                 case "our", "my", "state":
+                    // Parse variable declarations
                     String declaration = consume(parser).text;
                     if (consume(parser).text.equals("sub") && peek(parser).type == LexerTokenType.IDENTIFIER) {
                         // my sub name
                         return SubroutineParser.parseSubroutineDefinition(parser, true, declaration);
                     }
-                    // otherwise backtrack
+                    // Otherwise backtrack
                     parser.tokenIndex = currentIndex;
                     break;
             }
@@ -69,13 +88,15 @@ public class ParseStatement {
         if (token.type == LexerTokenType.OPERATOR) {
             switch (token.text) {
                 case "...":
+                    // Handle unimplemented operator
                     TokenUtils.consume(parser);
                     return new OperatorNode(
                             "die",
                             new StringNode("Unimplemented", parser.tokenIndex),
                             parser.tokenIndex);
                 case "{":
-                    if (!parser.isHashLiteral()) { // bare-block
+                    // Parse bare-blocks
+                    if (!parser.isHashLiteral()) {
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
                         BlockNode block = parser.parseBlock();
                         block.isLoop = true;
@@ -85,10 +106,11 @@ public class ParseStatement {
                     }
             }
         }
+        // Parse expressions
         Node expression = parser.parseExpression(0);
         token = peek(parser);
         if (token.type == LexerTokenType.IDENTIFIER) {
-            // statement modifier: if, for ...
+            // Handle statement modifiers: if, for, etc.
             switch (token.text) {
                 case "if":
                     TokenUtils.consume(parser);
@@ -121,8 +143,8 @@ public class ParseStatement {
                     }
                     boolean isDoWhile = false;
                     if (expression instanceof BlockNode) {
-                        // special case:  `do { BLOCK } while CONDITION`
-                        // executes the loop at least once
+                        // Special case: `do { BLOCK } while CONDITION`
+                        // Executes the loop at least once
                         parser.ctx.logDebug("do-while " + expression);
                         isDoWhile = true;
                     }
