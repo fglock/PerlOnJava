@@ -132,6 +132,8 @@ public class OperatorHandler {
         put("join", "join", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeDataProvider;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("split", "split", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;");
 
+        put("truncate", "truncate", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
+
         // List operators
         put("map", "map",
                 "org/perlonjava/operators/ListOperators",

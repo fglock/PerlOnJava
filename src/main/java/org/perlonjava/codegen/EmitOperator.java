@@ -81,10 +81,7 @@ public class EmitOperator {
                 emitterVisitor.emitFileHandle(node.left);
             }
             node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/operators/Operator", operator,
-                    "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                    false);
+            emitOperator(node.operator, emitterVisitor);
             return;
         }
 
