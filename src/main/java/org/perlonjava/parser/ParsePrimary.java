@@ -117,7 +117,7 @@ public class ParsePrimary {
         }
 
         if (operatorEnabled) {
-            Node operation = OperatorParser.parseCoreOperator(parser, token, startIndex);
+            Node operation = ParseCoreOperator.parseCoreOperator(parser, token, startIndex);
             if (operation != null) {
                 return operation;
             }
