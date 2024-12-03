@@ -11,8 +11,20 @@ import static org.perlonjava.parser.ListParser.consumeCommas;
 import static org.perlonjava.parser.ListParser.isComma;
 import static org.perlonjava.parser.OperatorParser.scalarUnderscore;
 
+/**
+ * The PrototypeArgs class is responsible for parsing arguments based on a given prototype.
+ * It handles different types of arguments such as scalars, arrays, hashes, and code references,
+ * and manages optional arguments and comma-separated lists.
+ */
 public class PrototypeArgs {
 
+    /**
+     * Consumes arguments from the parser according to a specified prototype.
+     *
+     * @param parser    The parser instance used for parsing.
+     * @param prototype The prototype string defining the expected argument types and structure.
+     * @return A ListNode containing the parsed arguments.
+     */
     static ListNode consumeArgsWithPrototype(Parser parser, String prototype) {
         ListNode args = new ListNode(parser.tokenIndex);
         boolean isOptional = false;
@@ -26,23 +38,24 @@ public class PrototypeArgs {
         }
 
         if (prototype == null) {
-            // null prototype
+            // Null prototype: parse a list of zero or more elements
             args = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
         } else {
-
+            // Parse arguments according to the prototype
             while (!prototype.isEmpty()) {
                 String prototypeStart = prototype.substring(0, 1);
                 prototype = prototype.substring(1);
                 // System.out.println("prototype " + prototype + " needComma:" + needComma + " optional:" + isOptional);
                 switch (prototypeStart) {
                     case " ", "\t", "\n":
+                        // Ignore whitespace characters in the prototype
                         break;
                     case ";":
-                        // System.out.println("prototype consume ;");
+                        // Semicolon indicates the start of optional arguments
                         isOptional = true;
                         break;
                     case "_":
-                        // System.out.println("prototype consume _");
+                        // Underscore indicates a scalar argument
                         if (needComma) {
                             if (!isComma(TokenUtils.peek(parser))) {
                                 args.elements.add(scalarUnderscore(parser));
@@ -59,7 +72,7 @@ public class PrototypeArgs {
                         needComma = true;
                         break;
                     case "*":
-                        // System.out.println("prototype consume *");
+                        // Asterisk indicates a file handle argument
                         if (needComma) {
                             if (!isComma(TokenUtils.peek(parser))) {
                                 if (isOptional) {
@@ -69,7 +82,7 @@ public class PrototypeArgs {
                             }
                             consumeCommas(parser);
                         }
-                        // TODO:   STDERR  /  *STDERR  /  \*STDERR  /  $fh  / my $fh
+                        // TODO: Handle different file handle formats:  STDERR  /  *STDERR  /  \*STDERR  /  $fh  / my $fh
                         Node argList5 = FileHandle.parseFileHandle(parser);
                         if (argList5 == null) {
                             if (isOptional) {
@@ -81,7 +94,7 @@ public class PrototypeArgs {
                         needComma = true;
                         break;
                     case "$":
-                        // System.out.println("prototype consume $");
+                        // Dollar sign indicates a scalar argument
                         if (needComma) {
                             if (!isComma(TokenUtils.peek(parser))) {
                                 if (isOptional) {
@@ -102,7 +115,7 @@ public class PrototypeArgs {
                         needComma = true;
                         break;
                     case "@", "%":
-                        // System.out.println("prototype consume @ or %");
+                        // At sign or percent sign indicates a list or hash argument
                         if (needComma) {
                             if (!isComma(TokenUtils.peek(parser))) {
                                 break;
@@ -114,7 +127,7 @@ public class PrototypeArgs {
                         needComma = true;
                         break;
                     case "&":
-                        // System.out.println("prototype consume &");
+                        // Ampersand indicates a code reference argument
                         if (needComma) {
                             if (!isComma(TokenUtils.peek(parser))) {
                                 if (isOptional) {
@@ -125,14 +138,14 @@ public class PrototypeArgs {
                             consumeCommas(parser);
                         }
                         if (TokenUtils.peek(parser).text.equals("{")) {
-                            //  { ... }
+                            // Parse a block
                             TokenUtils.consume(parser);
                             Node block = new SubroutineNode(null, null, null, parser.parseBlock(), false, parser.tokenIndex);
                             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
                             args.elements.add(block);
                             needComma = false;
                         } else if (TokenUtils.peek(parser).text.equals("\\")) {
-                            //  \&sub
+                            // Parse a code reference
                             ListNode argList2 = ListParser.parseZeroOrOneList(parser, 0);
                             if (argList2.elements.isEmpty()) {
                                 if (isOptional) {
@@ -152,7 +165,7 @@ public class PrototypeArgs {
             }
         }
 
-        // TODO check for "Too many arguments" error
+        // TODO: Check for "Too many arguments" error
 
         if (hasParentheses) {
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
