@@ -335,15 +335,7 @@ public class EmitOperator {
         // Accept both left and right operands in SCALAR context.
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        // Invoke the static method to create a range.
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/PerlRange",
-                "createRange",
-                "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/PerlRange;", false);
-        // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        emitOperator(node.operator, emitterVisitor);
     }
 
     // Handles the 'substr' operator, which extracts a substring from a string.

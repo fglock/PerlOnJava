@@ -134,6 +134,8 @@ public class OperatorHandler {
 
         put("truncate", "truncate", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
+        put("..", "createRange", "org/perlonjava/runtime/PerlRange","(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/PerlRange;");
+
         // List operators
         put("map", "map",
                 "org/perlonjava/operators/ListOperators",
