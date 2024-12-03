@@ -7,12 +7,17 @@ import org.perlonjava.runtime.PerlCompilerException;
 
 import static org.perlonjava.parser.TokenUtils.peek;
 
+/**
+ * The ParseInfix class is responsible for parsing infix operations in the source code.
+ * It handles binary operators, ternary operators, and special cases like method calls and subscripts.
+ */
 public class ParseInfix {
+
     /**
      * Parses infix operators and their right-hand operands.
      * This method handles binary operators, ternary operators, and special cases like method calls and subscripts.
      *
-     * @param parser
+     * @param parser     The parser instance used for parsing.
      * @param left       The left-hand operand of the infix operation.
      * @param precedence The current precedence level for parsing.
      * @return A node representing the parsed infix operation.
@@ -63,11 +68,13 @@ public class ParseInfix {
                 right = parser.parseExpression(precedence);
                 return ListNode.makeList(left, right);
             case "?":
+                // Handle ternary operator
                 Node middle = parser.parseExpression(0);
                 TokenUtils.consume(parser, LexerTokenType.OPERATOR, ":");
                 right = parser.parseExpression(precedence);
                 return new TernaryOperatorNode(token.text, left, middle, right, parser.tokenIndex);
             case "->":
+                // Handle method calls and subscripts
                 String nextText = peek(parser).text;
                 switch (nextText) {
                     case "(":
@@ -121,26 +128,31 @@ public class ParseInfix {
                 parser.parsingForLoopVariable = false;
 
                 if (right instanceof BinaryOperatorNode && ((BinaryOperatorNode) right).operator.equals("(")) {
-                    // right has parameter list
+                    // Right has parameter list
                 } else {
-                    // insert an empty parameter list
+                    // Insert an empty parameter list
                     right = new BinaryOperatorNode("(", right, new ListNode(parser.tokenIndex), parser.tokenIndex);
                 }
 
                 return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
             case "(":
+                // Handle function calls
                 right = new ListNode(ListParser.parseList(parser, ")", 0), parser.tokenIndex);
                 return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
             case "{":
+                // Handle hash subscripts
                 right = new HashLiteralNode(parser.parseHashSubscript(), parser.tokenIndex);
                 return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
             case "[":
+                // Handle array subscripts
                 right = new ArrayLiteralNode(ListParser.parseList(parser, "]", 1), parser.tokenIndex);
                 return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
             case "--":
             case "++":
+                // Handle postfix increment/decrement
                 return new OperatorNode(token.text + "postfix", left, parser.tokenIndex);
+            default:
+                throw new PerlCompilerException(parser.tokenIndex, "Unexpected infix operator: " + token, parser.ctx.errorUtil);
         }
-        throw new PerlCompilerException(parser.tokenIndex, "Unexpected infix operator: " + token, parser.ctx.errorUtil);
     }
 }
