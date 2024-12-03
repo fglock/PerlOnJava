@@ -739,10 +739,10 @@ public class RuntimeIO implements RuntimeScalarReference {
             } else {
                 throw new IllegalStateException("No socket available to bind");
             }
-            return RuntimeScalarCache.scalarTrue;
+            return scalarTrue;
         } catch (IOException e) {
             handleIOException(e, "bind operation failed");
-            return RuntimeScalarCache.scalarFalse;
+            return scalarFalse;
         }
     }
 
@@ -753,10 +753,10 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
         try {
             this.socket.connect(new InetSocketAddress(address, port));
-            return RuntimeScalarCache.scalarTrue;
+            return scalarTrue;
         } catch (IOException e) {
             handleIOException(e, "connect operation failed");
-            return RuntimeScalarCache.scalarFalse;
+            return scalarFalse;
         }
     }
 

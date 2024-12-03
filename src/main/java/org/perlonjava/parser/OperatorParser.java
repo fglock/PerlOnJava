@@ -10,8 +10,7 @@ import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.List;
 
-import static org.perlonjava.lexer.LexerTokenType.*;
-import static org.perlonjava.parser.TokenUtils.consume;
+import static org.perlonjava.lexer.LexerTokenType.OPERATOR;
 import static org.perlonjava.parser.TokenUtils.peek;
 
 /**

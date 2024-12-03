@@ -86,8 +86,7 @@ public class ParsePrimary {
         } else if (!nextTokenText.equals("::")) {
             // Check if the operator is enabled in the current scope
             operatorEnabled = switch (operator) {
-                case "say", "fc", "state", "evalbytes" ->
-                        parser.ctx.symbolTable.isFeatureCategoryEnabled(operator);
+                case "say", "fc", "state", "evalbytes" -> parser.ctx.symbolTable.isFeatureCategoryEnabled(operator);
                 case "__SUB__" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("current_sub");
                 default -> true;
             };
