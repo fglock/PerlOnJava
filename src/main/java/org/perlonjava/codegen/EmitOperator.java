@@ -264,30 +264,10 @@ public class EmitOperator {
 
     // Handles the 'split' operator, which splits a string into a list.
     static void handleSplitOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        String operator = node.operator;
         // Accept the left operand in SCALAR context and the right operand in LIST context.
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        // Invoke the static method for the operator.
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
-        // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    // Handles the 'join' operator, which joins elements of a list into a string.
-    static void handleJoinOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        String operator = node.operator;
-        // Accept the left operand in SCALAR context and the right operand in LIST context.
-        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        // Invoke the static method for the operator.
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeDataProvider;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        emitOperator(node.operator, emitterVisitor);
     }
 
     // Handles the 'diamond' operator, which reads input from a file or standard input.

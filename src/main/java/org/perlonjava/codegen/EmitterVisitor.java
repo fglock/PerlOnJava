@@ -135,10 +135,7 @@ public class EmitterVisitor implements Visitor {
             case "x":
                 EmitOperator.handleRepeat(this, node);
                 return;
-            case "join":
-                EmitOperator.handleJoinOperator(this, node);
-                return;
-            case "split":
+            case "join", "split":
                 EmitOperator.handleSplitOperator(this, node);
                 return;
             case "!~":
