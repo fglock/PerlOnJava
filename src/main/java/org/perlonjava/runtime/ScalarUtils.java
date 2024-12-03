@@ -192,4 +192,17 @@ public class ScalarUtils {
         runtimeScalar.set(NumberParser.parseNumber(runtimeScalar)); // parseNumber parses the current string to a number
         return runtimeScalar.preAutoIncrement(); // preAutoIncrement handles the actual incrementing logic
     }
+
+    /**
+     * This is used by evalbytes to assert that the operand contains only byte characters.
+     *
+     * @param str
+     */
+    public static void assertBytes(RuntimeScalar str) {
+        for (char c : str.toString().toCharArray()) {
+            if (c > 255) {
+                throw new IllegalArgumentException("evalbytes operand contains non-byte characters.");
+            }
+        }
+    }
 }

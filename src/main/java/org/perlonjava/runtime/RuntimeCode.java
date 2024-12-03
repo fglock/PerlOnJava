@@ -82,19 +82,6 @@ public class RuntimeCode implements RuntimeScalarReference {
     }
 
     /**
-     * This is used by evalbytes to assert that the operand contains only byte characters.
-     *
-     * @param str
-     */
-    public static void assertBytes(RuntimeScalar str) {
-        for (char c : str.toString().toCharArray()) {
-            if (c > 255) {
-                throw new IllegalArgumentException("evalbytes operand contains non-byte characters.");
-            }
-        }
-    }
-
-    /**
      * Compiles the text of an eval string into a Class that represents an anonymous subroutine.
      * After the Class is returned to the caller, an instance of the Class will be populated
      * with closure variables, and then makeCodeObject() will be called to transform the Class

@@ -115,6 +115,10 @@ public class RuntimeIO implements RuntimeScalarReference {
         stderr.channel = Channels.newChannel(stderr.outputStream);
     }
 
+    private static void handleIOException(IOException e, String message) {
+        getGlobalVariable("main::!").set(message + ": " + e.getMessage());
+    }
+
     public static void initStdHandles() {
         // Initialize STDOUT, STDERR, STDIN
         getGlobalIO("main::STDOUT").set(stdout);
@@ -161,7 +165,7 @@ public class RuntimeIO implements RuntimeScalarReference {
                 fh.fileChannel.position(fh.fileChannel.size()); // Move to end for appending
             }
         } catch (IOException e) {
-            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+            handleIOException(e, "File operation failed");
             fh = null;
         }
         return fh;
@@ -179,27 +183,22 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Constructor for standard output and error streams
     public static RuntimeIO open(FileDescriptor fd, boolean isOutput) {
         RuntimeIO fh = new RuntimeIO();
-        try {
-            if (isOutput) {
-                if (fd == FileDescriptor.out || fd == FileDescriptor.err) {
-                    // For standard output and error, we can't use FileChannel
-                    OutputStream out = (fd == FileDescriptor.out) ? System.out : System.err;
-                    fh.outputStream = new BufferedOutputStream(out, BUFFER_SIZE);
-                    fh.channel = Channels.newChannel(fh.outputStream);
-                } else {
-                    // For other output file descriptors, use FileChannel
-                    fh.fileChannel = new FileOutputStream(fd).getChannel();
-                }
+        if (isOutput) {
+            if (fd == FileDescriptor.out || fd == FileDescriptor.err) {
+                // For standard output and error, we can't use FileChannel
+                OutputStream out = (fd == FileDescriptor.out) ? System.out : System.err;
+                fh.outputStream = new BufferedOutputStream(out, BUFFER_SIZE);
+                fh.channel = Channels.newChannel(fh.outputStream);
             } else {
-                // For input, use FileChannel
-                fh.fileChannel = new FileInputStream(fd).getChannel();
-                fh.bufferedReader = new BufferedReader(Channels.newReader(fh.fileChannel, StandardCharsets.UTF_8));
+                // For other output file descriptors, use FileChannel
+                fh.fileChannel = new FileOutputStream(fd).getChannel();
             }
-            fh.isEOF = false;
-        } catch (Exception e) {
-            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
-            fh = null;
+        } else {
+            // For input, use FileChannel
+            fh.fileChannel = new FileInputStream(fd).getChannel();
+            fh.bufferedReader = new BufferedReader(Channels.newReader(fh.fileChannel, StandardCharsets.UTF_8));
         }
+        fh.isEOF = false;
         return fh;
     }
 
@@ -218,7 +217,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             dirHandle.value = dirIO;
             return scalarTrue;
         } catch (IOException e) {
-            getGlobalVariable("main::!").set(e.getMessage());
+            handleIOException(e, "Directory operation failed");
             return scalarFalse;
         }
     }
@@ -299,8 +298,7 @@ public class RuntimeIO implements RuntimeScalarReference {
                 channel1.truncate(length);
                 return scalarTrue;
             } catch (IOException e) {
-                System.err.println("Truncate operation failed: " + e.getMessage());
-                getGlobalVariable("main::!").set("Truncate operation failed: " + e.getMessage());
+                handleIOException(e, "Truncate operation failed");
                 return scalarFalse;
             }
         } else if (scalar.type == RuntimeScalarType.GLOB || scalar.type == RuntimeScalarType.GLOBREFERENCE) {
@@ -313,8 +311,7 @@ public class RuntimeIO implements RuntimeScalarReference {
                 runtimeIO.fileChannel.truncate(length);
                 return scalarTrue;
             } catch (IOException e) {
-                System.err.println("Truncate operation failed: " + e.getMessage());
-                getGlobalVariable("main::!").set("Truncate operation failed: " + e.getMessage());
+                handleIOException(e, "Truncate operation failed");
                 return scalarFalse;
             }
         } else {
@@ -339,8 +336,8 @@ public class RuntimeIO implements RuntimeScalarReference {
                 return scalarTrue;
             }
             return scalarFalse; // Not a directory handle
-        } catch (Exception e) {
-            getGlobalVariable("main::!").set("Directory operation failed: " + e.getMessage());
+        } catch (IOException e) {
+            handleIOException(e, "Directory operation failed");
             return scalarFalse;
         }
     }
@@ -439,8 +436,8 @@ public class RuntimeIO implements RuntimeScalarReference {
                 return new RuntimeScalar(Character.toString((char) result));
             }
             throw new PerlCompilerException("No input source available");
-        } catch (Exception e) {
-            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+        } catch (IOException e) {
+            handleIOException(e, "Read operation failed");
             return scalarUndef; // Indicating an error
         }
     }
@@ -464,9 +461,8 @@ public class RuntimeIO implements RuntimeScalarReference {
             } else {
                 throw new PerlCompilerException("No input source available");
             }
-        } catch (Exception e) {
-            System.err.println("File operation failed: " + e.getMessage());
-            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+        } catch (IOException e) {
+            handleIOException(e, "Read operation failed");
         }
         return -1; // Indicating an error or EOF
     }
@@ -537,9 +533,9 @@ public class RuntimeIO implements RuntimeScalarReference {
 
             // Return the read line as a RuntimeScalar
             return new RuntimeScalar(line.toString());
-        } catch (Exception e) {
+        } catch (IOException e) {
             // Set the global error variable ($!) and return undef on error
-            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+            handleIOException(e, "Readline operation failed");
             return scalarUndef;
         }
     }
@@ -559,8 +555,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             }
             // For output streams, EOF is not applicable
         } catch (IOException e) {
-            System.err.println("File operation failed: " + e.getMessage());
-            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+            handleIOException(e, "File operation failed");
         }
         return getScalarBoolean(this.isEOF);
     }
@@ -576,9 +571,8 @@ public class RuntimeIO implements RuntimeScalarReference {
             } else {
                 throw new PerlCompilerException("Tell operation is not supported for standard streams");
             }
-        } catch (Exception e) {
-            System.err.println("File operation failed: " + e.getMessage());
-            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+        } catch (IOException e) {
+            handleIOException(e, "File operation failed");
         }
         // TODO return error (false)
         return 0;
@@ -593,9 +587,8 @@ public class RuntimeIO implements RuntimeScalarReference {
             try {
                 fileChannel.position(pos);
                 isEOF = false;
-            } catch (Exception e) {
-                System.err.println("File operation failed: " + e.getMessage());
-                getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+            } catch (IOException e) {
+                handleIOException(e, "File operation failed");
             }
         } else {
             throw new PerlCompilerException("Seek operation is not supported for standard streams");
@@ -613,8 +606,8 @@ public class RuntimeIO implements RuntimeScalarReference {
                 outputStream.flush();
             }
             return scalarTrue;  // Return 1 to indicate success, consistent with other methods
-        } catch (Exception e) {
-            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+        } catch (IOException e) {
+            handleIOException(e, "File operation failed");
             return scalarFalse;  // Return undef to indicate failure
         }
     }
@@ -653,8 +646,8 @@ public class RuntimeIO implements RuntimeScalarReference {
                 outputStream = null;
             }
             return scalarTrue;
-        } catch (Exception e) {
-            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+        } catch (IOException e) {
+            handleIOException(e, "File operation failed");
             return scalarFalse;
         }
     }
@@ -686,8 +679,8 @@ public class RuntimeIO implements RuntimeScalarReference {
                 throw new PerlCompilerException("No output channel available");
             }
             return scalarTrue;
-        } catch (Exception e) {
-            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+        } catch (IOException e) {
+            handleIOException(e, "File operation failed");
             return scalarFalse;
         }
     }
@@ -726,7 +719,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             }
             return new RuntimeScalar(fd);
         } catch (IOException e) {
-            getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
+            handleIOException(e, "File operation failed");
             return scalarUndef;
         }
     }
@@ -748,7 +741,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             }
             return RuntimeScalarCache.scalarTrue;
         } catch (IOException e) {
-            GlobalVariable.setGlobalVariable("main::!", e.getMessage());
+            handleIOException(e, "bind operation failed");
             return RuntimeScalarCache.scalarFalse;
         }
     }
@@ -762,7 +755,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             this.socket.connect(new InetSocketAddress(address, port));
             return RuntimeScalarCache.scalarTrue;
         } catch (IOException e) {
-            GlobalVariable.setGlobalVariable("main::!", e.getMessage());
+            handleIOException(e, "connect operation failed");
             return RuntimeScalarCache.scalarFalse;
         }
     }
@@ -774,10 +767,10 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
         try {
             this.serverSocket.setReceiveBufferSize(backlog);
-            return RuntimeScalarCache.scalarTrue;
+            return scalarTrue;
         } catch (IOException e) {
-            GlobalVariable.setGlobalVariable("main::!", e.getMessage());
-            return RuntimeScalarCache.scalarFalse;
+            handleIOException(e, "listen operation failed");
+            return scalarFalse;
         }
     }
 
@@ -794,8 +787,8 @@ public class RuntimeIO implements RuntimeScalarReference {
             fileHandle.value = new RuntimeIO(clientSocket);
             return fileHandle;
         } catch (IOException e) {
-            GlobalVariable.setGlobalVariable("main::!", e.getMessage());
-            return RuntimeScalarCache.scalarUndef;
+            handleIOException(e, "accept operation failed");
+            return scalarUndef;
         }
     }
 }
