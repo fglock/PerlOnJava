@@ -126,7 +126,7 @@ public class NumberParser {
                 throw new PerlCompilerException(parser.tokenIndex, "Malformed hexadecimal floating-point number", parser.ctx.errorUtil);
             }
         }
-        
+
         try {
             // Convert the hexadecimal number to a double
             double value = parseHexToDouble(number.toString());

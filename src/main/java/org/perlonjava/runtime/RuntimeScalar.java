@@ -680,7 +680,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar postAutoIncrement() {
-        RuntimeScalar old = new RuntimeScalar().set(this);
+        RuntimeScalar old = new RuntimeScalar(this);
         switch (type) {
             case INTEGER -> this.value = (int) this.value + 1;
             case DOUBLE -> this.value = (double) this.value + 1;
@@ -719,7 +719,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar postAutoDecrement() {
-        RuntimeScalar old = new RuntimeScalar().set(this);
+        RuntimeScalar old = new RuntimeScalar(this);
         switch (type) {
             case INTEGER -> this.value = (int) this.value - 1;
             case DOUBLE -> this.value = (double) this.value - 1;
