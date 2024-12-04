@@ -9,6 +9,7 @@ package org.perlonjava.runtime;
  */
 
 import org.perlonjava.io.DirectoryIO;
+import org.perlonjava.io.IOHandle;
 import org.perlonjava.io.SocketIO;
 
 import java.io.*;
@@ -34,11 +35,13 @@ public class RuntimeIO implements RuntimeScalarReference {
     private static final int BUFFER_SIZE = 8192;
     // Mapping of file modes to their corresponding StandardOpenOption sets
     private static final Map<String, Set<StandardOpenOption>> MODE_OPTIONS = new HashMap<>();
+
     // Standard I/O streams
     public static RuntimeIO stdout = RuntimeIO.open(FileDescriptor.out, true);
-    public static RuntimeScalar lastSelectedHandle = new RuntimeScalar(stdout);
     public static RuntimeIO stderr = RuntimeIO.open(FileDescriptor.err, true);
     public static RuntimeIO stdin = RuntimeIO.open(FileDescriptor.in, false);
+
+    public static RuntimeScalar lastSelectedHandle = new RuntimeScalar(stdout);
     // Static variable to store the last accessed filehandle -  `${^LAST_FH}`
     public static RuntimeIO lastAccessedFileHandle = null;
 
@@ -55,8 +58,10 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Line number counter for the current filehandle - `$.`
     public int currentLineNumber = 0;
     boolean needFlush;
-    private SocketIO socketIO;
+
+    private IOHandle ioHandle;
     private DirectoryIO directoryIO;
+
     // Buffers for various I/O operations
     private ByteBuffer buffer = null;
     private ByteBuffer readBuffer = null;
@@ -77,9 +82,9 @@ public class RuntimeIO implements RuntimeScalarReference {
         this.singleCharBuffer = ByteBuffer.allocate(1);
     }
 
-    // Constructor for socket
-    public RuntimeIO(Socket socket) {
-        this.socketIO = new SocketIO(socket);
+    // Constructor for socket, in-memory file
+    public RuntimeIO(IOHandle ioHandle) {
+        this.ioHandle = ioHandle;
     }
 
     // Method to set custom OutputStream
@@ -310,7 +315,9 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Method to read a single character (getc equivalent)
     public RuntimeScalar getc() {
         try {
-            if (fileChannel != null) {
+            if (ioHandle != null) {
+                return ioHandle.getc();
+            } else if (fileChannel != null) {
                 singleCharBuffer.clear();
                 int bytesRead = fileChannel.read(singleCharBuffer);
                 if (bytesRead == -1) {
@@ -358,8 +365,8 @@ public class RuntimeIO implements RuntimeScalarReference {
                     isEOF = true;
                 }
                 return bytesRead;
-            } else if (socketIO != null) {
-                return socketIO.read(buffer).getInt();
+            } else if (ioHandle != null) {
+                return ioHandle.read(buffer).getInt();
             } else {
                 throw new PerlCompilerException("No input source available");
             }
@@ -421,7 +428,7 @@ public class RuntimeIO implements RuntimeScalarReference {
                 if (c == -1) {
                     this.isEOF = true;
                 }
-            } else if (socketIO != null) {
+            } else if (ioHandle != null) {
                 // TODO: Implement reading from a socket
                 throw new PerlCompilerException("Readline is not implemented for sockets");
             }
@@ -457,8 +464,8 @@ public class RuntimeIO implements RuntimeScalarReference {
                 this.isEOF = !bufferedReader.ready();
             } else if (inputStream != null) {
                 this.isEOF = (inputStream.available() == 0);
-            } else if (socketIO != null) {
-                return socketIO.eof();
+            } else if (ioHandle != null) {
+                return ioHandle.eof();
             }
             // For output streams, EOF is not applicable
         } catch (IOException e) {
@@ -511,8 +518,8 @@ public class RuntimeIO implements RuntimeScalarReference {
                 ((FileChannel) channel).force(false);
             } else if (outputStream != null) {
                 outputStream.flush();
-            } else if (socketIO != null) {
-                socketIO.flush();
+            } else if (ioHandle != null) {
+                ioHandle.flush();
             }
             return scalarTrue;  // Return 1 to indicate success, consistent with other methods
         } catch (IOException e) {
@@ -524,8 +531,8 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Method to close the filehandle
     public RuntimeScalar close() {
         try {
-            if (socketIO != null) {
-                socketIO.close();
+            if (ioHandle != null) {
+                ioHandle.close();
             }
 
             if (fileChannel != null) {
@@ -561,7 +568,9 @@ public class RuntimeIO implements RuntimeScalarReference {
         try {
             needFlush = true;
             byte[] bytes = data.getBytes();
-            if (channel != null) {
+            if (ioHandle != null) {
+                return ioHandle.write(bytes);
+            } else if (channel != null) {
                 // For standard output and error streams
                 ByteBuffer buf = ByteBuffer.wrap(bytes);
                 while (buf.hasRemaining()) {
@@ -579,9 +588,9 @@ public class RuntimeIO implements RuntimeScalarReference {
                     if (bytesWritten == 0) break; // Shouldn't happen, but just in case
                     totalWritten += bytesWritten;
                 }
-            } else if (socketIO != null) {
+            } else if (ioHandle != null) {
                 // For socket output
-                socketIO.write(bytes);
+                ioHandle.write(bytes);
             } else {
                 throw new PerlCompilerException("No output channel available");
             }
@@ -606,9 +615,9 @@ public class RuntimeIO implements RuntimeScalarReference {
             } else if (runtimeIO.fileChannel != null) {
                 // FileChannel does not directly expose a file descriptor in Java
                 fd = -1; // Placeholder for unsupported operation
-            } else if (runtimeIO.socketIO != null) {
+            } else if (runtimeIO.ioHandle != null) {
                 // Get the file descriptor from the Socket
-                return socketIO.fileno();
+                return ioHandle.fileno();
             } else if (runtimeIO.directoryIO != null) {
                 // On systems with dirfd support, return the directory file descriptor
                 fd = -1; // Return -1 if not supported
@@ -630,31 +639,30 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     // Method to bind a socket
     public RuntimeScalar bind(String address, int port) {
-        return this.socketIO.bind(address, port);
+        return this.ioHandle.bind(address, port);
     }
 
     // Method to connect a socket
     public RuntimeScalar connect(String address, int port) {
-        if (this.socketIO == null) {
+        if (this.ioHandle == null) {
             return scalarFalse;
         }
-        return this.socketIO.connect(address, port);
+        return this.ioHandle.connect(address, port);
     }
 
     // Method to listen on a server socket
     public RuntimeScalar listen(int backlog) {
-        if (this.socketIO == null) {
+        if (this.ioHandle == null) {
             return scalarFalse;
         }
-        return this.socketIO.listen(backlog);
+        return this.ioHandle.listen(backlog);
     }
 
     // Method to accept a connection on a server socket
     public RuntimeScalar accept() {
-        if (this.socketIO == null) {
+        if (this.ioHandle == null) {
             return scalarFalse;
         }
-        return this.socketIO.accept();
+        return this.ioHandle.accept();
     }
 }
-

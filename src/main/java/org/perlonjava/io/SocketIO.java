@@ -19,7 +19,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.*;
  * binding, connecting, listening, accepting connections, and reading/writing
  * data over sockets.
  */
-public class SocketIO {
+public class SocketIO implements IOHandle {
     private Socket socket;
     private ServerSocket serverSocket;
     private InputStream inputStream;
@@ -150,6 +150,7 @@ public class SocketIO {
      *
      * @return a RuntimeScalar containing the hash code of the socket's channel, or undefined if unavailable
      */
+    @Override
     public RuntimeScalar fileno() {
         if (socket != null) {
             return new RuntimeScalar(socket.getChannel().hashCode());
@@ -163,6 +164,7 @@ public class SocketIO {
      * @param buffer the buffer to store the read data
      * @return a RuntimeScalar containing the number of bytes read, or undefined if end-of-file is reached
      */
+    @Override
     public RuntimeScalar read(byte[] buffer) {
         try {
             if (inputStream != null) {
@@ -186,6 +188,7 @@ public class SocketIO {
      * @param data the data to be written to the socket
      * @return a RuntimeScalar indicating success (true) or failure (false)
      */
+    @Override
     public RuntimeScalar write(byte[] data) {
         try {
             if (outputStream != null) {
@@ -204,6 +207,7 @@ public class SocketIO {
      *
      * @return a RuntimeScalar indicating success (true) or failure (false)
      */
+    @Override
     public RuntimeScalar flush() {
         try {
             if (outputStream != null) {
@@ -222,6 +226,7 @@ public class SocketIO {
      *
      * @return a RuntimeScalar indicating EOF (true) or not (false)
      */
+    @Override
     public RuntimeScalar eof() {
         return isEOF ? scalarTrue : scalarFalse;
     }
@@ -231,6 +236,7 @@ public class SocketIO {
      *
      * @return a RuntimeScalar indicating success (true) or failure (false)
      */
+    @Override
     public RuntimeScalar close() {
         try {
             if (socket != null) {
@@ -245,6 +251,48 @@ public class SocketIO {
         } catch (IOException e) {
             handleIOException(e, "close operation failed");
             return scalarFalse;
+        }
+    }
+
+    /**
+     * Returns the current position in the input stream.
+     *
+     * @return the current position in the input stream
+     */
+    @Override
+    public long tell() {
+        throw new UnsupportedOperationException("tell operation is not supported for sockets");
+    }
+
+    /**
+     * Sets the position in the input stream.
+     *
+     * @param pos the position to set
+     */
+    @Override
+    public void seek(long pos) {
+        throw new UnsupportedOperationException("seek operation is not supported for sockets");
+    }
+
+    /**
+     * Reads a single byte from the socket's input stream.
+     *
+     * @return a RuntimeScalar containing the byte read, or undefined if end-of-file is reached
+     */
+    public RuntimeScalar getc() {
+        try {
+            if (inputStream != null) {
+                int byteRead = inputStream.read();
+                if (byteRead == -1) {
+                    isEOF = true;
+                    return scalarUndef;
+                }
+                return new RuntimeScalar(byteRead);
+            }
+            throw new IllegalStateException("No input stream available");
+        } catch (IOException e) {
+            handleIOException(e, "getc operation failed");
+            return scalarUndef;
         }
     }
 }
