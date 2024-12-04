@@ -8,10 +8,7 @@ package org.perlonjava.runtime;
     Implementing modes for read/write (+<, +>) operations.
  */
 
-import org.perlonjava.io.CustomFileChannel;
-import org.perlonjava.io.DirectoryIO;
-import org.perlonjava.io.IOHandle;
-import org.perlonjava.io.StandardIO;
+import org.perlonjava.io.*;
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -56,9 +53,6 @@ public class RuntimeIO implements RuntimeScalarReference {
     boolean needFlush;
     private DirectoryIO directoryIO;
 
-    // Streams and channels for I/O operations
-    private OutputStream outputStream;
-    private WritableByteChannel channel;
     // State flags
     private boolean isEOF;
 
@@ -73,8 +67,7 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     // Method to set custom OutputStream
     public static void setCustomOutputStream(OutputStream out) {
-        stdout.outputStream = new BufferedOutputStream(out, BUFFER_SIZE);
-        stdout.channel = Channels.newChannel(stdout.outputStream);
+        stdout.ioHandle = new CustomOutputStreamHandle(out);
     }
 
     public static void handleIOException(IOException e, String message) {
@@ -96,8 +89,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             fh.ioHandle = new StandardIO(System.in);
         } else if (">-".equals(fileName)) {
             // Handle standard output
-            fh.outputStream = new BufferedOutputStream(System.out, BUFFER_SIZE);
-            fh.channel = Channels.newChannel(fh.outputStream);
+            fh.ioHandle = new CustomOutputStreamHandle(System.out);
         } else {
             return open(fileName, "<");
         }
@@ -150,8 +142,7 @@ public class RuntimeIO implements RuntimeScalarReference {
                 if (fd == FileDescriptor.out || fd == FileDescriptor.err) {
                     // For standard output and error, we can't use FileChannel
                     OutputStream out = (fd == FileDescriptor.out) ? System.out : System.err;
-                    fh.outputStream = new BufferedOutputStream(out, BUFFER_SIZE);
-                    fh.channel = Channels.newChannel(fh.outputStream);
+                    fh.ioHandle = new CustomOutputStreamHandle(out);
                 } else {
                     // For other output file descriptors, use FileChannel
                     fh.ioHandle = new CustomFileChannel(fd, Collections.singleton(StandardOpenOption.WRITE));
@@ -393,99 +384,52 @@ public class RuntimeIO implements RuntimeScalarReference {
     }
 
     public RuntimeScalar flush() {
-        try {
-            needFlush = false;
-            if (channel != null && channel instanceof FileChannel) {
-                ((FileChannel) channel).force(false);
-            } else if (outputStream != null) {
-                outputStream.flush();
-            } else if (ioHandle != null) {
-                ioHandle.flush();
-            }
-            return scalarTrue;  // Return 1 to indicate success, consistent with other methods
-        } catch (IOException e) {
-            handleIOException(e, "File operation failed");
-            return scalarFalse;  // Return undef to indicate failure
+        needFlush = false;
+        if (ioHandle != null) {
+            ioHandle.flush();
         }
+        return scalarTrue;  // Return 1 to indicate success, consistent with other methods
     }
 
     // Method to close the filehandle
     public RuntimeScalar close() {
-        try {
-            if (ioHandle != null) {
-                ioHandle.close();
-            }
-
-            if (channel != null) {
-                if (channel instanceof FileChannel) {
-                    ((FileChannel) channel).force(true);
-                }
-                channel.close();
-                channel = null;
-            }
-            if (outputStream != null) {
-                outputStream.flush();
-                outputStream.close();
-                outputStream = null;
-            }
-            return scalarTrue;
-        } catch (IOException e) {
-            handleIOException(e, "File operation failed");
-            return scalarFalse;
+        if (ioHandle != null) {
+            ioHandle.close();
         }
+        return scalarTrue;
     }
 
     // Method to append data to a file
     public RuntimeScalar write(String data) {
-        try {
-            needFlush = true;
-            byte[] bytes = data.getBytes();
-            if (ioHandle != null) {
-                return ioHandle.write(bytes);
-            } else if (channel != null) {
-                // For standard output and error streams
-                ByteBuffer buf = ByteBuffer.wrap(bytes);
-                while (buf.hasRemaining()) {
-                    channel.write(buf);
-                }
-            } else {
-                throw new PerlCompilerException("No output channel available");
-            }
-            return scalarTrue;
-        } catch (IOException e) {
-            handleIOException(e, "File operation failed");
-            return scalarFalse;
+        needFlush = true;
+        byte[] bytes = data.getBytes();
+        if (ioHandle != null) {
+            return ioHandle.write(bytes);
+        } else {
+            throw new PerlCompilerException("No output channel available");
         }
     }
 
     public RuntimeScalar fileno() {
         RuntimeIO runtimeIO = this;
 
-        try {
-            int fd;
-            if (runtimeIO == stdin) {
-                fd = 0; // File descriptor for STDIN
-            } else if (runtimeIO == stdout) {
-                fd = 1; // File descriptor for STDOUT
-            } else if (runtimeIO == stderr) {
-                fd = 2; // File descriptor for STDERR
-            } else if (runtimeIO.ioHandle != null) {
-                // Get the file descriptor from the Socket
-                return ioHandle.fileno();
-            } else if (runtimeIO.directoryIO != null) {
-                // On systems with dirfd support, return the directory file descriptor
-                fd = -1; // Return -1 if not supported
-            } else if (runtimeIO.outputStream instanceof FileOutputStream) {
-                // Attempt to get the file descriptor from FileOutputStream
-                fd = ((FileOutputStream) runtimeIO.outputStream).getFD().hashCode();
-            } else {
-                fd = -1; // No real file descriptor
-            }
-            return new RuntimeScalar(fd);
-        } catch (IOException e) {
-            handleIOException(e, "File operation failed");
-            return scalarUndef;
+        int fd;
+        if (runtimeIO == stdin) {
+            fd = 0; // File descriptor for STDIN
+        } else if (runtimeIO == stdout) {
+            fd = 1; // File descriptor for STDOUT
+        } else if (runtimeIO == stderr) {
+            fd = 2; // File descriptor for STDERR
+        } else if (runtimeIO.ioHandle != null) {
+            // Get the file descriptor from the Socket
+            return ioHandle.fileno();
+        } else if (runtimeIO.directoryIO != null) {
+            // On systems with dirfd support, return the directory file descriptor
+            fd = -1; // Return -1 if not supported
+        } else {
+            fd = -1; // No real file descriptor
         }
+        return new RuntimeScalar(fd);
     }
 
     // Method to bind a socket
