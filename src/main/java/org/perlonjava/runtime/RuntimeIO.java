@@ -10,7 +10,8 @@ package org.perlonjava.runtime;
 
 import org.perlonjava.io.*;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -44,8 +45,8 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Line number counter for the current filehandle - `$.`
     public int currentLineNumber = 0;
     public IOHandle ioHandle;
-    boolean needFlush;
     public DirectoryIO directoryIO;
+    boolean needFlush;
 
     // Constructor to initialize buffers
     public RuntimeIO() {
@@ -169,7 +170,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             return handleIOError("Unsupported scalar type for truncate");
         }
     }
-    
+
     private Set<StandardOpenOption> convertMode(String mode) {
         Set<StandardOpenOption> options = MODE_OPTIONS.get(mode);
         if (options == null) {

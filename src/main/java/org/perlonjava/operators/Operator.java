@@ -268,11 +268,6 @@ public class Operator {
         }
     }
 
-    public static RuntimeScalar eof(RuntimeList runtimeList, RuntimeScalar fileHandle) {
-        RuntimeIO fh = fileHandle.getRuntimeIO();
-        return fh.eof();
-    }
-
     /**
      * Reads a line from a file handle.
      *
@@ -308,6 +303,11 @@ public class Operator {
      * @return A RuntimeScalar with the flag.
      */
     public static RuntimeScalar eof(RuntimeScalar fileHandle) {
+        RuntimeIO fh = fileHandle.getRuntimeIO();
+        return fh.eof();
+    }
+
+    public static RuntimeScalar eof(RuntimeList runtimeList, RuntimeScalar fileHandle) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
         return fh.eof();
     }

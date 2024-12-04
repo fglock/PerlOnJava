@@ -13,10 +13,10 @@ public class StandardIO implements IOHandle {
     public static final int STDIN_FILENO = 0;
     public static final int STDOUT_FILENO = 1;
     public static final int STDERR_FILENO = 2;
+    private final int fileno;
     private InputStream inputStream;
     private OutputStream outputStream;
     private boolean isEOF;
-    private final int fileno;
 
     public StandardIO(InputStream inputStream) {
         this.inputStream = inputStream;

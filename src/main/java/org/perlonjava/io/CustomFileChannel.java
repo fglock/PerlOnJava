@@ -14,7 +14,6 @@ import java.nio.file.StandardOpenOption;
 import java.util.Set;
 
 import static org.perlonjava.runtime.RuntimeIO.handleIOException;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 
 public class CustomFileChannel implements IOHandle {

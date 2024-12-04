@@ -39,7 +39,7 @@ public class SocketIO implements IOHandle {
                 this.outputStream = this.socket.getOutputStream();
             }
         } catch (IOException e) {
-             handleIOException(e, "Failed to initialize socket streams");
+            handleIOException(e, "Failed to initialize socket streams");
         }
     }
 

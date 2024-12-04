@@ -9,7 +9,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 
 public class CustomOutputStreamHandle implements IOHandle {
-    private OutputStream outputStream;
+    private final OutputStream outputStream;
 
     public CustomOutputStreamHandle(OutputStream outputStream) {
         this.outputStream = outputStream;
