@@ -135,6 +135,7 @@
     - `truncate`, `seek` operators.
     - preprocessor `# line` directive.
     - subroutine prototypes.
+    - in-memory I/O
 
 - **v3.0.0**: Concurrency and Security Features
   - Add support for concurrency and parallelism, such as threads and async/await.

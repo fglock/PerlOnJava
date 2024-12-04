@@ -200,8 +200,9 @@
 - ✔️   **`print` operators**: `print`, `printf` and `say` statements are implemented, with support for file handles.
 - ✔️   **`printf` and `sprintf`**: String formatting is implemented.
 - ✔️   **I/O operators**: `open`, `readline`, `eof`, `close`, `unlink`, `readpipe`, `fileno`, `getc` are implemented.
-- ❌  **I/O operators**: `read`, `socket`, `seek` are not implemented.
+- ❌  **I/O operators**: `read`, `socket`, `seek`, `truncate`, `bind`, `connect`, `accept`, `listen` are not implemented.
 - ✔️   **`open`**: 2-argument `open` supported forms are: `<-`, `-`, `>-`, `filename`.
+- ❌  **`open`**: In-memory files are not implemented.
 - ✔️   **`select`**: `select(filehandle)` is implemented.
 - ✔️   **Short-circuit and, or**: Short-circuit logical operators are supported.
 - ✔️   **Low-precedence/high precedence operators**: Logical operators like `not`, `or`, `and` are supported.
