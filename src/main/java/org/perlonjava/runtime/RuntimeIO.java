@@ -11,13 +11,13 @@ package org.perlonjava.runtime;
 import org.perlonjava.io.CustomFileChannel;
 import org.perlonjava.io.DirectoryIO;
 import org.perlonjava.io.IOHandle;
+import org.perlonjava.io.StandardIO;
 
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
-import java.nio.file.DirectoryStream;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
@@ -38,7 +38,7 @@ public class RuntimeIO implements RuntimeScalarReference {
     public static RuntimeIO stdout = RuntimeIO.open(FileDescriptor.out, true);
     public static RuntimeScalar lastSelectedHandle = new RuntimeScalar(stdout);
     public static RuntimeIO stderr = RuntimeIO.open(FileDescriptor.err, true);
-    public static RuntimeIO stdin = RuntimeIO.open(FileDescriptor.in, false);
+    public static RuntimeIO stdin = new RuntimeIO(new StandardIO(System.in));
     // Static variable to store the last accessed filehandle -  `${^LAST_FH}`
     public static RuntimeIO lastAccessedFileHandle = null;
 
@@ -50,30 +50,20 @@ public class RuntimeIO implements RuntimeScalarReference {
         MODE_OPTIONS.put("+<", EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE));
     }
 
-    // List to keep track of directory stream positions
-    private final List<DirectoryStream<Path>> directoryStreamPositions = new ArrayList<>();
     // Line number counter for the current filehandle - `$.`
     public int currentLineNumber = 0;
     public IOHandle ioHandle;
     boolean needFlush;
     private DirectoryIO directoryIO;
 
-    // Buffers for various I/O operations
-    private ByteBuffer buffer = null;
-    private ByteBuffer readBuffer = null;
-    private ByteBuffer singleCharBuffer = null;
     // Streams and channels for I/O operations
     private OutputStream outputStream;
-    private BufferedReader bufferedReader;
     private WritableByteChannel channel;
     // State flags
     private boolean isEOF;
 
     // Constructor to initialize buffers
     public RuntimeIO() {
-        this.buffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
-        this.readBuffer = ByteBuffer.allocate(BUFFER_SIZE);
-        this.singleCharBuffer = ByteBuffer.allocate(1);
     }
 
     // Constructor for socket, in-memory file
@@ -103,7 +93,7 @@ public class RuntimeIO implements RuntimeScalarReference {
         RuntimeIO fh = new RuntimeIO();
         if ("-".equals(fileName) || "<-".equals(fileName)) {
             // Handle standard input
-            fh.bufferedReader = new BufferedReader(new InputStreamReader(System.in));
+            fh.ioHandle = new StandardIO(System.in);
         } else if (">-".equals(fileName)) {
             // Handle standard output
             fh.outputStream = new BufferedOutputStream(System.out, BUFFER_SIZE);
@@ -301,22 +291,10 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     // Method to read a single character (getc equivalent)
     public RuntimeScalar getc() {
-        try {
-            if (ioHandle != null) {
-                return ioHandle.getc();
-            } else if (bufferedReader != null) {
-                int result = bufferedReader.read();
-                if (result == -1) {
-                    isEOF = true;
-                    return scalarUndef; // End of file
-                }
-                return new RuntimeScalar(Character.toString((char) result));
-            }
-            throw new PerlCompilerException("No input source available");
-        } catch (IOException e) {
-            handleIOException(e, "Read operation failed");
-            return scalarUndef; // Indicating an error
+        if (ioHandle != null) {
+            return ioHandle.getc();
         }
+        throw new PerlCompilerException("No input source available");
     }
 
     // Method to read into a byte array
@@ -329,77 +307,63 @@ public class RuntimeIO implements RuntimeScalarReference {
     }
 
     public RuntimeScalar readline() {
-        try {
-            // Update the last accessed filehandle
-            lastAccessedFileHandle = this;
+        // Update the last accessed filehandle
+        lastAccessedFileHandle = this;
 
-            // Flush stdout and stderr before reading, in case we are displaying a prompt
-            flushFileHandles();
+        // Flush stdout and stderr before reading, in case we are displaying a prompt
+        flushFileHandles();
 
-            // Check if the IO object is set up for reading
-            if (ioHandle == null && bufferedReader == null) {
-                throw new PerlCompilerException("Readline is not supported for output streams");
+        // Check if the IO object is set up for reading
+        if (ioHandle == null) {
+            throw new PerlCompilerException("Readline is not supported for output streams");
+        }
+
+        // Get the input record separator (equivalent to Perl's $/)
+        String sep = getGlobalVariable("main::/").toString();
+        boolean hasSeparator = !sep.isEmpty();
+        int separator = hasSeparator ? sep.charAt(0) : '\n';
+
+        StringBuilder line = new StringBuilder();
+        byte[] buffer = new byte[1]; // Buffer to read one byte at a time
+
+        int bytesRead;
+        while ((bytesRead = ioHandle.read(buffer).getInt()) != -1) {
+            char c = (char) buffer[0];
+            line.append(c);
+            // Break if we've reached the separator (if defined)
+            if (hasSeparator && c == separator) {
+                break;
             }
+        }
 
-            // Get the input record separator (equivalent to Perl's $/)
-            String sep = getGlobalVariable("main::/").toString();
-            boolean hasSeparator = !sep.isEmpty();
-            int separator = hasSeparator ? sep.charAt(0) : '\n';
+        if (bytesRead == -1) {
+            this.isEOF = true;
+        }
 
-            StringBuilder line = new StringBuilder();
+        // Increment the line number counter if a line was read
+        if (!line.isEmpty()) {
+            currentLineNumber++;
+        }
 
-            // Reading from a file using NIO FileChannel
-            if (bufferedReader != null) {
-                int c;
-                while ((c = bufferedReader.read()) != -1) {
-                    line.append((char) c);
-                    // Break if we've reached the separator (if defined)
-                    if (hasSeparator && c == separator) {
-                        break;
-                    }
-                }
-                if (c == -1) {
-                    this.isEOF = true;
-                }
-            } else if (ioHandle != null) {
-                // TODO: Implement reading from a socket
-                throw new PerlCompilerException("Readline is not implemented for sockets");
-            }
-
-            // Increment the line number counter if a line was read
-            if (!line.isEmpty()) {
-                currentLineNumber++;
-            }
-
-            // Return undef if we've reached EOF and no characters were read
-            if (line.isEmpty() && this.isEOF) {
-                return scalarUndef;
-            }
-
-            // Return the read line as a RuntimeScalar
-            return new RuntimeScalar(line.toString());
-        } catch (IOException e) {
-            // Set the global error variable ($!) and return undef on error
-            handleIOException(e, "Readline operation failed");
+        // Return undef if we've reached EOF and no characters were read
+        if (line.isEmpty() && this.isEOF) {
             return scalarUndef;
         }
+
+        // Return the read line as a RuntimeScalar
+        return new RuntimeScalar(line.toString());
     }
+
 
     // Method to check for end-of-file (eof equivalent)
     public RuntimeScalar eof() {
-        try {
-            // Update the last accessed filehandle
-            lastAccessedFileHandle = this;
+        // Update the last accessed filehandle
+        lastAccessedFileHandle = this;
 
-            if (bufferedReader != null) {
-                this.isEOF = !bufferedReader.ready();
-            } else if (ioHandle != null) {
-                return ioHandle.eof();
-            }
-            // For output streams, EOF is not applicable
-        } catch (IOException e) {
-            handleIOException(e, "File operation failed");
+        if (ioHandle != null) {
+            return ioHandle.eof();
         }
+        // For output streams, EOF is not applicable
         return getScalarBoolean(this.isEOF);
     }
 
@@ -458,10 +422,6 @@ public class RuntimeIO implements RuntimeScalarReference {
                 }
                 channel.close();
                 channel = null;
-            }
-            if (bufferedReader != null) {
-                bufferedReader.close();
-                bufferedReader = null;
             }
             if (outputStream != null) {
                 outputStream.flush();
