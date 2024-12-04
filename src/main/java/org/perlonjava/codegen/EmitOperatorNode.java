@@ -131,8 +131,7 @@ public class EmitOperatorNode {
             case "splice":
                 EmitOperator.handleSpliceBuiltin(emitterVisitor, node);
                 break;
-            case "pop":
-            case "shift":
+            case "pop", "shift":
                 emitterVisitor.handleArrayUnaryBuiltin(node, operator);
                 break;
             case "matchRegex", "quoteRegex", "replaceRegex", "tr", "y", "qx":

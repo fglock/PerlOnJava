@@ -46,7 +46,7 @@ public class Base extends PerlModuleBase {
         }
 
         // Extract the package name from the arguments
-        RuntimeScalar packageScalar = args.shift();
+        RuntimeScalar packageScalar = RuntimeArray.shift(args);
         String packageName = packageScalar.scalar().toString();
 
         // Determine the caller's namespace

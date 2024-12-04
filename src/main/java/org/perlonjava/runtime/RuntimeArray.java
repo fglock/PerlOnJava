@@ -128,24 +128,26 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
      * Removes and returns the last value of the array.
      *
      * @return The last value of the array, or undefined if empty.
+     * @param runtimeArray
      */
-    public RuntimeScalar pop() {
-        if (elements.isEmpty()) {
+    public static RuntimeScalar pop(RuntimeArray runtimeArray) {
+        if (runtimeArray.elements.isEmpty()) {
             return new RuntimeScalar(); // Return undefined if empty
         }
-        return elements.removeLast();
+        return runtimeArray.elements.removeLast();
     }
 
     /**
      * Removes and returns the first value of the array.
      *
      * @return The first value of the array, or undefined if empty.
+     * @param runtimeArray
      */
-    public RuntimeScalar shift() {
-        if (elements.isEmpty()) {
+    public static RuntimeScalar shift(RuntimeArray runtimeArray) {
+        if (runtimeArray.elements.isEmpty()) {
             return new RuntimeScalar(); // Return undefined if empty
         }
-        return elements.removeFirst();
+        return runtimeArray.elements.removeFirst();
     }
 
     /**
@@ -277,9 +279,10 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
      * Gets the index of the last element.
      *
      * @return A scalar representing the index of the last element.
+     * @param runtimeArray
      */
-    public RuntimeScalar indexLastElem() {
-        return getScalarInt(elements.size() - 1);
+    public static RuntimeScalar indexLastElem(RuntimeArray runtimeArray) {
+        return getScalarInt(runtimeArray.elements.size() - 1);
     }
 
     /**

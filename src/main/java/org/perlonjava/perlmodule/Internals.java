@@ -66,18 +66,18 @@ public class Internals extends PerlModuleBase {
 
     public static RuntimeList initializeStateArray(RuntimeArray args, int ctx) {
         StateVariable.initializeStateArray(
-                args.shift(),
-                args.shift().toString(),
-                args.shift().getInt(),
+                RuntimeArray.shift(args),
+                RuntimeArray.shift(args).toString(),
+                RuntimeArray.shift(args).getInt(),
                 args);
         return new RuntimeList();
     }
 
     public static RuntimeList initializeStateHash(RuntimeArray args, int ctx) {
         StateVariable.initializeStateHash(
-                args.shift(),
-                args.shift().toString(),
-                args.shift().getInt(),
+                RuntimeArray.shift(args),
+                RuntimeArray.shift(args).toString(),
+                RuntimeArray.shift(args).getInt(),
                 args);
         return new RuntimeList();
     }

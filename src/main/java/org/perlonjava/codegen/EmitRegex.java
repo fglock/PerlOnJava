@@ -4,6 +4,8 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.runtime.RuntimeContextType;
 
+import static org.perlonjava.codegen.EmitOperator.emitOperator;
+
 /**
  * The EmitRegex class is responsible for handling regex-related operations
  * within the code generation process. It provides methods to handle binding
@@ -93,15 +95,7 @@ public class EmitRegex {
                 // Handle system command execution
                 operand.elements.getFirst().accept(scalarVisitor);
                 emitterVisitor.pushCallContext();
-                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/operators/SystemOperator",
-                        "systemCommand",
-                        "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
-
-                // If the context type is VOID, pop the result off the stack
-                if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-                    emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-                }
+                emitOperator("systemCommand", emitterVisitor);
                 return;
             }
             case "tr", "y" -> {

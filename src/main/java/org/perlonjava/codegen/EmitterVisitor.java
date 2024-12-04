@@ -11,6 +11,8 @@ import org.perlonjava.runtime.ScalarUtils;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.perlonjava.codegen.EmitOperator.emitOperator;
+
 public class EmitterVisitor implements Visitor {
 
     public final EmitterContext ctx;
@@ -103,7 +105,7 @@ public class EmitterVisitor implements Visitor {
 
         node.right.accept(scalarVisitor); // right parameter
         // stack: [left, right]
-        EmitOperator.emitOperator(node.operator, this);
+        emitOperator(node.operator, this);
     }
 
     void handleCompoundAssignment(BinaryOperatorNode node, OperatorHandler operatorHandler) {
@@ -145,7 +147,7 @@ public class EmitterVisitor implements Visitor {
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", operator, "(I)Lorg/perlonjava/runtime/RuntimeScalar;", false);
             } else if (operator.equals("times") || operator.equals("time")) {
                 // Call static RuntimeScalar method with no arguments; returns RuntimeList
-                EmitOperator.emitOperator(operator, this);
+                emitOperator(operator, this);
                 return;
             } else {
                 // Call static RuntimeScalar method with no arguments
@@ -158,7 +160,7 @@ public class EmitterVisitor implements Visitor {
         } else if (operator.equals("gmtime") || operator.equals("localtime") || operator.equals("caller") || operator.equals("reset") || operator.equals("select")) {
             node.operand.accept(this.with(RuntimeContextType.LIST));
             pushCallContext();
-            EmitOperator.emitOperator(operator, this);
+            emitOperator(operator, this);
             return;
         } else if (operator.equals("prototype")) {
             node.operand.accept(this.with(RuntimeContextType.SCALAR));
@@ -179,7 +181,7 @@ public class EmitterVisitor implements Visitor {
         } else {
             node.operand.accept(this.with(RuntimeContextType.SCALAR));
             if (operatorHandler != null) {
-                EmitOperator.emitOperator(operator, this);
+                emitOperator(operator, this);
                 return;
             } else {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
@@ -198,10 +200,7 @@ public class EmitterVisitor implements Visitor {
             operand = ((ListNode) operand).elements.getFirst();
         }
         operand.accept(this.with(RuntimeContextType.LIST));
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
+        emitOperator(operator, this);
     }
 
     void handleFileTestBuiltin(OperatorNode node) {

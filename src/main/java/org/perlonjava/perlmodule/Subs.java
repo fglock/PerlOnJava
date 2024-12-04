@@ -33,7 +33,7 @@ public class Subs extends PerlModuleBase {
      * @throws PerlCompilerException if there are issues with the variable creation process.
      */
     public static RuntimeList importSubs(RuntimeArray args, int ctx) {
-        args.shift();
+        RuntimeArray.shift(args);
 
         // Determine the caller's namespace
         RuntimeList callerList = RuntimeCode.caller(new RuntimeList(), RuntimeContextType.SCALAR);

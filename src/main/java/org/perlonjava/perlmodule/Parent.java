@@ -51,7 +51,7 @@ public class Parent extends PerlModuleBase {
         }
 
         // Extract the package name from the arguments
-        RuntimeScalar packageScalar = args.shift();
+        RuntimeScalar packageScalar = RuntimeArray.shift(args);
         String packageName = packageScalar.scalar().toString();
 
         // Determine the caller's namespace
@@ -62,7 +62,7 @@ public class Parent extends PerlModuleBase {
         boolean noRequire = false;
         if (args.size() > 0 && args.get(0).toString().equals("-norequire")) {
             noRequire = true;
-            args.shift();
+            RuntimeArray.shift(args);
         }
 
         // Process each parent class specified in the arguments

@@ -114,7 +114,7 @@ public class DiamondIO {
         }
 
         // Get the next file name from the global ARGV array
-        RuntimeScalar fileName = getGlobalArray("main::ARGV").shift();
+        RuntimeScalar fileName = RuntimeArray.shift(getGlobalArray("main::ARGV"));
 
         // Return false if no more files are available
         if (fileName.type == RuntimeScalarType.UNDEF) {
