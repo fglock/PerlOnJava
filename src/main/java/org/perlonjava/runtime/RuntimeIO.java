@@ -101,26 +101,22 @@ public class RuntimeIO implements RuntimeScalarReference {
 
             // Truncate the file if mode is '>'
             if (">".equals(mode)) {
-                fh.ioHandle.seek(0);
+                fh.ioHandle.truncate(0);
             }
             if (">>".equals(mode)) {
                 long size = fh.ioHandle.tell();
                 fh.ioHandle.seek(size); // Move to end for appending
             }
         } catch (IOException e) {
-            handleIOException(e, "File operation failed");
+            handleIOException(e, "open failed");
             fh = null;
         }
         return fh;
     }
 
     public static Path getPath(String fileName) {
-        // Get the base directory from the user.dir system property
-        String userDir = System.getProperty("user.dir");
-
         // Construct the full file path relative to the user.dir
-        Path filePath = Paths.get(userDir, fileName);
-        return filePath;
+        return Paths.get(System.getProperty("user.dir"), fileName);
     }
 
     // Constructor for standard output and error streams
@@ -186,7 +182,7 @@ public class RuntimeIO implements RuntimeScalarReference {
                 channel1.truncate(length);
                 return scalarTrue;
             } catch (IOException e) {
-                handleIOException(e, "Truncate operation failed");
+                handleIOException(e, "truncate failed");
                 return scalarFalse;
             }
         } else if (scalar.type == RuntimeScalarType.GLOB || scalar.type == RuntimeScalarType.GLOBREFERENCE) {
@@ -294,7 +290,7 @@ public class RuntimeIO implements RuntimeScalarReference {
 
         // Check if the IO object is set up for reading
         if (ioHandle == null) {
-            throw new PerlCompilerException("Readline is not supported for output streams");
+            throw new PerlCompilerException("readline is not supported for output streams");
         }
 
         // Get the input record separator (equivalent to Perl's $/)
@@ -376,7 +372,7 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Method to close the filehandle
     public RuntimeScalar close() {
         if (ioHandle != null) {
-            ioHandle.close();
+            return ioHandle.close();
         }
         return scalarTrue;
     }
@@ -388,7 +384,7 @@ public class RuntimeIO implements RuntimeScalarReference {
         if (ioHandle != null) {
             return ioHandle.write(bytes);
         } else {
-            throw new PerlCompilerException("No output channel available");
+            throw new PerlCompilerException("write: No output channel available");
         }
     }
 
@@ -416,6 +412,9 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     // Method to bind a socket
     public RuntimeScalar bind(String address, int port) {
+        if (this.ioHandle == null) {
+            return scalarFalse;
+        }
         return this.ioHandle.bind(address, port);
     }
 
