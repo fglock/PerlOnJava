@@ -62,30 +62,17 @@ public class Directory {
     }
 
     public static RuntimeScalar closedir(RuntimeScalar runtimeScalar) {
-        if (runtimeScalar.type != RuntimeScalarType.GLOB) {
-            throw new PerlCompilerException("Invalid directory handle");
-        }
-
-        RuntimeIO dirIO = (RuntimeIO) runtimeScalar.value;
-        return dirIO.closedir();
+        return RuntimeIO.closedir(runtimeScalar);
     }
 
     public static RuntimeScalar rewinddir(RuntimeScalar runtimeScalar) {
-        if (runtimeScalar.type != RuntimeScalarType.GLOB) {
-            throw new PerlCompilerException("Invalid directory handle");
-        }
-
-        RuntimeIO dirIO = (RuntimeIO) runtimeScalar.value;
+        RuntimeIO dirIO = runtimeScalar.getRuntimeIO();
         dirIO.rewinddir();
         return scalarTrue;
     }
 
     public static RuntimeScalar telldir(RuntimeScalar runtimeScalar) {
-        if (runtimeScalar.type != RuntimeScalarType.GLOB) {
-            throw new PerlCompilerException("Invalid directory handle");
-        }
-
-        RuntimeIO dirIO = (RuntimeIO) runtimeScalar.value;
+        RuntimeIO dirIO = runtimeScalar.getRuntimeIO();
         return new RuntimeScalar(dirIO.telldir());
     }
 

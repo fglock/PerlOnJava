@@ -125,7 +125,7 @@ public class RuntimeIO implements RuntimeScalarReference {
     }
 
     public static RuntimeScalar readdir(RuntimeScalar dirHandle, int ctx) {
-        RuntimeIO runtimeIO = (RuntimeIO) dirHandle.value;
+        RuntimeIO runtimeIO = dirHandle.getRuntimeIO();
         if (runtimeIO.directoryIO != null) {
             return runtimeIO.directoryIO.readdir(ctx);
         }
@@ -175,10 +175,11 @@ public class RuntimeIO implements RuntimeScalarReference {
     }
 
     // Method for closing directory streams
-    public RuntimeScalar closedir() {
-        if (directoryIO != null) {
-            directoryIO.closedir();
-            directoryIO = null;
+    public static RuntimeScalar closedir(RuntimeScalar runtimeScalar) {
+        RuntimeIO dirIO = runtimeScalar.getRuntimeIO();
+        if (dirIO.directoryIO != null) {
+            dirIO.directoryIO.closedir();
+            dirIO.directoryIO = null;
             return scalarTrue;
         }
         return scalarFalse; // Not a directory handle
