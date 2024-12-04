@@ -247,7 +247,7 @@ public class SocketIO implements IOHandle {
      * @return the current position in the input stream
      */
     @Override
-    public long tell() {
+    public RuntimeScalar tell() {
         throw new UnsupportedOperationException("tell operation is not supported for sockets");
     }
 

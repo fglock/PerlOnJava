@@ -14,6 +14,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.Set;
 
 import static org.perlonjava.runtime.RuntimeIO.handleIOException;
+import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 
 public class CustomFileChannel implements IOHandle {
@@ -78,12 +79,12 @@ public class CustomFileChannel implements IOHandle {
     }
 
     @Override
-    public long tell() {
+    public RuntimeScalar tell() {
         try {
-            return fileChannel.position();
+            return getScalarInt(fileChannel.position());
         } catch (IOException e) {
             handleIOException(e, "tell failed");
-            return -1;
+            return getScalarInt(-1);
         }
     }
 

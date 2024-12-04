@@ -84,7 +84,7 @@ public class InMemoryIO implements IOHandle {
     }
 
     @Override
-    public long tell() {
+    public RuntimeScalar tell() {
         throw new UnsupportedOperationException("Tell operation is not supported for in-memory streams");
     }
 

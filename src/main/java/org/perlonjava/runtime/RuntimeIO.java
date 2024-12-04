@@ -110,8 +110,8 @@ public class RuntimeIO implements RuntimeScalarReference {
                 fh.ioHandle.truncate(0);
             }
             if (">>".equals(mode)) {
-                long size = fh.ioHandle.tell();
-                fh.ioHandle.seek(size); // Move to end for appending
+                RuntimeScalar size = fh.ioHandle.tell();
+                fh.ioHandle.seek(size.getLong()); // Move to end for appending
             }
         } catch (IOException e) {
             handleIOException(e, "open failed");
@@ -207,12 +207,6 @@ public class RuntimeIO implements RuntimeScalarReference {
     }
 
     // Method to read a single character (getc equivalent)
-    public RuntimeScalar getc() {
-        if (ioHandle != null) {
-            return ioHandle.getc();
-        }
-        throw new PerlCompilerException("No input source available");
-    }
 
     // Method to read into a byte array
     public int read(byte[] buffer) {
@@ -280,14 +274,15 @@ public class RuntimeIO implements RuntimeScalarReference {
     }
 
     // Method to get the current file pointer position (tell equivalent)
-    public long tell() {
+    public RuntimeScalar tell() {
         // Update the last accessed filehandle
         lastSelectedHandle = this;
 
         if (ioHandle != null) {
             return ioHandle.tell();
         } else {
-            throw new PerlCompilerException("Tell operation is not supported for standard streams");
+            handleIOError("Tell operation is not supported for standard streams");
+            return getScalarInt(-1);
         }
     }
 
@@ -299,7 +294,7 @@ public class RuntimeIO implements RuntimeScalarReference {
         if (ioHandle != null) {
             return ioHandle.seek(pos);
         } else {
-            throw new PerlCompilerException("Seek operation is not supported for standard streams");
+            return handleIOError("Seek operation is not supported for standard streams");
         }
     }
 
@@ -326,38 +321,23 @@ public class RuntimeIO implements RuntimeScalarReference {
         if (ioHandle != null) {
             return ioHandle.write(bytes);
         } else {
-            throw new PerlCompilerException("write: No output channel available");
+            return handleIOError("write: No output channel available");
         }
     }
 
     public RuntimeScalar fileno() {
-        RuntimeIO runtimeIO = this;
-
-        int fd;
-        if (runtimeIO == stdin) {
-            fd = 0; // File descriptor for STDIN
-        } else if (runtimeIO == stdout) {
-            fd = 1; // File descriptor for STDOUT
-        } else if (runtimeIO == stderr) {
-            fd = 2; // File descriptor for STDERR
-        } else if (runtimeIO.ioHandle != null) {
-            // Get the file descriptor from the Socket
-            return ioHandle.fileno();
-        } else if (runtimeIO.directoryIO != null) {
-            // On systems with dirfd support, return the directory file descriptor
-            fd = -1; // Return -1 if not supported
-        } else {
-            fd = -1; // No real file descriptor
+        if (ioHandle == null) {
+            return getScalarInt(-1);
         }
-        return new RuntimeScalar(fd);
+        return ioHandle.fileno();
     }
 
     // Method to bind a socket
     public RuntimeScalar bind(String address, int port) {
-        if (this.ioHandle == null) {
+        if (ioHandle == null) {
             return scalarFalse;
         }
-        return this.ioHandle.bind(address, port);
+        return ioHandle.bind(address, port);
     }
 
     // Method to connect a socket

@@ -57,7 +57,7 @@ public class CustomOutputStreamHandle implements IOHandle {
     }
 
     @Override
-    public long tell() {
+    public RuntimeScalar tell() {
         throw new UnsupportedOperationException("Tell operation is not supported");
     }
 

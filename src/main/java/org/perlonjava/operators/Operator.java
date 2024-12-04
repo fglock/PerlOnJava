@@ -293,7 +293,10 @@ public class Operator {
 
     public static RuntimeScalar getc(RuntimeScalar fileHandle) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
-        return fh.getc();
+        if (fh.ioHandle != null) {
+            return fh.ioHandle.getc();
+        }
+        throw new PerlCompilerException("No input source available");
     }
 
     /**

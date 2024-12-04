@@ -11,7 +11,7 @@ public interface IOHandle {
 
     RuntimeScalar eof();
 
-    long tell();
+    RuntimeScalar tell();
 
     RuntimeScalar flush();
 
