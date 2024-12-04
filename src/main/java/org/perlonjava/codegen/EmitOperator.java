@@ -259,14 +259,6 @@ public class EmitOperator {
         }
     }
 
-    // Handles the 'split' operator, which splits a string into a list.
-    static void handleSplitOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        // Accept the left operand in SCALAR context and the right operand in LIST context.
-        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        emitOperator(node.operator, emitterVisitor);
-    }
-
     // Handles the 'diamond' operator, which reads input from a file or standard input.
     static void handleDiamondBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
@@ -381,10 +373,10 @@ public class EmitOperator {
         node.right.accept(scalarVisitor); // right parameter
         // Invoke the virtual method for string concatenation.
         emitterVisitor.ctx.mv.visitMethodInsn(
-                Opcodes.INVOKEVIRTUAL,
+                Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/RuntimeScalar",
                 "stringConcat",
-                "(Lorg/perlonjava/runtime/RuntimeDataProvider;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeDataProvider;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         // If the context is VOID, pop the result from the stack.
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);

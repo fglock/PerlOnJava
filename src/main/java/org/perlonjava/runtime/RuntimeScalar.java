@@ -125,6 +125,51 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return getScalarInt(1).getList();
     }
 
+    // Implements the isa operator
+    public static RuntimeScalar isa(RuntimeScalar runtimeScalar, RuntimeScalar className) {
+        RuntimeArray args = new RuntimeArray();
+        args.push(runtimeScalar);
+        args.push(className);
+        return Universal.isa(args, RuntimeContextType.SCALAR).scalar();
+    }
+
+    /**
+     * "Blesses" a Perl reference into an object by associating it with a class name.
+     * This method is used to convert a Perl reference into an object of a specified class.
+     *
+     * @param runtimeScalar
+     * @param className     A RuntimeScalar representing the name of the class to bless the reference into.
+     * @return A RuntimeScalar representing the blessed object.
+     */
+    public static RuntimeScalar bless(RuntimeScalar runtimeScalar, RuntimeScalar className) {
+        switch (runtimeScalar.type) {
+            case REFERENCE:
+            case ARRAYREFERENCE:
+            case HASHREFERENCE:
+                String str = className.toString();
+                if (str.isEmpty()) {
+                    str = "main";
+                }
+                ((RuntimeBaseEntity) runtimeScalar.value).setBlessId(NameNormalizer.getBlessId(str));
+                break;
+            default:
+                throw new PerlCompilerException("Can't bless non-reference value");
+        }
+        return runtimeScalar;
+    }
+
+    public static RuntimeScalar stringConcat(RuntimeScalar runtimeScalar, RuntimeScalar b) {
+        return new RuntimeScalar(runtimeScalar + b.scalar().toString());
+    }
+
+    public static RuntimeScalar stringConcat(RuntimeScalar runtimeScalar, RuntimeDataProvider b) {
+        return new RuntimeScalar(runtimeScalar + b.scalar().toString());
+    }
+
+    public static RuntimeScalar repeat(RuntimeScalar runtimeScalar, RuntimeScalar arg) {
+        return (RuntimeScalar) Operator.repeat(runtimeScalar, arg, RuntimeContextType.SCALAR);
+    }
+
     public RuntimeScalar exit() {
         try {
             runEndBlocks();
@@ -161,14 +206,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public int countElements() {
         return 1;
-    }
-
-    // Implements the isa operator
-    public RuntimeScalar isa(RuntimeScalar className) {
-        RuntimeArray args = new RuntimeArray();
-        args.push(this);
-        args.push(className);
-        return Universal.isa(args, RuntimeContextType.SCALAR).scalar();
     }
 
     // Getters
@@ -457,30 +494,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         };
     }
 
-    /**
-     * "Blesses" a Perl reference into an object by associating it with a class name.
-     * This method is used to convert a Perl reference into an object of a specified class.
-     *
-     * @param className A RuntimeScalar representing the name of the class to bless the reference into.
-     * @return A RuntimeScalar representing the blessed object.
-     */
-    public RuntimeScalar bless(RuntimeScalar className) {
-        switch (type) {
-            case REFERENCE:
-            case ARRAYREFERENCE:
-            case HASHREFERENCE:
-                String str = className.toString();
-                if (str.isEmpty()) {
-                    str = "main";
-                }
-                ((RuntimeBaseEntity) value).setBlessId(NameNormalizer.getBlessId(str));
-                break;
-            default:
-                throw new PerlCompilerException("Can't bless non-reference value");
-        }
-        return this;
-    }
-
     public RuntimeScalar blessed() {
         return switch (type) {
             case REFERENCE:
@@ -584,14 +597,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return type != RuntimeScalarType.UNDEF;
     }
 
-    public RuntimeScalar stringConcat(RuntimeScalar b) {
-        return new RuntimeScalar(this + b.scalar().toString());
-    }
-
-    public RuntimeScalar stringConcat(RuntimeDataProvider b) {
-        return new RuntimeScalar(this + b.scalar().toString());
-    }
-
     public RuntimeScalar not() {
         return getScalarBoolean(!this.getBoolean());
     }
@@ -609,10 +614,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             return new RuntimeScalar(((RuntimeCode) code.value).prototype);
         }
         return scalarUndef;
-    }
-
-    public RuntimeScalar repeat(RuntimeScalar arg) {
-        return (RuntimeScalar) Operator.repeat(this, arg, RuntimeContextType.SCALAR);
     }
 
     public RuntimeScalar preAutoIncrement() {

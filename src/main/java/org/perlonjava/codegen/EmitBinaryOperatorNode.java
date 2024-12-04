@@ -65,15 +65,11 @@ public class EmitBinaryOperatorNode {
             case "close", "readline", "fileno", "getc", "truncate":
                 EmitOperator.handleReadlineOperator(emitterVisitor, node);
                 return;
-            case "sprintf":
-            case "substr":
+            case "join", "split", "sprintf", "substr":
                 EmitOperator.handleSubstr(emitterVisitor, node);
                 return;
             case "x":
                 EmitOperator.handleRepeat(emitterVisitor, node);
-                return;
-            case "join", "split":
-                EmitOperator.handleSplitOperator(emitterVisitor, node);
                 return;
             case "!~":
                 EmitRegex.handleNotBindRegex(emitterVisitor, node);

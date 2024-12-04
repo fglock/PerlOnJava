@@ -106,13 +106,10 @@ public class OperatorHandler {
         put("require", "require", "org/perlonjava/operators/ModuleOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         // Misc
-        put(".", "stringConcat");
-        put("x", "repeat");
-        put("&&", "logicalAnd");
-        put("||", "logicalOr");
-        put("//", "logicalDefinedOr");
-        put("isa", "isa");
-        put("bless", "bless");
+        put(".", "stringConcat", "org/perlonjava/runtime/RuntimeScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("x", "repeat", "org/perlonjava/runtime/RuntimeScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("isa", "isa", "org/perlonjava/runtime/RuntimeScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("bless", "bless", "org/perlonjava/runtime/RuntimeScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         put("select", "select", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("caller", "caller", "org/perlonjava/runtime/RuntimeCode", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
@@ -134,10 +131,10 @@ public class OperatorHandler {
 
         put("truncate", "truncate", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
-        put("..", "createRange", "org/perlonjava/runtime/PerlRange","(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/PerlRange;");
+        put("..", "createRange", "org/perlonjava/runtime/PerlRange", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/PerlRange;");
 
         put("substr", "substr", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
-        put("sprintf", "sprintf", "org/perlonjava/operators/Operator","(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("sprintf", "sprintf", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         put("systemCommand", "systemCommand", "org/perlonjava/operators/SystemOperator", "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;");
         put("indexLastElem", "indexLastElem", "org/perlonjava/runtime/RuntimeArray", "(Lorg/perlonjava/runtime/RuntimeArray;)Lorg/perlonjava/runtime/RuntimeScalar;");
@@ -197,20 +194,6 @@ public class OperatorHandler {
         this.methodName = methodName;
         this.methodType = methodType;
         this.descriptor = descriptor;
-    }
-
-    /**
-     * Associates an operator with a method in the RuntimeScalar class.
-     *
-     * @param operator   The operator symbol (e.g., "+").
-     * @param methodName The name of the method to associate with the operator.
-     */
-    static void put(String operator, String methodName) {
-        operatorHandlers.put(operator,
-                new OperatorHandler("org/perlonjava/runtime/RuntimeScalar",
-                        methodName,
-                        Opcodes.INVOKEVIRTUAL,
-                        "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;"));
     }
 
     /**
