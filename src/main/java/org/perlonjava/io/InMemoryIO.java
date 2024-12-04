@@ -3,17 +3,38 @@ package org.perlonjava.io;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarCache;
 
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 
 import static org.perlonjava.runtime.RuntimeIO.handleIOException;
 
 public class InMemoryIO implements IOHandle {
-    private ByteArrayOutputStream byteArrayOutputStream;
+    private final ByteArrayOutputStream byteArrayOutputStream;
     private ByteArrayInputStream byteArrayInputStream;
     private boolean isEOF;
 
     public InMemoryIO() {
         this.byteArrayOutputStream = new ByteArrayOutputStream();
+    }
+
+    public static RuntimeScalar truncate(RuntimeScalar scalar, long length) {
+        if (scalar == null || length < 0) {
+            throw new IllegalArgumentException("Invalid arguments for truncate operation.");
+        }
+
+        // Convert the string representation of the scalar to a byte array
+        byte[] data = scalar.toString().getBytes(); // Use the default charset
+
+        if (length > data.length) {
+            throw new IllegalArgumentException("Truncate length exceeds data length.");
+        }
+
+        byte[] truncatedData = new byte[(int) length];
+        System.arraycopy(data, 0, truncatedData, 0, (int) length);
+
+        // Assuming RuntimeScalar can be constructed from a byte array
+        return new RuntimeScalar(new String(truncatedData)); // Convert back to string if needed
     }
 
     public void setInput(byte[] input) {
@@ -73,7 +94,7 @@ public class InMemoryIO implements IOHandle {
     }
 
     @Override
-    public void seek(long pos) {
+    public RuntimeScalar seek(long pos) {
         throw new UnsupportedOperationException("Seek operation is not supported for in-memory streams");
     }
 
@@ -131,4 +152,9 @@ public class InMemoryIO implements IOHandle {
         }
         return RuntimeScalarCache.scalarUndef;
     }
+
+    public RuntimeScalar truncate(long length) {
+        throw new UnsupportedOperationException("Truncate operation is not supported.");
+    }
+
 }

@@ -268,9 +268,10 @@ public class SocketIO implements IOHandle {
      * Sets the position in the input stream.
      *
      * @param pos the position to set
+     * @return
      */
     @Override
-    public void seek(long pos) {
+    public RuntimeScalar seek(long pos) {
         throw new UnsupportedOperationException("seek operation is not supported for sockets");
     }
 
@@ -295,4 +296,9 @@ public class SocketIO implements IOHandle {
             return scalarUndef;
         }
     }
+
+    public RuntimeScalar truncate(long length) {
+        throw new UnsupportedOperationException("Truncate operation is not supported.");
+    }
+
 }

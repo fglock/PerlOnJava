@@ -18,11 +18,11 @@ import static org.perlonjava.runtime.RuntimeIO.handleIOException;
  * over directory entries and maintains the current position within the directory.
  */
 public class DirectoryIO {
+    private final String directoryPath;
+    private final ArrayList<RuntimeScalar> directorySpecialEntries = new ArrayList<>();
     private DirectoryStream<Path> directoryStream;
     private Iterator<Path> directoryIterator;
     private int currentDirPosition = 0;
-    private final String directoryPath;
-    private final ArrayList<RuntimeScalar> directorySpecialEntries = new ArrayList<>();
 
     /**
      * Constructs a {@code DirectoryIO} object with the specified directory stream and path.
@@ -41,7 +41,7 @@ public class DirectoryIO {
      *
      * @param args a {@code RuntimeList} containing the directory handle and path
      * @return {@code RuntimeScalarCache.scalarTrue} if the directory is successfully opened,
-     *         otherwise {@code RuntimeScalarCache.scalarFalse}
+     * otherwise {@code RuntimeScalarCache.scalarFalse}
      */
     public static RuntimeScalar openDir(RuntimeList args) {
         RuntimeScalar dirHandle = (RuntimeScalar) args.elements.get(0);
@@ -65,7 +65,7 @@ public class DirectoryIO {
      * success or failure.
      *
      * @return {@code RuntimeScalarCache.scalarTrue} if the directory stream is successfully closed,
-     *         otherwise {@code RuntimeScalarCache.scalarFalse}
+     * otherwise {@code RuntimeScalarCache.scalarFalse}
      */
     public RuntimeScalar closedir() {
         try {

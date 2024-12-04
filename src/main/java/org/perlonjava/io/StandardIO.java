@@ -3,19 +3,20 @@ package org.perlonjava.io;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarCache;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 
 import static org.perlonjava.runtime.RuntimeIO.handleIOException;
 
 public class StandardIO implements IOHandle {
-    private InputStream inputStream;
-    private OutputStream outputStream;
-    private boolean isEOF;
-    private int fileno;
-
     public static final int STDIN_FILENO = 0;
     public static final int STDOUT_FILENO = 1;
     public static final int STDERR_FILENO = 2;
+    private InputStream inputStream;
+    private OutputStream outputStream;
+    private boolean isEOF;
+    private final int fileno;
 
     public StandardIO(InputStream inputStream) {
         this.inputStream = inputStream;
@@ -73,7 +74,7 @@ public class StandardIO implements IOHandle {
     }
 
     @Override
-    public void seek(long pos) {
+    public RuntimeScalar seek(long pos) {
         throw new UnsupportedOperationException("Seek operation is not supported for standard streams");
     }
 
@@ -130,4 +131,9 @@ public class StandardIO implements IOHandle {
         }
         return RuntimeScalarCache.scalarUndef;
     }
+
+    public RuntimeScalar truncate(long length) {
+        throw new UnsupportedOperationException("Truncate operation is not supported.");
+    }
+
 }
