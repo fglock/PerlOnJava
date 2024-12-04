@@ -138,7 +138,7 @@ public class DirectoryIO {
 
         if (ctx == RuntimeContextType.SCALAR) {
             if (!directorySpecialEntries.isEmpty()) {
-                return directorySpecialEntries.remove(0);
+                return directorySpecialEntries.removeFirst();
             }
 
             if (directoryIterator.hasNext()) {

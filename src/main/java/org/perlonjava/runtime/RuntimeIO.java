@@ -47,9 +47,6 @@ public class RuntimeIO implements RuntimeScalarReference {
     boolean needFlush;
     private DirectoryIO directoryIO;
 
-    // State flags
-    private boolean isEOF;
-
     // Constructor to initialize buffers
     public RuntimeIO() {
     }
@@ -102,10 +99,6 @@ public class RuntimeIO implements RuntimeScalarReference {
             // Initialize ioHandle with CustomFileChannel
             fh.ioHandle = new CustomFileChannel(filePath, options);
 
-            if (options.contains(StandardOpenOption.READ)) {
-                fh.isEOF = false;
-            }
-
             // Truncate the file if mode is '>'
             if (">".equals(mode)) {
                 fh.ioHandle.seek(0);
@@ -147,7 +140,6 @@ public class RuntimeIO implements RuntimeScalarReference {
                 // For input, use FileChannel
                 fh.ioHandle = new CustomFileChannel(fd, Collections.singleton(StandardOpenOption.READ));
             }
-            fh.isEOF = false;
             return fh;
         } catch (IOException e) {
             handleIOException(e, "open failed");
@@ -323,17 +315,13 @@ public class RuntimeIO implements RuntimeScalarReference {
             }
         }
 
-        if (bytesRead == -1) {
-            this.isEOF = true;
-        }
-
         // Increment the line number counter if a line was read
         if (!line.isEmpty()) {
             currentLineNumber++;
         }
 
         // Return undef if we've reached EOF and no characters were read
-        if (line.isEmpty() && this.isEOF) {
+        if (line.isEmpty() && this.eof().getBoolean()) {
             return scalarUndef;
         }
 
@@ -350,8 +338,7 @@ public class RuntimeIO implements RuntimeScalarReference {
         if (ioHandle != null) {
             return ioHandle.eof();
         }
-        // For output streams, EOF is not applicable
-        return getScalarBoolean(this.isEOF);
+        return scalarTrue;
     }
 
     // Method to get the current file pointer position (tell equivalent)
@@ -367,13 +354,12 @@ public class RuntimeIO implements RuntimeScalarReference {
     }
 
     // Method to move the file pointer (seek equivalent)
-    public void seek(long pos) {
+    public RuntimeScalar seek(long pos) {
         // Update the last accessed filehandle
         lastSelectedHandle = this;
 
         if (ioHandle != null) {
-            ioHandle.seek(pos);
-            isEOF = false;
+            return ioHandle.seek(pos);
         } else {
             throw new PerlCompilerException("Seek operation is not supported for standard streams");
         }
@@ -382,7 +368,7 @@ public class RuntimeIO implements RuntimeScalarReference {
     public RuntimeScalar flush() {
         needFlush = false;
         if (ioHandle != null) {
-            ioHandle.flush();
+            return ioHandle.flush();
         }
         return scalarTrue;  // Return 1 to indicate success, consistent with other methods
     }
