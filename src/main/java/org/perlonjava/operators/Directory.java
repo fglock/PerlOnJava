@@ -62,21 +62,30 @@ public class Directory {
     }
 
     public static RuntimeScalar closedir(RuntimeScalar runtimeScalar) {
-        return RuntimeIO.closedir(runtimeScalar);
+        RuntimeIO dirIO = runtimeScalar.getRuntimeIO();
+        if (dirIO.directoryIO != null) {
+            dirIO.directoryIO.closedir();
+            dirIO.directoryIO = null;
+            return scalarTrue;
+        }
+        return scalarFalse; // Not a directory handle
     }
 
     public static RuntimeScalar rewinddir(RuntimeScalar runtimeScalar) {
         RuntimeIO dirIO = runtimeScalar.getRuntimeIO();
-        return dirIO.rewinddir();
+        if (dirIO.directoryIO == null) {
+            return RuntimeIO.handleIOError("seekdir is not supported for non-directory streams");
+        } else {
+            return dirIO.directoryIO.seekdir(1);
+        }
     }
 
     public static RuntimeScalar telldir(RuntimeScalar runtimeScalar) {
         RuntimeIO dirIO = runtimeScalar.getRuntimeIO();
-        return dirIO.telldir();
-    }
-
-    public static RuntimeScalar opendir(RuntimeList args) {
-        return RuntimeIO.openDir(args);
+        if (dirIO.directoryIO == null) {
+            return RuntimeIO.handleIOError("telldir is not supported for non-directory streams");
+        }
+        return dirIO.directoryIO.telldir();
     }
 
     public static Set<PosixFilePermission> getPosixFilePermissions(int mode) {
@@ -101,7 +110,11 @@ public class Directory {
     }
 
     public static RuntimeDataProvider readdir(RuntimeScalar dirHandle, int ctx) {
-        return RuntimeIO.readdir(dirHandle, ctx);
+        RuntimeIO runtimeIO = dirHandle.getRuntimeIO();
+        if (runtimeIO.directoryIO != null) {
+            return runtimeIO.directoryIO.readdir(ctx);
+        }
+        return scalarFalse;
     }
 
     public static RuntimeScalar seekdir(RuntimeList args) {
@@ -116,7 +129,12 @@ public class Directory {
         }
 
         RuntimeIO dirIO = (RuntimeIO) dirHandle.value;
-        dirIO.seekdir(position.getInt());
+        int position1 = position.getInt();
+        if (dirIO.directoryIO == null) {
+            RuntimeIO.handleIOError("seekdir is not supported for non-directory streams");
+        } else {
+            dirIO.directoryIO.seekdir(position1);
+        }
         return scalarTrue;
     }
 

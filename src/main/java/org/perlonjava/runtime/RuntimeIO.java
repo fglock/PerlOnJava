@@ -45,7 +45,7 @@ public class RuntimeIO implements RuntimeScalarReference {
     public int currentLineNumber = 0;
     public IOHandle ioHandle;
     boolean needFlush;
-    private DirectoryIO directoryIO;
+    public DirectoryIO directoryIO;
 
     // Constructor to initialize buffers
     public RuntimeIO() {
@@ -128,14 +128,6 @@ public class RuntimeIO implements RuntimeScalarReference {
         return DirectoryIO.openDir(args);
     }
 
-    public static RuntimeScalar readdir(RuntimeScalar dirHandle, int ctx) {
-        RuntimeIO runtimeIO = dirHandle.getRuntimeIO();
-        if (runtimeIO.directoryIO != null) {
-            return runtimeIO.directoryIO.readdir(ctx);
-        }
-        return scalarFalse;
-    }
-
     public static void flushFileHandles() {
         // Flush stdout and stderr before sleep, in case we are displaying a prompt
         if (stdout.needFlush) {
@@ -177,40 +169,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             return handleIOError("Unsupported scalar type for truncate");
         }
     }
-
-    // Method for closing directory streams
-    public static RuntimeScalar closedir(RuntimeScalar runtimeScalar) {
-        RuntimeIO dirIO = runtimeScalar.getRuntimeIO();
-        if (dirIO.directoryIO != null) {
-            dirIO.directoryIO.closedir();
-            dirIO.directoryIO = null;
-            return scalarTrue;
-        }
-        return scalarFalse; // Not a directory handle
-    }
-
-    // Method to get the current position in the directory stream (telldir equivalent)
-    public RuntimeScalar telldir() {
-        if (directoryIO == null) {
-            return handleIOError("telldir is not supported for non-directory streams");
-        }
-        return directoryIO.telldir();
-    }
-
-    // Method to seek to a specific position in the directory stream (seekdir equivalent)
-    public RuntimeScalar seekdir(int position) {
-        if (directoryIO == null) {
-            return handleIOError("seekdir is not supported for non-directory streams");
-        } else {
-            return directoryIO.seekdir(position);
-        }
-    }
-
-    // Method to rewind the directory stream to the beginning (rewinddir equivalent)
-    public RuntimeScalar rewinddir() {
-        return seekdir(1);
-    }
-
+    
     private Set<StandardOpenOption> convertMode(String mode) {
         Set<StandardOpenOption> options = MODE_OPTIONS.get(mode);
         if (options == null) {
