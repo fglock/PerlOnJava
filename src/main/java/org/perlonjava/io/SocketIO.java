@@ -13,6 +13,12 @@ import java.net.Socket;
 import static org.perlonjava.runtime.RuntimeIO.handleIOException;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
+/**
+ * The SocketIO class provides a simplified interface for socket operations,
+ * supporting both client and server socket functionalities. It allows for
+ * binding, connecting, listening, accepting connections, and reading/writing
+ * data over sockets.
+ */
 public class SocketIO {
     private Socket socket;
     private ServerSocket serverSocket;
@@ -20,17 +26,28 @@ public class SocketIO {
     private OutputStream outputStream;
     private boolean isEOF;
 
-    // Constructor for client socket
+    /**
+     * Constructs a SocketIO instance for a client socket.
+     *
+     * @param socket the client socket to be used for communication
+     */
     public SocketIO(Socket socket) {
         this.socket = socket;
         initializeStreams();
     }
 
-    // Constructor for server socket
+    /**
+     * Constructs a SocketIO instance for a server socket.
+     *
+     * @param serverSocket the server socket to be used for accepting connections
+     */
     public SocketIO(ServerSocket serverSocket) {
         this.serverSocket = serverSocket;
     }
 
+    /**
+     * Initializes the input and output streams for the socket.
+     */
     private void initializeStreams() {
         try {
             if (socket != null) {
@@ -42,7 +59,13 @@ public class SocketIO {
         }
     }
 
-    // Method to bind a socket
+    /**
+     * Binds the socket to a specific address and port.
+     *
+     * @param address the IP address to bind to
+     * @param port    the port number to bind to
+     * @return a RuntimeScalar indicating success (true) or failure (false)
+     */
     public RuntimeScalar bind(String address, int port) {
         try {
             if (socket != null) {
@@ -59,7 +82,13 @@ public class SocketIO {
         }
     }
 
-    // Method to connect a socket
+    /**
+     * Connects the client socket to a remote address and port.
+     *
+     * @param address the remote IP address to connect to
+     * @param port    the remote port number to connect to
+     * @return a RuntimeScalar indicating success (true) or failure (false)
+     */
     public RuntimeScalar connect(String address, int port) {
         if (socket == null) {
             throw new IllegalStateException("No socket available to connect");
@@ -73,7 +102,12 @@ public class SocketIO {
         }
     }
 
-    // Method to listen on a server socket
+    /**
+     * Listens for incoming connections on the server socket with a specified backlog.
+     *
+     * @param backlog the maximum number of pending connections
+     * @return a RuntimeScalar indicating success (true) or failure (false)
+     */
     public RuntimeScalar listen(int backlog) {
         if (serverSocket == null) {
             throw new IllegalStateException("No server socket available to listen");
@@ -87,7 +121,11 @@ public class SocketIO {
         }
     }
 
-    // Method to accept a connection on a server socket
+    /**
+     * Accepts a connection on the server socket and returns the remote address.
+     *
+     * @return a RuntimeScalar containing the remote address as a string, or false on failure
+     */
     public RuntimeScalar accept() {
         if (serverSocket == null) {
             throw new IllegalStateException("No server socket available to accept connections");
@@ -107,7 +145,11 @@ public class SocketIO {
         }
     }
 
-    // Method to emulate Perl's fileno function
+    /**
+     * Emulates Perl's fileno function by returning a unique identifier for the socket.
+     *
+     * @return a RuntimeScalar containing the hash code of the socket's channel, or undefined if unavailable
+     */
     public RuntimeScalar fileno() {
         if (socket != null) {
             return new RuntimeScalar(socket.getChannel().hashCode());
@@ -115,7 +157,12 @@ public class SocketIO {
         return scalarUndef;
     }
 
-    // Method to read data from the socket
+    /**
+     * Reads data from the socket into the provided buffer.
+     *
+     * @param buffer the buffer to store the read data
+     * @return a RuntimeScalar containing the number of bytes read, or undefined if end-of-file is reached
+     */
     public RuntimeScalar read(byte[] buffer) {
         try {
             if (inputStream != null) {
@@ -133,7 +180,12 @@ public class SocketIO {
         }
     }
 
-    // Method to write data to the socket
+    /**
+     * Writes data to the socket.
+     *
+     * @param data the data to be written to the socket
+     * @return a RuntimeScalar indicating success (true) or failure (false)
+     */
     public RuntimeScalar write(byte[] data) {
         try {
             if (outputStream != null) {
@@ -147,7 +199,11 @@ public class SocketIO {
         }
     }
 
-    // Method to flush the output stream
+    /**
+     * Flushes the output stream of the socket.
+     *
+     * @return a RuntimeScalar indicating success (true) or failure (false)
+     */
     public RuntimeScalar flush() {
         try {
             if (outputStream != null) {
@@ -161,12 +217,20 @@ public class SocketIO {
         }
     }
 
-    // Method to check for end-of-file
+    /**
+     * Checks if the end-of-file (EOF) has been reached on the input stream.
+     *
+     * @return a RuntimeScalar indicating EOF (true) or not (false)
+     */
     public RuntimeScalar eof() {
         return isEOF ? scalarTrue : scalarFalse;
     }
 
-    // Method to close the socket or server socket
+    /**
+     * Closes the socket or server socket, releasing any associated resources.
+     *
+     * @return a RuntimeScalar indicating success (true) or failure (false)
+     */
     public RuntimeScalar close() {
         try {
             if (socket != null) {

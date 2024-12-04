@@ -8,6 +8,7 @@ package org.perlonjava.runtime;
     Implementing modes for read/write (+<, +>) operations.
  */
 
+import org.perlonjava.io.DirectoryIO;
 import org.perlonjava.io.SocketIO;
 
 import java.io.*;
@@ -17,7 +18,10 @@ import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.*;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalIO;
@@ -52,6 +56,7 @@ public class RuntimeIO implements RuntimeScalarReference {
     public int currentLineNumber = 0;
     boolean needFlush;
     private SocketIO socketIO;
+    private DirectoryIO directoryIO;
     // Buffers for various I/O operations
     private ByteBuffer buffer = null;
     private ByteBuffer readBuffer = null;
@@ -62,25 +67,11 @@ public class RuntimeIO implements RuntimeScalarReference {
     private BufferedReader bufferedReader;
     private FileChannel fileChannel;
     private WritableByteChannel channel;
-    // Stream for directory operations
-    private DirectoryStream<Path> directoryStream;
-    private int currentDirPosition = 0;
-    private String directoryPath;
-    private Iterator<Path> directoryIterator;
-    private ArrayList<RuntimeScalar> directorySpecialEntries = new ArrayList<>();
     // State flags
     private boolean isEOF;
 
     // Constructor to initialize buffers
     public RuntimeIO() {
-        this.buffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
-        this.readBuffer = ByteBuffer.allocate(BUFFER_SIZE);
-        this.singleCharBuffer = ByteBuffer.allocate(1);
-    }
-
-    // Constructor for directory streams
-    public RuntimeIO(DirectoryStream<Path> directoryStream) {
-        this.directoryStream = directoryStream;
         this.buffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
         this.readBuffer = ByteBuffer.allocate(BUFFER_SIZE);
         this.singleCharBuffer = ByteBuffer.allocate(1);
@@ -191,72 +182,15 @@ public class RuntimeIO implements RuntimeScalarReference {
     }
 
     public static RuntimeScalar openDir(RuntimeList args) {
-        RuntimeScalar dirHandle = (RuntimeScalar) args.elements.get(0);
-        String dirPath = args.elements.get(1).toString();
-
-        try {
-            // Get the base directory from the user.dir system property
-            Path fullDirPath = getPath(dirPath);
-
-            DirectoryStream<Path> stream = Files.newDirectoryStream(fullDirPath);
-            RuntimeIO dirIO = new RuntimeIO(stream);
-            dirIO.directoryPath = dirPath;
-            dirHandle.type = RuntimeScalarType.GLOB;
-            dirHandle.value = dirIO;
-            return scalarTrue;
-        } catch (IOException e) {
-            handleIOException(e, "Directory operation failed");
-            return scalarFalse;
-        }
+        return DirectoryIO.openDir(args);
     }
 
-    public static RuntimeBaseEntity readdir(RuntimeScalar dirHandle, int ctx) {
-        if (dirHandle.type != RuntimeScalarType.GLOB) {
-            throw new PerlCompilerException("Invalid directory handle");
+    public static RuntimeScalar readdir(RuntimeScalar dirHandle, int ctx) {
+        RuntimeIO runtimeIO = (RuntimeIO) dirHandle.value;
+        if (runtimeIO.directoryIO != null) {
+            return runtimeIO.directoryIO.readdir(ctx);
         }
-
-        RuntimeIO dirIO = (RuntimeIO) dirHandle.value;
-        DirectoryStream<Path> stream = dirIO.getDirectoryStream();
-
-        // If the iterator is null, initialize it
-        if (dirIO.directoryIterator == null) {
-            dirIO.directoryIterator = stream.iterator();
-            // Add special directories '.' and '..' only on the first iteration
-            dirIO.directorySpecialEntries = new ArrayList<>();
-            dirIO.directorySpecialEntries.add(new RuntimeScalar("."));
-            dirIO.directorySpecialEntries.add(new RuntimeScalar(".."));
-        }
-
-        // Scalar context: return one entry at a time
-        if (ctx == RuntimeContextType.SCALAR) {
-            // Handle special entries first ('.' and '..')
-            if (!dirIO.directorySpecialEntries.isEmpty()) {
-                return dirIO.directorySpecialEntries.removeFirst();  // return '.' or '..'
-            }
-
-            // Now handle actual directory contents
-            if (dirIO.directoryIterator.hasNext()) {
-                Path entry = dirIO.directoryIterator.next();
-                return new RuntimeScalar(entry.getFileName().toString());
-            } else {
-                return scalarFalse;  // No more entries
-            }
-        } else {
-            // List context: return all entries at once
-            RuntimeList result = new RuntimeList();
-
-            // Add special entries ('.' and '..') first
-            result.elements.addAll(dirIO.directorySpecialEntries);
-            dirIO.directorySpecialEntries.clear();
-
-            // Add remaining directory contents
-            while (dirIO.directoryIterator.hasNext()) {
-                Path entry = dirIO.directoryIterator.next();
-                result.elements.add(new RuntimeScalar(entry.getFileName().toString()));
-            }
-
-            return result;
-        }
+        return scalarFalse;
     }
 
     public static void flushFileHandles() {
@@ -307,52 +241,30 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
     }
 
-    // Method to get the directory stream
-    public DirectoryStream<Path> getDirectoryStream() {
-        if (directoryStream != null && !directoryStreamPositions.contains(directoryStream)) {
-            directoryStreamPositions.add(directoryStream);
-        }
-        return directoryStream;
-    }
-
     // Method for closing directory streams
     public RuntimeScalar closedir() {
-        try {
-            if (directoryStream != null) {
-                directoryStream.close();
-                directoryStream = null;
-                return scalarTrue;
-            }
-            return scalarFalse; // Not a directory handle
-        } catch (IOException e) {
-            handleIOException(e, "Directory operation failed");
-            return scalarFalse;
+        if (directoryIO != null) {
+            directoryIO.closedir();
+            directoryIO = null;
+            return scalarTrue;
         }
+        return scalarFalse; // Not a directory handle
     }
 
     // Method to get the current position in the directory stream (telldir equivalent)
     public int telldir() {
-        return currentDirPosition;
+        if (directoryIO == null) {
+            throw new PerlCompilerException("telldir is not supported for non-directory streams");
+        }
+        return directoryIO.telldir();
     }
 
     // Method to seek to a specific position in the directory stream (seekdir equivalent)
     public void seekdir(int position) {
-        if (directoryStream == null) {
+        if (directoryIO == null) {
             throw new PerlCompilerException("seekdir is not supported for non-directory streams");
         }
-
-        // Reset the directory stream
-        try {
-            directoryStream.close();
-            directoryStream = Files.newDirectoryStream(Paths.get(directoryPath));
-            directoryIterator = directoryStream.iterator();
-            for (int i = 1; i < position && directoryIterator.hasNext(); i++) {
-                directoryIterator.next();
-            }
-            currentDirPosition = position;
-        } catch (IOException e) {
-            throw new PerlCompilerException("Directory operation failed: " + e.getMessage());
-        }
+        directoryIO.seekdir(position);
     }
 
     // Method to rewind the directory stream to the beginning (rewinddir equivalent)
@@ -446,6 +358,8 @@ public class RuntimeIO implements RuntimeScalarReference {
                     isEOF = true;
                 }
                 return bytesRead;
+            } else if (socketIO != null) {
+                return socketIO.read(buffer).getInt();
             } else {
                 throw new PerlCompilerException("No input source available");
             }
@@ -507,6 +421,9 @@ public class RuntimeIO implements RuntimeScalarReference {
                 if (c == -1) {
                     this.isEOF = true;
                 }
+            } else if (socketIO != null) {
+                // TODO: Implement reading from a socket
+                throw new PerlCompilerException("Readline is not implemented for sockets");
             }
 
             // Increment the line number counter if a line was read
@@ -540,6 +457,8 @@ public class RuntimeIO implements RuntimeScalarReference {
                 this.isEOF = !bufferedReader.ready();
             } else if (inputStream != null) {
                 this.isEOF = (inputStream.available() == 0);
+            } else if (socketIO != null) {
+                return socketIO.eof();
             }
             // For output streams, EOF is not applicable
         } catch (IOException e) {
@@ -592,6 +511,8 @@ public class RuntimeIO implements RuntimeScalarReference {
                 ((FileChannel) channel).force(false);
             } else if (outputStream != null) {
                 outputStream.flush();
+            } else if (socketIO != null) {
+                socketIO.flush();
             }
             return scalarTrue;  // Return 1 to indicate success, consistent with other methods
         } catch (IOException e) {
@@ -658,6 +579,9 @@ public class RuntimeIO implements RuntimeScalarReference {
                     if (bytesWritten == 0) break; // Shouldn't happen, but just in case
                     totalWritten += bytesWritten;
                 }
+            } else if (socketIO != null) {
+                // For socket output
+                socketIO.write(bytes);
             } else {
                 throw new PerlCompilerException("No output channel available");
             }
@@ -685,7 +609,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             } else if (runtimeIO.socketIO != null) {
                 // Get the file descriptor from the Socket
                 return socketIO.fileno();
-            } else if (runtimeIO.directoryStream != null) {
+            } else if (runtimeIO.directoryIO != null) {
                 // On systems with dirfd support, return the directory file descriptor
                 fd = -1; // Return -1 if not supported
             } else if (runtimeIO.inputStream instanceof FileInputStream) {
