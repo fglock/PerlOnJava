@@ -76,8 +76,7 @@ public class DirectoryIO {
             }
             return RuntimeScalarCache.scalarFalse;
         } catch (IOException e) {
-            handleIOException(e, "Directory operation failed");
-            return RuntimeScalarCache.scalarFalse;
+            return handleIOException(e, "Directory operation failed");
         }
     }
 

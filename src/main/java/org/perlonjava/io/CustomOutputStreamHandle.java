@@ -5,6 +5,9 @@ import org.perlonjava.runtime.RuntimeScalar;
 import java.io.IOException;
 import java.io.OutputStream;
 
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
+
 public class CustomOutputStreamHandle implements IOHandle {
     private OutputStream outputStream;
 
@@ -16,9 +19,9 @@ public class CustomOutputStreamHandle implements IOHandle {
     public RuntimeScalar write(byte[] data) {
         try {
             outputStream.write(data);
-            return new RuntimeScalar(1); // Indicate success
+            return scalarTrue; // Indicate success
         } catch (IOException e) {
-            return new RuntimeScalar(0); // Indicate failure
+            return scalarFalse; // Indicate failure
         }
     }
 

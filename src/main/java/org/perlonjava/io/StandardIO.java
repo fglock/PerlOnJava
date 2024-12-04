@@ -39,7 +39,7 @@ public class StandardIO implements IOHandle {
                 return new RuntimeScalar(bytesRead);
             }
         } catch (IOException e) {
-            handleIOException(e, "Read operation failed");
+            return handleIOException(e, "Read operation failed");
         }
         return RuntimeScalarCache.scalarUndef;
     }

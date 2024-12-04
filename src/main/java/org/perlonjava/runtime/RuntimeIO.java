@@ -63,8 +63,9 @@ public class RuntimeIO implements RuntimeScalarReference {
         lastSelectedHandle = new RuntimeIO(new CustomOutputStreamHandle(out));
     }
 
-    public static void handleIOException(IOException e, String message) {
+    public static RuntimeScalar handleIOException(IOException e, String message) {
         getGlobalVariable("main::!").set(message + ": " + e.getMessage());
+        return scalarFalse;
     }
 
     public static void initStdHandles() {
@@ -119,30 +120,6 @@ public class RuntimeIO implements RuntimeScalarReference {
         return Paths.get(System.getProperty("user.dir"), fileName);
     }
 
-    // Constructor for standard output and error streams
-    public static RuntimeIO open(FileDescriptor fd, boolean isOutput) {
-        try {
-            RuntimeIO fh = new RuntimeIO();
-            if (isOutput) {
-                if (fd == FileDescriptor.out || fd == FileDescriptor.err) {
-                    // For standard output and error, we can't use FileChannel
-                    OutputStream out = (fd == FileDescriptor.out) ? System.out : System.err;
-                    fh.ioHandle = new CustomOutputStreamHandle(out);
-                } else {
-                    // For other output file descriptors, use FileChannel
-                    fh.ioHandle = new CustomFileChannel(fd, Collections.singleton(StandardOpenOption.WRITE));
-                }
-            } else {
-                // For input, use FileChannel
-                fh.ioHandle = new CustomFileChannel(fd, Collections.singleton(StandardOpenOption.READ));
-            }
-            return fh;
-        } catch (IOException e) {
-            handleIOException(e, "open failed");
-            return null;
-        }
-    }
-
     public static RuntimeScalar openDir(RuntimeList args) {
         return DirectoryIO.openDir(args);
     }
@@ -182,8 +159,7 @@ public class RuntimeIO implements RuntimeScalarReference {
                 channel1.truncate(length);
                 return scalarTrue;
             } catch (IOException e) {
-                handleIOException(e, "truncate failed");
-                return scalarFalse;
+                return handleIOException(e, "truncate failed");
             }
         } else if (scalar.type == RuntimeScalarType.GLOB || scalar.type == RuntimeScalarType.GLOBREFERENCE) {
             // File handle

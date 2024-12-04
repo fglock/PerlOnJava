@@ -64,9 +64,8 @@ public class InMemoryIO implements IOHandle {
             byteArrayOutputStream.write(data);
             return RuntimeScalarCache.scalarTrue;
         } catch (IOException e) {
-            handleIOException(e, "Write operation failed");
+            return handleIOException(e, "Write operation failed");
         }
-        return RuntimeScalarCache.scalarFalse;
     }
 
     @Override
@@ -74,7 +73,7 @@ public class InMemoryIO implements IOHandle {
         try {
             byteArrayOutputStream.flush();
         } catch (IOException e) {
-            handleIOException(e, "Flush operation failed");
+            return handleIOException(e, "Flush operation failed");
         }
         return RuntimeScalarCache.scalarTrue;
     }
@@ -100,9 +99,8 @@ public class InMemoryIO implements IOHandle {
             byteArrayOutputStream.flush();
             return RuntimeScalarCache.scalarTrue;
         } catch (IOException e) {
-            handleIOException(e, "Flush operation failed");
+            return handleIOException(e, "Flush operation failed");
         }
-        return RuntimeScalarCache.scalarFalse;
     }
 
     public byte[] getOutput() {

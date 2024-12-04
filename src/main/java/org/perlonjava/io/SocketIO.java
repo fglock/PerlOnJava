@@ -33,7 +33,14 @@ public class SocketIO implements IOHandle {
      */
     public SocketIO(Socket socket) {
         this.socket = socket;
-        initializeStreams();
+        try {
+            if (this.socket != null) {
+                this.inputStream = this.socket.getInputStream();
+                this.outputStream = this.socket.getOutputStream();
+            }
+        } catch (IOException e) {
+             handleIOException(e, "Failed to initialize socket streams");
+        }
     }
 
     /**
@@ -43,20 +50,6 @@ public class SocketIO implements IOHandle {
      */
     public SocketIO(ServerSocket serverSocket) {
         this.serverSocket = serverSocket;
-    }
-
-    /**
-     * Initializes the input and output streams for the socket.
-     */
-    private void initializeStreams() {
-        try {
-            if (socket != null) {
-                this.inputStream = socket.getInputStream();
-                this.outputStream = socket.getOutputStream();
-            }
-        } catch (IOException e) {
-            handleIOException(e, "Failed to initialize socket streams");
-        }
     }
 
     /**
@@ -77,8 +70,7 @@ public class SocketIO implements IOHandle {
             }
             return scalarTrue;
         } catch (IOException e) {
-            handleIOException(e, "bind operation failed");
-            return scalarFalse;
+            return handleIOException(e, "bind operation failed");
         }
     }
 
@@ -97,8 +89,7 @@ public class SocketIO implements IOHandle {
             socket.connect(new InetSocketAddress(address, port));
             return scalarTrue;
         } catch (IOException e) {
-            handleIOException(e, "connect operation failed");
-            return scalarFalse;
+            return handleIOException(e, "connect operation failed");
         }
     }
 
@@ -177,8 +168,7 @@ public class SocketIO implements IOHandle {
             }
             throw new IllegalStateException("No input stream available");
         } catch (IOException e) {
-            handleIOException(e, "read operation failed");
-            return scalarUndef;
+            return handleIOException(e, "read operation failed");
         }
     }
 
@@ -197,8 +187,7 @@ public class SocketIO implements IOHandle {
             }
             throw new IllegalStateException("No output stream available");
         } catch (IOException e) {
-            handleIOException(e, "write operation failed");
-            return scalarFalse;
+            return handleIOException(e, "write operation failed");
         }
     }
 
@@ -216,8 +205,7 @@ public class SocketIO implements IOHandle {
             }
             return scalarFalse;
         } catch (IOException e) {
-            handleIOException(e, "flush operation failed");
-            return scalarFalse;
+            return handleIOException(e, "flush operation failed");
         }
     }
 
@@ -249,8 +237,7 @@ public class SocketIO implements IOHandle {
             }
             return scalarTrue;
         } catch (IOException e) {
-            handleIOException(e, "close operation failed");
-            return scalarFalse;
+            return handleIOException(e, "close operation failed");
         }
     }
 
@@ -292,8 +279,7 @@ public class SocketIO implements IOHandle {
             }
             throw new IllegalStateException("No input stream available");
         } catch (IOException e) {
-            handleIOException(e, "getc operation failed");
-            return scalarUndef;
+            return handleIOException(e, "getc operation failed");
         }
     }
 

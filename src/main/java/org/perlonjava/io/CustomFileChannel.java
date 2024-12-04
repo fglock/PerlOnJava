@@ -48,8 +48,7 @@ public class CustomFileChannel implements IOHandle {
             }
             return new RuntimeScalar(bytesRead);
         } catch (IOException e) {
-            handleIOException(e, "Read operation failed");
-            return RuntimeScalarCache.scalarUndef;
+            return handleIOException(e, "Read operation failed");
         }
     }
 
@@ -60,8 +59,7 @@ public class CustomFileChannel implements IOHandle {
             int bytesWritten = fileChannel.write(byteBuffer);
             return new RuntimeScalar(bytesWritten);
         } catch (IOException e) {
-            handleIOException(e, "Write operation failed");
-            return scalarFalse;
+            return handleIOException(e, "write failed");
         }
     }
 
@@ -71,8 +69,7 @@ public class CustomFileChannel implements IOHandle {
             fileChannel.close();
             return scalarTrue;
         } catch (IOException e) {
-            handleIOException(e, "Close operation failed");
-            return scalarFalse;
+            return handleIOException(e, "close failed");
         }
     }
 
@@ -86,7 +83,7 @@ public class CustomFileChannel implements IOHandle {
         try {
             return fileChannel.position();
         } catch (IOException e) {
-            handleIOException(e, "Tell operation failed");
+            handleIOException(e, "tell failed");
             return -1;
         }
     }
@@ -98,8 +95,7 @@ public class CustomFileChannel implements IOHandle {
             isEOF = false;
             return scalarTrue;
         } catch (IOException e) {
-            handleIOException(e, "Seek operation failed");
-            return scalarFalse;
+            return handleIOException(e, "seek failed");
         }
     }
 
@@ -109,8 +105,7 @@ public class CustomFileChannel implements IOHandle {
             fileChannel.force(false);
             return scalarTrue;
         } catch (IOException e) {
-            handleIOException(e, "Flush operation failed");
-            return scalarFalse;
+            return handleIOException(e, "flush failed");
         }
     }
 
@@ -151,21 +146,19 @@ public class CustomFileChannel implements IOHandle {
             singleByteBuffer.flip();
             return new RuntimeScalar(singleByteBuffer.get() & 0xFF);
         } catch (IOException e) {
-            handleIOException(e, "getc operation failed");
-            return RuntimeScalarCache.scalarUndef;
+            return handleIOException(e, "getc failed");
         }
     }
 
     public RuntimeScalar truncate(long length) {
-        if (length < 0) {
-            throw new IllegalArgumentException("Invalid arguments for truncate operation.");
-        }
         try {
+            if (length < 0) {
+                throw new IllegalArgumentException("Invalid arguments for truncate operation.");
+            }
             fileChannel.truncate(length);
             return scalarTrue;
         } catch (IOException e) {
-            handleIOException(e, "Truncate operation failed");
-            return scalarFalse;
+            return handleIOException(e, "truncate failed");
         }
     }
 }
