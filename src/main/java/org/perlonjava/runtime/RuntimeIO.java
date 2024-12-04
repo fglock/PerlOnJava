@@ -63,9 +63,13 @@ public class RuntimeIO implements RuntimeScalarReference {
         lastSelectedHandle = new RuntimeIO(new CustomOutputStreamHandle(out));
     }
 
-    public static RuntimeScalar handleIOException(IOException e, String message) {
-        getGlobalVariable("main::!").set(message + ": " + e.getMessage());
+    public static RuntimeScalar handleIOError(String message) {
+        getGlobalVariable("main::!").set(message);
         return scalarFalse;
+    }
+
+    public static RuntimeScalar handleIOException(IOException e, String message) {
+        return handleIOError(message + ": " + e.getMessage());
     }
 
     public static void initStdHandles() {
@@ -167,10 +171,10 @@ public class RuntimeIO implements RuntimeScalarReference {
             if (runtimeIO.ioHandle != null) {
                 return runtimeIO.ioHandle.truncate(length);
             } else {
-                throw new UnsupportedOperationException("No file handle available for truncation");
+                return handleIOError("No file handle available for truncate");
             }
         } else {
-            throw new UnsupportedOperationException("Unsupported scalar type for truncate");
+            return handleIOError("Unsupported scalar type for truncate");
         }
     }
 
@@ -186,24 +190,25 @@ public class RuntimeIO implements RuntimeScalarReference {
     }
 
     // Method to get the current position in the directory stream (telldir equivalent)
-    public int telldir() {
+    public RuntimeScalar telldir() {
         if (directoryIO == null) {
-            throw new PerlCompilerException("telldir is not supported for non-directory streams");
+            return handleIOError("telldir is not supported for non-directory streams");
         }
         return directoryIO.telldir();
     }
 
     // Method to seek to a specific position in the directory stream (seekdir equivalent)
-    public void seekdir(int position) {
+    public RuntimeScalar seekdir(int position) {
         if (directoryIO == null) {
-            throw new PerlCompilerException("seekdir is not supported for non-directory streams");
+            return handleIOError("seekdir is not supported for non-directory streams");
+        } else {
+            return directoryIO.seekdir(position);
         }
-        directoryIO.seekdir(position);
     }
 
     // Method to rewind the directory stream to the beginning (rewinddir equivalent)
-    public void rewinddir() {
-        seekdir(1);
+    public RuntimeScalar rewinddir() {
+        return seekdir(1);
     }
 
     private Set<StandardOpenOption> convertMode(String mode) {

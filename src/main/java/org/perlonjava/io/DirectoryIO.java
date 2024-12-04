@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 
 import static org.perlonjava.runtime.RuntimeIO.handleIOException;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 
 /**
  * The {@code DirectoryIO} class provides methods for directory operations such as opening,
@@ -53,7 +54,7 @@ public class DirectoryIO {
             DirectoryIO dirIO = new DirectoryIO(stream, dirPath);
             dirHandle.type = RuntimeScalarType.GLOB;
             dirHandle.value = dirIO;
-            return RuntimeScalarCache.scalarTrue;
+            return scalarTrue;
         } catch (IOException e) {
             handleIOException(e, "Directory operation failed");
             return RuntimeScalarCache.scalarFalse;
@@ -72,7 +73,7 @@ public class DirectoryIO {
             if (directoryStream != null) {
                 directoryStream.close();
                 directoryStream = null;
-                return RuntimeScalarCache.scalarTrue;
+                return scalarTrue;
             }
             return RuntimeScalarCache.scalarFalse;
         } catch (IOException e) {
@@ -85,8 +86,8 @@ public class DirectoryIO {
      *
      * @return the current directory position as an integer
      */
-    public int telldir() {
-        return currentDirPosition;
+    public RuntimeScalar telldir() {
+        return new RuntimeScalar(currentDirPosition);
     }
 
     /**
@@ -95,7 +96,7 @@ public class DirectoryIO {
      * @param position the position to seek to
      * @throws PerlCompilerException if seeking is not supported or an I/O error occurs
      */
-    public void seekdir(int position) {
+    public RuntimeScalar seekdir(int position) {
         if (directoryStream == null) {
             throw new PerlCompilerException("seekdir is not supported for non-directory streams");
         }
@@ -108,6 +109,7 @@ public class DirectoryIO {
                 directoryIterator.next();
             }
             currentDirPosition = position;
+            return scalarTrue;
         } catch (IOException e) {
             throw new PerlCompilerException("Directory operation failed: " + e.getMessage());
         }

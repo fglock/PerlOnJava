@@ -67,13 +67,12 @@ public class Directory {
 
     public static RuntimeScalar rewinddir(RuntimeScalar runtimeScalar) {
         RuntimeIO dirIO = runtimeScalar.getRuntimeIO();
-        dirIO.rewinddir();
-        return scalarTrue;
+        return dirIO.rewinddir();
     }
 
     public static RuntimeScalar telldir(RuntimeScalar runtimeScalar) {
         RuntimeIO dirIO = runtimeScalar.getRuntimeIO();
-        return new RuntimeScalar(dirIO.telldir());
+        return dirIO.telldir();
     }
 
     public static RuntimeScalar opendir(RuntimeList args) {
