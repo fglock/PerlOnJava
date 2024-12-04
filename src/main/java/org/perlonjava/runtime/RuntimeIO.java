@@ -8,9 +8,9 @@ package org.perlonjava.runtime;
     Implementing modes for read/write (+<, +>) operations.
  */
 
+import org.perlonjava.io.SocketIO;
+
 import java.io.*;
-import java.net.InetSocketAddress;
-import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
@@ -46,17 +46,16 @@ public class RuntimeIO implements RuntimeScalarReference {
         MODE_OPTIONS.put("+<", EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE));
     }
 
-    // Buffers for various I/O operations
-    private final ByteBuffer buffer;
-    private final ByteBuffer readBuffer;
-    private final ByteBuffer singleCharBuffer;
     // List to keep track of directory stream positions
     private final List<DirectoryStream<Path>> directoryStreamPositions = new ArrayList<>();
     // Line number counter for the current filehandle - `$.`
     public int currentLineNumber = 0;
     boolean needFlush;
-    private Socket socket;
-    private ServerSocket serverSocket;
+    private SocketIO socketIO;
+    // Buffers for various I/O operations
+    private ByteBuffer buffer = null;
+    private ByteBuffer readBuffer = null;
+    private ByteBuffer singleCharBuffer = null;
     // Streams and channels for I/O operations
     private InputStream inputStream;
     private OutputStream outputStream;
@@ -89,18 +88,7 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     // Constructor for socket
     public RuntimeIO(Socket socket) {
-        this.socket = socket;
-        this.inputStream = null;
-        this.outputStream = null;
-        try {
-            this.inputStream = socket.getInputStream();
-            this.outputStream = socket.getOutputStream();
-        } catch (IOException e) {
-            // Handle exception
-        }
-        this.buffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
-        this.readBuffer = ByteBuffer.allocate(BUFFER_SIZE);
-        this.singleCharBuffer = ByteBuffer.allocate(1);
+        this.socketIO = new SocketIO(socket);
     }
 
     // Method to set custom OutputStream
@@ -115,7 +103,7 @@ public class RuntimeIO implements RuntimeScalarReference {
         stderr.channel = Channels.newChannel(stderr.outputStream);
     }
 
-    private static void handleIOException(IOException e, String message) {
+    public static void handleIOException(IOException e, String message) {
         getGlobalVariable("main::!").set(message + ": " + e.getMessage());
     }
 
@@ -615,13 +603,8 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Method to close the filehandle
     public RuntimeScalar close() {
         try {
-            if (socket != null) {
-                socket.close();
-                socket = null;
-            }
-            if (serverSocket != null) {
-                serverSocket.close();
-                serverSocket = null;
+            if (socketIO != null) {
+                socketIO.close();
             }
 
             if (fileChannel != null) {
@@ -699,12 +682,9 @@ public class RuntimeIO implements RuntimeScalarReference {
             } else if (runtimeIO.fileChannel != null) {
                 // FileChannel does not directly expose a file descriptor in Java
                 fd = -1; // Placeholder for unsupported operation
-            } else if (runtimeIO.socket != null) {
+            } else if (runtimeIO.socketIO != null) {
                 // Get the file descriptor from the Socket
-                fd = runtimeIO.socket.getChannel().hashCode(); // Use hashCode as a proxy
-            } else if (runtimeIO.serverSocket != null) {
-                // Get the file descriptor from the ServerSocket
-                fd = runtimeIO.serverSocket.getChannel().hashCode(); // Use hashCode as a proxy
+                return socketIO.fileno();
             } else if (runtimeIO.directoryStream != null) {
                 // On systems with dirfd support, return the directory file descriptor
                 fd = -1; // Return -1 if not supported
@@ -724,72 +704,33 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
     }
 
-    // Method to get the underlying Socket
-    public Socket getSocket() {
-        return this.socket;
-    }
-
     // Method to bind a socket
     public RuntimeScalar bind(String address, int port) {
-        try {
-            if (this.socket != null) {
-                this.socket.bind(new InetSocketAddress(address, port));
-            } else if (this.serverSocket != null) {
-                this.serverSocket.bind(new InetSocketAddress(address, port));
-            } else {
-                throw new IllegalStateException("No socket available to bind");
-            }
-            return scalarTrue;
-        } catch (IOException e) {
-            handleIOException(e, "bind operation failed");
-            return scalarFalse;
-        }
+        return this.socketIO.bind(address, port);
     }
 
     // Method to connect a socket
     public RuntimeScalar connect(String address, int port) {
-        if (this.socket == null) {
-            throw new IllegalStateException("No socket available to connect");
-        }
-        try {
-            this.socket.connect(new InetSocketAddress(address, port));
-            return scalarTrue;
-        } catch (IOException e) {
-            handleIOException(e, "connect operation failed");
+        if (this.socketIO == null) {
             return scalarFalse;
         }
+        return this.socketIO.connect(address, port);
     }
 
     // Method to listen on a server socket
     public RuntimeScalar listen(int backlog) {
-        if (this.serverSocket == null) {
-            throw new PerlCompilerException("No server socket available to listen");
-        }
-        try {
-            this.serverSocket.setReceiveBufferSize(backlog);
-            return scalarTrue;
-        } catch (IOException e) {
-            handleIOException(e, "listen operation failed");
+        if (this.socketIO == null) {
             return scalarFalse;
         }
+        return this.socketIO.listen(backlog);
     }
 
     // Method to accept a connection on a server socket
     public RuntimeScalar accept() {
-        if (this.serverSocket == null) {
-            throw new PerlCompilerException("No server socket available to accept connections");
+        if (this.socketIO == null) {
+            return scalarFalse;
         }
-        try {
-            Socket clientSocket = this.serverSocket.accept();
-
-            RuntimeScalar fileHandle = new RuntimeScalar();
-            fileHandle.type = RuntimeScalarType.GLOB;
-            fileHandle.value = new RuntimeIO(clientSocket);
-            return fileHandle;
-        } catch (IOException e) {
-            handleIOException(e, "accept operation failed");
-            return scalarUndef;
-        }
+        return this.socketIO.accept();
     }
 }
 

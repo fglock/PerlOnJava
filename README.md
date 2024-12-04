@@ -184,6 +184,9 @@ Setting `lib` path with `-I` to access Perl modules is optional. Standard module
 │   │               |   ├── OperatorHandler.java
 │   │               |   ├── ArithmeticOperators.java
 │   │               |   └── other operator handling classes
+│   │               ├── io/
+│   │               |   ├── SocketIO.java
+│   │               |   └── other io classes
 │   │               └── runtime/
 │   │                   ├── RuntimeScalar.java
 │   │                   └── other runtime classes
