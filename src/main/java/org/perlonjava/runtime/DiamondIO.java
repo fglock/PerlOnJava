@@ -160,7 +160,7 @@ public class DiamondIO {
             // Open the original file for writing (this is the ARGVOUT equivalent)
             currentWriter = RuntimeIO.open(originalFileName, ">");
             getGlobalIO("main::ARGVOUT").set(currentWriter);
-            RuntimeIO.lastSelectedHandle = new RuntimeScalar(currentWriter);
+            RuntimeIO.lastSelectedHandle = currentWriter;
         }
 
         // Open the renamed file for reading

@@ -11,10 +11,7 @@ package org.perlonjava.runtime;
 import org.perlonjava.io.*;
 
 import java.io.*;
-import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
-import java.nio.channels.WritableByteChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
@@ -26,18 +23,15 @@ import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 public class RuntimeIO implements RuntimeScalarReference {
 
-    // Buffer size for I/O operations
-    private static final int BUFFER_SIZE = 8192;
     // Mapping of file modes to their corresponding StandardOpenOption sets
     private static final Map<String, Set<StandardOpenOption>> MODE_OPTIONS = new HashMap<>();
 
     // Standard I/O streams
-    public static RuntimeIO stdout = RuntimeIO.open(FileDescriptor.out, true);
-    public static RuntimeScalar lastSelectedHandle = new RuntimeScalar(stdout);
-    public static RuntimeIO stderr = RuntimeIO.open(FileDescriptor.err, true);
+    public static RuntimeIO stdout = new RuntimeIO(new StandardIO(System.out, true));
+    public static RuntimeIO stderr = new RuntimeIO(new StandardIO(System.err, false));
     public static RuntimeIO stdin = new RuntimeIO(new StandardIO(System.in));
     // Static variable to store the last accessed filehandle -  `${^LAST_FH}`
-    public static RuntimeIO lastAccessedFileHandle = null;
+    public static RuntimeIO lastSelectedHandle = stdout;
 
     static {
         // Initialize mode options
@@ -67,7 +61,9 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     // Method to set custom OutputStream
     public static void setCustomOutputStream(OutputStream out) {
-        stdout.ioHandle = new CustomOutputStreamHandle(out);
+        // stdout = new RuntimeIO(new CustomOutputStreamHandle(out));
+        // lastSelectedHandle = stdout;
+        lastSelectedHandle = new RuntimeIO(new CustomOutputStreamHandle(out));
     }
 
     public static void handleIOException(IOException e, String message) {
@@ -299,7 +295,7 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     public RuntimeScalar readline() {
         // Update the last accessed filehandle
-        lastAccessedFileHandle = this;
+        lastSelectedHandle = this;
 
         // Flush stdout and stderr before reading, in case we are displaying a prompt
         flushFileHandles();
@@ -349,7 +345,7 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Method to check for end-of-file (eof equivalent)
     public RuntimeScalar eof() {
         // Update the last accessed filehandle
-        lastAccessedFileHandle = this;
+        lastSelectedHandle = this;
 
         if (ioHandle != null) {
             return ioHandle.eof();
@@ -361,7 +357,7 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Method to get the current file pointer position (tell equivalent)
     public long tell() {
         // Update the last accessed filehandle
-        lastAccessedFileHandle = this;
+        lastSelectedHandle = this;
 
         if (ioHandle != null) {
             return ioHandle.tell();
@@ -373,7 +369,7 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Method to move the file pointer (seek equivalent)
     public void seek(long pos) {
         // Update the last accessed filehandle
-        lastAccessedFileHandle = this;
+        lastSelectedHandle = this;
 
         if (ioHandle != null) {
             ioHandle.seek(pos);

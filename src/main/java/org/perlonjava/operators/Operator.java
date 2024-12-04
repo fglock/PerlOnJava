@@ -192,10 +192,10 @@ public class Operator {
 
     public static RuntimeScalar select(RuntimeList runtimeList, int ctx) {
         if (runtimeList.elements.isEmpty()) {
-            return RuntimeIO.lastSelectedHandle;
+            return new RuntimeScalar(RuntimeIO.lastSelectedHandle);
         }
-        RuntimeScalar fh = RuntimeIO.lastSelectedHandle;
-        RuntimeIO.lastSelectedHandle = (RuntimeScalar) runtimeList.elements.getFirst();
+        RuntimeScalar fh = new RuntimeScalar(RuntimeIO.lastSelectedHandle);
+        RuntimeIO.lastSelectedHandle = ((RuntimeScalar) runtimeList.elements.getFirst()).getRuntimeIO();
         return fh;
     }
 
