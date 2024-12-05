@@ -3,6 +3,7 @@ package org.perlonjava.io;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarCache;
 
+import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -16,6 +17,7 @@ public class StandardIO implements IOHandle {
     private final int fileno;
     private InputStream inputStream;
     private OutputStream outputStream;
+    private BufferedOutputStream bufferedOutputStream;
     private boolean isEOF;
 
     public StandardIO(InputStream inputStream) {
@@ -25,6 +27,7 @@ public class StandardIO implements IOHandle {
 
     public StandardIO(OutputStream outputStream, boolean isStdout) {
         this.outputStream = outputStream;
+        this.bufferedOutputStream = new BufferedOutputStream(outputStream);
         this.fileno = isStdout ? STDOUT_FILENO : STDERR_FILENO;
     }
 
@@ -47,8 +50,8 @@ public class StandardIO implements IOHandle {
     @Override
     public RuntimeScalar write(byte[] data) {
         try {
-            if (outputStream != null) {
-                outputStream.write(data);
+            if (bufferedOutputStream != null) {
+                bufferedOutputStream.write(data);
                 return RuntimeScalarCache.scalarTrue;
             }
         } catch (IOException e) {
@@ -81,8 +84,8 @@ public class StandardIO implements IOHandle {
     @Override
     public RuntimeScalar flush() {
         try {
-            if (outputStream != null) {
-                outputStream.flush();
+            if (bufferedOutputStream != null) {
+                bufferedOutputStream.flush();
                 return RuntimeScalarCache.scalarTrue;
             }
         } catch (IOException e) {
@@ -135,5 +138,4 @@ public class StandardIO implements IOHandle {
     public RuntimeScalar truncate(long length) {
         throw new UnsupportedOperationException("Truncate operation is not supported.");
     }
-
 }
