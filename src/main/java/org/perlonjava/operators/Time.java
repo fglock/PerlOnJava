@@ -122,7 +122,7 @@ public class Time {
     }
 
     public static RuntimeScalar sleep(RuntimeScalar runtimeScalar) {
-        RuntimeIO.flushFileHandles();
+        RuntimeIO.flushAllHandles();
 
         long s = (long) runtimeScalar.getDouble() * 1000;
 

@@ -34,6 +34,23 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Static variable to store the last accessed filehandle -  `${^LAST_FH}`
     public static RuntimeIO lastSelectedHandle = stdout;
 
+    // LRU Cache to store open IOHandles
+    private static final int MAX_OPEN_HANDLES = 100; // Set the maximum number of open handles
+    private static final Map<IOHandle, Boolean> openHandles = new LinkedHashMap<IOHandle, Boolean>(MAX_OPEN_HANDLES, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<IOHandle, Boolean> eldest) {
+            if (size() > MAX_OPEN_HANDLES) {
+                try {
+                    eldest.getKey().flush(); // Flush the eldest handle instead of closing it
+                } catch (Exception e) {
+                    // Handle exception if needed
+                }
+                return true;
+            }
+            return false;
+        }
+    };
+
     static {
         // Initialize mode options
         MODE_OPTIONS.put("<", EnumSet.of(StandardOpenOption.READ));
@@ -105,6 +122,9 @@ public class RuntimeIO implements RuntimeScalarReference {
             // Initialize ioHandle with CustomFileChannel
             fh.ioHandle = new CustomFileChannel(filePath, options);
 
+            // Add the handle to the cache
+            addHandle(fh.ioHandle);
+
             // Truncate the file if mode is '>'
             if (">".equals(mode)) {
                 fh.ioHandle.truncate(0);
@@ -136,6 +156,45 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
         if (stderr.needFlush) {
             stderr.flush();
+        }
+    }
+
+    // Method to add a handle to the cache
+    public static void addHandle(IOHandle handle) {
+        synchronized (openHandles) {
+            openHandles.put(handle, Boolean.TRUE);
+        }
+    }
+
+    // Method to remove a handle from the cache
+    public static void removeHandle(IOHandle handle) {
+        synchronized (openHandles) {
+            openHandles.remove(handle);
+        }
+    }
+
+    // Method to flush all open handles
+    public static void flushAllHandles() {
+        synchronized (openHandles) {
+            for (IOHandle handle : openHandles.keySet()) {
+                handle.flush();
+            }
+        }
+        flushFileHandles();
+    }
+
+    // Method to close all open handles
+    public static void closeAllHandles() {
+        flushAllHandles();
+        synchronized (openHandles) {
+            for (IOHandle handle : openHandles.keySet()) {
+                try {
+                    handle.close();
+                } catch (Exception e) {
+                    // Handle exception if needed
+                }
+            }
+            openHandles.clear(); // Clear the cache after closing all handles
         }
     }
 
@@ -261,7 +320,6 @@ public class RuntimeIO implements RuntimeScalarReference {
         return new RuntimeScalar(line.toString());
     }
 
-
     // Method to check for end-of-file (eof equivalent)
     public RuntimeScalar eof() {
         // Update the last accessed filehandle
@@ -309,6 +367,8 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Method to close the filehandle
     public RuntimeScalar close() {
         if (ioHandle != null) {
+            removeHandle(ioHandle);
+            ioHandle.flush();
             return ioHandle.close();
         }
         return scalarTrue;

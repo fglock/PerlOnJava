@@ -9,7 +9,7 @@ import java.io.InputStreamReader;
 import java.util.List;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeIO.flushFileHandles;
+import static org.perlonjava.runtime.RuntimeIO.flushAllHandles;
 
 /**
  * The SystemOperator class provides functionality to execute system commands
@@ -32,7 +32,7 @@ public class SystemOperator {
         BufferedReader errorReader = null;
 
         try {
-            flushFileHandles();
+            flushAllHandles();
 
             // Determine the operating system and set the shell command accordingly
             String os = System.getProperty("os.name").toLowerCase();

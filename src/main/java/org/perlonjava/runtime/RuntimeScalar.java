@@ -173,9 +173,9 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     public RuntimeScalar exit() {
         try {
             runEndBlocks();
-            RuntimeIO.flushFileHandles();
+            RuntimeIO.closeAllHandles();
         } catch (Throwable t) {
-            RuntimeIO.flushFileHandles();
+            RuntimeIO.closeAllHandles();
             String errorMessage = ErrorMessageUtil.stringifyException(t);
             System.out.println(errorMessage);
             System.exit(1);

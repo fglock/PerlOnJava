@@ -93,7 +93,7 @@ public class PerlLanguageProvider {
             for (LexerToken token : tokens) {
                 System.out.println(token);
             }
-            RuntimeIO.flushFileHandles();
+            RuntimeIO.closeAllHandles();
             return null; // success
         }
         compilerOptions.code = null;    // Throw away the source code to spare memory
@@ -106,7 +106,7 @@ public class PerlLanguageProvider {
         if (ctx.compilerOptions.parseOnly) {
             // Printing the ast
             System.out.println(ast);
-            RuntimeIO.flushFileHandles();
+            RuntimeIO.closeAllHandles();
             return null; // success
         }
         ctx.logDebug("-- AST:\n" + ast + "--\n");
@@ -189,7 +189,7 @@ public class PerlLanguageProvider {
             runCheckBlocks();
         }
         if (ctx.compilerOptions.compileOnly) {
-            RuntimeIO.flushFileHandles();
+            RuntimeIO.closeAllHandles();
             return null;
         }
 
@@ -212,7 +212,7 @@ public class PerlLanguageProvider {
                     runEndBlocks();
                 }
             } catch (Throwable endException) {
-                RuntimeIO.flushFileHandles();
+                RuntimeIO.closeAllHandles();
                 String errorMessage = ErrorMessageUtil.stringifyException(endException);
                 System.out.println(errorMessage);
                 System.out.println("END failed--call queue aborted.");
@@ -221,13 +221,13 @@ public class PerlLanguageProvider {
             if (isMainProgram) {
                 runEndBlocks();
             }
-            RuntimeIO.flushFileHandles();
+            RuntimeIO.closeAllHandles();
             throw new RuntimeException(t);
         }
 
         ctx.logDebug("Result of generatedMethod: " + result);
 
-        RuntimeIO.flushFileHandles();
+        RuntimeIO.closeAllHandles();
         return result;
     }
 }
