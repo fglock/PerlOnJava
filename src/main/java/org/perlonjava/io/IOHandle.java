@@ -3,33 +3,55 @@ package org.perlonjava.io;
 import org.perlonjava.runtime.RuntimeScalar;
 
 public interface IOHandle {
-    RuntimeScalar read(byte[] buffer);
 
     RuntimeScalar write(byte[] data);
 
     RuntimeScalar close();
 
-    RuntimeScalar eof();
-
-    RuntimeScalar tell();
-
     RuntimeScalar flush();
 
-    RuntimeScalar fileno();
+    default RuntimeScalar getc() {
+        throw new UnsupportedOperationException("getc operation is not supported.");
+    }
+
+    default RuntimeScalar fileno() {
+        throw new UnsupportedOperationException("fileno operation is not supported.");
+    }
+
+    default RuntimeScalar eof() {
+        throw new UnsupportedOperationException("eof operation is not supported.");
+    }
+
+    default RuntimeScalar read(byte[] buffer) {
+        throw new UnsupportedOperationException("read operation is not supported.");
+    }
+
+    default RuntimeScalar tell() {
+        throw new UnsupportedOperationException("tell operation is not supported.");
+    }
 
     // Socket-specific methods
-    RuntimeScalar bind(String address, int port);
+    default RuntimeScalar bind(String address, int port) {
+        throw new UnsupportedOperationException("Bind operation is not supported.");
+    }
 
-    RuntimeScalar connect(String address, int port);
+    default RuntimeScalar connect(String address, int port) {
+        throw new UnsupportedOperationException("Connect operation is not supported.");
+    }
 
-    RuntimeScalar listen(int backlog);
+    default RuntimeScalar listen(int backlog) {
+        throw new UnsupportedOperationException("Listen operation is not supported.");
+    }
 
-    RuntimeScalar accept();
+    default RuntimeScalar accept() {
+        throw new UnsupportedOperationException("Accept operation is not supported.");
+    }
 
-    RuntimeScalar getc();
+    default RuntimeScalar seek(long pos) {
+        throw new UnsupportedOperationException("Seek operation is not supported.");
+    }
 
-    RuntimeScalar seek(long pos);
-
-    RuntimeScalar truncate(long length);
-
+    default RuntimeScalar truncate(long length) {
+        throw new UnsupportedOperationException("Truncate operation is not supported.");
+    }
 }

@@ -225,26 +225,6 @@ public class StandardIO implements IOHandle {
     }
 
     /**
-     * Unsupported operation for standard streams.
-     *
-     * @throws UnsupportedOperationException Always thrown.
-     */
-    @Override
-    public RuntimeScalar tell() {
-        throw new UnsupportedOperationException("Tell operation is not supported for standard streams");
-    }
-
-    /**
-     * Unsupported operation for standard streams.
-     *
-     * @throws UnsupportedOperationException Always thrown.
-     */
-    @Override
-    public RuntimeScalar seek(long pos) {
-        throw new UnsupportedOperationException("Seek operation is not supported for standard streams");
-    }
-
-    /**
      * Returns the file descriptor associated with this IO handle.
      *
      * @return A RuntimeScalar representing the file descriptor.
@@ -252,46 +232,6 @@ public class StandardIO implements IOHandle {
     @Override
     public RuntimeScalar fileno() {
         return new RuntimeScalar(fileno);
-    }
-
-    /**
-     * Unsupported operation for standard streams.
-     *
-     * @throws UnsupportedOperationException Always thrown.
-     */
-    @Override
-    public RuntimeScalar bind(String address, int port) {
-        throw new UnsupportedOperationException("Bind operation is not supported for standard streams");
-    }
-
-    /**
-     * Unsupported operation for standard streams.
-     *
-     * @throws UnsupportedOperationException Always thrown.
-     */
-    @Override
-    public RuntimeScalar connect(String address, int port) {
-        throw new UnsupportedOperationException("Connect operation is not supported for standard streams");
-    }
-
-    /**
-     * Unsupported operation for standard streams.
-     *
-     * @throws UnsupportedOperationException Always thrown.
-     */
-    @Override
-    public RuntimeScalar listen(int backlog) {
-        throw new UnsupportedOperationException("Listen operation is not supported for standard streams");
-    }
-
-    /**
-     * Unsupported operation for standard streams.
-     *
-     * @throws UnsupportedOperationException Always thrown.
-     */
-    @Override
-    public RuntimeScalar accept() {
-        throw new UnsupportedOperationException("Accept operation is not supported for standard streams");
     }
 
     /**
@@ -313,14 +253,5 @@ public class StandardIO implements IOHandle {
             handleIOException(e, "getc operation failed");
         }
         return RuntimeScalarCache.scalarUndef;
-    }
-
-    /**
-     * Unsupported operation for standard streams.
-     *
-     * @throws UnsupportedOperationException Always thrown.
-     */
-    public RuntimeScalar truncate(long length) {
-        throw new UnsupportedOperationException("Truncate operation is not supported.");
     }
 }

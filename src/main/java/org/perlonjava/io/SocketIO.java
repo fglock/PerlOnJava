@@ -241,26 +241,6 @@ public class SocketIO implements IOHandle {
         }
     }
 
-    /**
-     * Returns the current position in the input stream.
-     *
-     * @return the current position in the input stream
-     */
-    @Override
-    public RuntimeScalar tell() {
-        throw new UnsupportedOperationException("tell operation is not supported for sockets");
-    }
-
-    /**
-     * Sets the position in the input stream.
-     *
-     * @param pos the position to set
-     * @return
-     */
-    @Override
-    public RuntimeScalar seek(long pos) {
-        throw new UnsupportedOperationException("seek operation is not supported for sockets");
-    }
 
     /**
      * Reads a single byte from the socket's input stream.
@@ -283,8 +263,5 @@ public class SocketIO implements IOHandle {
         }
     }
 
-    public RuntimeScalar truncate(long length) {
-        throw new UnsupportedOperationException("Truncate operation is not supported.");
-    }
 
 }

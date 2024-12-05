@@ -83,15 +83,6 @@ public class InMemoryIO implements IOHandle {
         return new RuntimeScalar(isEOF);
     }
 
-    @Override
-    public RuntimeScalar tell() {
-        throw new UnsupportedOperationException("Tell operation is not supported for in-memory streams");
-    }
-
-    @Override
-    public RuntimeScalar seek(long pos) {
-        throw new UnsupportedOperationException("Seek operation is not supported for in-memory streams");
-    }
 
     @Override
     public RuntimeScalar flush() {
@@ -113,25 +104,6 @@ public class InMemoryIO implements IOHandle {
         return new RuntimeScalar(-1);
     }
 
-    @Override
-    public RuntimeScalar bind(String address, int port) {
-        throw new UnsupportedOperationException("Bind operation is not supported for in-memory streams");
-    }
-
-    @Override
-    public RuntimeScalar connect(String address, int port) {
-        throw new UnsupportedOperationException("Connect operation is not supported for in-memory streams");
-    }
-
-    @Override
-    public RuntimeScalar listen(int backlog) {
-        throw new UnsupportedOperationException("Listen operation is not supported for in-memory streams");
-    }
-
-    @Override
-    public RuntimeScalar accept() {
-        throw new UnsupportedOperationException("Accept operation is not supported for in-memory streams");
-    }
 
     public RuntimeScalar getc() {
         if (byteArrayInputStream != null) {
@@ -145,8 +117,5 @@ public class InMemoryIO implements IOHandle {
         return RuntimeScalarCache.scalarUndef;
     }
 
-    public RuntimeScalar truncate(long length) {
-        throw new UnsupportedOperationException("Truncate operation is not supported.");
-    }
 
 }

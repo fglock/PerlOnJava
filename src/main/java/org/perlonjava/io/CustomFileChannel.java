@@ -115,26 +115,6 @@ public class CustomFileChannel implements IOHandle {
     }
 
     @Override
-    public RuntimeScalar bind(String address, int port) {
-        throw new UnsupportedOperationException("Bind operation is not supported for file channels");
-    }
-
-    @Override
-    public RuntimeScalar connect(String address, int port) {
-        throw new UnsupportedOperationException("Connect operation is not supported for file channels");
-    }
-
-    @Override
-    public RuntimeScalar listen(int backlog) {
-        throw new UnsupportedOperationException("Listen operation is not supported for file channels");
-    }
-
-    @Override
-    public RuntimeScalar accept() {
-        throw new UnsupportedOperationException("Accept operation is not supported for file channels");
-    }
-
-    @Override
     public RuntimeScalar getc() {
         try {
             ByteBuffer singleByteBuffer = ByteBuffer.allocate(1);
