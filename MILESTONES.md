@@ -2,6 +2,17 @@
 
 ### Completed Milestones
 
+- **v2.1.0**: Core modules and optimization
+  - Added `Getopt::Long`, `JSON` modules.
+  - Optimized `print` to `STDOUT`/`STDERR` performance by running in a separate thread.
+  - Added `subs` pragma.
+  - Added regex `$+` variable.
+  - Added command line switches: `-v`, `-V` .
+  - Added file test operators: `-R`, `-W`, `-X`, `-O`, `-t`.
+  - Added feature flags: `evalbytes`.
+  - Added `CORE::GLOBAL` and core function overrides.
+  - Added hexadecimal floating point numbers.
+
 - **v2.0.0**: Towards a Complete Perl Port on the JVM
   - Added unmodified core Perl modules `File::Basename`, `File::Find`, `Data::Dumper`, `Term::ANSIColor`, `Time::Local`, `HTTP::Date`, `HTTP::CookieJar`.
   - Added `Cwd`, `File::Spec`, `File::Spec::Functions`, `HTTP::Tiny` modules.
@@ -114,17 +125,8 @@
 
 ### Upcoming Milestones
 
-- **v2.1.0**: Core modules
+- **v2.2.0**: Core modules
   - Planned release date: 2024-12-10
-  - Added `subs` pragma.
-  - Added regex `$+` variable.
-  - Added `Getopt::Long`, `JSON` modules.
-  - Added command line switches: `-v`, `-V` .
-  - Added file test operators: `-R`, `-W`, `-X`, `-O`, `-t`.
-  - Added feature flags: `evalbytes`.
-  - Added `CORE::GLOBAL` and core function overrides.
-  - Added hexadecimal floating point numbers.
-  - Optimized `print` to `STDOUT`/`STDERR` performance by running in a separate thread.
   - Work in progress:
     - `lexical_subs` feature.
     - `use VERSION`, `require VERSION`.
