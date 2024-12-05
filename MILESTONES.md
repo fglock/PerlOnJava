@@ -127,16 +127,18 @@
   - Optimized `print` to `STDOUT`/`STDERR` performance by running in a separate thread.
   - Work in progress:
     - `lexical_subs` feature.
-    - `socket` and related operators.
     - `use VERSION`, `require VERSION`.
     - lexical warnings.
     - lexical features.
     - lexical strictness.
     - lexical utf8 source code.
-    - `truncate`, `seek` operators.
     - preprocessor `# line` directive.
     - subroutine prototypes.
+  - Work in progress: I/O subsystem
     - in-memory I/O
+    - `socket` and related operators.
+    - `truncate`, `seek` operators.
+    - `read` operator.
 
 - **v3.0.0**: Concurrency and Security Features
   - Add support for concurrency and parallelism, such as threads and async/await.

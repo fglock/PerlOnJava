@@ -69,4 +69,64 @@ public class Readline {
         // Return the read line as a RuntimeScalar
         return new RuntimeScalar(line.toString());
     }
+
+    /**
+     * Reads a specified number of characters from a file handle into a scalar.
+     *
+     * @param fileHandle The file handle.
+     * @param scalar     The scalar to read data into.
+     * @param length     The number of characters to read (as RuntimeScalar).
+     * @param offset     The offset to start writing in the scalar (as RuntimeScalar).
+     * @return The number of characters read, or 0 at EOF, or undef on error.
+     */
+    public static RuntimeScalar read(RuntimeScalar fileHandle, RuntimeScalar scalar, RuntimeScalar length, RuntimeScalar offset) {
+        RuntimeIO fh = fileHandle.getRuntimeIO();
+
+        // Check if the IO object is set up for reading
+        if (fh.ioHandle == null) {
+            throw new PerlCompilerException("read is not supported for output streams");
+        }
+
+        // Convert length and offset to integers
+        int lengthValue = length.getInt();
+        int offsetValue = offset.getInt();
+
+        // Prepare the buffer and read data
+        byte[] buffer = new byte[lengthValue];
+        int bytesRead = fh.ioHandle.read(buffer).getInt();
+
+        if (bytesRead == -1) {
+            // Error occurred
+            return scalarUndef;
+        }
+
+        // Convert bytes to string
+        String readData = new String(buffer, 0, bytesRead);
+
+        // Handle offset
+        StringBuilder scalarValue = new StringBuilder(scalar.toString());
+        if (offsetValue < 0) {
+            offsetValue = scalarValue.length() + offsetValue;
+        }
+        if (offsetValue > scalarValue.length()) {
+            // Pad with null characters if offset is greater than current length
+            while (scalarValue.length() < offsetValue) {
+                scalarValue.append('\0');
+            }
+        }
+
+        // Insert the read data at the specified offset
+        scalarValue.replace(offsetValue, offsetValue + readData.length(), readData);
+
+        // Update the scalar with the new value
+        scalar.set(scalarValue.toString());
+
+        // Return the number of characters read
+        return new RuntimeScalar(bytesRead);
+    }
+
+    // Overloaded method without offset
+    public static RuntimeScalar read(RuntimeScalar fileHandle, RuntimeScalar scalar, RuntimeScalar length) {
+        return read(fileHandle, scalar, length, new RuntimeScalar(0));
+    }
 }

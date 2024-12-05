@@ -12,7 +12,6 @@ import org.perlonjava.io.*;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
@@ -198,38 +197,6 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
     }
 
-    /**
-     * Unified truncate method that handles both filename and file handle.
-     *
-     * @param scalar The RuntimeScalar representing either a filename or a file handle.
-     * @param length The length to truncate the file to.
-     * @return true if successful, false if an error occurs.
-     * @throws UnsupportedOperationException if truncate is not supported.
-     */
-    public static RuntimeScalar truncate(RuntimeScalar scalar, long length) {
-        if (scalar.type == RuntimeScalarType.STRING) {
-            // Handle as filename
-            String filename = scalar.toString();
-            Path filePath = Paths.get(filename);
-            try (FileChannel channel1 = FileChannel.open(filePath, StandardOpenOption.WRITE)) {
-                channel1.truncate(length);
-                return scalarTrue;
-            } catch (IOException e) {
-                return handleIOException(e, "truncate failed");
-            }
-        } else if (scalar.type == RuntimeScalarType.GLOB || scalar.type == RuntimeScalarType.GLOBREFERENCE) {
-            // File handle
-            RuntimeIO runtimeIO = scalar.getRuntimeIO();
-            if (runtimeIO.ioHandle != null) {
-                return runtimeIO.ioHandle.truncate(length);
-            } else {
-                return handleIOError("No file handle available for truncate");
-            }
-        } else {
-            return handleIOError("Unsupported scalar type for truncate");
-        }
-    }
-
     private Set<StandardOpenOption> convertMode(String mode) {
         Set<StandardOpenOption> options = MODE_OPTIONS.get(mode);
         if (options == null) {
@@ -264,8 +231,6 @@ public class RuntimeIO implements RuntimeScalarReference {
     public boolean getBooleanRef() {
         return true;
     }
-
-    // Method to read a single character (getc equivalent)
 
     // Method to read into a byte array
     public int read(byte[] buffer) {

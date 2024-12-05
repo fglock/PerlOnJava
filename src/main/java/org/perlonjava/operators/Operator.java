@@ -2,6 +2,11 @@ package org.perlonjava.operators;
 
 import org.perlonjava.runtime.*;
 
+import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.IllegalFormatException;
 import java.util.Iterator;
@@ -10,8 +15,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeScalarCache.getScalarBoolean;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
+import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 public class Operator {
 
@@ -169,7 +173,28 @@ public class Operator {
     }
 
     public static RuntimeScalar truncate(RuntimeScalar fileHandle, RuntimeList runtimeList) {
-        return RuntimeIO.truncate(fileHandle, ((RuntimeScalar) runtimeList.elements.getFirst()).getLong());
+        long length = ((RuntimeScalar) runtimeList.elements.getFirst()).getLong();
+        if (fileHandle.type == RuntimeScalarType.STRING) {
+            // Handle as filename
+            String filename = fileHandle.toString();
+            Path filePath = Paths.get(filename);
+            try (FileChannel channel1 = FileChannel.open(filePath, StandardOpenOption.WRITE)) {
+                channel1.truncate(length);
+                return scalarTrue;
+            } catch (IOException e) {
+                return RuntimeIO.handleIOException(e, "truncate failed");
+            }
+        } else if (fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
+            // File handle
+            RuntimeIO runtimeIO = fileHandle.getRuntimeIO();
+            if (runtimeIO.ioHandle != null) {
+                return runtimeIO.ioHandle.truncate(length);
+            } else {
+                return RuntimeIO.handleIOError("No file handle available for truncate");
+            }
+        } else {
+            return RuntimeIO.handleIOError("Unsupported scalar type for truncate");
+        }
     }
 
     /**
