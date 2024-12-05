@@ -124,6 +124,7 @@
   - Added feature flags: `evalbytes`.
   - Added `CORE::GLOBAL` and core function overrides.
   - Added hexadecimal floating point numbers.
+  - Optimized `print` to `STDOUT`/`STDERR` performance by running in a separate thread.
   - Work in progress:
     - `lexical_subs` feature.
     - `socket` and related operators.

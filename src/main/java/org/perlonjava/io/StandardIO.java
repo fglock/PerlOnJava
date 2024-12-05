@@ -12,30 +12,67 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 import static org.perlonjava.runtime.RuntimeIO.handleIOException;
 
+/**
+ * The StandardIO class implements the IOHandle interface and provides functionality for
+ * handling standard input and output operations. It uses a separate thread to manage
+ * writing to standard output (STDOUT) or standard error (STDERR), allowing the main
+ * program to continue executing without being blocked by IO operations.
+ */
 public class StandardIO implements IOHandle {
+    // Constants representing the file descriptors for standard input, output, and error
     public static final int STDIN_FILENO = 0;
     public static final int STDOUT_FILENO = 1;
     public static final int STDERR_FILENO = 2;
-    private static final int LOCAL_BUFFER_SIZE = 1024; // Define the size of the local buffer
 
+    // Size of the local buffer used for temporarily storing data before writing
+    private static final int LOCAL_BUFFER_SIZE = 1024;
+
+    // File descriptor for this IO handle
     private final int fileno;
+
+    // Local buffer for temporarily storing data
     private final byte[] localBuffer = new byte[LOCAL_BUFFER_SIZE];
+
+    // Queue for managing data to be printed by the print thread
     private final BlockingQueue<byte[]> printQueue = new LinkedBlockingQueue<>();
+
+    // Thread responsible for writing data to the output stream
     private final Thread printThread;
+
+    // Lock object used for synchronizing flush operations
     private final Object flushLock = new Object();
+
+    // Input and output streams for reading and writing data
     private InputStream inputStream;
     private OutputStream outputStream;
     private BufferedOutputStream bufferedOutputStream;
+
+    // Flag indicating if the end of the input stream has been reached
     private boolean isEOF;
+
+    // Position in the local buffer where the next byte will be written
     private int bufferPosition = 0;
+
+    // Flag indicating if a flush operation is in progress
     private boolean flushInProgress = false;
 
+    /**
+     * Constructor for creating a StandardIO instance for reading from an input stream.
+     *
+     * @param inputStream The input stream to read from.
+     */
     public StandardIO(InputStream inputStream) {
         this.inputStream = inputStream;
         this.fileno = STDIN_FILENO;
         this.printThread = null; // No print thread needed for input
     }
 
+    /**
+     * Constructor for creating a StandardIO instance for writing to an output stream.
+     *
+     * @param outputStream The output stream to write to.
+     * @param isStdout     Flag indicating if the output stream is standard output.
+     */
     public StandardIO(OutputStream outputStream, boolean isStdout) {
         this.outputStream = outputStream;
         this.bufferedOutputStream = new BufferedOutputStream(outputStream);
@@ -45,11 +82,13 @@ public class StandardIO implements IOHandle {
         printThread = new Thread(() -> {
             try {
                 while (true) {
+                    // Take data from the queue and write it to the buffered output stream
                     byte[] data = printQueue.take();
                     if (data.length == 0) break; // Exit signal
                     bufferedOutputStream.write(data);
                     bufferedOutputStream.flush();
                     synchronized (flushLock) {
+                        // Notify waiting threads if a flush operation is complete
                         if (flushInProgress && printQueue.isEmpty()) {
                             flushInProgress = false;
                             flushLock.notifyAll();
@@ -64,6 +103,13 @@ public class StandardIO implements IOHandle {
         printThread.start();
     }
 
+    /**
+     * Writes data to the output stream. If the data exceeds the local buffer size,
+     * it is added to the print queue for the print thread to handle.
+     *
+     * @param data The data to write.
+     * @return A RuntimeScalar indicating the success of the operation.
+     */
     @Override
     public RuntimeScalar write(byte[] data) {
         synchronized (localBuffer) {
@@ -92,6 +138,11 @@ public class StandardIO implements IOHandle {
         return RuntimeScalarCache.scalarTrue;
     }
 
+    /**
+     * Flushes the local buffer and waits for the print queue to be empty.
+     *
+     * @return A RuntimeScalar indicating the success of the operation.
+     */
     @Override
     public RuntimeScalar flush() {
         synchronized (localBuffer) {
@@ -110,6 +161,9 @@ public class StandardIO implements IOHandle {
         return RuntimeScalarCache.scalarTrue;
     }
 
+    /**
+     * Flushes the local buffer by adding its contents to the print queue.
+     */
     private void flushLocalBuffer() {
         if (bufferPosition > 0) {
             byte[] dataToFlush = new byte[bufferPosition];
@@ -119,6 +173,11 @@ public class StandardIO implements IOHandle {
         }
     }
 
+    /**
+     * Closes the IO handle by signaling the print thread to exit.
+     *
+     * @return A RuntimeScalar indicating the success of the operation.
+     */
     @Override
     public RuntimeScalar close() {
         // Signal the print thread to exit
@@ -133,7 +192,12 @@ public class StandardIO implements IOHandle {
         return RuntimeScalarCache.scalarTrue;
     }
 
-
+    /**
+     * Reads data from the input stream into the provided buffer.
+     *
+     * @param buffer The buffer to read data into.
+     * @return A RuntimeScalar representing the number of bytes read.
+     */
     @Override
     public RuntimeScalar read(byte[] buffer) {
         try {
@@ -150,48 +214,91 @@ public class StandardIO implements IOHandle {
         return RuntimeScalarCache.scalarUndef;
     }
 
-
+    /**
+     * Checks if the end of the input stream has been reached.
+     *
+     * @return A RuntimeScalar indicating if EOF has been reached.
+     */
     @Override
     public RuntimeScalar eof() {
         return new RuntimeScalar(isEOF);
     }
 
+    /**
+     * Unsupported operation for standard streams.
+     *
+     * @throws UnsupportedOperationException Always thrown.
+     */
     @Override
     public RuntimeScalar tell() {
         throw new UnsupportedOperationException("Tell operation is not supported for standard streams");
     }
 
+    /**
+     * Unsupported operation for standard streams.
+     *
+     * @throws UnsupportedOperationException Always thrown.
+     */
     @Override
     public RuntimeScalar seek(long pos) {
         throw new UnsupportedOperationException("Seek operation is not supported for standard streams");
     }
 
-
+    /**
+     * Returns the file descriptor associated with this IO handle.
+     *
+     * @return A RuntimeScalar representing the file descriptor.
+     */
     @Override
     public RuntimeScalar fileno() {
         return new RuntimeScalar(fileno);
     }
 
+    /**
+     * Unsupported operation for standard streams.
+     *
+     * @throws UnsupportedOperationException Always thrown.
+     */
     @Override
     public RuntimeScalar bind(String address, int port) {
         throw new UnsupportedOperationException("Bind operation is not supported for standard streams");
     }
 
+    /**
+     * Unsupported operation for standard streams.
+     *
+     * @throws UnsupportedOperationException Always thrown.
+     */
     @Override
     public RuntimeScalar connect(String address, int port) {
         throw new UnsupportedOperationException("Connect operation is not supported for standard streams");
     }
 
+    /**
+     * Unsupported operation for standard streams.
+     *
+     * @throws UnsupportedOperationException Always thrown.
+     */
     @Override
     public RuntimeScalar listen(int backlog) {
         throw new UnsupportedOperationException("Listen operation is not supported for standard streams");
     }
 
+    /**
+     * Unsupported operation for standard streams.
+     *
+     * @throws UnsupportedOperationException Always thrown.
+     */
     @Override
     public RuntimeScalar accept() {
         throw new UnsupportedOperationException("Accept operation is not supported for standard streams");
     }
 
+    /**
+     * Reads a single byte from the input stream.
+     *
+     * @return A RuntimeScalar representing the byte read, or undefined if EOF is reached.
+     */
     public RuntimeScalar getc() {
         try {
             if (inputStream != null) {
@@ -208,6 +315,11 @@ public class StandardIO implements IOHandle {
         return RuntimeScalarCache.scalarUndef;
     }
 
+    /**
+     * Unsupported operation for standard streams.
+     *
+     * @throws UnsupportedOperationException Always thrown.
+     */
     public RuntimeScalar truncate(long length) {
         throw new UnsupportedOperationException("Truncate operation is not supported.");
     }
