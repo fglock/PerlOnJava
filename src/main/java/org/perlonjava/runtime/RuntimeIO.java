@@ -19,20 +19,12 @@ import java.util.*;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalIO;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
 
 public class RuntimeIO implements RuntimeScalarReference {
 
     // Mapping of file modes to their corresponding StandardOpenOption sets
     private static final Map<String, Set<StandardOpenOption>> MODE_OPTIONS = new HashMap<>();
-
-    // Standard I/O streams
-    public static RuntimeIO stdout = new RuntimeIO(new StandardIO(System.out, true));
-    public static RuntimeIO stderr = new RuntimeIO(new StandardIO(System.err, false));
-    public static RuntimeIO stdin = new RuntimeIO(new StandardIO(System.in));
-    // Static variable to store the last accessed filehandle -  `${^LAST_FH}`
-    public static RuntimeIO lastSelectedHandle = stdout;
-
     // LRU Cache to store open IOHandles
     private static final int MAX_OPEN_HANDLES = 100; // Set the maximum number of open handles
     private static final Map<IOHandle, Boolean> openHandles = new LinkedHashMap<IOHandle, Boolean>(MAX_OPEN_HANDLES, 0.75f, true) {
@@ -49,6 +41,12 @@ public class RuntimeIO implements RuntimeScalarReference {
             return false;
         }
     };
+    // Standard I/O streams
+    public static RuntimeIO stdout = new RuntimeIO(new StandardIO(System.out, true));
+    public static RuntimeIO stderr = new RuntimeIO(new StandardIO(System.err, false));
+    public static RuntimeIO stdin = new RuntimeIO(new StandardIO(System.in));
+    // Static variable to store the last accessed filehandle -  `${^LAST_FH}`
+    public static RuntimeIO lastSelectedHandle = stdout;
 
     static {
         // Initialize mode options
@@ -239,7 +237,7 @@ public class RuntimeIO implements RuntimeScalarReference {
         ioHandle = new ClosedIOHandle();
         return ret;
     }
-    
+
     public int read(byte[] buffer) {
         return ioHandle.read(buffer).getInt();
     }

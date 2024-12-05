@@ -202,7 +202,12 @@ public class ArgumentParser {
                     System.exit(0);
                     break;
                 case 'V':
-                    printExtendedVersionInfo();
+                    // Handle -V[:configvar] switch
+                    String configVar = null;
+                    if (j < arg.length() - 1 && arg.charAt(j + 1) == ':') {
+                        configVar = arg.substring(j + 2);
+                    }
+                    printConfigurationInfo(configVar, parsedArgs);
                     System.exit(0);
                     break;
                 case 'x':
@@ -234,13 +239,40 @@ public class ArgumentParser {
         System.out.println();
     }
 
-    private static void printExtendedVersionInfo() {
-        String version = GlobalContext.perlVersionNoV;
-        System.out.println("Summary of my perl5 (" + version + ") configuration:");
-        System.out.println();
-        System.out.println("  JVM properties:");
-        System.getProperties().forEach((key, value) ->
-                System.out.println("    " + key + ": " + value));
+    /**
+     * Prints configuration information. If a specific configVar is provided,
+     * it prints only that configuration. Otherwise, it prints all configurations.
+     * If the configVar is not found, it prints 'UNKNOWN'.
+     *
+     * @param configVar The specific configuration variable to display, or null to display all.
+     */
+    private static void printConfigurationInfo(String configVar, CompilerOptions parsedArgs) {
+        if (configVar != null) {
+            // Print specific configuration variable or 'UNKNOWN' if not found
+            String value = System.getProperty(configVar, "UNKNOWN");
+            System.out.println(configVar + "='" + value + "';");
+        } else {
+            // Print all configuration information
+            String version = GlobalContext.perlVersionNoV;
+            System.out.println("Summary of my perl5 (" + version + ") configuration:");
+            System.out.println();
+
+            System.out.println("  JVM properties:");
+            System.getProperties().forEach((key, value) ->
+                    System.out.println("    " + key + ": " + value));
+
+            // Print environment variables
+            System.out.println("  %ENV:");
+            System.getenv().forEach((key, value) ->
+                    System.out.println("    " + key + "=\"" + value + "\""));
+            System.out.println();
+
+            // Print include paths
+            System.out.println("  @INC:");
+            // XXX TODO - process PERL5ENV before showing @INC
+            parsedArgs.inc.elements.forEach(path ->
+                    System.out.println("    " + path));
+        }
     }
 
     /**

@@ -37,7 +37,6 @@
   - `-U`: Allows unsafe operations.
   - `-W`: Enables all warnings.
   - `-X`: Disables all warnings.
-  - `-V[:configvar]`: Displays configuration information.
   - `-w`: Enables warnings.
   - `-d[t][:debugger]`: Runs the program under the debugger.
   - `-D[number/list]`: Sets debugging flags.

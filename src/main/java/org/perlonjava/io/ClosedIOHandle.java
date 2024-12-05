@@ -1,7 +1,7 @@
 package org.perlonjava.io;
 
-import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeIO;
+import org.perlonjava.runtime.RuntimeScalar;
 
 public class ClosedIOHandle implements IOHandle {
 
