@@ -1,6 +1,7 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.ArgumentParser;
+import org.perlonjava.operators.Readline;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -83,7 +84,7 @@ public class DiamondIO {
                 }
 
                 // Attempt to read a line from the current file
-                RuntimeScalar line = currentReader.readline();
+                RuntimeScalar line = Readline.readline(currentReader);
                 if (line.type != RuntimeScalarType.UNDEF) {
                     return line;
                 }

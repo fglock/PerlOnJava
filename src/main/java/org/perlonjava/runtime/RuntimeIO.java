@@ -276,50 +276,6 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
     }
 
-    public RuntimeScalar readline() {
-        // Update the last accessed filehandle
-        lastSelectedHandle = this;
-
-        // Flush stdout and stderr before reading, in case we are displaying a prompt
-        flushFileHandles();
-
-        // Check if the IO object is set up for reading
-        if (ioHandle == null) {
-            throw new PerlCompilerException("readline is not supported for output streams");
-        }
-
-        // Get the input record separator (equivalent to Perl's $/)
-        String sep = getGlobalVariable("main::/").toString();
-        boolean hasSeparator = !sep.isEmpty();
-        int separator = hasSeparator ? sep.charAt(0) : '\n';
-
-        StringBuilder line = new StringBuilder();
-        byte[] buffer = new byte[1]; // Buffer to read one byte at a time
-
-        int bytesRead;
-        while ((bytesRead = ioHandle.read(buffer).getInt()) != -1) {
-            char c = (char) buffer[0];
-            line.append(c);
-            // Break if we've reached the separator (if defined)
-            if (hasSeparator && c == separator) {
-                break;
-            }
-        }
-
-        // Increment the line number counter if a line was read
-        if (!line.isEmpty()) {
-            currentLineNumber++;
-        }
-
-        // Return undef if we've reached EOF and no characters were read
-        if (line.isEmpty() && this.eof().getBoolean()) {
-            return scalarUndef;
-        }
-
-        // Return the read line as a RuntimeScalar
-        return new RuntimeScalar(line.toString());
-    }
-
     // Method to check for end-of-file (eof equivalent)
     public RuntimeScalar eof() {
         // Update the last accessed filehandle
