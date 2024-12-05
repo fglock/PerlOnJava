@@ -55,6 +55,9 @@ public class OperatorHandler {
         put("oct", "oct", "org/perlonjava/operators/ScalarOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("hex", "hex", "org/perlonjava/operators/ScalarOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
+        put("srand", "srand", "org/perlonjava/operators/Random", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("rand", "rand", "org/perlonjava/operators/Random", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+
         // Compare
         put("<", "lessThan", "org/perlonjava/operators/CompareOperators");
         put("<=", "lessThanOrEqual", "org/perlonjava/operators/CompareOperators");

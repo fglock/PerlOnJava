@@ -6,7 +6,6 @@ import org.perlonjava.perlmodule.Universal;
 
 import java.util.Iterator;
 import java.util.NoSuchElementException;
-import java.util.Random;
 import java.util.Stack;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
@@ -29,8 +28,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Static stack to store saved "local" states of RuntimeScalar instances
     private static final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
-    private static long currentSeed = System.currentTimeMillis();
-    private static final Random random = new Random(currentSeed);
     // Fields to store the type and value of the scalar variable
     public RuntimeScalarType type;
     public Object value;
@@ -186,18 +183,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar study() {
         return scalarUndef;
-    }
-
-    public RuntimeScalar srand() {
-        long oldSeed = currentSeed;
-        if (this.type != RuntimeScalarType.UNDEF) {
-            currentSeed = this.getInt();
-        } else {
-            // Semi-randomly choose a seed if no argument is provided
-            currentSeed = System.nanoTime() ^ System.identityHashCode(Thread.currentThread());
-        }
-        random.setSeed(currentSeed);
-        return new RuntimeScalar(oldSeed);
     }
 
     public RuntimeScalar clone() {
@@ -747,10 +732,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             this.value = str;
         }
         return getScalarInt(charsRemoved);
-    }
-
-    public RuntimeScalar rand() {
-        return new RuntimeScalar(random.nextDouble() * this.getDouble());
     }
 
     public RuntimeScalar integer() {
