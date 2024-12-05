@@ -60,7 +60,7 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     // Line number counter for the current filehandle - `$.`
     public int currentLineNumber = 0;
-    public IOHandle ioHandle;
+    public IOHandle ioHandle = new ClosedIOHandle(); // Initialize with ClosedIOHandle
     public DirectoryIO directoryIO;
     boolean needFlush;
 
@@ -189,6 +189,7 @@ public class RuntimeIO implements RuntimeScalarReference {
             for (IOHandle handle : openHandles.keySet()) {
                 try {
                     handle.close();
+                    handle = new ClosedIOHandle();
                 } catch (Exception e) {
                     // Handle exception if needed
                 }
@@ -210,14 +211,13 @@ public class RuntimeIO implements RuntimeScalarReference {
     }
 
     public String toStringRef() {
-        String ref = "IO(0x" + this.hashCode() + ")";
 
         // XXX TODO IO reference can be blessed
         // return (blessId == 0
         //         ? ref
         //         : NameNormalizer.getBlessStr(blessId) + "=" + ref);
 
-        return ref;
+        return "IO(0x" + this.hashCode() + ")";
     }
 
     public int getIntRef() {
@@ -232,116 +232,61 @@ public class RuntimeIO implements RuntimeScalarReference {
         return true;
     }
 
-    // Method to read into a byte array
+    public RuntimeScalar close() {
+        removeHandle(ioHandle);
+        ioHandle.flush();
+        RuntimeScalar ret = ioHandle.close();
+        ioHandle = new ClosedIOHandle();
+        return ret;
+    }
+    
     public int read(byte[] buffer) {
-        if (ioHandle != null) {
-            return ioHandle.read(buffer).getInt();
-        } else {
-            throw new PerlCompilerException("No input source available");
-        }
+        return ioHandle.read(buffer).getInt();
     }
 
-    // Method to check for end-of-file (eof equivalent)
     public RuntimeScalar eof() {
-        // Update the last accessed filehandle
         lastSelectedHandle = this;
-
-        if (ioHandle != null) {
-            return ioHandle.eof();
-        }
-        return scalarTrue;
+        return ioHandle.eof();
     }
 
-    // Method to get the current file pointer position (tell equivalent)
     public RuntimeScalar tell() {
-        // Update the last accessed filehandle
         lastSelectedHandle = this;
-
-        if (ioHandle != null) {
-            return ioHandle.tell();
-        } else {
-            handleIOError("Tell operation is not supported for standard streams");
-            return getScalarInt(-1);
-        }
+        return ioHandle.tell();
     }
 
-    // Method to move the file pointer (seek equivalent)
     public RuntimeScalar seek(long pos) {
-        // Update the last accessed filehandle
         lastSelectedHandle = this;
-
-        if (ioHandle != null) {
-            return ioHandle.seek(pos);
-        } else {
-            return handleIOError("Seek operation is not supported for standard streams");
-        }
+        return ioHandle.seek(pos);
     }
 
     public RuntimeScalar flush() {
         needFlush = false;
-        if (ioHandle != null) {
-            return ioHandle.flush();
-        }
-        return scalarTrue;  // Return 1 to indicate success, consistent with other methods
+        return ioHandle.flush();
     }
 
-    // Method to close the filehandle
-    public RuntimeScalar close() {
-        if (ioHandle != null) {
-            removeHandle(ioHandle);
-            ioHandle.flush();
-            return ioHandle.close();
-        }
-        return scalarTrue;
-    }
-
-    // Method to append data to a file
     public RuntimeScalar write(String data) {
         needFlush = true;
         byte[] bytes = data.getBytes();
-        if (ioHandle != null) {
-            return ioHandle.write(bytes);
-        } else {
-            return handleIOError("write: No output channel available");
-        }
+        return ioHandle.write(bytes);
     }
 
     public RuntimeScalar fileno() {
-        if (ioHandle == null) {
-            return getScalarInt(-1);
-        }
         return ioHandle.fileno();
     }
 
-    // Method to bind a socket
     public RuntimeScalar bind(String address, int port) {
-        if (ioHandle == null) {
-            return scalarFalse;
-        }
         return ioHandle.bind(address, port);
     }
 
-    // Method to connect a socket
     public RuntimeScalar connect(String address, int port) {
-        if (this.ioHandle == null) {
-            return scalarFalse;
-        }
-        return this.ioHandle.connect(address, port);
+        return ioHandle.connect(address, port);
     }
 
-    // Method to listen on a server socket
     public RuntimeScalar listen(int backlog) {
-        if (this.ioHandle == null) {
-            return scalarFalse;
-        }
-        return this.ioHandle.listen(backlog);
+        return ioHandle.listen(backlog);
     }
 
-    // Method to accept a connection on a server socket
     public RuntimeScalar accept() {
-        if (this.ioHandle == null) {
-            return scalarFalse;
-        }
-        return this.ioHandle.accept();
+        return ioHandle.accept();
     }
 }
