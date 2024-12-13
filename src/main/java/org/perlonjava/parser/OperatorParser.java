@@ -11,6 +11,7 @@ import org.perlonjava.runtime.PerlCompilerException;
 import java.util.List;
 
 import static org.perlonjava.lexer.LexerTokenType.OPERATOR;
+import static org.perlonjava.parser.NumberParser.parseNumber;
 import static org.perlonjava.parser.TokenUtils.peek;
 
 /**
@@ -135,7 +136,10 @@ public class OperatorParser {
         Node operand;
 
         // `require` version
-        if (token.type == LexerTokenType.NUMBER || token.text.matches("^v\\d+$")) {
+        if (token.type == LexerTokenType.NUMBER) {
+            TokenUtils.consume(parser);
+            operand = parseNumber(parser, token);
+        } else if (token.text.matches("^v\\d+$")) {
             TokenUtils.consume(parser);
             operand = StringParser.parseVstring(parser, token.text, parser.tokenIndex);
         } else if (token.type == LexerTokenType.IDENTIFIER) {

@@ -322,7 +322,8 @@ public class StringParser {
                     // Consume the dot
                     TokenUtils.consume(parser);
                     // Consume the number, convert it to a character, and append it
-                    int charCode = Integer.parseInt(TokenUtils.consume(parser).text);
+                    String num = TokenUtils.consume(parser).text.replace("_", "");
+                    int charCode = Integer.parseInt(num);
                     vStringBuilder.append((char) charCode);
                 } else {
                     break; // Exit the loop if the next token is not a number
