@@ -315,6 +315,7 @@
 - ✔️   **Time::Local** module.
 - ✔️   **HTTP::Date** module.
 - 🚧  **HTTP::Tiny** some features untested: proxy settings.
+- 🚧  **DynaLoader** placeholder module.
 
 ### Non-core modules
 - ✔️   **HTTP::CookieJar** module.
