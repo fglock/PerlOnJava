@@ -10,7 +10,6 @@ import java.util.Stack;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
-import static org.perlonjava.runtime.SpecialBlock.runEndBlocks;
 
 /**
  * The RuntimeScalar class simulates Perl scalar variables.
@@ -165,20 +164,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public static RuntimeScalar repeat(RuntimeScalar runtimeScalar, RuntimeScalar arg) {
         return (RuntimeScalar) Operator.repeat(runtimeScalar, arg, RuntimeContextType.SCALAR);
-    }
-
-    public RuntimeScalar exit() {
-        try {
-            runEndBlocks();
-            RuntimeIO.closeAllHandles();
-        } catch (Throwable t) {
-            RuntimeIO.closeAllHandles();
-            String errorMessage = ErrorMessageUtil.stringifyException(t);
-            System.out.println(errorMessage);
-            System.exit(1);
-        }
-        System.exit(this.getInt());
-        return new RuntimeScalar(); // This line will never be reached
     }
 
     public RuntimeScalar study() {

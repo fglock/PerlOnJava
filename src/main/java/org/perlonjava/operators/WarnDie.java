@@ -3,9 +3,10 @@ package org.perlonjava.operators;
 import org.perlonjava.runtime.*;
 
 import static org.perlonjava.runtime.GlobalVariable.*;
+import static org.perlonjava.runtime.SpecialBlock.runEndBlocks;
 
 /**
- * The WarnDie class provides implementations for the warn and die operations,
+ * The WarnDie class provides implementations for the warn, die, and exit operations,
  * which are used to issue warnings and terminate execution with an error message,
  * respectively. These operations can trigger custom signal handlers if defined.
  */
@@ -93,5 +94,25 @@ public class WarnDie {
         }
 
         throw new PerlCompilerException(out);
+    }
+
+    /**
+     * Terminates the program
+     *
+     * @param runtimeScalar with exit status
+     * @return nothing
+     */
+    public static RuntimeScalar exit(RuntimeScalar runtimeScalar) {
+        try {
+            runEndBlocks();
+            RuntimeIO.closeAllHandles();
+        } catch (Throwable t) {
+            RuntimeIO.closeAllHandles();
+            String errorMessage = ErrorMessageUtil.stringifyException(t);
+            System.out.println(errorMessage);
+            System.exit(1);
+        }
+        System.exit(runtimeScalar.getInt());
+        return new RuntimeScalar(); // This line will never be reached
     }
 }
