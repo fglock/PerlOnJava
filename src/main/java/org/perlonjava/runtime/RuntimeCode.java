@@ -394,6 +394,28 @@ public class RuntimeCode implements RuntimeScalarReference {
         }
     }
 
+    // Return a reference to the subroutine with this name: \&$a
+    public static RuntimeScalar createCodeReference(RuntimeScalar runtimeScalar, String packageName) {
+        String name = NameNormalizer.normalizeVariableName(runtimeScalar.toString(), packageName);
+        // System.out.println("Creating code reference: " + name + " got: " + GlobalContext.getGlobalCodeRef(name));
+        return GlobalVariable.getGlobalCodeRef(name);
+    }
+
+    public static RuntimeScalar prototype(RuntimeScalar runtimeScalar, String packageName) {
+        RuntimeScalar code = runtimeScalar;
+        if (code.type != RuntimeScalarType.CODE) {
+            String name = NameNormalizer.normalizeVariableName(code.toString(), packageName);
+            // System.out.println("Looking for prototype: " + name);
+            code = GlobalVariable.getGlobalCodeRef(name);
+        }
+        // System.out.println("type: " + code.type);
+        if (code.type == RuntimeScalarType.CODE) {
+            // System.out.println("prototype: " + ((RuntimeCode) code.value).prototype);
+            return new RuntimeScalar(((RuntimeCode) code.value).prototype);
+        }
+        return scalarUndef;
+    }
+
     /**
      * Method to apply (execute) a subroutine reference.
      * Invokes the method associated with the code object, passing the RuntimeArray and RuntimeContextType as arguments.

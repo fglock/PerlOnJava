@@ -165,10 +165,10 @@ public class EmitterVisitor implements Visitor {
         } else if (operator.equals("prototype")) {
             node.operand.accept(this.with(RuntimeContextType.SCALAR));
             ctx.mv.visitLdcInsn(ctx.symbolTable.getCurrentPackage());
-            ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/RuntimeScalar",
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/RuntimeCode",
                     "prototype",
-                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
                     false);
         } else if ((operator.equals("stat") || operator.equals("lstat"))
                 && (node.operand instanceof IdentifierNode && ((IdentifierNode) node.operand).name.equals("_"))) {
@@ -255,10 +255,10 @@ public class EmitterVisitor implements Visitor {
                     // \&$a or \&{$a}
                     operatorNode.operand.accept(this.with(RuntimeContextType.SCALAR));
                     ctx.mv.visitLdcInsn(ctx.symbolTable.getCurrentPackage());
-                    ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                            "org/perlonjava/runtime/RuntimeScalar",
+                    ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/RuntimeCode",
                             "createCodeReference",
-                            "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                            "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
                             false);
                 } else {
                     // assume \&var, which is already a reference

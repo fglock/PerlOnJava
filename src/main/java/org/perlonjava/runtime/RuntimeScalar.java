@@ -545,13 +545,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return result;
     }
 
-    // Return a reference to the subroutine with this name: \&$a
-    public RuntimeScalar createCodeReference(String packageName) {
-        String name = NameNormalizer.normalizeVariableName(this.toString(), packageName);
-        // System.out.println("Creating code reference: " + name + " got: " + GlobalContext.getGlobalCodeRef(name));
-        return GlobalVariable.getGlobalCodeRef(name);
-    }
-
     public RuntimeScalar undefine() {
         this.type = RuntimeScalarType.UNDEF;
         this.value = null;
@@ -584,21 +577,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar not() {
         return getScalarBoolean(!this.getBoolean());
-    }
-
-    public RuntimeScalar prototype(String packageName) {
-        RuntimeScalar code = this;
-        if (code.type != RuntimeScalarType.CODE) {
-            String name = NameNormalizer.normalizeVariableName(code.toString(), packageName);
-            // System.out.println("Looking for prototype: " + name);
-            code = GlobalVariable.getGlobalCodeRef(name);
-        }
-        // System.out.println("type: " + code.type);
-        if (code.type == RuntimeScalarType.CODE) {
-            // System.out.println("prototype: " + ((RuntimeCode) code.value).prototype);
-            return new RuntimeScalar(((RuntimeCode) code.value).prototype);
-        }
-        return scalarUndef;
     }
 
     public RuntimeScalar preAutoIncrement() {
