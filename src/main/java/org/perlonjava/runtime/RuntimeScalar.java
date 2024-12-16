@@ -155,13 +155,9 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public static RuntimeScalar stringConcat(RuntimeScalar runtimeScalar, RuntimeScalar b) {
-        return new RuntimeScalar(runtimeScalar + b.scalar().toString());
+        return new RuntimeScalar(runtimeScalar + b.toString());
     }
-
-    public static RuntimeScalar stringConcat(RuntimeScalar runtimeScalar, RuntimeDataProvider b) {
-        return new RuntimeScalar(runtimeScalar + b.scalar().toString());
-    }
-
+    
     public static RuntimeScalar repeat(RuntimeScalar runtimeScalar, RuntimeScalar arg) {
         return (RuntimeScalar) Operator.repeat(runtimeScalar, arg, RuntimeContextType.SCALAR);
     }
