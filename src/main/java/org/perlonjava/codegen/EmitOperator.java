@@ -213,7 +213,6 @@ public class EmitOperator {
     // Handles the 'splice' built-in function, which modifies an array.
     static void handleSpliceBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Handle:  splice @array, LIST
-        String operator = node.operator;
         emitterVisitor.ctx.logDebug("handleSpliceBuiltin " + node);
         Node args = node.operand;
         // Remove the first element from the list and accept it in LIST context.
@@ -221,12 +220,7 @@ public class EmitOperator {
         operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         // Accept the remaining arguments in LIST context.
         args.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        // Invoke the static method for the operator.
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeArray;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
-        // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        emitOperator(node.operator, emitterVisitor);
     }
 
     // Handles the 'push' operator, which adds elements to an array.

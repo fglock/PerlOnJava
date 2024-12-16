@@ -144,6 +144,7 @@ public class OperatorHandler {
         put("indexLastElem", "indexLastElem", "org/perlonjava/runtime/RuntimeArray", "(Lorg/perlonjava/runtime/RuntimeArray;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("pop", "pop", "org/perlonjava/runtime/RuntimeArray", "(Lorg/perlonjava/runtime/RuntimeArray;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("shift", "shift", "org/perlonjava/runtime/RuntimeArray", "(Lorg/perlonjava/runtime/RuntimeArray;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("splice", "splice", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeArray;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;");
 
         // List operators
         put("map", "map",
