@@ -359,16 +359,7 @@ public class EmitOperator {
         // Accept both left and right operands in SCALAR context.
         node.left.accept(scalarVisitor); // target - left parameter
         node.right.accept(scalarVisitor); // right parameter
-        // Invoke the virtual method for string concatenation.
-        emitterVisitor.ctx.mv.visitMethodInsn(
-                Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/RuntimeScalar",
-                "stringConcat",
-                "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeDataProvider;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        emitOperator(node.operator, emitterVisitor);
     }
 
     // Handles the 'scalar' operator, which forces a list into scalar context.
