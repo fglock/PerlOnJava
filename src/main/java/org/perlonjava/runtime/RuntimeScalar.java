@@ -124,8 +124,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     // Implements the isa operator
     public static RuntimeScalar isa(RuntimeScalar runtimeScalar, RuntimeScalar className) {
         RuntimeArray args = new RuntimeArray();
-        args.push(runtimeScalar);
-        args.push(className);
+        RuntimeArray.push(args, runtimeScalar);
+        RuntimeArray.push(args, className);
         return Universal.isa(args, RuntimeContextType.SCALAR).scalar();
     }
 

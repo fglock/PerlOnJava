@@ -52,7 +52,7 @@ public class Lib extends PerlModuleBase {
         for (int i = 1; i < args.size(); i++) {
             String dir = args.get(i).toString();
             if (!contains(INC, dir)) {
-                INC.push(new RuntimeScalar(dir));
+                RuntimeArray.push(INC, new RuntimeScalar(dir));
             }
         }
         return new RuntimeList();
@@ -62,7 +62,7 @@ public class Lib extends PerlModuleBase {
         if (ORIG_INC == null) {
             ORIG_INC = GlobalVariable.getGlobalArray("lib::ORIG_INC");
             for (RuntimeScalar elem : INC.elements) {
-                ORIG_INC.push(elem);
+                RuntimeArray.push(ORIG_INC, elem);
             }
         }
     }
@@ -95,7 +95,7 @@ public class Lib extends PerlModuleBase {
         for (int i = 0; i < inc.size(); i++) {
             String path = inc.get(i).toString();
             if (seen.add(path)) {
-                unique.push(new RuntimeScalar(path));
+                RuntimeArray.push(unique, new RuntimeScalar(path));
             }
         }
         inc.setFromList(unique.getList());

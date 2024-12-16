@@ -93,7 +93,7 @@ public class ArgumentParser {
             }
         } else {
             // If code is already set, treat the argument as a runtime argument
-            parsedArgs.argumentList.push(new RuntimeScalar(args[index]));
+            RuntimeArray.push(parsedArgs.argumentList, new RuntimeScalar(args[index]));
         }
     }
 
@@ -438,10 +438,10 @@ public class ArgumentParser {
         if (j < arg.length() - 1) {
             // If there's a directory specified immediately after -I, use it
             String path = arg.substring(j + 1);
-            parsedArgs.inc.push(new RuntimeScalar(path));
+            RuntimeArray.push(parsedArgs.inc, new RuntimeScalar(path));
         } else if (index + 1 < args.length && !args[index + 1].startsWith("-")) {
             // If the next argument is not a switch, treat it as the directory
-            parsedArgs.inc.push(new RuntimeScalar(args[++index]));
+            RuntimeArray.push(parsedArgs.inc, new RuntimeScalar(args[++index]));
         } else {
             System.err.println("No directory specified for -I.");
             System.exit(1);

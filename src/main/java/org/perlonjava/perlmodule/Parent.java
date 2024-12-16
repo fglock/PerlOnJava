@@ -77,7 +77,7 @@ public class Parent extends PerlModuleBase {
 
             // Add the parent class to the @ISA array of the inheritor
             RuntimeArray isa = getGlobalArray(inheritor + "::ISA");
-            isa.push(new RuntimeScalar(parentClassName));
+            RuntimeArray.push(isa, new RuntimeScalar(parentClassName));
         }
 
         return new RuntimeList();

@@ -539,7 +539,7 @@ public class Operator {
         // Add new elements
         if (!list.elements.isEmpty()) {
             RuntimeArray arr = new RuntimeArray();
-            arr.push(list);
+            RuntimeArray.push(arr, list);
             runtimeArray.elements.addAll(offset, arr.elements);
         }
 

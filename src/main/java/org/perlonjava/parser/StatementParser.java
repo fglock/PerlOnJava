@@ -353,8 +353,8 @@ public class StatementParser {
                 // check module version
                 parser.ctx.logDebug("use version: check module version");
                 RuntimeArray args = new RuntimeArray();
-                args.push(new RuntimeScalar(packageName));
-                args.push(versionScalar);
+                RuntimeArray.push(args, new RuntimeScalar(packageName));
+                RuntimeArray.push(args, versionScalar);
                 Universal.VERSION(args, RuntimeContextType.SCALAR);
             }
 
@@ -371,8 +371,8 @@ public class StatementParser {
                 // fetch the method using `can` operator
                 String importMethod = isNoDeclaration ? "unimport" : "import";
                 RuntimeArray canArgs = new RuntimeArray();
-                canArgs.push(new RuntimeScalar(packageName));
-                canArgs.push(new RuntimeScalar(importMethod));
+                RuntimeArray.push(canArgs, new RuntimeScalar(packageName));
+                RuntimeArray.push(canArgs, new RuntimeScalar(importMethod));
                 RuntimeList codeList = Universal.can(canArgs, RuntimeContextType.SCALAR);
                 ctx.logDebug("Use can(" + packageName + ", " + importMethod + "): " + codeList);
                 if (codeList.size() == 1) {
@@ -381,7 +381,7 @@ public class StatementParser {
                         // call the method
                         ctx.logDebug("Use call : " + importMethod + "(" + args + ")");
                         RuntimeArray importArgs = args.getArrayOfAlias();
-                        importArgs.unshift(new RuntimeScalar(packageName));
+                        RuntimeArray.unshift(importArgs, new RuntimeScalar(packageName));
                         RuntimeCode.apply(code, importArgs, RuntimeContextType.SCALAR);
                     }
                 }

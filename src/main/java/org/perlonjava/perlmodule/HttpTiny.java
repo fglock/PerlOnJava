@@ -220,10 +220,10 @@ public class HttpTiny extends PerlModuleBase {
 
         // Perform the request
         RuntimeArray requestArgs = new RuntimeArray();
-        requestArgs.push(self);
-        requestArgs.push(new RuntimeScalar("GET"));
-        requestArgs.push(new RuntimeScalar(url));
-        requestArgs.push(options.createReference());
+        RuntimeArray.push(requestArgs, self);
+        RuntimeArray.push(requestArgs, new RuntimeScalar("GET"));
+        RuntimeArray.push(requestArgs, new RuntimeScalar(url));
+        RuntimeArray.push(requestArgs, options.createReference());
 
         RuntimeList response = request(requestArgs, ctx);
         RuntimeHash responseHash = ((RuntimeScalar) response.elements.get(0)).hashDeref();

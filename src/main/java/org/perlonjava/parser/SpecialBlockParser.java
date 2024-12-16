@@ -177,7 +177,7 @@ public class SpecialBlockParser {
                 case "END" -> saveEndBlock(codeRef);
                 case "INIT" -> saveInitBlock(codeRef);
                 case "CHECK" -> saveCheckBlock(codeRef);
-                case "UNITCHECK" -> parser.ctx.unitcheckBlocks.push(codeRef);
+                case "UNITCHECK" -> RuntimeArray.push(parser.ctx.unitcheckBlocks, codeRef);
             }
         }
 

@@ -77,7 +77,7 @@ public class Base extends PerlModuleBase {
 
             // Add the base class to the @ISA array of the inheritor
             RuntimeArray isa = getGlobalArray(inheritor + "::ISA");
-            isa.push(new RuntimeScalar(baseClassName));
+            RuntimeArray.push(isa, new RuntimeScalar(baseClassName));
         }
 
         return new RuntimeList();

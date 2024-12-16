@@ -27,7 +27,7 @@ public class Exporter extends PerlModuleBase {
             exporter.registerMethod("export_ok_tags", "exportOkTags", null);
 
             // Set up @EXPORTER::EXPORT_OK = ("import");
-            GlobalVariable.getGlobalArray("Exporter::EXPORT_OK").push(new RuntimeScalar("import"));
+            RuntimeArray.push(GlobalVariable.getGlobalArray("Exporter::EXPORT_OK"), new RuntimeScalar("import"));
         } catch (Exception e) {
             System.err.println("Warning: Failed to initialize Exporter: " + e.getMessage());
         }
@@ -139,7 +139,7 @@ public class Exporter extends PerlModuleBase {
         for (RuntimeBaseEntity elem : args.elements) {
             RuntimeArray tags = exportTags.get(elem.toString()).arrayDeref();
             for (RuntimeScalar tag : tags.elements) {
-                export.push(tag);
+                RuntimeArray.push(export, tag);
             }
         }
         return new RuntimeList();
@@ -154,7 +154,7 @@ public class Exporter extends PerlModuleBase {
         for (RuntimeBaseEntity elem : args.elements) {
             RuntimeArray tags = exportTags.get(elem.toString()).arrayDeref();
             for (RuntimeScalar tag : tags.elements) {
-                exportOk.push(tag);
+                RuntimeArray.push(exportOk, tag);
             }
         }
         return new RuntimeList();

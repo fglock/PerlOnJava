@@ -23,7 +23,7 @@ public class SpecialBlock {
      * @param codeRef the code reference to be saved
      */
     public static void saveEndBlock(RuntimeScalar codeRef) {
-        endBlocks.push(codeRef);
+        RuntimeArray.push(endBlocks, codeRef);
     }
 
     /**
@@ -33,7 +33,7 @@ public class SpecialBlock {
      * @param codeRef the code reference to be saved
      */
     public static void saveInitBlock(RuntimeScalar codeRef) {
-        initBlocks.unshift(codeRef);
+        RuntimeArray.unshift(initBlocks, codeRef);
     }
 
     /**
@@ -43,7 +43,7 @@ public class SpecialBlock {
      * @param codeRef the code reference to be saved
      */
     public static void saveCheckBlock(RuntimeScalar codeRef) {
-        checkBlocks.push(codeRef);
+        RuntimeArray.push(checkBlocks, codeRef);
     }
 
     /**

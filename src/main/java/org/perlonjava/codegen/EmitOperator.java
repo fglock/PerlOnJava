@@ -225,16 +225,10 @@ public class EmitOperator {
 
     // Handles the 'push' operator, which adds elements to an array.
     static void handlePushOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        String operator = node.operator;
         // Accept both left and right operands in LIST context.
         node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));
         node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        // Invoke the virtual method for the operator.
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", operator, "(Lorg/perlonjava/runtime/RuntimeDataProvider;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        emitOperator(node.operator, emitterVisitor);
     }
 
     // Handles the 'map' operator, which applies a function to each element of a list.

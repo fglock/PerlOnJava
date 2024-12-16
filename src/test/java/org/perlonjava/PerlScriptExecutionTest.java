@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeIO;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
@@ -21,8 +22,6 @@ import java.nio.file.Paths;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.perlonjava.runtime.GlobalVariable.resetAllGlobals;
-import static org.perlonjava.scriptengine.PerlLanguageProvider.resetAll;
 
 /**
  * Test class for executing Perl scripts and verifying their output.
@@ -104,7 +103,7 @@ public class PerlScriptExecutionTest {
             options.fileName = filename; // Set the filename for reference
 
             // Add the path to the Perl modules
-            options.inc.push(new RuntimeScalar("src/main/perl/lib"));
+            RuntimeArray.push(options.inc, new RuntimeScalar("src/main/perl/lib"));
 
             // Execute the Perl code
             PerlLanguageProvider.executePerlCode(options, true);

@@ -189,7 +189,7 @@ public class RuntimeStash extends RuntimeHash {
     public RuntimeArray keys() {
         RuntimeArray list = new RuntimeArray();
         for (String key : elements.keySet()) {
-            list.push(new RuntimeScalar(key));
+            RuntimeArray.push(list, new RuntimeScalar(key));
         }
         hashIterator = null; // keys resets the iterator
         return list;
@@ -203,7 +203,7 @@ public class RuntimeStash extends RuntimeHash {
     public RuntimeArray values() {
         RuntimeArray list = new RuntimeArray();
         for (RuntimeScalar value : elements.values()) {
-            list.push(value); // push an alias to the value
+            RuntimeArray.push(list, value); // push an alias to the value
         }
         hashIterator = null; // values resets the iterator
         return list;

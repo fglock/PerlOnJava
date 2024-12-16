@@ -86,7 +86,7 @@ public abstract class PerlModuleBase {
 
         // Add each symbol to the export array
         for (String symbol : symbols) {
-            exportArray.push(new RuntimeScalar(symbol));
+            RuntimeArray.push(exportArray, new RuntimeScalar(symbol));
         }
     }
 
