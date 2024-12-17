@@ -36,6 +36,8 @@ public class StatementParser {
     public static Node parseWhileStatement(Parser parser, String label) {
         LexerToken operator = TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "while" "until"
 
+        parser.ctx.symbolTable.enterScope();
+
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
         Node condition = parser.parseExpression(0);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
@@ -56,6 +58,9 @@ public class StatementParser {
         if (operator.text.equals("until")) {
             condition = new OperatorNode("not", condition, condition.getIndex());
         }
+
+        parser.ctx.symbolTable.exitScope();
+
         return new For3Node(label, true, null,
                 condition, null, body, continueNode, false, parser.tokenIndex);
     }
