@@ -36,4 +36,8 @@ sub fetchrow_array {
     return $arr ? @$arr : ();
 }
 
+sub fetch {
+    return fetchrow_arrayref(@_);
+}
+
 1;
