@@ -4,7 +4,7 @@
 # curl https://repo1.maven.org/maven2/com/h2database/h2/2.2.224/h2-2.2.224.jar --output h2-2.2.224.jar
 #
 # Run using:
-# java -cp "h2-2.2.224.jar:target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main dbi.pl
+# java -cp "h2-2.2.224.jar:target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main misc/snippets/dbi.pl
 #
 
 use strict;
