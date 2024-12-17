@@ -10,6 +10,7 @@
 use strict;
 use warnings;
 use DBI;
+use Data::Dumper;
 
 # Connect to H2 database
 my $dbh = DBI->connect(
@@ -39,6 +40,12 @@ $sth->execute(20);
 # Fetch and display results
 while (my @row = $sth->fetchrow_array) {
     print "ID: $row[0], Name: $row[1], Age: $row[2]\n";
+}
+
+
+$sth->execute(20);
+while (my $row = $sth->fetchrow_hashref) {
+    print Dumper $row;
 }
 
 $sth->finish;

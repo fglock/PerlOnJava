@@ -38,6 +38,7 @@ public class Dbi extends PerlModuleBase {
             dbi.registerMethod("prepare", null);
             dbi.registerMethod("execute", null);
             dbi.registerMethod("fetchrow_array", null);
+            dbi.registerMethod("fetchrow_hashref", null);
             dbi.registerMethod("rows", null);
             dbi.registerMethod("disconnect", null);
             dbi.registerMethod("err", null);
@@ -225,6 +226,47 @@ public class Dbi extends PerlModuleBase {
         } catch (Exception e) {
             setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
             return new RuntimeArray().getList();
+        }
+    }
+
+    /**
+     * Fetches the next row from a result set as a hash reference.
+     *
+     * @param args RuntimeArray containing statement handle (sth)
+     * @param ctx  Context parameter
+     * @return RuntimeList containing row data as hash reference or empty hash if no more rows
+     */
+    public static RuntimeList fetchrow_hashref(RuntimeArray args, int ctx) {
+        RuntimeHash sth = args.get(0).hashDeref();
+        try {
+            RuntimeHash executeResult = sth.get("execute_result").hashDeref();
+            ResultSet rs = (ResultSet) executeResult.get("resultset").value;
+
+            // Fetch next row if available
+            if (rs.next()) {
+                RuntimeHash row = new RuntimeHash();
+                ResultSetMetaData metaData = rs.getMetaData();
+
+                // For each column, add column name -> value pair to hash
+                for (int i = 1; i <= metaData.getColumnCount(); i++) {
+                    String columnName = metaData.getColumnName(i);
+                    Object value = rs.getObject(i);
+                    row.put(columnName, new RuntimeScalar(value != null ? value.toString() : ""));
+                }
+
+                // Create reference for hash
+                RuntimeScalar rowRef = row.createReference();
+                return rowRef.getList();
+            }
+
+            // Return undef if no more rows
+            return scalarUndef.getList();
+        } catch (SQLException e) {
+            setError(sth, e);
+            return scalarUndef.getList();
+        } catch (Exception e) {
+            setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
+            return scalarUndef.getList();
         }
     }
 
