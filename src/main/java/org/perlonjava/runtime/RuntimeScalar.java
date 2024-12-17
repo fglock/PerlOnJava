@@ -46,12 +46,32 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
     }
 
+    public RuntimeScalar(Long value) {
+        if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
+            this.type = RuntimeScalarType.DOUBLE;
+            this.value = (double) value;
+        } else {
+            this.type = RuntimeScalarType.INTEGER;
+            this.value = (int) (long) value;
+        }
+    }
+
     public RuntimeScalar(int value) {
         this.type = RuntimeScalarType.INTEGER;
         this.value = value;
     }
 
+    public RuntimeScalar(Integer value) {
+        this.type = RuntimeScalarType.INTEGER;
+        this.value = value;
+    }
+
     public RuntimeScalar(double value) {
+        this.type = RuntimeScalarType.DOUBLE;
+        this.value = value;
+    }
+
+    public RuntimeScalar(Double value) {
         this.type = RuntimeScalarType.DOUBLE;
         this.value = value;
     }
