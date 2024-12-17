@@ -320,8 +320,43 @@
 ### Non-core modules
 - ✔️   **HTTP::CookieJar** module.
 - ✔️   **JSON** module.
+
+### DBI
 - 🚧  **DBI** basic functionality implemented, with JDBC support.
-  - Database drivers must be included in the class path.
+- ✔️   These DBI methods are implemented: `connect`,`prepare`,`execute`,`fetchrow_array`,`rows`,`disconnect`,`err`,`errstr`,`state`, `do`, `finish`.
+
+- JDBC Database drivers must be included in the class path.
+
+- The DSN (Data Source Name) follows the convention:
+
+    dbi:DriverClassName:database:host[:port][;parameters]
+
+  - H2 Database:
+    
+    dbi:org.h2.Driver:mem:testdb;DB_CLOSE_DELAY=-1
+    dbi:org.h2.Driver:file:/path/to/database
+    
+  - MySQL:
+    
+    dbi:com.mysql.cj.jdbc.Driver:database_name:localhost
+    dbi:com.mysql.cj.jdbc.Driver:mydb:localhost:3306
+    
+  - PostgreSQL:
+    
+    dbi:org.postgresql.Driver:database_name:localhost
+    dbi:org.postgresql.Driver:postgres:localhost:5432
+    
+  - SQLite:
+    
+    dbi:org.sqlite.JDBC:database_file:/path/to/database.db
+
+  - BigQuery: BigQuery uses the Simba JDBC driver and requires OAuth authentication parameters
+
+    dbi:com.simba.googlebigquery.jdbc.Driver:project_id:instance;OAuthType=0;OAuthServiceAcctEmail=your-service-account;OAuthPvtKeyPath=/path/to/key.json
+
+  - Snowflake: Snowflake uses their custom JDBC driver and includes additional parameters for warehouse and role settings
+
+    dbi:net.snowflake.client.jdbc.SnowflakeDriver:database_name:account-identifier.region.snowflakecomputing.com;warehouse=warehouse_name;role=role_name
 
 
 ## Non-strict and Obsolete Features
