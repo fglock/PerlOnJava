@@ -90,7 +90,7 @@ public class ArgumentParser {
                     // Search in PATH when -S is used and filename has no path separators
                     String pathEnv = System.getenv("PATH");
                     if (pathEnv != null) {
-                        for (String path : pathEnv.split(System.getProperty("path.separator"))) {
+                        for (String path : pathEnv.split(File.pathSeparator)) {
                             File file = new File(path, filePath);
                             if (file.exists() && file.canRead()) {
                                 filePath = file.getAbsolutePath();
