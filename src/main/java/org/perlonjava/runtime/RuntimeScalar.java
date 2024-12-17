@@ -103,6 +103,11 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         this.value = value;
     }
 
+    public RuntimeScalar(Object value) {
+        this.type = RuntimeScalarType.OBJECT;
+        this.value = value;
+    }
+
     public static RuntimeScalar undef() {
         return scalarUndef;
     }

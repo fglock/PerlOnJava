@@ -136,6 +136,7 @@
     - lexical utf8 source code.
     - preprocessor `# line` directive.
     - subroutine prototypes.
+  - Work in progress: DBI subsystem
   - Work in progress: Overload subsystem
   - Work in progress: I/O subsystem
     - in-memory I/O
