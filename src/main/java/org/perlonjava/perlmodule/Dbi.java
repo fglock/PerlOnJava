@@ -76,6 +76,7 @@ public class Dbi extends PerlModuleBase {
             RuntimeScalar attr = args.get(4);   //  \%attr
             if (attr.type == RuntimeScalarType.HASHREFERENCE) {
                 dbh.put("RaiseError", attr.hashDerefGet(new RuntimeScalar("RaiseError")));
+                dbh.put("PrintError", attr.hashDerefGet(new RuntimeScalar("PrintError")));
             }
 
             // Split DSN into components (format: dbi:Driver:database:host)
@@ -108,8 +109,16 @@ public class Dbi extends PerlModuleBase {
         } catch (Exception e) {
             setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
         }
+        RuntimeScalar msg = new RuntimeScalar("DBI connect('" + dsn + "','" + username + "',...) failed: " + getGlobalVariable("DBI::errstr").toString());
+        return handleError(dbh, msg);
+    }
+
+    private static RuntimeList handleError(RuntimeHash dbh, RuntimeScalar msg) {
         if (dbh.get("RaiseError").getBoolean()) {
-            die(new RuntimeScalar("DBI connect('" + dsn + "','" + username + "',...) failed: " + getGlobalVariable("DBI::errstr").toString()), new RuntimeScalar());
+            Carp.croak(new RuntimeArray(msg), RuntimeContextType.VOID);
+        }
+        if (dbh.get("PrintError").getBoolean()) {
+            Carp.carp(new RuntimeArray(msg), RuntimeContextType.VOID);
         }
         return scalarUndef.getList();
     }
@@ -147,11 +156,11 @@ public class Dbi extends PerlModuleBase {
             return sthRef.getList();
         } catch (SQLException e) {
             setError(sth, e);
-            return new RuntimeHash().createReference().getList();
         } catch (Exception e) {
             setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-            return new RuntimeHash().createReference().getList();
         }
+        RuntimeScalar msg = new RuntimeScalar("DBI prepare() failed: " + getGlobalVariable("DBI::errstr").toString());
+        return handleError(dbh, msg);
     }
 
     /**
@@ -347,11 +356,11 @@ public class Dbi extends PerlModuleBase {
             return new RuntimeHash().createReference().getList();
         } catch (SQLException e) {
             setError(dbh, e);
-            return new RuntimeHash().createReference().getList();
         } catch (Exception e) {
             setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-            return new RuntimeHash().createReference().getList();
         }
+        RuntimeScalar msg = new RuntimeScalar("DBI disconnect() failed: " + getGlobalVariable("DBI::errstr").toString());
+        return handleError(dbh, msg);
     }
 
     /**
