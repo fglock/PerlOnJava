@@ -2,6 +2,7 @@ package org.perlonjava;
 
 import org.perlonjava.runtime.*;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -81,10 +82,24 @@ public class ArgumentParser {
      */
     private static void processNonSwitchArgument(String[] args, CompilerOptions parsedArgs, int index) {
         if (parsedArgs.code == null) {
-            // If no code has been set, treat the argument as a file name and read its content
+            // If no code has been set, treat the argument as a file name
             parsedArgs.fileName = args[index];
             try {
-                String fileContent = new String(Files.readAllBytes(Paths.get(parsedArgs.fileName)));
+                String filePath = parsedArgs.fileName;
+                if (parsedArgs.usePathEnv && !filePath.contains("/") && !filePath.contains("\\")) {
+                    // Search in PATH when -S is used and filename has no path separators
+                    String pathEnv = System.getenv("PATH");
+                    if (pathEnv != null) {
+                        for (String path : pathEnv.split(System.getProperty("path.separator"))) {
+                            File file = new File(path, filePath);
+                            if (file.exists() && file.canRead()) {
+                                filePath = file.getAbsolutePath();
+                                break;
+                            }
+                        }
+                    }
+                }
+                String fileContent = new String(Files.readAllBytes(Paths.get(filePath)));
                 parsedArgs.code = fileContent;
                 processShebangLine(args, parsedArgs, fileContent, index);
             } catch (IOException e) {
@@ -209,6 +224,10 @@ public class ArgumentParser {
                     }
                     printConfigurationInfo(configVar, parsedArgs);
                     System.exit(0);
+                    break;
+                case 'S':
+                    // Enable PATH environment search for program
+                    parsedArgs.usePathEnv = true;
                     break;
                 case 'x':
                     parsedArgs.discardLeadingGarbage = true;
@@ -683,6 +702,7 @@ public class ArgumentParser {
         System.out.println("  -[mM][-]module        execute \"use/no module...\" before executing program");
         System.out.println("  -n                    assume \"while (<>) { ... }\" loop around program");
         System.out.println("  -p                    assume loop like -n but print line also, like sed");
+        System.out.println("  -S                    look for programfile using PATH environment variable");
         System.out.println("  -x[directory]         ignore text before #!perl line (optionally cd to directory)");
         System.out.println("  --debug               enable debugging mode");
         System.out.println("  --tokenize            tokenize the input code");
@@ -769,6 +789,7 @@ public class ArgumentParser {
         public RuntimeArray inc = new RuntimeArray();
         public String splitPattern = "' '"; // Default split pattern for -a
         public boolean lineEndingProcessing = false; // For -l
+        public boolean usePathEnv = false; // For -S
         public boolean discardLeadingGarbage = false; // For -x
         List<ModuleUseStatement> moduleUseStatements = new ArrayList<>(); // For -m -M
 

@@ -127,6 +127,7 @@
 
 - **v2.2.0**: Core modules
   - Added `DBI` module with JDBC support.
+  - Added command line switches: `-S`.
   - Planned release date: 2024-12-10
   - Work in progress:
     - `lexical_subs` feature.

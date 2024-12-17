@@ -28,7 +28,7 @@
 ### Command line switches
 
 - ✔️   Accept command line switches from the shebang line.
-- ✔️   Command line switches `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-x`, `-v`, `-V`, `-?` are implemented.
+- ✔️   Command line switches `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-S`, `-x`, `-v`, `-V`, `-?` are implemented.
 - ❌  Missing command line switches include:
   - `-s`: Rudimentary switch parsing.
   - `-T`: Taint checks.
@@ -42,7 +42,6 @@
   - `-D[number/list]`: Sets debugging flags.
   - `-f`: Suppresses execution of `sitecustomize.pl`.
   - `-C [number/list]`: Controls Unicode features.
-  - `-S`: Uses the PATH environment variable to find the script.
 
 ## Testing
 - ✔️   **TAP tests**: Running standard Perl testing protocol.
@@ -321,7 +320,7 @@
 - ✔️   **HTTP::CookieJar** module.
 - ✔️   **JSON** module.
 
-### DBI
+### DBI module
 - 🚧  **DBI** basic functionality implemented, with JDBC support.
 - ✔️   These DBI methods are implemented: `connect`,`prepare`,`execute`,`fetchrow_array`,`rows`,`disconnect`,`err`,`errstr`,`state`, `do`, `finish`.
 
