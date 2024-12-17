@@ -325,7 +325,9 @@
 - 🚧  **DBI** basic functionality implemented, with JDBC support.
 - ✔️   These DBI methods are implemented: `connect`,`prepare`,`execute`,`fetchrow_array`,`rows`,`disconnect`,`err`,`errstr`,`state`, `do`, `finish`.
 
-- JDBC Database drivers must be included in the class path.
+- JDBC Database drivers must be included in the class path. Example:
+
+    java -cp "h2-2.2.224.jar:target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main misc/snippets/dbi.pl
 
 - The DSN (Data Source Name) follows the convention:
 
