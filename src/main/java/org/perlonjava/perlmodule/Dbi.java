@@ -6,7 +6,9 @@ import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
 
 import java.sql.*;
+import java.util.Arrays;
 
+import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
@@ -97,10 +99,13 @@ public class Dbi extends PerlModuleBase {
             return dbhRef.getList();
         } catch (SQLException e) {
             setError(dbh, e);
-            return new RuntimeHash().createReference().getList();
+            return scalarUndef.getList();
+        } catch (ClassNotFoundException e) {
+            setError(dbh, new SQLException("Database driver not found: " + e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
+            return scalarUndef.getList();
         } catch (Exception e) {
             setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-            return new RuntimeHash().createReference().getList();
+            return scalarUndef.getList();
         }
     }
 
@@ -405,5 +410,7 @@ public class Dbi extends PerlModuleBase {
             handle.put("errstr", new RuntimeScalar(""));
             handle.put("state", new RuntimeScalar("00000"));
         }
+        getGlobalVariable("DBI::err").set(handle.get("err"));
+        getGlobalVariable("DBI::errstr").set(handle.get("errstr"));
     }
 }
