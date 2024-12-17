@@ -12,6 +12,8 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 /**
  * DBI (Database Independent Interface) module implementation for PerlonJava.
  * This class provides database connectivity and operations similar to Perl's DBI module.
+ *
+ * Note: Some methods are defined in src/main/perl/lib/DBI.pm
  */
 public class Dbi extends PerlModuleBase {
 

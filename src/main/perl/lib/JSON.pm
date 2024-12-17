@@ -172,3 +172,27 @@ sub decode_json { # decode
 
 1;
 
+__END__
+
+=head1 AUTHOR
+
+Makamaka Hannyaharamitu, E<lt>makamaka[at]cpan.orgE<gt>
+
+JSON::XS was written by  Marc Lehmann E<lt>schmorp[at]schmorp.deE<gt>
+
+The release of this new version owes to the courtesy of Marc Lehmann.
+
+=head1 CURRENT MAINTAINER
+
+Kenichi Ishigaki, E<lt>ishigaki[at]cpan.orgE<gt>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2005-2013 by Makamaka Hannyaharamitu
+
+Most of the documentation is taken from JSON::XS by Marc Lehmann
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.
+
+=cut

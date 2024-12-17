@@ -41,3 +41,20 @@ sub fetch {
 }
 
 1;
+
+__END__
+
+=head1 AUTHORS
+
+DBI by Tim Bunce, L<http://www.tim.bunce.name>
+
+This pod text by Tim Bunce, J. Douglas Dunlop, Jonathan Leffler and others.
+Perl by Larry Wall and the C<perl5-porters>.
+
+=head1 COPYRIGHT
+
+The DBI module is Copyright (c) 1994-2012 Tim Bunce. Ireland.
+All rights reserved.
+
+You may distribute under the terms of either the GNU General Public
+License or the Artistic License, as specified in the Perl 5.10.0 README file.

@@ -14,6 +14,8 @@ import static org.perlonjava.runtime.RuntimeScalarCache.*;
  * The {@code Json} class provides methods for encoding and decoding JSON data
  * within a Perl-like runtime environment. It extends {@link PerlModuleBase} and
  * offers functionality to convert between JSON strings and Perl data structures.
+ *
+ *  Note: Some methods are defined in src/main/perl/lib/JSON.pm
  */
 public class Json extends PerlModuleBase {
 
