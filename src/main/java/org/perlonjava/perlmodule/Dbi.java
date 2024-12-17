@@ -12,19 +12,17 @@ import java.util.Properties;
 public class Dbi extends PerlModuleBase {
 
     public Dbi() {
-        super("DBI", true);
+        super("DBI", false);
     }
 
     public static void initialize() {
         Dbi dbi = new Dbi();
-        dbi.initializeExporter();
-        dbi.defineExport("EXPORT", "connect", "prepare", "execute", "fetchrow_array", "finish");
         try {
             dbi.registerMethod("connect", null);
             dbi.registerMethod("prepare", null);
             dbi.registerMethod("execute", null);
             dbi.registerMethod("fetchrow_array", null);
-            dbi.registerMethod("finish", null);
+            dbi.registerMethod("disconnect", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing DBI method: " + e.getMessage());
         }
@@ -38,13 +36,21 @@ public class Dbi extends PerlModuleBase {
         String dsn = args.get(1).toString();
         String username = args.get(2).toString();
         String password = args.get(3).toString();
-        RuntimeHash options = args.size() > 4 ? args.get(4).hashDeref() : new RuntimeHash();
 
         // Parse DSN
         String[] dsnParts = dsn.split(":");
-        String driver = "jdbc:" + dsnParts[1] + ":" + dsnParts[2];
+        String driverClass = dsnParts[1];
 
-        Connection conn = DriverManager.getConnection(driver, username, password);
+        // Load the driver directly from DSN
+        Class.forName(driverClass);
+
+        // Extract protocol from driver class name
+        String protocol = driverClass.split("\\.")[1].toLowerCase();
+
+        // Preserve the full connection string including mem: prefix
+        String jdbcUrl = "jdbc:" + protocol + ":" + dsnParts[2] + ":" + dsnParts[3];
+
+        Connection conn = DriverManager.getConnection(jdbcUrl, username, password);
 
         RuntimeHash dbh = new RuntimeHash();
         dbh.put("connection", new RuntimeScalar(conn));
@@ -112,7 +118,7 @@ public class Dbi extends PerlModuleBase {
         return new RuntimeArray().getList();
     }
 
-    public static RuntimeList finish(RuntimeArray args, int ctx) throws Exception {
+    public static RuntimeList disconnect(RuntimeArray args, int ctx) throws Exception {
         RuntimeHash sth = args.get(0).hashDeref();
         PreparedStatement stmt = (PreparedStatement) sth.get("statement").value;
         stmt.close();
