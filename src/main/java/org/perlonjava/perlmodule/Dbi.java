@@ -120,7 +120,7 @@ public class Dbi extends PerlModuleBase {
         if (dbh.get("PrintError").getBoolean()) {
             Carp.carp(new RuntimeArray(msg), RuntimeContextType.VOID);
         }
-        return scalarUndef.getList();
+        return new RuntimeList();
     }
 
     /**
@@ -135,6 +135,7 @@ public class Dbi extends PerlModuleBase {
     public static RuntimeList prepare(RuntimeArray args, int ctx) {
         RuntimeHash dbh = args.get(0).hashDeref();
         RuntimeHash sth = new RuntimeHash();
+        sth.put("dbh", dbh.createReference());
         try {
             if (args.size() < 2) {
                 throw new IllegalStateException("Bad number of arguments for DBI->prepare");
@@ -174,6 +175,7 @@ public class Dbi extends PerlModuleBase {
      */
     public static RuntimeList execute(RuntimeArray args, int ctx) {
         RuntimeHash sth = args.get(0).hashDeref();
+        RuntimeHash dbh = sth.get("dbh").hashDeref();
         try {
             if (args.size() < 1) {
                 throw new IllegalStateException("Bad number of arguments for DBI->execute");
@@ -205,11 +207,11 @@ public class Dbi extends PerlModuleBase {
             return result.createReference().getList();
         } catch (SQLException e) {
             setError(sth, e);
-            return new RuntimeHash().createReference().getList();
         } catch (Exception e) {
             setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-            return new RuntimeHash().createReference().getList();
         }
+        RuntimeScalar msg = new RuntimeScalar("DBI execute() failed: " + getGlobalVariable("DBI::errstr").toString());
+        return handleError(dbh, msg);
     }
 
     /**
@@ -222,6 +224,7 @@ public class Dbi extends PerlModuleBase {
     public static RuntimeList fetchrow_arrayref(RuntimeArray args, int ctx) {
         // Get statement handle and result set
         RuntimeHash sth = args.get(0).hashDeref();
+        RuntimeHash dbh = sth.get("dbh").hashDeref();
         try {
             RuntimeHash executeResult = sth.get("execute_result").hashDeref();
             ResultSet rs = (ResultSet) executeResult.get("resultset").value;
@@ -241,11 +244,11 @@ public class Dbi extends PerlModuleBase {
             return new RuntimeList();
         } catch (SQLException e) {
             setError(sth, e);
-            return new RuntimeList();
         } catch (Exception e) {
             setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-            return new RuntimeList();
         }
+        RuntimeScalar msg = new RuntimeScalar("DBI fetchrow_arrayref() failed: " + getGlobalVariable("DBI::errstr").toString());
+        return handleError(dbh, msg);
     }
 
     /**
@@ -257,6 +260,7 @@ public class Dbi extends PerlModuleBase {
      */
     public static RuntimeList fetchrow_hashref(RuntimeArray args, int ctx) {
         RuntimeHash sth = args.get(0).hashDeref();
+        RuntimeHash dbh = sth.get("dbh").hashDeref();
         try {
             RuntimeHash executeResult = sth.get("execute_result").hashDeref();
             ResultSet rs = (ResultSet) executeResult.get("resultset").value;
@@ -282,11 +286,11 @@ public class Dbi extends PerlModuleBase {
             return scalarUndef.getList();
         } catch (SQLException e) {
             setError(sth, e);
-            return scalarUndef.getList();
         } catch (Exception e) {
             setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-            return scalarUndef.getList();
         }
+        RuntimeScalar msg = new RuntimeScalar("DBI fetchrow_hashref() failed: " + getGlobalVariable("DBI::errstr").toString());
+        return handleError(dbh, msg);
     }
 
     /**
