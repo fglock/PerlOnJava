@@ -40,7 +40,7 @@
   - `-w`: Enables warnings.
   - `-d[t][:debugger]`: Runs the program under the debugger.
   - `-D[number/list]`: Sets debugging flags.
-  - `-f`: Suppresses execution of `~/.perlrc`.
+  - `-f`: Suppresses execution of `sitecustomize.pl`.
   - `-C [number/list]`: Controls Unicode features.
   - `-S`: Uses the PATH environment variable to find the script.
 
