@@ -1,13 +1,11 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeHash;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.*;
 
 import java.sql.*;
 import java.util.Arrays;
 
+import static org.perlonjava.operators.WarnDie.die;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
@@ -64,15 +62,21 @@ public class Dbi extends PerlModuleBase {
      */
     public static RuntimeList connect(RuntimeArray args, int ctx) {
         RuntimeHash dbh = new RuntimeHash();
+        String dsn = null;
+        String username = null;
         try {
             if (args.size() < 4) {
                 throw new IllegalStateException("Bad number of arguments for DBI->connect");
             }
 
             // Extract connection parameters from args
-            String dsn = args.get(1).toString();
-            String username = args.get(2).toString();
+            dsn = args.get(1).toString();
+            username = args.get(2).toString();
             String password = args.get(3).toString();
+            RuntimeScalar attr = args.get(4);   //  \%attr
+            if (attr.type == RuntimeScalarType.HASHREFERENCE) {
+                dbh.put("RaiseError", attr.hashDerefGet(new RuntimeScalar("RaiseError")));
+            }
 
             // Split DSN into components (format: dbi:Driver:database:host)
             String[] dsnParts = dsn.split(":");
@@ -99,14 +103,15 @@ public class Dbi extends PerlModuleBase {
             return dbhRef.getList();
         } catch (SQLException e) {
             setError(dbh, e);
-            return scalarUndef.getList();
         } catch (ClassNotFoundException e) {
             setError(dbh, new SQLException("Database driver not found: " + e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-            return scalarUndef.getList();
         } catch (Exception e) {
             setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-            return scalarUndef.getList();
         }
+        if (dbh.get("RaiseError").getBoolean()) {
+            die(new RuntimeScalar("DBI connect('" + dsn + "','" + username + "',...) failed: " + getGlobalVariable("DBI::errstr").toString()), new RuntimeScalar());
+        }
+        return scalarUndef.getList();
     }
 
     /**

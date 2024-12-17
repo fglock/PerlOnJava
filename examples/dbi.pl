@@ -18,7 +18,7 @@ my $dbh = DBI->connect(
     "sa",                 # Default H2 username
     "",                   # Empty password
     { RaiseError => 1 }
-) or die $DBI::errstr;
+);
 
 # Create a test table
 $dbh->do("CREATE TABLE users (
