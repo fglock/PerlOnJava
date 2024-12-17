@@ -37,7 +37,7 @@ public class Dbi extends PerlModuleBase {
             dbi.registerMethod("connect", null);
             dbi.registerMethod("prepare", null);
             dbi.registerMethod("execute", null);
-            dbi.registerMethod("fetchrow_array", null);
+            dbi.registerMethod("fetchrow_arrayref", null);
             dbi.registerMethod("fetchrow_hashref", null);
             dbi.registerMethod("rows", null);
             dbi.registerMethod("disconnect", null);
@@ -200,7 +200,7 @@ public class Dbi extends PerlModuleBase {
      * @param ctx  Context parameter
      * @return RuntimeList containing row data or empty list if no more rows
      */
-    public static RuntimeList fetchrow_array(RuntimeArray args, int ctx) {
+    public static RuntimeList fetchrow_arrayref(RuntimeArray args, int ctx) {
         // Get statement handle and result set
         RuntimeHash sth = args.get(0).hashDeref();
         try {
@@ -215,17 +215,17 @@ public class Dbi extends PerlModuleBase {
                 for (int i = 1; i <= metaData.getColumnCount(); i++) {
                     RuntimeArray.push(row, new RuntimeScalar(rs.getObject(i).toString()));
                 }
-                return row.getList();
+                return row.createReference().getList();
             }
 
             // Return empty array if no more rows
-            return new RuntimeArray().getList();
+            return new RuntimeList();
         } catch (SQLException e) {
             setError(sth, e);
-            return new RuntimeArray().getList();
+            return new RuntimeList();
         } catch (Exception e) {
             setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-            return new RuntimeArray().getList();
+            return new RuntimeList();
         }
     }
 

@@ -44,6 +44,11 @@ while (my @row = $sth->fetchrow_array) {
 
 
 $sth->execute(20);
+while (my $row = $sth->fetchrow_arrayref) {
+    print Dumper $row;
+}
+
+$sth->execute(20);
 while (my $row = $sth->fetchrow_hashref) {
     print Dumper $row;
 }

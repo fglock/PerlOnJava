@@ -31,4 +31,9 @@ sub finish {
     # placeholder
 }
 
+sub fetchrow_array {
+    my $arr = fetchrow_arrayref(@_);
+    return $arr ? @$arr : ();
+}
+
 1;
