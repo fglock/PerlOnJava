@@ -22,6 +22,7 @@ public class Dbi extends PerlModuleBase {
             dbi.registerMethod("prepare", null);
             dbi.registerMethod("execute", null);
             dbi.registerMethod("fetchrow_array", null);
+            dbi.registerMethod("rows", null);
             dbi.registerMethod("disconnect", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing DBI method: " + e.getMessage());
@@ -104,12 +105,18 @@ public class Dbi extends PerlModuleBase {
             result.put("resultset", new RuntimeScalar(stmt.getResultSet()));
         }
 
+        // Store the execute result in the statement handle
+        sth.put("execute_result", result.createReference());
+
         return result.createReference().getList();
     }
 
     public static RuntimeList fetchrow_array(RuntimeArray args, int ctx) throws Exception {
         RuntimeHash sth = args.get(0).hashDeref();
-        ResultSet rs = (ResultSet) sth.get("resultset").value;
+
+        // Get ResultSet from the execute result hash
+        RuntimeHash executeResult = sth.get("execute_result").hashDeref();
+        ResultSet rs = (ResultSet) executeResult.get("resultset").value;
 
         if (rs.next()) {
             RuntimeArray row = new RuntimeArray();
@@ -123,10 +130,48 @@ public class Dbi extends PerlModuleBase {
         return new RuntimeArray().getList();
     }
 
-    public static RuntimeList disconnect(RuntimeArray args, int ctx) throws Exception {
+    public static RuntimeList rows(RuntimeArray args, int ctx) throws Exception {
+        if (args.size() < 1) {
+            throw new IllegalStateException("Bad number of arguments for DBI->rows");
+        }
+
         RuntimeHash sth = args.get(0).hashDeref();
         PreparedStatement stmt = (PreparedStatement) sth.get("statement").value;
-        stmt.close();
+
+        int rowCount = -1;
+
+        // For UPDATE, DELETE, INSERT operations
+        try {
+            rowCount = stmt.getUpdateCount();
+        } catch (SQLException e) {
+            // If getting update count fails, return -1
+            return new RuntimeArray(new RuntimeScalar(-1)).getList();
+        }
+
+        // If it's not an update operation (rowCount == -1), try to get result set row count
+        if (rowCount == -1 && sth.elements.containsKey("resultset")) {
+            ResultSet rs = (ResultSet) sth.get("resultset").value;
+            try {
+                // Try to move to last row to get row count
+                if (rs.last()) {
+                    rowCount = rs.getRow();
+                    // Reset cursor to before first row
+                    rs.beforeFirst();
+                }
+            } catch (SQLException e) {
+                // Some JDBC drivers don't support moving cursor
+                rowCount = -1;
+            }
+        }
+
+        return new RuntimeArray(new RuntimeScalar(rowCount)).getList();
+    }
+
+    public static RuntimeList disconnect(RuntimeArray args, int ctx) throws Exception {
+        RuntimeHash dbh = args.get(0).hashDeref();
+        Connection conn = (Connection) dbh.get("connection").value;
+        conn.close();
+        dbh.put("active", new RuntimeScalar(false));
 
         return new RuntimeHash().createReference().getList();
     }

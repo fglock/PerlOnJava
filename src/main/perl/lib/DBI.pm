@@ -26,4 +26,8 @@ sub do {
     ($rows == 0) ? "0E0" : $rows;
 }
 
+sub finish {
+    # placeholder
+}
+
 1;
