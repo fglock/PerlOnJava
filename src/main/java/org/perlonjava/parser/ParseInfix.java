@@ -122,19 +122,24 @@ public class ParseInfix {
                         } else {
                             throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
                         }
-                }
-                parser.parsingForLoopVariable = true;
-                right = parser.parseExpression(precedence);
-                parser.parsingForLoopVariable = false;
+                    default:
+                        parser.parsingForLoopVariable = true;
+                        if (nextText.equals("$")) {
+                            right = parser.parseExpression(precedence);
+                        } else {
+                            right = SubroutineParser.parseSubroutineCall(parser);
+                        }
+                        parser.parsingForLoopVariable = false;
 
-                if (right instanceof BinaryOperatorNode && ((BinaryOperatorNode) right).operator.equals("(")) {
-                    // Right has parameter list
-                } else {
-                    // Insert an empty parameter list
-                    right = new BinaryOperatorNode("(", right, new ListNode(parser.tokenIndex), parser.tokenIndex);
-                }
+                        if (right instanceof BinaryOperatorNode && ((BinaryOperatorNode) right).operator.equals("(")) {
+                            // Right has parameter list
+                        } else {
+                            // Insert an empty parameter list
+                            right = new BinaryOperatorNode("(", right, new ListNode(parser.tokenIndex), parser.tokenIndex);
+                        }
 
-                return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
+                        return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
+                }
             case "(":
                 // Handle function calls
                 right = new ListNode(ListParser.parseList(parser, ")", 0), parser.tokenIndex);
