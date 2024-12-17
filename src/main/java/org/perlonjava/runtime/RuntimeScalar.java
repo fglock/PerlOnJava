@@ -94,13 +94,13 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         this.value = value;
     }
 
-    public RuntimeScalar(RuntimeGlob val) {
+    public RuntimeScalar(RuntimeGlob value) {
         if (value == null) {
             this.type = RuntimeScalarType.UNDEF;
         } else {
-            this.type = val.type;
+            this.type = value.type;
         }
-        this.value = val;
+        this.value = value;
     }
 
     public static RuntimeScalar undef() {
