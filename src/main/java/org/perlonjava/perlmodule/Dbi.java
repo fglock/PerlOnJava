@@ -56,7 +56,10 @@ public class Dbi extends PerlModuleBase {
         dbh.put("connection", new RuntimeScalar(conn));
         dbh.put("active", new RuntimeScalar(true));
 
-        return dbh.createReference().getList();
+        // XXX TODO return "dbh" class
+        // RuntimeScalar dbhRef = RuntimeScalar.bless(dbh.createReference(), new RuntimeScalar("DBI::db"));
+        RuntimeScalar dbhRef = RuntimeScalar.bless(dbh.createReference(), new RuntimeScalar("DBI"));
+        return dbhRef.getList();
     }
 
     public static RuntimeList prepare(RuntimeArray args, int ctx) throws Exception {
@@ -74,7 +77,9 @@ public class Dbi extends PerlModuleBase {
         sth.put("statement", new RuntimeScalar(stmt));
         sth.put("sql", new RuntimeScalar(sql));
 
-        return sth.createReference().getList();
+        // XXX TODO return "sth" class
+        RuntimeScalar sthRef = RuntimeScalar.bless(sth.createReference(), new RuntimeScalar("DBI"));
+        return sthRef.getList();
     }
 
     public static RuntimeList execute(RuntimeArray args, int ctx) throws Exception {

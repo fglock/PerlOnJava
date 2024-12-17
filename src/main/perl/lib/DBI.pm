@@ -15,4 +15,15 @@ package DBI;
 #     { RaiseError => 1 }
 # );
 
+# package DBI::db;
+# Class for $dbh
+
+sub do {
+    my($dbh, $statement, $attr, @params) = @_;
+    my $sth = $dbh->prepare($statement, $attr) or return undef;
+    $sth->execute(@params) or return undef;
+    my $rows = $sth->rows;
+    ($rows == 0) ? "0E0" : $rows;
+}
+
 1;
