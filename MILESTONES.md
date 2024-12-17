@@ -126,6 +126,7 @@
 ### Upcoming Milestones
 
 - **v2.2.0**: Core modules
+  - Added `DBI` module with JDBC support.
   - Planned release date: 2024-12-10
   - Work in progress:
     - `lexical_subs` feature.
@@ -137,7 +138,9 @@
     - preprocessor `# line` directive.
     - subroutine prototypes.
   - Work in progress: DBI subsystem
+    - Additional methods.
   - Work in progress: Overload subsystem
+    - Additional methods.
   - Work in progress: I/O subsystem
     - in-memory I/O
     - `socket` and related operators.
