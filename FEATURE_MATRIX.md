@@ -320,6 +320,8 @@
 ### Non-core modules
 - ✔️   **HTTP::CookieJar** module.
 - ✔️   **JSON** module.
+- 🚧  **DBI** basic functionality implemented, with JDBC support.
+  - Database drivers must be included in the class path.
 
 
 ## Non-strict and Obsolete Features
