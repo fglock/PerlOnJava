@@ -46,6 +46,7 @@ public class Dbi extends PerlModuleBase {
             dbi.registerMethod("err", null);
             dbi.registerMethod("errstr", null);
             dbi.registerMethod("state", null);
+            dbi.registerMethod("last_insert_id", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing DBI method: " + e.getMessage());
         }
@@ -148,7 +149,7 @@ public class Dbi extends PerlModuleBase {
 
             // Get connection from database handle and prepare statement
             Connection conn = (Connection) dbh.get("connection").value;
-            PreparedStatement stmt = conn.prepareStatement(sql);
+            PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
 
             // Create statement handle (sth) hash
             sth.put("statement", new RuntimeScalar(stmt));
@@ -163,6 +164,28 @@ public class Dbi extends PerlModuleBase {
             setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
         }
         RuntimeScalar msg = new RuntimeScalar("DBI prepare() failed: " + getGlobalVariable("DBI::errstr").toString());
+        return handleError(dbh, msg);
+    }
+
+    public static RuntimeList last_insert_id(RuntimeArray args, int ctx) {
+        RuntimeHash dbh = args.get(0).hashDeref();
+        try {
+            Connection conn = (Connection) dbh.get("connection").value;
+            Statement stmt = (Statement) dbh.get("statement").value;
+            ResultSet rs = stmt.getGeneratedKeys();
+
+            if (rs.next()) {
+                long id = rs.getLong(1);
+                return new RuntimeScalar(id).getList();
+            }
+
+            return scalarUndef.getList();
+        } catch (SQLException e) {
+            setError(dbh, e);
+        } catch (Exception e) {
+            setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
+        }
+        RuntimeScalar msg = new RuntimeScalar("DBI last_insert_id() failed: " + getGlobalVariable("DBI::errstr").toString());
         return handleError(dbh, msg);
     }
 
