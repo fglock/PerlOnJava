@@ -125,6 +125,37 @@ sub fetchall_arrayref {
     return \@rows;
 }
 
+sub selectall_arrayref {
+    my ($dbh, $statement, $attr, @bind_values) = @_;
+
+    # Handle statement handle or SQL string
+    my $sth = ref($statement) ? $statement : $dbh->prepare($statement, $attr)
+        or return undef;
+
+    $sth->execute(@bind_values) or return undef;
+
+    # Extract MaxRows and Slice/Columns attributes
+    my $max_rows = $attr->{MaxRows};
+    my $slice = $attr->{Slice};
+
+    # Handle Columns attribute (convert 1-based indices to 0-based)
+    if (!defined $slice && defined $attr->{Columns}) {
+        if (ref $attr->{Columns} eq 'ARRAY') {
+            $slice = [map { $_ - 1 } @{$attr->{Columns}}];
+        } else {
+            $slice = $attr->{Columns};
+        }
+    }
+
+    # Fetch all rows using the specified parameters
+    my $rows = $sth->fetchall_arrayref($slice, $max_rows);
+
+    # Call finish() if MaxRows was specified
+    $sth->finish if defined $max_rows;
+
+    return $rows;
+}
+
 1;
 
 __END__

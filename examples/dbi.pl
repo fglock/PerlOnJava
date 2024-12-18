@@ -89,6 +89,49 @@ my $renamed = $sth->fetchall_arrayref(\{ 1 => 'person_name', 2 => 'person_age' }
 say "\nRenamed columns:";
 print Dumper $renamed;
 
+
+
+# Select specific columns using 1-based indices
+my $column_subset = $dbh->selectall_arrayref(
+    "SELECT * FROM users",
+    {
+        Columns => [2, 3]  # Get name and age columns only
+    }
+);
+say "\nColumn subset using indices:";
+print Dumper $column_subset;
+
+# Complex query with joins and hash slice (assuming we add a new table)
+$dbh->do("CREATE TABLE orders (
+    order_id INTEGER AUTO_INCREMENT PRIMARY KEY,
+    user_id INTEGER,
+    amount DECIMAL(10,2),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+)");
+
+$dbh->do("INSERT INTO orders (user_id, amount) VALUES (?, ?)",
+    undef, 1, 99.99);
+$dbh->do("INSERT INTO orders (user_id, amount) VALUES (?, ?)",
+    undef, 1, 150.50);
+$dbh->do("INSERT INTO orders (user_id, amount) VALUES (?, ?)",
+    undef, 2, 75.25);
+
+my $user_orders = $dbh->selectall_arrayref(
+    "SELECT u.name, u.age, COUNT(o.order_id) as order_count, SUM(o.amount) as total_spent
+     FROM users u
+     LEFT JOIN orders o ON u.id = o.user_id
+     GROUP BY u.id, u.name, u.age
+     HAVING SUM(o.amount) > ?",
+    {
+        Slice => {},       # Return as array of hashrefs
+        MaxRows => 10      # Limit results
+    },
+    50.00
+);
+say "\nComplex join with aggregates:";
+print Dumper $user_orders;
+
+
 $sth->finish;
 $dbh->disconnect;
 
