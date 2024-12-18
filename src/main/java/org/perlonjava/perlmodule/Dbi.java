@@ -100,7 +100,7 @@ public class Dbi extends PerlModuleBase {
 
             // Create database handle (dbh) hash and store connection
             dbh.put("connection", new RuntimeScalar(conn));
-            dbh.put("active", new RuntimeScalar(true));
+            dbh.put("Active", new RuntimeScalar(true));
             dbh.put("type", new RuntimeScalar("dbh"));
 
             // Create blessed reference for Perl compatibility
@@ -396,7 +396,7 @@ public class Dbi extends PerlModuleBase {
             conn.close();
 
             // Mark connection as inactive
-            dbh.put("active", new RuntimeScalar(false));
+            dbh.put("Active", new RuntimeScalar(false));
 
             return new RuntimeHash().createReference().getList();
         } catch (SQLException e) {

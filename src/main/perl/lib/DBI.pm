@@ -59,6 +59,72 @@ sub fetch {
     return fetchrow_arrayref(@_);
 }
 
+sub fetchall_arrayref {
+    my ($sth, $slice, $max_rows) = @_;
+
+    # Return undef if statement handle is inactive
+    return undef unless $sth->{dbh}{Active};
+
+    my @rows;
+    my $row_count = 0;
+
+    # Handle different slice types
+    if (!defined $slice) {
+        # Default behavior - fetch all columns as array refs
+        while (!defined($max_rows) || $row_count < $max_rows) {
+            my $row = $sth->fetchrow_arrayref();
+            last unless $row;
+            push @rows, [@$row]; # Create a copy of the row
+            $row_count++;
+        }
+    }
+    elsif (ref($slice) eq 'ARRAY') {
+        # Array slice - select specific columns by index
+        while (!defined($max_rows) || $row_count < $max_rows) {
+            my $row = $sth->fetchrow_arrayref();
+            last unless $row;
+            if (@$slice) {
+                push @rows, [map { $row->[$_] } @$slice];
+            } else {
+                push @rows, [@$row]; # Empty slice means all columns
+            }
+            $row_count++;
+        }
+    }
+    elsif (ref($slice) eq 'HASH') {
+        # Hash slice - fetch as hash refs with selected columns
+        while (!defined($max_rows) || $row_count < $max_rows) {
+            my $row = $sth->fetchrow_hashref();
+            last unless $row;
+            if (%$slice) {
+                # Select only requested columns
+                my %new_row = map { $_ => $row->{$_} }
+                    grep { exists $slice->{$_} }
+                        keys %$row;
+                push @rows, \%new_row;
+            } else {
+                push @rows, {%$row}; # Empty hash means all columns
+            }
+            $row_count++;
+        }
+    }
+    elsif (ref($slice) eq 'REF' && ref($$slice) eq 'HASH') {
+        # Column index to name mapping
+        while (!defined($max_rows) || $row_count < $max_rows) {
+            my $row = $sth->fetchrow_arrayref();
+            last unless $row;
+            my %new_row;
+            while (my ($idx, $key) = each %{$$slice}) {
+                $new_row{$key} = $row->[$idx];
+            }
+            push @rows, \%new_row;
+            $row_count++;
+        }
+    }
+
+    return \@rows;
+}
+
 1;
 
 __END__

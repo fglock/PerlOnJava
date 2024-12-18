@@ -325,6 +325,7 @@
     `connect`, `prepare`, `execute`,
     `fetchrow_arrayref`, `fetchrow_array`, `fetchrow_hashref`,
     `selectrow_array`, `selectrow_arrayref`, `selectrow_hashref`,
+    `fetchall_arrayref`,
     `rows`, `disconnect`, `err`, `errstr`, `state`, `do`, `finish`, `last_insert_id`.
 - ✔️   These DBI attributes are implemented: `RaiseError`, `PrintError`.
 
