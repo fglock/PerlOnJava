@@ -276,7 +276,8 @@ public class Dbi extends PerlModuleBase {
                 ResultSetMetaData metaData = rs.getMetaData();
                 // Convert each column value to string and add to row array
                 for (int i = 1; i <= metaData.getColumnCount(); i++) {
-                    RuntimeArray.push(row, new RuntimeScalar(rs.getObject(i).toString()));
+                    Object value = rs.getObject(i);
+                    RuntimeArray.push(row, value != null ? new RuntimeScalar(value.toString()) : scalarUndef);
                 }
                 return row.createReference().getList();
             }
@@ -315,7 +316,7 @@ public class Dbi extends PerlModuleBase {
                 for (int i = 1; i <= metaData.getColumnCount(); i++) {
                     String columnName = metaData.getColumnName(i);
                     Object value = rs.getObject(i);
-                    row.put(columnName, new RuntimeScalar(value != null ? value.toString() : ""));
+                    row.put(columnName, value != null ? new RuntimeScalar(value.toString()) : scalarUndef);
                 }
 
                 // Create reference for hash

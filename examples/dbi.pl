@@ -132,6 +132,36 @@ say "\nComplex join with aggregates:";
 print Dumper $user_orders;
 
 
+# Add a new column that allows NULL
+$dbh->do("ALTER TABLE users ADD COLUMN last_login TIMESTAMP NULL");
+
+# Insert rows with NULL values
+$dbh->do("INSERT INTO users (name, age, last_login) VALUES (?, ?, ?)",
+    undef, "Carol", 28, undef);
+$dbh->do("INSERT INTO users (name, age, last_login) VALUES (?, ?, ?)",
+    undef, "Dave", 35, '2023-01-01 10:00:00');
+
+# Query including NULL values
+my $null_results = $dbh->selectall_arrayref(
+    "SELECT name, age, last_login FROM users WHERE last_login IS NULL",
+    { Slice => {} }
+);
+say "\nUsers with NULL last_login:";
+print Dumper $null_results;
+
+# Compare NULL vs non-NULL
+my $all_logins = $dbh->selectall_arrayref(
+    "SELECT name, last_login,
+     CASE WHEN last_login IS NULL THEN 'Never logged in'
+          ELSE 'Has logged in' END as login_status
+     FROM users",
+    { Slice => {} }
+);
+say "\nAll users login status:";
+print Dumper $all_logins;
+
+
+
 $sth->finish;
 $dbh->disconnect;
 
