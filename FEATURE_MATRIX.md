@@ -321,11 +321,12 @@
 - ✔️   **JSON** module.
 
 ### DBI module
-- 🚧  **DBI** basic functionality implemented, with JDBC support.
 - ✔️   These DBI methods are implemented:
     `connect`, `prepare`, `execute`,
-    `fetchrow_arrayref`, `fetchrow_array`, `fetchrow_hashref`, `selectrow_array`, `selectrow_arrayref`,
+    `fetchrow_arrayref`, `fetchrow_array`, `fetchrow_hashref`,
+    `selectrow_array`, `selectrow_arrayref`, `selectrow_hashref`,
     `rows`, `disconnect`, `err`, `errstr`, `state`, `do`, `finish`, `last_insert_id`.
+- ✔️   These DBI attributes are implemented: `RaiseError`, `PrintError`.
 
 - JDBC Database drivers must be included in the class path. Example:
 

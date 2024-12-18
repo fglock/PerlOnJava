@@ -56,6 +56,7 @@ while (my $row = $sth->fetchrow_hashref) {
 }
 
 print Dumper $dbh->selectrow_arrayref("SELECT * FROM users WHERE age > ?", undef, 20);
+print Dumper $dbh->selectrow_hashref("SELECT * FROM users WHERE age > ?", undef, 20);
 
 $sth->finish;
 $dbh->disconnect;

@@ -38,6 +38,13 @@ sub selectrow_arrayref {
     return $sth->fetchrow_arrayref();
 }
 
+sub selectrow_hashref {
+    my($dbh, $statement, $attr, @params) = @_;
+    my $sth = $dbh->prepare($statement, $attr) or return undef;
+    $sth->execute(@params) or return undef;
+    return $sth->fetchrow_hashref();
+}
+
 sub selectrow_array {
     my $arr = selectrow_arrayref(@_);
     return $arr ? @$arr : ();
