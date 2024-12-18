@@ -322,7 +322,10 @@
 
 ### DBI module
 - 🚧  **DBI** basic functionality implemented, with JDBC support.
-- ✔️   These DBI methods are implemented: `connect`, `prepare`, `execute`, `fetchrow_arrayref`, `fetchrow_array`, `fetchrow_hashref`, `rows`, `disconnect`, `err`, `errstr`, `state`, `do`, `finish`, `last_insert_id`.
+- ✔️   These DBI methods are implemented:
+    `connect`, `prepare`, `execute`,
+    `fetchrow_arrayref`, `fetchrow_array`, `fetchrow_hashref`, `selectrow_array`, `selectrow_arrayref`,
+    `rows`, `disconnect`, `err`, `errstr`, `state`, `do`, `finish`, `last_insert_id`.
 
 - JDBC Database drivers must be included in the class path. Example:
 

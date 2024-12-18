@@ -11,6 +11,7 @@ use strict;
 use warnings;
 use DBI;
 use Data::Dumper;
+use feature 'say';
 
 # Connect to H2 database
 my $dbh = DBI->connect(
@@ -32,6 +33,7 @@ $dbh->do("INSERT INTO users (name, age) VALUES (?, ?)",
     undef, "Alice", 30);
 $dbh->do("INSERT INTO users (name, age) VALUES (?, ?)", 
     undef, "Bob", 25);
+say "last_insert_id ", $dbh->last_insert_id;
 
 # Query with parameters
 my $sth = $dbh->prepare("SELECT * FROM users WHERE age > ?");
@@ -52,6 +54,8 @@ $sth->execute(20);
 while (my $row = $sth->fetchrow_hashref) {
     print Dumper $row;
 }
+
+print Dumper $dbh->selectrow_arrayref("SELECT * FROM users WHERE age > ?", undef, 20);
 
 $sth->finish;
 $dbh->disconnect;

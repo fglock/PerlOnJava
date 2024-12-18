@@ -31,6 +31,18 @@ sub finish {
     # placeholder
 }
 
+sub selectrow_arrayref {
+    my($dbh, $statement, $attr, @params) = @_;
+    my $sth = $dbh->prepare($statement, $attr) or return undef;
+    $sth->execute(@params) or return undef;
+    return $sth->fetchrow_arrayref();
+}
+
+sub selectrow_array {
+    my $arr = selectrow_arrayref(@_);
+    return $arr ? @$arr : ();
+}
+
 sub fetchrow_array {
     my $arr = fetchrow_arrayref(@_);
     return $arr ? @$arr : ();
