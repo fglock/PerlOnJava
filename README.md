@@ -95,13 +95,14 @@ For a detailed feature list, see the [FEATURE_MATRIX.md](FEATURE_MATRIX.md).
 
 JDBC Database drivers can be added in two ways:
 
-1. Using the `Configure` script to add the drivers to the Perl jar file:
+1. Using the `Configure.pl` script to add the drivers to the Perl jar file:
+
+*Work in Progress*
 
 The Configure script automatically installs JDBC drivers from the jdbc-drivers directory into your local Maven repository and updates the build configuration.
 This creates a single jar file containing both PerlOnJava and the database drivers.
 
-- Place your JDBC driver jar files in the `jdbc-drivers` directory
-- Run `./Configure` to register the drivers
+- Run `./Configure.pl my.driver` to register the drivers - for example, `./Configure.pl postgresql`
 - Run `mvn clean package` or `gradle clean build` to build with the drivers included
 - Run your Perl script: `java -jar target/perlonjava-1.0-SNAPSHOT.jar examples/dbi.pl`
 
