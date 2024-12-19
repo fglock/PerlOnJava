@@ -5,6 +5,7 @@ import org.perlonjava.runtime.*;
 import java.sql.*;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
@@ -290,6 +291,9 @@ public class Dbi extends PerlModuleBase {
                 sth.put("NAME_lc", columnNamesLower.createReference());
                 sth.put("NAME_uc", columnNamesUpper.createReference());
             }
+
+            sth.put("Executed", scalarTrue);
+            dbh.put("Executed", scalarTrue);
 
             // Store execution result in statement handle
             sth.put("execute_result", result.createReference());
