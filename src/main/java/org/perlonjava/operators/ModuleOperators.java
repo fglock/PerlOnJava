@@ -35,39 +35,42 @@ public class ModuleOperators {
             // Otherwise, search in INC directories
             List<RuntimeScalar> inc = GlobalVariable.getGlobalArray("main::INC").elements;
             for (RuntimeBaseEntity dir : inc) {
-                Path fullPath = Paths.get(dir.toString(), fileName);
-                if (Files.exists(fullPath)) {
-                    fullName = fullPath;
-                    break;
-                }
-            }
-        }
-        if (fullName == null) {
-            // If not found in file system, try to find in jar at "src/main/perl/lib"
-            String resourcePath = "/lib/" + fileName;
-            URL resource = RuntimeScalar.class.getResource(resourcePath);
-            // System.out.println("Found resource " + resource);
-            if (resource != null) {
+                String dirName = dir.toString();
+                if (dirName.equals(GlobalContext.JAR_PERLLIB)) {
+                    // Try to find in jar at "src/main/perl/lib"
+                    String resourcePath = "/lib/" + fileName;
+                    URL resource = RuntimeScalar.class.getResource(resourcePath);
+                    // System.out.println("Found resource " + resource);
+                    if (resource != null) {
 
-                String path = resource.getPath();
-                // Remove leading slash if on Windows
-                if (System.getProperty("os.name").toLowerCase().contains("win") && path.startsWith("/")) {
-                    path = path.substring(1);
-                }
-                fullName = Paths.get(path);
+                        String path = resource.getPath();
+                        // Remove leading slash if on Windows
+                        if (System.getProperty("os.name").toLowerCase().contains("win") && path.startsWith("/")) {
+                            path = path.substring(1);
+                        }
+                        fullName = Paths.get(path);
 
-                try (InputStream is = resource.openStream();
-                     BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
-                    StringBuilder content = new StringBuilder();
-                    String line = null;
-                    while ((line = reader.readLine()) != null) {
-                        content.append(line).append("\n");
+                        try (InputStream is = resource.openStream();
+                             BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
+                            StringBuilder content = new StringBuilder();
+                            String line = null;
+                            while ((line = reader.readLine()) != null) {
+                                content.append(line).append("\n");
+                            }
+                            // System.out.println("Content of " + resourcePath + ": " + content.toString());
+                            code = content.toString();
+                            break;
+                        } catch (IOException e1) {
+                            //GlobalVariable.setGlobalVariable("main::!", "No such file or directory");
+                            //return new RuntimeScalar();
+                        }
                     }
-                    // System.out.println("Content of " + resourcePath + ": " + content.toString());
-                    code = content.toString();
-                } catch (IOException e1) {
-                    GlobalVariable.setGlobalVariable("main::!", "No such file or directory");
-                    return new RuntimeScalar();
+                } else {
+                    Path fullPath = Paths.get(dirName, fileName);
+                    if (Files.exists(fullPath)) {
+                        fullName = fullPath;
+                        break;
+                    }
                 }
             }
         }

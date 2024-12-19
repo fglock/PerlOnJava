@@ -22,6 +22,9 @@ public class GlobalContext {
     public static final String GLOBAL_PHASE = "main::" + Character.toString('G' - 'A' + 1) + "LOBAL_PHASE"; // $^GLOBAL_PHASE
     public static final String TAINT = "main::" + Character.toString('T' - 'A' + 1) + "AINT"; // $^TAINT
 
+    // Internal name of the "./src/main/perl/lib" directory
+    public static final String JAR_PERLLIB = "jar:PERL5LIB";
+
     /**
      * Initializes global variables, arrays, hashes, internal modules, file handles, and other entities.
      *
@@ -73,12 +76,17 @@ public class GlobalContext {
         Map<String, RuntimeScalar> env = GlobalVariable.getGlobalHash("main::ENV").elements;
         System.getenv().forEach((k, v) -> env.put(k, new RuntimeScalar(v)));
 
-        // Initialize @INC
-        // https://stackoverflow.com/questions/2526804/how-is-perls-inc-constructed
+        /* Initialize @INC.
+           @INC Search order is:
+            - "-I" argument
+            - jar file: src/main/perl/lib
+            - PERL5LIB env
+           See also: https://stackoverflow.com/questions/2526804/how-is-perls-inc-constructed
+         */
         List<RuntimeScalar> inc = GlobalVariable.getGlobalArray("main::INC").elements;
 
         inc.addAll(compilerOptions.inc.elements);   // add from `-I`
-
+        inc.add(new RuntimeScalar(JAR_PERLLIB));    // internal src/main/perl/lib
         String[] directories = env.getOrDefault("PERL5LIB", new RuntimeScalar("")).toString().split(":");
         for (String directory : directories) {
             if (!directory.isEmpty()) {
