@@ -97,6 +97,11 @@ public class Dbi extends PerlModuleBase {
             // Establish database connection
             Connection conn = DriverManager.getConnection(jdbcUrl, username, password);
 
+            // Get ReadOnly attribute if present
+            if (dbh.get("ReadOnly").getBoolean()) {
+                conn.setReadOnly(true);
+            }
+
             // Create database handle (dbh) hash and store connection
             dbh.put("connection", new RuntimeScalar(conn));
             dbh.put("Active", new RuntimeScalar(true));
