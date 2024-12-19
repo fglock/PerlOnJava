@@ -368,7 +368,7 @@
 #### Database Connection Strings (DSN)
 Format: `dbi:DriverClassName:database:host[:port][;parameters]`
 
-##### Supported Databases
+##### Example DSN for some Databases
 - **H2**
   ```
   dbi:org.h2.Driver:mem:testdb;DB_CLOSE_DELAY=-1
