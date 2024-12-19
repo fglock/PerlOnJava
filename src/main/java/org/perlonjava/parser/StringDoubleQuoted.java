@@ -29,6 +29,8 @@ public class StringDoubleQuoted {
     static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes) {
         String input = rawStr.buffers.getFirst();
         int tokenIndex = rawStr.next;
+        boolean isRegex = !parseEscapes;
+        ctx.logDebug("parseDoubleQuotedString isRegex:" + isRegex);
 
         StringBuilder str = new StringBuilder();  // Buffer to hold the parsed string
         List<Node> parts = new ArrayList<>();  // List to hold parts of the parsed string
@@ -132,6 +134,17 @@ public class StringDoubleQuoted {
                             text = tokens.get(parser.tokenIndex).text;
                             switch (text) {
                                 case "[":
+                                    if (isRegex) {
+                                        // maybe character class
+                                        LexerToken tokenNext = tokens.get(parser.tokenIndex + 1);
+                                        ctx.logDebug("str [ " + tokenNext);
+                                        if (!tokenNext.text.equals("$") && !(tokenNext.type == LexerTokenType.NUMBER)) {
+                                            break outerLoop;
+                                        }
+                                    }
+                                    operand = ParseInfix.parseInfixOperation(parser, operand, 0);
+                                    ctx.logDebug("str operand " + operand);
+                                    break;
                                 case "{":
                                     operand = ParseInfix.parseInfixOperation(parser, operand, 0);
                                     ctx.logDebug("str operand " + operand);
