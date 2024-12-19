@@ -186,15 +186,13 @@ my $users_by_col = $sth->fetchall_hashref(2); # 'name' column
 print Dumper $users_by_col;
 
 # Test with multiple keys using orders table
-say "\nFetchall_hashref with composite keys:";
-my $sth2 = $dbh->prepare(q{
-    SELECT u.id as user_id, u.name, o.order_id, o.amount
-    FROM users u
-    JOIN orders o ON u.id = o.user_id
-});
-$sth2->execute();
-my $nested = $sth2->fetchall_hashref(['user_id', 'order_id']);
-# my $nested = $sth2->fetchrow_hashref();
+say "\nSelectall_hashref with composite keys:";
+my $nested = $dbh->selectall_hashref(
+    q{SELECT u.id as user_id, u.name, o.order_id, o.amount
+      FROM users u
+      JOIN orders o ON u.id = o.user_id},
+    ['user_id', 'order_id']
+);
 print Dumper $nested;
 
 # Access nested data example

@@ -219,6 +219,20 @@ sub selectall_arrayref {
     return $rows;
 }
 
+sub selectall_hashref {
+    my ($dbh, $statement, $key_field, $attr, @bind_values) = @_;
+
+    # Handle statement handle or SQL string
+    my $sth = ref($statement) ? $statement : $dbh->prepare($statement, $attr)
+        or return undef;
+
+    # Execute with bind values if provided
+    $sth->execute(@bind_values) or return undef;
+
+    # Reuse fetchall_hashref to do the heavy lifting
+    return $sth->fetchall_hashref($key_field);
+}
+
 1;
 
 __END__
