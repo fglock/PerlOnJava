@@ -79,7 +79,7 @@ public class GlobalContext {
         /* Initialize @INC.
            @INC Search order is:
             - "-I" argument
-            - jar file: src/main/perl/lib
+            - JAR_PERLLIB, the jar directory: src/main/perl/lib
             - PERL5LIB env
            See also: https://stackoverflow.com/questions/2526804/how-is-perls-inc-constructed
          */
