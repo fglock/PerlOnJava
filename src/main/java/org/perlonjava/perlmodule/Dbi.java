@@ -171,6 +171,16 @@ public class Dbi extends PerlModuleBase {
             sth.put("sql", new RuntimeScalar(sql));
             sth.put("Type", new RuntimeScalar("st"));
 
+            // Add NUM_OF_FIELDS by getting metadata
+            ResultSetMetaData metaData = stmt.getMetaData();
+            int numFields = (metaData != null) ? metaData.getColumnCount() : 0;
+            sth.put("NUM_OF_FIELDS", new RuntimeScalar(numFields));
+
+            // Add NUM_OF_PARAMS by getting parameter count
+            ParameterMetaData paramMetaData = stmt.getParameterMetaData();
+            int numParams = paramMetaData.getParameterCount();
+            sth.put("NUM_OF_PARAMS", new RuntimeScalar(numParams));
+
             // Create blessed reference for statement handle
             RuntimeScalar sthRef = RuntimeScalar.bless(sth.createReference(), new RuntimeScalar("DBI"));
 
