@@ -339,6 +339,8 @@
 
     dbi:DriverClassName:database:host[:port][;parameters]
 
+- DSN examples:
+
   - H2 Database:
     
     dbi:org.h2.Driver:mem:testdb;DB_CLOSE_DELAY=-1
@@ -365,6 +367,14 @@
   - Snowflake: Snowflake uses their custom JDBC driver and includes additional parameters for warehouse and role settings
 
     dbi:net.snowflake.client.jdbc.SnowflakeDriver:database_name:account-identifier.region.snowflakecomputing.com;warehouse=warehouse_name;role=role_name
+
+  - Google Spanner: Google Spanner uses the Cloud Spanner JDBC driver and requires OAuth authentication parameters
+
+    dbi:com.google.cloud.spanner.jdbc.JdbcDriver:projects/PROJECT_ID/instances/INSTANCE_ID/databases/DATABASE_ID;credentials=/path/to/credentials.json
+
+  - Oracle:
+
+    dbi:oracle.jdbc.driver.OracleDriver:database_name:hostname:1521;serviceName=service_name
 
 
 ## Non-strict and Obsolete Features
