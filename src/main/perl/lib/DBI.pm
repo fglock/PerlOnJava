@@ -138,7 +138,8 @@ sub fetchall_hashref {
     my @key_fields = ref($key_field) eq 'ARRAY' ? @$key_field : ($key_field);
 
     # Get column names/info
-    my $fields = $sth->{NAME_lc};
+    my $hash_key_name = $sth->{FetchHashKeyName} || 'NAME';
+    my $fields = $sth->{$hash_key_name};
     my %field_index;
     for my $i (0..$#{$fields}) {
         $field_index{$fields->[$i]} = $i + 1;  # 1-based indexing
