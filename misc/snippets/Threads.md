@@ -20,14 +20,34 @@
 - Hash sharing
 - Reference sharing
 - Tied variables
+- Global variables management
 
 ### 2.2 Implementation Methods
 ```java
 class SharedVariableManager {
     private ConcurrentHashMap<String, Object> sharedSpace;
     private ThreadLocal<Map<String, Object>> threadLocal;
+    private ThreadLocal<Map<String, Object>> threadLocalGlobals;
+    private ConcurrentHashMap<String, Object> sharedGlobals;
+    
+    public Object getGlobalVariable(String name, boolean isShared) {
+        return isShared ? sharedGlobals.get(name) : threadLocalGlobals.get().get(name);
+    }
 }
 ```
+
+### 2.3 Global Variable Handling
+#### 2.3.1 Storage Mechanisms
+- Thread-local storage for thread-specific globals
+- Shared concurrent storage for cross-thread globals
+- Copy-on-write for modified shared globals
+- Reference counting for cleanup
+
+#### 2.3.2 Access Patterns
+- Default thread-local unless explicitly shared
+- Synchronized access for shared globals
+- Memory barriers for cross-thread visibility
+- Lock hierarchy for multiple global access
 
 ## 3. Synchronization Primitives
 ### 3.1 Required Components
