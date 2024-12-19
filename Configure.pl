@@ -30,6 +30,10 @@ if (-f 'build.gradle') {
 # Add to pom.xml
 if (-f 'pom.xml') {
     my ($group, $artifact, $version) = split ':', $maven_coords;
+    if (!defined $version) {
+        warn "No version specified for $group:$artifact. Using 'LATEST' as the version.";
+        $version = 'LATEST';
+    }
     my $pom = read_file('pom.xml');
     unless ($pom =~ /<artifactId>$artifact<\/artifactId>/) {
         my $dep = "\n        <dependency>\n" .
