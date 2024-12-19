@@ -3,12 +3,12 @@ use strict;
 use warnings;
 use HTTP::Tiny;
 use JSON;
+use Data::Dumper;
 
 my $driver = shift @ARGV || die "Usage: $0 org.h2.Driver\n";
 
-# Convert driver class to search terms
-my ($org, $db) = $driver =~ m{^org\.(\w+)\.Driver};
-my $search_url = "https://search.maven.org/solrsearch/select?q=$db+driver&rows=1&wt=json";
+# Search for driver class
+my $search_url = "https://search.maven.org/solrsearch/select?q=$driver&rows=1&wt=json";
 
 my $http = HTTP::Tiny->new;
 my $response = $http->get($search_url);

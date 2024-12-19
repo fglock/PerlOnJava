@@ -102,14 +102,24 @@ JDBC Database drivers can be added in two ways:
 The Configure script automatically installs JDBC drivers from the jdbc-drivers directory into your local Maven repository and updates the build configuration.
 This creates a single jar file containing both PerlOnJava and the database drivers.
 
-- Run `./Configure.pl my.driver` to register the drivers - for example, `./Configure.pl postgresql`
+- Locate the driver name in Maven Central search: https://search.maven.org/
+- Run `./Configure.pl my-driver` to register the drivers - for example:
+
+```bash
+./Configure.pl aws-mysql-jdbc
+```
+
 - Run `mvn clean package` or `gradle clean build` to build with the drivers included
-- Run your Perl script: `java -jar target/perlonjava-1.0-SNAPSHOT.jar examples/dbi.pl`
+- Run your Perl script the usual way:
+
+```bash
+java -jar target/perlonjava-1.0-SNAPSHOT.jar mydbi.pl`
+```
 
 2. Using the Java classpath to load the drivers dynamically:
 
 ```bash
-java -cp "jdbc-drivers/h2-2.2.224.jar:target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main misc/snippets/dbi.pl
+java -cp "jdbc-drivers/h2-2.2.224.jar:target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main mydbi.pl
 ```
 
 
