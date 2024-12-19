@@ -1,5 +1,6 @@
 package DBI;
 use strict;
+use warnings;
 
 # NOTE: The rest of the code is in file:
 #       src/main/java/org/perlonjava/perlmodule/Dbi.java
@@ -123,6 +124,68 @@ sub fetchall_arrayref {
     }
 
     return \@rows;
+}
+
+sub fetchall_hashref {
+    my ($sth, $key_field) = @_;
+
+    # Return undef if statement handle is inactive
+    return undef unless $sth->{dbh}{Active};
+
+    my %results;
+
+    # Convert key_field to array ref if it's not already
+    my @key_fields = ref($key_field) eq 'ARRAY' ? @$key_field : ($key_field);
+
+    # Get column names/info
+    my $fields = $sth->{NAME_lc};
+    my %field_index;
+    for my $i (0..$#{$fields}) {
+        $field_index{$fields->[$i]} = $i + 1;  # 1-based indexing
+    }
+
+    # Verify key fields exist
+    for my $key (@key_fields) {
+        unless (exists $field_index{lc($key)} || ($key =~ /^\d+$/ && $key <= @$fields)) {
+            return undef;  # Invalid key field
+        }
+    }
+
+    # Fetch all rows
+    while (my $row = $sth->fetchrow_hashref()) {
+        my $href = \%results;
+
+        # Navigate through all but the last key
+        for my $i (0 .. $#key_fields - 1) {
+            my $key = $key_fields[$i];
+            my $key_value;
+
+            # Handle numeric column reference
+            if ($key =~ /^\d+$/) {
+                $key_value = $row->{$fields->[$key - 1]};
+            } else {
+                $key_value = $row->{lc($key)};
+            }
+
+            $href->{$key_value} ||= {};
+            $href = $href->{$key_value};
+        }
+
+        # Handle the last key
+        my $final_key = $key_fields[-1];
+        my $final_value;
+
+        # Handle numeric column reference
+        if ($final_key =~ /^\d+$/) {
+            $final_value = $row->{$fields->[$final_key - 1]};
+        } else {
+            $final_value = $row->{lc($final_key)};
+        }
+
+        $href->{$final_value} = $row;
+    }
+
+    return \%results;
 }
 
 sub selectall_arrayref {

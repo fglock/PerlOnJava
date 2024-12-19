@@ -161,6 +161,52 @@ say "\nAll users login status:";
 print Dumper $all_logins;
 
 
+# fetchall_hashref
+
+# use lowercase column names for fetchall_hashref
+$dbh->{FetchHashKeyName} = "NAME_lc";
+
+# Test fetchall_hashref with single key
+say "\nFetchall_hashref by id:";
+$sth = $dbh->prepare("SELECT * FROM users");
+$sth->execute();
+my $users_by_id = $sth->fetchall_hashref('id');
+print Dumper $users_by_id;
+
+# Test with lowercase column name
+say "\nFetchall_hashref by name:";
+$sth->execute();
+my $users_by_name = $sth->fetchall_hashref('name');
+print Dumper $users_by_name;
+
+# Test with numeric column reference
+say "\nFetchall_hashref by column number:";
+$sth->execute();
+my $users_by_col = $sth->fetchall_hashref(2); # 'name' column
+print Dumper $users_by_col;
+
+# Test with multiple keys using orders table
+say "\nFetchall_hashref with composite keys:";
+my $sth2 = $dbh->prepare(q{
+    SELECT u.id as user_id, u.name, o.order_id, o.amount
+    FROM users u
+    JOIN orders o ON u.id = o.user_id
+});
+$sth2->execute();
+my $nested = $sth2->fetchall_hashref(['user_id', 'order_id']);
+# my $nested = $sth2->fetchrow_hashref();
+print Dumper $nested;
+
+# Access nested data example
+say "\nAccessing   nested data:";
+for my $user_id (sort keys %$nested) {
+    say "User $user_id orders:";
+    for my $order_id (sort keys %{$nested->{$user_id}}) {
+        my $order = $nested->{$user_id}{$order_id};
+        say "  Order $order_id: $order->{amount} for $order->{name}";
+    }
+}
+
 
 $sth->finish;
 $dbh->disconnect;

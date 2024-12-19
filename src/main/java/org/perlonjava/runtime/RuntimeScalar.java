@@ -361,6 +361,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case VSTRING -> (String) value;
             case BOOLEAN -> (boolean) value ? "1" : "";
             case REFERENCE, ARRAYREFERENCE, HASHREFERENCE -> Overload.stringify(this);
+            case OBJECT -> value.toString();
             default -> ((RuntimeScalarReference) value).toStringRef();
         };
     }

@@ -60,6 +60,7 @@ public class Dbi extends PerlModuleBase {
      *             [1] - DSN (Data Source Name) in format "dbi:Driver:database:host"
      *             [2] - Username
      *             [3] - Password
+     *             [4] - \%attr (optional)
      * @param ctx  Context parameter
      * @return RuntimeList containing database handle (dbh)
      */
@@ -78,8 +79,8 @@ public class Dbi extends PerlModuleBase {
             String password = args.get(3).toString();
             RuntimeScalar attr = args.get(4);   //  \%attr
             if (attr.type == RuntimeScalarType.HASHREFERENCE) {
-                dbh.put("RaiseError", attr.hashDerefGet(new RuntimeScalar("RaiseError")));
-                dbh.put("PrintError", attr.hashDerefGet(new RuntimeScalar("PrintError")));
+                // add attributes to dbh: RaiseError, PrintError, FetchHashKeyName
+                dbh.setFromList(new RuntimeList(dbh, attr.hashDeref()));
             }
 
             // Split DSN into components (format: dbi:Driver:database:host)
@@ -133,6 +134,7 @@ public class Dbi extends PerlModuleBase {
      * @param args RuntimeArray containing:
      *             [0] - Database handle (dbh)
      *             [1] - SQL query string
+     *             [2] - \%attr (optional)
      * @param ctx  Context parameter
      * @return RuntimeList containing statement handle (sth)
      */
@@ -147,6 +149,13 @@ public class Dbi extends PerlModuleBase {
 
             // Extract database handle and SQL query
             String sql = args.get(1).toString();
+
+            RuntimeScalar attr = args.get(2);   //  \%attr
+            if (attr.type != RuntimeScalarType.HASHREFERENCE) {
+                attr = new RuntimeHash().createReference();
+            }
+            // add attributes from dbh and attr: RaiseError, PrintError, FetchHashKeyName
+            sth.setFromList(new RuntimeList(sth, dbh, attr.hashDeref()));
 
             // Get connection from database handle and prepare statement
             Connection conn = (Connection) dbh.get("connection").value;
@@ -238,9 +247,33 @@ public class Dbi extends PerlModuleBase {
             result.put("success", new RuntimeScalar(true));
             result.put("has_resultset", new RuntimeScalar(hasResultSet));
 
-            // Store result set if available
             if (hasResultSet) {
-                result.put("resultset", new RuntimeScalar(stmt.getResultSet()));
+                // Store result set if available
+                ResultSet rs = stmt.getResultSet();
+                result.put("resultset", new RuntimeScalar(rs));
+
+                // Get column metadata
+                ResultSetMetaData metaData = rs.getMetaData();
+                int columnCount = metaData.getColumnCount();
+
+                // Create arrays for column names
+                RuntimeArray columnNames = new RuntimeArray();
+                RuntimeArray columnNamesLower = new RuntimeArray();
+                RuntimeArray columnNamesUpper = new RuntimeArray();
+
+                // Populate column name arrays
+                for (int i = 1; i <= columnCount; i++) {
+                    // String name = metaData.getColumnName(i);
+                    String name = metaData.getColumnLabel(i);
+                    RuntimeArray.push(columnNames, new RuntimeScalar(name));
+                    RuntimeArray.push(columnNamesLower, new RuntimeScalar(name.toLowerCase()));
+                    RuntimeArray.push(columnNamesUpper, new RuntimeScalar(name.toUpperCase()));
+                }
+
+                // Store column name arrays in statement handle
+                sth.put("NAME", columnNames.createReference());
+                sth.put("NAME_lc", columnNamesLower.createReference());
+                sth.put("NAME_uc", columnNamesUpper.createReference());
             }
 
             // Store execution result in statement handle
@@ -312,9 +345,16 @@ public class Dbi extends PerlModuleBase {
                 RuntimeHash row = new RuntimeHash();
                 ResultSetMetaData metaData = rs.getMetaData();
 
+                // Get the column name style to use
+                String nameStyle = sth.get("FetchHashKeyName").toString();
+                if (nameStyle.isEmpty()) {
+                    nameStyle = "NAME";
+                }
+                RuntimeArray columnNames = sth.get(nameStyle).arrayDeref();
+
                 // For each column, add column name -> value pair to hash
                 for (int i = 1; i <= metaData.getColumnCount(); i++) {
-                    String columnName = metaData.getColumnName(i);
+                    String columnName = columnNames.get(i-1).toString();
                     Object value = rs.getObject(i);
                     row.put(columnName, value != null ? new RuntimeScalar(value.toString()) : scalarUndef);
                 }
