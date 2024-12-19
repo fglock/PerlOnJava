@@ -169,7 +169,7 @@ public class Dbi extends PerlModuleBase {
             conn.setAutoCommit(dbh.get("AutoCommit").getBoolean());
 
             // Set ReadOnly attribute in case it was changed
-            conn.setReadOnly(dbh.get("ReadOnly").getBoolean());
+            conn.setReadOnly(sth.get("ReadOnly").getBoolean());
 
             // Prepare statement
             PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
