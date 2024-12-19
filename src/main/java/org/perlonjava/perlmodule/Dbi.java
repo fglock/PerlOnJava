@@ -4,9 +4,9 @@ import org.perlonjava.runtime.*;
 
 import java.sql.*;
 
+import static org.perlonjava.perlmodule.Builtin.scalarTrue;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 /**
  * DBI (Database Independent Interface) module implementation for PerlonJava.
@@ -77,6 +77,10 @@ public class Dbi extends PerlModuleBase {
             username = args.get(2).toString();
             String password = args.get(3).toString();
             RuntimeScalar attr = args.get(4);   //  \%attr
+
+            // Set dbh attributes
+            dbh.put("ReadOnly", scalarFalse);
+            dbh.put("AutoCommit", scalarTrue);
             if (attr.type == RuntimeScalarType.HASHREFERENCE) {
                 // add attributes to dbh: RaiseError, PrintError, FetchHashKeyName
                 dbh.setFromList(new RuntimeList(dbh, attr.hashDeref()));
@@ -97,11 +101,6 @@ public class Dbi extends PerlModuleBase {
 
             // Establish database connection
             Connection conn = DriverManager.getConnection(jdbcUrl, username, password);
-
-            // Get ReadOnly attribute if present
-            if (dbh.get("ReadOnly").getBoolean()) {
-                conn.setReadOnly(true);
-            }
 
             // Create database handle (dbh) hash and store connection
             dbh.put("connection", new RuntimeScalar(conn));
@@ -163,8 +162,16 @@ public class Dbi extends PerlModuleBase {
             // add attributes from dbh and attr: RaiseError, PrintError, FetchHashKeyName
             sth.setFromList(new RuntimeList(sth, dbh, attr.hashDeref()));
 
-            // Get connection from database handle and prepare statement
+            // Get connection from database handle
             Connection conn = (Connection) dbh.get("connection").value;
+
+            // Set AutoCommit attribute in case it was changed
+            conn.setAutoCommit(dbh.get("AutoCommit").getBoolean());
+
+            // Set ReadOnly attribute in case it was changed
+            conn.setReadOnly(dbh.get("ReadOnly").getBoolean());
+
+            // Prepare statement
             PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
 
             // Create statement handle (sth) hash
