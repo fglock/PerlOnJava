@@ -106,6 +106,32 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     }
 
     /**
+     * Adds values to the end of the array.
+     *
+     * @param runtimeArray
+     * @param value        The values to add.
+     * @return A scalar representing the new size of the array.
+     */
+    public static RuntimeScalar push(RuntimeArray runtimeArray, RuntimeDataProvider value) {
+        value.addToArray(runtimeArray);
+        return getScalarInt(runtimeArray.elements.size());
+    }
+
+    /**
+     * Adds values to the beginning of the array.
+     *
+     * @param runtimeArray
+     * @param value        The values to add.
+     * @return A scalar representing the new size of the array.
+     */
+    public static RuntimeScalar unshift(RuntimeArray runtimeArray, RuntimeDataProvider value) {
+        RuntimeArray arr = new RuntimeArray();
+        RuntimeArray.push(arr, value);
+        runtimeArray.elements.addAll(0, arr.elements);
+        return getScalarInt(runtimeArray.elements.size());
+    }
+
+    /**
      * Adds the elements of this array to another RuntimeArray.
      *
      * @param array The RuntimeArray to which elements will be added.
@@ -134,32 +160,6 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
      */
     public RuntimeScalar addToScalar(RuntimeScalar scalar) {
         return scalar.set(this.size());
-    }
-
-    /**
-     * Adds values to the end of the array.
-     *
-     * @param runtimeArray
-     * @param value The values to add.
-     * @return A scalar representing the new size of the array.
-     */
-    public static RuntimeScalar push(RuntimeArray runtimeArray, RuntimeDataProvider value) {
-        value.addToArray(runtimeArray);
-        return getScalarInt(runtimeArray.elements.size());
-    }
-
-    /**
-     * Adds values to the beginning of the array.
-     *
-     * @param runtimeArray
-     * @param value The values to add.
-     * @return A scalar representing the new size of the array.
-     */
-    public static RuntimeScalar unshift(RuntimeArray runtimeArray, RuntimeDataProvider value) {
-        RuntimeArray arr = new RuntimeArray();
-        RuntimeArray.push(arr, value);
-        runtimeArray.elements.addAll(0, arr.elements);
-        return getScalarInt(runtimeArray.elements.size());
     }
 
     /**

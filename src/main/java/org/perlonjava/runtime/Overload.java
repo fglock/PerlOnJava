@@ -1,7 +1,5 @@
 package org.perlonjava.runtime;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
-
 /**
  * The {@code Overload} class provides functionality to handle Perl-like
  * overloading of objects. This is particularly useful in scenarios where

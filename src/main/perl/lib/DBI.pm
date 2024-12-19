@@ -21,7 +21,7 @@ use warnings;
 # Class for $dbh
 
 sub do {
-    my($dbh, $statement, $attr, @params) = @_;
+    my ($dbh, $statement, $attr, @params) = @_;
     my $sth = $dbh->prepare($statement, $attr) or return undef;
     $sth->execute(@params) or return undef;
     my $rows = $sth->rows;
@@ -33,14 +33,14 @@ sub finish {
 }
 
 sub selectrow_arrayref {
-    my($dbh, $statement, $attr, @params) = @_;
+    my ($dbh, $statement, $attr, @params) = @_;
     my $sth = $dbh->prepare($statement, $attr) or return undef;
     $sth->execute(@params) or return undef;
     return $sth->fetchrow_arrayref();
 }
 
 sub selectrow_hashref {
-    my($dbh, $statement, $attr, @params) = @_;
+    my ($dbh, $statement, $attr, @params) = @_;
     my $sth = $dbh->prepare($statement, $attr) or return undef;
     $sth->execute(@params) or return undef;
     return $sth->fetchrow_hashref();
@@ -75,7 +75,7 @@ sub fetchall_arrayref {
         while (!defined($max_rows) || $row_count < $max_rows) {
             my $row = $sth->fetchrow_arrayref();
             last unless $row;
-            push @rows, [@$row]; # Create a copy of the row
+            push @rows, [ @$row ]; # Create a copy of the row
             $row_count++;
         }
     }
@@ -85,9 +85,10 @@ sub fetchall_arrayref {
             my $row = $sth->fetchrow_arrayref();
             last unless $row;
             if (@$slice) {
-                push @rows, [map { $row->[$_] } @$slice];
-            } else {
-                push @rows, [@$row]; # Empty slice means all columns
+                push @rows, [ map {$row->[$_]} @$slice ];
+            }
+            else {
+                push @rows, [ @$row ]; # Empty slice means all columns
             }
             $row_count++;
         }
@@ -99,12 +100,13 @@ sub fetchall_arrayref {
             last unless $row;
             if (%$slice) {
                 # Select only requested columns
-                my %new_row = map { $_ => $row->{$_} }
-                    grep { exists $slice->{$_} }
+                my %new_row = map {$_ => $row->{$_}}
+                    grep {exists $slice->{$_}}
                         keys %$row;
                 push @rows, \%new_row;
-            } else {
-                push @rows, {%$row}; # Empty hash means all columns
+            }
+            else {
+                push @rows, { %$row }; # Empty hash means all columns
             }
             $row_count++;
         }
@@ -141,14 +143,14 @@ sub fetchall_hashref {
     my $hash_key_name = $sth->{FetchHashKeyName} || 'NAME';
     my $fields = $sth->{$hash_key_name};
     my %field_index;
-    for my $i (0..$#{$fields}) {
-        $field_index{$fields->[$i]} = $i + 1;  # 1-based indexing
+    for my $i (0 .. $#{$fields}) {
+        $field_index{$fields->[$i]} = $i + 1; # 1-based indexing
     }
 
     # Verify key fields exist
     for my $key (@key_fields) {
-        unless (exists $field_index{lc($key)} || ($key =~ /^\d+$/ && $key <= @$fields)) {
-            return undef;  # Invalid key field
+        unless (exists $field_index{$key} || ($key =~ /^\d+$/ && $key <= @$fields)) {
+            return undef; # Invalid key field
         }
     }
 
@@ -164,8 +166,9 @@ sub fetchall_hashref {
             # Handle numeric column reference
             if ($key =~ /^\d+$/) {
                 $key_value = $row->{$fields->[$key - 1]};
-            } else {
-                $key_value = $row->{lc($key)};
+            }
+            else {
+                $key_value = $row->{$key};
             }
 
             $href->{$key_value} ||= {};
@@ -179,8 +182,9 @@ sub fetchall_hashref {
         # Handle numeric column reference
         if ($final_key =~ /^\d+$/) {
             $final_value = $row->{$fields->[$final_key - 1]};
-        } else {
-            $final_value = $row->{lc($final_key)};
+        }
+        else {
+            $final_value = $row->{$final_key};
         }
 
         $href->{$final_value} = $row;
@@ -205,8 +209,9 @@ sub selectall_arrayref {
     # Handle Columns attribute (convert 1-based indices to 0-based)
     if (!defined $slice && defined $attr->{Columns}) {
         if (ref $attr->{Columns} eq 'ARRAY') {
-            $slice = [map { $_ - 1 } @{$attr->{Columns}}];
-        } else {
+            $slice = [ map {$_ - 1} @{$attr->{Columns}} ];
+        }
+        else {
             $slice = $attr->{Columns};
         }
     }

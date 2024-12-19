@@ -3,16 +3,14 @@ package org.perlonjava.perlmodule;
 import org.perlonjava.runtime.*;
 
 import java.sql.*;
-import java.util.Arrays;
 
-import static org.perlonjava.operators.WarnDie.die;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
  * DBI (Database Independent Interface) module implementation for PerlonJava.
  * This class provides database connectivity and operations similar to Perl's DBI module.
- *
+ * <p>
  * Note: Some methods are defined in src/main/perl/lib/DBI.pm
  */
 public class Dbi extends PerlModuleBase {
@@ -114,7 +112,7 @@ public class Dbi extends PerlModuleBase {
         } catch (Exception e) {
             setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
         }
-        RuntimeScalar msg = new RuntimeScalar("DBI connect('" + dsn + "','" + username + "',...) failed: " + getGlobalVariable("DBI::errstr").toString());
+        RuntimeScalar msg = new RuntimeScalar("DBI connect('" + dsn + "','" + username + "',...) failed: " + getGlobalVariable("DBI::errstr"));
         return handleError(dbh, msg);
     }
 
@@ -177,7 +175,7 @@ public class Dbi extends PerlModuleBase {
         } catch (Exception e) {
             setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
         }
-        RuntimeScalar msg = new RuntimeScalar("DBI prepare() failed: " + getGlobalVariable("DBI::errstr").toString());
+        RuntimeScalar msg = new RuntimeScalar("DBI prepare() failed: " + getGlobalVariable("DBI::errstr"));
         return handleError(dbh, msg);
     }
 
@@ -210,7 +208,7 @@ public class Dbi extends PerlModuleBase {
         } catch (Exception e) {
             setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
         }
-        RuntimeScalar msg = new RuntimeScalar("DBI last_insert_id() failed: " + getGlobalVariable("DBI::errstr").toString());
+        RuntimeScalar msg = new RuntimeScalar("DBI last_insert_id() failed: " + getGlobalVariable("DBI::errstr"));
         return handleError(dbh, msg);
     }
 
@@ -284,7 +282,7 @@ public class Dbi extends PerlModuleBase {
         } catch (Exception e) {
             setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
         }
-        RuntimeScalar msg = new RuntimeScalar("DBI execute() failed: " + getGlobalVariable("DBI::errstr").toString());
+        RuntimeScalar msg = new RuntimeScalar("DBI execute() failed: " + getGlobalVariable("DBI::errstr"));
         return handleError(dbh, msg);
     }
 
@@ -322,7 +320,7 @@ public class Dbi extends PerlModuleBase {
         } catch (Exception e) {
             setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
         }
-        RuntimeScalar msg = new RuntimeScalar("DBI fetchrow_arrayref() failed: " + getGlobalVariable("DBI::errstr").toString());
+        RuntimeScalar msg = new RuntimeScalar("DBI fetchrow_arrayref() failed: " + getGlobalVariable("DBI::errstr"));
         return handleError(dbh, msg);
     }
 
@@ -354,7 +352,7 @@ public class Dbi extends PerlModuleBase {
 
                 // For each column, add column name -> value pair to hash
                 for (int i = 1; i <= metaData.getColumnCount(); i++) {
-                    String columnName = columnNames.get(i-1).toString();
+                    String columnName = columnNames.get(i - 1).toString();
                     Object value = rs.getObject(i);
                     row.put(columnName, value != null ? new RuntimeScalar(value.toString()) : scalarUndef);
                 }
@@ -371,7 +369,7 @@ public class Dbi extends PerlModuleBase {
         } catch (Exception e) {
             setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
         }
-        RuntimeScalar msg = new RuntimeScalar("DBI fetchrow_hashref() failed: " + getGlobalVariable("DBI::errstr").toString());
+        RuntimeScalar msg = new RuntimeScalar("DBI fetchrow_hashref() failed: " + getGlobalVariable("DBI::errstr"));
         return handleError(dbh, msg);
     }
 
@@ -445,7 +443,7 @@ public class Dbi extends PerlModuleBase {
         } catch (Exception e) {
             setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
         }
-        RuntimeScalar msg = new RuntimeScalar("DBI disconnect() failed: " + getGlobalVariable("DBI::errstr").toString());
+        RuntimeScalar msg = new RuntimeScalar("DBI disconnect() failed: " + getGlobalVariable("DBI::errstr"));
         return handleError(dbh, msg);
     }
 
