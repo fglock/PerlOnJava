@@ -91,6 +91,27 @@ For a detailed feature list, see the [FEATURE_MATRIX.md](FEATURE_MATRIX.md).
 - **ICU4J**: For Unicode support.
 - **FASTJSON v2**: For JSON support.
 
+### Adding JDBC Drivers
+
+JDBC Database drivers can be added in two ways:
+
+1. Using the `Configure` script to add the drivers to the Perl jar file:
+
+The Configure script automatically installs JDBC drivers from the jdbc-drivers directory into your local Maven repository and updates the build configuration.
+This creates a single jar file containing both PerlOnJava and the database drivers.
+
+- Place your JDBC driver jar files in the `jdbc-drivers` directory
+- Run `./Configure` to register the drivers
+- Run `mvn clean package` or `gradle clean build` to build with the drivers included
+- Run your Perl script: `java -jar target/perlonjava-1.0-SNAPSHOT.jar examples/dbi.pl`
+
+2. Using the Java classpath to load the drivers dynamically:
+
+```bash
+java -cp "jdbc-drivers/h2-2.2.224.jar:target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main misc/snippets/dbi.pl
+```
+
+
 ### Notes
 
 - The project uses the `maven-shade-plugin` for Maven to create a shaded JAR.
