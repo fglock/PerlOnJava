@@ -13,6 +13,10 @@
 9. [Statements and Special Operators](#statements-and-special-operators)
 10. [Namespaces and Global Variables](#namespaces-and-global-variables)
 11. [Perl Modules, Pragmas, Features](#perl-modules-pragmas-features)
+  - [Pragmas](#pragmas)
+  - [Core modules](#core-modules)
+  - [Non-core modules](#non-core-modules)
+  - [DBI module](#dbi-module)
 12. [Non-strict and Obsolete Features](#non-strict-and-obsolete-features)
 13. [Features Probably Incompatible with JVM](#features-probably-incompatible-with-jvm)
 14. [Language Differences and Workarounds](#language-differences-and-workarounds)
@@ -24,6 +28,8 @@
 - ✔️   **Perl-like runtime error messages**: Runtime errors are formatted similarly to Perl's.
 - ❌  **Perl-like warnings**: Internal support for most warnings is missing. Warnings need to be formatted to resemble Perl’s output.
 - ✔️   **Comments**: Support for comments and POD (documentation) in code is implemented.
+- ❌  **Perl debugger**: The built-in Perl debugger (`perl -d`) is not implemented..
+
 
 ### Command line switches
 
@@ -321,60 +327,95 @@
 - ✔️   **JSON** module.
 
 ### DBI module
-- ✔️   These DBI methods are implemented:
-    `connect`, `prepare`, `execute`,
-    `fetchrow_arrayref`, `fetchrow_array`, `fetchrow_hashref`,
-    `selectrow_array`, `selectrow_arrayref`, `selectrow_hashref`,
-    `fetchall_arrayref`, `selectall_arrayref`,
-    `fetchall_hashref`, `selectall_hashref`,
-    `rows`, `disconnect`, `err`, `errstr`, `state`, `do`, `finish`, `last_insert_id`.
-- ✔️   These Database Handle attributes are implemented: `RaiseError`, `PrintError`, `Username`, `Name`, `Active`, `Type`, `ReadOnly`, `Executed`, `AutoCommit`.
-- ✔️   These Statement Handle attributes are implemented: `NAME`, `NAME_lc`, `NAME_uc`, `NUM_OF_FIELDS`, `NUM_OF_PARAMS`, `Database`.
 
-- JDBC Database drivers must be included in the class path. Example:
+> **Important**: JDBC Database drivers must be included in the class path:
+> ```bash
+> java -cp "h2-2.2.224.jar:target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main misc/snippets/dbi.pl
+> ```
 
-    java -cp "h2-2.2.224.jar:target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main misc/snippets/dbi.pl
+#### Implemented Methods
+- `connect`
+- `prepare`
+- `execute`
+- `fetchrow_arrayref`, `fetchrow_array`, `fetchrow_hashref`
+- `selectrow_array`, `selectrow_arrayref`, `selectrow_hashref`
+- `fetchall_arrayref`, `selectall_arrayref`
+- `fetchall_hashref`, `selectall_hashref`
+- `rows`
+- `disconnect`
+- `err`, `errstr`, `state`
+- `do`
+- `finish`
+- `last_insert_id`
 
-- The DSN (Data Source Name) follows the convention:
+#### Database Handle Attributes
+- `RaiseError`
+- `PrintError`
+- `Username`
+- `Name`
+- `Active`
+- `Type`
+- `ReadOnly`
+- `Executed`
+- `AutoCommit`
 
-    dbi:DriverClassName:database:host[:port][;parameters]
+#### Statement Handle Attributes
+- `NAME`, `NAME_lc`, `NAME_uc`
+- `NUM_OF_FIELDS`
+- `NUM_OF_PARAMS`
+- `Database`
 
-- DSN examples:
+#### Database Connection Strings (DSN)
+Format: `dbi:DriverClassName:database:host[:port][;parameters]`
 
-  - H2 Database:
-    
-    dbi:org.h2.Driver:mem:testdb;DB_CLOSE_DELAY=-1
-    dbi:org.h2.Driver:file:/path/to/database
-    
-  - MySQL:
-    
-    dbi:com.mysql.cj.jdbc.Driver:database_name:localhost
-    dbi:com.mysql.cj.jdbc.Driver:mydb:localhost:3306
-    
-  - PostgreSQL:
-    
-    dbi:org.postgresql.Driver:database_name:localhost
-    dbi:org.postgresql.Driver:postgres:localhost:5432
-    
-  - SQLite:
-    
-    dbi:org.sqlite.JDBC:database_file:/path/to/database.db
+##### Supported Databases
+- **H2**
+  ```
+  dbi:org.h2.Driver:mem:testdb;DB_CLOSE_DELAY=-1
+  dbi:org.h2.Driver:file:/path/to/database
+  ```
 
-  - BigQuery: BigQuery uses the Simba JDBC driver and requires OAuth authentication parameters
+- **MySQL**
+  ```
+  dbi:com.mysql.cj.jdbc.Driver:database_name:localhost
+  dbi:com.mysql.cj.jdbc.Driver:mydb:localhost:3306
+  ```
 
-    dbi:com.simba.googlebigquery.jdbc.Driver:project_id:instance;OAuthType=0;OAuthServiceAcctEmail=your-service-account;OAuthPvtKeyPath=/path/to/key.json
+- **PostgreSQL**
+  ```
+  dbi:org.postgresql.Driver:database_name:localhost
+  dbi:org.postgresql.Driver:postgres:localhost:5432
+  ```
 
-  - Snowflake: Snowflake uses their custom JDBC driver and includes additional parameters for warehouse and role settings
+- **SQLite**
+  ```
+  dbi:org.sqlite.JDBC:database_file:/path/to/database.db
+  ```
 
-    dbi:net.snowflake.client.jdbc.SnowflakeDriver:database_name:account-identifier.region.snowflakecomputing.com;warehouse=warehouse_name;role=role_name
+- **BigQuery**
+  ```
+  dbi:com.simba.googlebigquery.jdbc.Driver:project_id:instance;OAuthType=0;OAuthServiceAcctEmail=your-service-account;OAuthPvtKeyPath=/path/to/key.json
+  ```
 
-  - Google Spanner: Google Spanner uses the Cloud Spanner JDBC driver and requires OAuth authentication parameters
+- **Snowflake**
+  ```
+  dbi:net.snowflake.client.jdbc.SnowflakeDriver:database_name:account-identifier.region.snowflakecomputing.com;warehouse=warehouse_name;role=role_name
+  ```
 
-    dbi:com.google.cloud.spanner.jdbc.JdbcDriver:projects/PROJECT_ID/instances/INSTANCE_ID/databases/DATABASE_ID;credentials=/path/to/credentials.json
+- **Google Spanner**
+  ```
+  dbi:com.google.cloud.spanner.jdbc.JdbcDriver:projects/PROJECT_ID/instances/INSTANCE_ID/databases/DATABASE_ID;credentials=/path/to/credentials.json
+  ```
 
-  - Oracle:
-
-    dbi:oracle.jdbc.driver.OracleDriver:database_name:hostname:1521;serviceName=service_name
+- **Oracle**
+  ```
+  dbi:oracle.jdbc.driver.OracleDriver:database_name:hostname:1521;serviceName=service_name
+  ```
+  
+Note: JDBC Database drivers must be included in the class path:
+```bash
+java -cp "h2-2.2.224.jar:target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main misc/snippets/dbi.pl
+```
 
 
 ## Non-strict and Obsolete Features
