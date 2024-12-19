@@ -64,7 +64,7 @@ sub fetchall_arrayref {
     my ($sth, $slice, $max_rows) = @_;
 
     # Return undef if statement handle is inactive
-    return undef unless $sth->{dbh}{Active};
+    return undef unless $sth->{Database}{Active};
 
     my @rows;
     my $row_count = 0;
@@ -132,7 +132,7 @@ sub fetchall_hashref {
     my ($sth, $key_field) = @_;
 
     # Return undef if statement handle is inactive
-    return undef unless $sth->{dbh}{Active};
+    return undef unless $sth->{Database}{Active};
 
     my %results;
 

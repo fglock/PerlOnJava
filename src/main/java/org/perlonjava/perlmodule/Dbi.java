@@ -146,7 +146,7 @@ public class Dbi extends PerlModuleBase {
     public static RuntimeList prepare(RuntimeArray args, int ctx) {
         RuntimeHash dbh = args.get(0).hashDeref();
         RuntimeHash sth = new RuntimeHash();
-        sth.put("dbh", dbh.createReference());
+        sth.put("Database", dbh.createReference());
         try {
             if (args.size() < 2) {
                 throw new IllegalStateException("Bad number of arguments for DBI->prepare");
@@ -206,7 +206,7 @@ public class Dbi extends PerlModuleBase {
             sth = dbh.get("sth").hashDeref();
         } else {
             sth = dbh;
-            dbh = sth.get("dbh").hashDeref();
+            dbh = sth.get("Database").hashDeref();
         }
 
         try {
@@ -240,7 +240,7 @@ public class Dbi extends PerlModuleBase {
      */
     public static RuntimeList execute(RuntimeArray args, int ctx) {
         RuntimeHash sth = args.get(0).hashDeref();
-        RuntimeHash dbh = sth.get("dbh").hashDeref();
+        RuntimeHash dbh = sth.get("Database").hashDeref();
         try {
             if (args.size() < 1) {
                 throw new IllegalStateException("Bad number of arguments for DBI->execute");
@@ -313,7 +313,7 @@ public class Dbi extends PerlModuleBase {
     public static RuntimeList fetchrow_arrayref(RuntimeArray args, int ctx) {
         // Get statement handle and result set
         RuntimeHash sth = args.get(0).hashDeref();
-        RuntimeHash dbh = sth.get("dbh").hashDeref();
+        RuntimeHash dbh = sth.get("Database").hashDeref();
         try {
             RuntimeHash executeResult = sth.get("execute_result").hashDeref();
             ResultSet rs = (ResultSet) executeResult.get("resultset").value;
@@ -350,7 +350,7 @@ public class Dbi extends PerlModuleBase {
      */
     public static RuntimeList fetchrow_hashref(RuntimeArray args, int ctx) {
         RuntimeHash sth = args.get(0).hashDeref();
-        RuntimeHash dbh = sth.get("dbh").hashDeref();
+        RuntimeHash dbh = sth.get("Database").hashDeref();
         try {
             RuntimeHash executeResult = sth.get("execute_result").hashDeref();
             ResultSet rs = (ResultSet) executeResult.get("resultset").value;
