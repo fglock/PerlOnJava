@@ -328,10 +328,13 @@
 
 ### DBI module
 
-> **Important**: JDBC Database drivers must be included in the class path:
-> ```bash
-> java -cp "h2-2.2.224.jar:target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main misc/snippets/dbi.pl
-> ```
+#### Adding JDBC Drivers
+
+**Important**: JDBC Database drivers must be included in the class path:
+
+```bash
+java -cp "h2-2.2.224.jar:target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main misc/snippets/dbi.pl
+```
 
 #### Implemented Methods
 - `connect`
@@ -412,11 +415,6 @@ Format: `dbi:DriverClassName:database:host[:port][;parameters]`
   dbi:oracle.jdbc.driver.OracleDriver:database_name:hostname:1521;serviceName=service_name
   ```
   
-Note: JDBC Database drivers must be included in the class path:
-```bash
-java -cp "h2-2.2.224.jar:target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main misc/snippets/dbi.pl
-```
-
 
 ## Non-strict and Obsolete Features
 - ❌  **Use string as a scalar reference**: Support for scalar references from strings is not yet implemented.
