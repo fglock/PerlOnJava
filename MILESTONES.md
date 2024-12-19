@@ -147,6 +147,8 @@
     - `socket` and related operators.
     - `truncate`, `seek` operators.
     - `read` operator.
+  - Work in progress: Threads subsystem
+    - Added preliminary docs.
 
 - **v3.0.0**: Concurrency and Security Features
   - Add support for concurrency and parallelism, such as threads and async/await.
