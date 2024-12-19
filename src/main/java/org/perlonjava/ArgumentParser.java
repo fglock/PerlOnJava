@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.perlonjava.runtime.GlobalContext.perlVersion;
@@ -130,7 +131,11 @@ public class ArgumentParser {
             if (perlIndex != -1) {
                 String relevantPart = shebangLine.substring(perlIndex + 4).trim();
                 String[] shebangArgs = relevantPart.split("\\s+");
-                processArgs(shebangArgs, parsedArgs);
+                // Filter out empty args from shebang processing
+                String[] nonEmptyArgs = Arrays.stream(shebangArgs)
+                        .filter(arg -> !arg.isEmpty())
+                        .toArray(String[]::new);
+                processArgs(nonEmptyArgs, parsedArgs);
             }
         }
     }
