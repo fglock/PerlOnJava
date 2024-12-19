@@ -328,8 +328,8 @@
     `fetchall_arrayref`, `selectall_arrayref`,
     `fetchall_hashref`, `selectall_hashref`,
     `rows`, `disconnect`, `err`, `errstr`, `state`, `do`, `finish`, `last_insert_id`.
-- ✔️   These DBI attributes are implemented: `RaiseError`, `PrintError`.
-- ✔️   These sth attributes are implemented: `NAME`, `NAME_lc`, `NAME_uc`.
+- ✔️   These Database Handle attributes are implemented: `RaiseError`, `PrintError`, `Username`, `Name`, `Active`, `Type`.
+- ✔️   These Statement Handle attributes are implemented: `NAME`, `NAME_lc`, `NAME_uc`.
 
 - JDBC Database drivers must be included in the class path. Example:
 

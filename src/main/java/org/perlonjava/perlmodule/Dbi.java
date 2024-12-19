@@ -100,7 +100,9 @@ public class Dbi extends PerlModuleBase {
             // Create database handle (dbh) hash and store connection
             dbh.put("connection", new RuntimeScalar(conn));
             dbh.put("Active", new RuntimeScalar(true));
-            dbh.put("type", new RuntimeScalar("dbh"));
+            dbh.put("Type", new RuntimeScalar("db"));
+            dbh.put("Username", new RuntimeScalar(username));
+            dbh.put("Name", new RuntimeScalar(driverClass));
 
             // Create blessed reference for Perl compatibility
             RuntimeScalar dbhRef = RuntimeScalar.bless(dbh.createReference(), new RuntimeScalar("DBI"));
@@ -162,7 +164,7 @@ public class Dbi extends PerlModuleBase {
             // Create statement handle (sth) hash
             sth.put("statement", new RuntimeScalar(stmt));
             sth.put("sql", new RuntimeScalar(sql));
-            sth.put("type", new RuntimeScalar("sth"));
+            sth.put("Type", new RuntimeScalar("st"));
 
             // Create blessed reference for statement handle
             RuntimeScalar sthRef = RuntimeScalar.bless(sth.createReference(), new RuntimeScalar("DBI"));
@@ -184,8 +186,8 @@ public class Dbi extends PerlModuleBase {
         // argument can be either a dbh or a sth
         RuntimeHash dbh = args.get(0).hashDeref();
         RuntimeHash sth = null;
-        String type = dbh.get("type").toString();
-        if (type.equals("dbh")) {
+        String type = dbh.get("Type").toString();
+        if (type.equals("db")) {
             sth = dbh.get("sth").hashDeref();
         } else {
             sth = dbh;
