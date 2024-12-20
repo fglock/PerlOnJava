@@ -65,7 +65,6 @@ public class Dbi extends PerlModuleBase {
     public static RuntimeList connect(RuntimeArray args, int ctx) {
         RuntimeHash dbh = new RuntimeHash();
         String dsn = null;
-        String username = null;
         try {
             if (args.size() < 4) {
                 throw new IllegalStateException("Bad number of arguments for DBI->connect");
@@ -120,7 +119,7 @@ public class Dbi extends PerlModuleBase {
         } catch (Exception e) {
             setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
         }
-        RuntimeScalar msg = new RuntimeScalar("DBI connect('" + dsn + "','" + username + "',...) failed: " + getGlobalVariable("DBI::errstr"));
+        RuntimeScalar msg = new RuntimeScalar("DBI connect('" + dsn + "','" + dbh.get("Username") + "',...) failed: " + getGlobalVariable("DBI::errstr"));
         return handleError(dbh, msg);
     }
 
