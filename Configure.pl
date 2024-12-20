@@ -24,13 +24,6 @@ die "Usage: $0 --search org.h2.Driver | --direct group:artifact:version\n"
 
 my $input = shift @ARGV || die "Missing input argument\n";
 
-# Common JDBC driver mappings
-my %driver_mappings = (
-    'org.h2.Driver' => 'com.h2database:h2',
-    'com.mysql.jdbc.Driver' => 'mysql:mysql-connector-java',
-    'org.postgresql.Driver' => 'org.postgresql:postgresql'
-);
-
 my $maven_coords;
 if ($direct) {
     die "Invalid Maven coordinates format. Expected: group:artifact:version\n"
@@ -38,17 +31,21 @@ if ($direct) {
     $maven_coords = $input;
     print "Using direct Maven coordinates: $maven_coords\n";
 } else {
-    if (exists $driver_mappings{$input}) {
-        $input = $driver_mappings{$input};
-        print "Mapped driver $input to known artifact\n" if $verbose;
+    my $rows = 50;
+
+    my $search_url;
+    if ($input =~ /\.Driver$/) {
+        # Class name search
+        $search_url = "https://search.maven.org/solrsearch/select?q=fc:$input&rows=$rows&wt=json";
+    } elsif ($input =~ /:/) {
+        # Group:artifact search
+        my ($group, $artifact) = split ':', $input;
+        $search_url = "https://search.maven.org/solrsearch/select?q=g:$group+AND+a:$artifact&rows=$rows&wt=json";
+    } else {
+        # Keyword search - using exact text match
+        my $encoded_input = uri_escape($input);
+        $search_url = "https://search.maven.org/solrsearch/select?q=a:$encoded_input+OR+text:$encoded_input&rows=$rows&wt=json";
     }
-
-    my ($group, $artifact) = split ':', $input;
-    $group ||= $input;  # Use full input as group if no colon found
-
-    my $search_url = "https://search.maven.org/solrsearch/select?q=g:$group";
-    $search_url .= "+AND+a:$artifact" if $artifact;
-    $search_url .= "&rows=5&wt=json";
 
     print "Search URL: $search_url\n" if $verbose;
 
@@ -73,7 +70,15 @@ if ($direct) {
     die "No Maven artifacts found for: $input\n"
         unless $data->{response}{docs} && @{$data->{response}{docs}};
 
-    my @docs = @{$data->{response}{docs}};
+
+    # After decoding JSON, implement smart scoring and sorting
+    my @docs = sort {
+        score_jdbc_relevance($b) <=> score_jdbc_relevance($a)
+    } @{$data->{response}{docs}};
+
+    # Take top 5 most relevant results
+    @docs = @docs[0..9] if @docs > 10;
+
     if (@docs > 1) {
         print "Multiple matches found:\n";
         for my $i (0..$#docs) {
@@ -132,4 +137,22 @@ sub write_file {
     my ($file, $content) = @_;
     open my $fh, '>', $file or die "Cannot write $file: $!";
     print $fh $content;
+}
+
+sub score_jdbc_relevance {
+    my $doc = shift;
+    my $score = 0;
+
+    # Higher score for JDBC indicators
+    $score += 5 if $doc->{g} =~ /jdbc/i;
+    $score += 5 if $doc->{a} =~ /jdbc/i;
+    $score += 3 if $doc->{g} =~ /database|mysql|postgresql|oracle|sqlserver/i;
+    $score += 3 if $doc->{a} =~ /database|mysql|postgresql|oracle|sqlserver/i;
+    $score += 2 if $doc->{latestVersion} =~ /jdbc/i;
+    $score += 4 if $doc->{c} =~ /Driver$/;
+
+    # Boost score based on download count
+    $score += log($doc->{downloadCount} || 1);
+
+    return $score;
 }

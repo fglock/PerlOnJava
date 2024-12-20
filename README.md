@@ -104,7 +104,7 @@ in the PerlOnJava jar file.
 - Run `./Configure.pl my-driver-name` to register the drivers - for example:
 
 ```bash
-./Configure.pl aws-mysql-jdbc
+./Configure.pl --search aws-mysql-jdbc
 ```
 
 - Run the usual `mvn clean package` or `gradle clean build` to build with the drivers included
