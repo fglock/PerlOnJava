@@ -13,4 +13,5 @@ build/
 gradle/
 gradlew
 gradlew.bat
+.idea/compiler.xml
 

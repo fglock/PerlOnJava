@@ -319,6 +319,7 @@
 - ✔️   **Term::ANSIColor** module.
 - ✔️   **Time::Local** module.
 - ✔️   **HTTP::Date** module.
+- ✔️   **URI::Escape** module.
 - 🚧  **HTTP::Tiny** some features untested: proxy settings.
 - 🚧  **DynaLoader** placeholder module.
 
