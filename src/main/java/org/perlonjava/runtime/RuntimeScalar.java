@@ -126,7 +126,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     /**
      * Returns a new RuntimeScalar instance with the given value.
-     * Try to store the value as a known type if possible, otherwise store it as Object.
+     * Tries to store the value as a known type if possible, otherwise stores it as Object.
      *
      * @param value the value to store in the new RuntimeScalar instance
      * @return a new RuntimeScalar instance with the given value
@@ -150,7 +150,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     /**
      * Returns a new RuntimeScalar instance with the given value.
-     * Try to store the value as a known type if possible, otherwise store it as a String.
+     * Tries to store the value as a known type if possible, otherwise stores it as String.
      *
      * @param value the value to store in the new RuntimeScalar instance
      * @return a new RuntimeScalar instance with the given value
