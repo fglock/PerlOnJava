@@ -23,6 +23,9 @@ public class EmitBinaryOperatorNode {
             case "and":
                 EmitLogicalOperator.emitLogicalOperator(emitterVisitor, node, Opcodes.IFEQ, "getBoolean");
                 return;
+            case "xor":
+                EmitLogicalOperator.emitXorOperator(emitterVisitor, node);
+                return;
             case "&&=":
                 EmitLogicalOperator.emitLogicalAssign(emitterVisitor, node, Opcodes.IFEQ, "getBoolean");
                 return;

@@ -209,7 +209,7 @@
 - ❌  **`open`**: In-memory files are not implemented.
 - ✔️   **`select`**: `select(filehandle)` is implemented.
 - ✔️   **Short-circuit and, or**: Short-circuit logical operators are supported.
-- ✔️   **Low-precedence/high precedence operators**: Logical operators like `not`, `or`, `and` are supported.
+- ✔️   **Low-precedence/high precedence operators**: Logical operators like `not`, `or`, `and`, `xor` are supported.
 - ✔️   **Ternary operator**: The ternary conditional operator is implemented.
 - ✔️   **Compound assignment operators**: Compound assignment operators are implemented.
 - ✔️   **`package` declaration**: `package BLOCK` is also supported.

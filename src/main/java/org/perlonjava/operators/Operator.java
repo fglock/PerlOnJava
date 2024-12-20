@@ -19,6 +19,10 @@ import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 public class Operator {
 
+    public static RuntimeScalar xor(RuntimeScalar left, RuntimeScalar right) {
+        return getScalarBoolean(left.getBoolean() ^ right.getBoolean());
+    }
+
     /**
      * Formats the elements according to the specified format string.
      *
