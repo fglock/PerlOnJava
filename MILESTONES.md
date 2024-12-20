@@ -131,6 +131,7 @@
   - Added `URI::Escape` module.
   - Added command line switches: `-S`.
   - Added `Configure.pl` to set compiler options and add JDBC drivers.
+  - Added Links to Perl on JVM resources in README - https://github.com/fglock/PerlOnJava/tree/master#additional-information-and-resources
   - Planned release date: 2024-12-10
   - Work in progress:
     - `lexical_subs` feature.
