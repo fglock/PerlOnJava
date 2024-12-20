@@ -13,6 +13,11 @@ use URI::Escape;
 # The script can search for JDBC drivers by class name or use direct Maven
 # coordinates to update build files like build.gradle or pom.xml.
 
+# Note: This script can be run using the following command:
+#
+# java -jar target/perlonjava-1.0-SNAPSHOT.jar ./Configure.pl -D perlVersion=v5.40.0
+#
+
 # Define supported actions and options for both dependency management and configuration
 my $search = 0;   # Flag to indicate if a search for JDBC driver by class name is requested
 my $direct = 0;   # Flag to indicate if direct Maven coordinates are provided
