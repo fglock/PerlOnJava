@@ -13,6 +13,7 @@ This project presents a Perl compiler that compiles Perl into Java bytecode and 
 7. [Internal Modules](#internal-modules)
 8. [Milestones](#milestones)
 9. [License](#license)
+10. [Additional Information and Resources](#additional-information-and-resources)
 
 ## Introduction
 
@@ -283,8 +284,16 @@ For detailed information on completed and upcoming milestones, see the [MILESTON
 
 This project is licensed under the Perl Artistic License 2.0 - see the [LICENSE](LICENSE.md) file for details.
 
+## Additional Information and Resources
+
+- For more details on the relationship with the ["Perlito5" Perl to Java compiler and Perl to JavaScript compiler](https://github.com/fglock/Perlito), including its influence on this project and how it complements the PerlOnJava Perl Compiler, see [RELATION_WITH_PERLITO_COMPILER.md](misc/RELATION_WITH_PERLITO_COMPILER.md). This document provides insights into the historical context and technical decisions that shaped the development of this compiler.
+
+- Nikos Vaggalis 2013 [All about Perl 6 – interview of Flávio Glock](http://www.josetteorama.com/all-about-perl-6-interview-of-flavio-glock/).
+
+- Andrew Shitov 2015 [Interview with Flávio Glock](https://andrewshitov.com/2015/05/15/interview-with-flavio-glock/).
+
+- Nikos Vaggalis 2024 [Flavio Glock On Perl, Java, Compilers And Virtual Machines](https://www.i-programmer.info/professional-programmer/103-i-programmer/17491-flavio-glock-on-perl-java-compilers-and-virtual-machines.html).
+
+
 ![Java CI with Maven](https://github.com/fglock/PerlOnJava/workflows/Java%20CI%20with%20Maven/badge.svg)
 
-## Additional Information
-
-For more details on the relationship with the Perlito compiler, see [RELATION_WITH_PERLITO_COMPILER.md](misc/RELATION_WITH_PERLITO_COMPILER.md).
