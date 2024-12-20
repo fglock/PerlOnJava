@@ -1,9 +1,6 @@
 package org.perlonjava;
 
-import org.perlonjava.runtime.GlobalVariable;
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.ScalarUtils;
+import org.perlonjava.runtime.*;
 
 import java.io.File;
 import java.io.IOException;
@@ -274,6 +271,8 @@ public class ArgumentParser {
      * @param configVar The specific configuration variable to display, or null to display all.
      */
     private static void printConfigurationInfo(String configVar, CompilerOptions parsedArgs) {
+        GlobalContext.initializeGlobals(parsedArgs);
+
         if (configVar != null) {
             // Print specific configuration variable or 'UNKNOWN' if not found
             String value = System.getProperty(configVar, "UNKNOWN");
@@ -290,14 +289,12 @@ public class ArgumentParser {
 
             // Print environment variables
             System.out.println("  %ENV:");
-            System.getenv().forEach((key, value) ->
+            GlobalVariable.getGlobalHash("main::ENV").elements.forEach((key, value) ->
                     System.out.println("    " + key + "=\"" + value + "\""));
-            System.out.println();
 
             // Print include paths
             System.out.println("  @INC:");
-            // XXX TODO - process PERL5ENV before showing @INC
-            parsedArgs.inc.elements.forEach(path ->
+            GlobalVariable.getGlobalArray("main::INC").elements.forEach(path ->
                     System.out.println("    " + path));
         }
     }

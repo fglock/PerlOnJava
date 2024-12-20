@@ -126,6 +126,7 @@
 ### Upcoming Milestones
 
 - **v2.2.0**: Core modules
+  - Perl version is now v5.40.0
   - Added `DBI` module with JDBC support.
   - Added `URI::Escape` module.
   - Added command line switches: `-S`.
