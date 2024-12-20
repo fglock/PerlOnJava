@@ -4,7 +4,7 @@ import org.perlonjava.astnode.OperatorNode;
 
 import java.util.*;
 
-import static org.perlonjava.runtime.GlobalContext.perlVersionNoV;
+import static org.perlonjava.Configuration.getPerlVersionNoV;
 
 /**
  * A scoped symbol table that supports nested scopes for lexical variables, package declarations, warnings, features, and strict options.
@@ -363,7 +363,7 @@ public class ScopedSymbolTable {
 
         Integer bitPosition = featureBitPositions.get(feature);
         if (bitPosition == null) {
-            throw new PerlCompilerException("Feature \"" + feature + "\" is not supported by Perl " + perlVersionNoV);
+            throw new PerlCompilerException("Feature \"" + feature + "\" is not supported by Perl " + getPerlVersionNoV());
         } else {
             featureFlagsStack.push(featureFlagsStack.pop() | (1 << bitPosition));
         }
@@ -376,7 +376,7 @@ public class ScopedSymbolTable {
 
         Integer bitPosition = featureBitPositions.get(feature);
         if (bitPosition == null) {
-            throw new PerlCompilerException("Feature \"" + feature + "\" is not supported by Perl " + perlVersionNoV);
+            throw new PerlCompilerException("Feature \"" + feature + "\" is not supported by Perl " + getPerlVersionNoV());
         } else {
             featureFlagsStack.push(featureFlagsStack.pop() & ~(1 << bitPosition));
         }
@@ -389,7 +389,7 @@ public class ScopedSymbolTable {
 
         Integer bitPosition = featureBitPositions.get(feature);
         if (bitPosition == null) {
-            throw new PerlCompilerException("Feature \"" + feature + "\" is not supported by Perl " + perlVersionNoV);
+            throw new PerlCompilerException("Feature \"" + feature + "\" is not supported by Perl " + getPerlVersionNoV());
         } else {
             return (featureFlagsStack.peek() & (1 << bitPosition)) != 0;
         }

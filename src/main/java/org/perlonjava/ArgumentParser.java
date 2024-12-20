@@ -1,6 +1,9 @@
 package org.perlonjava;
 
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.GlobalVariable;
+import org.perlonjava.runtime.RuntimeArray;
+import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.ScalarUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -10,7 +13,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import static org.perlonjava.runtime.GlobalContext.perlVersion;
+import static org.perlonjava.Configuration.perlVersion;
 
 /**
  * The ArgumentParser class is responsible for parsing command-line arguments
@@ -248,7 +251,7 @@ public class ArgumentParser {
     }
 
     private static void printVersionInfo() {
-        String version = GlobalContext.perlVersionNoV;
+        String version = Configuration.getPerlVersionNoV();
         System.out.println();
         System.out.println("This is perl 5, version " + version + " built for JVM");
         System.out.println();
@@ -277,7 +280,7 @@ public class ArgumentParser {
             System.out.println(configVar + "='" + value + "';");
         } else {
             // Print all configuration information
-            String version = GlobalContext.perlVersionNoV;
+            String version = Configuration.getPerlVersionNoV();
             System.out.println("Summary of my perl5 (" + version + ") configuration:");
             System.out.println();
 

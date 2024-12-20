@@ -1,5 +1,6 @@
 package org.perlonjava.parser;
 
+import org.perlonjava.Configuration;
 import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.codegen.ExtractValueVisitor;
@@ -287,7 +288,7 @@ public class StatementParser {
                 if (packageName == null) {
                     parser.ctx.logDebug("use version: check Perl version");
                     Universal.compareVersion(
-                            new RuntimeScalar(GlobalContext.perlVersion),
+                            new RuntimeScalar(Configuration.perlVersion),
                             versionScalar,
                             "Perl");
 

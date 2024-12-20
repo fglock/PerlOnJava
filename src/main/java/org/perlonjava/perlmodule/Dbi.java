@@ -4,7 +4,6 @@ import org.perlonjava.runtime.*;
 
 import java.sql.*;
 
-import static org.perlonjava.perlmodule.Builtin.scalarTrue;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 

@@ -1,6 +1,7 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.ArgumentParser;
+import org.perlonjava.Configuration;
 import org.perlonjava.perlmodule.*;
 
 import java.util.List;
@@ -14,9 +15,6 @@ import static org.perlonjava.runtime.RuntimeIO.initStdHandles;
  */
 public class GlobalContext {
 
-    public static final String perlVersion = "v5.38.0";
-    public static final String perlVersionNoV = "5.38.0";
-    public static final String perlVersionOld = "5.038000";
     // Special variables internal names
     public static final String LAST_FH = "main::" + Character.toString('L' - 'A' + 1) + "AST_FH"; // $^LAST_FH
     public static final String GLOBAL_PHASE = "main::" + Character.toString('G' - 'A' + 1) + "LOBAL_PHASE"; // $^GLOBAL_PHASE
@@ -39,9 +37,9 @@ public class GlobalContext {
             GlobalVariable.getGlobalVariable(varName);
         }
         GlobalVariable.getGlobalVariable("main::" + Character.toString('O' - 'A' + 1)).set("jvm");    // initialize $^O
-        GlobalVariable.getGlobalVariable("main::" + Character.toString('V' - 'A' + 1)).set(perlVersion);    // initialize $^V
+        GlobalVariable.getGlobalVariable("main::" + Character.toString('V' - 'A' + 1)).set(Configuration.perlVersion);    // initialize $^V
 
-        GlobalVariable.getGlobalVariable("main::]").set(perlVersionOld);    // initialize $] to Perl version
+        GlobalVariable.getGlobalVariable("main::]").set(Configuration.getPerlVersionOld());    // initialize $] to Perl version
         GlobalVariable.getGlobalVariable("main::@").set("");    // initialize $@ to ""
         GlobalVariable.getGlobalVariable("main::_");    // initialize $_ to "undef"
         GlobalVariable.getGlobalVariable("main::\"").set(" ");    // initialize $" to " "

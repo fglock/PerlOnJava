@@ -5,7 +5,7 @@ import javax.script.ScriptEngineFactory;
 import java.util.Arrays;
 import java.util.List;
 
-import static org.perlonjava.runtime.GlobalContext.perlVersion;
+import static org.perlonjava.Configuration.perlVersion;
 
 /**
  * The PerlScriptEngineFactory class is an implementation of the ScriptEngineFactory interface.

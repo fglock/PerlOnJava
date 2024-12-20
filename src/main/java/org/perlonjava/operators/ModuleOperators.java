@@ -1,6 +1,7 @@
 package org.perlonjava.operators;
 
 import org.perlonjava.ArgumentParser;
+import org.perlonjava.Configuration;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
@@ -112,7 +113,7 @@ public class ModuleOperators {
         if (runtimeScalar.type == RuntimeScalarType.INTEGER || runtimeScalar.type == RuntimeScalarType.DOUBLE || runtimeScalar.type == RuntimeScalarType.VSTRING || runtimeScalar.type == RuntimeScalarType.BOOLEAN) {
             // `require VERSION`
             Universal.compareVersion(
-                    new RuntimeScalar(GlobalContext.perlVersion),
+                    new RuntimeScalar(Configuration.perlVersion),
                     runtimeScalar,
                     "Perl");
             return getScalarInt(1);
