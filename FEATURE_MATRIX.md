@@ -352,6 +352,7 @@ Please see [Adding JDBC Drivers](README.md#adding-jdbc-drivers) in README.md.
 - `RaiseError`
 - `PrintError`
 - `Username`
+- `Password`
 - `Name`
 - `Active`
 - `Type`

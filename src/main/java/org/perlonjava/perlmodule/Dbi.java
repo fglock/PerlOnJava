@@ -73,8 +73,8 @@ public class Dbi extends PerlModuleBase {
 
             // Extract connection parameters from args
             dsn = args.get(1).toString();
-            username = args.get(2).toString();
-            String password = args.get(3).toString();
+            dbh.put("Username", new RuntimeScalar(args.get(2).toString()));
+            dbh.put("Password", new RuntimeScalar(args.get(3).toString()));
             RuntimeScalar attr = args.get(4);   //  \%attr
 
             // Set dbh attributes
@@ -99,13 +99,15 @@ public class Dbi extends PerlModuleBase {
             String jdbcUrl = "jdbc:" + protocol + ":" + dsnParts[2] + ":" + dsnParts[3];
 
             // Establish database connection
-            Connection conn = DriverManager.getConnection(jdbcUrl, username, password);
+            Connection conn = DriverManager.getConnection(jdbcUrl, dbh.get("Username").toString(), dbh.get("Password").toString());
+
+            // Remove password from dbh hash
+            dbh.delete(new RuntimeScalar("Password"));
 
             // Create database handle (dbh) hash and store connection
             dbh.put("connection", new RuntimeScalar(conn));
             dbh.put("Active", new RuntimeScalar(true));
             dbh.put("Type", new RuntimeScalar("db"));
-            dbh.put("Username", new RuntimeScalar(username));
             dbh.put("Name", new RuntimeScalar(driverClass));
 
             // Create blessed reference for Perl compatibility
