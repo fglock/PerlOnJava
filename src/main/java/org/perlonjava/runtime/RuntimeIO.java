@@ -71,6 +71,11 @@ public class RuntimeIO implements RuntimeScalarReference {
         this.ioHandle = ioHandle;
     }
 
+    // Constructor for directory handle
+    public RuntimeIO(DirectoryIO directoryIO) {
+        this.directoryIO = directoryIO;
+    }
+
     // Method to set custom OutputStream
     public static void setCustomOutputStream(OutputStream out) {
         // stdout = new RuntimeIO(new CustomOutputStreamHandle(out));
@@ -140,10 +145,6 @@ public class RuntimeIO implements RuntimeScalarReference {
     public static Path getPath(String fileName) {
         // Construct the full file path relative to the user.dir
         return Paths.get(System.getProperty("user.dir"), fileName);
-    }
-
-    public static RuntimeScalar openDir(RuntimeList args) {
-        return DirectoryIO.openDir(args);
     }
 
     public static void flushFileHandles() {

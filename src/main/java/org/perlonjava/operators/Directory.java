@@ -1,5 +1,6 @@
 package org.perlonjava.operators;
 
+import org.perlonjava.io.DirectoryIO;
 import org.perlonjava.runtime.*;
 
 import java.io.File;
@@ -59,6 +60,10 @@ public class Directory {
             getGlobalVariable("main::!").set(e.getMessage());
             return scalarFalse;
         }
+    }
+
+    public static RuntimeScalar opendir(RuntimeList args) {
+        return DirectoryIO.openDir(args);
     }
 
     public static RuntimeScalar closedir(RuntimeScalar runtimeScalar) {
