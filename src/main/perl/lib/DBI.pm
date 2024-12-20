@@ -75,7 +75,7 @@ sub fetchall_arrayref {
         while (!defined($max_rows) || $row_count < $max_rows) {
             my $row = $sth->fetchrow_arrayref();
             last unless $row;
-            push @rows, [ @$row ]; # Create a copy of the row
+            push @rows, $row; # Use the row directly to avoid unnecessary copying
             $row_count++;
         }
     }
@@ -88,7 +88,7 @@ sub fetchall_arrayref {
                 push @rows, [ map {$row->[$_]} @$slice ];
             }
             else {
-                push @rows, [ @$row ]; # Empty slice means all columns
+                push @rows, $row; # Use the row directly
             }
             $row_count++;
         }
@@ -106,7 +106,7 @@ sub fetchall_arrayref {
                 push @rows, \%new_row;
             }
             else {
-                push @rows, { %$row }; # Empty hash means all columns
+                push @rows, $row; # Use the row directly
             }
             $row_count++;
         }
@@ -187,7 +187,7 @@ sub fetchall_hashref {
             $final_value = $row->{$final_key};
         }
 
-        $href->{$final_value} = $row;
+        $href->{$final_value} = $row; # Use the row directly
     }
 
     return \%results;

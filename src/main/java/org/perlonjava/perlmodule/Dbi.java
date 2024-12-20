@@ -88,9 +88,6 @@ public class Dbi extends PerlModuleBase {
             String[] dsnParts = dsn.split(":");
             String driverClass = dsnParts[1];
 
-            // Dynamically load the JDBC driver
-            Class.forName(driverClass);
-
             // Extract database protocol from driver class name
             String protocol = driverClass.split("\\.")[1].toLowerCase();
 
@@ -114,8 +111,6 @@ public class Dbi extends PerlModuleBase {
             return dbhRef.getList();
         } catch (SQLException e) {
             setError(dbh, e);
-        } catch (ClassNotFoundException e) {
-            setError(dbh, new SQLException("Database driver not found: " + e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
         } catch (Exception e) {
             setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
         }
