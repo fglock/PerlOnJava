@@ -20,6 +20,7 @@ public class Exporter extends PerlModuleBase {
      */
     public static void initialize() {
         Exporter exporter = new Exporter();
+        GlobalVariable.getGlobalVariable("Exporter::VERSION").set(new RuntimeScalar("5.78"));
         try {
             // Load Exporter methods into Perl namespace
             exporter.registerMethod("import", "importSymbols", null);
