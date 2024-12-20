@@ -25,6 +25,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Static stack to store saved "local" states of RuntimeScalar instances
     private static final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
+
+    // Type map for scalar types to their corresponding enum
     private static final Map<Class<?>, RuntimeScalarType> typeMap = new HashMap<>();
 
     static {
@@ -156,23 +158,13 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
      * @return a new RuntimeScalar instance with the given value
      */
     public static RuntimeScalar newScalarOrString(Object value) {
-        RuntimeScalar newScalar =  new RuntimeScalar(value);
+        RuntimeScalar newScalar = new RuntimeScalar(value);
         if (newScalar.type == RuntimeScalarType.OBJECT) {
             // Unknown type, convert to string
             newScalar.type = RuntimeScalarType.STRING;
             newScalar.value = value.toString();
         }
         return newScalar;
-    }
-
-    private void initializeWithLong(Long value) {
-        if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
-            this.type = RuntimeScalarType.DOUBLE;
-            this.value = (double) value;
-        } else {
-            this.type = RuntimeScalarType.INTEGER;
-            this.value = value.intValue();
-        }
     }
 
     public static RuntimeScalar undef() {
@@ -232,6 +224,16 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public static RuntimeScalar repeat(RuntimeScalar runtimeScalar, RuntimeScalar arg) {
         return (RuntimeScalar) Operator.repeat(runtimeScalar, arg, RuntimeContextType.SCALAR);
+    }
+
+    private void initializeWithLong(Long value) {
+        if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
+            this.type = RuntimeScalarType.DOUBLE;
+            this.value = (double) value;
+        } else {
+            this.type = RuntimeScalarType.INTEGER;
+            this.value = value.intValue();
+        }
     }
 
     public RuntimeScalar study() {
