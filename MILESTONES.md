@@ -129,6 +129,7 @@
   - Added `DBI` module with JDBC support.
   - Added `URI::Escape` module.
   - Added command line switches: `-S`.
+  - Added `Configure.pl` to set compiler options and add JDBC drivers.
   - Planned release date: 2024-12-10
   - Work in progress:
     - `lexical_subs` feature.
