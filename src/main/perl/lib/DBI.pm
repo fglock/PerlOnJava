@@ -17,9 +17,6 @@ use warnings;
 #     { RaiseError => 1 }
 # );
 
-# package DBI::db;
-# Class for $dbh
-
 sub do {
     my ($dbh, $statement, $attr, @params) = @_;
     my $sth = $dbh->prepare($statement, $attr) or return undef;
@@ -242,6 +239,8 @@ sub selectall_hashref {
 1;
 
 __END__
+
+Author and Copyright messages from the original DBI.pm:
 
 =head1 AUTHORS
 

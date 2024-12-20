@@ -174,6 +174,8 @@ sub decode_json { # decode
 
 __END__
 
+Author and Copyright messages from the original JSON.pm:
+
 =head1 AUTHOR
 
 Makamaka Hannyaharamitu, E<lt>makamaka[at]cpan.orgE<gt>
