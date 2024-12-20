@@ -4,9 +4,7 @@ import org.perlonjava.operators.Operator;
 import org.perlonjava.parser.NumberParser;
 import org.perlonjava.perlmodule.Universal;
 
-import java.util.Iterator;
-import java.util.NoSuchElementException;
-import java.util.Stack;
+import java.util.*;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
@@ -27,6 +25,16 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Static stack to store saved "local" states of RuntimeScalar instances
     private static final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
+    private static final Map<Class<?>, RuntimeScalarType> typeMap = new HashMap<>();
+
+    static {
+        typeMap.put(Integer.class, RuntimeScalarType.INTEGER);
+        typeMap.put(String.class, RuntimeScalarType.STRING);
+        typeMap.put(Double.class, RuntimeScalarType.DOUBLE);
+        typeMap.put(Boolean.class, RuntimeScalarType.BOOLEAN);
+        // Add other known types if necessary
+    }
+
     // Fields to store the type and value of the scalar variable
     public RuntimeScalarType type;
     public Object value;
@@ -37,23 +45,11 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar(long value) {
-        if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
-            this.type = RuntimeScalarType.DOUBLE;
-            this.value = (double) value;
-        } else {
-            this.type = RuntimeScalarType.INTEGER;
-            this.value = (int) value;
-        }
+        initializeWithLong(value);
     }
 
     public RuntimeScalar(Long value) {
-        if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
-            this.type = RuntimeScalarType.DOUBLE;
-            this.value = (double) value;
-        } else {
-            this.type = RuntimeScalarType.INTEGER;
-            this.value = (int) (long) value;
-        }
+        initializeWithLong(value);
     }
 
     public RuntimeScalar(int value) {
@@ -129,8 +125,26 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar(Object value) {
-        this.type = RuntimeScalarType.OBJECT;
-        this.value = value;
+        if (value == null) {
+            this.type = RuntimeScalarType.UNDEF;
+            this.value = null;
+        } else if (value instanceof Long) {
+            initializeWithLong((Long) value);
+        } else {
+            // Look for a known type, default to OBJECT if not found
+            this.type = typeMap.getOrDefault(value.getClass(), RuntimeScalarType.OBJECT);
+            this.value = value;
+        }
+    }
+
+    private void initializeWithLong(Long value) {
+        if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
+            this.type = RuntimeScalarType.DOUBLE;
+            this.value = (double) value;
+        } else {
+            this.type = RuntimeScalarType.INTEGER;
+            this.value = value.intValue();
+        }
     }
 
     public static RuntimeScalar undef() {
