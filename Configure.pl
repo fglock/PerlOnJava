@@ -7,32 +7,124 @@ use Data::Dumper;
 use Getopt::Long;
 use URI::Escape;
 
-# Define supported actions and options
-my $search = 0;
-my $direct = 0;
-my $verbose = 0;
+# This script is designed to manage configuration settings and dependencies
+# for a Java project. It provides options to update configuration values
+# in a Java configuration file and manage dependencies using Maven coordinates.
+# The script can search for JDBC drivers by class name or use direct Maven
+# coordinates to update build files like build.gradle or pom.xml.
 
+# Define supported actions and options for both dependency management and configuration
+my $search = 0;   # Flag to indicate if a search for JDBC driver by class name is requested
+my $direct = 0;   # Flag to indicate if direct Maven coordinates are provided
+my $verbose = 0;  # Flag to enable verbose output for debugging
+my %config;       # Hash to store key-value pairs for configuration updates
+my $help = 0;     # Flag to show help message
+
+# Parse command-line options
+Getopt::Long::Configure("no_ignore_case");
 GetOptions(
+    "h|help" => \$help,
     "search" => \$search,    # Search by driver class name
     "direct" => \$direct,    # Use direct Maven coordinates
     "verbose" => \$verbose,  # Enable verbose output
-) or die "Error in command line arguments\n";
+    "D=s%" => \%config,      # Key-value configuration pairs
+) or show_help();
 
-# Show usage if no action specified
-die "Usage: $0 --search org.h2.Driver | --direct group:artifact:version\n"
-    unless $search xor $direct;
+# Show help message if requested
+show_help() if $help;
 
-my $input = shift @ARGV || die "Missing input argument\n";
+# Show current configuration if no specific actions are requested
+show_config() unless ($search || $direct || %config || @ARGV);
 
-my $maven_coords;
-if ($direct) {
-    die "Invalid Maven coordinates format. Expected: group:artifact:version\n"
-        unless $input =~ /^[^:]+:[^:]+:[^:]+$/;
-    $maven_coords = $input;
-    print "Using direct Maven coordinates: $maven_coords\n";
-} else {
+# Update configuration if any key-value pairs are provided
+update_configuration(\%config) if %config;
+
+# Handle dependency management if search or direct options are provided
+handle_dependencies() if ($search || $direct);
+
+# Function to display help message and usage instructions
+sub show_help {
+    print
+        'Usage: ./Configure [options]
+
+Configuration Options:
+    -h, --help                      Show this help message
+    -D key=value                    Set configuration value
+
+Dependency Management Options:
+    --search                        Search for JDBC driver by class name
+    --direct                        Use direct Maven coordinates
+    --verbose                       Enable verbose output
+
+Examples:
+    ./Configure -D strict_mode=true -D enable_optimizations=false
+    ./Configure --search org.h2.Driver
+    ./Configure --direct com.h2database:h2:2.2.224
+';
+    exit;
+}
+
+# Function to display the current configuration by reading a Java configuration file
+sub show_config {
+    my $java_config = read_file('src/main/java/org/perlonjava/Configuration.java');
+    print "Current configuration:\n\n";
+    while ($java_config =~ /public static final (\w+)\s+(\w+)\s*=\s*(.+?);/g) {
+        print "$2 = $3\n";
+    }
+    exit;
+}
+
+# Function to update configuration values in the Java configuration file
+sub update_configuration {
+    my $config = shift;
+    my $file = 'src/main/java/org/perlonjava/Configuration.java';
+    my $content = read_file($file);
+
+    foreach my $key (keys %$config) {
+        my $value = $config->{$key};
+        # Handle string values vs boolean/numeric values
+        $value = "\"$value\"" if $value !~ /^(?:true|false|\d+)$/;
+
+        if ($content =~ /public static final \w+\s+\Q$key\E\s*=\s*.+?;/) {
+            $content =~ s/(public static final \w+\s+\Q$key\E\s*=\s*).+?;/$1$value;/;
+            print "Updated $key = $value\n";
+        }
+    }
+
+    write_file($file, $content);
+    print "\nConfiguration updated successfully\n";
+}
+
+# Function to handle dependency management based on search or direct options
+sub handle_dependencies {
+    # Show usage if no action specified
+    die "Usage: $0 --search org.h2.Driver | --direct group:artifact:version\n"
+        unless $search xor $direct;
+
+    my $input = shift @ARGV || die "Missing input argument\n";
+
+    my $maven_coords;
+    if ($direct) {
+        # Validate and use direct Maven coordinates
+        die "Invalid Maven coordinates format. Expected: group:artifact:version\n"
+            unless $input =~ /^[^:]+:[^:]+:[^:]+$/;
+        $maven_coords = $input;
+        print "Using direct Maven coordinates: $maven_coords\n";
+    } else {
+        # Search for Maven artifact based on input
+        $maven_coords = search_maven_artifact($input);
+    }
+
+    # Update build files with the resolved Maven coordinates
+    update_build_files($maven_coords);
+}
+
+# Function to search for a Maven artifact using the Maven Central Repository
+sub search_maven_artifact {
+    my $input = shift;
     my $rows = 50;
 
+    # Construct search URL based on input type
     my $search_url;
     if ($input =~ /\.Driver$/) {
         # Class name search
@@ -49,6 +141,7 @@ if ($direct) {
 
     print "Search URL: $search_url\n" if $verbose;
 
+    # Perform HTTP request with retries
     my $http = HTTP::Tiny->new;
     my $max_retries = 3;
     my $retry_count = 0;
@@ -70,13 +163,12 @@ if ($direct) {
     die "No Maven artifacts found for: $input\n"
         unless $data->{response}{docs} && @{$data->{response}{docs}};
 
-
-    # After decoding JSON, implement smart scoring and sorting
+    # Sort results by relevance score
     my @docs = sort {
         score_jdbc_relevance($b) <=> score_jdbc_relevance($a)
     } @{$data->{response}{docs}};
 
-    # Take top 5 most relevant results
+    # Take top 10 most relevant results
     @docs = @docs[0..9] if @docs > 10;
 
     if (@docs > 1) {
@@ -87,45 +179,48 @@ if ($direct) {
         print "Select number [0-" . $#docs . "]: ";
         my $choice = <STDIN>;
         chomp $choice;
-        $maven_coords = $docs[$choice]{id};
-    } else {
-        $maven_coords = $docs[0]{id};
+        return $docs[$choice]{id};
     }
-    print "Adding JDBC driver: $input -> $maven_coords\n";
+
+    return $docs[0]{id};
 }
 
-# Add to build.gradle
-if (-f 'build.gradle') {
-    my $gradle = read_file('build.gradle');
-    unless ($gradle =~ /implementation ['"]$maven_coords['"]/) {
-        $gradle =~ s/(dependencies \{)/$1\n    implementation "$maven_coords"/;
-        write_file('build.gradle', $gradle);
-        print "Updated build.gradle\n";
+# Function to update build files (build.gradle or pom.xml) with the specified Maven coordinates
+sub update_build_files {
+    my $maven_coords = shift;
+
+    # Add to build.gradle if present
+    if (-f 'build.gradle') {
+        my $gradle = read_file('build.gradle');
+        unless ($gradle =~ /implementation ['"]$maven_coords['"]/) {
+            $gradle =~ s/(dependencies \{)/$1\n    implementation "$maven_coords"/;
+            write_file('build.gradle', $gradle);
+            print "Updated build.gradle\n";
+        }
+    }
+
+    # Add to pom.xml if present
+    if (-f 'pom.xml') {
+        my ($group, $artifact, $version) = split ':', $maven_coords;
+        if (!defined $version) {
+            warn "No version specified for $group:$artifact. Using 'LATEST' as the version.";
+            $version = 'LATEST';
+        }
+        my $pom = read_file('pom.xml');
+        unless ($pom =~ /<artifactId>$artifact<\/artifactId>/) {
+            my $dep = "\n        <dependency>\n" .
+                "            <groupId>$group</groupId>\n" .
+                "            <artifactId>$artifact</artifactId>\n" .
+                "            <version>$version</version>\n" .
+                "        </dependency>";
+            $pom =~ s/(<dependencies>)/$1$dep/;
+            write_file('pom.xml', $pom);
+            print "Updated pom.xml\n";
+        }
     }
 }
 
-# Add to pom.xml
-if (-f 'pom.xml') {
-    my ($group, $artifact, $version) = split ':', $maven_coords;
-    if (!defined $version) {
-        warn "No version specified for $group:$artifact. Using 'LATEST' as the version.";
-        $version = 'LATEST';
-    }
-    my $pom = read_file('pom.xml');
-    unless ($pom =~ /<artifactId>$artifact<\/artifactId>/) {
-        my $dep = "\n        <dependency>\n" .
-            "            <groupId>$group</groupId>\n" .
-            "            <artifactId>$artifact</artifactId>\n" .
-            "            <version>$version</version>\n" .
-            "        </dependency>";
-        $pom =~ s/(<dependencies>)/$1$dep/;
-        write_file('pom.xml', $pom);
-        print "Updated pom.xml\n";
-    }
-}
-
-print "Build configuration complete\n";
-
+# Function to read the content of a file
 sub read_file {
     my $file = shift;
     local $/;
@@ -133,12 +228,14 @@ sub read_file {
     return <$fh>;
 }
 
+# Function to write content to a file
 sub write_file {
     my ($file, $content) = @_;
     open my $fh, '>', $file or die "Cannot write $file: $!";
     print $fh $content;
 }
 
+# Function to score artifacts based on JDBC relevance indicators
 sub score_jdbc_relevance {
     my $doc = shift;
     my $score = 0;
