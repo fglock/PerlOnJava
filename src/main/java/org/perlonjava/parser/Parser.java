@@ -19,7 +19,7 @@ public class Parser {
     public static final Set<String> LIST_TERMINATORS =
             Set.of(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when", "not", "and", "or");
     public static final Set<String> INFIX_OP = Set.of(
-            "or", "xor", "and", "||", "//", "&&", "|", "^", "&", "|.", "^.", "&.",
+            "or", "xor", "and", "||", "//", "&&", "|", "^", "^^", "&", "|.", "^.", "&.",
             "==", "!=", "<=>", "eq", "ne", "cmp", "<", ">", "<=",
             ">=", "lt", "gt", "le", "ge", "<<", ">>", "+", "-", "*",
             "**", "/", "%", ".", "=", "**=", "+=", "*=", "&=", "&.=",

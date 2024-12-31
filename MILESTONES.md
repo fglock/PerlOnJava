@@ -130,9 +130,10 @@
   - Added `DBI` module with JDBC support.
   - Added `URI::Escape` module.
   - Added command line switches: `-S`.
+  - Added low-precedence xor `^^` operator.
   - Added `Configure.pl` to set compiler options and add JDBC drivers.
   - Added Links to Perl on JVM resources in README - https://github.com/fglock/PerlOnJava/tree/master#additional-information-and-resources
-  - Planned release date: 2024-12-10
+  - Planned release date: 2025-02-10
   - Work in progress:
     - `lexical_subs` feature.
     - `use VERSION`, `require VERSION`.
