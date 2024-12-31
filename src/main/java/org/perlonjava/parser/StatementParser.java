@@ -338,7 +338,7 @@ public class StatementParser {
         Node list = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
         ctx.logDebug("Use statement list hasParentheses:" + hasParentheses + " ast:" + list);
 
-        parser.parseStatementTerminator();
+        ParseStatement.parseStatementTerminator(parser);
 
         if (fullName != null) {
             // execute the statement immediately, using:
@@ -425,7 +425,7 @@ public class StatementParser {
         BlockNode block = parseOptionalPackageBlock(parser, nameNode, packageNode);
         if (block != null) return block;
 
-        parser.parseStatementTerminator();
+        ParseStatement.parseStatementTerminator(parser);
         parser.ctx.symbolTable.setCurrentPackage(nameNode.name);
         return packageNode;
     }

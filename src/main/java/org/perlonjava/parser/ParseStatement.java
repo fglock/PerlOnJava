@@ -96,7 +96,7 @@ public class ParseStatement {
                             parser.tokenIndex);
                 case "{":
                     // Parse bare-blocks
-                    if (!parser.isHashLiteral()) {
+                    if (!isHashLiteral(parser)) {
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
                         BlockNode block = parser.parseBlock();
                         block.isLoop = true;
@@ -115,17 +115,17 @@ public class ParseStatement {
                 case "if":
                     TokenUtils.consume(parser);
                     Node modifierExpression = parser.parseExpression(0);
-                    parser.parseStatementTerminator();
+                    parseStatementTerminator(parser);
                     return new BinaryOperatorNode("&&", modifierExpression, expression, parser.tokenIndex);
                 case "unless":
                     TokenUtils.consume(parser);
                     modifierExpression = parser.parseExpression(0);
-                    parser.parseStatementTerminator();
+                    parseStatementTerminator(parser);
                     return new BinaryOperatorNode("||", modifierExpression, expression, parser.tokenIndex);
                 case "for", "foreach":
                     TokenUtils.consume(parser);
                     modifierExpression = parser.parseExpression(0);
-                    parser.parseStatementTerminator();
+                    parseStatementTerminator(parser);
                     return new For1Node(
                             null,
                             false,
@@ -137,7 +137,7 @@ public class ParseStatement {
                 case "while", "until":
                     TokenUtils.consume(parser);
                     modifierExpression = parser.parseExpression(0);
-                    parser.parseStatementTerminator();
+                    parseStatementTerminator(parser);
                     if (token.text.equals("until")) {
                         modifierExpression = new OperatorNode("not", modifierExpression, modifierExpression.getIndex());
                     }
@@ -157,7 +157,63 @@ public class ParseStatement {
             }
             throw new PerlCompilerException(parser.tokenIndex, "Not implemented: " + token, parser.ctx.errorUtil);
         }
-        parser.parseStatementTerminator();
+        parseStatementTerminator(parser);
         return expression;
+    }
+
+    // disambiguate between Block or Hash literal
+    public static boolean isHashLiteral(Parser parser) {
+        int currentIndex = parser.tokenIndex;
+
+        // Start after the opening '{'
+        consume(parser, LexerTokenType.OPERATOR, "{");
+
+        int braceCount = 1; // Track nested braces
+        while (braceCount > 0) {
+            LexerToken token = consume(parser);
+            parser.ctx.logDebug("isHashLiteral " + token + " braceCount:" + braceCount);
+            if (token.type == LexerTokenType.EOF) {
+                break; // not a hash literal;
+            }
+            switch (token.text) {
+                case "{", "(", "[":
+                    braceCount++;
+                    break;
+                case ")", "}", "]":
+                    braceCount--;
+                    break;
+                default:
+                    if (braceCount == 1) {
+                        switch (token.text) {
+                            case ",", "=>":
+                                parser.ctx.logDebug("isHashLiteral TRUE");
+                                parser.tokenIndex = currentIndex;
+                                return true; // Likely a hash literal
+                            case ";":
+                                parser.tokenIndex = currentIndex;
+                                return false; // Likely a block
+                            case "for", "while", "if", "unless", "until", "foreach":
+                                if (!TokenUtils.peek(parser).text.equals("=>")) {
+                                    parser.ctx.logDebug("isHashLiteral FALSE");
+                                    parser.tokenIndex = currentIndex;
+                                    return false; // Likely a block
+                                }
+                        }
+                    }
+            }
+        }
+        parser.ctx.logDebug("isHashLiteral undecided");
+        parser.tokenIndex = currentIndex;
+        return true;
+    }
+
+    public static void parseStatementTerminator(Parser parser) {
+        LexerToken token = peek(parser);
+        if (token.type != LexerTokenType.EOF && !token.text.equals("}") && !token.text.equals(";")) {
+            throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+        }
+        if (token.text.equals(";")) {
+            consume(parser);
+        }
     }
 }

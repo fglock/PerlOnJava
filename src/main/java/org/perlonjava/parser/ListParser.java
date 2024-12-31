@@ -8,6 +8,8 @@ import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.List;
 
+import static org.perlonjava.parser.TokenUtils.peek;
+
 /**
  * The ListParser class provides methods to parse lists in various contexts,
  * such as function calls, array literals, and hash literals. It supports
@@ -115,7 +117,7 @@ public class ListParser {
                 hasParen = true;
             }
             expr.handle = FileHandle.parseFileHandle(parser);
-            if (expr.handle == null || !parser.isSpaceAfterPrintBlock()) {
+            if (expr.handle == null || !isSpaceAfterPrintBlock(parser)) {
                 // Backtrack
                 parser.tokenIndex = currentIndex;
                 hasParen = false;
@@ -132,7 +134,7 @@ public class ListParser {
                 expr.handle = parser.parseBlock();
                 TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             }
-            if (!parser.isSpaceAfterPrintBlock() || looksLikeEmptyList(parser)) {
+            if (!isSpaceAfterPrintBlock(parser) || looksLikeEmptyList(parser)) {
                 throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
             }
         }
@@ -274,5 +276,44 @@ public class ListParser {
         }
         parser.tokenIndex = previousIndex;
         return isEmptyList;
+    }
+
+    public static boolean isSpaceAfterPrintBlock(Parser parser) {
+        int currentIndex = parser.tokenIndex;
+        LexerToken token = peek(parser);
+        boolean isSpace = false;
+        switch (token.type) {
+            case EOF:
+            case IDENTIFIER:
+            case NUMBER:
+            case STRING:
+                isSpace = true;
+                break;
+            case OPERATOR:
+                switch (token.text) {
+                    case "[", "\"", "//", "\\", "`", "$", "$#", "@", "%", "&", "!", "~",
+                         "+", "-", "/", "*", ";", "++", "--":
+                        isSpace = true;
+                        break;
+                    case ".":
+                        // must be followed by NUMBER
+                        TokenUtils.consume(parser);
+                        if (parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NUMBER) {
+                            isSpace = true;
+                        }
+                        parser.tokenIndex = currentIndex;
+                        break;
+                    case "(", "'":
+                        // must have space before
+                        TokenUtils.consume(parser);
+                        if (parser.tokenIndex != currentIndex) {
+                            isSpace = true;
+                        }
+                        parser.tokenIndex = currentIndex;
+                        break;
+                }
+                break;
+        }
+        return isSpace;
     }
 }

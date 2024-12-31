@@ -1,13 +1,11 @@
 package org.perlonjava.parser;
 
 import org.perlonjava.astnode.BlockNode;
-import org.perlonjava.astnode.IdentifierNode;
 import org.perlonjava.astnode.ListNode;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.*;
 
@@ -110,62 +108,6 @@ public class Parser {
         return new BlockNode(statements, currentIndex);
     }
 
-    public void parseStatementTerminator() {
-        LexerToken token = peek(this);
-        if (token.type != LexerTokenType.EOF && !token.text.equals("}") && !token.text.equals(";")) {
-            throw new PerlCompilerException(tokenIndex, "Syntax error", ctx.errorUtil);
-        }
-        if (token.text.equals(";")) {
-            TokenUtils.consume(this);
-        }
-    }
-
-    // disambiguate between Block or Hash literal
-    public boolean isHashLiteral() {
-        int currentIndex = tokenIndex;
-
-        // Start after the opening '{'
-        TokenUtils.consume(this, LexerTokenType.OPERATOR, "{");
-
-        int braceCount = 1; // Track nested braces
-        while (braceCount > 0) {
-            LexerToken token = TokenUtils.consume(this);
-            ctx.logDebug("isHashLiteral " + token + " braceCount:" + braceCount);
-            if (token.type == LexerTokenType.EOF) {
-                break; // not a hash literal;
-            }
-            switch (token.text) {
-                case "{", "(", "[":
-                    braceCount++;
-                    break;
-                case ")", "}", "]":
-                    braceCount--;
-                    break;
-                default:
-                    if (braceCount == 1) {
-                        switch (token.text) {
-                            case ",", "=>":
-                                ctx.logDebug("isHashLiteral TRUE");
-                                tokenIndex = currentIndex;
-                                return true; // Likely a hash literal
-                            case ";":
-                                tokenIndex = currentIndex;
-                                return false; // Likely a block
-                            case "for", "while", "if", "unless", "until", "foreach":
-                                if (!TokenUtils.peek(this).text.equals("=>")) {
-                                    ctx.logDebug("isHashLiteral FALSE");
-                                    tokenIndex = currentIndex;
-                                    return false; // Likely a block
-                                }
-                        }
-                    }
-            }
-        }
-        ctx.logDebug("isHashLiteral undecided");
-        tokenIndex = currentIndex;
-        return true;
-    }
-
     /**
      * Parses an expression based on operator precedence.
      * <p>
@@ -225,63 +167,6 @@ public class Parser {
 
         // Return the root node of the constructed expression tree.
         return left;
-    }
-
-    public boolean isSpaceAfterPrintBlock() {
-        int currentIndex = tokenIndex;
-        LexerToken token = peek(this);
-        boolean isSpace = false;
-        switch (token.type) {
-            case EOF:
-            case IDENTIFIER:
-            case NUMBER:
-            case STRING:
-                isSpace = true;
-                break;
-            case OPERATOR:
-                switch (token.text) {
-                    case "[", "\"", "//", "\\", "`", "$", "$#", "@", "%", "&", "!", "~",
-                         "+", "-", "/", "*", ";", "++", "--":
-                        isSpace = true;
-                        break;
-                    case ".":
-                        // must be followed by NUMBER
-                        TokenUtils.consume(this);
-                        if (tokens.get(tokenIndex).type == LexerTokenType.NUMBER) {
-                            isSpace = true;
-                        }
-                        tokenIndex = currentIndex;
-                        break;
-                    case "(", "'":
-                        // must have space before
-                        TokenUtils.consume(this);
-                        if (tokenIndex != currentIndex) {
-                            isSpace = true;
-                        }
-                        tokenIndex = currentIndex;
-                        break;
-                }
-                break;
-        }
-        return isSpace;
-    }
-
-    List<Node> parseHashSubscript() {
-        ctx.logDebug("parseHashSubscript start");
-        int currentIndex = tokenIndex;
-
-        LexerToken ident = TokenUtils.consume(this);
-        LexerToken close = TokenUtils.consume(this);
-        if (ident.type == LexerTokenType.IDENTIFIER && close.text.equals("}")) {
-            // autoquote
-            List<Node> list = new ArrayList<>();
-            list.add(new IdentifierNode(ident.text, currentIndex));
-            return list;
-        }
-
-        // backtrack
-        tokenIndex = currentIndex;
-        return ListParser.parseList(this, "}", 1);
     }
 
 }

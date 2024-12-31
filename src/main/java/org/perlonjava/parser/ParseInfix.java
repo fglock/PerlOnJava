@@ -5,6 +5,9 @@ import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static org.perlonjava.parser.TokenUtils.peek;
 
 /**
@@ -83,7 +86,7 @@ public class ParseInfix {
                         return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
                     case "{":
                         TokenUtils.consume(parser);
-                        right = new HashLiteralNode(parser.parseHashSubscript(), parser.tokenIndex);
+                        right = new HashLiteralNode(parseHashSubscript(parser), parser.tokenIndex);
                         return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
                     case "[":
                         TokenUtils.consume(parser);
@@ -146,7 +149,7 @@ public class ParseInfix {
                 return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
             case "{":
                 // Handle hash subscripts
-                right = new HashLiteralNode(parser.parseHashSubscript(), parser.tokenIndex);
+                right = new HashLiteralNode(parseHashSubscript(parser), parser.tokenIndex);
                 return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
             case "[":
                 // Handle array subscripts
@@ -159,5 +162,23 @@ public class ParseInfix {
             default:
                 throw new PerlCompilerException(parser.tokenIndex, "Unexpected infix operator: " + token, parser.ctx.errorUtil);
         }
+    }
+
+    static List<Node> parseHashSubscript(Parser parser) {
+        parser.ctx.logDebug("parseHashSubscript start");
+        int currentIndex = parser.tokenIndex;
+
+        LexerToken ident = TokenUtils.consume(parser);
+        LexerToken close = TokenUtils.consume(parser);
+        if (ident.type == LexerTokenType.IDENTIFIER && close.text.equals("}")) {
+            // autoquote
+            List<Node> list = new ArrayList<>();
+            list.add(new IdentifierNode(ident.text, currentIndex));
+            return list;
+        }
+
+        // backtrack
+        parser.tokenIndex = currentIndex;
+        return ListParser.parseList(parser, "}", 1);
     }
 }
