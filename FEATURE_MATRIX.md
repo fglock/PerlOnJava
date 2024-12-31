@@ -342,6 +342,7 @@
 - ❌  **Safe** module.
 - ❌  **Digest::MD5** module.
 - ❌  **Digest::SHA** module.
+- ❌  **Text::Balanced** module.
 
 ### Non-core modules
 - ✔️   **HTTP::CookieJar** module.
