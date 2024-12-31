@@ -263,6 +263,8 @@
 - ✔️   **setting `$_` in `while` loop with `<>`**: automatic setting `$_` in `while` loops is implemented.
 - ✔️   **`do BLOCK while`**: `do` executes once before the conditional is evaluated.
 - ✔️   **`...` ellipsis statement**: `...` is supported.
+- ❌  **`exec` operator**: `exec` is not implemented.
+- ❌  **`fork` operator**: `fork` is not implemented.
 
 ## Namespaces and Global Variables
 - ✔️   **Global variable infrastructure**: Support for global variables is implemented.
@@ -275,6 +277,8 @@
 - ❌  **Thread-safe `@_`, `$_`, and regex variables**: Thread safety for global special variables is missing.
 
 ## Perl Modules, Pragmas, Features
+
+- ❌  There is no Perl-side support for interaction with Java libraries or other JVM languages, such as `Inline::Java` or similar modules.
 
 ### Pragmas
 
@@ -298,6 +302,8 @@
 - ❌  **bignum, bigint, and bigrat** pragmas
 - ❌  **encoding** pragma
 - ❌  **integer** pragma
+- ❌  **locale** pragma
+- ❌  **ops** pragma
 - 🚧  **re** pragma for regular expression options: Implemented `is_regexp`.
 - ✔️   **subs** pragma.
 - 🚧  **builtin** pragma:
@@ -324,6 +330,10 @@
 - ✔️   **URI::Escape** module.
 - 🚧  **HTTP::Tiny** some features untested: proxy settings.
 - 🚧  **DynaLoader** placeholder module.
+- ❌  **IO::Socket** module, and related modules or asynchronous I/O operations.
+- ❌  **Safe** module.
+- ❌  **Digest::MD5** module.
+- ❌  **Digest::SHA** module.
 
 ### Non-core modules
 - ✔️   **HTTP::CookieJar** module.
@@ -418,7 +428,7 @@ Format: `dbi:DriverClassName:database:host[:port][;parameters]`
 
 ## Non-strict and Obsolete Features
 - ❌  **Use string as a scalar reference**: Support for scalar references from strings is not yet implemented.
-- ❌  **`format` operator**: Format is not implemented.
+- ❌  **`format` operator**: `format` and `write` functions for report generation are not implemented.
 - ❌  **DBM file support**: `dbmclose`, `dbmopen` are not implemented.
 - ❌  **`reset("A-Z")`** resetting global variables is not implemented.
 - ❌  **Indirect object syntax** indirect object syntax is not implemented.
