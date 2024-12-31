@@ -91,8 +91,12 @@
 - ✔️   **Autoload**: `AUTOLOAD` mechanism is implemented; `$AUTOLOAD` variable is implemented.
 - ❌  **`__CLASS__`**: `__CLASS__` token is not yet supported.
 - ❌  **`class`**: `class` token is not yet supported.
-- ❌  **`:isa`**: `:isa` attribute is not yet supported.
-- ❌  **`method`**: `method` token is not yet supported.
+- ❌  **`:isa`**: `:isa` class attribute is not yet supported.
+- ❌  **`method`**: `method` block is not yet supported.
+- ❌  **`field`**: `field` token is not yet supported.
+- ❌  **`:param`**: `:param` field attribute is not yet supported.
+- ❌  **`:reader`**: `:reader` field attribute is not yet supported.
+- ❌  **`ADJUST`**: `ADJUST` block is not yet supported.
 
 ## Operators
 - ✔️   **Simple arithmetic**: Operators like `+`, `-`, `*`, and `%` are supported.
