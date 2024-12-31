@@ -89,6 +89,10 @@
 - ✔️   **Version check**: Method `VERSION ( [ REQUIRE ] )` is implemented.
 - ✔️   **Inheritance**: `SUPER::method` is implemented.
 - ✔️   **Autoload**: `AUTOLOAD` mechanism is implemented; `$AUTOLOAD` variable is implemented.
+- ❌  **`__CLASS__`**: `__CLASS__` token is not yet supported.
+- ❌  **`class`**: `class` token is not yet supported.
+- ❌  **`:isa`**: `:isa` attribute is not yet supported.
+- ❌  **`method`**: `method` token is not yet supported.
 
 ## Operators
 - ✔️   **Simple arithmetic**: Operators like `+`, `-`, `*`, and `%` are supported.
