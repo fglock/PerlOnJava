@@ -97,32 +97,17 @@ For a detailed feature list, see the [FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md)
 
 JDBC Database drivers can be added in two ways:
 
-1. Using the `Configure.pl` script to add the drivers to the Perl jar file:
+1. Using Configure.pl:
+    ````bash
+    ./Configure.pl --search mysql-connector-java
+    ````
 
-  The Configure script updates the build configuration to install the JDBC database drivers in the PerlOnJava jar file.
+2. Using Java classpath:
+    ````bash
+    java -cp "jdbc-drivers/h2-2.2.224.jar:target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main myscript.pl
+    ````
 
-  - Run `./Configure.pl --search my-driver-name` to register the drivers - for example:
-
-  ```bash
-  ./Configure.pl --search aws-mysql-jdbc
-  ```
-
-  - Configure will locate the driver name using Maven Central search: https://search.maven.org/, and prompt you to confirm the driver name if there are multiple matches.
-  - Run the usual `mvn clean package` or `gradle clean build` to build with the drivers included
-  - Run your Perl script the usual way:
-
-  ```bash
-  java -jar target/perlonjava-1.0-SNAPSHOT.jar myscript.pl
-  ```
-
-2. Using the Java classpath to load the drivers dynamically:
-
-  - Download the JDBC database driver jar file.
-  - Run your Perl script with the full class path including the JDBC driver:
-
-  ```bash
-  java -cp "jdbc-drivers/h2-2.2.224.jar:target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main myscript.pl
-  ```
+For detailed instructions and database connection examples, see [JDBC Database Guide](docs/JDBC_GUIDE.md).
 
 
 ### Notes

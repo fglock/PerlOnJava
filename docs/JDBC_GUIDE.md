@@ -1,5 +1,3 @@
-**Work in Progress**
-
 # JDBC Database Guide for PerlOnJava
 
 This guide explains how to use databases with PerlOnJava through the DBI module and JDBC drivers.
@@ -15,17 +13,32 @@ $dbh->do("CREATE TABLE users (id INT, name VARCHAR(50))");
 
 ## Adding JDBC Drivers
 
-Two ways to add database drivers:
+JDBC Database drivers can be added in two ways:
 
 1. Using Configure.pl:
+    - The Configure script updates the build configuration to install the JDBC database drivers in the PerlOnJava jar file
+    - It uses Maven Central search (https://search.maven.org/) to locate drivers
+    - Will prompt for confirmation if multiple matches are found
+
+Examples:
 ```bash
 ./Configure.pl --search mysql-connector-java
+./Configure.pl --search aws-mysql-jdbc
+```
+
+Then build with the drivers included:
+```bash
 mvn clean package
+# or
+gradle clean build
 ```
 
 2. Using Java classpath:
+    - Download the JDBC database driver jar file
+    - Run your Perl script with the full class path including the JDBC driver:
+
 ```bash
-java -cp "jdbc-drivers/mysql.jar:target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main script.pl
+java -cp "jdbc-drivers/h2-2.2.224.jar:target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main myscript.pl
 ```
 
 ## Database Connection Examples
@@ -81,6 +94,27 @@ my $dbh = DBI->connect(
     "&db=database_name",
     "username",
     "password"
+);
+```
+
+### Google Spanner
+```perl
+my $dbh = DBI->connect(
+    "jdbc:cloudspanner://projects/PROJECT_ID/instances/INSTANCE_ID/databases/DATABASE_ID",
+    undef,
+    undef,
+    {
+        credentials => "/path/to/credentials.json"
+    }
+);
+```
+
+### Oracle
+```perl
+my $dbh = DBI->connect(
+"jdbc:oracle:thin:@hostname:1521/service_name",
+"username",
+"password"
 );
 ```
 
@@ -214,6 +248,5 @@ for my $id (@ids) {
 
 ## See Also
 
-- [FEATURE_MATRIX.md](../FEATURE_MATRIX.md) for complete feature list
+- [FEATURE_MATRIX.md](FEATURE_MATRIX.md) for complete feature list
 - [DBI documentation](https://metacpan.org/pod/DBI) for standard DBI interface
-

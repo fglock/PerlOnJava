@@ -353,7 +353,7 @@
 
 #### Adding JDBC Drivers
 
-Please see [Adding JDBC Drivers](README.md#adding-jdbc-drivers) in README.md.
+Please see [Adding JDBC Drivers](../README.md#adding-jdbc-drivers) in README.md.
 
 #### Implemented Methods
 - `connect`
@@ -391,50 +391,8 @@ Please see [Adding JDBC Drivers](README.md#adding-jdbc-drivers) in README.md.
 #### Database Connection Strings (DSN)
 Format: `jdbc:protocol:database:host[:port][;parameters]`
 
-##### Example DSN for some Databases
-- **H2**
-  ```
-  jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1
-  jdbc:h2:file:/path/to/database
-  ```
+For database connection examples see [Database Connection Examples](JDBC_GUIDE.md#database-connection-examples) in JDBC_GUIDE.md.
 
-- **MySQL**
-  ```
-  jdbc:mysql://localhost/database_name
-  jdbc:mysql://localhost:3306/mydb
-  ```
-
-- **PostgreSQL**
-  ```
-  jdbc:postgresql://localhost/database_name
-  jdbc:postgresql://localhost:5432/postgres
-  ```
-
-- **SQLite**
-  ```
-  jdbc:sqlite:/path/to/database.db
-  ```
-
-- **BigQuery**
-  ```
-  jdbc:bigquery://project_id;OAuthType=0;OAuthServiceAcctEmail=your-service-account;OAuthPvtKeyPath=/path/to/key.json
-  ```
-
-- **Snowflake**
-  ```
-  jdbc:snowflake://account-identifier.region.snowflakecomputing.com?warehouse=warehouse_name&role=role_name&db=database_name
-  ```
-
-- **Google Spanner**
-  ```
-  jdbc:cloudspanner://projects/PROJECT_ID/instances/INSTANCE_ID/databases/DATABASE_ID;credentials=/path/to/credentials.json
-  ```
-
-- **Oracle**
-  ```
-  jdbc:oracle:thin:@hostname:1521/service_name
-  ```
-  
 
 ## Non-strict and Obsolete Features
 - ❌  **Use string as a scalar reference**: Support for scalar references from strings is not yet implemented.
