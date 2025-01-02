@@ -55,7 +55,7 @@ public class Dbi extends PerlModuleBase {
      *
      * @param args RuntimeArray containing connection parameters:
      *             [0] - DBI object
-     *             [1] - DSN (Data Source Name) in format "dbi:Driver:database:host"
+     *             [1] - DSN (Data Source Name) in format "jdbc:protocol:database:host"
      *             [2] - Username
      *             [3] - Password
      *             [4] - \%attr (optional)
@@ -64,14 +64,14 @@ public class Dbi extends PerlModuleBase {
      */
     public static RuntimeList connect(RuntimeArray args, int ctx) {
         RuntimeHash dbh = new RuntimeHash();
-        String dsn = null;
+        String jdbcUrl = null;
         try {
             if (args.size() < 4) {
                 throw new IllegalStateException("Bad number of arguments for DBI->connect");
             }
 
             // Extract connection parameters from args
-            dsn = args.get(1).toString();
+            jdbcUrl = args.get(1).toString();
             dbh.put("Username", new RuntimeScalar(args.get(2).toString()));
             dbh.put("Password", new RuntimeScalar(args.get(3).toString()));
             RuntimeScalar attr = args.get(4);   //  \%attr
@@ -84,16 +84,6 @@ public class Dbi extends PerlModuleBase {
                 dbh.setFromList(new RuntimeList(dbh, attr.hashDeref()));
             }
 
-            // Split DSN into components (format: dbi:Driver:database:host)
-            String[] dsnParts = dsn.split(":");
-            String driverClass = dsnParts[1];
-
-            // Extract database protocol from driver class name
-            String protocol = driverClass.split("\\.")[1].toLowerCase();
-
-            // Construct JDBC URL from DSN components
-            String jdbcUrl = "jdbc:" + protocol + ":" + dsnParts[2] + ":" + dsnParts[3];
-
             // Establish database connection
             Connection conn = DriverManager.getConnection(jdbcUrl, dbh.get("Username").toString(), dbh.get("Password").toString());
 
@@ -104,7 +94,7 @@ public class Dbi extends PerlModuleBase {
             dbh.put("connection", new RuntimeScalar(conn));
             dbh.put("Active", new RuntimeScalar(true));
             dbh.put("Type", new RuntimeScalar("db"));
-            dbh.put("Name", new RuntimeScalar(driverClass));
+            dbh.put("Name", new RuntimeScalar(jdbcUrl));
 
             // Create blessed reference for Perl compatibility
             RuntimeScalar dbhRef = RuntimeScalar.bless(dbh.createReference(), new RuntimeScalar("DBI"));
@@ -114,7 +104,7 @@ public class Dbi extends PerlModuleBase {
         } catch (Exception e) {
             setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
         }
-        RuntimeScalar msg = new RuntimeScalar("DBI connect('" + dsn + "','" + dbh.get("Username") + "',...) failed: " + getGlobalVariable("DBI::errstr"));
+        RuntimeScalar msg = new RuntimeScalar("DBI connect('" + jdbcUrl + "','" + dbh.get("Username") + "',...) failed: " + getGlobalVariable("DBI::errstr"));
         return handleError(dbh, msg);
     }
 

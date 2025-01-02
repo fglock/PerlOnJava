@@ -11,7 +11,7 @@ use warnings;
 #
 # # Connect to H2 database
 # my $dbh = DBI->connect(
-#     "dbi:org.h2.Driver:mem:testdb;DB_CLOSE_DELAY=-1",  # In-memory H2 database
+#     "jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1",  # In-memory H2 database
 #     "sa",                 # Default H2 username
 #     "",                   # Empty password
 #     { RaiseError => 1 }

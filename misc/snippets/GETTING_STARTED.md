@@ -46,7 +46,7 @@ print encode_json($data);
 ```perl
 use DBI;
 
-my $dbh = DBI->connect("dbi:org.h2.Driver:mem:testdb;DB_CLOSE_DELAY=-1");
+my $dbh = DBI->connect("jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1");
 $dbh->do("CREATE TABLE test (id INT, name VARCHAR(50))");
 $dbh->do("INSERT INTO test VALUES (1, 'PerlOnJava')");
 

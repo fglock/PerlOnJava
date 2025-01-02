@@ -389,50 +389,50 @@ Please see [Adding JDBC Drivers](README.md#adding-jdbc-drivers) in README.md.
 - `Database`
 
 #### Database Connection Strings (DSN)
-Format: `dbi:DriverClassName:database:host[:port][;parameters]`
+Format: `jdbc:protocol:database:host[:port][;parameters]`
 
 ##### Example DSN for some Databases
 - **H2**
   ```
-  dbi:org.h2.Driver:mem:testdb;DB_CLOSE_DELAY=-1
-  dbi:org.h2.Driver:file:/path/to/database
+  jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1
+  jdbc:h2:file:/path/to/database
   ```
 
 - **MySQL**
   ```
-  dbi:com.mysql.cj.jdbc.Driver:database_name:localhost
-  dbi:com.mysql.cj.jdbc.Driver:mydb:localhost:3306
+  jdbc:mysql://localhost/database_name
+  jdbc:mysql://localhost:3306/mydb
   ```
 
 - **PostgreSQL**
   ```
-  dbi:org.postgresql.Driver:database_name:localhost
-  dbi:org.postgresql.Driver:postgres:localhost:5432
+  jdbc:postgresql://localhost/database_name
+  jdbc:postgresql://localhost:5432/postgres
   ```
 
 - **SQLite**
   ```
-  dbi:org.sqlite.JDBC:database_file:/path/to/database.db
+  jdbc:sqlite:/path/to/database.db
   ```
 
 - **BigQuery**
   ```
-  dbi:com.simba.googlebigquery.jdbc.Driver:project_id:instance;OAuthType=0;OAuthServiceAcctEmail=your-service-account;OAuthPvtKeyPath=/path/to/key.json
+  jdbc:bigquery://project_id;OAuthType=0;OAuthServiceAcctEmail=your-service-account;OAuthPvtKeyPath=/path/to/key.json
   ```
 
 - **Snowflake**
   ```
-  dbi:net.snowflake.client.jdbc.SnowflakeDriver:database_name:account-identifier.region.snowflakecomputing.com;warehouse=warehouse_name;role=role_name
+  jdbc:snowflake://account-identifier.region.snowflakecomputing.com?warehouse=warehouse_name&role=role_name&db=database_name
   ```
 
 - **Google Spanner**
   ```
-  dbi:com.google.cloud.spanner.jdbc.JdbcDriver:projects/PROJECT_ID/instances/INSTANCE_ID/databases/DATABASE_ID;credentials=/path/to/credentials.json
+  jdbc:cloudspanner://projects/PROJECT_ID/instances/INSTANCE_ID/databases/DATABASE_ID;credentials=/path/to/credentials.json
   ```
 
 - **Oracle**
   ```
-  dbi:oracle.jdbc.driver.OracleDriver:database_name:hostname:1521;serviceName=service_name
+  jdbc:oracle:thin:@hostname:1521/service_name
   ```
   
 

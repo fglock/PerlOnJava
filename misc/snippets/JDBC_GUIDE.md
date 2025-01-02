@@ -9,7 +9,7 @@ This guide explains how to use databases with PerlOnJava through the DBI module 
 ```perl
 use DBI;
 
-my $dbh = DBI->connect("dbi:org.h2.Driver:mem:testdb;DB_CLOSE_DELAY=-1");
+my $dbh = DBI->connect("jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1");
 $dbh->do("CREATE TABLE users (id INT, name VARCHAR(50))");
 ```
 
@@ -33,16 +33,16 @@ java -cp "jdbc-drivers/mysql.jar:target/perlonjava-1.0-SNAPSHOT.jar" org.perlonj
 ### H2 Database
 ```perl
 # In-memory database
-my $dbh = DBI->connect("dbi:org.h2.Driver:mem:testdb;DB_CLOSE_DELAY=-1");
+my $dbh = DBI->connect("jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1");
 
 # File-based database
-my $dbh = DBI->connect("dbi:org.h2.Driver:file:/path/to/database");
+my $dbh = DBI->connect("jdbc:h2:file:/path/to/database");
 ```
 
 ### MySQL
 ```perl
 my $dbh = DBI->connect(
-    "dbi:com.mysql.cj.jdbc.Driver:database_name:localhost",
+    "jdbc:mysql://localhost/database_name",
     "username",
     "password"
 );
@@ -51,7 +51,7 @@ my $dbh = DBI->connect(
 ### PostgreSQL
 ```perl
 my $dbh = DBI->connect(
-    "dbi:org.postgresql.Driver:database_name:localhost:5432",
+    "jdbc:postgresql://localhost:5432/database_name",
     "username",
     "password"
 );
@@ -59,13 +59,13 @@ my $dbh = DBI->connect(
 
 ### SQLite
 ```perl
-my $dbh = DBI->connect("dbi:org.sqlite.JDBC:database_file:/path/to/database.db");
+my $dbh = DBI->connect("jdbc:sqlite:/path/to/database.db");
 ```
 
 ### BigQuery
 ```perl
 my $dbh = DBI->connect(
-    "dbi:com.simba.googlebigquery.jdbc.Driver:project_id:instance" .
+    "jdbc:bigquery://project_id" .
     ";OAuthType=0" .
     ";OAuthServiceAcctEmail=your-service-account" .
     ";OAuthPvtKeyPath=/path/to/key.json"
@@ -75,10 +75,10 @@ my $dbh = DBI->connect(
 ### Snowflake
 ```perl
 my $dbh = DBI->connect(
-    "dbi:net.snowflake.client.jdbc.SnowflakeDriver:database_name:" .
-    "account-identifier.region.snowflakecomputing.com" .
-    ";warehouse=warehouse_name" .
-    ";role=role_name",
+    "jdbc:snowflake://account-identifier.region.snowflakecomputing.com" .
+    "?warehouse=warehouse_name" .
+    "&role=role_name" .
+    "&db=database_name",
     "username",
     "password"
 );
