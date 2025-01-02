@@ -53,6 +53,8 @@
 ├── settings.gradle
 ├── examples/
 │   └── Perl example files
+├── docs/
+│   └── project documentation files
 └── misc/
     └── project notes
 ```
