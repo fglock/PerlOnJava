@@ -1,6 +1,12 @@
-## PerlOnJava Milestones
+# PerlOnJava Milestones
 
-### Completed Milestones
+# Table of Contents
+
+- [Completed Milestones](#completed-milestones)
+- [Work in progress](#work-in-progress)
+- [Upcoming Milestones](#upcoming-milestones)
+
+## Completed Milestones
 
 - **v2.1.0**: Core modules and optimization
   - Added `Getopt::Long`, `JSON` modules.
@@ -123,7 +129,40 @@
 
 - **v1.0.0**: Initial proof of concept for the parser and execution engine.
 
-### Upcoming Milestones
+
+## Work in progress
+
+- Work in progress: Compiler subsystem
+  - `lexical_subs` feature.
+  - `use VERSION`, `require VERSION`.
+  - lexical warnings.
+  - lexical features.
+  - lexical strictness.
+  - lexical utf8 source code.
+  - preprocessor `# line` directive.
+  - subroutine prototypes.
+- Work in progress: DBI subsystem
+  - Additional methods.
+- Work in progress: Overload subsystem
+  - Additional methods.
+- Work in progress: I/O subsystem
+  - in-memory I/O
+  - `socket` and related operators.
+  - `truncate`, `seek` operators.
+  - `read` operator.
+  - IO layers.
+- Work in progress: Threads subsystem
+  - Added preliminary docs.
+  - Plan for fork emulation, `multiplicity`.
+  - Adjust `exit` semantics, to exit the current thread only.
+- Feature and Warnings internals
+  - Add metadata to AST nodes.
+  - This can be used to add context to `EvalOperatorNode` for example.
+- CPAN support
+  - port `cpan`, `prove`.
+
+
+## Upcoming Milestones
 
 - **v2.2.0**: Core modules
   - Perl version is now v5.40.0
@@ -134,26 +173,6 @@
   - Added `Configure.pl` to set compiler options and add JDBC drivers.
   - Added Links to Perl on JVM resources in README - https://github.com/fglock/PerlOnJava/tree/master#additional-information-and-resources
   - Planned release date: 2025-02-10
-  - Work in progress:
-    - `lexical_subs` feature.
-    - `use VERSION`, `require VERSION`.
-    - lexical warnings.
-    - lexical features.
-    - lexical strictness.
-    - lexical utf8 source code.
-    - preprocessor `# line` directive.
-    - subroutine prototypes.
-  - Work in progress: DBI subsystem
-    - Additional methods.
-  - Work in progress: Overload subsystem
-    - Additional methods.
-  - Work in progress: I/O subsystem
-    - in-memory I/O
-    - `socket` and related operators.
-    - `truncate`, `seek` operators.
-    - `read` operator.
-  - Work in progress: Threads subsystem
-    - Added preliminary docs.
 
 - **v3.0.0**: Concurrency and Security Features
   - Add support for concurrency and parallelism, such as threads and async/await.

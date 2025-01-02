@@ -35,17 +35,4 @@ public class EvalOperatorNode extends OperatorNode {
     public ScopedSymbolTable getSymbolTable() {
         return symbolTable;
     }
-
-    /**
-     * Accepts a visitor that performs some operation on this node.
-     * This method is part of the Visitor design pattern, which allows
-     * for defining new operations on the AST nodes without changing
-     * the node classes.
-     *
-     * @param visitor the visitor that will perform the operation on this node
-     */
-    @Override
-    public void accept(Visitor visitor) {
-        visitor.visit(this);
-    }
 }
