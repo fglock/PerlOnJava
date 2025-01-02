@@ -182,8 +182,9 @@
   - Added `URI::Escape` module.
   - Added command line switches: `-S`.
   - Added low-precedence xor `^^` operator.
-  - Added `Configure.pl` to set compiler options and add JDBC drivers.
+  - Added [Configure.pl](Configure.pl) to set compiler options and add JDBC drivers.
   - Added Links to Perl on JVM resources in README - https://github.com/fglock/PerlOnJava/tree/master#additional-information-and-resources
+  - Added [SUPPORT.md](SUPPORT.md)
   - Planned release date: 2025-02-10
 
 - **v3.0.0**: Concurrency and Security Features
