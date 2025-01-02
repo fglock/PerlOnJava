@@ -3,9 +3,9 @@
 ## Getting Help
 
 ### Documentation
-- [README.md](README.md) - Project overview and setup instructions
+- [README.md](../README.md) - Project overview and setup instructions
 - [FEATURE_MATRIX.md](FEATURE_MATRIX.md) - Detailed feature compatibility list
-- [MILESTONES.md](MILESTONES.md) - Project roadmap and version history
+- [MILESTONES.md](../MILESTONES.md) - Project roadmap and version history
 
 ### Community Resources
 - GitHub Issues: Technical questions and bug reports
@@ -120,4 +120,4 @@ Include:
 
 ## License
 
-This project is licensed under the Perl Artistic License 2.0. See [LICENSE](LICENSE.md) for details.
+This project is licensed under the Perl Artistic License 2.0. See [LICENSE](../LICENSE.md) for details.

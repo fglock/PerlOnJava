@@ -12,7 +12,7 @@ This project presents a Perl compiler that compiles Perl into Java bytecode and 
 6. [Debugging Tools](#debugging-tools)
 7. [Internal Modules](#internal-modules)
 8. [Milestones](#milestones)
-9. [Support and Contribution Guide](SUPPORT.md)
+9. [Support and Contribution Guide](docs/SUPPORT.md)
 10. [License](#license)
 11. [Additional Information and Resources](#additional-information-and-resources)
 
@@ -29,7 +29,7 @@ This project aims to develop a Perl compiler that translates Perl code into Java
 - **Statements, Data Types, and Call Context**: Handles common Perl statements, data types, and maintains Perl's context sensitivity.
 - **Java Scripting API (JSR 223)**: Enables Perl scripts to be executed within Java applications using the `ScriptEngine` interface.
 
-For a detailed feature list, see the [FEATURE_MATRIX.md](FEATURE_MATRIX.md).
+For a detailed feature list, see the [FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md).
 
 ### Current Limitations
 
@@ -303,7 +303,7 @@ This project is licensed under the Perl Artistic License 2.0 - see the [LICENSE]
 
 - Nikos Vaggalis, 2024 [Flavio Glock On Perl, Java, Compilers And Virtual Machines](https://www.i-programmer.info/professional-programmer/103-i-programmer/17491-flavio-glock-on-perl-java-compilers-and-virtual-machines.html).
 
-- For more details on the relationship with the ["Perlito5" Perl to Java compiler and Perl to JavaScript compiler](https://github.com/fglock/Perlito), including its influence on this project and how it complements the PerlOnJava Perl Compiler, see [RELATION_WITH_PERLITO_COMPILER.md](misc/RELATION_WITH_PERLITO_COMPILER.md). This document provides insights into the historical context and technical decisions that shaped the development of this compiler.
+- For more details on the relationship with the ["Perlito5" Perl to Java compiler and Perl to JavaScript compiler](https://github.com/fglock/Perlito), including its influence on this project and how it complements the PerlOnJava Perl Compiler, see [RELATION_WITH_PERLITO_COMPILER.md](docs/RELATION_WITH_PERLITO_COMPILER.md). This document provides insights into the historical context and technical decisions that shaped the development of this compiler.
 
 
 ![Java CI with Maven](https://github.com/fglock/PerlOnJava/workflows/Java%20CI%20with%20Maven/badge.svg)
