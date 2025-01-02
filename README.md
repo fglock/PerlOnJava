@@ -12,8 +12,9 @@ This project presents a Perl compiler that compiles Perl into Java bytecode and 
 6. [Debugging Tools](#debugging-tools)
 7. [Internal Modules](#internal-modules)
 8. [Milestones](#milestones)
-9. [License](#license)
-10. [Additional Information and Resources](#additional-information-and-resources)
+9. [Support and Contribution Guide](SUPPORT.md)
+10. [License](#license)
+11. [Additional Information and Resources](#additional-information-and-resources)
 
 ## Introduction
 
