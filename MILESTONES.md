@@ -132,7 +132,7 @@
 
 ## Work in progress
 
-- Work in progress: Compiler subsystem
+- Compiler subsystem
   - `lexical_subs` feature.
   - `use VERSION`, `require VERSION`.
   - lexical warnings.
@@ -141,25 +141,31 @@
   - lexical utf8 source code.
   - preprocessor `# line` directive.
   - subroutine prototypes.
-- Work in progress: DBI subsystem
+  - `goto` special cases - for `Text::Balanced`.
+  - indirect object special cases - for `GetOpt::Long`.
+  - Here documents.
+- DBI subsystem
   - Additional methods.
-- Work in progress: Overload subsystem
+- Overload subsystem
   - Additional methods.
-- Work in progress: I/O subsystem
+- I/O subsystem
   - in-memory I/O
   - `socket` and related operators.
   - `truncate`, `seek` operators.
   - `read` operator.
   - IO layers.
-- Work in progress: Threads subsystem
+  - Experiment with memory-mapped I/O.
+- Threads subsystem
   - Added preliminary docs.
-  - Plan for fork emulation, `multiplicity`.
+  - Plan for fork emulation, interpreter clone.
+  - Plan for `multiplicity`.
   - Adjust `exit` semantics, to exit the current thread only.
 - Feature and Warnings internals
   - Add metadata to AST nodes.
   - This can be used to add context to `EvalOperatorNode` for example.
 - CPAN support
-  - port `cpan`, `prove`.
+  - Port `cpan`, `prove`.
+  - Add module testing for PerlOnJava core modules.
 
 
 ## Upcoming Milestones
