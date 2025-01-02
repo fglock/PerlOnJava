@@ -160,6 +160,7 @@
   - Plan for fork emulation, interpreter clone.
   - Plan for `multiplicity`.
   - Adjust `exit` semantics, to exit the current thread only.
+  - Add `ThreadLocal` to global variables and caches. Provide tear down hooks to clean up; use `remove()` - for example in `InheritanceResolver`
 - Feature and Warnings internals
   - Add metadata to AST nodes.
   - This can be used to add context to `EvalOperatorNode` for example.
