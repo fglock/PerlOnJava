@@ -144,6 +144,8 @@
   - `goto` special cases - for `Text::Balanced`.
   - indirect object special cases - for `GetOpt::Long`.
   - Here documents.
+  - Implement aliasing in `for`.
+  - Implement localization of regex variables.
 - DBI subsystem
   - Additional methods.
 - Overload subsystem
@@ -160,13 +162,16 @@
   - Plan for fork emulation, interpreter clone.
   - Plan for `multiplicity`.
   - Adjust `exit` semantics, to exit the current thread only.
-  - Add `ThreadLocal` to global variables and caches. Provide tear down hooks to clean up; use `remove()` - for example in `InheritanceResolver`
+  - Add `ThreadLocal` to global variables, special variables (like regex, current directory, current handle, ENV), and caches (like `InheritanceResolver`). Provide tear down hooks to clean up; use `remove()`.
 - Feature and Warnings internals
   - Add metadata to AST nodes.
   - This can be used to add context to `EvalOperatorNode` for example.
 - CPAN support
   - Port `cpan`, `prove`.
   - Add module testing for PerlOnJava core modules.
+- Optimization
+  - Inline `map` and related blocks.
+  - Inline constant subroutines.
 
 
 ## Upcoming Milestones
