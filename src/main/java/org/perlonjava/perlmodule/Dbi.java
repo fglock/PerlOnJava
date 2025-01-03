@@ -3,6 +3,7 @@ package org.perlonjava.perlmodule;
 import org.perlonjava.runtime.*;
 
 import java.sql.*;
+import java.util.Enumeration;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
@@ -61,6 +62,9 @@ public class Dbi extends PerlModuleBase {
             dbi.registerMethod("ping", null);
             dbi.registerMethod("trace", null);
             dbi.registerMethod("trace_msg", null);
+            dbi.registerMethod("available_drivers", null);
+            dbi.registerMethod("data_sources", null);
+            dbi.registerMethod("get_info", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing DBI method: " + e.getMessage());
         }
@@ -936,6 +940,80 @@ public class Dbi extends PerlModuleBase {
         }
 
         return scalarTrue.getList();
+    }
+
+    public static RuntimeList available_drivers(RuntimeArray args, int ctx) {
+        RuntimeArray drivers = new RuntimeArray();
+        try {
+            Enumeration<Driver> driverList = DriverManager.getDrivers();
+            while (driverList.hasMoreElements()) {
+                Driver driver = driverList.nextElement();
+                RuntimeArray.push(drivers, new RuntimeScalar(driver.getClass().getName()));
+            }
+        } catch (Exception e) {
+            // Return empty list if error occurs
+        }
+        return drivers.getList();
+    }
+
+    public static RuntimeList data_sources(RuntimeArray args, int ctx) {
+        RuntimeArray sources = new RuntimeArray();
+        String driverClass = args.size() > 0 ? args.get(0).toString() : null;
+
+        try {
+            if (driverClass != null) {
+                // Load specific driver
+                Class.forName(driverClass);
+            }
+
+            // Get registered drivers
+            Enumeration<Driver> drivers = DriverManager.getDrivers();
+            while (drivers.hasMoreElements()) {
+                Driver driver = drivers.nextElement();
+                if (driverClass == null || driver.getClass().getName().equals(driverClass)) {
+                    // Add standard URLs for common databases
+                    if (driver.getClass().getName().contains("h2")) {
+                        RuntimeArray.push(sources, new RuntimeScalar("jdbc:h2:mem:"));
+                        RuntimeArray.push(sources, new RuntimeScalar("jdbc:h2:file:"));
+                    } else if (driver.getClass().getName().contains("mysql")) {
+                        RuntimeArray.push(sources, new RuntimeScalar("jdbc:mysql://localhost:3306/"));
+                    } else if (driver.getClass().getName().contains("postgresql")) {
+                        RuntimeArray.push(sources, new RuntimeScalar("jdbc:postgresql://localhost:5432/"));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Return current list if error occurs
+        }
+        return sources.getList();
+    }
+
+    public static RuntimeList get_info(RuntimeArray args, int ctx) {
+        RuntimeHash dbh = args.get(0).hashDeref();
+        RuntimeHash info = new RuntimeHash();
+
+        try {
+            Connection conn = (Connection) dbh.get("connection").value;
+            DatabaseMetaData meta = conn.getMetaData();
+
+            // Add standard database information using available JDBC methods
+            info.put("DBMS_NAME", RuntimeScalar.newScalarOrString(meta.getDatabaseProductName()));
+            info.put("DBMS_VERSION", RuntimeScalar.newScalarOrString(meta.getDatabaseProductVersion()));
+            info.put("DRIVER_NAME", RuntimeScalar.newScalarOrString(meta.getDriverName()));
+            info.put("DRIVER_VERSION", RuntimeScalar.newScalarOrString(meta.getDriverVersion()));
+            info.put("IDENTIFIER_QUOTE_CHAR", RuntimeScalar.newScalarOrString(meta.getIdentifierQuoteString()));
+            info.put("SQL_KEYWORDS", RuntimeScalar.newScalarOrString(meta.getSQLKeywords()));
+            info.put("MAX_CONNECTIONS", RuntimeScalar.newScalarOrString(meta.getMaxConnections()));
+            info.put("USER_NAME", RuntimeScalar.newScalarOrString(meta.getUserName()));
+            info.put("NUMERIC_FUNCTIONS", RuntimeScalar.newScalarOrString(meta.getNumericFunctions()));
+            info.put("STRING_FUNCTIONS", RuntimeScalar.newScalarOrString(meta.getStringFunctions()));
+
+            return info.createReference().getList();
+        } catch (SQLException e) {
+            setError(dbh, e);
+        }
+        RuntimeScalar msg = new RuntimeScalar("DBI get_info() failed: " + getGlobalVariable("DBI::errstr"));
+        return handleError(dbh, msg);
     }
 }
 

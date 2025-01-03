@@ -373,6 +373,7 @@ Please see [Adding JDBC Drivers](../README.md#adding-jdbc-drivers) in README.md.
 - `bind_param`, `bind_param_inout`, `bind_col`, `bind_columns`
 - `table_info`, `column_info`, `primary_key_info`, `foreign_key_info`, `type_info`
 - `clone`, `ping`, `trace`, `trace_msg`
+- `available_drivers`, `data_sources`, `get_info`
 
 #### Database Handle Attributes
 - `RaiseError`
