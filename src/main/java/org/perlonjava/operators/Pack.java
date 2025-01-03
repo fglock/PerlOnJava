@@ -26,7 +26,7 @@ public class Pack {
             throw new RuntimeException("pack: not enough arguments");
         }
 
-        RuntimeScalar templateScalar = (RuntimeScalar) args.getFirst();
+        RuntimeScalar templateScalar = args.getFirst();
         String template = templateScalar.toString();
         List<RuntimeBaseEntity> values = args.elements.subList(1, args.elements.size());
 

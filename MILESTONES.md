@@ -180,6 +180,7 @@
   - Perl version is now v5.40.0
   - Added `DBI` module with JDBC support.
   - Added `URI::Escape` module.
+  - Added `builtin` methods: `inf` `nan` `weaken` `unweaken` `is_weak` `blessed` `refaddr` `reftype` `created_as_string` `created_as_number` `stringify` `ceil` `floor` `indexed` `trim` `is_tainted`.
   - Added command line switches: `-S`.
   - Added low-precedence xor `^^` operator.
   - Added [Configure.pl](Configure.pl) to set compiler options and add JDBC drivers.

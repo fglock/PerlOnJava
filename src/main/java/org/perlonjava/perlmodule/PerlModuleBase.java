@@ -1,9 +1,6 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.GlobalVariable;
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeCode;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.*;
 
 import java.lang.reflect.Method;
 
@@ -88,6 +85,26 @@ public abstract class PerlModuleBase {
         for (String symbol : symbols) {
             RuntimeArray.push(exportArray, new RuntimeScalar(symbol));
         }
+    }
+
+    /**
+     * Defines a tag bundle of exportable symbols for the Perl module.
+     *
+     * @param tagName The name of the export tag (without the ':' prefix)
+     * @param symbols The symbols to be included in this tag bundle
+     */
+    protected void defineExportTag(String tagName, String... symbols) {
+        // Get the EXPORT_TAGS hash
+        RuntimeHash exportTags = GlobalVariable.getGlobalHash(moduleName + "::EXPORT_TAGS");
+
+        // Create new array for the tag symbols
+        RuntimeArray tagArray = new RuntimeArray();
+        for (String symbol : symbols) {
+            RuntimeArray.push(tagArray, new RuntimeScalar(symbol));
+        }
+
+        // Add the tag array to EXPORT_TAGS hash
+        exportTags.put(tagName, new RuntimeScalar(tagArray));
     }
 
     /**
