@@ -52,6 +52,11 @@ public class Dbi extends PerlModuleBase {
             dbi.registerMethod("bind_param_inout", null);
             dbi.registerMethod("bind_col", null);
             dbi.registerMethod("bind_columns", null);
+            dbi.registerMethod("table_info", null);
+            dbi.registerMethod("column_info", null);
+            dbi.registerMethod("primary_key_info", null);
+            dbi.registerMethod("foreign_key_info", null);
+            dbi.registerMethod("type_info", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing DBI method: " + e.getMessage());
         }
@@ -691,6 +696,162 @@ public class Dbi extends PerlModuleBase {
         }
         RuntimeScalar msg = new RuntimeScalar("DBI bind_columns() failed: " + getGlobalVariable("DBI::errstr"));
         return handleError(dbh, msg);
+    }
+
+    public static RuntimeList table_info(RuntimeArray args, int ctx) {
+        RuntimeHash dbh = args.get(0).hashDeref();
+        try {
+            Connection conn = (Connection) dbh.get("connection").value;
+            DatabaseMetaData metaData = conn.getMetaData();
+
+            String catalog = args.size() > 1 ? args.get(1).toString() : null;
+            String schema = args.size() > 2 ? args.get(2).toString() : null;
+            String table = args.size() > 3 ? args.get(3).toString() : "%";
+            String type = args.size() > 4 ? args.get(4).toString() : null;
+
+            ResultSet rs = metaData.getTables(catalog, schema, table, type != null ? new String[]{type} : null);
+
+            // Create statement handle for results
+            RuntimeHash sth = createMetadataResultSet(dbh, rs);
+            return sth.createReference().getList();
+        } catch (SQLException e) {
+            setError(dbh, e);
+        }
+        RuntimeScalar msg = new RuntimeScalar("DBI table_info() failed: " + getGlobalVariable("DBI::errstr"));
+        return handleError(dbh, msg);
+    }
+
+    public static RuntimeList column_info(RuntimeArray args, int ctx) {
+        RuntimeHash dbh = args.get(0).hashDeref();
+        try {
+            if (args.size() < 4) {
+                throw new IllegalStateException("Bad number of arguments for DBI->column_info");
+            }
+
+            Connection conn = (Connection) dbh.get("connection").value;
+            DatabaseMetaData metaData = conn.getMetaData();
+
+            String catalog = args.get(1).toString();
+            String schema = args.get(2).toString();
+            String table = args.get(3).toString();
+            String column = args.size() > 4 ? args.get(4).toString() : "%";
+
+            ResultSet rs = metaData.getColumns(catalog, schema, table, column);
+
+            RuntimeHash sth = createMetadataResultSet(dbh, rs);
+            return sth.createReference().getList();
+        } catch (SQLException e) {
+            setError(dbh, e);
+        }
+        RuntimeScalar msg = new RuntimeScalar("DBI column_info() failed: " + getGlobalVariable("DBI::errstr"));
+        return handleError(dbh, msg);
+    }
+
+    public static RuntimeList primary_key_info(RuntimeArray args, int ctx) {
+        RuntimeHash dbh = args.get(0).hashDeref();
+        try {
+            if (args.size() < 4) {
+                throw new IllegalStateException("Bad number of arguments for DBI->primary_key_info");
+            }
+
+            Connection conn = (Connection) dbh.get("connection").value;
+            DatabaseMetaData metaData = conn.getMetaData();
+
+            String catalog = args.get(1).toString();
+            String schema = args.get(2).toString();
+            String table = args.get(3).toString();
+
+            ResultSet rs = metaData.getPrimaryKeys(catalog, schema, table);
+
+            RuntimeHash sth = createMetadataResultSet(dbh, rs);
+            return sth.createReference().getList();
+        } catch (SQLException e) {
+            setError(dbh, e);
+        }
+        RuntimeScalar msg = new RuntimeScalar("DBI primary_key_info() failed: " + getGlobalVariable("DBI::errstr"));
+        return handleError(dbh, msg);
+    }
+
+    public static RuntimeList foreign_key_info(RuntimeArray args, int ctx) {
+        RuntimeHash dbh = args.get(0).hashDeref();
+        try {
+            if (args.size() < 7) {
+                throw new IllegalStateException("Bad number of arguments for DBI->foreign_key_info");
+            }
+
+            Connection conn = (Connection) dbh.get("connection").value;
+            DatabaseMetaData metaData = conn.getMetaData();
+
+            String pkCatalog = args.get(1).toString();
+            String pkSchema = args.get(2).toString();
+            String pkTable = args.get(3).toString();
+            String fkCatalog = args.get(4).toString();
+            String fkSchema = args.get(5).toString();
+            String fkTable = args.get(6).toString();
+
+            ResultSet rs = metaData.getCrossReference(pkCatalog, pkSchema, pkTable,
+                    fkCatalog, fkSchema, fkTable);
+
+            RuntimeHash sth = createMetadataResultSet(dbh, rs);
+            return sth.createReference().getList();
+        } catch (SQLException e) {
+            setError(dbh, e);
+        }
+        RuntimeScalar msg = new RuntimeScalar("DBI foreign_key_info() failed: " + getGlobalVariable("DBI::errstr"));
+        return handleError(dbh, msg);
+    }
+
+    public static RuntimeList type_info(RuntimeArray args, int ctx) {
+        RuntimeHash dbh = args.get(0).hashDeref();
+        try {
+            Connection conn = (Connection) dbh.get("connection").value;
+            DatabaseMetaData metaData = conn.getMetaData();
+            ResultSet rs = metaData.getTypeInfo();
+
+            RuntimeHash sth = createMetadataResultSet(dbh, rs);
+            return sth.createReference().getList();
+        } catch (SQLException e) {
+            setError(dbh, e);
+        }
+        RuntimeScalar msg = new RuntimeScalar("DBI type_info() failed: " + getGlobalVariable("DBI::errstr"));
+        return handleError(dbh, msg);
+    }
+
+    private static RuntimeHash createMetadataResultSet(RuntimeHash dbh, ResultSet rs) throws SQLException {
+        RuntimeHash sth = new RuntimeHash();
+        sth.put("Database", dbh.createReference());
+
+        // Create statement handle with result set
+        RuntimeHash result = new RuntimeHash();
+        result.put("success", scalarTrue);
+        result.put("has_resultset", scalarTrue);
+        result.put("resultset", new RuntimeScalar(rs));
+
+        // Get column metadata
+        ResultSetMetaData metaData = rs.getMetaData();
+        int columnCount = metaData.getColumnCount();
+
+        // Create arrays for column names
+        RuntimeArray columnNames = new RuntimeArray();
+        RuntimeArray columnNamesLower = new RuntimeArray();
+        RuntimeArray columnNamesUpper = new RuntimeArray();
+
+        for (int i = 1; i <= columnCount; i++) {
+            String name = metaData.getColumnLabel(i);
+            RuntimeArray.push(columnNames, new RuntimeScalar(name));
+            RuntimeArray.push(columnNamesLower, new RuntimeScalar(name.toLowerCase()));
+            RuntimeArray.push(columnNamesUpper, new RuntimeScalar(name.toUpperCase()));
+        }
+
+        sth.put("NAME", columnNames.createReference());
+        sth.put("NAME_lc", columnNamesLower.createReference());
+        sth.put("NAME_uc", columnNamesUpper.createReference());
+        sth.put("NUM_OF_FIELDS", new RuntimeScalar(columnCount));
+        sth.put("Type", new RuntimeScalar("st"));
+        sth.put("Executed", scalarTrue);
+        sth.put("execute_result", result.createReference());
+
+        return sth;
     }
 }
 
