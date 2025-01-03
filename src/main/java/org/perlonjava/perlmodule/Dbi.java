@@ -4,6 +4,7 @@ import org.perlonjava.runtime.*;
 
 import java.sql.*;
 import java.util.Enumeration;
+import java.util.Properties;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
@@ -99,13 +100,24 @@ public class Dbi extends PerlModuleBase {
             // Set dbh attributes
             dbh.put("ReadOnly", scalarFalse);
             dbh.put("AutoCommit", scalarTrue);
+
+            // Handle credentials file if specified in attributes
+            Properties props = new Properties();
+            props.setProperty("user", dbh.get("Username").toString());
+            props.setProperty("password", dbh.get("Password").toString());
+
             if (attr.type == RuntimeScalarType.HASHREFERENCE) {
-                // add attributes to dbh: RaiseError, PrintError, FetchHashKeyName
-                dbh.setFromList(new RuntimeList(dbh, attr.hashDeref()));
+                RuntimeHash attrHash = attr.hashDeref();
+                if (attrHash.get("credentials").getDefinedBoolean()) {
+                    String credentialsPath = attrHash.get("credentials").toString();
+                    props.setProperty("credentials", credentialsPath);
+                }
+                // add other attributes to dbh
+                dbh.setFromList(new RuntimeList(dbh, attrHash));
             }
 
-            // Establish database connection
-            Connection conn = DriverManager.getConnection(jdbcUrl, dbh.get("Username").toString(), dbh.get("Password").toString());
+            // Establish database connection with properties
+            Connection conn = DriverManager.getConnection(jdbcUrl, props);
 
             // Remove password from dbh hash
             dbh.delete(new RuntimeScalar("Password"));

@@ -393,9 +393,6 @@ Please see [Adding JDBC Drivers](../README.md#adding-jdbc-drivers) in README.md.
 - `NUM_OF_PARAMS`
 - `Database`
 
-#### Database Connection Strings (DSN)
-Format: `jdbc:protocol:database:host[:port][;parameters]`
-
 For database connection examples see [Database Connection Examples](JDBC_GUIDE.md#database-connection-examples) in JDBC_GUIDE.md.
 
 
