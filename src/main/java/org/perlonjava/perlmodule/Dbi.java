@@ -1101,8 +1101,7 @@ public class Dbi extends PerlModuleBase {
             if (cachedDbh != null) {
                 RuntimeHash dbh = cachedDbh.hashDeref();
                 if (dbh.get("Active").getBoolean()) {
-                    RuntimeArray pingArgs = new RuntimeArray();
-                    RuntimeArray.push(pingArgs, cachedDbh);
+                    RuntimeArray pingArgs = new RuntimeArray(cachedDbh);
                     if (ping(pingArgs, ctx).getFirst().getBoolean()) {
                         return cachedDbh.getList();
                     }

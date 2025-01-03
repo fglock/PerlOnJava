@@ -5,20 +5,50 @@ This project presents a Perl compiler that compiles Perl into Java bytecode and 
 ## Table of Contents
 
 1. [Introduction](#introduction)
-2. [Features and Limitations](#features-and-limitations)
-3. [Target Audience](#target-audience)
-4. [Build Instructions](#build-instructions)
-5. [Running the JAR File](#running-the-jar-file)
-6. [Debugging Tools](#debugging-tools)
-7. [Architecture](docs/ARCHITECTURE.md)
-8. [Milestones](MILESTONES.md)
-9. [Support and Contribution Guide](docs/SUPPORT.md)
-10. [License](#license)
-11. [Additional Information and Resources](#additional-information-and-resources)
+2. [Quick Start](#quick-start)
+3. [Features and Limitations](#features-and-limitations)
+4. [Target Audience](#target-audience)
+5. [Build Instructions](#build-instructions)
+6. [Running the JAR File](#running-the-jar-file)
+7. [Debugging Tools](#debugging-tools)
+8. [Architecture](docs/ARCHITECTURE.md)
+9. [Milestones](MILESTONES.md)
+10. [Support and Contribution Guide](docs/SUPPORT.md)
+11. [License](#license)
+12. [Additional Information and Resources](#additional-information-and-resources)
 
 ## Introduction
 
 This project aims to develop a Perl compiler that translates Perl code into Java bytecode and executes it on the Java Virtual Machine (JVM). It provides a platform for running Perl scripts in a JVM environment, facilitating integration between Perl and Java.
+
+## Quick Start
+
+1. Build the project:
+```bash
+mvn clean package
+```
+
+2. Run a simple Perl script:
+```bash
+java -jar target/perlonjava-1.0-SNAPSHOT.jar -E 'print "Hello from Perl!\n"'
+```
+
+3. Use Perl in your Java application:
+```java
+import javax.script.*;
+
+ScriptEngineManager manager = new ScriptEngineManager();
+ScriptEngine engine = manager.getEngineByName("perl");
+engine.eval("print 'Hello from Java-integrated Perl!\n'");
+```
+
+4. Connect to a database:
+```perl
+use DBI;
+my $dbh = DBI->connect("jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1");
+$dbh->do("CREATE TABLE test (id INT, name VARCHAR(50))");
+$dbh->do("INSERT INTO test VALUES (1, 'Hello World')");
+```
 
 ## Features and Limitations
 
