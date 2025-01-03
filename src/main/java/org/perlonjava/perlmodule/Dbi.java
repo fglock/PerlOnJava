@@ -45,7 +45,9 @@ public class Dbi extends PerlModuleBase {
             dbi.registerMethod("errstr", null);
             dbi.registerMethod("state", null);
             dbi.registerMethod("last_insert_id", null);
-        } catch (NoSuchMethodException e) {
+            dbi.registerMethod("begin_work", null);
+            dbi.registerMethod("commit", null);
+            dbi.registerMethod("rollback", null);        } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing DBI method: " + e.getMessage());
         }
     }
@@ -524,4 +526,55 @@ public class Dbi extends PerlModuleBase {
         getGlobalVariable("DBI::err").set(handle.get("err"));
         getGlobalVariable("DBI::errstr").set(handle.get("errstr"));
     }
+
+    public static RuntimeList begin_work(RuntimeArray args, int ctx) {
+        RuntimeHash dbh = args.get(0).hashDeref();
+        try {
+            Connection conn = (Connection) dbh.get("connection").value;
+            conn.setAutoCommit(false);
+            dbh.put("AutoCommit", scalarFalse);
+            return scalarTrue.getList();
+        } catch (SQLException e) {
+            setError(dbh, e);
+        } catch (Exception e) {
+            setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
+        }
+        RuntimeScalar msg = new RuntimeScalar("DBI begin_work() failed: " + getGlobalVariable("DBI::errstr"));
+        return handleError(dbh, msg);
+    }
+
+    public static RuntimeList commit(RuntimeArray args, int ctx) {
+        RuntimeHash dbh = args.get(0).hashDeref();
+        try {
+            Connection conn = (Connection) dbh.get("connection").value;
+            conn.commit();
+            conn.setAutoCommit(true);
+            dbh.put("AutoCommit", scalarTrue);
+            return scalarTrue.getList();
+        } catch (SQLException e) {
+            setError(dbh, e);
+        } catch (Exception e) {
+            setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
+        }
+        RuntimeScalar msg = new RuntimeScalar("DBI commit() failed: " + getGlobalVariable("DBI::errstr"));
+        return handleError(dbh, msg);
+    }
+
+    public static RuntimeList rollback(RuntimeArray args, int ctx) {
+        RuntimeHash dbh = args.get(0).hashDeref();
+        try {
+            Connection conn = (Connection) dbh.get("connection").value;
+            conn.rollback();
+            conn.setAutoCommit(true);
+            dbh.put("AutoCommit", scalarTrue);
+            return scalarTrue.getList();
+        } catch (SQLException e) {
+            setError(dbh, e);
+        } catch (Exception e) {
+            setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
+        }
+        RuntimeScalar msg = new RuntimeScalar("DBI rollback() failed: " + getGlobalVariable("DBI::errstr"));
+        return handleError(dbh, msg);
+    }
 }
+
