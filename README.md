@@ -13,10 +13,9 @@ This project presents a Perl compiler that compiles Perl into Java bytecode and 
 7. [Debugging Tools](#debugging-tools)
 8. [Architecture](docs/ARCHITECTURE.md)
 9. [Milestones](MILESTONES.md)
-10. [Support and Contribution Guide](docs/SUPPORT.md)
-11. [Community](#community)
-12. [License](#license)
-13. [Additional Information and Resources](#additional-information-and-resources)
+10. [Community and Support](#community-and-support)
+11. [License](#license)
+12. [Additional Information and Resources](#additional-information-and-resources)
 
 ## Introduction
 
@@ -199,30 +198,23 @@ Setting `lib` path with `-I` to access Perl modules is optional. Standard module
     java -jar target/perlonjava-1.0-SNAPSHOT.jar --parse -E ' print 123 '
     ```
 
-## Community
+## Community and Support
 
-### Getting Help
-- GitHub Issues: Technical questions and bug reports
-- GitHub Discussions: General project discussions and feature requests
-- Stack Overflow: Use tags `perl` and `perlonjava`
+### Quick Links
+- [Support and Contribution Guide](docs/SUPPORT.md) - Detailed guidelines for contributors
+- [GitHub Issues](https://github.com/fglock/PerlOnJava/issues) - Bug reports and feature requests
+- [GitHub Discussions](https://github.com/fglock/PerlOnJava/discussions) - Community discussions
+- Stack Overflow - Use tags `perl` and `perlonjava`
 
-### Contributing
-- Fork the repository and submit pull requests
-- Check [Support and Contribution Guide](docs/SUPPORT.md) for detailed guidelines
-- Join discussions on upcoming features and improvements
+### Getting Started with Contributing
+1. Read the [Support and Contribution Guide](docs/SUPPORT.md)
+2. Check [MILESTONES.md](MILESTONES.md) for project roadmap
+3. Review [FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md) for implementation status
 
-### Stay Updated
-- Watch the repository for release notifications
-- Follow project announcements in GitHub Discussions
-- Check [MILESTONES.md](MILESTONES.md) for roadmap updates
-
-### Report Issues
-Submit bug reports with:
-- PerlOnJava version
-- Java version
-- Operating system
-- Minimal reproducible example
-- Expected vs actual behavior
+### Release Updates
+- Watch the repository for notifications
+- Check [MILESTONES.md](MILESTONES.md) for version history
+- Follow LTS version announcements
 
 
 ## License
