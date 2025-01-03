@@ -104,7 +104,7 @@ public abstract class PerlModuleBase {
         }
 
         // Add the tag array to EXPORT_TAGS hash
-        exportTags.put(tagName, new RuntimeScalar(tagArray));
+        exportTags.put(tagName, tagArray.createReference());
     }
 
     /**
