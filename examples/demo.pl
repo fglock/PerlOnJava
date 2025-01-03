@@ -15,7 +15,7 @@
 #   These commands will compile the Java code, run the Java and Perl tests, and generate test reports.
 #
 
-# use 5.32.0;
+use 5.40.0;
 # use feature 'say';
 # use feature 'isa';
 

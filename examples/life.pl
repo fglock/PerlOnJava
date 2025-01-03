@@ -1,7 +1,10 @@
 # http://rosettacode.org/wiki/Conway's_Game_of_Life#Perl
 
-my ($width, $height, $generations) = @ARGV;
- 
+# Set default values for input parameters
+my $width = $ARGV[0] || 20;        # Default width of 20
+my $height = $ARGV[1] || 10;       # Default height of 10
+my $generations = $ARGV[2] || 50;   # Default 50 generations
+
 my $printed;
  
 sub generate {
