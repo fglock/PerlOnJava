@@ -84,7 +84,7 @@ public class ListOperators {
                 RuntimeList result = RuntimeCode.apply(perlComparatorClosure, comparatorArgs, RuntimeContextType.SCALAR);
 
                 // Retrieve the comparison result and return it as an integer
-                return result.elements.get(0).scalar().getInt();
+                return result.getFirst().getInt();
             } catch (Exception e) {
                 // Wrap any exceptions thrown by the comparator in a RuntimeException
                 throw new RuntimeException(e);
@@ -126,7 +126,7 @@ public class ListOperators {
                 RuntimeList result = RuntimeCode.apply(perlFilterClosure, filterArgs, RuntimeContextType.SCALAR);
 
                 // Check the result of the filter subroutine
-                if (result.getFirst().scalar().getBoolean()) {
+                if (result.getFirst().getBoolean()) {
                     // If the result is non-zero, add the element to the filtered list
                     // We need to clone, otherwise we would be adding an alias to the original element
                     filteredElements.add(element.clone());
