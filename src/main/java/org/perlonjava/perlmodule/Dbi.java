@@ -47,7 +47,12 @@ public class Dbi extends PerlModuleBase {
             dbi.registerMethod("last_insert_id", null);
             dbi.registerMethod("begin_work", null);
             dbi.registerMethod("commit", null);
-            dbi.registerMethod("rollback", null);        } catch (NoSuchMethodException e) {
+            dbi.registerMethod("rollback", null);
+            dbi.registerMethod("bind_param", null);
+            dbi.registerMethod("bind_param_inout", null);
+            dbi.registerMethod("bind_col", null);
+            dbi.registerMethod("bind_columns", null);
+        } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing DBI method: " + e.getMessage());
         }
     }
@@ -574,6 +579,117 @@ public class Dbi extends PerlModuleBase {
             setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
         }
         RuntimeScalar msg = new RuntimeScalar("DBI rollback() failed: " + getGlobalVariable("DBI::errstr"));
+        return handleError(dbh, msg);
+    }
+
+    public static RuntimeList bind_param(RuntimeArray args, int ctx) {
+        RuntimeHash sth = args.get(0).hashDeref();
+        RuntimeHash dbh = sth.get("Database").hashDeref();
+        try {
+            if (args.size() < 3) {
+                throw new IllegalStateException("Bad number of arguments for DBI->bind_param");
+            }
+
+            PreparedStatement stmt = (PreparedStatement) sth.get("statement").value;
+            int paramIndex = args.get(1).getInt();
+            Object value = args.get(2).value;
+
+            // Store bound parameters for later use
+            RuntimeHash boundParams = sth.get("bound_params") != null ?
+                    sth.get("bound_params").hashDeref() : new RuntimeHash();
+            boundParams.put(String.valueOf(paramIndex), new RuntimeScalar(value));
+            sth.put("bound_params", boundParams.createReference());
+
+            stmt.setObject(paramIndex, value);
+            return scalarTrue.getList();
+        } catch (SQLException e) {
+            setError(sth, e);
+        } catch (Exception e) {
+            setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
+        }
+        RuntimeScalar msg = new RuntimeScalar("DBI bind_param() failed: " + getGlobalVariable("DBI::errstr"));
+        return handleError(dbh, msg);
+    }
+
+    public static RuntimeList bind_param_inout(RuntimeArray args, int ctx) {
+        RuntimeHash sth = args.get(0).hashDeref();
+        RuntimeHash dbh = sth.get("Database").hashDeref();
+        try {
+            if (args.size() < 3) {
+                throw new IllegalStateException("Bad number of arguments for DBI->bind_param_inout");
+            }
+
+            PreparedStatement stmt = (PreparedStatement) sth.get("statement").value;
+            int paramIndex = args.get(1).getInt();
+            RuntimeScalar valueRef = args.get(2);
+
+            // Store bound parameters for later use
+            RuntimeHash boundParams = sth.get("bound_params") != null ?
+                    sth.get("bound_params").hashDeref() : new RuntimeHash();
+            boundParams.put(String.valueOf(paramIndex), valueRef);
+            sth.put("bound_params", boundParams.createReference());
+
+            stmt.setObject(paramIndex, valueRef.value);
+            return scalarTrue.getList();
+        } catch (SQLException e) {
+            setError(sth, e);
+        } catch (Exception e) {
+            setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
+        }
+        RuntimeScalar msg = new RuntimeScalar("DBI bind_param_inout() failed: " + getGlobalVariable("DBI::errstr"));
+        return handleError(dbh, msg);
+    }
+
+    public static RuntimeList bind_col(RuntimeArray args, int ctx) {
+        RuntimeHash sth = args.get(0).hashDeref();
+        RuntimeHash dbh = sth.get("Database").hashDeref();
+        try {
+            if (args.size() < 2) {
+                throw new IllegalStateException("Bad number of arguments for DBI->bind_col");
+            }
+
+            int colIndex = args.get(1).getInt();
+            RuntimeScalar valueRef = args.size() > 2 ? args.get(2) : null;
+
+            // Store bound columns for later use
+            RuntimeHash boundColumns = sth.get("bound_columns") != null ?
+                    sth.get("bound_columns").hashDeref() : new RuntimeHash();
+            boundColumns.put(String.valueOf(colIndex), valueRef);
+            sth.put("bound_columns", boundColumns.createReference());
+
+            return scalarTrue.getList();
+        } catch (Exception e) {
+            setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
+        }
+        RuntimeScalar msg = new RuntimeScalar("DBI bind_col() failed: " + getGlobalVariable("DBI::errstr"));
+        return handleError(dbh, msg);
+    }
+
+    public static RuntimeList bind_columns(RuntimeArray args, int ctx) {
+        RuntimeHash sth = args.get(0).hashDeref();
+        RuntimeHash dbh = sth.get("Database").hashDeref();
+        try {
+            if (args.size() < 2) {
+                return scalarTrue.getList();
+            }
+
+            // Clear existing bound columns
+            sth.put("bound_columns", new RuntimeHash().createReference());
+
+            // Bind each column reference
+            for (int i = 1; i < args.size(); i++) {
+                RuntimeArray bindArgs = new RuntimeArray();
+                RuntimeArray.push(bindArgs, args.get(0));  // sth
+                RuntimeArray.push(bindArgs, new RuntimeScalar(i));  // column index
+                RuntimeArray.push(bindArgs, args.get(i));  // value reference
+                bind_col(bindArgs, ctx);
+            }
+
+            return scalarTrue.getList();
+        } catch (Exception e) {
+            setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
+        }
+        RuntimeScalar msg = new RuntimeScalar("DBI bind_columns() failed: " + getGlobalVariable("DBI::errstr"));
         return handleError(dbh, msg);
     }
 }

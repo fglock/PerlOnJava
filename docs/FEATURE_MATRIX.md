@@ -370,6 +370,7 @@ Please see [Adding JDBC Drivers](../README.md#adding-jdbc-drivers) in README.md.
 - `finish`
 - `last_insert_id`
 - `begin_work`, `commit`, `rollback`
+- `bind_param`, `bind_param_inout`, `bind_col`, `bind_columns`
 
 #### Database Handle Attributes
 - `RaiseError`
