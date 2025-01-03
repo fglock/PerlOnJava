@@ -35,7 +35,7 @@ public class Operator {
         String format = runtimeScalar.toString();
 
         // Create an array to hold the arguments for the format string
-        Object[] args = new Object[list.elements.size()];
+        Object[] args = new Object[list.size()];
 
         // Regular expression to find format specifiers in the format string
         // Example of format specifiers: %d, %f, %s, etc.
@@ -46,7 +46,7 @@ public class Operator {
 
         // Iterate through the format string and map each format specifier
         // to the corresponding element in the list
-        while (matcher.find() && index < list.elements.size()) {
+        while (matcher.find() && index < list.size()) {
             // Get the current format specifier (e.g., %d, %f, %s)
             String specifier = matcher.group();
             // Get the corresponding element from the list
@@ -143,7 +143,7 @@ public class Operator {
 //        open FILEHANDLE
 
         RuntimeIO fh;
-        String mode = runtimeList.elements.get(0).toString();
+        String mode = runtimeList.getFirst().toString();
         if (runtimeList.size() > 1) {
             // 3-argument open
             String fileName = runtimeList.elements.get(1).toString();
@@ -224,7 +224,7 @@ public class Operator {
             return new RuntimeScalar(RuntimeIO.lastSelectedHandle);
         }
         RuntimeScalar fh = new RuntimeScalar(RuntimeIO.lastSelectedHandle);
-        RuntimeIO.lastSelectedHandle = ((RuntimeScalar) runtimeList.elements.getFirst()).getRuntimeIO();
+        RuntimeIO.lastSelectedHandle = runtimeList.getFirst().getRuntimeIO();
         return fh;
     }
 
@@ -449,7 +449,7 @@ public class Operator {
         int strLength = str.length();
 
         int size = list.elements.size();
-        int offset = Integer.parseInt(list.elements.get(0).toString());
+        int offset = Integer.parseInt(list.getFirst().toString());
         // If length is not provided, use the rest of the string
         int length = (size > 1) ? Integer.parseInt(list.elements.get(1).toString()) : strLength - offset;
 
@@ -502,7 +502,7 @@ public class Operator {
         int size = runtimeArray.elements.size();
 
         int offset;
-        if (!list.elements.isEmpty()) {
+        if (!list.isEmpty()) {
             RuntimeDataProvider value = list.elements.removeFirst();
             offset = value.scalar().getInt();
         } else {
@@ -536,7 +536,7 @@ public class Operator {
         length = Math.min(length, size - offset);
 
         // Remove elements
-        for (int i = 0; i < length && offset < runtimeArray.elements.size(); i++) {
+        for (int i = 0; i < length && offset < runtimeArray.size(); i++) {
             removedElements.elements.add(runtimeArray.elements.remove(offset));
         }
 
@@ -560,7 +560,7 @@ public class Operator {
 
         boolean allDeleted = true;
         RuntimeList fileList = value.getList();
-        if (fileList.elements.isEmpty()) {
+        if (fileList.isEmpty()) {
             fileList.elements.add(GlobalVariable.getGlobalVariable("main::_"));
         }
         Iterator<RuntimeScalar> iterator = fileList.iterator();
@@ -584,7 +584,7 @@ public class Operator {
             StringBuilder sb = new StringBuilder();
 
             RuntimeList list = value.getList();
-            if (list.elements.isEmpty()) {
+            if (list.isEmpty()) {
                 list.elements.add(GlobalVariable.getGlobalVariable("main::_"));
             }
 
