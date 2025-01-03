@@ -14,8 +14,9 @@ This project presents a Perl compiler that compiles Perl into Java bytecode and 
 8. [Architecture](docs/ARCHITECTURE.md)
 9. [Milestones](MILESTONES.md)
 10. [Support and Contribution Guide](docs/SUPPORT.md)
-11. [License](#license)
-12. [Additional Information and Resources](#additional-information-and-resources)
+11. [Community](#community)
+12. [License](#license)
+13. [Additional Information and Resources](#additional-information-and-resources)
 
 ## Introduction
 
@@ -197,6 +198,32 @@ Setting `lib` path with `-I` to access Perl modules is optional. Standard module
     ```bash
     java -jar target/perlonjava-1.0-SNAPSHOT.jar --parse -E ' print 123 '
     ```
+
+## Community
+
+### Getting Help
+- GitHub Issues: Technical questions and bug reports
+- GitHub Discussions: General project discussions and feature requests
+- Stack Overflow: Use tags `perl` and `perlonjava`
+
+### Contributing
+- Fork the repository and submit pull requests
+- Check [Support and Contribution Guide](docs/SUPPORT.md) for detailed guidelines
+- Join discussions on upcoming features and improvements
+
+### Stay Updated
+- Watch the repository for release notifications
+- Follow project announcements in GitHub Discussions
+- Check [MILESTONES.md](MILESTONES.md) for roadmap updates
+
+### Report Issues
+Submit bug reports with:
+- PerlOnJava version
+- Java version
+- Operating system
+- Minimal reproducible example
+- Expected vs actual behavior
+
 
 ## License
 
