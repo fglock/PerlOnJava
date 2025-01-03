@@ -57,6 +57,10 @@ public class Dbi extends PerlModuleBase {
             dbi.registerMethod("primary_key_info", null);
             dbi.registerMethod("foreign_key_info", null);
             dbi.registerMethod("type_info", null);
+            dbi.registerMethod("clone", null);
+            dbi.registerMethod("ping", null);
+            dbi.registerMethod("trace", null);
+            dbi.registerMethod("trace_msg", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing DBI method: " + e.getMessage());
         }
@@ -852,6 +856,86 @@ public class Dbi extends PerlModuleBase {
         sth.put("execute_result", result.createReference());
 
         return sth;
+    }
+
+    public static RuntimeList clone(RuntimeArray args, int ctx) {
+        RuntimeHash dbh = args.get(0).hashDeref();
+        try {
+            Connection conn = (Connection) dbh.get("connection").value;
+
+            // Create new connection with same parameters
+            RuntimeHash newDbh = new RuntimeHash();
+            newDbh.put("Username", dbh.get("Username"));
+            newDbh.put("Name", dbh.get("Name"));
+            newDbh.put("ReadOnly", dbh.get("ReadOnly"));
+            newDbh.put("AutoCommit", dbh.get("AutoCommit"));
+            newDbh.put("Type", new RuntimeScalar("db"));
+
+            // Clone the connection
+            Connection newConn = DriverManager.getConnection(
+                    dbh.get("Name").toString(),
+                    dbh.get("Username").toString(),
+                    ""  // Password omitted for security
+            );
+
+            // Set connection properties
+            newConn.setReadOnly(dbh.get("ReadOnly").getBoolean());
+            newConn.setAutoCommit(dbh.get("AutoCommit").getBoolean());
+
+            newDbh.put("connection", new RuntimeScalar(newConn));
+            newDbh.put("Active", scalarTrue);
+
+            return RuntimeScalar.bless(newDbh.createReference(), new RuntimeScalar("DBI")).getList();
+        } catch (SQLException e) {
+            setError(dbh, e);
+        }
+        RuntimeScalar msg = new RuntimeScalar("DBI clone() failed: " + getGlobalVariable("DBI::errstr"));
+        return handleError(dbh, msg);
+    }
+
+    public static RuntimeList ping(RuntimeArray args, int ctx) {
+        RuntimeHash dbh = args.get(0).hashDeref();
+        try {
+            Connection conn = (Connection) dbh.get("connection").value;
+            return new RuntimeScalar(conn.isValid(5)).getList(); // 5 second timeout
+        } catch (SQLException e) {
+            setError(dbh, e);
+            return scalarFalse.getList();
+        }
+    }
+
+    public static RuntimeList trace(RuntimeArray args, int ctx) {
+        RuntimeHash dbh = args.get(0).hashDeref();
+        int level = args.size() > 1 ? args.get(1).getInt() : 0;
+        RuntimeScalar output = args.size() > 2 ? args.get(2) : null;
+
+        // Store trace level
+        dbh.put("TraceLevel", new RuntimeScalar(level));
+        if (output != null) {
+            dbh.put("TraceOutput", output);
+        }
+
+        return new RuntimeScalar(level).getList();
+    }
+
+    public static RuntimeList trace_msg(RuntimeArray args, int ctx) {
+        RuntimeHash dbh = args.get(0).hashDeref();
+        String msg = args.get(1).toString();
+        int level = args.size() > 2 ? args.get(2).getInt() : 0;
+
+        RuntimeScalar currentLevel = dbh.get("TraceLevel");
+        if (currentLevel != null && level <= currentLevel.getInt()) {
+            RuntimeScalar output = dbh.get("TraceOutput");
+            if (output != null) {
+                // Write to custom output
+                System.out.println(msg); // Simplified - extend for custom output handling
+            } else {
+                // Default to STDERR
+                System.err.println(msg);
+            }
+        }
+
+        return scalarTrue.getList();
     }
 }
 
