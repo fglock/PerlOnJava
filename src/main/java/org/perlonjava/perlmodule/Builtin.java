@@ -32,7 +32,10 @@ public class Builtin extends PerlModuleBase {
         builtin.defineExport("EXPORT_OK",
                 "is_bool", "true", "false", "weaken", "unweaken", "is_weak",
                 "blessed", "refaddr", "reftype", "ceil", "floor",
-                "is_tainted", "trim", "indexed");
+                "is_tainted", "trim", "indexed", "inf", "nan",
+                "created_as_string", "created_as_number", "stringify"
+                // TODO "export_lexically", "load_module"
+        );
 
         // Define the :5.40 tag bundle
         builtin.defineExportTag("5.40",
@@ -57,6 +60,9 @@ public class Builtin extends PerlModuleBase {
             builtin.registerMethod("trim", "trim", "$");
             builtin.registerMethod("is_tainted", "isTainted", "$");
             builtin.registerMethod("indexed", "indexed", "@");
+            builtin.registerMethod("created_as_string", "createdAsString", "$");
+            builtin.registerMethod("created_as_number", "createdAsNumber", "$");
+            builtin.registerMethod("stringify", "stringify", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Internals method: " + e.getMessage());
         }
@@ -154,5 +160,20 @@ public class Builtin extends PerlModuleBase {
             result.add(args.get(i));
         }
         return result;
+    }
+
+    public static RuntimeList createdAsString(RuntimeArray args, int ctx) {
+        RuntimeScalar scalar = args.get(0);
+        return new RuntimeList(getScalarBoolean(scalar.type == RuntimeScalarType.STRING));
+    }
+
+    public static RuntimeList createdAsNumber(RuntimeArray args, int ctx) {
+        RuntimeScalar scalar = args.get(0);
+        return new RuntimeList(getScalarBoolean(scalar.type == RuntimeScalarType.INTEGER || scalar.type == RuntimeScalarType.DOUBLE));
+    }
+
+    public static RuntimeList stringify(RuntimeArray args, int ctx) {
+        RuntimeScalar scalar = args.get(0);
+        return new RuntimeList(new RuntimeScalar(scalar.toString()));
     }
 }
