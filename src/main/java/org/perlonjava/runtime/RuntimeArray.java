@@ -76,7 +76,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
      * @return The last value of the array, or undefined if empty.
      */
     public static RuntimeScalar pop(RuntimeArray runtimeArray) {
-        if (runtimeArray.elements.isEmpty()) {
+        if (runtimeArray.isEmpty()) {
             return new RuntimeScalar(); // Return undefined if empty
         }
         return runtimeArray.elements.removeLast();
@@ -89,7 +89,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
      * @return The first value of the array, or undefined if empty.
      */
     public static RuntimeScalar shift(RuntimeArray runtimeArray) {
-        if (runtimeArray.elements.isEmpty()) {
+        if (runtimeArray.isEmpty()) {
             return new RuntimeScalar(); // Return undefined if empty
         }
         return runtimeArray.elements.removeFirst();
@@ -150,6 +150,10 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
      */
     public int countElements() {
         return elements.size();
+    }
+
+    public boolean isEmpty() {
+        return elements.isEmpty();
     }
 
     /**

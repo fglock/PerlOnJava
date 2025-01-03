@@ -63,10 +63,10 @@ public class Time {
     public static RuntimeList localtime(RuntimeList args, int ctx) {
         RuntimeList res = new RuntimeList();
         ZonedDateTime date;
-        if (args.elements.isEmpty()) {
+        if (args.isEmpty()) {
             date = ZonedDateTime.now();
         } else {
-            long arg = ((RuntimeScalar) args.elements.getFirst()).getInt();
+            long arg = args.getFirst().getInt();
             date = Instant.ofEpochSecond(arg).atZone(ZoneId.systemDefault());
         }
         if (ctx == RuntimeContextType.SCALAR) {
@@ -97,10 +97,10 @@ public class Time {
     public static RuntimeList gmtime(RuntimeList args, int ctx) {
         RuntimeList res = new RuntimeList();
         ZonedDateTime date;
-        if (args.elements.isEmpty()) {
+        if (args.isEmpty()) {
             date = ZonedDateTime.now(ZoneOffset.UTC);
         } else {
-            long arg = ((RuntimeScalar) args.elements.getFirst()).getInt();
+            long arg = args.getFirst().getInt();
             date = Instant.ofEpochSecond(arg).atZone(ZoneId.of("UTC"));
         }
         if (ctx == RuntimeContextType.SCALAR) {

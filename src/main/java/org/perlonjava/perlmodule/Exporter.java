@@ -133,7 +133,7 @@ public class Exporter extends PerlModuleBase {
 
     public static RuntimeList exportTags(RuntimeArray args, int ctx) {
         // Extract the package name from caller
-        RuntimeScalar packageScalar = RuntimeCode.caller(new RuntimeList(), SCALAR).elements.getFirst().scalar();
+        RuntimeScalar packageScalar = RuntimeCode.caller(new RuntimeList(), SCALAR).getFirst().scalar();
         // Retrieve the export lists and tags from the package
         RuntimeArray export = GlobalVariable.getGlobalArray(packageScalar + "::EXPORT");
         RuntimeHash exportTags = GlobalVariable.getGlobalHash(packageScalar + "::EXPORT_TAGS");
@@ -148,7 +148,7 @@ public class Exporter extends PerlModuleBase {
 
     public static RuntimeList exportOkTags(RuntimeArray args, int ctx) {
         // Extract the package name from caller
-        RuntimeScalar packageScalar = RuntimeCode.caller(new RuntimeList(), SCALAR).elements.getFirst().scalar();
+        RuntimeScalar packageScalar = RuntimeCode.caller(new RuntimeList(), SCALAR).getFirst().scalar();
         // Retrieve the export lists and tags from the package
         RuntimeArray exportOk = GlobalVariable.getGlobalArray(packageScalar + "::EXPORT_OK");
         RuntimeHash exportTags = GlobalVariable.getGlobalHash(packageScalar + "::EXPORT_TAGS");

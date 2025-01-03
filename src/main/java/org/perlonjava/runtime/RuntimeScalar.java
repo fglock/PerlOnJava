@@ -177,7 +177,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public static RuntimeList reset(RuntimeList args, int ctx) {
-        if (args.elements.isEmpty()) {
+        if (args.isEmpty()) {
             RuntimeRegex.reset();
         } else {
             throw new PerlCompilerException("not implemented: reset(args)");

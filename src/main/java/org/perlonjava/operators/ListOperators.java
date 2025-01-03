@@ -126,7 +126,7 @@ public class ListOperators {
                 RuntimeList result = RuntimeCode.apply(perlFilterClosure, filterArgs, RuntimeContextType.SCALAR);
 
                 // Check the result of the filter subroutine
-                if (result.elements.getFirst().scalar().getBoolean()) {
+                if (result.getFirst().scalar().getBoolean()) {
                     // If the result is non-zero, add the element to the filtered list
                     // We need to clone, otherwise we would be adding an alias to the original element
                     filteredElements.add(element.clone());

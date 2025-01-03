@@ -126,7 +126,7 @@ public class Directory {
         if (args.elements.size() != 2) {
             throw new PerlCompilerException("Invalid arguments for seekdir");
         }
-        RuntimeScalar dirHandle = (RuntimeScalar) args.elements.getFirst();
+        RuntimeScalar dirHandle = args.getFirst();
         RuntimeScalar position = (RuntimeScalar) args.elements.getLast();
 
         if (dirHandle.type != RuntimeScalarType.GLOB) {

@@ -5,6 +5,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
+
 /**
  * The RuntimeList class simulates a Perl list.
  * It provides methods to manipulate and access a dynamic list of Perl values.
@@ -281,8 +283,8 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
      * @return The scalar value of the last element in the list.
      */
     public RuntimeScalar scalar() {
-        if (elements.isEmpty()) {
-            return new RuntimeScalar(); // Return undefined if empty
+        if (isEmpty()) {
+            return scalarUndef; // Return undefined if empty
         }
         // XXX expand the last element
         return elements.getLast().scalar();

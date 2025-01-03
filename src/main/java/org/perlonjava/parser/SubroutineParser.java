@@ -171,7 +171,7 @@ public class SubroutineParser {
 
             // Create the subroutine immediately
             RuntimeList result = runSpecialBlock(parser, "BEGIN", subroutineNode);
-            RuntimeScalar codeRef = (RuntimeScalar) result.elements.getFirst();
+            RuntimeScalar codeRef = result.getFirst();
 
             // - register the subroutine in the namespace
             String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());

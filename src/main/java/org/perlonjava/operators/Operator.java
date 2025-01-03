@@ -177,7 +177,7 @@ public class Operator {
     }
 
     public static RuntimeScalar truncate(RuntimeScalar fileHandle, RuntimeList runtimeList) {
-        long length = ((RuntimeScalar) runtimeList.elements.getFirst()).getLong();
+        long length = runtimeList.getFirst().getLong();
         if (fileHandle.type == RuntimeScalarType.STRING) {
             // Handle as filename
             String filename = fileHandle.toString();
@@ -220,7 +220,7 @@ public class Operator {
     }
 
     public static RuntimeScalar select(RuntimeList runtimeList, int ctx) {
-        if (runtimeList.elements.isEmpty()) {
+        if (runtimeList.isEmpty()) {
             return new RuntimeScalar(RuntimeIO.lastSelectedHandle);
         }
         RuntimeScalar fh = new RuntimeScalar(RuntimeIO.lastSelectedHandle);

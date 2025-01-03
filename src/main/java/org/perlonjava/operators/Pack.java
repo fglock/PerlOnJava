@@ -22,11 +22,11 @@ public class Pack {
      * @throws RuntimeException if there are not enough arguments or if an unsupported format character is encountered.
      */
     public static RuntimeScalar pack(RuntimeList args) {
-        if (args.elements.isEmpty()) {
+        if (args.isEmpty()) {
             throw new RuntimeException("pack: not enough arguments");
         }
 
-        RuntimeScalar templateScalar = (RuntimeScalar) args.elements.getFirst();
+        RuntimeScalar templateScalar = (RuntimeScalar) args.getFirst();
         String template = templateScalar.toString();
         List<RuntimeBaseEntity> values = args.elements.subList(1, args.elements.size());
 

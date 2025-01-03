@@ -281,10 +281,10 @@ public class StatementParser {
             parser.ctx.logDebug("use version: " + versionNode + " next:" + TokenUtils.peek(parser));
             // Extract version string using ExtractValueVisitor
             RuntimeList versionValues = ExtractValueVisitor.getValues(versionNode);
-            if (!versionValues.elements.isEmpty()) {
+            if (!versionValues.isEmpty()) {
                 // String versionString = versionValues.elements.getFirst().toString();
                 // parser.ctx.logDebug("use version String: " + printable(versionString));
-                versionScalar = (RuntimeScalar) versionValues.elements.getFirst();
+                versionScalar = versionValues.getFirst();
                 if (packageName == null) {
                     parser.ctx.logDebug("use version: check Perl version");
                     Universal.compareVersion(
@@ -382,7 +382,7 @@ public class StatementParser {
                 RuntimeList codeList = Universal.can(canArgs, RuntimeContextType.SCALAR);
                 ctx.logDebug("Use can(" + packageName + ", " + importMethod + "): " + codeList);
                 if (codeList.size() == 1) {
-                    RuntimeScalar code = (RuntimeScalar) codeList.elements.getFirst();
+                    RuntimeScalar code = codeList.getFirst();
                     if (code.getBoolean()) {
                         // call the method
                         ctx.logDebug("Use call : " + importMethod + "(" + args + ")");

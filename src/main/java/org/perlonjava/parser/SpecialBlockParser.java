@@ -172,7 +172,7 @@ public class SpecialBlockParser {
         GlobalVariable.getGlobalVariable("main::@").set(""); // Reset error variable
 
         if (!blockPhase.equals("BEGIN")) {
-            RuntimeScalar codeRef = (RuntimeScalar) result.elements.getFirst();
+            RuntimeScalar codeRef = result.getFirst();
             switch (blockPhase) {
                 case "END" -> saveEndBlock(codeRef);
                 case "INIT" -> saveInitBlock(codeRef);

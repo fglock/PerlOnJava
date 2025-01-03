@@ -319,8 +319,8 @@ public class RuntimeCode implements RuntimeScalarReference {
     public static RuntimeList caller(RuntimeList args, int ctx) {
         RuntimeList res = new RuntimeList();
         int frame = 0;
-        if (!args.elements.isEmpty()) {
-            frame = ((RuntimeScalar) args.elements.getFirst()).getInt();
+        if (!args.isEmpty()) {
+            frame = args.getFirst().getInt();
         }
         CallerStack.CallerInfo info = CallerStack.peek(0);
         if (info == null) {
@@ -459,14 +459,13 @@ public class RuntimeCode implements RuntimeScalarReference {
      * @return a string representing the CODE reference
      */
     public String toStringRef() {
-        String ref = "CODE(0x" + Integer.toHexString(this.hashCode()) + ")";
 
         // XXX TODO code reference can be blessed
         // return (blessId == 0
         //         ? ref
         //         : NameNormalizer.getBlessStr(blessId) + "=" + ref);
 
-        return ref;
+        return "CODE(0x" + Integer.toHexString(this.hashCode()) + ")";
     }
 
     /**
