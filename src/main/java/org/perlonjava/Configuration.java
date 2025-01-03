@@ -29,9 +29,12 @@ public final class Configuration {
         String[] parts = versionNoV.split("\\.");
         StringBuilder formattedVersion = new StringBuilder();
 
-        for (String part : parts) {
-            // Ensure each part is three digits long
-            formattedVersion.append(String.format("%03d", Integer.parseInt(part)));
+        // First part without padding
+        formattedVersion.append(parts[0]).append(".");
+
+        // Remaining parts with 3 digit padding
+        for (int i = 1; i < parts.length; i++) {
+            formattedVersion.append(String.format("%03d", Integer.parseInt(parts[i])));
         }
 
         return formattedVersion.toString();
