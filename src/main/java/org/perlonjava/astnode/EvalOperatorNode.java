@@ -1,6 +1,5 @@
 package org.perlonjava.astnode;
 
-import org.perlonjava.codegen.Visitor;
 import org.perlonjava.runtime.ScopedSymbolTable;
 
 /**

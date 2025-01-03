@@ -163,6 +163,10 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         return elements.size();
     }
 
+    public boolean isEmpty() {
+        return elements.isEmpty();
+    }
+
     /**
      * Counts the total number of elements in the list, including nested elements.
      *

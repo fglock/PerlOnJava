@@ -4,6 +4,8 @@ import org.perlonjava.runtime.*;
 
 import java.sql.*;
 import java.util.Enumeration;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Properties;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
@@ -19,6 +21,23 @@ public class Dbi extends PerlModuleBase {
 
     private static final int DBI_ERROR_CODE = 2000000000;  // Default $DBI::stderr value
     private static final String GENERAL_ERROR_STATE = "S1000";
+
+    private static final int MAX_CACHED_STATEMENTS = 100;
+    private static final int MAX_CACHED_CONNECTIONS = 10;
+
+    private static final Map<String, RuntimeScalar> CACHED_STATEMENTS = new LinkedHashMap<>(MAX_CACHED_STATEMENTS, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, RuntimeScalar> eldest) {
+            return size() > MAX_CACHED_STATEMENTS;
+        }
+    };
+
+    private static final Map<String, RuntimeScalar> CACHED_CONNECTIONS = new LinkedHashMap<>(MAX_CACHED_CONNECTIONS, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, RuntimeScalar> eldest) {
+            return size() > MAX_CACHED_CONNECTIONS;
+        }
+    };
 
     /**
      * Constructor initializes the DBI module.
@@ -66,6 +85,8 @@ public class Dbi extends PerlModuleBase {
             dbi.registerMethod("available_drivers", null);
             dbi.registerMethod("data_sources", null);
             dbi.registerMethod("get_info", null);
+            dbi.registerMethod("prepare_cached", null);
+            dbi.registerMethod("connect_cached", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing DBI method: " + e.getMessage());
         }
@@ -473,13 +494,19 @@ public class Dbi extends PerlModuleBase {
      * @return RuntimeList containing empty hash reference
      */
     public static RuntimeList disconnect(RuntimeArray args, int ctx) {
-        // Get database handle and close connection
         RuntimeHash dbh = args.get(0).hashDeref();
         try {
             Connection conn = (Connection) dbh.get("connection").value;
-            conn.close();
+            String name = dbh.get("Name").toString();
+            String username = dbh.get("Username").toString();
+            String cacheKey = name + ":" + username;
 
-            // Mark connection as inactive
+            CACHED_CONNECTIONS.remove(cacheKey);
+
+            String stmtPrefix = name + ":";
+            CACHED_STATEMENTS.entrySet().removeIf(entry -> entry.getKey().startsWith(stmtPrefix));
+
+            conn.close();
             dbh.put("Active", new RuntimeScalar(false));
 
             return new RuntimeHash().createReference().getList();
@@ -1026,6 +1053,75 @@ public class Dbi extends PerlModuleBase {
         }
         RuntimeScalar msg = new RuntimeScalar("DBI get_info() failed: " + getGlobalVariable("DBI::errstr"));
         return handleError(dbh, msg);
+    }
+
+    public static RuntimeList prepare_cached(RuntimeArray args, int ctx) {
+        RuntimeHash dbh = args.get(0).hashDeref();
+        try {
+            if (args.size() < 2) {
+                throw new IllegalStateException("Bad number of arguments for DBI->prepare_cached");
+            }
+
+            String sql = args.get(1).toString();
+            RuntimeScalar attr = args.size() > 2 ? args.get(2) : new RuntimeHash().createReference();
+
+            String cacheKey = dbh.get("Name").toString() + ":" + sql;
+
+            RuntimeScalar cachedStmt = CACHED_STATEMENTS.get(cacheKey);
+            if (cachedStmt != null && cachedStmt.hashDeref().get("Database").hashDeref().get("Active").getBoolean()) {
+                return cachedStmt.getList();
+            }
+
+            RuntimeArray prepareArgs = new RuntimeArray();
+            RuntimeArray.push(prepareArgs, args.get(0));
+            RuntimeArray.push(prepareArgs, args.get(1));
+            RuntimeArray.push(prepareArgs, attr);
+
+            RuntimeList result = prepare(prepareArgs, ctx);
+
+            CACHED_STATEMENTS.put(cacheKey, result.getFirst());
+
+            return result;
+        } catch (Exception e) {
+            setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
+            RuntimeScalar msg = new RuntimeScalar("DBI prepare_cached() failed: " + getGlobalVariable("DBI::errstr"));
+            return handleError(dbh, msg);
+        }
+    }
+
+    public static RuntimeList connect_cached(RuntimeArray args, int ctx) {
+        try {
+            if (args.size() < 4) {
+                throw new IllegalStateException("Bad number of arguments for DBI->connect_cached");
+            }
+
+            String cacheKey = args.get(1).toString() + ":" + args.get(2).toString();
+
+            RuntimeScalar cachedDbh = CACHED_CONNECTIONS.get(cacheKey);
+            if (cachedDbh != null) {
+                RuntimeHash dbh = cachedDbh.hashDeref();
+                if (dbh.get("Active").getBoolean()) {
+                    RuntimeArray pingArgs = new RuntimeArray();
+                    RuntimeArray.push(pingArgs, cachedDbh);
+                    if (ping(pingArgs, ctx).getFirst().getBoolean()) {
+                        return cachedDbh.getList();
+                    }
+                }
+            }
+
+            RuntimeList result = connect(args, ctx);
+
+            if (!result.isEmpty()) {
+                CACHED_CONNECTIONS.put(cacheKey, result.getFirst());
+            }
+
+            return result;
+        } catch (Exception e) {
+            RuntimeHash dbh = new RuntimeHash();
+            setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
+            RuntimeScalar msg = new RuntimeScalar("DBI connect_cached() failed: " + getGlobalVariable("DBI::errstr"));
+            return handleError(dbh, msg);
+        }
     }
 }
 

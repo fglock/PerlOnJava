@@ -1,5 +1,9 @@
 package org.perlonjava.runtime;
 
+import java.util.Iterator;
+
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
+
 /**
  * The RuntimeBaseEntity class serves as an abstract base class for scalar, hash,
  * and array variables in the runtime environment. It provides common functionality
@@ -59,4 +63,19 @@ public abstract class RuntimeBaseEntity implements RuntimeDataProvider, DynamicS
     public void setBlessId(int blessId) {
         this.blessId = blessId;
     }
+
+    /**
+     * Gets the first element of the list.
+     * For arrays and hashes, returns their first element using iteration.
+     *
+     * @return The first element as a RuntimeBaseEntity, or `undef` if empty
+     */
+    public RuntimeScalar getFirst() {
+        Iterator<RuntimeScalar> iterator = this.iterator();
+        if (iterator.hasNext()) {
+            return iterator.next();
+        }
+        return scalarUndef;
+    }
+
 }
