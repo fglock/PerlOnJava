@@ -172,6 +172,8 @@
 - Optimization
   - Inline `map` and related blocks.
   - Inline constant subroutines.
+- Compilation with GraalVM
+  - Added [docs/GRAALVM.md](docs/GRAALVM.md) with preliminary results.
 
 
 ## Upcoming Milestones
