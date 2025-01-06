@@ -13,10 +13,6 @@ public class For1Node extends AbstractNode {
      */
     public final boolean useNewScope;
     /**
-     * The list part of the for loop.
-     */
-    public Node variable;
-    /**
      * The variable part of the for loop.
      */
     public final Node list;
@@ -25,6 +21,10 @@ public class For1Node extends AbstractNode {
      */
     public final Node body;
     public final Node continueBlock;
+    /**
+     * The list part of the for loop.
+     */
+    public Node variable;
     /**
      * the label name for this loop
      */

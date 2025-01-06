@@ -3,6 +3,7 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
+import org.perlonjava.perlmodule.Warnings;
 import org.perlonjava.runtime.*;
 
 import java.util.ArrayList;
@@ -347,11 +348,13 @@ public class EmitVariable {
                     String var = sigil + name;
                     emitterVisitor.ctx.logDebug("MY " + operator + " " + sigil + name);
                     if (emitterVisitor.ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
-                        System.err.println(
-                                emitterVisitor.ctx.errorUtil.errorMessage(node.getIndex(),
-                                        "Warning: \"" + operator + "\" variable "
-                                                + var
-                                                + " masks earlier declaration in same ctx.symbolTable"));
+                        if (Warnings.warningManager.isWarningEnabled("redefine")) {
+                            System.err.println(
+                                    emitterVisitor.ctx.errorUtil.errorMessage(node.getIndex(),
+                                            "Warning: \"" + operator + "\" variable "
+                                                    + var
+                                                    + " masks earlier declaration in same ctx.symbolTable"));
+                        }
                     }
                     int varIndex = emitterVisitor.ctx.symbolTable.addVariable(var, operator, sigilNode);
                     // TODO optimization - SETVAR+MY can be combined

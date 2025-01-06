@@ -10,7 +10,7 @@ import org.perlonjava.runtime.WarningFlags;
  */
 public class Warnings extends PerlModuleBase {
 
-    private static final WarningFlags warningManager = new WarningFlags();
+    public static final WarningFlags warningManager = new WarningFlags();
 
     /**
      * Constructor for Warnings.

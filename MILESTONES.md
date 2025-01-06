@@ -144,7 +144,6 @@
   - `goto` special cases - for `Text::Balanced`.
   - indirect object special cases - for `GetOpt::Long`.
   - Here documents.
-  - Implement aliasing in `for`.
   - Implement localization of regex variables.
 - DBI subsystem
   - Additional methods.
@@ -181,6 +180,7 @@
 - **v2.2.0**: Core modules
   - Perl version is now v5.40.0
   - `for` loop can iterate over multiple values at the same time.
+  - `for` loop variables are aliased.
   - Added `DBI` module with JDBC support.
   - Added `URI::Escape` module.
   - Added `builtin` methods: `inf` `nan` `weaken` `unweaken` `is_weak` `blessed` `refaddr` `reftype` `created_as_string` `created_as_number` `stringify` `ceil` `floor` `indexed` `trim` `is_tainted`.

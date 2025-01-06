@@ -60,14 +60,14 @@ public class Exporter extends PerlModuleBase {
         RuntimeArray exportOk = GlobalVariable.getGlobalArray(packageScalar + "::EXPORT_OK");
         RuntimeHash exportTags = GlobalVariable.getGlobalHash(packageScalar + "::EXPORT_TAGS");
 
-            // If no specific symbols are requested, default to exporting all symbols in @EXPORT
-            if (args.size() == 0) {
-                if (export != null && export.elements != null) {
-                    args = export;
-                } else {
-                    args = new RuntimeArray();
-                }
+        // If no specific symbols are requested, default to exporting all symbols in @EXPORT
+        if (args.size() == 0) {
+            if (export != null && export.elements != null) {
+                args = export;
+            } else {
+                args = new RuntimeArray();
             }
+        }
 
         String exportLevel = GlobalVariable.getGlobalVariable("Exporter::ExportLevel").toString();
 

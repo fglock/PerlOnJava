@@ -96,7 +96,7 @@ public class WarningFlags {
      * @param category The name of the warning category.
      * @param state    The state to set (true for enabled, false for disabled).
      */
-    private void setWarningState(String category, boolean state) {
+    public void setWarningState(String category, boolean state) {
         ScopedSymbolTable symbolTable = getCurrentScope();
         if (state) {
             symbolTable.enableWarningCategory(category);
