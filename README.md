@@ -242,6 +242,8 @@ This project is licensed under the Perl Artistic License 2.0 - see the [LICENSE]
 
 - For more details on the relationship with the ["Perlito5" Perl to Java compiler and Perl to JavaScript compiler](https://github.com/fglock/Perlito), including its influence on this project and how it complements the PerlOnJava Perl Compiler, see [RELATION_WITH_PERLITO_COMPILER.md](docs/RELATION_WITH_PERLITO_COMPILER.md). This document provides insights into the historical context and technical decisions that shaped the development of this compiler.
 
+- [GraalVM Native Image Support Investigation](docs/GRAALVM.md) - Technical exploration of GraalVM integration.
+
 
 ![Java CI with Maven](https://github.com/fglock/PerlOnJava/workflows/Java%20CI%20with%20Maven/badge.svg)
 
