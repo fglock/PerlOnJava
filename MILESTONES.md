@@ -8,6 +8,19 @@
 
 ## Completed Milestones
 
+- **v2.2.0**: Core modules
+  - Perl version is now v5.40.0
+  - `for` loop can iterate over multiple values at the same time.
+  - `for` loop variables are aliased.
+  - Added `DBI` module with JDBC support.
+  - Added `URI::Escape` module.
+  - Added `builtin` methods: `inf` `nan` `weaken` `unweaken` `is_weak` `blessed` `refaddr` `reftype` `created_as_string` `created_as_number` `stringify` `ceil` `floor` `indexed` `trim` `is_tainted`.
+  - Added command line switches: `-S`.
+  - Added low-precedence xor `^^` operator.
+  - Added [Configure.pl](Configure.pl) to set compiler options and add JDBC drivers.
+  - Added Links to Perl on JVM resources in README - https://github.com/fglock/PerlOnJava/tree/master#additional-information-and-resources
+  - Added [SUPPORT.md](docs/SUPPORT.md)
+ 
 - **v2.1.0**: Core modules and optimization
   - Added `Getopt::Long`, `JSON` modules.
   - Optimized `print` to `STDOUT`/`STDERR` performance by running in a separate thread.
@@ -177,18 +190,7 @@
 
 ## Upcoming Milestones
 
-- **v2.2.0**: Core modules
-  - Perl version is now v5.40.0
-  - `for` loop can iterate over multiple values at the same time.
-  - `for` loop variables are aliased.
-  - Added `DBI` module with JDBC support.
-  - Added `URI::Escape` module.
-  - Added `builtin` methods: `inf` `nan` `weaken` `unweaken` `is_weak` `blessed` `refaddr` `reftype` `created_as_string` `created_as_number` `stringify` `ceil` `floor` `indexed` `trim` `is_tainted`.
-  - Added command line switches: `-S`.
-  - Added low-precedence xor `^^` operator.
-  - Added [Configure.pl](Configure.pl) to set compiler options and add JDBC drivers.
-  - Added Links to Perl on JVM resources in README - https://github.com/fglock/PerlOnJava/tree/master#additional-information-and-resources
-  - Added [SUPPORT.md](docs/SUPPORT.md)
+- **v2.3.0**: Next minor version
   - Planned release date: 2025-02-10
 
 - **v3.0.0**: Concurrency and Security Features
