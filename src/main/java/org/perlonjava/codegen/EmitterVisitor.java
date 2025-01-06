@@ -310,7 +310,7 @@ public class EmitterVisitor implements Visitor {
 
     @Override
     public void visit(For1Node node) {
-        EmitStatement.emitFor1(this, node);
+        EmitForeach.emitFor1(this, node);
     }
 
     @Override
