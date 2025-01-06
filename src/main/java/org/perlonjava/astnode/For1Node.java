@@ -15,7 +15,7 @@ public class For1Node extends AbstractNode {
     /**
      * The list part of the for loop.
      */
-    public final Node variable;
+    public Node variable;
     /**
      * The variable part of the for loop.
      */

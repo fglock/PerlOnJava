@@ -262,7 +262,7 @@
 - ❌  **File test operators**: Add support for stacked file test operators.
 - ✔️   **Directory operators**: `readdir`, `opendir`, `closedir`, `telldir`, `seekdir`, `rewinddir`, `mkdir`, `rmdir`, `chdir`.
 - ❌  **`for` loop variable**: The `for` loop variable is not an alias to a list element.
-- ❌  **`for` loop variable**: Iterate over multiple values at a time is not implemented.
+- ✔️   **`for` loop variable**: Iterate over multiple values at a time is implemented.
 - ✔️   **loop control operators**: `next`, `last`, `redo` with labels are implemented.
 - ❌  **loop control operators**: `next`, `last`, `redo` with expression are not implemented.
 - ❌  **loop control operators**: `next`, `last`, `redo` going to a different place in the call stack are not implemented. Label searching in the call stack is missing.

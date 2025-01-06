@@ -180,6 +180,7 @@
 
 - **v2.2.0**: Core modules
   - Perl version is now v5.40.0
+  - `for` loop can iterate over multiple values at the same time.
   - Added `DBI` module with JDBC support.
   - Added `URI::Escape` module.
   - Added `builtin` methods: `inf` `nan` `weaken` `unweaken` `is_weak` `blessed` `refaddr` `reftype` `created_as_string` `created_as_number` `stringify` `ceil` `floor` `indexed` `trim` `is_tainted`.

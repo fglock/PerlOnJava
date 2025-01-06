@@ -3,8 +3,7 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
-import org.perlonjava.astnode.For1Node;
-import org.perlonjava.astnode.ListNode;
+import org.perlonjava.astnode.*;
 import org.perlonjava.runtime.RuntimeContextType;
 
 public class EmitForeach {
@@ -20,6 +19,13 @@ public class EmitForeach {
         Label loopEnd = new Label();
         Label continueLabel = new Label();
 
+        // First declare the variables if it's a my operator
+        if (node.variable instanceof OperatorNode opNode && opNode.operator.equals("my")) {
+            node.variable.accept(emitterVisitor.with(RuntimeContextType.VOID));
+            node.variable = ((OperatorNode) node.variable).operand;
+        }
+
+        // Obtain the iterator for the list
         node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "iterator", "()Ljava/util/Iterator;", true);
 
@@ -35,10 +41,8 @@ public class EmitForeach {
         // Handle multiple variables case
         if (node.variable instanceof ListNode varList) {
             for (int i = 0; i < varList.elements.size(); i++) {
-                // Duplicate iterator for each variable except last one
-                if (i < varList.elements.size() - 1) {
-                    mv.visitInsn(Opcodes.DUP);
-                }
+                // Duplicate iterator
+                mv.visitInsn(Opcodes.DUP);
 
                 // Check if iterator has more elements
                 mv.visitInsn(Opcodes.DUP);
