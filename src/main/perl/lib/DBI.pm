@@ -26,7 +26,14 @@ sub do {
 }
 
 sub finish {
-    # placeholder
+    my ($sth) = @_;
+    $sth->{Active} = 0;
+}
+
+sub clone {
+    my ($dbh) = @_;
+    my %new_dbh = %{$dbh};  # Shallow copy
+    return bless \%new_dbh, ref($dbh);
 }
 
 sub selectrow_arrayref {
