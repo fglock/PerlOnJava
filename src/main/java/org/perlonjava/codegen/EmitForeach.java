@@ -19,8 +19,20 @@ public class EmitForeach {
         Label loopEnd = new Label();
         Label continueLabel = new Label();
 
-        // First declare the variables if it's a my operator
-        if (node.variable instanceof OperatorNode opNode && opNode.operator.equals("my")) {
+        // Handle $_ by declaring it as 'our'
+        if (node.variable instanceof OperatorNode opNode &&
+                opNode.operator.equals("$") &&
+                opNode.operand instanceof IdentifierNode idNode &&
+                idNode.name.equals("_")) {
+            int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex("$_");
+            if (varIndex == -1) {
+                node.variable = new OperatorNode("our", node.variable, node.variable.getIndex());
+            }
+        }
+
+        // First declare the variables if it's a my/our operator
+        if (node.variable instanceof OperatorNode opNode &&
+                (opNode.operator.equals("my") || opNode.operator.equals("our"))) {
             node.variable.accept(emitterVisitor.with(RuntimeContextType.VOID));
             node.variable = ((OperatorNode) node.variable).operand;
         }
@@ -64,10 +76,13 @@ public class EmitForeach {
                 mv.visitLabel(endValueLabel);
 
                 // Assign to variable
-                varList.elements.get(i).accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-                mv.visitInsn(Opcodes.SWAP);
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-                mv.visitInsn(Opcodes.POP);
+                Node varNode = varList.elements.get(i);
+                if (varNode instanceof OperatorNode operatorNode) {
+                    String varName = operatorNode.operator + ((IdentifierNode)operatorNode.operand).name;
+                    int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
+                    emitterVisitor.ctx.logDebug("FOR1 multi var name:" + varName + " index:" + varIndex);
+                    mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+                }
             }
         } else {
             // Original single variable case
@@ -75,10 +90,12 @@ public class EmitForeach {
             mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
             mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeScalar");
 
-            node.variable.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-            mv.visitInsn(Opcodes.SWAP);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-            mv.visitInsn(Opcodes.POP);
+            if (node.variable instanceof OperatorNode operatorNode) {
+                String varName = operatorNode.operator + ((IdentifierNode)operatorNode.operand).name;
+                int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
+                emitterVisitor.ctx.logDebug("FOR1 single var name:" + varName + " index:" + varIndex);
+                mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+            }
         }
 
         emitterVisitor.ctx.javaClassInfo.incrementStackLevel(1);
