@@ -37,9 +37,13 @@ java -jar target/perlonjava-1.0-SNAPSHOT.jar -E 'print "Hello from Perl!\n"'
 ```java
 import javax.script.*;
 
-ScriptEngineManager manager = new ScriptEngineManager();
-ScriptEngine engine = manager.getEngineByName("perl");
-engine.eval("print 'Hello from Java-integrated Perl!\n'");
+public class TestPerl {
+   public static void main(String[] args) throws Exception {
+      ScriptEngineManager manager = new ScriptEngineManager();
+      ScriptEngine engine = manager.getEngineByName("perl");
+      engine.eval("print 'Hello from Java-integrated Perl!\n'");
+   }
+}
 ```
 
 4. Connect to a database:

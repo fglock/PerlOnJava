@@ -55,7 +55,9 @@ sourceSets {
     main {
         resources {
             srcDir 'src/main/perl'
+            srcDir 'src/main/resources'
             include '**/*.pm'
+            include 'META-INF/services/**'
         }
     }
     test {
@@ -68,6 +70,7 @@ sourceSets {
 tasks.named('processResources', Copy) {
     from(sourceSets.main.resources.srcDirs) {
         include '**/*.pm'
+        include 'META-INF/services/**'
     }
     into("$buildDir/resources/main")
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
