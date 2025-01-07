@@ -196,7 +196,7 @@ public class NumberParser {
      */
     public static void checkNumberExponent(Parser parser, StringBuilder number) {
         // Check for exponent part
-        String exponentPart = TokenUtils.peek(parser).text;
+        String exponentPart = parser.tokens.get(parser.tokenIndex).text;
         if (exponentPart.startsWith("e") || exponentPart.startsWith("E")) {
             TokenUtils.consume(parser); // consume 'e' or 'E' and possibly more 'E10'
 
