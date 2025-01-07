@@ -192,6 +192,7 @@
 
 - **v2.3.0**: Next minor version
   - Added chained operators.
+  - Added stacked file test operators.
   - Planned release date: 2025-02-10
 
 - **v3.0.0**: Concurrency and Security Features

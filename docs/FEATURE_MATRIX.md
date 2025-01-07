@@ -259,7 +259,7 @@
 - ✔️   **File test operators**: Time-based operators (`-M`, `-A`, `-C`) return the difference in days as a floating-point number.
 - ✔️   **File test operators**: Using `_` as the argument reuses the last stat result.
 - 🚧  **File test operators**: The current implementation only works with file paths, not filehandles or dirhandles.
-- ❌  **File test operators**: Add support for stacked file test operators.
+- ✔️   **File test operators**: Support stacked file test operators.
 - ✔️   **Directory operators**: `readdir`, `opendir`, `closedir`, `telldir`, `seekdir`, `rewinddir`, `mkdir`, `rmdir`, `chdir`.
 - ✔️   **`for` loop variable**: The `for` loop variable is aliased to list elements.
 - ✔️   **`for` loop variable**: Iterate over multiple values at a time is implemented.

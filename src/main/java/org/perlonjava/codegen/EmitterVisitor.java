@@ -293,27 +293,80 @@ public class EmitterVisitor implements Visitor {
 
     void handleFileTestBuiltin(OperatorNode node) {
         // Handle:  -d FILE
-        String operator = node.operator;
         ctx.logDebug("handleFileTestBuiltin " + node);
 
-        // push the operator string to the JVM stack
-        ctx.mv.visitLdcInsn(node.operator);
-        if (node.operand instanceof IdentifierNode && ((IdentifierNode) node.operand).name.equals("_")) {
-            // use the `_` file handle
-            ctx.mv.visitMethodInsn(
-                    Opcodes.INVOKESTATIC,
-                    "org/perlonjava/operators/FileTestOperator",
-                    "fileTestLastHandle",
-                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        } else {
-            // push the file name to the JVM stack
-            node.operand.accept(this.with(RuntimeContextType.SCALAR));
-            ctx.mv.visitMethodInsn(
-                    Opcodes.INVOKESTATIC,
-                    "org/perlonjava/operators/FileTestOperator",
-                    "fileTest",
-                    "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        // Collect chained operators by traversing nested OperatorNodes
+        List<String> operators = new ArrayList<>();
+        Node currentNode = node;
+        Node fileOperand = null;
+
+        // Traverse the nested structure to collect operators and find file operand
+        while (currentNode instanceof OperatorNode opNode && opNode.operator.startsWith("-")) {
+            operators.add(0, opNode.operator);
+            if (opNode.operand instanceof ListNode listNode) {
+                currentNode = listNode.elements.getFirst();
+                // Store the file operand when we reach the innermost ListNode
+                if (!(currentNode instanceof OperatorNode)) {
+                    fileOperand = currentNode;
+                    break;
+                }
+            } else {
+                fileOperand = opNode.operand;
+                break;
+            }
         }
+
+        if (operators.size() > 1) {
+            // Handle chained operators
+
+            // Create String array at runtime
+            ctx.mv.visitIntInsn(Opcodes.BIPUSH, operators.size());
+            ctx.mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/String");
+
+            for (int i = 0; i < operators.size(); i++) {
+                ctx.mv.visitInsn(Opcodes.DUP);
+                ctx.mv.visitIntInsn(Opcodes.BIPUSH, i);
+                ctx.mv.visitLdcInsn(operators.get(i));
+                ctx.mv.visitInsn(Opcodes.AASTORE);
+            }
+
+            if (fileOperand instanceof IdentifierNode && ((IdentifierNode) fileOperand).name.equals("_")) {
+                ctx.mv.visitMethodInsn(
+                        Opcodes.INVOKESTATIC,
+                        "org/perlonjava/operators/FileTestOperator",
+                        "chainedFileTestLastHandle",
+                        "([Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                        false);
+            } else {
+                fileOperand.accept(this.with(RuntimeContextType.SCALAR));
+                ctx.mv.visitMethodInsn(
+                        Opcodes.INVOKESTATIC,
+                        "org/perlonjava/operators/FileTestOperator",
+                        "chainedFileTest",
+                        "([Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                        false);
+            }
+        } else {
+            // Original single operator logic remains unchanged
+            ctx.mv.visitLdcInsn(node.operator);
+            if (node.operand instanceof IdentifierNode && ((IdentifierNode) node.operand).name.equals("_")) {
+                ctx.mv.visitMethodInsn(
+                        Opcodes.INVOKESTATIC,
+                        "org/perlonjava/operators/FileTestOperator",
+                        "fileTestLastHandle",
+                        "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                        false);
+            } else {
+                node.operand.accept(this.with(RuntimeContextType.SCALAR));
+                ctx.mv.visitMethodInsn(
+                        Opcodes.INVOKESTATIC,
+                        "org/perlonjava/operators/FileTestOperator",
+                        "fileTest",
+                        "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                        false);
+            }
+        }
+
         if (ctx.contextType == RuntimeContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.POP);
         }

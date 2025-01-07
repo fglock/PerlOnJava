@@ -145,6 +145,20 @@ public class FileTestOperator {
         }
     }
 
+    public static RuntimeScalar chainedFileTest(String[] operators, RuntimeScalar fileHandle) {
+        for (String operator : operators) {
+            RuntimeScalar result = fileTest(operator, fileHandle);
+            if (!result.getBoolean()) {
+                return scalarFalse;
+            }
+        }
+        return scalarTrue;
+    }
+
+    public static RuntimeScalar chainedFileTestLastHandle(String[] operators) {
+        return chainedFileTest(operators, lastFileHandle);
+    }
+
     /**
      * Determines if a file is text or binary based on its content.
      *
