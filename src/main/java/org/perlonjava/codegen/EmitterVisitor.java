@@ -1,5 +1,6 @@
 package org.perlonjava.codegen;
 
+import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
@@ -8,6 +9,7 @@ import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.ScalarUtils;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -78,7 +80,61 @@ public class EmitterVisitor implements Visitor {
     void handleBinaryOperator(BinaryOperatorNode node, OperatorHandler operatorHandler) {
         EmitterVisitor scalarVisitor =
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
-        node.left.accept(scalarVisitor); // target - left parameter
+        ctx.logDebug("handleBinaryOperator: " + node.toString());
+
+        // Check for chained comparison operators like `a < b < c`
+        if (node.left instanceof BinaryOperatorNode leftBinaryOperator) {
+            BinaryOperatorNode rightBinaryOperator = node;
+
+            // Define valid operator groups
+            String[] comparisonOps = {"<", ">", "<=", ">=", "lt", "gt", "le", "ge"};
+            String[] equalityOps = {"==", "!=", "eq", "ne"};
+
+            // Check if both operators are of the same type (both comparison or both equality)
+            if ((Arrays.asList(comparisonOps).contains(rightBinaryOperator.operator) && Arrays.asList(comparisonOps).contains(leftBinaryOperator.operator))
+                    || (Arrays.asList(equalityOps).contains(rightBinaryOperator.operator) && Arrays.asList(equalityOps).contains(leftBinaryOperator.operator))) {
+
+                // For expression like: a < b < c
+                leftBinaryOperator.left.accept(scalarVisitor); // left(a) parameter
+                leftBinaryOperator.right.accept(scalarVisitor); // middle(b) parameter
+
+                // At this point stack has: [left(a), middle(b)]
+                ctx.mv.visitInsn(Opcodes.DUP_X1);  // Duplicate middle value and put under left: [middle(b), left(a), middle(b)]
+                emitOperator(leftBinaryOperator.operator, scalarVisitor);  // Evaluate first comparison (a < b): [middle(b), result1]
+
+                // Set up labels for control flow
+                Label endLabel = new Label();
+                Label falseLabel = new Label();
+
+                // Convert result to boolean and prepare for short-circuit
+                ctx.mv.visitInsn(Opcodes.DUP);    // Stack: [middle(b), result1, result1]
+                ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE,
+                        "org/perlonjava/runtime/RuntimeDataProvider",
+                        "getBoolean",
+                        "()Z",
+                        true);
+                ctx.mv.visitJumpInsn(Opcodes.IFEQ, falseLabel);  // If false, jump to falseLabel
+
+                // First comparison was true, evaluate second comparison
+                ctx.mv.visitInsn(Opcodes.POP);  // Remove result1, Stack: [middle(b)]
+                rightBinaryOperator.right.accept(scalarVisitor);  // Push right(c), Stack: [middle(b), right(c)]
+                emitOperator(rightBinaryOperator.operator, scalarVisitor);  // Evaluate (b < c)
+                ctx.mv.visitJumpInsn(Opcodes.GOTO, endLabel);
+
+                // Handle case where first comparison was false
+                ctx.mv.visitLabel(falseLabel);
+                ctx.mv.visitInsn(Opcodes.SWAP);  // Stack: [result1, middle(b)]
+                ctx.mv.visitInsn(Opcodes.POP);   // Remove unused middle value, keep false result
+
+                ctx.mv.visitLabel(endLabel);
+
+                // Clean up stack if in VOID context
+                if (ctx.contextType == RuntimeContextType.VOID) {
+                    ctx.mv.visitInsn(Opcodes.POP);
+                }
+                return;
+            }
+        }
 
         // Optimization
         if ((node.operator.equals("+")
@@ -88,6 +144,7 @@ public class EmitterVisitor implements Visitor {
             String value = right.value;
             boolean isInteger = ScalarUtils.isInteger(value);
             if (isInteger) {
+                node.left.accept(scalarVisitor); // target - left parameter
                 int intValue = Integer.parseInt(value);
                 ctx.mv.visitLdcInsn(intValue);
                 ctx.mv.visitMethodInsn(
@@ -103,6 +160,7 @@ public class EmitterVisitor implements Visitor {
             }
         }
 
+        node.left.accept(scalarVisitor); // left parameter
         node.right.accept(scalarVisitor); // right parameter
         // stack: [left, right]
         emitOperator(node.operator, this);

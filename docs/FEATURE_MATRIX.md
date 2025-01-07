@@ -125,7 +125,7 @@
 - ✔️   **Vectors**: `vec` is implemented.
 - ✔️   **Lvalue `substr`**: Assignable Substring extraction is implemented.
 - ✔️   **Lvalue `vec`**: Assignable `vec` is implemented.
-- ❌  **Chained operators**: operations like `$x < $y <= $z` not yet implemented.
+- 🚧  **Chained operators**: operations like `$x < $y <= $z` partially implemented.
 
 ## Arrays, Hashes, and Lists
 - ✔️   **Array, Hash, and List infrastructure**: Basic infrastructure for arrays, hashes, and lists is implemented.

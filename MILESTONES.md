@@ -158,6 +158,7 @@
   - indirect object special cases - for `GetOpt::Long`.
   - Here documents.
   - Implement localization of regex variables.
+  - Chained operators.
 - DBI subsystem
   - Additional methods.
 - Overload subsystem
