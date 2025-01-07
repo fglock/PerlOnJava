@@ -9,9 +9,7 @@ import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.ScalarUtils;
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 import static org.perlonjava.codegen.EmitOperator.emitOperator;
 
@@ -83,55 +81,18 @@ public class EmitterVisitor implements Visitor {
         ctx.logDebug("handleBinaryOperator: " + node.toString());
 
         // Check for chained comparison operators like `a < b < c`
-        if (node.left instanceof BinaryOperatorNode leftBinaryOperator) {
-            BinaryOperatorNode rightBinaryOperator = node;
-
-            // Define valid operator groups
+        if (node.left instanceof BinaryOperatorNode) {
             String[] comparisonOps = {"<", ">", "<=", ">=", "lt", "gt", "le", "ge"};
             String[] equalityOps = {"==", "!=", "eq", "ne"};
 
-            // Check if both operators are of the same type (both comparison or both equality)
-            if ((Arrays.asList(comparisonOps).contains(rightBinaryOperator.operator) && Arrays.asList(comparisonOps).contains(leftBinaryOperator.operator))
-                    || (Arrays.asList(equalityOps).contains(rightBinaryOperator.operator) && Arrays.asList(equalityOps).contains(leftBinaryOperator.operator))) {
+            // Check if operators are of same type
+            boolean isComparisonChain = Arrays.asList(comparisonOps).contains(node.operator);
+            boolean isEqualityChain = Arrays.asList(equalityOps).contains(node.operator);
 
-                // For expression like: a < b < c
-                leftBinaryOperator.left.accept(scalarVisitor); // left(a) parameter
-                leftBinaryOperator.right.accept(scalarVisitor); // middle(b) parameter
+            if ((isComparisonChain && isOperatorOfType(node.left, comparisonOps)) ||
+                    (isEqualityChain && isOperatorOfType(node.left, equalityOps))) {
 
-                // At this point stack has: [left(a), middle(b)]
-                ctx.mv.visitInsn(Opcodes.DUP_X1);  // Duplicate middle value and put under left: [middle(b), left(a), middle(b)]
-                emitOperator(leftBinaryOperator.operator, scalarVisitor);  // Evaluate first comparison (a < b): [middle(b), result1]
-
-                // Set up labels for control flow
-                Label endLabel = new Label();
-                Label falseLabel = new Label();
-
-                // Convert result to boolean and prepare for short-circuit
-                ctx.mv.visitInsn(Opcodes.DUP);    // Stack: [middle(b), result1, result1]
-                ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE,
-                        "org/perlonjava/runtime/RuntimeDataProvider",
-                        "getBoolean",
-                        "()Z",
-                        true);
-                ctx.mv.visitJumpInsn(Opcodes.IFEQ, falseLabel);  // If false, jump to falseLabel
-
-                // First comparison was true, evaluate second comparison
-                ctx.mv.visitInsn(Opcodes.POP);  // Remove result1, Stack: [middle(b)]
-                rightBinaryOperator.right.accept(scalarVisitor);  // Push right(c), Stack: [middle(b), right(c)]
-                emitOperator(rightBinaryOperator.operator, scalarVisitor);  // Evaluate (b < c)
-                ctx.mv.visitJumpInsn(Opcodes.GOTO, endLabel);
-
-                // Handle case where first comparison was false
-                ctx.mv.visitLabel(falseLabel);
-                ctx.mv.visitInsn(Opcodes.SWAP);  // Stack: [result1, middle(b)]
-                ctx.mv.visitInsn(Opcodes.POP);   // Remove unused middle value, keep false result
-
-                ctx.mv.visitLabel(endLabel);
-
-                // Clean up stack if in VOID context
-                if (ctx.contextType == RuntimeContextType.VOID) {
-                    ctx.mv.visitInsn(Opcodes.POP);
-                }
+                emitChainedComparison(node, scalarVisitor);
                 return;
             }
         }
@@ -164,6 +125,68 @@ public class EmitterVisitor implements Visitor {
         node.right.accept(scalarVisitor); // right parameter
         // stack: [left, right]
         emitOperator(node.operator, this);
+    }
+
+    private boolean isOperatorOfType(Node node, String[] operatorTypes) {
+        if (node instanceof BinaryOperatorNode binOp) {
+            return Arrays.asList(operatorTypes).contains(binOp.operator);
+        }
+        return false;
+    }
+
+    private void emitChainedComparison(BinaryOperatorNode node, EmitterVisitor scalarVisitor) {
+        // Collect all nodes in the chain from left to right
+        List<Node> operands = new ArrayList<>();
+        List<String> operators = new ArrayList<>();
+
+        // Build the chain
+        BinaryOperatorNode current = node;
+        while (true) {
+            operators.add(0, current.operator);
+            operands.add(0, current.right);
+
+            if (current.left instanceof BinaryOperatorNode leftNode) {
+                current = leftNode;
+            } else {
+                operands.add(0, current.left);
+                break;
+            }
+        }
+
+        // Emit first comparison
+        operands.get(0).accept(scalarVisitor);
+        operands.get(1).accept(scalarVisitor);
+        emitOperator(operators.get(0), scalarVisitor);
+
+        // Set up labels for the chain
+        Label endLabel = new Label();
+        Label falseLabel = new Label();
+
+        // Emit remaining comparisons
+        for (int i = 1; i < operators.size(); i++) {
+            // Check previous result
+            ctx.mv.visitInsn(Opcodes.DUP);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE,
+                    "org/perlonjava/runtime/RuntimeDataProvider",
+                    "getBoolean",
+                    "()Z",
+                    true);
+            ctx.mv.visitJumpInsn(Opcodes.IFEQ, falseLabel);
+
+            // Previous was true, do next comparison
+            ctx.mv.visitInsn(Opcodes.POP);
+            operands.get(i).accept(scalarVisitor);
+            operands.get(i + 1).accept(scalarVisitor);
+            emitOperator(operators.get(i), scalarVisitor);
+        }
+
+        ctx.mv.visitJumpInsn(Opcodes.GOTO, endLabel);
+        ctx.mv.visitLabel(falseLabel);
+        ctx.mv.visitLabel(endLabel);
+
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            ctx.mv.visitInsn(Opcodes.POP);
+        }
     }
 
     void handleCompoundAssignment(BinaryOperatorNode node, OperatorHandler operatorHandler) {

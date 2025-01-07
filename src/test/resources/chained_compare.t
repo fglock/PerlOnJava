@@ -47,14 +47,10 @@ $result = "cat" gt "bat" gt "ant";
 print "not " if !$result;
 say "ok # 'cat' gt 'bat' gt 'ant' is true";
 
-__END__
-
-### TODO
-
-# Mixed numeric and string comparisons (should not chain)
-$result = 5 < 6 eq "1";
-print "not " if !$result;
-say "ok # 5 < 6 eq '1' is true";
+### # Mixed numeric and string comparisons (should not chain)
+### $result = 5 < 6 eq "1";
+### print "not " if !$result;
+### say "ok # 5 < 6 eq '1' is true";
 
 # Long chains
 $result = 1 < 2 < 3 < 4 < 5;
