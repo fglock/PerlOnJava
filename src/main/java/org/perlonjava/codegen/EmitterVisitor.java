@@ -81,17 +81,11 @@ public class EmitterVisitor implements Visitor {
         ctx.logDebug("handleBinaryOperator: " + node.toString());
 
         // Check for chained comparison operators like `a < b < c`
-        if (node.left instanceof BinaryOperatorNode) {
-            String[] comparisonOps = {"<", ">", "<=", ">=", "lt", "gt", "le", "ge"};
-            String[] equalityOps = {"==", "!=", "eq", "ne"};
+        if (node.left instanceof BinaryOperatorNode leftNode) {
+            boolean isComparisonChain = isComparisonOperator(node.operator) && isComparisonOperator(leftNode.operator);
+            boolean isEqualityChain = isEqualityOperator(node.operator) && isEqualityOperator(leftNode.operator);
 
-            // Check if operators are of same type
-            boolean isComparisonChain = Arrays.asList(comparisonOps).contains(node.operator);
-            boolean isEqualityChain = Arrays.asList(equalityOps).contains(node.operator);
-
-            if ((isComparisonChain && isOperatorOfType(node.left, comparisonOps)) ||
-                    (isEqualityChain && isOperatorOfType(node.left, equalityOps))) {
-
+            if (isComparisonChain || isEqualityChain) {
                 emitChainedComparison(node, scalarVisitor);
                 return;
             }
@@ -139,6 +133,9 @@ public class EmitterVisitor implements Visitor {
         List<Node> operands = new ArrayList<>();
         List<String> operators = new ArrayList<>();
 
+        boolean isComparisonChain = isComparisonOperator(node.operator);
+        boolean isEqualityChain = isEqualityOperator(node.operator);
+
         // Build the chain
         BinaryOperatorNode current = node;
         while (true) {
@@ -146,6 +143,13 @@ public class EmitterVisitor implements Visitor {
             operands.add(0, current.right);
 
             if (current.left instanceof BinaryOperatorNode leftNode) {
+                boolean nextIsComparison = isComparisonOperator(leftNode.operator);
+                boolean nextIsEquality = isEqualityOperator(leftNode.operator);
+
+                if ((isComparisonChain && !nextIsComparison) || (isEqualityChain && !nextIsEquality)) {
+                    operands.add(0, current.left);
+                    break;
+                }
                 current = leftNode;
             } else {
                 operands.add(0, current.left);
@@ -187,6 +191,16 @@ public class EmitterVisitor implements Visitor {
         if (ctx.contextType == RuntimeContextType.VOID) {
             ctx.mv.visitInsn(Opcodes.POP);
         }
+    }
+
+    private boolean isComparisonOperator(String operator) {
+        String[] comparisonOps = {"<", ">", "<=", ">=", "lt", "gt", "le", "ge"};
+        return Arrays.asList(comparisonOps).contains(operator);
+    }
+
+    private boolean isEqualityOperator(String operator) {
+        String[] equalityOps = {"==", "!=", "eq", "ne"};
+        return Arrays.asList(equalityOps).contains(operator);
     }
 
     void handleCompoundAssignment(BinaryOperatorNode node, OperatorHandler operatorHandler) {
