@@ -158,7 +158,6 @@
   - indirect object special cases - for `GetOpt::Long`.
   - Here documents.
   - Implement localization of regex variables.
-  - Chained operators.
 - DBI subsystem
   - Additional methods.
 - Overload subsystem
@@ -192,6 +191,7 @@
 ## Upcoming Milestones
 
 - **v2.3.0**: Next minor version
+  - Added chained operators.
   - Planned release date: 2025-02-10
 
 - **v3.0.0**: Concurrency and Security Features
