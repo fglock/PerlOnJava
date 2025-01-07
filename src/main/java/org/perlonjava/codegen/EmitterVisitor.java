@@ -14,6 +14,8 @@ import java.util.*;
 import static org.perlonjava.codegen.EmitOperator.emitOperator;
 
 public class EmitterVisitor implements Visitor {
+    public static final String[] CHAIN_COMPARISON_OP = new String[]{"<", ">", "<=", ">=", "lt", "gt", "le", "ge"};
+    public static final String[] CHAIN_EQUALITY_OP = new String[]{"==", "!=", "eq", "ne"};
 
     public final EmitterContext ctx;
     /**
@@ -121,13 +123,6 @@ public class EmitterVisitor implements Visitor {
         emitOperator(node.operator, this);
     }
 
-    private boolean isOperatorOfType(Node node, String[] operatorTypes) {
-        if (node instanceof BinaryOperatorNode binOp) {
-            return Arrays.asList(operatorTypes).contains(binOp.operator);
-        }
-        return false;
-    }
-
     private void emitChainedComparison(BinaryOperatorNode node, EmitterVisitor scalarVisitor) {
         // Collect all nodes in the chain from left to right
         List<Node> operands = new ArrayList<>();
@@ -194,13 +189,11 @@ public class EmitterVisitor implements Visitor {
     }
 
     private boolean isComparisonOperator(String operator) {
-        String[] comparisonOps = {"<", ">", "<=", ">=", "lt", "gt", "le", "ge"};
-        return Arrays.asList(comparisonOps).contains(operator);
+        return Arrays.asList(CHAIN_COMPARISON_OP).contains(operator);
     }
 
     private boolean isEqualityOperator(String operator) {
-        String[] equalityOps = {"==", "!=", "eq", "ne"};
-        return Arrays.asList(equalityOps).contains(operator);
+        return Arrays.asList(CHAIN_EQUALITY_OP).contains(operator);
     }
 
     void handleCompoundAssignment(BinaryOperatorNode node, OperatorHandler operatorHandler) {
