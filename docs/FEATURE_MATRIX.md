@@ -376,7 +376,7 @@ Please see [Adding JDBC Drivers](../README.md#adding-jdbc-drivers) in README.md.
 - `table_info`, `column_info`, `primary_key_info`, `foreign_key_info`, `type_info`
 - `clone`, `ping`, `trace`, `trace_msg`
 - `available_drivers`, `data_sources`, `get_info`
-- `prepare_cached`, connect_cached`
+- `prepare_cached`, `connect_cached`
 
 #### Database Handle Attributes
 - `RaiseError`
@@ -396,7 +396,7 @@ Please see [Adding JDBC Drivers](../README.md#adding-jdbc-drivers) in README.md.
 - `NUM_OF_PARAMS`
 - `Database`
 
-For database connection examples see [Database Connection Examples](JDBC_GUIDE.md#database-connection-examples) in JDBC_GUIDE.md.
+For database connection examples see [Database Connection Examples](JDBC_GUIDE.md#database-connection-examples) in [JDBC_GUIDE.md](JDBC_GUIDE.md).
 
 
 ## Non-strict and Obsolete Features
@@ -408,7 +408,7 @@ For database connection examples see [Database Connection Examples](JDBC_GUIDE.m
 
 ## Features Probably Incompatible with JVM
 - ❌  **`DESTROY`**: Handling of object destruction may be incompatible with JVM garbage collection.
-  - For more details see: misc/snippets/auto_close.md
+  - For more details see: `misc/snippets/auto_close.md`.
   - Some modules that depend on `DESTROY`: `SelectSaver`, `File::Temp`.
 - ❌  **Perl `XS` code**: XS code interfacing with C is not supported on the JVM.
 - ❌  **Auto-close files**: File auto-close depends on handling of object destruction, may be incompatible with JVM garbage collection.
