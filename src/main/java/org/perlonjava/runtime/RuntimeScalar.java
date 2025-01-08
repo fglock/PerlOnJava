@@ -589,10 +589,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         };
     }
 
-    public RuntimeScalar ref() {
+    public static RuntimeScalar ref(RuntimeScalar runtimeScalar) {
         String str;
         int blessId;
-        switch (type) {
+        switch (runtimeScalar.type) {
             case CODE:
                 str = "CODE";
                 break;
@@ -604,7 +604,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 break;
             case REFERENCE:
                 String ref = "REF";
-                if (value instanceof RuntimeScalar scalar) {
+                if (runtimeScalar.value instanceof RuntimeScalar scalar) {
                     ref = switch (scalar.type) {
                         case VSTRING -> "VSTRING";
                         case REGEX, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE -> "REF";
@@ -612,15 +612,15 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                         default -> "SCALAR";
                     };
                 }
-                blessId = ((RuntimeBaseEntity) value).blessId;
+                blessId = ((RuntimeBaseEntity) runtimeScalar.value).blessId;
                 str = blessId == 0 ? ref : NameNormalizer.getBlessStr(blessId);
                 break;
             case ARRAYREFERENCE:
-                blessId = ((RuntimeBaseEntity) value).blessId;
+                blessId = ((RuntimeBaseEntity) runtimeScalar.value).blessId;
                 str = blessId == 0 ? "ARRAY" : NameNormalizer.getBlessStr(blessId);
                 break;
             case HASHREFERENCE:
-                blessId = ((RuntimeBaseEntity) value).blessId;
+                blessId = ((RuntimeBaseEntity) runtimeScalar.value).blessId;
                 str = blessId == 0 ? "HASH" : NameNormalizer.getBlessStr(blessId);
                 break;
             case GLOBREFERENCE:
@@ -670,8 +670,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return type != RuntimeScalarType.UNDEF;
     }
 
-    public RuntimeScalar not() {
-        return getScalarBoolean(!this.getBoolean());
+    public static RuntimeScalar not(RuntimeScalar runtimeScalar) {
+        return getScalarBoolean(!runtimeScalar.getBoolean());
     }
 
     public RuntimeScalar preAutoIncrement() {

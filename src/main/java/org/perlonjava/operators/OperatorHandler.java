@@ -148,6 +148,13 @@ public class OperatorHandler {
         put("push", "push", "org/perlonjava/runtime/RuntimeArray", "(Lorg/perlonjava/runtime/RuntimeArray;Lorg/perlonjava/runtime/RuntimeDataProvider;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("unshift", "unshift", "org/perlonjava/runtime/RuntimeArray", "(Lorg/perlonjava/runtime/RuntimeArray;Lorg/perlonjava/runtime/RuntimeDataProvider;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
+        put("undef", "undef", "org/perlonjava/runtime/RuntimeScalar", "()Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("wantarray", "wantarray", "org/perlonjava/runtime/RuntimeScalar", "(I)Lorg/perlonjava/runtime/RuntimeScalar;");
+
+        put("not", "not", "org/perlonjava/runtime/RuntimeScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("ref", "ref", "org/perlonjava/runtime/RuntimeScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("prototype", "prototype", "org/perlonjava/runtime/RuntimeCode", "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;");
+
         // List operators
         put("map", "map",
                 "org/perlonjava/operators/ListOperators",

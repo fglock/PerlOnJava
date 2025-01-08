@@ -145,15 +145,9 @@ public class EmitterVisitor implements Visitor {
             if (operator.equals("wantarray")) {
                 // Retrieve wantarray value from JVM local vars
                 mv.visitVarInsn(Opcodes.ILOAD, ctx.symbolTable.getVariableIndex("wantarray"));
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", operator, "(I)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-            } else if (operator.equals("times") || operator.equals("time")) {
-                // Call static RuntimeScalar method with no arguments; returns RuntimeList
-                emitOperator(operator, this);
-                return;
-            } else {
-                // Call static RuntimeScalar method with no arguments
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
             }
+            emitOperator(operator, this);
+            return;
         } else if (operator.equals("undef")) {
             operator = "undefine";
             node.operand.accept(this.with(RuntimeContextType.RUNTIME));
@@ -166,11 +160,8 @@ public class EmitterVisitor implements Visitor {
         } else if (operator.equals("prototype")) {
             node.operand.accept(this.with(RuntimeContextType.SCALAR));
             ctx.mv.visitLdcInsn(ctx.symbolTable.getCurrentPackage());
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/RuntimeCode",
-                    "prototype",
-                    "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                    false);
+            emitOperator(operator, this);
+            return;
         } else if ((operator.equals("stat") || operator.equals("lstat"))
                 && (node.operand instanceof IdentifierNode && ((IdentifierNode) node.operand).name.equals("_"))) {
             // `stat _`
@@ -185,6 +176,7 @@ public class EmitterVisitor implements Visitor {
                 emitOperator(operator, this);
                 return;
             } else {
+                // System.out.println("Missing operator " + operator);
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
             }
         }
