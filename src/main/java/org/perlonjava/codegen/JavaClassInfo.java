@@ -80,6 +80,11 @@ public class JavaClassInfo {
         return null;
     }
 
+    public LoopLabels findLabelByName(String labelName) {
+        // XXX TODO
+        return findLoopLabelsByName(labelName);
+    }
+
     /**
      * Increments the stack level by a specified amount.
      *

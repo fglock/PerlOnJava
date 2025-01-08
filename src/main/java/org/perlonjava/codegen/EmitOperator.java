@@ -534,4 +534,35 @@ public class EmitOperator {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
         emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
     }
+
+    static void handleGotoLabel(EmitterVisitor emitterVisitor, OperatorNode node) {
+        EmitterContext ctx = emitterVisitor.ctx;
+
+        // Extract label name from the operand
+        String labelName = null;
+        if (node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
+            Node arg = labelNode.elements.getFirst();
+            if (arg instanceof IdentifierNode) {
+                labelName = ((IdentifierNode) arg).name;
+            } else {
+                throw new RuntimeException("Invalid goto label: " + node);
+            }
+        }
+
+        if (labelName == null) {
+            throw new PerlCompilerException(node.tokenIndex, "goto must be given label", ctx.errorUtil);
+        }
+
+        // Find the label in the current scope
+        LoopLabels targetLabel = ctx.javaClassInfo.findLabelByName(labelName);
+        if (targetLabel == null) {
+            throw new PerlCompilerException(node.tokenIndex, "Can't find label " + labelName, ctx.errorUtil);
+        }
+
+        // Clean up stack before jumping
+        ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
+
+        // Jump to the target label
+        ctx.mv.visitJumpInsn(Opcodes.GOTO, targetLabel.nextLabel);  // XXX TODO
+    }
 }
