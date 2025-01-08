@@ -328,6 +328,6 @@ public class EmitterVisitor implements Visitor {
 
     @Override
     public void visit(LabelNode node) {
-        // XXX TODO
+        // XXX TODO emit the ASM label
     }
 }
