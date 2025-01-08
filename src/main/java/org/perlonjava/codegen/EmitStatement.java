@@ -6,8 +6,6 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.runtime.RuntimeContextType;
 
-import java.util.List;
-
 /**
  * The EmitStatement class is responsible for handling various control flow statements
  * and generating the corresponding bytecode using ASM.
@@ -167,73 +165,6 @@ public class EmitStatement {
 
             emitterVisitor.ctx.logDebug("FOR end");
         }
-    }
-
-    /**
-     * Emits bytecode for a block of statements.
-     *
-     * @param emitterVisitor The visitor used for code emission.
-     * @param node           The block node representing the block of statements.
-     */
-    static void emitBlock(EmitterVisitor emitterVisitor, BlockNode node) {
-        MethodVisitor mv = emitterVisitor.ctx.mv;
-
-        emitterVisitor.ctx.logDebug("generateCodeBlock start context:" + emitterVisitor.ctx.contextType);
-        emitterVisitor.ctx.symbolTable.enterScope();
-        EmitterVisitor voidVisitor =
-                emitterVisitor.with(RuntimeContextType.VOID); // statements in the middle of the block have context VOID
-        List<Node> list = node.elements;
-
-        // Create labels for the loop
-        Label redoLabel = new Label();
-        Label nextLabel = new Label();
-
-        // Setup 'local' environment if needed
-        Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv);
-
-        // Add redo label
-        mv.visitLabel(redoLabel);
-
-        // Restore 'local' environment if 'redo' was called
-        Local.localTeardown(localRecord, mv);
-
-        if (node.isLoop) {
-            emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
-                    node.labelName,
-                    nextLabel,
-                    redoLabel,
-                    nextLabel,
-                    emitterVisitor.ctx.contextType);
-        }
-
-        for (int i = 0; i < list.size(); i++) {
-            Node element = list.get(i);
-
-            DebugInfo.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
-
-            // Emit the statement with current context
-            if (i == list.size() - 1) {
-                // Special case for the last element
-                emitterVisitor.ctx.logDebug("Last element: " + element);
-                element.accept(emitterVisitor);
-            } else {
-                // General case for all other elements
-                emitterVisitor.ctx.logDebug("Element: " + element);
-                element.accept(voidVisitor);
-            }
-        }
-
-        if (node.isLoop) {
-            emitterVisitor.ctx.javaClassInfo.popLoopLabels();
-        }
-
-        // Add 'next', 'last' label
-        mv.visitLabel(nextLabel);
-
-        Local.localTeardown(localRecord, mv);
-
-        emitterVisitor.ctx.symbolTable.exitScope();
-        emitterVisitor.ctx.logDebug("generateCodeBlock end");
     }
 
     /**

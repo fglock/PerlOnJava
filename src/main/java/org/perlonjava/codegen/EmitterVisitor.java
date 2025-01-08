@@ -303,7 +303,7 @@ public class EmitterVisitor implements Visitor {
 
     @Override
     public void visit(BlockNode node) {
-        EmitStatement.emitBlock(this, node);
+        EmitBlock.emitBlock(this, node);
     }
 
     @Override
