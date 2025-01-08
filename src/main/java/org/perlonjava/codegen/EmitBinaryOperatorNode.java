@@ -99,6 +99,10 @@ public class EmitBinaryOperatorNode {
                 }
                 EmitOperator.handleRangeOperator(emitterVisitor, node);
                 return;
+            case "<", ">", "<=", ">=", "lt", "gt", "le", "ge",
+                 "==", "!=", "eq", "ne":
+                EmitOperatorChained.emitChainedComparison(emitterVisitor, node);
+                return;
         }
 
         OperatorHandler operatorHandler = OperatorHandler.get(operator);

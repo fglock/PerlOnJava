@@ -1,6 +1,5 @@
 package org.perlonjava.codegen;
 
-import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
@@ -9,14 +8,12 @@ import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.ScalarUtils;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.perlonjava.codegen.EmitOperator.emitOperator;
 
 public class EmitterVisitor implements Visitor {
-    public static final String[] CHAIN_COMPARISON_OP = new String[]{"<", ">", "<=", ">=", "lt", "gt", "le", "ge"};
-    public static final String[] CHAIN_EQUALITY_OP = new String[]{"==", "!=", "eq", "ne"};
-
     public final EmitterContext ctx;
     /**
      * Cache for EmitterVisitor instances with different ContextTypes
@@ -82,17 +79,6 @@ public class EmitterVisitor implements Visitor {
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
         ctx.logDebug("handleBinaryOperator: " + node.toString());
 
-        // Check for chained comparison operators like `a < b < c`
-        if (node.left instanceof BinaryOperatorNode leftNode) {
-            boolean isComparisonChain = isComparisonOperator(node.operator) && isComparisonOperator(leftNode.operator);
-            boolean isEqualityChain = isEqualityOperator(node.operator) && isEqualityOperator(leftNode.operator);
-
-            if (isComparisonChain || isEqualityChain) {
-                emitChainedComparison(node, scalarVisitor);
-                return;
-            }
-        }
-
         // Optimization
         if ((node.operator.equals("+")
                 || node.operator.equals("-")
@@ -121,79 +107,6 @@ public class EmitterVisitor implements Visitor {
         node.right.accept(scalarVisitor); // right parameter
         // stack: [left, right]
         emitOperator(node.operator, this);
-    }
-
-    private void emitChainedComparison(BinaryOperatorNode node, EmitterVisitor scalarVisitor) {
-        // Collect all nodes in the chain from left to right
-        List<Node> operands = new ArrayList<>();
-        List<String> operators = new ArrayList<>();
-
-        boolean isComparisonChain = isComparisonOperator(node.operator);
-        boolean isEqualityChain = isEqualityOperator(node.operator);
-
-        // Build the chain
-        BinaryOperatorNode current = node;
-        while (true) {
-            operators.add(0, current.operator);
-            operands.add(0, current.right);
-
-            if (current.left instanceof BinaryOperatorNode leftNode) {
-                boolean nextIsComparison = isComparisonOperator(leftNode.operator);
-                boolean nextIsEquality = isEqualityOperator(leftNode.operator);
-
-                if ((isComparisonChain && !nextIsComparison) || (isEqualityChain && !nextIsEquality)) {
-                    operands.add(0, current.left);
-                    break;
-                }
-                current = leftNode;
-            } else {
-                operands.add(0, current.left);
-                break;
-            }
-        }
-
-        // Emit first comparison
-        operands.get(0).accept(scalarVisitor);
-        operands.get(1).accept(scalarVisitor);
-        emitOperator(operators.get(0), scalarVisitor);
-
-        // Set up labels for the chain
-        Label endLabel = new Label();
-        Label falseLabel = new Label();
-
-        // Emit remaining comparisons
-        for (int i = 1; i < operators.size(); i++) {
-            // Check previous result
-            ctx.mv.visitInsn(Opcodes.DUP);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE,
-                    "org/perlonjava/runtime/RuntimeDataProvider",
-                    "getBoolean",
-                    "()Z",
-                    true);
-            ctx.mv.visitJumpInsn(Opcodes.IFEQ, falseLabel);
-
-            // Previous was true, do next comparison
-            ctx.mv.visitInsn(Opcodes.POP);
-            operands.get(i).accept(scalarVisitor);
-            operands.get(i + 1).accept(scalarVisitor);
-            emitOperator(operators.get(i), scalarVisitor);
-        }
-
-        ctx.mv.visitJumpInsn(Opcodes.GOTO, endLabel);
-        ctx.mv.visitLabel(falseLabel);
-        ctx.mv.visitLabel(endLabel);
-
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    private boolean isComparisonOperator(String operator) {
-        return Arrays.asList(CHAIN_COMPARISON_OP).contains(operator);
-    }
-
-    private boolean isEqualityOperator(String operator) {
-        return Arrays.asList(CHAIN_EQUALITY_OP).contains(operator);
     }
 
     void handleCompoundAssignment(BinaryOperatorNode node, OperatorHandler operatorHandler) {
@@ -289,87 +202,6 @@ public class EmitterVisitor implements Visitor {
         }
         operand.accept(this.with(RuntimeContextType.LIST));
         emitOperator(operator, this);
-    }
-
-    void handleFileTestBuiltin(OperatorNode node) {
-        // Handle:  -d FILE
-        ctx.logDebug("handleFileTestBuiltin " + node);
-
-        // Collect chained operators by traversing nested OperatorNodes
-        List<String> operators = new ArrayList<>();
-        Node currentNode = node;
-        Node fileOperand = null;
-
-        // Traverse the nested structure to collect operators and find file operand
-        while (currentNode instanceof OperatorNode opNode && opNode.operator.startsWith("-")) {
-            operators.add(0, opNode.operator);
-            if (opNode.operand instanceof ListNode listNode) {
-                currentNode = listNode.elements.getFirst();
-                // Store the file operand when we reach the innermost ListNode
-                if (!(currentNode instanceof OperatorNode)) {
-                    fileOperand = currentNode;
-                    break;
-                }
-            } else {
-                fileOperand = opNode.operand;
-                break;
-            }
-        }
-
-        if (operators.size() > 1) {
-            // Handle chained operators
-
-            // Create String array at runtime
-            ctx.mv.visitIntInsn(Opcodes.BIPUSH, operators.size());
-            ctx.mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/String");
-
-            for (int i = 0; i < operators.size(); i++) {
-                ctx.mv.visitInsn(Opcodes.DUP);
-                ctx.mv.visitIntInsn(Opcodes.BIPUSH, i);
-                ctx.mv.visitLdcInsn(operators.get(i));
-                ctx.mv.visitInsn(Opcodes.AASTORE);
-            }
-
-            if (fileOperand instanceof IdentifierNode && ((IdentifierNode) fileOperand).name.equals("_")) {
-                ctx.mv.visitMethodInsn(
-                        Opcodes.INVOKESTATIC,
-                        "org/perlonjava/operators/FileTestOperator",
-                        "chainedFileTestLastHandle",
-                        "([Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                        false);
-            } else {
-                fileOperand.accept(this.with(RuntimeContextType.SCALAR));
-                ctx.mv.visitMethodInsn(
-                        Opcodes.INVOKESTATIC,
-                        "org/perlonjava/operators/FileTestOperator",
-                        "chainedFileTest",
-                        "([Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                        false);
-            }
-        } else {
-            // Original single operator logic remains unchanged
-            ctx.mv.visitLdcInsn(node.operator);
-            if (node.operand instanceof IdentifierNode && ((IdentifierNode) node.operand).name.equals("_")) {
-                ctx.mv.visitMethodInsn(
-                        Opcodes.INVOKESTATIC,
-                        "org/perlonjava/operators/FileTestOperator",
-                        "fileTestLastHandle",
-                        "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                        false);
-            } else {
-                node.operand.accept(this.with(RuntimeContextType.SCALAR));
-                ctx.mv.visitMethodInsn(
-                        Opcodes.INVOKESTATIC,
-                        "org/perlonjava/operators/FileTestOperator",
-                        "fileTest",
-                        "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                        false);
-            }
-        }
-
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
     }
 
     @Override

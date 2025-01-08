@@ -138,9 +138,9 @@ public class EmitOperatorNode {
                 EmitRegex.handleRegex(emitterVisitor, node);
                 break;
             default:
-                if (operator.length() == 2 && operator.charAt(0) == '-') {
+                if (operator.length() == 2 && operator.startsWith("-")) {
                     // -d -e -f
-                    emitterVisitor.handleFileTestBuiltin(node);
+                    EmitOperatorFileTest.handleFileTestBuiltin(emitterVisitor, node);
                     return;
                 }
                 throw new PerlCompilerException(node.tokenIndex, "Not implemented: operator: " + operator, emitterVisitor.ctx.errorUtil);
