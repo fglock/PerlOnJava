@@ -187,7 +187,7 @@ public class StringParser {
             // if modifiers include `e`, then parse the `replace` code
             ctx.logDebug("regex e-modifier: " + replaceStr);
             Parser blockParser = new Parser(ctx, new Lexer(replaceStr).tokenize());
-            replace = blockParser.parseBlock();
+            replace = ParseBlock.parseBlock(blockParser);
         } else if (rawStr.secondBufferStartDelim != '\'') {
             // handle string interpolaton
             rawStr.buffers.removeFirst();   // consume the first buffer

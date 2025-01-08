@@ -131,7 +131,7 @@ public class ListParser {
             }
             if (TokenUtils.peek(parser).text.equals("{")) {
                 TokenUtils.consume(parser);
-                expr.handle = parser.parseBlock();
+                expr.handle = ParseBlock.parseBlock(parser);
                 TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             }
             if (!isSpaceAfterPrintBlock(parser) || looksLikeEmptyList(parser)) {

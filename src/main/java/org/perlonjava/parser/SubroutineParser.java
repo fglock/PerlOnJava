@@ -147,7 +147,7 @@ public class SubroutineParser {
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
 
         // Parse the block of the subroutine, which contains the actual code.
-        Node block = parser.parseBlock();
+        Node block = ParseBlock.parseBlock(parser);
 
         // After the block, we expect a closing curly brace '}' to denote the end of the subroutine.
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");

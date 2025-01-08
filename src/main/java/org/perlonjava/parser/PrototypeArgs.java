@@ -140,7 +140,7 @@ public class PrototypeArgs {
                         if (TokenUtils.peek(parser).text.equals("{")) {
                             // Parse a block
                             TokenUtils.consume(parser);
-                            Node block = new SubroutineNode(null, null, null, parser.parseBlock(), false, parser.tokenIndex);
+                            Node block = new SubroutineNode(null, null, null, ParseBlock.parseBlock(parser), false, parser.tokenIndex);
                             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
                             args.elements.add(block);
                             needComma = false;

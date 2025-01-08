@@ -99,7 +99,7 @@ public class StringDoubleQuoted {
                         ctx.logDebug("str block-like: " + blockStr);
                         blockStr = sigil + "{" + blockStr + "}";
                         Parser blockParser = new Parser(ctx, new Lexer(blockStr).tokenize());
-                        operand = blockParser.parseBlock();
+                        operand = ParseBlock.parseBlock(blockParser);
                         parser.tokenIndex = rawStr2.next;
                         ctx.logDebug("str operand " + operand);
                     } else {

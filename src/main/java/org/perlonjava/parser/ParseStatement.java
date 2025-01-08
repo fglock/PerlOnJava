@@ -18,40 +18,13 @@ public class ParseStatement {
      * Parses a single statement from the parser's token stream.
      *
      * @param parser The parser instance used for parsing.
+     * @param label  The label for the statement, if any.
      * @return A Node representing the parsed statement.
      */
-    public static Node parseStatement(Parser parser) {
+    public static Node parseStatement(Parser parser, String label) {
         int currentIndex = parser.tokenIndex;
         LexerToken token = peek(parser);
         parser.ctx.logDebug("parseStatement `" + token.text + "`");
-
-        // Check for label:
-        String label = null;
-        if (token.type == LexerTokenType.IDENTIFIER) {
-            String id = TokenUtils.consume(parser).text;
-            if (peek(parser).text.equals(":")) {
-                label = id;
-                TokenUtils.consume(parser);
-                token = peek(parser);
-            } else {
-                parser.tokenIndex = currentIndex;  // Backtrack
-            }
-        }
-
-//        // Handle multiple labels; create labelNode and return
-//        if (token.type == LexerTokenType.IDENTIFIER) {
-//            String id = TokenUtils.consume(parser).text;
-//            if (peek(parser).text.equals(":")) {
-//                TokenUtils.consume(parser); // consume the colon
-//                LabelNode labelNode = new LabelNode(id, currentIndex);
-//                // Check for more labels
-//                if (peek(parser).type == LexerTokenType.IDENTIFIER) {
-//                    return labelNode; // Return just the label, let parser continue with next statement
-//                }
-//                return labelNode;
-//            }
-//            parser.tokenIndex = currentIndex;  // Backtrack if not a label
-//        }
 
         if (token.type == LexerTokenType.IDENTIFIER) {
             switch (token.text) {
@@ -113,7 +86,7 @@ public class ParseStatement {
                     // Parse bare-blocks
                     if (!isHashLiteral(parser)) {
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-                        BlockNode block = parser.parseBlock();
+                        BlockNode block = ParseBlock.parseBlock(parser);
                         block.isLoop = true;
                         block.labelName = label;
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");

@@ -45,14 +45,14 @@ public class StatementParser {
 
         // Parse the body of the loop
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-        Node body = parser.parseBlock();
+        Node body = ParseBlock.parseBlock(parser);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
         Node continueNode = null;
         if (TokenUtils.peek(parser).text.equals("continue")) {
             TokenUtils.consume(parser);
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-            continueNode = parser.parseBlock();
+            continueNode = ParseBlock.parseBlock(parser);
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         }
 
@@ -121,7 +121,7 @@ public class StatementParser {
 
         // Parse the body of the loop
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-        Node body = parser.parseBlock();
+        Node body = ParseBlock.parseBlock(parser);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
         // Parse optional continue block
@@ -129,7 +129,7 @@ public class StatementParser {
         if (TokenUtils.peek(parser).text.equals("continue")) {
             TokenUtils.consume(parser);
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-            continueNode = parser.parseBlock();
+            continueNode = ParseBlock.parseBlock(parser);
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         }
 
@@ -168,7 +168,7 @@ public class StatementParser {
 
         // Parse the body of the loop
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-        Node body = parser.parseBlock();
+        Node body = ParseBlock.parseBlock(parser);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
         // 3-argument for doesn't have a continue block
@@ -189,14 +189,14 @@ public class StatementParser {
         Node condition = parser.parseExpression(0);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-        Node thenBranch = parser.parseBlock();
+        Node thenBranch = ParseBlock.parseBlock(parser);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         Node elseBranch = null;
         LexerToken token = TokenUtils.peek(parser);
         if (token.text.equals("else")) {
             TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "else"
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-            elseBranch = parser.parseBlock();
+            elseBranch = ParseBlock.parseBlock(parser);
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         } else if (token.text.equals("elsif")) {
             elseBranch = parseIfStatement(parser);
@@ -215,7 +215,7 @@ public class StatementParser {
 
         // Parse the try block
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-        Node tryBlock = parser.parseBlock();
+        Node tryBlock = ParseBlock.parseBlock(parser);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
         // Parse the catch block
@@ -224,7 +224,7 @@ public class StatementParser {
         Node catchParameter = parser.parseExpression(0); // Parse the exception variable
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-        Node catchBlock = parser.parseBlock();
+        Node catchBlock = ParseBlock.parseBlock(parser);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
         // Parse the optional finally block
@@ -232,7 +232,7 @@ public class StatementParser {
         if (TokenUtils.peek(parser).text.equals("finally")) {
             TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "finally"
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-            finallyBlock = parser.parseBlock();
+            finallyBlock = ParseBlock.parseBlock(parser);
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         }
 
@@ -446,7 +446,7 @@ public class StatementParser {
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
             parser.ctx.symbolTable.enterScope();
             parser.ctx.symbolTable.setCurrentPackage(nameNode.name);
-            BlockNode block = parser.parseBlock();
+            BlockNode block = ParseBlock.parseBlock(parser);
 
             // Insert packageNode as first statement in block
             block.elements.addFirst(packageNode);

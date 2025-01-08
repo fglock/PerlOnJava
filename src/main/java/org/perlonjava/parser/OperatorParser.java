@@ -172,7 +172,7 @@ public class OperatorParser {
         token = TokenUtils.peek(parser);
         if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-            block = parser.parseBlock();
+            block = ParseBlock.parseBlock(parser);
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             return block;
         }
@@ -196,7 +196,7 @@ public class OperatorParser {
         if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
             // If the next token is '{', parse a block
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-            block = parser.parseBlock();
+            block = ParseBlock.parseBlock(parser);
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             // transform:  eval { 123 }
             // into:  sub { 123 }->()  with useTryCatch flag

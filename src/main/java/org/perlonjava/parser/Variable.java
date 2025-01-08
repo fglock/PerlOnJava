@@ -36,7 +36,7 @@ public class Variable {
         } else if (peek(parser).text.equals("{")) {
             // Handle curly brackets to parse a nested expression `${v}`
             TokenUtils.consume(parser); // Consume the '{'
-            Node block = parser.parseBlock(); // Parse the block inside the curly brackets
+            Node block = ParseBlock.parseBlock(parser); // Parse the block inside the curly brackets
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}"); // Consume the '}'
             return new OperatorNode(sigil, block, parser.tokenIndex);
         }

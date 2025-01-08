@@ -43,7 +43,7 @@ public class SpecialBlockParser {
         // Consume the opening brace '{'
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
         // Parse the block content
-        BlockNode block = parser.parseBlock();
+        BlockNode block = ParseBlock.parseBlock(parser);
         // Consume the closing brace '}'
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 

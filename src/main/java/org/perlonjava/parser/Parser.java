@@ -1,13 +1,14 @@
 package org.perlonjava.parser;
 
-import org.perlonjava.astnode.BlockNode;
-import org.perlonjava.astnode.ListNode;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.perlonjava.parser.TokenUtils.peek;
 
@@ -84,28 +85,7 @@ public class Parser {
             // looks like pod: insert a newline to trigger pod parsing
             tokens.addFirst(new LexerToken(LexerTokenType.NEWLINE, "\n"));
         }
-        return parseBlock();
-    }
-
-    public BlockNode parseBlock() {
-        int currentIndex = tokenIndex;
-        ctx.symbolTable.enterScope();
-        List<Node> statements = new ArrayList<>();
-        LexerToken token = peek(this);
-        while (token.type != LexerTokenType.EOF
-                && !(token.type == LexerTokenType.OPERATOR && token.text.equals("}"))) {
-            if (token.text.equals(";")) {
-                TokenUtils.consume(this);
-            } else {
-                statements.add(ParseStatement.parseStatement(this));
-            }
-            token = peek(this);
-        }
-        if (statements.isEmpty()) {
-            statements.add(new ListNode(tokenIndex));
-        }
-        ctx.symbolTable.exitScope();
-        return new BlockNode(statements, currentIndex);
+        return ParseBlock.parseBlock(this);
     }
 
     /**
