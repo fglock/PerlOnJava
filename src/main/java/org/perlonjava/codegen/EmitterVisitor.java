@@ -109,7 +109,7 @@ public class EmitterVisitor implements Visitor {
         emitOperator(node.operator, this);
     }
 
-    void handleCompoundAssignment(BinaryOperatorNode node, OperatorHandler operatorHandler) {
+    void handleCompoundAssignment(BinaryOperatorNode node) {
         // compound assignment operators like `+=`
         EmitterVisitor scalarVisitor =
                 this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
@@ -118,12 +118,8 @@ public class EmitterVisitor implements Visitor {
         node.right.accept(scalarVisitor); // right parameter
         // stack: [left, left, right]
         // perform the operation
-        ctx.mv.visitMethodInsn(
-                operatorHandler.getMethodType(),
-                operatorHandler.getClassName(),
-                operatorHandler.getMethodName(),
-                operatorHandler.getDescriptor(),
-                false);
+        String baseOperator = node.operator.substring(0, node.operator.length() - 1);
+        emitOperator(baseOperator, scalarVisitor);
         // assign to the Lvalue
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         if (ctx.contextType == RuntimeContextType.VOID) {

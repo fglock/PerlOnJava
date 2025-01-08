@@ -82,13 +82,8 @@ public class EmitBinaryOperatorNode {
                 return;
             case "**=", "+=", "*=", "&=", "&.=", "binary&=", "<<=", "-=", "/=", "|=", "|.=",
                  "binary|=", ">>=", ".=", "%=", "^=", "^.=", "binary^=", "x=":
-                String newOp = operator.substring(0, operator.length() - 1);
-                OperatorHandler operatorHandler = OperatorHandler.get(newOp);
-                if (operatorHandler != null) {
-                    emitterVisitor.handleCompoundAssignment(node, operatorHandler);
-                    return;
-                }
-                break;
+                emitterVisitor.handleCompoundAssignment(node);
+                return;
             case "...":
                 EmitLogicalOperator.emitFlipFlopOperator(emitterVisitor, node);
                 return;
