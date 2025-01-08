@@ -230,8 +230,14 @@ public class ParseCoreOperator {
                 return new OperatorNode(token.text, operand, currentIndex);
             case "goto":
                 // Handle 'goto' keyword as a unary operator with an operand
+                boolean isSubroutine = peek(parser).text.equals("&");  // goto &subr
                 operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
-                return new OperatorNode("return", operand, currentIndex);
+                if (isSubroutine) {
+                    // goto &sub form
+                    return new OperatorNode("return", operand, currentIndex);
+                }
+                // goto LABEL form
+                return new OperatorNode("goto", operand, currentIndex);
             case "return":
                 // Handle 'return' keyword as a unary operator with an operand
                 operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);

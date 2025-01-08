@@ -35,6 +35,9 @@ public class EmitOperatorNode {
             case "return":
                 EmitOperator.handleReturnOperator(emitterVisitor, node);
                 break;
+            case "goto":
+                EmitOperator.handleGotoLabel(emitterVisitor, node);
+                break;
             case "eval", "evalbytes":
                 EmitEval.handleEvalOperator(emitterVisitor, node);
                 break;

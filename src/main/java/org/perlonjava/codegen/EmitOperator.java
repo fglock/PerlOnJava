@@ -560,9 +560,13 @@ public class EmitOperator {
         }
 
         // Clean up stack before jumping
-        ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
+        ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, targetLabel.asmStackLevel);
 
-        // Jump to the target label
+        // If we're in a non-void context, push an undef value before jumping
+        if (ctx.contextType != RuntimeContextType.VOID) {
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", "undef", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        }
+
         ctx.mv.visitJumpInsn(Opcodes.GOTO, targetLabel.nextLabel);  // XXX TODO
     }
 }
