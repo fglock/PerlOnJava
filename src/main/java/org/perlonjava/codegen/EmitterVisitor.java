@@ -326,4 +326,8 @@ public class EmitterVisitor implements Visitor {
         EmitLiteral.emitArrayLiteral(this, node);
     }
 
+    @Override
+    public void visit(LabelNode node) {
+        // XXX TODO
+    }
 }

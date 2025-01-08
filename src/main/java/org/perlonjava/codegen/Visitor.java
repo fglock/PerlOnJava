@@ -124,5 +124,7 @@ public interface Visitor {
      * @param node the TryNode to visit
      */
     void visit(TryNode node);
+
+    void visit(LabelNode node);
 }
 

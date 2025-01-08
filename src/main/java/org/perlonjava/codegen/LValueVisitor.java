@@ -150,5 +150,9 @@ public class LValueVisitor implements Visitor {
         // A TryNode is not an L-value, so set context to VOID
         context = RuntimeContextType.VOID;
     }
+
+    @Override
+    public void visit(LabelNode node) {
+    }
 }
 

@@ -354,5 +354,11 @@ public class PrintVisitor implements Visitor {
 
         indentLevel--;
     }
+
+    @Override
+    public void visit(LabelNode node) {
+        appendIndent();
+        sb.append("LabelNode: ").append(node.label).append(":\n");
+    }
 }
 

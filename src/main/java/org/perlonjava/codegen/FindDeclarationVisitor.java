@@ -139,4 +139,8 @@ public class FindDeclarationVisitor implements Visitor {
             node.finallyBlock.accept(this);
         }
     }
+
+    @Override
+    public void visit(LabelNode node) {
+    }
 }
