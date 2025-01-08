@@ -38,6 +38,21 @@ public class ParseStatement {
             }
         }
 
+//        // Handle multiple labels; create labelNode and return
+//        if (token.type == LexerTokenType.IDENTIFIER) {
+//            String id = TokenUtils.consume(parser).text;
+//            if (peek(parser).text.equals(":")) {
+//                TokenUtils.consume(parser); // consume the colon
+//                LabelNode labelNode = new LabelNode(id, currentIndex);
+//                // Check for more labels
+//                if (peek(parser).type == LexerTokenType.IDENTIFIER) {
+//                    return labelNode; // Return just the label, let parser continue with next statement
+//                }
+//                return labelNode;
+//            }
+//            parser.tokenIndex = currentIndex;  // Backtrack if not a label
+//        }
+
         if (token.type == LexerTokenType.IDENTIFIER) {
             switch (token.text) {
                 case "CHECK", "INIT", "UNITCHECK", "BEGIN", "END":
