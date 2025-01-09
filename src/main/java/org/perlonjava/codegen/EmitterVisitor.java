@@ -5,7 +5,6 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.operators.OperatorHandler;
 import org.perlonjava.runtime.NameNormalizer;
-import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.ScalarUtils;
 
@@ -317,18 +316,7 @@ public class EmitterVisitor implements Visitor {
 
     @Override
     public void visit(LabelNode node) {
-        // Find the label in the current scope
-        GotoLabels targetLabel = ctx.javaClassInfo.findGotoLabelsByName(node.label);
-        if (targetLabel == null) {
-            throw new PerlCompilerException(node.tokenIndex, "Can't find label " + node.label, ctx.errorUtil);
-        }
-        ctx.mv.visitLabel(targetLabel.gotoLabel);
-        // If context is not void, push an empty list
-        // For example, if the label is the last thing in a block
-        if (ctx.contextType!= RuntimeContextType.VOID) {
-            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
-            ctx.mv.visitInsn(Opcodes.DUP);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
-        }
+        EmitLabel.emitLabel(ctx, node);
     }
+
 }
