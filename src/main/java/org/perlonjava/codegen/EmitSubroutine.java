@@ -8,6 +8,8 @@ import org.perlonjava.astnode.IdentifierNode;
 import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.astnode.SubroutineNode;
 import org.perlonjava.runtime.*;
+import org.perlonjava.symbols.ScopedSymbolTable;
+import org.perlonjava.symbols.SymbolTable;
 
 import java.util.Arrays;
 import java.util.Map;

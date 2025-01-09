@@ -8,6 +8,7 @@ import org.perlonjava.codegen.JavaClassInfo;
 import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.parser.Parser;
+import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;

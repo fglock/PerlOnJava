@@ -1,4 +1,4 @@
-package org.perlonjava.runtime;
+package org.perlonjava.symbols;
 
 import org.perlonjava.astnode.OperatorNode;
 

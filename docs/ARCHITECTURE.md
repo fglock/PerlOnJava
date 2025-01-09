@@ -38,6 +38,9 @@
 │   │               ├── io/
 │   │               |   ├── SocketIO.java
 │   │               |   └── other io classes
+│   │               ├── symbols/
+│   │               |   ├── ScopedSymbolTable.java
+│   │               |   └── other symbol table classes
 │   │               └── runtime/
 │   │                   ├── RuntimeScalar.java
 │   │                   └── other runtime classes
@@ -80,6 +83,9 @@
 ### Runtime packages: *Runtime* and *Operators*
 
 - **Runtime**: Provides the implementation of the behavior of a Perl scalar variable, Code, Array, Hash.
+
+### Symbol Table
+
 - **ScopedSymbolTable**: Manage variable names and their corresponding local variable indices.
 
 ### Perl Module classes

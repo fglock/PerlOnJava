@@ -1,6 +1,6 @@
 package org.perlonjava.astnode;
 
-import org.perlonjava.runtime.ScopedSymbolTable;
+import org.perlonjava.symbols.ScopedSymbolTable;
 
 /**
  * The EvalOperatorNode class represents a specialized OperatorNode

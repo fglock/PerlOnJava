@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.symbols.ScopedSymbolTable;
+
 import java.util.*;
 
 import static org.perlonjava.parser.SpecialBlockParser.getCurrentScope;

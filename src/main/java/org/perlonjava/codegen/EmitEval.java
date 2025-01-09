@@ -9,7 +9,7 @@ import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeCode;
 import org.perlonjava.runtime.RuntimeContextType;
-import org.perlonjava.runtime.ScopedSymbolTable;
+import org.perlonjava.symbols.ScopedSymbolTable;
 
 public class EmitEval {
     /**

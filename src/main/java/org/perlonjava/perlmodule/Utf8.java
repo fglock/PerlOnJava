@@ -5,7 +5,7 @@ import com.ibm.icu.text.CharsetMatch;
 import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.ScopedSymbolTable;
+import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.nio.charset.StandardCharsets;
 

@@ -5,7 +5,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.perlonjava.ArgumentParser;
 import org.perlonjava.runtime.ErrorMessageUtil;
 import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.ScopedSymbolTable;
+import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.util.HashMap;
 import java.util.Map;

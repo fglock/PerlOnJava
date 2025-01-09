@@ -9,6 +9,7 @@ import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.parser.Parser;
 import org.perlonjava.runtime.*;
+import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.lang.invoke.*;
 import java.lang.reflect.Constructor;

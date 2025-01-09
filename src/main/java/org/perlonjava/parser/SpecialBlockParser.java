@@ -6,6 +6,8 @@ import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.*;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
+import org.perlonjava.symbols.ScopedSymbolTable;
+import org.perlonjava.symbols.SymbolTable;
 
 import java.util.ArrayList;
 import java.util.List;

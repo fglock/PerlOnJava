@@ -1,6 +1,9 @@
-package org.perlonjava.runtime;
+package org.perlonjava.symbols;
 
 import org.perlonjava.astnode.OperatorNode;
+import org.perlonjava.runtime.FeatureFlags;
+import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.WarningFlags;
 
 import java.util.*;
 
