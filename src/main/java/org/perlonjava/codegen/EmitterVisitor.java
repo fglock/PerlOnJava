@@ -322,6 +322,6 @@ public class EmitterVisitor implements Visitor {
         if (targetLabel == null) {
             throw new PerlCompilerException(node.tokenIndex, "Can't find label " + node.label, ctx.errorUtil);
         }
-        // ctx.mv.visitJumpInsn(Opcodes.GOTO, targetLabel.gotoLabel);
+        ctx.mv.visitLabel(targetLabel.gotoLabel);
     }
 }
