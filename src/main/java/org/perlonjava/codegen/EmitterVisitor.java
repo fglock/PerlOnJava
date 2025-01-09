@@ -323,5 +323,12 @@ public class EmitterVisitor implements Visitor {
             throw new PerlCompilerException(node.tokenIndex, "Can't find label " + node.label, ctx.errorUtil);
         }
         ctx.mv.visitLabel(targetLabel.gotoLabel);
+        // If context is not void, push an empty list
+        // For example, if the label is the last thing in a block
+        if (ctx.contextType!= RuntimeContextType.VOID) {
+            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+            ctx.mv.visitInsn(Opcodes.DUP);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
+        }
     }
 }

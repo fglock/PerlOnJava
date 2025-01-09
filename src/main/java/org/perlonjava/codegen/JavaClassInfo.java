@@ -83,16 +83,21 @@ public class JavaClassInfo {
         return null;
     }
 
+    public void pushGotoLabels(String labelName, Label gotoLabel) {
+        gotoLabelStack.push(new GotoLabels(labelName, gotoLabel, stackLevelManager.getStackLevel()));
+    }
+
     public GotoLabels findGotoLabelsByName(String labelName) {
-        if (labelName == null) {
-            return gotoLabelStack.peek();
-        }
         for (GotoLabels gotoLabels : gotoLabelStack) {
-            if (gotoLabels.labelName != null && gotoLabels.labelName.equals(labelName)) {
+            if (gotoLabels.labelName.equals(labelName)) {
                 return gotoLabels;
             }
         }
         return null;
+    }
+
+    public void popGotoLabels() {
+        gotoLabelStack.pop();
     }
 
     /**

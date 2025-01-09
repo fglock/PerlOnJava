@@ -30,8 +30,7 @@ public class EmitBlock {
 
         // Create labels used inside the block, like `{ L1: ... }`
         for (int i = 0; i < node.labels.size(); i++) {
-            String labelName = node.labels.get(i);
-            emitterVisitor.ctx.javaClassInfo.gotoLabelStack.add(new GotoLabels(labelName, new Label(), 0));
+            emitterVisitor.ctx.javaClassInfo.pushGotoLabels(node.labels.get(i), new Label());
         }
 
         // Setup 'local' environment if needed
@@ -75,7 +74,7 @@ public class EmitBlock {
 
         // Pop labels used inside the block
         for (int i = 0; i < node.labels.size(); i++) {
-            emitterVisitor.ctx.javaClassInfo.gotoLabelStack.pop();
+            emitterVisitor.ctx.javaClassInfo.popGotoLabels();
         }
 
         // Add 'next', 'last' label
