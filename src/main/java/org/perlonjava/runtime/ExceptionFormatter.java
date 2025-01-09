@@ -48,11 +48,19 @@ public class ExceptionFormatter {
     private static ArrayList<ArrayList<String>> formatThrowable(Throwable t) {
         ArrayList<ArrayList<String>> stackTrace = new ArrayList<>();
 
+        // System.out.println("innermostCause: "); innermostCause.printStackTrace();
+
         // Filter and append the stack trace
+
+        // Filter compiled Perl methods like:
+        //     org.perlonjava.anon1.apply(misc/snippets/CallerTest.pm @ CallerTest:36)
+        // Filter `org.perlonjava.perlmodule` Perl-like Java methods like:
+        //     org.perlonjava.perlmodule.Exporter.exportOkTags(Exporter.java:159)
+
         Arrays.stream(t.getStackTrace())
                 .filter(element ->
-                        element.getMethodName().contains("apply") // Only include methods with "apply" in their name
-                                && !element.getFileName().contains(".java") // Exclude Java source files
+                         element.getClassName().contains("org.perlonjava.anon")
+                         || element.getClassName().contains("org.perlonjava.perlmodule")
                 )
                 .forEach(element -> {
                     String fileName = element.getFileName();
