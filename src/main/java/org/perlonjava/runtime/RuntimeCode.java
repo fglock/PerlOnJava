@@ -323,6 +323,23 @@ public class RuntimeCode implements RuntimeScalarReference {
         if (!args.isEmpty()) {
             frame = args.getFirst().getInt();
         }
+
+//        // Get runtime stack trace and show debug info
+//        Throwable t = new Throwable();
+//        ArrayList<ArrayList<String>> stackTrace = ExceptionFormatter.formatException(t);
+//        System.out.println("# Runtime stack trace:");
+//        for (int i = 0; i < stackTrace.size(); i++) {
+//            System.out.println("#   " + i + ": " + stackTrace.get(i));
+//        }
+//
+//        System.out.println("# CallerStack frames:");
+//        for (int i = 0; i < 3; i++) {
+//            CallerStack.CallerInfo info = CallerStack.peek(i);
+//            if (info != null) {
+//                System.out.println("#   " + i + ": " + info);
+//            }
+//        }
+
         CallerStack.CallerInfo info = CallerStack.peek(0);
         if (info == null) {
             // Runtime stack trace
