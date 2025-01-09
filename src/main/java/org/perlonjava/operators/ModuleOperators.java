@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 
+import static org.perlonjava.runtime.ExceptionFormatter.findInnermostCause;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalHash;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
@@ -100,7 +101,7 @@ public class ModuleOperators {
             result = PerlLanguageProvider.executePerlCode(parsedArgs, false);
         } catch (Throwable t) {
             GlobalVariable.setGlobalVariable("main::@", "Error in file " + parsedArgs.fileName +
-                    "\n" + t);
+                    "\n" + findInnermostCause(t).getMessage());
             return new RuntimeScalar();
         }
 
