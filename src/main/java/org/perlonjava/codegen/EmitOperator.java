@@ -499,7 +499,7 @@ public class EmitOperator {
         // add return value depending on context
         if (loopLabels.context != RuntimeContextType.VOID) {
             if (operator.equals("next") || operator.equals("last")) {
-                // If the context is not VOID, push "undef" to the stack
+                // If the loop context is not VOID, push "undef" to the stack
                 ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", "undef", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
             }
         }
@@ -561,11 +561,6 @@ public class EmitOperator {
 
         // Clean up stack before jumping
         ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, targetLabel.asmStackLevel);
-
-        // If we're in a non-void context, push an undef value before jumping
-        if (ctx.contextType != RuntimeContextType.VOID) {
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", "undef", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        }
 
         ctx.mv.visitJumpInsn(Opcodes.GOTO, targetLabel.nextLabel);  // XXX TODO
     }
