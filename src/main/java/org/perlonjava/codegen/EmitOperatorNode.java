@@ -30,13 +30,13 @@ public class EmitOperatorNode {
             case "next":
             case "redo":
             case "last":
-                EmitOperator.handleNextOperator(emitterVisitor.ctx, node);
+                EmitControlFlow.handleNextOperator(emitterVisitor.ctx, node);
                 break;
             case "return":
-                EmitOperator.handleReturnOperator(emitterVisitor, node);
+                EmitControlFlow.handleReturnOperator(emitterVisitor, node);
                 break;
             case "goto":
-                EmitOperator.handleGotoLabel(emitterVisitor, node);
+                EmitControlFlow.handleGotoLabel(emitterVisitor, node);
                 break;
             case "eval", "evalbytes":
                 EmitEval.handleEvalOperator(emitterVisitor, node);

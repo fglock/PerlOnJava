@@ -35,7 +35,6 @@ public class EmitLabel {
         // we need to ensure a value is pushed onto the stack
         if (ctx.contextType != RuntimeContextType.VOID) {
             // Create a new empty RuntimeList as the result value
-            // This matches Perl's behavior where labels return empty lists
             ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
             ctx.mv.visitInsn(Opcodes.DUP);  // Duplicate reference for constructor
             // Initialize the empty RuntimeList

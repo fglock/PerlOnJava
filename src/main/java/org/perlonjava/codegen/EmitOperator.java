@@ -1,6 +1,5 @@
 package org.perlonjava.codegen;
 
-import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
@@ -466,102 +465,4 @@ public class EmitOperator {
         }
     }
 
-    // Handles the 'next', 'last', and 'redo' operators for loop control.
-    static void handleNextOperator(EmitterContext ctx, OperatorNode node) {
-        ctx.logDebug("visit(next)");
-
-        String labelStr = null;
-        ListNode labelNode = (ListNode) node.operand;
-        if (!labelNode.elements.isEmpty()) {
-            // Handle 'next' with a label.
-            Node arg = labelNode.elements.getFirst();
-            if (arg instanceof IdentifierNode) {
-                // Extract the label name.
-                labelStr = ((IdentifierNode) arg).name;
-            } else {
-                throw new RuntimeException("Not implemented: " + node);
-            }
-        }
-
-        String operator = node.operator;
-        // Find loop labels by name.
-        LoopLabels loopLabels = ctx.javaClassInfo.findLoopLabelsByName(labelStr);
-        ctx.logDebug("visit(next) operator: " + operator + " label: " + labelStr + " labels: " + loopLabels);
-        if (loopLabels == null) {
-            throw new PerlCompilerException(node.tokenIndex, "Can't \"" + operator + "\" outside a loop block", ctx.errorUtil);
-        }
-
-        ctx.logDebug("visit(next): asmStackLevel: " + ctx.javaClassInfo.stackLevelManager.getStackLevel());
-
-        // Use StackLevelManager to emit POP instructions
-        ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, loopLabels.asmStackLevel);
-
-        // add return value depending on context
-        if (loopLabels.context != RuntimeContextType.VOID) {
-            if (operator.equals("next") || operator.equals("last")) {
-                // If the loop context is not VOID, push "undef" to the stack
-                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", "undef", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
-            }
-        }
-
-        // Determine the appropriate label to jump to.
-        Label label = operator.equals("next") ? loopLabels.nextLabel
-                : operator.equals("last") ? loopLabels.lastLabel
-                : loopLabels.redoLabel;
-        ctx.mv.visitJumpInsn(Opcodes.GOTO, label);
-    }
-
-    // Handles the 'return' operator, which exits a subroutine and returns a value.
-    static void handleReturnOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
-        EmitterContext ctx = emitterVisitor.ctx;
-
-        ctx.logDebug("visit(return) in context " + emitterVisitor.ctx.contextType);
-        ctx.logDebug("visit(return) will visit " + node.operand + " in context " + emitterVisitor.ctx.with(RuntimeContextType.RUNTIME).contextType);
-
-        // Use StackLevelManager to emit POP instructions
-        ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, 0);
-
-        if (node.operand instanceof ListNode list) {
-            if (list.elements.size() == 1) {
-                // Special case for a list with 1 element.
-                list.elements.getFirst().accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
-                emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
-                return;
-            }
-        }
-
-        // Accept the operand in RUNTIME context and jump to the return label.
-        node.operand.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
-        emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
-    }
-
-    static void handleGotoLabel(EmitterVisitor emitterVisitor, OperatorNode node) {
-        EmitterContext ctx = emitterVisitor.ctx;
-
-        // Extract label name from the operand
-        String labelName = null;
-        if (node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
-            Node arg = labelNode.elements.getFirst();
-            if (arg instanceof IdentifierNode) {
-                labelName = ((IdentifierNode) arg).name;
-            } else {
-                throw new RuntimeException("Invalid goto label: " + node);
-            }
-        }
-
-        if (labelName == null) {
-            throw new PerlCompilerException(node.tokenIndex, "goto must be given label", ctx.errorUtil);
-        }
-
-        // Find the label in the current scope
-        GotoLabels targetLabel = ctx.javaClassInfo.findGotoLabelsByName(labelName);
-        if (targetLabel == null) {
-            throw new PerlCompilerException(node.tokenIndex, "Can't find label " + labelName, ctx.errorUtil);
-        }
-
-        // Clean up stack before jumping
-        ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, targetLabel.asmStackLevel);
-
-        ctx.mv.visitJumpInsn(Opcodes.GOTO, targetLabel.gotoLabel);
-    }
 }
