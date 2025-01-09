@@ -351,8 +351,11 @@ public class StatementParser {
                     ctx.errorUtil.getLineNumber(parser.tokenIndex));
 
             ctx.logDebug("Use statement: " + fullName + " called from " + CallerStack.peek(0));
+
+            boolean moduleTrue = parser.ctx.symbolTable.isFeatureCategoryEnabled("module_true");
+
             // execute 'require(fullName)'
-            RuntimeScalar ret = ModuleOperators.require(new RuntimeScalar(fullName));
+            RuntimeScalar ret = ModuleOperators.require(new RuntimeScalar(fullName), moduleTrue);
             ctx.logDebug("Use statement return: " + ret);
 
             if (versionNode != null) {

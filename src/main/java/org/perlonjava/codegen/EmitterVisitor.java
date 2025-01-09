@@ -158,6 +158,11 @@ public class EmitterVisitor implements Visitor {
             ctx.mv.visitLdcInsn(ctx.symbolTable.getCurrentPackage());
             emitOperator(operator, this);
             return;
+        } else if (operator.equals("require")) {
+            node.operand.accept(this.with(RuntimeContextType.SCALAR));
+            ctx.mv.visitLdcInsn(node.getBooleanAnnotation("module_true"));
+            emitOperator(operator, this);
+            return;
         } else if ((operator.equals("stat") || operator.equals("lstat"))
                 && (node.operand instanceof IdentifierNode && ((IdentifierNode) node.operand).name.equals("_"))) {
             // `stat _`

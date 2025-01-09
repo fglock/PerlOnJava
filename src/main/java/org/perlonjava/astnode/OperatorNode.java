@@ -2,6 +2,9 @@ package org.perlonjava.astnode;
 
 import org.perlonjava.codegen.Visitor;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * The OperatorNode class represents a node in the abstract syntax tree (AST) that holds
  * a unary or list operator and its operand. This class implements the Node interface, allowing it to be
@@ -17,10 +20,30 @@ public class OperatorNode extends AbstractNode {
      */
     public String operator;
     /**
-     * Node id is used by some operations.
+     * Node id is used by some operations like `state` to identify a specific node.
      * BEGIN blocks mark captured variables using this id.
+     * TODO: move this to `annotations` field.
      */
     public int id = 0;
+
+    // Lazy initialization - only created when first annotation is set
+    public Map<String, Object> annotations;
+
+    public void setAnnotation(String key, Object value) {
+        if (annotations == null) {
+            annotations = new HashMap<>();
+        }
+        annotations.put(key, value);
+    }
+
+    public Object getAnnotation(String key) {
+        return annotations == null ? null : annotations.get(key);
+    }
+
+    public boolean getBooleanAnnotation(String key) {
+        Object value = getAnnotation(key);
+        return value instanceof Boolean && (Boolean) value;
+    }
 
     /**
      * Constructs a new OperatorNode with the specified operator and operand.

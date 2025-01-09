@@ -69,6 +69,18 @@ public class PrintVisitor implements Visitor {
                 sb.append("id: ").append(node.id).append("\n");
             }
 
+            // Print annotations if present
+            if (node.annotations != null && !node.annotations.isEmpty()) {
+                appendIndent();
+                sb.append("annotations:\n");
+                indentLevel++;
+                node.annotations.forEach((key, value) -> {
+                    appendIndent();
+                    sb.append(key).append(": ").append(value).append("\n");
+                });
+                indentLevel--;
+            }
+
             node.operand.accept(this);
             indentLevel--;
         }

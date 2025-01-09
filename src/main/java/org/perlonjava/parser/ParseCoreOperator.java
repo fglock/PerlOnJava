@@ -250,7 +250,12 @@ public class ParseCoreOperator {
                 return OperatorParser.parseDoOperator(parser);
             case "require":
                 // Handle 'require' operator
-                return OperatorParser.parseRequire(parser);
+                OperatorNode node = (OperatorNode) OperatorParser.parseRequire(parser);
+                // Is `module_true` feature enabled?
+                if (parser.ctx.symbolTable.isFeatureCategoryEnabled("module_true")) {
+                    node.setAnnotation("module_true", true);
+                }
+                return node;
             case "sub":
                 // Handle 'sub' keyword to parse an anonymous subroutine
                 return SubroutineParser.parseSubroutineDefinition(parser, false, null);

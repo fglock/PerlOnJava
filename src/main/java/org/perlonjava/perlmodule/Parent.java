@@ -72,7 +72,7 @@ public class Parent extends PerlModuleBase {
             if (!noRequire) {
                 // Require the parent class file unless -norequire is specified
                 String filename = parentClassName.replace("::", "/").replace("'", "/") + ".pm";
-                RuntimeScalar ret = ModuleOperators.require(new RuntimeScalar(filename));
+                RuntimeScalar ret = ModuleOperators.require(new RuntimeScalar(filename), false);
             }
 
             // Add the parent class to the @ISA array of the inheritor

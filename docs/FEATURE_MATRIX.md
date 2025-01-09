@@ -300,8 +300,8 @@
 - ✔️   **subs** pragma
 - 🚧  **utf8** pragma: utf8 is always on. Disabling utf8 might work in a future version.
 - ✔️   **feature** pragma
-  - ✔️  Features implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `bitwise`, `postderef`, `evalbytes`.
-  - ❌ Features missing: `module_true`, `postderef_qq`, `signatures`, `unicode_eval`, `unicode_strings`, `defer`.
+  - ✔️  Features implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `bitwise`, `postderef`, `evalbytes`, `module_true`.
+  - ❌ Features missing: `postderef_qq`, `signatures`, `unicode_eval`, `unicode_strings`, `defer`.
 - 🚧  **warnings** pragma
 - ❌  **version** pragma: version objects are not yet supported.
 - ❌  **experimental** pragma

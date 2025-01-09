@@ -107,7 +107,7 @@ public class ModuleOperators {
         return result == null ? scalarUndef : result.scalar();
     }
 
-    public static RuntimeScalar require(RuntimeScalar runtimeScalar) {
+    public static RuntimeScalar require(RuntimeScalar runtimeScalar, boolean moduleTrue) {
         // https://perldoc.perl.org/functions/require
 
         if (runtimeScalar.type == RuntimeScalarType.INTEGER || runtimeScalar.type == RuntimeScalarType.DOUBLE || runtimeScalar.type == RuntimeScalarType.VSTRING || runtimeScalar.type == RuntimeScalarType.BOOLEAN) {
@@ -133,7 +133,21 @@ public class ModuleOperators {
             // `do FILE` returned undef
             String err = getGlobalVariable("main::@").toString();
             String ioErr = getGlobalVariable("main::!").toString();
-            throw new PerlCompilerException(err.isEmpty() ? "Can't locate " + fileName + ": " + ioErr : "Compilation failed in require: " + err);
+
+            String message;
+            if (err.isEmpty() && ioErr.isEmpty()) {
+                if (!moduleTrue) {
+                    message = fileName + " did not return a true value";
+                } else {
+                    return result; // Skip throwing exception when moduleTrue is enabled
+                }
+            } else if (err.isEmpty()) {
+                message = "Can't locate " + fileName + ": " + ioErr;
+            } else {
+                message = "Compilation failed in require: " + err;
+            }
+
+            throw new PerlCompilerException(message);
         }
         return result;
     }

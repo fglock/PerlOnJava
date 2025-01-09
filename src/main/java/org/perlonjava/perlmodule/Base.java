@@ -65,7 +65,7 @@ public class Base extends PerlModuleBase {
             // Require the base class file
             String filename = baseClassName.replace("::", "/").replace("'", "/") + ".pm";
             try {
-                RuntimeScalar ret = ModuleOperators.require(new RuntimeScalar(filename));
+                RuntimeScalar ret = ModuleOperators.require(new RuntimeScalar(filename), false);
             } catch (Exception e) {
                 if (e.getMessage().contains("not found")) {
                     System.err.println("Base class package \"" + baseClassName + "\" is empty.");
