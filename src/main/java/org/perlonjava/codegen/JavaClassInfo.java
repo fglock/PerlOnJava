@@ -32,6 +32,8 @@ public class JavaClassInfo {
      */
     public Deque<LoopLabels> loopLabelStack;
 
+    public Deque<GotoLabels> gotoLabelStack;
+
     /**
      * Constructs a new JavaClassInfo object.
      * Initializes the class name, stack level manager, and loop label stack.
@@ -41,6 +43,7 @@ public class JavaClassInfo {
         this.returnLabel = null;
         this.stackLevelManager = new StackLevelManager();
         this.loopLabelStack = new ArrayDeque<>();
+        this.gotoLabelStack = new ArrayDeque<>();
     }
 
     /**
@@ -80,9 +83,16 @@ public class JavaClassInfo {
         return null;
     }
 
-    public LoopLabels findLabelByName(String labelName) {
-        // XXX TODO
-        return findLoopLabelsByName(labelName);
+    public GotoLabels findGotoLabelsByName(String labelName) {
+        if (labelName == null) {
+            return gotoLabelStack.peek();
+        }
+        for (GotoLabels gotoLabels : gotoLabelStack) {
+            if (gotoLabels.labelName != null && gotoLabels.labelName.equals(labelName)) {
+                return gotoLabels;
+            }
+        }
+        return null;
     }
 
     /**
@@ -122,6 +132,7 @@ public class JavaClassInfo {
                 "    returnLabel=" + (returnLabel != null ? returnLabel.toString() : "null") + ",\n" +
                 "    asmStackLevel=" + stackLevelManager.getStackLevel() + ",\n" +
                 "    loopLabelStack=" + loopLabelStack + "\n" +
+                "    gotoLabelStack=" + gotoLabelStack + "\n" +
                 "}";
     }
 }

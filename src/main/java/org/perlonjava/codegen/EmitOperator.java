@@ -554,7 +554,7 @@ public class EmitOperator {
         }
 
         // Find the label in the current scope
-        LoopLabels targetLabel = ctx.javaClassInfo.findLabelByName(labelName);
+        GotoLabels targetLabel = ctx.javaClassInfo.findGotoLabelsByName(labelName);
         if (targetLabel == null) {
             throw new PerlCompilerException(node.tokenIndex, "Can't find label " + labelName, ctx.errorUtil);
         }
@@ -562,6 +562,6 @@ public class EmitOperator {
         // Clean up stack before jumping
         ctx.javaClassInfo.stackLevelManager.emitPopInstructions(ctx.mv, targetLabel.asmStackLevel);
 
-        ctx.mv.visitJumpInsn(Opcodes.GOTO, targetLabel.nextLabel);  // XXX TODO
+        ctx.mv.visitJumpInsn(Opcodes.GOTO, targetLabel.gotoLabel);
     }
 }
