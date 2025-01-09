@@ -125,20 +125,28 @@ public class SpecialBlockParser {
                         new IdentifierNode(
                                 parser.ctx.symbolTable.getCurrentPackage(), tokenIndex), tokenIndex));
 
+        SubroutineNode anonSub =
+                new SubroutineNode(
+                        null,
+                        null,
+                        null,
+                        block,
+                        false,
+                        tokenIndex);
+
         if (blockPhase.equals("BEGIN")) {
             // BEGIN - execute immediately
-            nodes.add(block);
+            nodes.add(
+                    new BinaryOperatorNode(
+                            "->",
+                            anonSub,
+                            new ListNode(tokenIndex),
+                            tokenIndex
+                    )
+            );
         } else {
             // Not BEGIN - return a sub to execute later
-            nodes.add(
-                    new SubroutineNode(
-                            null,
-                            null,
-                            null,
-                            block,
-                            false,
-                            tokenIndex)
-            );
+            nodes.add(anonSub);
         }
 
         ArgumentParser.CompilerOptions parsedArgs = parser.ctx.compilerOptions.clone();

@@ -324,14 +324,15 @@ public class RuntimeCode implements RuntimeScalarReference {
             frame = args.getFirst().getInt();
         }
 
-//        // Get runtime stack trace and show debug info
-//        Throwable t = new Throwable();
-//        ArrayList<ArrayList<String>> stackTrace = ExceptionFormatter.formatException(t);
+        Throwable t = new Throwable();
+        ArrayList<ArrayList<String>> stackTrace = ExceptionFormatter.formatException(t);
+        int stackTraceSize = stackTrace.size();
+
+//        // Show debug info
 //        System.out.println("# Runtime stack trace:");
-//        for (int i = 0; i < stackTrace.size(); i++) {
+//        for (int i = 0; i < stackTraceSize; i++) {
 //            System.out.println("#   " + i + ": " + stackTrace.get(i));
 //        }
-//
 //        System.out.println("# CallerStack frames:");
 //        for (int i = 0; i < 3; i++) {
 //            CallerStack.CallerInfo info = CallerStack.peek(i);
@@ -339,30 +340,32 @@ public class RuntimeCode implements RuntimeScalarReference {
 //                System.out.println("#   " + i + ": " + info);
 //            }
 //        }
+//        System.out.println();
 
-        CallerStack.CallerInfo info = CallerStack.peek(0);
-        if (info == null) {
+        if (stackTraceSize > 0) {
+            frame++;
+        }
+        if (frame >= 0 && frame < stackTraceSize) {
             // Runtime stack trace
-            Throwable t = new Throwable();
-            ArrayList<ArrayList<String>> stackTrace = ExceptionFormatter.formatException(t);
-            frame++;  // frame 0 is the current method, so we need to increment it
-            if (frame >= 0 && frame < stackTrace.size()) {
-                if (ctx == RuntimeContextType.SCALAR) {
-                    res.add(new RuntimeScalar(stackTrace.get(frame).getFirst()));
-                } else {
-                    res.add(new RuntimeScalar(stackTrace.get(frame).get(0)));
-                    res.add(new RuntimeScalar(stackTrace.get(frame).get(1)));
-                    res.add(new RuntimeScalar(stackTrace.get(frame).get(2)));
-                }
+            if (ctx == RuntimeContextType.SCALAR) {
+                res.add(new RuntimeScalar(stackTrace.get(frame).getFirst()));
+            } else {
+                res.add(new RuntimeScalar(stackTrace.get(frame).get(0)));
+                res.add(new RuntimeScalar(stackTrace.get(frame).get(1)));
+                res.add(new RuntimeScalar(stackTrace.get(frame).get(2)));
             }
         } else {
-            // Compile-time stack trace
-            if (ctx == RuntimeContextType.SCALAR) {
-                res.add(new RuntimeScalar(info.packageName));
-            } else {
-                res.add(new RuntimeScalar(info.packageName));
-                res.add(new RuntimeScalar(info.filename));
-                res.add(new RuntimeScalar(info.line));
+            frame = frame - stackTraceSize;
+            CallerStack.CallerInfo info = CallerStack.peek(frame);
+            if (info != null) {
+                // Compile-time stack trace
+                if (ctx == RuntimeContextType.SCALAR) {
+                    res.add(new RuntimeScalar(info.packageName));
+                } else {
+                    res.add(new RuntimeScalar(info.packageName));
+                    res.add(new RuntimeScalar(info.filename));
+                    res.add(new RuntimeScalar(info.line));
+                }
             }
         }
         return res;
