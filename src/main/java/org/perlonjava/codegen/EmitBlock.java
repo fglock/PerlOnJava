@@ -24,9 +24,15 @@ public class EmitBlock {
                 emitterVisitor.with(RuntimeContextType.VOID); // statements in the middle of the block have context VOID
         List<Node> list = node.elements;
 
-        // Create labels for the loop
+        // Create labels for the block as a loop, like `L1: {...}`
         Label redoLabel = new Label();
         Label nextLabel = new Label();
+
+        // Create labels used inside the block, like `{ L1: ... }`
+        for (int i = 0; i < node.labels.size(); i++) {
+            String labelName = node.labels.get(i);
+            emitterVisitor.ctx.javaClassInfo.gotoLabelStack.add(new GotoLabels(labelName, new Label(), 0));
+        }
 
         // Setup 'local' environment if needed
         Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv);
@@ -65,6 +71,11 @@ public class EmitBlock {
 
         if (node.isLoop) {
             emitterVisitor.ctx.javaClassInfo.popLoopLabels();
+        }
+
+        // Pop labels used inside the block
+        for (int i = 0; i < node.labels.size(); i++) {
+            emitterVisitor.ctx.javaClassInfo.gotoLabelStack.pop();
         }
 
         // Add 'next', 'last' label

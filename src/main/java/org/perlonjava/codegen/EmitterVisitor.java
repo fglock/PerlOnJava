@@ -5,6 +5,7 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.operators.OperatorHandler;
 import org.perlonjava.runtime.NameNormalizer;
+import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.ScalarUtils;
 
@@ -316,6 +317,11 @@ public class EmitterVisitor implements Visitor {
 
     @Override
     public void visit(LabelNode node) {
-        // XXX TODO emit the ASM label
+        // Find the label in the current scope
+        GotoLabels targetLabel = ctx.javaClassInfo.findGotoLabelsByName(node.label);
+        if (targetLabel == null) {
+            throw new PerlCompilerException(node.tokenIndex, "Can't find label " + node.label, ctx.errorUtil);
+        }
+        // ctx.mv.visitJumpInsn(Opcodes.GOTO, targetLabel.gotoLabel);
     }
 }
