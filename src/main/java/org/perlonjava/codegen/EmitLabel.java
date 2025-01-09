@@ -13,7 +13,7 @@ public class EmitLabel {
     /**
      * Generates bytecode for a label declaration in Perl code.
      *
-     * @param ctx The current emitter context containing compilation state
+     * @param ctx  The current emitter context containing compilation state
      * @param node The AST node representing the label
      * @throws PerlCompilerException if the label is not found in the current scope
      */

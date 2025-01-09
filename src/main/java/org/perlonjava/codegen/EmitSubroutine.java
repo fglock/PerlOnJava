@@ -7,7 +7,9 @@ import org.perlonjava.astnode.BinaryOperatorNode;
 import org.perlonjava.astnode.IdentifierNode;
 import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.astnode.SubroutineNode;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.NameNormalizer;
+import org.perlonjava.runtime.RuntimeCode;
+import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.symbols.ScopedSymbolTable;
 import org.perlonjava.symbols.SymbolTable;
 

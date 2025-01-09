@@ -226,6 +226,53 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return (RuntimeScalar) Operator.repeat(runtimeScalar, arg, RuntimeContextType.SCALAR);
     }
 
+    public static RuntimeScalar ref(RuntimeScalar runtimeScalar) {
+        String str;
+        int blessId;
+        switch (runtimeScalar.type) {
+            case CODE:
+                str = "CODE";
+                break;
+            case GLOB:
+                str = "";
+                break;
+            case REGEX:
+                str = "Regexp";
+                break;
+            case REFERENCE:
+                String ref = "REF";
+                if (runtimeScalar.value instanceof RuntimeScalar scalar) {
+                    ref = switch (scalar.type) {
+                        case VSTRING -> "VSTRING";
+                        case REGEX, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE -> "REF";
+                        case GLOB -> "GLOB";
+                        default -> "SCALAR";
+                    };
+                }
+                blessId = ((RuntimeBaseEntity) runtimeScalar.value).blessId;
+                str = blessId == 0 ? ref : NameNormalizer.getBlessStr(blessId);
+                break;
+            case ARRAYREFERENCE:
+                blessId = ((RuntimeBaseEntity) runtimeScalar.value).blessId;
+                str = blessId == 0 ? "ARRAY" : NameNormalizer.getBlessStr(blessId);
+                break;
+            case HASHREFERENCE:
+                blessId = ((RuntimeBaseEntity) runtimeScalar.value).blessId;
+                str = blessId == 0 ? "HASH" : NameNormalizer.getBlessStr(blessId);
+                break;
+            case GLOBREFERENCE:
+                str = "GLOB";
+                break;
+            default:
+                return scalarEmptyString;
+        }
+        return new RuntimeScalar(str);
+    }
+
+    public static RuntimeScalar not(RuntimeScalar runtimeScalar) {
+        return getScalarBoolean(!runtimeScalar.getBoolean());
+    }
+
     public RuntimeScalar refaddr() {
         switch (type) {
             case REFERENCE:
@@ -589,49 +636,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         };
     }
 
-    public static RuntimeScalar ref(RuntimeScalar runtimeScalar) {
-        String str;
-        int blessId;
-        switch (runtimeScalar.type) {
-            case CODE:
-                str = "CODE";
-                break;
-            case GLOB:
-                str = "";
-                break;
-            case REGEX:
-                str = "Regexp";
-                break;
-            case REFERENCE:
-                String ref = "REF";
-                if (runtimeScalar.value instanceof RuntimeScalar scalar) {
-                    ref = switch (scalar.type) {
-                        case VSTRING -> "VSTRING";
-                        case REGEX, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE -> "REF";
-                        case GLOB -> "GLOB";
-                        default -> "SCALAR";
-                    };
-                }
-                blessId = ((RuntimeBaseEntity) runtimeScalar.value).blessId;
-                str = blessId == 0 ? ref : NameNormalizer.getBlessStr(blessId);
-                break;
-            case ARRAYREFERENCE:
-                blessId = ((RuntimeBaseEntity) runtimeScalar.value).blessId;
-                str = blessId == 0 ? "ARRAY" : NameNormalizer.getBlessStr(blessId);
-                break;
-            case HASHREFERENCE:
-                blessId = ((RuntimeBaseEntity) runtimeScalar.value).blessId;
-                str = blessId == 0 ? "HASH" : NameNormalizer.getBlessStr(blessId);
-                break;
-            case GLOBREFERENCE:
-                str = "GLOB";
-                break;
-            default:
-                return scalarEmptyString;
-        }
-        return new RuntimeScalar(str);
-    }
-
     // Return a reference to this
     public RuntimeScalar createReference() {
         RuntimeScalar result = new RuntimeScalar();
@@ -668,10 +672,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             return (boolean) value;
         }
         return type != RuntimeScalarType.UNDEF;
-    }
-
-    public static RuntimeScalar not(RuntimeScalar runtimeScalar) {
-        return getScalarBoolean(!runtimeScalar.getBoolean());
     }
 
     public RuntimeScalar preAutoIncrement() {

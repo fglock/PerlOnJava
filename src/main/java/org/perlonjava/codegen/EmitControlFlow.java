@@ -20,7 +20,7 @@ public class EmitControlFlow {
      * - 'last' is equivalent to 'break' in Java
      * - 'redo' restarts the current loop iteration
      *
-     * @param ctx The current emitter context containing compilation state
+     * @param ctx  The current emitter context containing compilation state
      * @param node The operator node representing the control flow statement
      * @throws PerlCompilerException if the operator is used outside a loop block
      */
@@ -74,7 +74,7 @@ public class EmitControlFlow {
      * Processes both single and multiple return values, ensuring proper stack management.
      *
      * @param emitterVisitor The visitor handling the bytecode emission
-     * @param node The operator node representing the return statement
+     * @param node           The operator node representing the return statement
      */
     static void handleReturnOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         EmitterContext ctx = emitterVisitor.ctx;
@@ -105,7 +105,7 @@ public class EmitControlFlow {
      * Validates label existence and manages stack cleanup before jumping.
      *
      * @param emitterVisitor The visitor handling the bytecode emission
-     * @param node The operator node representing the goto statement
+     * @param node           The operator node representing the goto statement
      * @throws PerlCompilerException if the label is missing or invalid
      */
     static void handleGotoLabel(EmitterVisitor emitterVisitor, OperatorNode node) {

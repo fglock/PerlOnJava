@@ -29,6 +29,18 @@ public class OperatorNode extends AbstractNode {
     // Lazy initialization - only created when first annotation is set
     public Map<String, Object> annotations;
 
+    /**
+     * Constructs a new OperatorNode with the specified operator and operand.
+     *
+     * @param operator the unary operator to be stored in this node
+     * @param operand  the operand on which the unary operator is applied; operand can be a single node or a ListNode
+     */
+    public OperatorNode(String operator, Node operand, int tokenIndex) {
+        this.operator = operator;
+        this.operand = operand;
+        this.tokenIndex = tokenIndex;
+    }
+
     public void setAnnotation(String key, Object value) {
         if (annotations == null) {
             annotations = new HashMap<>();
@@ -43,18 +55,6 @@ public class OperatorNode extends AbstractNode {
     public boolean getBooleanAnnotation(String key) {
         Object value = getAnnotation(key);
         return value instanceof Boolean && (Boolean) value;
-    }
-
-    /**
-     * Constructs a new OperatorNode with the specified operator and operand.
-     *
-     * @param operator the unary operator to be stored in this node
-     * @param operand  the operand on which the unary operator is applied; operand can be a single node or a ListNode
-     */
-    public OperatorNode(String operator, Node operand, int tokenIndex) {
-        this.operator = operator;
-        this.operand = operand;
-        this.tokenIndex = tokenIndex;
     }
 
     /**

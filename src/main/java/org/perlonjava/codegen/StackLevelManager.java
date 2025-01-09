@@ -66,9 +66,9 @@ public class StackLevelManager {
      * @param targetStackLevel the desired stack level to adjust to.
      */
     public void emitPopInstructions(MethodVisitor mv, int targetStackLevel) {
-        while (stackLevel > targetStackLevel) {
+        int s = this.stackLevel;
+        while (s-- > targetStackLevel) {
             mv.visitInsn(Opcodes.POP);
-            decrement(1);
         }
     }
 }

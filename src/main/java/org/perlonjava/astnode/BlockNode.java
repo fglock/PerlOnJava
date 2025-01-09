@@ -26,7 +26,7 @@ public class BlockNode extends AbstractNode {
     public String labelName;
 
     /**
-     *  The list of labels inside this block, as in `{ L1: ..., L2:... }`
+     * The list of labels inside this block, as in `{ L1: ..., L2:... }`
      */
     public List<String> labels;
 

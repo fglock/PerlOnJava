@@ -59,8 +59,8 @@ public class ExceptionFormatter {
 
         Arrays.stream(t.getStackTrace())
                 .filter(element ->
-                         element.getClassName().contains("org.perlonjava.anon")
-                         || element.getClassName().contains("org.perlonjava.perlmodule")
+                        element.getClassName().contains("org.perlonjava.anon")
+                                || element.getClassName().contains("org.perlonjava.perlmodule")
                 )
                 .forEach(element -> {
                     String fileName = element.getFileName();
