@@ -2,6 +2,7 @@ package org.perlonjava.astnode;
 
 import org.perlonjava.codegen.Visitor;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -20,9 +21,14 @@ public class BlockNode extends AbstractNode {
      */
     public boolean isLoop;
     /**
-     * the label name for this loop
+     * the label name for this loop block, as in `L1: {...}`
      */
     public String labelName;
+
+    /**
+     *  The list of labels inside this block, as in `{ L1: ..., L2:... }`
+     */
+    public List<String> labels;
 
     /**
      * Constructs a new BlockNode with the specified list of child nodes.
@@ -33,6 +39,8 @@ public class BlockNode extends AbstractNode {
     public BlockNode(List<Node> elements, int tokenIndex) {
         this.elements = elements;
         this.tokenIndex = tokenIndex;
+        this.labels = new ArrayList<>();
+        this.labelName = null;
         this.isLoop = false;
     }
 

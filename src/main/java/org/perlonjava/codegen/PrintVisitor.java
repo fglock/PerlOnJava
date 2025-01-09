@@ -263,7 +263,19 @@ public class PrintVisitor implements Visitor {
         if (node.isLoop) {
             appendIndent();
             sb.append("isLoop").append("\n");
+
+            if (node.labelName != null) {
+                appendIndent();
+                sb.append("label: ").append(node.labelName).append("\n");
+            }
         }
+
+        // Add labels printing
+        if (!node.labels.isEmpty()) {
+            appendIndent();
+            sb.append("labels: ").append(String.join(", ", node.labels)).append("\n");
+        }
+
         for (Node element : node.elements) {
             element.accept(this);
         }

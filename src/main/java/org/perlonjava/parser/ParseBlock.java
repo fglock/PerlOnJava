@@ -39,6 +39,7 @@ public class ParseBlock {
 
         // Container for all statements in the block
         List<Node> statements = new ArrayList<>();
+        List<String> blockLabels = new ArrayList<>(); // track labels
 
         // Get the current token without consuming it
         LexerToken token = peek(parser);
@@ -50,17 +51,20 @@ public class ParseBlock {
             // Label parsing logic
             String label = null;
             if (token.type == LexerTokenType.IDENTIFIER) {
-                // Check for potential label declaration
-                int currentIndexLabel = parser.tokenIndex;
-                String id = TokenUtils.consume(parser).text;
-                if (peek(parser).text.equals(":")) {
-                    // TODO handle special cases like `L1: L2:` and `L1: }`
-                    label = id;
-                    statements.add(new LabelNode(id, currentIndex));  // Create label node
-                    TokenUtils.consume(parser);
+                label = parseLabel(parser, statements, blockLabels);
+
+                token = peek(parser);
+                String nextLabel = label;
+                while (nextLabel != null && token.type == LexerTokenType.IDENTIFIER) {
+                    nextLabel = parseLabel(parser, statements, blockLabels);
                     token = peek(parser);
-                } else {
-                    parser.tokenIndex = currentIndexLabel;  // Backtrack if not a label
+                    if (nextLabel != null) {
+                        label = nextLabel;  // Keep track of the last valid label
+                    }
+                }
+
+                if (label != null && token.type == LexerTokenType.OPERATOR && token.text.equals("}")) {
+                    continue;
                 }
             }
 
@@ -86,6 +90,21 @@ public class ParseBlock {
         parser.ctx.symbolTable.exitScope();
 
         // Create and return the block node with all parsed statements
-        return new BlockNode(statements, currentIndex);
+        BlockNode blockNode = new BlockNode(statements, currentIndex);
+        blockNode.labels = blockLabels; // Set the collected labels in the BlockNode
+        return blockNode;
+    }
+
+    private static String parseLabel(Parser parser, List<Node> statements, List<String> blockLabels) {
+        int currentIndexLabel = parser.tokenIndex;
+        String id = TokenUtils.consume(parser).text;
+        if (peek(parser).text.equals(":")) {
+            statements.add(new LabelNode(id, currentIndexLabel));
+            blockLabels.add(id); // Add each found label to our list
+            TokenUtils.consume(parser); // Consume the colon
+            return id;
+        }
+        parser.tokenIndex = currentIndexLabel;
+        return null;
     }
 }
