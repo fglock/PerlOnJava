@@ -96,7 +96,7 @@ public class EmitterMethodCreator implements Opcodes {
         // The context type is determined by the caller.
         ctx.contextType = RuntimeContextType.RUNTIME;
 
-        DebugInfo.setDebugInfoFileName(ctx);
+        ByteCodeSourceMapper.setDebugInfoFileName(ctx);
 
         // Define the class with version, access flags, name, signature, superclass, and interfaces
         cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, ctx.javaClassInfo.javaClassName, null, "java/lang/Object", null);

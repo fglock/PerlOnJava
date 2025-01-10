@@ -54,7 +54,7 @@ public class EmitBlock {
         for (int i = 0; i < list.size(); i++) {
             Node element = list.get(i);
 
-            DebugInfo.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
+            ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
 
             // Emit the statement with current context
             if (i == list.size() - 1) {

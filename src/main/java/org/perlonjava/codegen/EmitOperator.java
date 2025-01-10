@@ -457,7 +457,7 @@ public class EmitOperator {
         // Set the current package in the symbol table.
         emitterVisitor.ctx.symbolTable.setCurrentPackage(name);
         // Set debug information for the file name.
-        DebugInfo.setDebugInfoFileName(emitterVisitor.ctx);
+        ByteCodeSourceMapper.setDebugInfoFileName(emitterVisitor.ctx);
         if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
             // If context is not void, return an empty list.
             ListNode listNode = new ListNode(node.tokenIndex);

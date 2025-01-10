@@ -1,6 +1,6 @@
 package org.perlonjava.runtime;
 
-import org.perlonjava.codegen.DebugInfo;
+import org.perlonjava.codegen.ByteCodeSourceMapper;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -65,7 +65,7 @@ public class ExceptionFormatter {
                                 || element.getClassName().contains("org.perlonjava.perlmodule")
                 )
                 .forEach(element -> {
-                    DebugInfo.SourceLocation loc = DebugInfo.parseStackTraceElement(element);
+                    ByteCodeSourceMapper.SourceLocation loc = ByteCodeSourceMapper.parseStackTraceElement(element);
                     stackTrace.add(
                             new ArrayList<>(
                                     Arrays.asList(
