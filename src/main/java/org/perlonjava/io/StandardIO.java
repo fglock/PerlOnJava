@@ -9,6 +9,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 import static org.perlonjava.runtime.RuntimeIO.handleIOException;
 
@@ -19,42 +20,29 @@ import static org.perlonjava.runtime.RuntimeIO.handleIOException;
  * program to continue executing without being blocked by IO operations.
  */
 public class StandardIO implements IOHandle {
-    // Constants representing the file descriptors for standard input, output, and error
+    // Standard file descriptors
     public static final int STDIN_FILENO = 0;
     public static final int STDOUT_FILENO = 1;
     public static final int STDERR_FILENO = 2;
 
-    // Size of the local buffer used for temporarily storing data before writing
+    // Configuration constants
     private static final int LOCAL_BUFFER_SIZE = 1024;
+    private static final long FLUSH_TIMEOUT_MS = 1000;
 
-    // File descriptor for this IO handle
+    // Core instance fields
     private final int fileno;
-
-    // Local buffer for temporarily storing data
     private final byte[] localBuffer = new byte[LOCAL_BUFFER_SIZE];
-
-    // Queue for managing data to be printed by the print thread
     private final BlockingQueue<byte[]> printQueue = new LinkedBlockingQueue<>();
-
-    // Thread responsible for writing data to the output stream
     private final Thread printThread;
-
-    // Lock object used for synchronizing flush operations
     private final Object flushLock = new Object();
+    private volatile boolean shutdownRequested = false;
 
-    // Input and output streams for reading and writing data
+    // Stream handling
     private InputStream inputStream;
     private OutputStream outputStream;
     private BufferedOutputStream bufferedOutputStream;
-
-    // Flag indicating if the end of the input stream has been reached
     private boolean isEOF;
-
-    // Position in the local buffer where the next byte will be written
     private int bufferPosition = 0;
-
-    // Flag indicating if a flush operation is in progress
-    private boolean flushInProgress = false;
 
     /**
      * Constructor for creating a StandardIO instance for reading from an input stream.
@@ -71,35 +59,37 @@ public class StandardIO implements IOHandle {
      * Constructor for creating a StandardIO instance for writing to an output stream.
      *
      * @param outputStream The output stream to write to.
-     * @param isStdout     Flag indicating if the output stream is standard output.
+     * @param isStdout    Flag indicating if the output stream is standard output.
      */
     public StandardIO(OutputStream outputStream, boolean isStdout) {
         this.outputStream = outputStream;
         this.bufferedOutputStream = new BufferedOutputStream(outputStream);
         this.fileno = isStdout ? STDOUT_FILENO : STDERR_FILENO;
 
-        // Start a daemon thread to handle printing
+        // Initialize and start the print thread for asynchronous output processing
         printThread = new Thread(() -> {
             try {
-                while (true) {
-                    // Take data from the queue and write it to the buffered output stream
-                    byte[] data = printQueue.take();
-                    if (data.length == 0) break; // Exit signal
+                while (!shutdownRequested || !printQueue.isEmpty()) {
+                    // Poll with timeout to allow checking shutdown condition
+                    byte[] data = printQueue.poll(100, TimeUnit.MILLISECONDS);
+                    if (data == null) continue;
+                    if (data.length == 0) break; // Empty array signals shutdown
+
                     bufferedOutputStream.write(data);
                     bufferedOutputStream.flush();
+
+                    // Notify any waiting flush operations
                     synchronized (flushLock) {
-                        // Notify waiting threads if a flush operation is complete
-                        if (flushInProgress && printQueue.isEmpty()) {
-                            flushInProgress = false;
-                            flushLock.notifyAll();
-                        }
+                        flushLock.notifyAll();
                     }
                 }
-            } catch (InterruptedException | IOException e) {
+            } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+            } catch (IOException e) {
+                // Stream errors handled silently
             }
         });
-        printThread.setDaemon(true); // Set the thread as a daemon
+        printThread.setDaemon(true);
         printThread.start();
     }
 
@@ -117,20 +107,17 @@ public class StandardIO implements IOHandle {
             int spaceLeft = LOCAL_BUFFER_SIZE - bufferPosition;
 
             if (dataLength > spaceLeft) {
-                // Fill the remaining space in the local buffer
-                System.arraycopy(data, 0, localBuffer, bufferPosition, spaceLeft);
-                bufferPosition += spaceLeft;
                 flushLocalBuffer();
-
-                // Write remaining data directly if it exceeds buffer size
-                int remainingDataLength = dataLength - spaceLeft;
-                if (remainingDataLength > LOCAL_BUFFER_SIZE) {
-                    printQueue.offer(data);
+                if (dataLength > LOCAL_BUFFER_SIZE) {
+                    // Large writes go directly to queue
+                    printQueue.offer(data.clone());
                 } else {
-                    System.arraycopy(data, spaceLeft, localBuffer, 0, remainingDataLength);
-                    bufferPosition = remainingDataLength;
+                    // Smaller writes use the local buffer
+                    System.arraycopy(data, 0, localBuffer, 0, dataLength);
+                    bufferPosition = dataLength;
                 }
             } else {
+                // Accumulate in local buffer
                 System.arraycopy(data, 0, localBuffer, bufferPosition, dataLength);
                 bufferPosition += dataLength;
             }
@@ -139,7 +126,20 @@ public class StandardIO implements IOHandle {
     }
 
     /**
+     * Helper method to flush the local buffer contents to the print queue.
+     */
+    private void flushLocalBuffer() {
+        if (bufferPosition > 0) {
+            byte[] data = new byte[bufferPosition];
+            System.arraycopy(localBuffer, 0, data, 0, bufferPosition);
+            printQueue.offer(data);
+            bufferPosition = 0;
+        }
+    }
+
+    /**
      * Flushes the local buffer and waits for the print queue to be empty.
+     * Uses a timeout to prevent indefinite blocking.
      *
      * @return A RuntimeScalar indicating the success of the operation.
      */
@@ -148,11 +148,11 @@ public class StandardIO implements IOHandle {
         synchronized (localBuffer) {
             flushLocalBuffer();
         }
+
         synchronized (flushLock) {
-            flushInProgress = true;
-            while (flushInProgress) {
+            if (!printQueue.isEmpty()) {
                 try {
-                    flushLock.wait();
+                    flushLock.wait(FLUSH_TIMEOUT_MS);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
@@ -162,31 +162,23 @@ public class StandardIO implements IOHandle {
     }
 
     /**
-     * Flushes the local buffer by adding its contents to the print queue.
-     */
-    private void flushLocalBuffer() {
-        if (bufferPosition > 0) {
-            byte[] dataToFlush = new byte[bufferPosition];
-            System.arraycopy(localBuffer, 0, dataToFlush, 0, bufferPosition);
-            printQueue.offer(dataToFlush);
-            bufferPosition = 0;
-        }
-    }
-
-    /**
-     * Closes the IO handle by signaling the print thread to exit.
+     * Closes the IO handle by flushing pending data and signaling the print thread to exit.
      *
      * @return A RuntimeScalar indicating the success of the operation.
      */
     @Override
     public RuntimeScalar close() {
-        // Signal the print thread to exit
+        flush();
+        shutdownRequested = true;
         if (printThread != null) {
-            printQueue.offer(new byte[0]);
+            printQueue.offer(new byte[0]); // Signal thread to exit
             try {
-                printThread.join();
+                printThread.join(FLUSH_TIMEOUT_MS);
+                bufferedOutputStream.close();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+            } catch (IOException e) {
+                return handleIOException(e, "Close operation failed");
             }
         }
         return RuntimeScalarCache.scalarTrue;
@@ -245,7 +237,7 @@ public class StandardIO implements IOHandle {
                 int byteRead = inputStream.read();
                 if (byteRead == -1) {
                     isEOF = true;
-                    return RuntimeScalarCache.scalarUndef; // Return undefined if EOF is reached
+                    return RuntimeScalarCache.scalarUndef;
                 }
                 return new RuntimeScalar(byteRead);
             }
