@@ -38,6 +38,7 @@ public class StringDoubleQuoted {
         Lexer lexer = new Lexer(input);
         List<LexerToken> tokens = lexer.tokenize();
         Parser parser = new Parser(ctx, tokens);
+        ctx.quoteMetaEnabled = false;
 
         // Loop through the token array until the end
         while (true) {
@@ -49,7 +50,7 @@ public class StringDoubleQuoted {
             switch (text) {
                 case "\\":
                     if (parseEscapes) {
-                        parseDoubleQuotedEscapes(ctx, tokens, parser, str, tokenIndex);
+                        parseDoubleQuotedEscapes(ctx, tokens, parser, str, tokenIndex, parts);
                     } else {
                         // Consume the escaped character without processing
                         str.append(text);
@@ -84,8 +85,8 @@ public class StringDoubleQuoted {
                         break;
                     }
                     if (!str.isEmpty()) {
-                        parts.add(new StringNode(str.toString(), tokenIndex));  // Add the string so far to parts
-                        str = new StringBuilder();  // Reset the buffer
+                        addStringSegment(ctx, parts, new StringNode(str.toString(), tokenIndex));  // Add the string so far to parts
+                        str.setLength(0);  // Reset the buffer
                     }
                     String sigil = text;
                     ctx.logDebug("str sigil");
@@ -172,7 +173,7 @@ public class StringDoubleQuoted {
                     if (isArray) {
                         operand = new BinaryOperatorNode("join", new OperatorNode("$", new IdentifierNode("\"", tokenIndex), tokenIndex), operand, tokenIndex);
                     }
-                    parts.add(operand);
+                    addStringSegment(ctx, parts, operand);
                     break;
                 default:
                     str.append(text);
@@ -180,7 +181,7 @@ public class StringDoubleQuoted {
         }
 
         if (!str.isEmpty()) {
-            parts.add(new StringNode(str.toString(), tokenIndex));  // Add the remaining string to parts
+            addStringSegment(ctx, parts, new StringNode(str.toString(), tokenIndex));  // Add the remaining string to parts
         }
 
         // Join the parts
@@ -198,6 +199,14 @@ public class StringDoubleQuoted {
                 tokenIndex);
     }
 
+    private static void addStringSegment(EmitterContext ctx, List<Node> parts, Node node) {
+        if (ctx.quoteMetaEnabled) {
+            parts.add(new OperatorNode("quotemeta", node, node.getIndex()));
+        } else {
+            parts.add(node);
+        }
+    }
+
     /**
      * Parses escape sequences within a double-quoted string.
      *
@@ -207,7 +216,7 @@ public class StringDoubleQuoted {
      * @param str        The StringBuilder to append parsed characters to.
      * @param tokenIndex The current index of the token being parsed.
      */
-    private static void parseDoubleQuotedEscapes(EmitterContext ctx, List<LexerToken> tokens, Parser parser, StringBuilder str, int tokenIndex) {
+    private static void parseDoubleQuotedEscapes(EmitterContext ctx, List<LexerToken> tokens, Parser parser, StringBuilder str, int tokenIndex, List<Node> parts) {
         LexerToken token;
         String text;
         String escape;
@@ -263,28 +272,19 @@ public class StringDoubleQuoted {
                     }
                 }
                 break;
-            case "E":
-                break;  // Marks the end of \Q sequence
-            case "Q":
-                // \Q quotemeta: Start an inner loop to handle the quoted section
-                while (true) {
-                    token = tokens.get(parser.tokenIndex++);
-                    LexerToken nextToken = tokens.get(parser.tokenIndex);
-                    if (token.type == LexerTokenType.EOF) {
-                        break;
-                    }
-                    if (token.text.equals("\\") && nextToken.text.startsWith("E")) {
-                        parser.tokenIndex--;
-                        break;
-                    }
-                    if (token.type == LexerTokenType.IDENTIFIER || token.type == LexerTokenType.NUMBER) {
-                        str.append(token.text);
-                    } else {
-                        for (char c : token.text.toCharArray()) {
-                            str.append("\\").append(c);
-                        }
-                    }
+            case "E":  // Marks the end of quotemeta sequence
+                if (!str.isEmpty()) {
+                    addStringSegment(ctx, parts, new StringNode(str.toString(), tokenIndex));  // Add the string so far to parts
+                    str.setLength(0);  // Reset the buffer
                 }
+                ctx.quoteMetaEnabled = false;
+                break;
+            case "Q":   // Marks the start of quotemeta sequence
+                if (!str.isEmpty()) {
+                    addStringSegment(ctx, parts, new StringNode(str.toString(), tokenIndex));  // Add the string so far to parts
+                    str.setLength(0);  // Reset the buffer
+                }
+                ctx.quoteMetaEnabled = true;
                 break;
             case "x":
                 StringBuilder unicodeSeq = new StringBuilder();

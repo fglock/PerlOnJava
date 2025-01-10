@@ -1,7 +1,10 @@
 package org.perlonjava.codegen;
 
 import org.objectweb.asm.Label;
-import java.util.*;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Maps bytecode positions to their corresponding Perl source code locations.
@@ -19,25 +22,8 @@ public class ByteCodeSourceMapper {
     private static final Map<String, Integer> packageNameToId = new HashMap<>();
 
     /**
-     * Holds debug information for a specific source file including
-     * mappings between token indices and line information.
-     */
-    private static class SourceFileInfo {
-        final String fileName;
-        final Map<Integer, LineInfo> tokenToLineInfo = new HashMap<>();
-
-        SourceFileInfo(String fileName) {
-            this.fileName = fileName;
-        }
-    }
-
-    /**
-     * Associates a line number with its package context.
-     */
-    private record LineInfo(int lineNumber, int packageNameId) {}
-
-    /**
      * Gets or creates a unique identifier for a package name.
+     *
      * @param packageName The fully qualified package name
      * @return The unique identifier for the package
      */
@@ -50,6 +36,7 @@ public class ByteCodeSourceMapper {
 
     /**
      * Sets the source file information in the bytecode metadata.
+     *
      * @param ctx The current emitter context
      */
     static void setDebugInfoFileName(EmitterContext ctx) {
@@ -60,7 +47,8 @@ public class ByteCodeSourceMapper {
 
     /**
      * Maps a token index to its source line number in the bytecode.
-     * @param ctx The current emitter context
+     *
+     * @param ctx        The current emitter context
      * @param tokenIndex The index of the token in the source
      */
     static void setDebugInfoLineNumber(EmitterContext ctx, int tokenIndex) {
@@ -79,6 +67,7 @@ public class ByteCodeSourceMapper {
 
     /**
      * Converts a stack trace element to its original source location.
+     *
      * @param element The stack trace element to parse
      * @return The corresponding source code location
      */
@@ -100,8 +89,28 @@ public class ByteCodeSourceMapper {
     }
 
     /**
+     * Holds debug information for a specific source file including
+     * mappings between token indices and line information.
+     */
+    private static class SourceFileInfo {
+        final String fileName;
+        final Map<Integer, LineInfo> tokenToLineInfo = new HashMap<>();
+
+        SourceFileInfo(String fileName) {
+            this.fileName = fileName;
+        }
+    }
+
+    /**
+     * Associates a line number with its package context.
+     */
+    private record LineInfo(int lineNumber, int packageNameId) {
+    }
+
+    /**
      * Represents a location in the source code, including file name,
      * package name, and line number.
      */
-    public record SourceLocation(String sourceFileName, String packageName, int lineNumber) {}
+    public record SourceLocation(String sourceFileName, String packageName, int lineNumber) {
+    }
 }

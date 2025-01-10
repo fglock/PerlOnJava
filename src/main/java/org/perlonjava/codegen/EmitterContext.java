@@ -64,6 +64,11 @@ public class EmitterContext {
     public RuntimeArray unitcheckBlocks;
 
     /**
+     * Active after \Q in double quoted string
+     */
+    public boolean quoteMetaEnabled;
+
+    /**
      * Constructs a new EmitterContext with the specified parameters.
      *
      * @param javaClassInfo   the name of the Java class being generated

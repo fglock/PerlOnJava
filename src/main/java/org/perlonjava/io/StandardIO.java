@@ -41,16 +41,6 @@ public class StandardIO implements IOHandle {
     private boolean isEOF;
     private int bufferPosition = 0;
 
-    private static class QueueItem {
-        final byte[] data;
-        final int seq;
-
-        QueueItem(byte[] data, int seq) {
-            this.data = data;
-            this.seq = seq;
-        }
-    }
-
     public StandardIO(InputStream inputStream) {
         this.inputStream = inputStream;
         this.fileno = STDIN_FILENO;
@@ -219,5 +209,15 @@ public class StandardIO implements IOHandle {
             handleIOException(e, "getc operation failed");
         }
         return RuntimeScalarCache.scalarUndef;
+    }
+
+    private static class QueueItem {
+        final byte[] data;
+        final int seq;
+
+        QueueItem(byte[] data, int seq) {
+            this.data = data;
+            this.seq = seq;
+        }
     }
 }
