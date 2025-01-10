@@ -46,6 +46,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
     boolean isGlobalMatch;   // Flag for global matching
     boolean isNonDestructive; // Flag for non-destructive substitution
     boolean isMatchExactlyOnce; // Flag for matching exactly once
+    boolean keepCurrentPosition; // Flag for /c modifier
 
     // Replacement string for substitutions
     private RuntimeScalar replacement = null;
@@ -74,6 +75,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
             try {
                 int flags = regex.convertModifiers(modifiers);
                 regex.isGlobalMatch = modifiers.contains("g");
+                regex.keepCurrentPosition = modifiers.contains("c");
                 regex.isNonDestructive = modifiers.contains("r");
                 regex.isMatchExactlyOnce = modifiers.contains("?");
                 boolean flag_xx = modifiers.contains("xx");
