@@ -191,6 +191,7 @@
 ## Upcoming Milestones
 
 - **v2.3.0**: Next minor version
+  - `README.md` now calls PerlOnJava "A Perl Distribution for the JVM" instead of "Perl Compiler".
   - Added `Text::Balanced` module.
   - Added chained operators.
   - Added stacked file test operators.

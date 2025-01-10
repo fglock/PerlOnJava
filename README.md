@@ -1,6 +1,10 @@
-# PerlOnJava Perl Compiler
+# PerlOnJava: A Perl Distribution for the JVM
 
-This project presents a Perl compiler that compiles Perl into Java bytecode and runs it, providing a method to integrate Perl with Java-based ecosystems.
+PerlOnJava provides a Perl distribution designed to run natively on the Java Virtual Machine (JVM). 
+It allows Perl scripts to integrate seamlessly with Java-based ecosystems while offering familiar tools and modules for Perl development.
+
+The included JAR package features a variety of Perl modules, such as `DBI` (with JDBC support), `HTTP::Tiny`, `JSON`, `File::Find`, and `Data::Dumper`. 
+Users can also add their own database JDBC drivers, making it a flexible solution for cross-platform Perl applications.
 
 ## Table of Contents
 
@@ -56,14 +60,15 @@ $dbh->do("INSERT INTO test VALUES (1, 'Hello World')");
 
 ## Features and Limitations
 
-### Features
+### Key Features
 
-- **Closures**: Supports anonymous functions and lexical variable closures.
-- **Eval-string**: Executes Perl code dynamically.
-- **Statements, Data Types, and Call Context**: Handles common Perl statements, data types, and maintains Perl's context sensitivity.
-- **Java Scripting API (JSR 223)**: Enables Perl scripts to be executed within Java applications using the `ScriptEngine` interface.
+- **Familiar Perl Modules**: Includes core modules such as `DBI`, `File::Find`, `Data::Dumper`, and non-core modules like `JSON` and `HTTP::CookieJar`.
+- **JDBC Support**: Use `DBI` to connect to Java databases via JDBC.
+- **Java Integration**: Execute Perl scripts in Java environments, leveraging the JVM's capabilities and interoperability, with Java Scripting API (JSR 223).
+- **Cross-Platform Distribution**: Run Perl scripts in any Java-supported environment with consistent performance.
 
-For a detailed feature list, see the [FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md).
+For more details on supported modules, pragmas, and features, see the [Feature Matrix](docs/FEATURE_MATRIX.md).
+
 
 ### Current Limitations
 
