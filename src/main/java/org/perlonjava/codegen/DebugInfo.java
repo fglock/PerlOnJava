@@ -4,76 +4,64 @@ import org.objectweb.asm.Label;
 import java.util.*;
 
 public class DebugInfo {
-    private static final Map<String, PackageTracker> activePackages = new HashMap<>();
-    private static final NavigableMap<PackageRange, Integer> packageRanges = new TreeMap<>(Comparator.comparing(PackageRange::sourceFile).thenComparingInt(PackageRange::startLine));
-    private static final Map<Integer, Integer> tokenToLineMap = new HashMap<>();
+    private static final Map<String, SourceFileInfo> sourceFiles = new HashMap<>();
+    private static final ArrayList<String> packageNamePool = new ArrayList<>();
+    private static final Map<String, Integer> packageNameToId = new HashMap<>();
 
-    static void setDebugInfoLineNumber(EmitterContext ctx, int tokenIndex) {
-        int lineNumber = ctx.errorUtil.getLineNumber(tokenIndex);
-        String sourceFile = ctx.compilerOptions.fileName;
-        String currentPackage = ctx.symbolTable.getCurrentPackage();
+    private static class SourceFileInfo {
+        final String fileName;
+        final Map<Integer, LineInfo> tokenToLineInfo = new HashMap<>();
 
-        // Store token to line mapping
-        tokenToLineMap.put(tokenIndex, lineNumber);
-
-        PackageTracker tracker = activePackages.get(sourceFile);
-        if (tracker == null || !tracker.currentPackage.equals(currentPackage)) {
-            if (tracker != null) {
-                packageRanges.put(
-                        new PackageRange(tracker.sourceFile, tracker.currentPackage, tracker.startLine),
-                        lineNumber - 1
-                );
-            }
-            tracker = new PackageTracker();
-            tracker.currentPackage = currentPackage;
-            tracker.startLine = lineNumber;
-            tracker.sourceFile = sourceFile;
-            activePackages.put(sourceFile, tracker);
+        SourceFileInfo(String fileName) {
+            this.fileName = fileName;
         }
-
-        Label thisLabel = new Label();
-        ctx.mv.visitLabel(thisLabel);
-        ctx.mv.visitLineNumber(tokenIndex, thisLabel);  // Using tokenIndex instead of lineNumber
     }
 
-    // New method to get line number from token index
-    public static int getLineNumberFromToken(int tokenIndex) {
-        return tokenToLineMap.getOrDefault(tokenIndex, -1);
+    private record LineInfo(int lineNumber, int packageNameId) {}
+
+    private static int getOrCreatePackageId(String packageName) {
+        return packageNameToId.computeIfAbsent(packageName, name -> {
+            packageNamePool.add(name);
+            return packageNamePool.size() - 1;
+        });
     }
 
     static void setDebugInfoFileName(EmitterContext ctx) {
+        String sourceFile = ctx.compilerOptions.fileName;
+        sourceFiles.computeIfAbsent(sourceFile, SourceFileInfo::new);
         ctx.cw.visitSource(ctx.compilerOptions.fileName, null);
     }
 
-    public static String getPackageForLocation(String sourceFile, int lineNumber) {
-        var entry = packageRanges.floorEntry(new PackageRange(sourceFile, "", lineNumber));
-        if (entry != null && entry.getValue() >= lineNumber) {
-            return entry.getKey().packageName();
-        }
-        PackageTracker tracker = activePackages.get(sourceFile);
-        if (tracker != null && lineNumber >= tracker.startLine) {
-            return tracker.currentPackage;
-        }
-        return "";
+    static void setDebugInfoLineNumber(EmitterContext ctx, int tokenIndex) {
+        String sourceFile = ctx.compilerOptions.fileName;
+        SourceFileInfo info = sourceFiles.computeIfAbsent(sourceFile, SourceFileInfo::new);
+
+        info.tokenToLineInfo.put(tokenIndex, new LineInfo(
+                ctx.errorUtil.getLineNumber(tokenIndex),
+                getOrCreatePackageId(ctx.symbolTable.getCurrentPackage())
+        ));
+
+        Label thisLabel = new Label();
+        ctx.mv.visitLabel(thisLabel);
+        ctx.mv.visitLineNumber(tokenIndex, thisLabel);
     }
 
     public static SourceLocation parseStackTraceElement(StackTraceElement element) {
-        String sourceFileName = element.getFileName();
-        int tokenIndex = element.getLineNumber(); // Now getting tokenIndex from stack trace
-        int actualLineNumber = getLineNumberFromToken(tokenIndex);
-        String packageName = getPackageForLocation(sourceFileName, actualLineNumber);
-        return new SourceLocation(sourceFileName, packageName, actualLineNumber);
+        String sourceFile = element.getFileName();
+        int tokenIndex = element.getLineNumber();
+
+        SourceFileInfo info = sourceFiles.get(sourceFile);
+        if (info == null) {
+            return new SourceLocation(sourceFile, "", tokenIndex);
+        }
+
+        LineInfo lineInfo = info.tokenToLineInfo.get(tokenIndex);
+        return new SourceLocation(
+                sourceFile,
+                packageNamePool.get(lineInfo.packageNameId()),
+                lineInfo.lineNumber()
+        );
     }
 
-    private static class PackageTracker {
-        String currentPackage;
-        int startLine;
-        String sourceFile;
-    }
-
-    private record PackageRange(String sourceFile, String packageName, int startLine) {
-    }
-
-    public record SourceLocation(String sourceFileName, String packageName, int lineNumber) {
-    }
+    public record SourceLocation(String sourceFileName, String packageName, int lineNumber) {}
 }
