@@ -64,7 +64,7 @@ $dbh->do("INSERT INTO test VALUES (1, 'Hello World')");
 
 ### Key Features
 
-- **Familiar Perl Modules**: Includes core modules such as `DBI`, `File::Find`, `Data::Dumper`, and non-core modules like `JSON` and `HTTP::CookieJar`.
+- **Familiar Perl Modules**: Includes core modules such as `Text::Balanced`, `File::Find`, `Data::Dumper`, and non-core modules like `DBI`, `JSON` and `HTTP::CookieJar`.
 - **JDBC Support**: Use `DBI` to connect to Java databases via JDBC.
 - **Java Integration**: Execute Perl scripts in Java environments, leveraging the JVM's capabilities and interoperability, with Java Scripting API (JSR 223).
 - **Cross-Platform Distribution**: Run Perl scripts in any Java-supported environment with consistent performance.
