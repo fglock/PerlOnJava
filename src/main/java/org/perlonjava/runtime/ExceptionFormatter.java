@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.codegen.DebugInfo;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 
@@ -63,21 +65,13 @@ public class ExceptionFormatter {
                                 || element.getClassName().contains("org.perlonjava.perlmodule")
                 )
                 .forEach(element -> {
-                    String fileName = element.getFileName();
-                    // Split the file name into source file name and package name.
-                    // The filename is formatted in codegen.DebugInfo like:
-                    // sourceFileName + " @ " + packageName
-                    String[] fileNameParts = fileName.split(" @ ", 2); // Split into at most 2 parts
-                    String sourceFileName = fileNameParts[0];
-                    String packageName = fileNameParts.length > 1 ? fileNameParts[1] : "";
-
-                    // Add the formatted stack trace element to the list
+                    DebugInfo.SourceLocation loc = DebugInfo.parseStackTraceElement(element);
                     stackTrace.add(
                             new ArrayList<>(
                                     Arrays.asList(
-                                            packageName,
-                                            sourceFileName,
-                                            String.valueOf(element.getLineNumber())
+                                            loc.packageName(),
+                                            loc.sourceFileName(),
+                                            String.valueOf(loc.lineNumber())
                                     )
                             )
                     );

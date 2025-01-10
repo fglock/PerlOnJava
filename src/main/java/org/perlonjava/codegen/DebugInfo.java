@@ -3,6 +3,18 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.Label;
 
 public class DebugInfo {
+    public static final String PACKAGE_SEPARATOR = " @ ";
+
+    public static record SourceLocation(String sourceFileName, String packageName, int lineNumber) {}
+
+    public static SourceLocation parseStackTraceElement(StackTraceElement element) {
+        String fileName = element.getFileName();
+        String[] fileNameParts = fileName.split(PACKAGE_SEPARATOR, 2);
+        String sourceFileName = fileNameParts[0];
+        String packageName = fileNameParts.length > 1 ? fileNameParts[1] : "";
+        return new SourceLocation(sourceFileName, packageName, element.getLineNumber());
+    }
+
     static void setDebugInfoLineNumber(EmitterContext ctx, int tokenIndex) {
         // Annotate the bytecode with Perl source code line numbers
         int lineNumber = ctx.errorUtil.getLineNumber(tokenIndex);
@@ -17,6 +29,6 @@ public class DebugInfo {
         String packageName = ctx.symbolTable.getCurrentPackage();
         String sourceFileName = ctx.compilerOptions.fileName;
         // System.out.println("Source file name: " + sourceFileName + " @ " + packageName + " " + ctx.cw);
-        ctx.cw.visitSource(sourceFileName + " @ " + packageName, null);
+        ctx.cw.visitSource(sourceFileName + PACKAGE_SEPARATOR + packageName, null);
     }
 }
