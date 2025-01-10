@@ -1,27 +1,12 @@
 package org.perlonjava.codegen;
 
 import org.objectweb.asm.Label;
-import java.util.TreeMap;
-import java.util.NavigableMap;
-import java.util.HashMap;
-import java.util.Map;
+
+import java.util.*;
 
 public class DebugInfo {
-    private static class PackageTracker {
-        String currentPackage;
-        int startLine;
-        String sourceFile;
-    }
-
     private static final Map<String, PackageTracker> activePackages = new HashMap<>();
-    private static final NavigableMap<PackageRange, Integer> packageRanges = new TreeMap<>((a, b) -> {
-        int fileCompare = a.sourceFile().compareTo(b.sourceFile());
-        if (fileCompare != 0) return fileCompare;
-        return Integer.compare(a.startLine(), b.startLine());
-    });
-
-    private static record PackageRange(String sourceFile, String packageName, int startLine) {}
-    public static record SourceLocation(String sourceFileName, String packageName, int lineNumber) {}
+    private static final NavigableMap<PackageRange, Integer> packageRanges = new TreeMap<>(Comparator.comparing(PackageRange::sourceFile).thenComparingInt(PackageRange::startLine));
 
     static void setDebugInfoLineNumber(EmitterContext ctx, int tokenIndex) {
         int lineNumber = ctx.errorUtil.getLineNumber(tokenIndex);
@@ -68,5 +53,17 @@ public class DebugInfo {
         String sourceFileName = element.getFileName();
         String packageName = getPackageForLocation(sourceFileName, element.getLineNumber());
         return new SourceLocation(sourceFileName, packageName, element.getLineNumber());
+    }
+
+    private static class PackageTracker {
+        String currentPackage;
+        int startLine;
+        String sourceFile;
+    }
+
+    private record PackageRange(String sourceFile, String packageName, int startLine) {
+    }
+
+    public record SourceLocation(String sourceFileName, String packageName, int lineNumber) {
     }
 }
