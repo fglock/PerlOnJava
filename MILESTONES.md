@@ -194,6 +194,7 @@
   - Added chained operators.
   - Added stacked file test operators.
   - Added `module_true` feature.
+  - Added `/c` regex modifier.
   - Planned release date: 2025-02-10
 
 - **v3.0.0**: Concurrency and Security Features

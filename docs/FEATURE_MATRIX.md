@@ -171,7 +171,7 @@
 
 ## Regular Expressions
 - ✔️   **Basic Matching**: Operators `qr//`, `m//`, `s///`, `split` are implemented.
-- ✔️   **Regex modifiers**: Modifiers `/i` `/m` `/s` `/g` `/r` `/e` `/x` `/xx` are implemented.
+- ✔️   **Regex modifiers**: Modifiers `/i` `/m` `/s` `/g` `/c` `/r` `/e` `/x` `/xx` are implemented.
 - ✔️   **Special variables**: The special variables `$1`, `$2`... are implemented.
 - ✔️   **Transliteration**: `tr` and `y` transliteration operators are implemented.
 - ✔️   **`pos`**: `pos` operator is implemented.

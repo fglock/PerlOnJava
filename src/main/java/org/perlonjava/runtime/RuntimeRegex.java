@@ -226,6 +226,11 @@ public class RuntimeRegex implements RuntimeScalarReference {
             }
         }
 
+        // Reset pos() on failed match with /g, unless /c is set
+        if (!found && regex.isGlobalMatch && !regex.keepCurrentPosition) {
+            posScalar.set(scalarUndef);
+        }
+
         if (found) {
             regex.matched = true; // Counter for m?PAT?
         }
