@@ -32,7 +32,7 @@ public class StringOperators {
     public static RuntimeScalar quotemeta(RuntimeScalar runtimeScalar) {
         StringBuilder quoted = new StringBuilder();
         // Iterate over each character in the string
-        for (char c : runtimeScalar.value.toString().toCharArray()) {
+        for (char c : runtimeScalar.toString().toCharArray()) {
             // If the character is alphanumeric, append it as is
             if (Character.isLetterOrDigit(c)) {
                 quoted.append(c);

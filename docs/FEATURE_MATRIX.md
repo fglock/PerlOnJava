@@ -267,7 +267,9 @@
 - ❌  **loop control operators**: `next`, `last`, `redo` with expression are not implemented.
 - ❌  **loop control operators**: `next`, `last`, `redo` going to a different place in the call stack are not implemented. Label searching in the call stack is missing.
 - ✔️   **`goto &name`**: `goto &name` is implemented. It is not a tail-call.
-- ❌  **`goto` operator**: `goto EXPR` and `goto LABEL` are not implemented.
+- ✔️   **`goto` operator**: `goto LABEL` is implemented.
+- ❌  **`goto` operator**: `goto EXPR` is not implemented.
+- ❌  **`goto` operator**: `goto` going to a different place in the call stack is not implemented. Label searching in the call stack is missing.
 - ✔️   **setting `$_` in `while` loop with `<>`**: automatic setting `$_` in `while` loops is implemented.
 - ✔️   **`do BLOCK while`**: `do` executes once before the conditional is evaluated.
 - ✔️   **`...` ellipsis statement**: `...` is supported.
@@ -338,13 +340,13 @@
 - ✔️   **Time::Local** module.
 - ✔️   **HTTP::Date** module.
 - ✔️   **URI::Escape** module.
+- ✔️   **Text::Balanced** use the same version as Perl.
 - 🚧  **HTTP::Tiny** some features untested: proxy settings.
 - 🚧  **DynaLoader** placeholder module.
 - ❌  **IO::Socket** module, and related modules or asynchronous I/O operations.
 - ❌  **Safe** module.
 - ❌  **Digest::MD5** module.
 - ❌  **Digest::SHA** module.
-- ❌  **Text::Balanced** module.
 - ❌  **POSIX** module.
 
 ### Non-core modules

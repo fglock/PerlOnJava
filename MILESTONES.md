@@ -191,6 +191,7 @@
 ## Upcoming Milestones
 
 - **v2.3.0**: Next minor version
+  - Added `Text::Balanced` module.
   - Added chained operators.
   - Added stacked file test operators.
   - Added `module_true` feature.
