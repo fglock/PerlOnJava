@@ -23,7 +23,9 @@ Users can also add their own database JDBC drivers, making it a flexible solutio
 
 ## Introduction
 
-This project aims to develop a Perl compiler that translates Perl code into Java bytecode and executes it on the Java Virtual Machine (JVM). It provides a platform for running Perl scripts in a JVM environment, facilitating integration between Perl and Java.
+PerlOnJava bridges the gap between Perl and Java by providing a platform that compiles Perl scripts into Java bytecode, making them executable on the JVM. 
+By leveraging this distribution, developers can run familiar Perl code while accessing Java's ecosystem of libraries and tools. 
+This project aims to bring the strengths of Perl to modern JVM environments while supporting a growing list of core modules and pragmas.
 
 ## Quick Start
 
