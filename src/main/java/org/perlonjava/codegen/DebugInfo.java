@@ -1,17 +1,20 @@
 package org.perlonjava.codegen;
 
 import org.objectweb.asm.Label;
-
 import java.util.*;
 
 public class DebugInfo {
     private static final Map<String, PackageTracker> activePackages = new HashMap<>();
     private static final NavigableMap<PackageRange, Integer> packageRanges = new TreeMap<>(Comparator.comparing(PackageRange::sourceFile).thenComparingInt(PackageRange::startLine));
+    private static final Map<Integer, Integer> tokenToLineMap = new HashMap<>();
 
     static void setDebugInfoLineNumber(EmitterContext ctx, int tokenIndex) {
         int lineNumber = ctx.errorUtil.getLineNumber(tokenIndex);
         String sourceFile = ctx.compilerOptions.fileName;
         String currentPackage = ctx.symbolTable.getCurrentPackage();
+
+        // Store token to line mapping
+        tokenToLineMap.put(tokenIndex, lineNumber);
 
         PackageTracker tracker = activePackages.get(sourceFile);
         if (tracker == null || !tracker.currentPackage.equals(currentPackage)) {
@@ -30,7 +33,12 @@ public class DebugInfo {
 
         Label thisLabel = new Label();
         ctx.mv.visitLabel(thisLabel);
-        ctx.mv.visitLineNumber(lineNumber, thisLabel);
+        ctx.mv.visitLineNumber(tokenIndex, thisLabel);  // Using tokenIndex instead of lineNumber
+    }
+
+    // New method to get line number from token index
+    public static int getLineNumberFromToken(int tokenIndex) {
+        return tokenToLineMap.getOrDefault(tokenIndex, -1);
     }
 
     static void setDebugInfoFileName(EmitterContext ctx) {
@@ -51,8 +59,10 @@ public class DebugInfo {
 
     public static SourceLocation parseStackTraceElement(StackTraceElement element) {
         String sourceFileName = element.getFileName();
-        String packageName = getPackageForLocation(sourceFileName, element.getLineNumber());
-        return new SourceLocation(sourceFileName, packageName, element.getLineNumber());
+        int tokenIndex = element.getLineNumber(); // Now getting tokenIndex from stack trace
+        int actualLineNumber = getLineNumberFromToken(tokenIndex);
+        String packageName = getPackageForLocation(sourceFileName, actualLineNumber);
+        return new SourceLocation(sourceFileName, packageName, actualLineNumber);
     }
 
     private static class PackageTracker {
