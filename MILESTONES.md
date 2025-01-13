@@ -197,6 +197,9 @@
   - Added stacked file test operators.
   - Added `module_true` feature.
   - Added `/c` regex modifier.
+  - Library upgrades.
+    Maven:  `mvn versions:use-latest-versions`.
+    Gradle: `./gradlew useLatestVersions`.
   - Planned release date: 2025-02-10
 
 - **v3.0.0**: Concurrency and Security Features

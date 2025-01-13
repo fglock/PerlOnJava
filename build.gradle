@@ -1,6 +1,8 @@
 plugins {
     id 'java'
     id 'jvm-test-suite'
+    id 'com.github.ben-manes.versions' version '0.51.0'
+    id 'se.patrikerdes.use-latest-versions' version '0.2.18'
     id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
 
@@ -18,10 +20,10 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.ow2.asm:asm:9.7'
-    implementation 'org.ow2.asm:asm-util:9.7'
-    implementation 'com.ibm.icu:icu4j:71.1'
-    implementation 'com.alibaba.fastjson2:fastjson2:2.0.53'
+    implementation 'org.ow2.asm:asm:9.7.1'
+    implementation 'org.ow2.asm:asm-util:9.7.1'
+    implementation 'com.ibm.icu:icu4j:76.1'
+    implementation 'com.alibaba.fastjson2:fastjson2:2.0.54'
 }
 
 testing {
