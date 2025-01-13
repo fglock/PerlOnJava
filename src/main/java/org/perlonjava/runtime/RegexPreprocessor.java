@@ -136,9 +136,10 @@ public class RegexPreprocessor {
         }
 
         String result = sb.toString();
-        result = result.replaceAll("\\(\\?=", "(?-m:");
-        result = result.replaceAll("\\(\\?<=", "(?-m:");
-        result = result.replaceAll("\\(\\?<!", "(?-m:^");
+        result = result.replaceAll("\\(\\?=", "(?-m:");  // Positive lookahead
+        result = result.replaceAll("\\(\\?<=", "(?-m:"); // Positive lookbehind
+        result = result.replaceAll("\\(\\?<!", "(?-m:^"); // Negative lookbehind
+        result = result.replaceAll("\\(\\?!", "(?-m:^"); // Negative lookahead
 
         return result;
     }
