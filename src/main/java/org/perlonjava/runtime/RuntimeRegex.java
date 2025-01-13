@@ -3,10 +3,9 @@ package org.perlonjava.runtime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import com.google.re2j.Pattern;
+import com.google.re2j.Matcher;
 
-import static java.util.regex.Pattern.COMMENTS;
 import static org.perlonjava.runtime.RegexPreprocessor.preProcessRegex;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
@@ -79,11 +78,16 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 regex.isNonDestructive = modifiers.contains("r");
                 regex.isMatchExactlyOnce = modifiers.contains("?");
                 boolean flag_xx = modifiers.contains("xx");
+                boolean flag_x = modifiers.contains("x");
 
                 // Check for \G and set useGAssertion
                 regex.useGAssertion = patternString.contains("\\G");
 
-                String javaPatternString = preProcessRegex(patternString, flag_xx);
+                // System.out.println("DEBUG: Pattern before preprocess: " + patternString + " flags: " + flags + " flag_xx: " + flag_xx + " flag_x: " + flag_x);
+
+                String javaPatternString = preProcessRegex(patternString, flag_x, flag_xx);
+
+                // System.out.println("DEBUG: Pattern after preprocess:  " + javaPatternString);
 
                 // Compile the regex pattern
                 regex.pattern = Pattern.compile(javaPatternString, flags);
@@ -168,20 +172,25 @@ public class RuntimeRegex implements RuntimeScalarReference {
         boolean isPosDefined = posScalar.getDefinedBoolean();
         int startPos = isPosDefined ? posScalar.getInt() : 0;
 
-        // Start matching from the current position if defined
-        if (isPosDefined) {
-            matcher.region(startPos, inputStr.length());
-        }
-
         boolean found = false;
         RuntimeList result = new RuntimeList();
         List<RuntimeBaseEntity> matchedGroups = result.elements;
 
-        int capture = 1;
-        int previousPos = startPos; // Track the previous position
+        int previousPos = startPos;
         globalMatcher = null;
 
-        while (matcher.find()) {
+        while (true) {
+            boolean matchFound;
+            if (isPosDefined) {
+                matchFound = matcher.find(startPos);
+            } else {
+                matchFound = matcher.find();
+            }
+
+            if (!matchFound) {
+                break;
+            }
+
             // If \G is used, ensure the match starts at the expected position
             if (regex.useGAssertion && isPosDefined && matcher.start() != startPos) {
                 break;
@@ -393,7 +402,6 @@ public class RuntimeRegex implements RuntimeScalarReference {
         if ((flags & MULTILINE) != 0) flagString.append('m');
         if ((flags & DOTALL) != 0) flagString.append('s');
         if ((flags & CASE_INSENSITIVE) != 0) flagString.append('i');
-        if ((flags & COMMENTS) != 0) flagString.append('x');
 
         // Check if no flags are set
         if (flagString.isEmpty()) {
@@ -459,9 +467,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
         if (modifiers.contains("s")) {
             flags |= DOTALL;
         }
-        if (modifiers.contains("x")) {
-            flags |= COMMENTS;
-        }
+        // /x and /xx are handled in the preprocessor.
         // /g (global) is not an actual flag for Pattern, it's used for matching multiple occurrences.
         // /r (non-destructive) is also not an actual flag for Pattern, it returns the replacement.
         return flags;

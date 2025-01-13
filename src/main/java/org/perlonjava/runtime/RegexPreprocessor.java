@@ -6,91 +6,83 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * The RegexPreprocessor class provides functionality to preprocess regular expressions
- * to make them compatible with Java's regex engine. It handles various regex constructs
- * and modifies them as necessary to adhere to Java's regex syntax requirements.
+ * The RegexPreprocessor class transforms Perl-compatible regular expressions into re2j-compatible format.
+ * This preprocessing is necessary due to syntax and feature differences between Perl and re2j regex engines.
+ *
+ * Regex transformations performed:
+ *
+ * General transformations:
+ * - \G anchor is removed from pattern start
+ * - (?#...) inline comments are removed
+ * - \N{name} converts Unicode character names to code points
+ * - \N{U+XXXX} converts to explicit Unicode code points
+ * - Octal escapes are properly zero-padded
+ * - Lookarounds are transformed:
+ *   (?=) → (?-m:)
+ *   (?<=) → (?-m:)
+ *   (?<!) → (?-m:^)
+ *
+ * Character class [...] transformations:
+ * - POSIX classes are converted to explicit ranges:
+ *   [:ascii:] → [\x00-\x7F]
+ *   [:alpha:] → [A-Za-z]
+ * - Whitespace handling in /xx mode
+ * - Proper escaping of special characters
+ *
+ * Extended mode features:
+ * - /x flag: ignores whitespace and # comments
+ * - /xx flag: extra strict whitespace handling in character classes
+ *
+ * TODO:
+ * - Add support for named capture cleanup: (?<my_group>...) → (?<mygroup>...)
  */
 public class RegexPreprocessor {
-
-    // Regex escape rules:
-    //
-    // \[       as-is
-    // \120     becomes: \0120 - Java requires octal sequences to start with zero
-    // \0       becomes: \00 - Java requires the extra zero
-    // (?#...)  inline comment is removed
-    // \N{name}    named Unicode character or character sequence
-    // \N{U+263D}  Unicode character
-    // \G       \G is removed, it is handled separately
-    //
-    // inside [ ... ]
-    //      space    becomes: "\ " unless the /xx flag is used (flag_xx)
-    //      \120     becomes: \0120 - Java requires octal sequences to start with zero
-    //      \0       becomes: \00 - Java requires the extra zero
-    //      \N{name}    named Unicode character or character sequence
-    //      \N{U+263D}  Unicode character
-    //      [:ascii:]  becomes: \p{ASCII}
-    //      [:^ascii:] becomes: \P{ASCII}
-    //      \b       is moved, Java doesn't support \b inside [...]
-    //               [xx \b xx]  becomes: (?:[xx xx]|\b) - Java doesn't support \b as a character
-    //
-    // WIP:
-    // named capture (?<one> ... ) replace underscore in name
 
     private static final Map<String, String> CHARACTER_CLASSES = new HashMap<>();
 
     static {
         String[][] characterClasses = {
-                {"[:ascii:]", "\\p{ASCII}"},
-                {"[:^ascii:]", "\\P{ASCII}"},
-                {"[:alpha:]", "\\p{Alpha}"},
-                {"[:^alpha:]", "\\P{Alpha}"},
-                {"[:alnum:]", "\\p{Alnum}"},
-                {"[:^alnum:]", "\\P{Alnum}"},
-                {"[:blank:]", "\\p{Blank}"},
-                {"[:^blank:]", "\\P{Blank}"},
-                {"[:cntrl:]", "\\p{Cntrl}"},
-                {"[:^cntrl:]", "\\P{Cntrl}"},
-                {"[:digit:]", "\\p{Digit}"},
-                {"[:^digit:]", "\\P{Digit}"},
-                {"[:graph:]", "\\p{Graph}"},
-                {"[:^graph:]", "\\P{Graph}"},
-                {"[:lower:]", "\\p{Lower}"},
-                {"[:^lower:]", "\\P{Lower}"},
-                {"[:print:]", "\\p{Print}"},
-                {"[:^print:]", "\\P{Print}"},
-                {"[:punct:]", "\\p{Punct}"},
-                {"[:^punct:]", "\\P{Punct}"},
-                {"[:space:]", "\\p{Space}"},
-                {"[:^space:]", "\\P{Space}"},
-                {"[:upper:]", "\\p{Upper}"},
-                {"[:^upper:]", "\\P{Upper}"},
-                {"[:word:]", "\\p{Alnum}_"},
-                {"[:^word:]", "\\P{Alnum}_"},
-                {"[:xdigit:]", "\\p{XDigit}"},
-                {"[:^xdigit:]", "\\P{XDigit}"}
+                {"[:ascii:]", "[\\x00-\\x7F]"},
+                {"[:^ascii:]", "[^\\x00-\\x7F]"},
+                {"[:alpha:]", "[A-Za-z]"},
+                {"[:^alpha:]", "[^A-Za-z]"},
+                {"[:alnum:]", "[A-Za-z0-9]"},
+                {"[:^alnum:]", "[^A-Za-z0-9]"},
+                {"[:blank:]", "[ \\t]"},
+                {"[:^blank:]", "[^ \\t]"},
+                {"[:cntrl:]", "[\\x00-\\x1F\\x7F]"},
+                {"[:^cntrl:]", "[^\\x00-\\x1F\\x7F]"},
+                {"[:digit:]", "[0-9]"},
+                {"[:^digit:]", "[^0-9]"},
+                {"[:graph:]", "[\\x21-\\x7E]"},
+                {"[:^graph:]", "[^\\x21-\\x7E]"},
+                {"[:lower:]", "[a-z]"},
+                {"[:^lower:]", "[^a-z]"},
+                {"[:print:]", "[\\x20-\\x7E\\p{L}\\p{M}\\p{N}\\p{P}\\p{S}]"},
+                {"[:^print:]", "[^\\x20-\\x7E\\p{L}\\p{M}\\p{N}\\p{P}\\p{S}]"},
+                {"[:punct:]", "[!\"#$%&'()*+,\\-./:;<=>?@\\[\\\\\\]^_`{|}~]"},
+                {"[:^punct:]", "[^!\"#$%&'()*+,\\-./:;<=>?@\\[\\\\\\]^_`{|}~]"},
+                {"[:space:]", "[ \\t\\r\\n\\v\\f]"},
+                {"[:^space:]", "[^ \\t\\r\\n\\v\\f]"},
+                {"[:upper:]", "[A-Z]"},
+                {"[:^upper:]", "[^A-Z]"},
+                {"[:word:]", "[A-Za-z0-9_]"},
+                {"[:^word:]", "[^A-Za-z0-9_]"},
+                {"[:xdigit:]", "[0-9A-Fa-f]"},
+                {"[:^xdigit:]", "[^0-9A-Fa-f]"}
         };
         for (String[] characterClass : characterClasses) {
             CHARACTER_CLASSES.put(characterClass[0], characterClass[1]);
         }
     }
 
-    /**
-     * Preprocesses a given regex string to make it compatible with Java's regex engine.
-     * This involves handling various constructs and escape sequences that Java does not
-     * natively support or requires in a different format.
-     *
-     * @param s       The regex string to preprocess.
-     * @param flag_xx A flag indicating whether to treat spaces as tokens.
-     * @return A preprocessed regex string compatible with Java's regex engine.
-     */
-    static String preProcessRegex(String s, boolean flag_xx) {
+    public static String preProcessRegex(String s, boolean flag_x, boolean flag_xx) {
         final int length = s.length();
-        int named_capture_count = 0;
         StringBuilder sb = new StringBuilder();
         StringBuilder rejected = new StringBuilder();
         int offset = 0;
+        boolean inCharClass = false;
 
-        // Remove \G from the pattern string for Java compilation
         if (s.startsWith("\\G")) {
             offset += 2;
         }
@@ -98,22 +90,57 @@ public class RegexPreprocessor {
         while (offset < length) {
             final int c = s.codePointAt(offset);
             switch (c) {
-                case '\\':  // Handle escape sequences
+                case '[':
+                    inCharClass = true;
+                    offset = handleCharacterClass(s, flag_xx, sb, c, offset, length, rejected);
+                    inCharClass = false;  // Reset after character class processing
+                    break;
+                case ' ':
+                case '\t':
+                case '\n':
+                case '\r':
+                    if (!inCharClass && (flag_x || flag_xx)) {
+                        if (offset > 0 && s.charAt(offset - 1) == '\\') {
+                            sb.append(Character.toChars(c));
+                        } else {
+                            while (offset + 1 < length &&
+                                    Character.isWhitespace(s.charAt(offset + 1))) {
+                                offset++;
+                            }
+                        }
+                        offset++;
+                        continue;
+                    }
+                    sb.append(Character.toChars(c));
+                    break;
+                case '#':
+                    if (!inCharClass && (flag_x || flag_xx)) {
+                        while (offset < length && s.charAt(offset) != '\n') {
+                            offset++;
+                        }
+                        if (offset < length && s.charAt(offset) == '\n') {
+                            offset++;
+                        }
+                        continue;
+                    }
+                    sb.append(Character.toChars(c));
+                    break;
+                case '\\':
                     offset = handleEscapeSequences(s, sb, c, offset, length);
                     break;
-                case '[':   // Handle character classes
-                    offset = handleCharacterClass(s, flag_xx, sb, c, offset, length, rejected);
-                    break;
-                case '(':
-                    offset = handleParentheses(s, offset, length, sb, c);
-                    break;
-                default:    // Append normal characters
+                default:
                     sb.append(Character.toChars(c));
                     break;
             }
             offset++;
         }
-        return sb.toString();
+
+        String result = sb.toString();
+        result = result.replaceAll("\\(\\?=", "(?-m:");
+        result = result.replaceAll("\\(\\?<=", "(?-m:");
+        result = result.replaceAll("\\(\\?<!", "(?-m:^");
+
+        return result;
     }
 
     private static int handleParentheses(String s, int offset, int length, StringBuilder sb, int c) {
@@ -121,19 +148,10 @@ public class RegexPreprocessor {
         if (offset < length - 3) {
             int c2 = s.codePointAt(offset + 1);
             int c3 = s.codePointAt(offset + 2);
-            int c4 = s.codePointAt(offset + 3);
             if (c2 == '?' && c3 == '#') {
-                // Remove inline comments (?# ... )
                 offset = handleSkipComment(offset, s, length);
                 append = false;
             }
-
-            // Named capture (?<name> ... ) - WIP
-            // Replace underscore in name
-            // This section is currently commented out and marked as work in progress.
-            //
-            // } else handleUnderscoreInNamedCapture(c2, c3, c4);
-
         }
         if (append) {
             sb.append(Character.toChars(c));
@@ -145,9 +163,25 @@ public class RegexPreprocessor {
         int len = sb.length();
         sb.append(Character.toChars(c));
         offset++;
+
+        // First check for POSIX character classes
+        for (Map.Entry<String, String> entry : CHARACTER_CLASSES.entrySet()) {
+            String className = entry.getKey();
+            String classReplacement = entry.getValue();
+            if (offset + className.length() <= length && s.startsWith(className, offset)) {
+                String replacement = classReplacement;
+                if (replacement.startsWith("[") && replacement.endsWith("]")) {
+                    replacement = replacement.substring(1, replacement.length() - 1);
+                }
+                sb.append(replacement);
+                return offset + className.length() - 1;
+            }
+        }
+
+        // Handle regular character class content
         offset = handleRegexCharacterClassEscape(offset, s, sb, length, flag_xx, rejected);
+
         if (!rejected.isEmpty()) {
-            // Process \b inside character class
             String subseq;
             if ((sb.length() - len) == 2) {
                 subseq = "(?:" + rejected + ")";
@@ -158,6 +192,7 @@ public class RegexPreprocessor {
             sb.setLength(len);
             sb.append(subseq);
         }
+
         return offset;
     }
 
@@ -165,8 +200,7 @@ public class RegexPreprocessor {
         sb.append(Character.toChars(c));
         offset++;
         if (offset < length && s.charAt(offset) == 'N' && offset + 1 < length && s.charAt(offset + 1) == '{') {
-            // Handle \N{name} constructs
-            offset += 2; // Skip past \N{
+            offset += 2;
             int endBrace = s.indexOf('}', offset);
             if (endBrace != -1) {
                 String name = s.substring(offset, endBrace).trim();
@@ -184,12 +218,10 @@ public class RegexPreprocessor {
                     int c3 = s.codePointAt(off++);
                     int c4 = s.codePointAt(off++);
                     if ((c3 >= '0' && c3 <= '7') && (c4 >= '0' && c4 <= '7')) {
-                        // Handle \000 octal sequences
                         sb.append('0');
                     }
                 }
             } else if (c2 == '0') {
-                // Rewrite \0 to \00
                 sb.append('0');
             }
             sb.append(Character.toChars(c2));
@@ -197,27 +229,10 @@ public class RegexPreprocessor {
         return offset;
     }
 
-    /**
-     * Handles escape sequences within character classes.
-     *
-     * @param offset   The current offset in the regex string.
-     * @param s        The regex string.
-     * @param sb       The StringBuilder to append processed characters.
-     * @param length   The length of the regex string.
-     * @param flag_xx  A flag indicating whether to treat spaces as tokens.
-     * @param rejected A StringBuilder to collect rejected sequences.
-     * @return The updated offset after processing the character class.
-     */
     private static int handleRegexCharacterClassEscape(int offset, String s, StringBuilder sb, int length, boolean flag_xx,
                                                        StringBuilder rejected) {
-        // inside [ ... ]
-        //      space    becomes: "\ " unless the /xx flag is used (flag_xx)
-        //      \120     becomes: \0120 - Java requires octal sequences to start with zero
-        //      \0       becomes: \00 - Java requires the extra zero
-        //      [:ascii:]  becomes: \p{ASCII}
-        //      [:^ascii:] becomes: \P{ASCII}
-        //      \b       is rejected, Java doesn't support \b inside [...]
         boolean first = true;
+        boolean lastWasChar = false;
         while (offset < length) {
             final int c = s.codePointAt(offset);
             switch (c) {
@@ -230,59 +245,35 @@ public class RegexPreprocessor {
                         return offset;
                     }
                 case '[':
-                    // Check for character class like [:ascii:]
                     offset = handleCharacterClass(offset, s, sb, length);
                     break;
-                case '\\':  // Handle escape sequences
+                case '\\':
                     sb.append(Character.toChars(c));
                     offset++;
-                    if (offset < length && s.charAt(offset) == 'N' && offset + 1 < length && s.charAt(offset + 1) == '{') {
-                        // Handle \N{name} constructs
-                        offset += 2; // Skip past \N{
-                        int endBrace = s.indexOf('}', offset);
-                        if (endBrace != -1) {
-                            String name = s.substring(offset, endBrace).trim();
-                            int codePoint = getCodePointFromName(name);
-                            sb.append(String.format("x{%X}", codePoint));
-                            offset = endBrace;
-                        } else {
-                            throw new IllegalArgumentException("Unmatched brace in \\N{name} construct");
-                        }
-                    } else if (s.codePointAt(offset) == 'b') {
-                        rejected.append("\\b"); // Java doesn't support \b inside [...]
-                        offset++;
-                    } else {
-                        int c2 = s.codePointAt(offset);
-                        if (c2 >= '1' && c2 <= '3') {
-                            if (offset < length + 1) {
-                                int off = offset;
-                                int c3 = s.codePointAt(off++);
-                                int c4 = s.codePointAt(off++);
-                                if ((c3 >= '0' && c3 <= '7') && (c4 >= '0' && c4 <= '7')) {
-                                    // Handle \000 octal sequences
-                                    sb.append('0');
-                                }
-                            }
-                        } else if (c2 == '0') {
-                            // Rewrite \0 to \00
-                            sb.append('0');
-                        }
-                        sb.append(Character.toChars(c2));
+                    if (offset < length) {
+                        sb.append(Character.toChars(s.codePointAt(offset)));
                     }
                     break;
                 case ' ':
+                case '\t':
+                case '\n':
+                case '\r':
                     if (flag_xx) {
+                        break;
+                    }
+                    // Fall through to default if not in /xx mode
+                default:
+                    if (c == '^' && first) {
+                        sb.append(Character.toChars(c));
+                    } else if (c == '-' && lastWasChar && offset + 1 < length && Character.isLetterOrDigit(s.codePointAt(offset + 1))) {
+                        sb.append(Character.toChars(c));
+                    } else if ("\\]".indexOf(c) != -1) {
+                        sb.append('\\');
                         sb.append(Character.toChars(c));
                     } else {
-                        sb.append("\\ ");   // make this space a "token", even inside /x
+                        sb.append(Character.toChars(c));
+                        lastWasChar = Character.isLetterOrDigit(c);
                     }
-                    break;
-                case '(', ')', '*', '?', '<', '>', '\'', '"', '$', '@', '#', '=', '&':
-                    sb.append('\\');
-                    sb.append(Character.toChars(c));
-                    break;
-                default:
-                    sb.append(Character.toChars(c));
                     break;
             }
             first = false;
@@ -291,38 +282,25 @@ public class RegexPreprocessor {
         return offset;
     }
 
-    /**
-     * Handles predefined character classes within the regex.
-     *
-     * @param offset The current offset in the regex string.
-     * @param s      The regex string.
-     * @param sb     The StringBuilder to append processed characters.
-     * @param length The length of the regex string.
-     * @return The updated offset after processing the character class.
-     */
     private static int handleCharacterClass(int offset, String s, StringBuilder sb, int length) {
         for (Map.Entry<String, String> entry : CHARACTER_CLASSES.entrySet()) {
             String className = entry.getKey();
             String classReplacement = entry.getValue();
-            if (offset + className.length() - 1 < length && s.startsWith(className, offset)) {
-                sb.append(classReplacement);
+            if (offset + className.length() <= length && s.startsWith(className, offset)) {
+                // Remove the outer brackets from classReplacement if it has them
+                String replacement = classReplacement;
+                if (replacement.startsWith("[") && replacement.endsWith("]")) {
+                    replacement = replacement.substring(1, replacement.length() - 1);
+                }
+                sb.append(replacement);
                 return offset + className.length() - 1;
             }
         }
-        sb.append("\\[");
+        sb.append("[");
         return offset;
     }
 
-    /**
-     * Skips over inline comments within the regex.
-     *
-     * @param offset The current offset in the regex string.
-     * @param s      The regex string.
-     * @param length The length of the regex string.
-     * @return The updated offset after skipping the comment.
-     */
     private static int handleSkipComment(int offset, String s, int length) {
-        // comment (?# ... )
         int offset3 = offset;
         while (offset3 < length) {
             final int c3 = s.codePointAt(offset3);
@@ -332,21 +310,12 @@ public class RegexPreprocessor {
                 case '\\':
                     offset3++;
                     break;
-                default:
-                    break;
             }
             offset3++;
         }
-        return offset;  // possible error - end of comment not found
+        return offset;
     }
 
-    /**
-     * Retrieves the Unicode code point for a given character name.
-     *
-     * @param name The name of the Unicode character.
-     * @return The Unicode code point.
-     * @throws IllegalArgumentException If the name is invalid or not found.
-     */
     private static int getCodePointFromName(String name) {
         int codePoint;
         if (name.startsWith("U+")) {
@@ -362,35 +331,5 @@ public class RegexPreprocessor {
             }
         }
         return codePoint;
-    }
-
-    /**
-     * WIP - replace undescore in named capture
-     */
-    private static void handleUnderscoreInNamedCapture(int c2, int c3, int c4) {
-        if (c2 == '?' && c3 == '<' &&
-                ((c4 >= 'A' && c4 <= 'Z') || (c4 >= 'a' && c4 <= 'z') || (c4 == '_'))
-        ) {
-//                                    // named capture (?<one> ... )
-//                                    // replace underscore in name
-//                                    int endName = s.indexOf(">", offset+3);
-//                                    // PlCORE.say("endName " + endName + " offset " + offset);
-//                                    if (endName > offset) {
-//                                        String name = s.substring(offset+3, endName);
-//                                        String validName = name.replace("_", "UnderScore") + "Num" + named_capture_count; // See: regex_named_capture()
-//                                        if (this.namedCaptures == null) {
-//                                            this.namedCaptures = new PlHash();
-//                                        }
-//                                        this.namedCaptures.hget_arrayref(name).array_deref_strict().push_void(new PlString(validName));
-//                                        // PlCORE.say("name [" + name + "]");
-//                                        sb.append("(?<");
-//                                        sb.append(validName);
-//                                        sb.append(">");
-//                                        offset = endName;
-//                                        named_capture_count++;
-//                                        // PlCORE.say("name sb [" + sb + "]");
-//                                        append = false;
-//                                    }
-        }
     }
 }

@@ -133,6 +133,7 @@ For more details on supported modules, pragmas, and features, see the [Feature M
 - **ASM**: For bytecode manipulation.
 - **ICU4J**: For Unicode support.
 - **FASTJSON v2**: For JSON support.
+- **RE2/J**: For linear time regular expression matching.
 
 ### Adding JDBC Drivers
 

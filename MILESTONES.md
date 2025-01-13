@@ -197,6 +197,7 @@
   - Added stacked file test operators.
   - Added `module_true` feature.
   - Added `/c` regex modifier.
+  - Use `RE2/J` regex library: linear time regular expression matching in Java.
   - Planned release date: 2025-02-10
 
 - **v3.0.0**: Concurrency and Security Features

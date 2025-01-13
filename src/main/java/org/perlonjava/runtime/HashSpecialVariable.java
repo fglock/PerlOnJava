@@ -4,7 +4,7 @@ import java.util.AbstractMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
+import com.google.re2j.Matcher;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
