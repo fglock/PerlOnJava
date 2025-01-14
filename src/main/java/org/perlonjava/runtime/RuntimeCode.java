@@ -192,6 +192,31 @@ public class RuntimeCode implements RuntimeScalarReference {
         return codeRef;
     }
 
+    public static RuntimeScalar findMethodInHierarchy(String methodName, String perlClassName, int startFromIndex) {
+        // Check the method cache
+        String normalizedMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
+        RuntimeScalar cachedMethod = InheritanceResolver.getCachedMethod(normalizedMethodName);
+        if (cachedMethod != null) {
+            return cachedMethod;
+        }
+
+        // Get the linearized inheritance hierarchy using C3
+        List<String> linearizedClasses = InheritanceResolver.linearizeC3(perlClassName);
+
+        // Start iteration from the specified index
+        // For the SUPER:: case, we use index:
+        for (int i = startFromIndex; i < linearizedClasses.size(); i++) {
+            String className = linearizedClasses.get(i);
+            String normalizedClassMethodName = NameNormalizer.normalizeVariableName(methodName, className);
+            if (GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName)) {
+                RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedClassMethodName);
+                InheritanceResolver.cacheMethod(normalizedMethodName, codeRef);
+                return codeRef;
+            }
+        }
+        return null;
+    }
+
     /**
      * Call a method in a Perl-like class hierarchy using the C3 linearization algorithm.
      *
@@ -267,50 +292,18 @@ public class RuntimeCode implements RuntimeScalarReference {
             // Find the index of the current package in the linearized hierarchy
             int currentIndex = linearizedClasses.indexOf(currentPackage);
 
-            // Iterate over the linearized classes starting from the class after the current package
-            for (int i = currentIndex + 1; i < linearizedClasses.size(); i++) {
-                String className = linearizedClasses.get(i);
-                String normalizedClassMethodName = NameNormalizer.normalizeVariableName(superMethodName, className);
-
-                if (GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName)) {
-                    // If the method is found, retrieve and apply it
-                    RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedClassMethodName);
-
-                    // Save the method in the cache
-                    InheritanceResolver.cacheMethod(normalizedClassMethodName, codeRef);
-
-                    return apply(codeRef, args, callContext);
-                }
+            method = findMethodInHierarchy(superMethodName, currentPackage, currentIndex + 1);
+            if (method != null) {
+                return apply(method, args, callContext);
             }
 
             // If the method is not found in any class, throw an exception
             throw new PerlCompilerException("Can't locate object method \"" + superMethodName + "\" via package \"" + currentPackage + "\" (perhaps you forgot to load \"" + currentPackage + "\"?)");
         }
 
-        // Check the method cache
-        String normalizedMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
-        RuntimeScalar cachedMethod = InheritanceResolver.getCachedMethod(normalizedMethodName);
-        if (cachedMethod != null) {
-            return apply(cachedMethod, args, callContext);
-        }
-
-        // Get the linearized inheritance hierarchy using C3
-        List<String> linearizedClasses = InheritanceResolver.linearizeC3(perlClassName);
-
-        // Iterate over the linearized classes to find the method
-        for (String className : linearizedClasses) {
-            String normalizedClassMethodName = NameNormalizer.normalizeVariableName(methodName, className);
-            // System.out.println("call normalizedClassMethodName: " + normalizedClassMethodName);
-            if (GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName)) {
-                // System.out.println("call GlobalVariable.getGlobalCodeRef: " + normalizedClassMethodName);
-                // If the method is found, retrieve and apply it
-                RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedClassMethodName);
-
-                // Save the method in the cache
-                InheritanceResolver.cacheMethod(normalizedMethodName, codeRef);
-
-                return apply(codeRef, args, callContext);
-            }
+        method = findMethodInHierarchy(methodName, perlClassName, 0);
+        if (method != null) {
+            return apply(method, args, callContext);
         }
 
         // If the method is not found in any class, throw an exception

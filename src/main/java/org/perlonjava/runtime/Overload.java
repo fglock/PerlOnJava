@@ -22,6 +22,8 @@ public class Overload {
             int blessId = baseEntity.blessId;
 
             if (blessId != 0) {
+                String perlClassName = NameNormalizer.getBlessStr(blessId);
+
                 // TODO: handle blessed & overloaded objects
                 // Blessed objects are associated with a specific class or type
                 // and may require special handling to convert to a string.
@@ -34,6 +36,11 @@ public class Overload {
                 //       // Handle overload fallback
                 //    }
                 // }
+
+                RuntimeScalar method = RuntimeCode.findMethodInHierarchy("((", perlClassName, 0);
+                if (method != null) {
+                    // TODO: handle overload fallback
+                }
             }
         }
 

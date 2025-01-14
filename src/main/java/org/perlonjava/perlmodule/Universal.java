@@ -79,22 +79,11 @@ public class Universal extends PerlModuleBase {
                 }
         }
 
-        // Check the method cache
-        String normalizedMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
-        RuntimeScalar cachedMethod = InheritanceResolver.getCachedMethod(normalizedMethodName);
-        if (cachedMethod != null) {
-            return cachedMethod.getList();
+        RuntimeScalar method = RuntimeCode.findMethodInHierarchy(methodName, perlClassName, 0);
+        if (method != null) {
+            return method.getList();
         }
-
-        // Get the linearized inheritance hierarchy using C3
-        for (String className : InheritanceResolver.linearizeC3(perlClassName)) {
-            String normalizedClassMethodName = NameNormalizer.normalizeVariableName(methodName, className);
-            if (GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName)) {
-                // If the method is found, return it
-                return getGlobalCodeRef(normalizedClassMethodName).getList();
-            }
-        }
-        return new RuntimeScalar(false).getList();
+        return new RuntimeList();
     }
 
     /**
