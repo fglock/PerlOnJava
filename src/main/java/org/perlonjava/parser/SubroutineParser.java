@@ -137,8 +137,9 @@ public class SubroutineParser {
         if (wantName && !TokenUtils.peek(parser).text.equals("{")) {
             // A named subroutine can be predeclared without a block of code.
             String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
-            RuntimeCode codeRef = new RuntimeCode(prototype, attributes);
-            GlobalVariable.getGlobalCodeRef(fullName).set(new RuntimeScalar(codeRef));
+            RuntimeCode codeRef = (RuntimeCode) GlobalVariable.getGlobalCodeRef(fullName).value;
+            codeRef.prototype = prototype;
+            codeRef.attributes = attributes;
             // return an empty AST list
             return new ListNode(parser.tokenIndex);
         }
@@ -171,11 +172,16 @@ public class SubroutineParser {
 
             // Create the subroutine immediately
             RuntimeList result = runSpecialBlock(parser, "BEGIN", subroutineNode);
-            RuntimeScalar codeRef = result.getFirst();
+            RuntimeCode code1 = (RuntimeCode) result.getFirst().value;
 
             // - register the subroutine in the namespace
             String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
-            GlobalVariable.getGlobalCodeRef(fullName).set(codeRef);
+
+            RuntimeCode code = (RuntimeCode) GlobalVariable.getGlobalCodeRef(fullName).value;
+            code.prototype = code1.prototype;
+            code.attributes = code1.attributes;
+            code.methodObject = code1.methodObject;
+            code.codeObject = code1.codeObject;
 
             // return an empty AST list
             return new ListNode(parser.tokenIndex);
