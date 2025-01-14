@@ -175,7 +175,7 @@ public class GlobalVariable {
         RuntimeScalar var = globalCodeRefs.get(key);
         if (var == null) {
             var = new RuntimeScalar();
-            var.type = RuntimeScalarType.GLOB;  // value is null
+            var.type = RuntimeScalarType.CODE;  // value is null
             globalCodeRefs.put(key, var);
         }
         return var;

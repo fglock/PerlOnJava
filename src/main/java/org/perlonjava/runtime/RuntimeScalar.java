@@ -490,6 +490,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case VSTRING -> (String) value;
             case BOOLEAN -> (boolean) value ? "1" : "";
             case REFERENCE, ARRAYREFERENCE, HASHREFERENCE -> Overload.stringify(this);
+            case CODE -> this.toStringRef();
             case OBJECT -> value.toString();
             default -> ((RuntimeScalarReference) value).toStringRef();
         };
@@ -498,7 +499,12 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     public String toStringRef() {
         String ref = switch (type) {
             case UNDEF -> "SCALAR(0x14500834042)";
-            case CODE -> ((RuntimeCode) value).toStringRef();
+            case CODE -> {
+                if (value == null) {
+                    yield "CODE(0x14500834042)";
+                }
+                yield ((RuntimeCode) value).toStringRef();
+            }
             case GLOB -> {
                 if (value == null) {
                     yield "CODE(0x14500834042)";
@@ -652,8 +658,9 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar defined() {
         if (type == RuntimeScalarType.GLOB && value == null) {
-            // getGlobalCodeRef returns an "empty glob" if the codeRef is not set
-            // XXX TODO implement a better response in getGlobalCodeRef
+            return scalarFalse;
+        }
+        if (type == RuntimeScalarType.CODE && value == null) {
             return scalarFalse;
         }
         if (type == RuntimeScalarType.BOOLEAN) {

@@ -345,10 +345,10 @@ public class RuntimeCode implements RuntimeScalarReference {
     public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeArray a, int callContext) {
         // Check if the type of this RuntimeScalar is CODE
         if (runtimeScalar.type == RuntimeScalarType.CODE) {
-            // Cast the value to RuntimeCode and call apply()
-            return ((RuntimeCode) runtimeScalar.value).apply(subroutineName, a, callContext);
-        } else {
-            // If the type is not CODE, throw an exception indicating an invalid state
+            if (runtimeScalar.value != null) {
+                // Cast the value to RuntimeCode and call apply()
+                return ((RuntimeCode) runtimeScalar.value).apply(subroutineName, a, callContext);
+            }
 
             // Does AUTOLOAD exist?
             if (!subroutineName.isEmpty()) {
@@ -363,14 +363,10 @@ public class RuntimeCode implements RuntimeScalarReference {
                     // Call AUTOLOAD
                     return apply(autoload, a, callContext);
                 }
-            }
-
-            if (!subroutineName.isEmpty() && runtimeScalar.type == RuntimeScalarType.GLOB && runtimeScalar.value == null) {
                 throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
             }
-
-            throw new PerlCompilerException("Not a CODE reference");
         }
+        throw new PerlCompilerException("Not a CODE reference");
     }
 
     // Return a reference to the subroutine with this name: \&$a
