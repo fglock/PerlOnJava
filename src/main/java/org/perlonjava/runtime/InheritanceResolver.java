@@ -158,13 +158,15 @@ public class InheritanceResolver {
      * @param startFromIndex The index in the linearized hierarchy to start searching from (used for SUPER:: calls)
      * @return RuntimeScalar representing the found method, or null if not found
      */
-    public static RuntimeScalar findMethodInHierarchy(String methodName, String perlClassName, int startFromIndex) {
-        // Normalize the method name for consistent caching
-        String normalizedMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
+    public static RuntimeScalar findMethodInHierarchy(String methodName, String perlClassName, String cacheKey, int startFromIndex) {
+        if (cacheKey == null) {
+            // Normalize the method name for consistent caching
+            cacheKey = NameNormalizer.normalizeVariableName(methodName, perlClassName);
+        }
 
         // Check the method cache - handles both found and not-found cases
-        if (methodCache.containsKey(normalizedMethodName)) {
-            return methodCache.get(normalizedMethodName);
+        if (methodCache.containsKey(cacheKey)) {
+            return methodCache.get(cacheKey);
         }
 
         // Get the linearized inheritance hierarchy using C3
@@ -179,13 +181,13 @@ public class InheritanceResolver {
             if (GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName)) {
                 RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedClassMethodName);
                 // Cache the found method
-                cacheMethod(normalizedMethodName, codeRef);
+                cacheMethod(cacheKey, codeRef);
                 return codeRef;
             }
         }
 
         // Cache the fact that method was not found (using null)
-        methodCache.put(normalizedMethodName, null);
+        methodCache.put(cacheKey, null);
         return null;
     }
 }

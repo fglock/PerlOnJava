@@ -78,7 +78,7 @@ public class Universal extends PerlModuleBase {
                 }
         }
 
-        RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, 0);
+        RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, null, 0);
         if (method != null) {
             return method.getList();
         }

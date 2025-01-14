@@ -267,7 +267,11 @@ public class RuntimeCode implements RuntimeScalarReference {
             // Find the index of the current package in the linearized hierarchy
             int currentIndex = linearizedClasses.indexOf(currentPackage);
 
-            method = InheritanceResolver.findMethodInHierarchy(superMethodName, currentPackage, currentIndex + 1);
+            method = InheritanceResolver.findMethodInHierarchy(
+                    superMethodName,
+                    currentPackage,
+                    currentPackage + "::" + methodName,  // cache key includes the full method name
+                    currentIndex + 1);
             if (method != null) {
                 return apply(method, args, callContext);
             }
@@ -276,7 +280,7 @@ public class RuntimeCode implements RuntimeScalarReference {
             throw new PerlCompilerException("Can't locate object method \"" + superMethodName + "\" via package \"" + currentPackage + "\" (perhaps you forgot to load \"" + currentPackage + "\"?)");
         }
 
-        method = InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, 0);
+        method = InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, null, 0);
         if (method != null) {
             return apply(method, args, callContext);
         }
