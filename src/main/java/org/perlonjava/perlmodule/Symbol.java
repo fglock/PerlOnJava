@@ -2,6 +2,8 @@ package org.perlonjava.perlmodule;
 
 import org.perlonjava.runtime.*;
 
+import static org.perlonjava.runtime.RuntimeContextType.SCALAR;
+
 /**
  * The Symbol class provides functionalities for symbol manipulation in a Perl-like environment.
  * It extends PerlModuleBase to leverage module initialization and method registration.
@@ -113,8 +115,8 @@ public class Symbol extends PerlModuleBase {
         if (args.size() > 1) {
             packageName = args.get(1);
         } else {
-            // XXX TODO - default to caller()
-            packageName = new RuntimeScalar("main");
+            RuntimeList callerList = RuntimeCode.caller(new RuntimeList(), SCALAR);
+            packageName = callerList.scalar();
         }
         RuntimeScalar result;
         // System.out.println("qualify " + object + " :: " + packageName + " type:" + object.type);
