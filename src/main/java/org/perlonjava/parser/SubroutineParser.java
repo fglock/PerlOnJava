@@ -172,16 +172,13 @@ public class SubroutineParser {
 
             // Create the subroutine immediately
             RuntimeList result = runSpecialBlock(parser, "BEGIN", subroutineNode);
-            RuntimeCode code1 = (RuntimeCode) result.getFirst().value;
+            RuntimeCode codeFrom = (RuntimeCode) result.getFirst().value;
 
             // - register the subroutine in the namespace
             String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
 
             RuntimeCode code = (RuntimeCode) GlobalVariable.getGlobalCodeRef(fullName).value;
-            code.prototype = code1.prototype;
-            code.attributes = code1.attributes;
-            code.methodObject = code1.methodObject;
-            code.codeObject = code1.codeObject;
+            RuntimeCode.copy(code, codeFrom);
 
             // return an empty AST list
             return new ListNode(parser.tokenIndex);
@@ -190,4 +187,5 @@ public class SubroutineParser {
         // return anonymous subroutine
         return subroutineNode;
     }
+
 }

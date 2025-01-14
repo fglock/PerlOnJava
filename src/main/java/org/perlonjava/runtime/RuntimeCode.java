@@ -48,6 +48,13 @@ public class RuntimeCode implements RuntimeScalarReference {
 
     public RuntimeList constantValue;
 
+    public static void copy(RuntimeCode code, RuntimeCode codeFrom) {
+        code.prototype = codeFrom.prototype;
+        code.attributes = codeFrom.attributes;
+        code.methodObject = codeFrom.methodObject;
+        code.codeObject = codeFrom.codeObject;
+    }
+
     public boolean defined() {
         return this.methodObject != null || this.constantValue != null;
     }
