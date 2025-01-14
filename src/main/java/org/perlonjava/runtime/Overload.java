@@ -18,17 +18,31 @@ public class Overload {
      * @return the string representation of the {@code RuntimeScalar}.
      */
     public static String stringify(RuntimeScalar runtimeScalar) {
+        if (runtimeScalar.value instanceof RuntimeBaseEntity baseEntity) {
+            int blessId = baseEntity.blessId;
 
-        // Retrieve the blessId to determine if the object is blessed
-        int blessId = ((RuntimeBaseEntity) runtimeScalar.value).blessId;
-
-        if (blessId != 0) {
-            // TODO: handle blessed objects
-            // Blessed objects are associated with a specific class or type
-            // and may require special handling to convert to a string.
+            if (blessId != 0) {
+                // TODO: handle blessed & overloaded objects
+                // Blessed objects are associated with a specific class or type
+                // and may require special handling to convert to a string.
+                //
+                // If UNIVERSAL::can($v, "()") || UNIVERSAL::can($v, "((") {
+                //    $sub = UNIVERSAL::can($v, "(\"");
+                //    if ($sub) {
+                //       $sub->($v);
+                //    } else {
+                //       // Handle overload fallback
+                //    }
+                // }
+            }
         }
 
-        // Convert the scalar reference to its string representation
-        return ((RuntimeScalarReference) runtimeScalar.value).toStringRef();
+        // Not blessed & overloaded - Convert the scalar reference to its string representation
+        return switch (runtimeScalar.type) {
+            case REFERENCE -> ((RuntimeScalarReference) runtimeScalar.value).toStringRef();
+            case ARRAYREFERENCE -> ((RuntimeArray) runtimeScalar.value).toStringRef();
+            case HASHREFERENCE -> ((RuntimeHash) runtimeScalar.value).toStringRef();
+            default -> runtimeScalar.toStringRef();
+        };
     }
 }
