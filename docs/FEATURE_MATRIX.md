@@ -318,6 +318,8 @@
 - ✔️   **subs** pragma.
 - 🚧  **builtin** pragma:
   - ✔️  Implemented: `true` `false` `is_bool` `inf` `nan` `weaken` `unweaken` `is_weak` `blessed` `refaddr` `reftype` `created_as_string` `created_as_number` `stringify` `ceil` `floor` `indexed` `trim` `is_tainted`.
+- 🚧  **overload** pragma:
+- ❌  **overloading** pragma
 
 
 

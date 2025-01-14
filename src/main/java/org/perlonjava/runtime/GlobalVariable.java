@@ -196,6 +196,19 @@ public class GlobalVariable {
     }
 
     /**
+     * Checks if a Perl package is loaded by scanning for any methods in its namespace
+     *
+     * @param className The name of the package/class to check
+     * @return true if any methods exist in the class namespace
+     */
+    public static boolean isPackageLoaded(String className) {
+        String prefix = className + "::";
+        // Check if any code references exist with this class prefix
+        return globalCodeRefs.keySet().stream()
+                .anyMatch(key -> key.startsWith(prefix));
+    }
+
+    /**
      * Retrieves a global IO reference by its key, initializing it if necessary.
      *
      * @param key The key of the global IO reference.
