@@ -9,24 +9,26 @@ Users can also add their own database JDBC drivers, making it a flexible solutio
 ## Table of Contents
 
 1. [Introduction](#introduction)
-2. [Quick Start](#quick-start)
-3. [Features and Limitations](#features-and-limitations)
-4. [Target Audience](#target-audience)
-5. [Build Instructions](#build-instructions)
-6. [Running the JAR File](#running-the-jar-file)
-7. [Debugging Tools](#debugging-tools)
-8. [Architecture](docs/ARCHITECTURE.md)
-9. [Porting Modules](docs/PORTING_MODULES.md)
-10. [Milestones](MILESTONES.md)
-11. [Community and Support](#community-and-support)
-12. [License](#license)
-13. [Additional Information and Resources](#additional-information-and-resources)
+2. [Why PerlOnJava](docs/WHY_PERLONJAVA.md)
+3. [Quick Start](#quick-start)
+4. [Features and Limitations](#features-and-limitations)
+5. [Target Audience](#target-audience)
+6. [Build Instructions](#build-instructions)
+7. [Running the JAR File](#running-the-jar-file)
+8. [Debugging Tools](#debugging-tools)
+9. [Architecture](docs/ARCHITECTURE.md)
+10. [Porting Modules](docs/PORTING_MODULES.md)
+11. [Milestones](MILESTONES.md)
+12. [Community and Support](#community-and-support)
+13. [License](#license)
+14. [Additional Information and Resources](#additional-information-and-resources)
 
 ## Introduction
 
 PerlOnJava bridges the gap between Perl and Java by providing a platform that compiles Perl scripts into Java bytecode, making them executable on the JVM. 
 By leveraging this distribution, developers can run familiar Perl code while accessing Java's ecosystem of libraries and tools. 
 This project aims to bring the strengths of Perl to modern JVM environments while supporting a growing list of core modules and pragmas.
+For detailed reasoning on when to use PerlOnJava, see [Why PerlOnJava](docs/WHY_PERLONJAVA.md).
 
 ## Quick Start
 
