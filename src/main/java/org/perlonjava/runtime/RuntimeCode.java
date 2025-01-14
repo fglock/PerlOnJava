@@ -257,30 +257,16 @@ public class RuntimeCode implements RuntimeScalarReference {
 
         // System.out.println("call perlClassName: " + perlClassName + " methodName: " + methodName);
         if (methodName.startsWith("SUPER::")) {
-            // Remove the "SUPER::" prefix to get the actual method name
-            String superMethodName = methodName.substring(7);
-            // System.out.println("call SUPER:: " + superMethodName);
-
-            // Get the linearized inheritance hierarchy for the current package
-            List<String> linearizedClasses = InheritanceResolver.linearizeC3(currentPackage);
-
-            // Find the index of the current package in the linearized hierarchy
-            int currentIndex = linearizedClasses.indexOf(currentPackage);
-
             method = InheritanceResolver.findMethodInHierarchy(
-                    superMethodName,
+                    methodName.substring(7),    // method name without SUPER:: prefix
                     currentPackage,
-                    currentPackage + "::" + methodName,  // cache key includes the full method name
-                    currentIndex + 1);
-            if (method != null) {
-                return apply(method, args, callContext);
-            }
-
-            // If the method is not found in any class, throw an exception
-            throw new PerlCompilerException("Can't locate object method \"" + superMethodName + "\" via package \"" + currentPackage + "\" (perhaps you forgot to load \"" + currentPackage + "\"?)");
+                    currentPackage + "::" + methodName,  // cache key includes the SUPER:: prefix
+                    1   // start looking in the parent package
+            );
+        } else {
+            method = InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, null, 0);
         }
 
-        method = InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, null, 0);
         if (method != null) {
             return apply(method, args, callContext);
         }
