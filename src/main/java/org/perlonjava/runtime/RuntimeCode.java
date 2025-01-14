@@ -192,31 +192,6 @@ public class RuntimeCode implements RuntimeScalarReference {
         return codeRef;
     }
 
-    public static RuntimeScalar findMethodInHierarchy(String methodName, String perlClassName, int startFromIndex) {
-        // Check the method cache
-        String normalizedMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
-        RuntimeScalar cachedMethod = InheritanceResolver.getCachedMethod(normalizedMethodName);
-        if (cachedMethod != null) {
-            return cachedMethod;
-        }
-
-        // Get the linearized inheritance hierarchy using C3
-        List<String> linearizedClasses = InheritanceResolver.linearizeC3(perlClassName);
-
-        // Start iteration from the specified index
-        // For the SUPER:: case, we use index:
-        for (int i = startFromIndex; i < linearizedClasses.size(); i++) {
-            String className = linearizedClasses.get(i);
-            String normalizedClassMethodName = NameNormalizer.normalizeVariableName(methodName, className);
-            if (GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName)) {
-                RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedClassMethodName);
-                InheritanceResolver.cacheMethod(normalizedMethodName, codeRef);
-                return codeRef;
-            }
-        }
-        return null;
-    }
-
     /**
      * Call a method in a Perl-like class hierarchy using the C3 linearization algorithm.
      *
@@ -292,7 +267,7 @@ public class RuntimeCode implements RuntimeScalarReference {
             // Find the index of the current package in the linearized hierarchy
             int currentIndex = linearizedClasses.indexOf(currentPackage);
 
-            method = findMethodInHierarchy(superMethodName, currentPackage, currentIndex + 1);
+            method = InheritanceResolver.findMethodInHierarchy(superMethodName, currentPackage, currentIndex + 1);
             if (method != null) {
                 return apply(method, args, callContext);
             }
@@ -301,7 +276,7 @@ public class RuntimeCode implements RuntimeScalarReference {
             throw new PerlCompilerException("Can't locate object method \"" + superMethodName + "\" via package \"" + currentPackage + "\" (perhaps you forgot to load \"" + currentPackage + "\"?)");
         }
 
-        method = findMethodInHierarchy(methodName, perlClassName, 0);
+        method = InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, 0);
         if (method != null) {
             return apply(method, args, callContext);
         }

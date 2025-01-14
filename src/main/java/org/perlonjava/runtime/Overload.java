@@ -37,8 +37,10 @@ public class Overload {
                 //    }
                 // }
 
-                RuntimeScalar method = RuntimeCode.findMethodInHierarchy("((", perlClassName, 0);
-                if (method != null) {
+                RuntimeScalar methodOveloaded = InheritanceResolver.findMethodInHierarchy("((", perlClassName, 0);
+                RuntimeScalar methodFallback = InheritanceResolver.findMethodInHierarchy("()", perlClassName, 0);
+                if (methodOveloaded != null || methodFallback != null) {
+                    // TODO: handle stringification with '("'
                     // TODO: handle overload fallback
                 }
             }

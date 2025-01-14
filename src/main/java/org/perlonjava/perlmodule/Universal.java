@@ -4,7 +4,6 @@ import org.perlonjava.runtime.*;
 
 import java.util.List;
 
-import static org.perlonjava.runtime.GlobalVariable.getGlobalCodeRef;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarBoolean;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 import static org.perlonjava.runtime.RuntimeScalarType.*;
@@ -79,7 +78,7 @@ public class Universal extends PerlModuleBase {
                 }
         }
 
-        RuntimeScalar method = RuntimeCode.findMethodInHierarchy(methodName, perlClassName, 0);
+        RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, 0);
         if (method != null) {
             return method.getList();
         }

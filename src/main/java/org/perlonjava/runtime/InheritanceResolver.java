@@ -148,4 +148,44 @@ public class InheritanceResolver {
         result.add(0, className);
         return result;
     }
+
+    /**
+     * Searches for a method in the class hierarchy starting from a specific index.
+     * Uses method caching to improve performance for both found and not-found methods.
+     *
+     * @param methodName The name of the method to find
+     * @param perlClassName The Perl class name to start the search from
+     * @param startFromIndex The index in the linearized hierarchy to start searching from (used for SUPER:: calls)
+     * @return RuntimeScalar representing the found method, or null if not found
+     */
+    public static RuntimeScalar findMethodInHierarchy(String methodName, String perlClassName, int startFromIndex) {
+        // Normalize the method name for consistent caching
+        String normalizedMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
+
+        // Check the method cache - handles both found and not-found cases
+        if (methodCache.containsKey(normalizedMethodName)) {
+            return methodCache.get(normalizedMethodName);
+        }
+
+        // Get the linearized inheritance hierarchy using C3
+        List<String> linearizedClasses = linearizeC3(perlClassName);
+
+        // Search through the class hierarchy starting from the specified index
+        for (int i = startFromIndex; i < linearizedClasses.size(); i++) {
+            String className = linearizedClasses.get(i);
+            String normalizedClassMethodName = NameNormalizer.normalizeVariableName(methodName, className);
+
+            // Check if method exists in current class
+            if (GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName)) {
+                RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedClassMethodName);
+                // Cache the found method
+                cacheMethod(normalizedMethodName, codeRef);
+                return codeRef;
+            }
+        }
+
+        // Cache the fact that method was not found (using null)
+        methodCache.put(normalizedMethodName, null);
+        return null;
+    }
 }
