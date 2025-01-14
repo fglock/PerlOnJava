@@ -48,6 +48,10 @@ public class RuntimeCode implements RuntimeScalarReference {
 
     public RuntimeList constantValue;
 
+    public boolean defined() {
+        return this.methodObject != null || this.constantValue != null;
+    }
+
     /**
      * Constructs a RuntimeCode instance with the specified prototype and attributes.
      *
@@ -345,9 +349,10 @@ public class RuntimeCode implements RuntimeScalarReference {
     public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeArray a, int callContext) {
         // Check if the type of this RuntimeScalar is CODE
         if (runtimeScalar.type == RuntimeScalarType.CODE) {
-            if (runtimeScalar.value != null) {
+            RuntimeCode code = (RuntimeCode) runtimeScalar.value;
+            if (code.defined()) {
                 // Cast the value to RuntimeCode and call apply()
-                return ((RuntimeCode) runtimeScalar.value).apply(subroutineName, a, callContext);
+                return code.apply(subroutineName, a, callContext);
             }
 
             // Does AUTOLOAD exist?

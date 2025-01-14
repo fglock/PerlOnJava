@@ -657,10 +657,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar defined() {
-        if (type == RuntimeScalarType.GLOB && value == null) {
-            return scalarFalse;
-        }
-        if (type == RuntimeScalarType.CODE && value == null) {
+        if (type == RuntimeScalarType.CODE && !((RuntimeCode) value).defined()) {
             return scalarFalse;
         }
         if (type == RuntimeScalarType.BOOLEAN) {
