@@ -30,6 +30,14 @@ By leveraging this distribution, developers can run familiar Perl code while acc
 This project aims to bring the strengths of Perl to modern JVM environments while supporting a growing list of core modules and pragmas.
 For detailed reasoning on when to use PerlOnJava, see [Why PerlOnJava](docs/WHY_PERLONJAVA.md).
 
+### What This Project Is
+
+- **A JVM-Native Perl Implementation**: Runs Perl code directly on the Java Virtual Machine
+- **A Bridge to Java Ecosystems**: Enables Perl scripts to interact with Java libraries and frameworks
+- **A Cross-Platform Solution**: Provides consistent Perl behavior across different operating systems via JVM
+- **A Modern Integration Tool**: Allows Perl codebases to participate in Java-based enterprise environments
+
+
 ## Quick Start
 
 1. Build the project:
@@ -67,22 +75,31 @@ $dbh->do("INSERT INTO test VALUES (1, 'Hello World')");
 
 ### Key Features
 
-- **Familiar Perl Modules**: Includes core modules such as `Text::Balanced`, `File::Find`, `Data::Dumper`, and non-core modules like `DBI`, `JSON` and `HTTP::CookieJar`.
-- **JDBC Support**: Use `DBI` to connect to Java databases via JDBC.
-- **Java Integration**: Execute Perl scripts in Java environments, leveraging the JVM's capabilities and interoperability, with Java Scripting API (JSR 223).
-- **Cross-Platform Distribution**: Run Perl scripts in any Java-supported environment with consistent performance.
+- **Core Perl Language**: Full support for variables, loops, conditionals, subroutines, and most operators
+- **Object-Oriented Programming**: Classes, inheritance, method calls, and C3 method resolution
+- **Regular Expressions**: Comprehensive regex support including most modifiers and special variables
+- **Java Integration**:
+   - Execute Perl scripts in Java environments via JSR 223
+   - DBI module with native JDBC support
+   - Cross-platform consistency through JVM
 
-For more details on supported modules, pragmas, and features, see the [Feature Matrix](docs/FEATURE_MATRIX.md).
-
+### Core Module Support
+- **Data Processing**: `Data::Dumper`, `JSON`, `Text::Balanced`
+- **File Operations**: `File::Find`, `File::Basename`, `File::Spec`
+- **Network**: `HTTP::Tiny`, `HTTP::CookieJar`, `URI::Escape`
+- **Development**: `Carp`, `Symbol`, `Exporter`
 
 ### Current Limitations
 
-- **Limited Module Support**: Does not support XS modules or many CPAN libraries.
-- **Syntax Compatibility**: May not fully support advanced syntax-changing modules or esoteric Perl features.
+- **Module Compatibility**: No support for XS modules or direct C integration
+- **System Operations**: Cannot use fork, exec, or low-level system calls
+- **Advanced Features**: No support for threads, Unicode manipulation, or tied variables
+- **Syntax Extensions**: Some modern Perl features like signatures and attributes not implemented
 
-### What This Project Is
+## Detailed Documentation
 
-- **A Complement to Perl**: This project complements Perl by enabling its integration with Java environments.
+For a comprehensive overview of supported features, limitations, and implementation details, see our [Feature Matrix](docs/FEATURE_MATRIX.md).
+
 
 ## Target Audience
 
