@@ -198,7 +198,7 @@
   - Added stacked file test operators.
   - Added `module_true` feature.
   - Added `/c` regex modifier.
-  - Added `""` overload.
+  - Added overload: `""`, `0+`, `fallback`, `nomethod`.
   - Library upgrades.
     Maven:  `mvn versions:use-latest-versions`.
     Gradle: `./gradlew useLatestVersions`.

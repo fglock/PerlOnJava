@@ -342,6 +342,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case UNDEF -> 0;
             case VSTRING -> 0;
             case BOOLEAN -> (boolean) value ? 1 : 0;
+            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE -> Overload.numify(this).getInt();
             default -> ((RuntimeScalarReference) value).getIntRef();
         };
     }
@@ -354,6 +355,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case UNDEF -> 0L;
             case VSTRING -> 0L;
             case BOOLEAN -> (boolean) value ? 1L : 0L;
+            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE -> Overload.numify(this).getLong();
             default -> ((RuntimeScalarReference) value).getIntRef();
         };
     }
@@ -366,6 +368,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case UNDEF -> 0.0;
             case VSTRING -> 0.0;
             case BOOLEAN -> (boolean) value ? 1.0D : 0.0D;
+            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE -> Overload.numify(this).getDouble();
             default -> ((RuntimeScalarReference) value).getDoubleRef();
         };
     }
@@ -489,7 +492,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case REGEX -> value.toString();
             case VSTRING -> (String) value;
             case BOOLEAN -> (boolean) value ? "1" : "";
-            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE -> Overload.stringify(this);
+            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE -> Overload.stringify(this).toString();
             case CODE -> this.toStringRef();
             case OBJECT -> value.toString();
             default -> ((RuntimeScalarReference) value).toStringRef();
