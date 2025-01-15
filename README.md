@@ -94,7 +94,6 @@ $dbh->do("INSERT INTO test VALUES (1, 'Hello World')");
 - **Module Compatibility**: No support for XS modules or direct C integration
 - **System Operations**: Cannot use fork, exec, or low-level system calls
 - **Advanced Features**: No support for threads, Unicode manipulation, or tied variables
-- **Syntax Extensions**: Some modern Perl features like signatures and attributes not implemented
 
 ### Detailed Documentation
 
