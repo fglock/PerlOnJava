@@ -96,7 +96,7 @@ $dbh->do("INSERT INTO test VALUES (1, 'Hello World')");
 - **Advanced Features**: No support for threads, Unicode manipulation, or tied variables
 - **Syntax Extensions**: Some modern Perl features like signatures and attributes not implemented
 
-## Detailed Documentation
+### Detailed Documentation
 
 For a comprehensive overview of supported features, limitations, and implementation details, see our [Feature Matrix](docs/FEATURE_MATRIX.md).
 
