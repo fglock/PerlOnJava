@@ -188,7 +188,8 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **CORE::GLOBAL namespace**: `CORE::GLOBAL` and core function overrides are implemented.
 - ✅  **alternate subroutine call syntax**: `&$sub`, `&$sub(args)` syntax is implemented.
 - 🚧  **Subroutine prototypes**: Prototypes `$`, `@`, `%`, `&`, `;`, `_`, empty string and undef are supported.
-- ❌  **Subroutine signatures**: Formal parameters are not implemented.
+- ✅  **Subroutine signatures**: Formal parameters are implemented.
+- ❌  **Subroutine signatures**: Formal parameter count checking and error messages are not implemented.
 - 🚧  **Subroutine attributes**: `prototype` is implemented. Other subroutine attributes are not yet supported.
 - ✅  **`lvalue` subroutines**: Subroutines with attribute `:lvalue` are supported.
 - ❌  **Lexical subroutines**: Subroutines declared `my`, `state`, or `our` are not yet supported.
@@ -326,8 +327,8 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **subs** pragma
 - 🚧  **utf8** pragma: utf8 is always on. Disabling utf8 might work in a future version.
 - ✅  **feature** pragma
-  - ✅ Features implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `bitwise`, `postderef`, `evalbytes`, `module_true`.
-  - ❌ Features missing: `postderef_qq`, `signatures`, `unicode_eval`, `unicode_strings`, `defer`.
+  - ✅ Features implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `bitwise`, `postderef`, `evalbytes`, `module_true`, `signatures`.
+  - ❌ Features missing: `postderef_qq`, `unicode_eval`, `unicode_strings`, `defer`.
 - 🚧  **warnings** pragma
 - ❌  **version** pragma: version objects are not yet supported.
 - ❌  **experimental** pragma

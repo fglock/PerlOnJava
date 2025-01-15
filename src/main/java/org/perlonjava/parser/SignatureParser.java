@@ -12,7 +12,7 @@ import java.util.List;
 import static org.perlonjava.parser.ListParser.parseZeroOrOneList;
 
 public class SignatureParser {
-    public static Node parseSignature(Parser parser, String signature) {
+    public static ListNode parseSignature(Parser parser, String signature) {
         int tokenIndex = parser.tokenIndex;
 
         // Tokenize the signature
@@ -22,6 +22,7 @@ public class SignatureParser {
         // sigParser.ctx.logDebug("signature tokens: " + tokens + " at " + sigParser.tokenIndex);
 
         List<Node> nodes = new ArrayList<>();
+        List<Node> variables = new ArrayList<>();
         int minParams = 0;
         int maxParams = 0;
         boolean hasSlurpy = false;
@@ -34,24 +35,28 @@ public class SignatureParser {
             }
 
             String sigil = token.text;
-
-            // Handle slurpy params (@array or %hash)
-            if (sigil.equals("@") || sigil.equals("%")) {
-                hasSlurpy = true;
-                if (TokenUtils.peek(sigParser).type == LexerTokenType.IDENTIFIER) {
-                    String name = TokenUtils.consume(sigParser).text;
-                    nodes.add(generateSlurpyAssignment(sigil, name, maxParams, tokenIndex));
-                }
-                maxParams = Integer.MAX_VALUE;
-                break; // Slurpy must be last
-            }
-
-            // Handle scalar params
             String name = null;
             if (TokenUtils.peek(sigParser).type == LexerTokenType.IDENTIFIER) {
                 name = TokenUtils.consume(sigParser).text;
             }
 
+            // Collect variable list
+            Node variable = null;
+            if (name != null) {
+                variable = new OperatorNode(sigil, new IdentifierNode(name, tokenIndex), tokenIndex);
+                variables.add(variable);
+            } else {
+                variables.add(new OperatorNode("undef", null, tokenIndex));
+            }
+
+            // Handle slurpy params (@array or %hash)
+            if (sigil.equals("@") || sigil.equals("%")) {
+                hasSlurpy = true;
+                maxParams = Integer.MAX_VALUE;
+                break; // Slurpy must be last
+            }
+
+            // Handle scalar params
             Node defaultValue = null;
             LexerToken nextToken = TokenUtils.peek(sigParser);
             if (nextToken.text.equals("=") ||
@@ -60,10 +65,9 @@ public class SignatureParser {
 
                 String op = TokenUtils.consume(sigParser).text;
                 defaultValue = parseZeroOrOneList(sigParser, 0);
-                nodes.add(generateDefaultAssignment(name, defaultValue, op, maxParams, tokenIndex));
+                nodes.add(generateDefaultAssignment(defaultValue, op, maxParams, variable, tokenIndex));
             } else {
                 minParams++;
-                nodes.add(generateRequiredAssignment(name, maxParams, tokenIndex));
             }
 
             maxParams++;
@@ -81,80 +85,59 @@ public class SignatureParser {
             throw new PerlCompilerException("Expected ')' in signature prototype");
         }
 
-        // Add parameter count validation at start
-        nodes.add(0, new BinaryOperatorNode(
-                "(",
-                new OperatorNode("&",
-                        new IdentifierNode("_check_param_count", tokenIndex), tokenIndex),
-                new ListNode(
-                        List.of(
-                                new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex),
-                                new NumberNode(Integer.toString(minParams), tokenIndex),
-                                new NumberNode(Integer.toString(maxParams), tokenIndex)),
-                        tokenIndex),
-                tokenIndex)
-        );
+//        // AST:  Add parameter count validation
+//        nodes.add(0, new BinaryOperatorNode(
+//                "(",
+//                new OperatorNode("&",
+//                        new IdentifierNode("_check_param_count", tokenIndex), tokenIndex),
+//                new ListNode(
+//                        List.of(
+//                                new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex),
+//                                new NumberNode(Integer.toString(minParams), tokenIndex),
+//                                new NumberNode(Integer.toString(maxParams), tokenIndex)),
+//                        tokenIndex),
+//                tokenIndex)
+//        );
 
-        return new BlockNode(nodes, 0);
-    }
-
-    private static Node generateSlurpyAssignment(String sigil, String name, int paramIndex, int tokenIndex) {
-        return new BinaryOperatorNode(
-                "=",
-                new OperatorNode(sigil, new IdentifierNode(name, tokenIndex), tokenIndex),
+        // AST:  my ($a, $b) = @_
+        nodes.add(0,
                 new BinaryOperatorNode(
-                        "[",
+                        "=",
+                        new OperatorNode("my",
+                                new ListNode(variables, tokenIndex),
+                                tokenIndex),
                         new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex),
-                        new BinaryOperatorNode(
-                                "..",
-                                new NumberNode(Integer.toString(paramIndex), tokenIndex),
-                                new OperatorNode("$#", new IdentifierNode("_", tokenIndex), tokenIndex),
-                                tokenIndex),
-                        tokenIndex),
-                tokenIndex);
+                        tokenIndex));
+
+        return new ListNode(nodes, tokenIndex);
     }
 
-    private static Node generateDefaultAssignment(String name, Node defaultValue, String op, int paramIndex, int tokenIndex) {
-        // placeholder
-        return new NumberNode(Integer.toString(paramIndex), tokenIndex);
-
-//        Node arrayAccess = new ArrayAccessNode(
-//                new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex),
-//                new NumberNode(Integer.toString(paramIndex), tokenIndex),
-//                tokenIndex
-//        );
-//
-//        Node condition = switch (op) {
-//            case "=" -> new OperatorNode("!",
-//                    new OperatorNode("defined", arrayAccess, tokenIndex),
-//                    tokenIndex);
-//            case "||=" -> new OperatorNode("!", arrayAccess, tokenIndex);
-//            case "//=" -> new OperatorNode("!",
-//                    new OperatorNode("defined", arrayAccess, tokenIndex),
-//                    tokenIndex);
-//            default -> throw new IllegalArgumentException("Unknown operator: " + op);
-//        };
-//
-//        return new BinaryOperatorNode(
-//                "=",
-//                new OperatorNode("$", new IdentifierNode(name, tokenIndex), tokenIndex),
-//                new ConditionalNode(condition, defaultValue, arrayAccess, tokenIndex),
-//                tokenIndex
-//        );
-    }
-
-    private static Node generateRequiredAssignment(String name, int paramIndex, int tokenIndex) {
+    private static Node generateDefaultAssignment(Node defaultValue, String op, int paramIndex, Node variable, int tokenIndex) {
+        if (variable == null) {
+            // AST for:  `$=`
+            return new ListNode(tokenIndex);
+        }
+        if (op.equals("=")) {
+            // AST for:  `@_ < 3 && $a = 123
+            return new BinaryOperatorNode(
+                    "&&",
+                    new BinaryOperatorNode(
+                            "<",
+                            new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex),
+                            new NumberNode(Integer.toString(paramIndex + 1), tokenIndex),
+                            tokenIndex),
+                    new BinaryOperatorNode(
+                            "=",
+                            variable,
+                            defaultValue,
+                            tokenIndex),
+                    tokenIndex);
+        }
+        // AST for:  `$a //= 123`  `$a ||= 123`
         return new BinaryOperatorNode(
-                "=",
-                new OperatorNode("$", new IdentifierNode(name, tokenIndex), tokenIndex),
-                new BinaryOperatorNode(
-                        "[",
-                        new OperatorNode("$", new IdentifierNode("_", tokenIndex), tokenIndex),
-                        new ArrayLiteralNode(
-                                List.of(
-                                        new NumberNode(Integer.toString(paramIndex), tokenIndex)),
-                                tokenIndex),
-                        tokenIndex),
+                op,
+                variable,
+                defaultValue,
                 tokenIndex);
     }
 }

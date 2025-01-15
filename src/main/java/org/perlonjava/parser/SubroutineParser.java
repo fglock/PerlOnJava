@@ -103,6 +103,7 @@ public class SubroutineParser {
 
         // Initialize the prototype node to null. This will store the prototype of the subroutine if it exists.
         String prototype = null;
+        ListNode signature = null;
 
         // Check if the next token is an opening parenthesis '(' indicating a prototype.
         if (TokenUtils.peek(parser).text.equals("(")) {
@@ -112,9 +113,9 @@ public class SubroutineParser {
             if (parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures")) {
                 parser.ctx.logDebug("Signatures feature enabled: " + prototype);
                 // If the signatures feature is enabled, we parse the prototype as a signature.
-                Node sigAst = parseSignature(parser, prototype);
+                signature = parseSignature(parser, prototype);
                 // TODO integrate the AST for the signature into the subroutine definition
-                parser.ctx.logDebug("Signature AST: " + sigAst);
+                parser.ctx.logDebug("Signature AST: " + signature);
                 prototype = null;
             }
         }
@@ -157,10 +158,15 @@ public class SubroutineParser {
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
 
         // Parse the block of the subroutine, which contains the actual code.
-        Node block = ParseBlock.parseBlock(parser);
+        BlockNode block = ParseBlock.parseBlock(parser);
 
         // After the block, we expect a closing curly brace '}' to denote the end of the subroutine.
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+
+        // Insert signature code in the block
+        if (signature != null) {
+            block.elements.addAll(0, signature.elements);
+        }
 
         if (subName == null) {
             // Now we check if the next token is one of the illegal characters that cannot follow a subroutine.

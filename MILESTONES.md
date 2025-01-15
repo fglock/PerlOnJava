@@ -195,6 +195,7 @@
   - Project description updated in `README.md` to "A Perl Distribution for the JVM"
   - Added module porting guide at `docs/PORTING_MODULES.md`
   - Added `Text::Balanced` module.
+  - Added subroutine signatures and `signature` feature.
   - Added chained operators.
   - Added stacked file test operators.
   - Added `module_true` feature.
