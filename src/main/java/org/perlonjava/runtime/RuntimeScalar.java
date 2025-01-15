@@ -172,8 +172,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public static RuntimeScalar wantarray(int ctx) {
-        return ctx == RuntimeContextType.VOID ? new RuntimeScalar() :
-                new RuntimeScalar(ctx == RuntimeContextType.LIST ? 1 : 0);
+        return ctx == RuntimeContextType.VOID ? new RuntimeScalar() : new RuntimeScalar(ctx == RuntimeContextType.LIST ? 1 : 0);
     }
 
     public static RuntimeList reset(RuntimeList args, int ctx) {
@@ -505,9 +504,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case VSTRING -> "VSTRING(0x" + value.hashCode() + ")";
             default -> "SCALAR(0x" + Integer.toHexString(value.hashCode()) + ")";
         };
-        return (blessId == 0
-                ? ref
-                : NameNormalizer.getBlessStr(blessId) + "=" + ref);
+        return (blessId == 0 ? ref : NameNormalizer.getBlessStr(blessId) + "=" + ref);
     }
 
     public int getIntRef() {
@@ -622,9 +619,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return switch (type) {
             case REFERENCE, ARRAYREFERENCE, HASHREFERENCE: {
                 int id = ((RuntimeBaseEntity) value).blessId;
-                yield (id != 0
-                        ? new RuntimeScalar(NameNormalizer.getBlessStr(id))
-                        : scalarUndef);
+                yield (id != 0 ? new RuntimeScalar(NameNormalizer.getBlessStr(id)) : scalarUndef);
             }
             default:
                 yield scalarUndef;
