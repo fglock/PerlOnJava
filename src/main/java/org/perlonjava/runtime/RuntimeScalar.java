@@ -847,29 +847,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeIO getRuntimeIO() {
-        RuntimeIO fh;
-        if (type == RuntimeScalarType.GLOBREFERENCE) {
-            // my $fh2 = \*STDOUT;
-            // System.out.println("GLOBREFERENCE");
-            String globName = ((RuntimeGlob) value).globName;
-            fh = (RuntimeIO) GlobalVariable.getGlobalIO(globName).value;
-        } else if (type == RuntimeScalarType.GLOB) {
-            // my $fh = *STDOUT;
-            if (value instanceof RuntimeGlob) {
-                // System.out.println("GLOB");
-                String globName = ((RuntimeGlob) value).globName;
-                fh = (RuntimeIO) GlobalVariable.getGlobalIO(globName).value;
-            } else {
-                // System.out.println("GLOB but IO");
-                fh = (RuntimeIO) value;
-            }
-        } else {
-            // print STDOUT ...
-            // System.out.println("IO");
-            fh = (RuntimeIO) value;
-            // throw  new PerlCompilerException("Invalid fileHandle type: " + fileHandle.type);
-        }
-        return fh;
+        return RuntimeIO.getRuntimeIO(this);
     }
 
     /**

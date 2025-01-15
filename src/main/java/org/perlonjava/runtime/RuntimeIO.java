@@ -197,6 +197,32 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
     }
 
+    public static RuntimeIO getRuntimeIO(RuntimeScalar runtimeScalar) {
+        RuntimeIO fh;
+        if (runtimeScalar.type == RuntimeScalarType.GLOBREFERENCE) {
+            // my $fh2 = \*STDOUT;
+            // System.out.println("GLOBREFERENCE");
+            String globName = ((RuntimeGlob) runtimeScalar.value).globName;
+            fh = (RuntimeIO) getGlobalIO(globName).value;
+        } else if (runtimeScalar.type == RuntimeScalarType.GLOB) {
+            // my $fh = *STDOUT;
+            if (runtimeScalar.value instanceof RuntimeGlob) {
+                // System.out.println("GLOB");
+                String globName = ((RuntimeGlob) runtimeScalar.value).globName;
+                fh = (RuntimeIO) getGlobalIO(globName).value;
+            } else {
+                // System.out.println("GLOB but IO");
+                fh = (RuntimeIO) runtimeScalar.value;
+            }
+        } else {
+            // print STDOUT ...
+            // System.out.println("IO");
+            fh = (RuntimeIO) runtimeScalar.value;
+            // throw  new PerlCompilerException("Invalid fileHandle type: " + fileHandle.type);
+        }
+        return fh;
+    }
+
     private Set<StandardOpenOption> convertMode(String mode) {
         Set<StandardOpenOption> options = MODE_OPTIONS.get(mode);
         if (options == null) {
