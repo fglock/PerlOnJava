@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.perlonjava.parser.PrototypeArgs.consumeArgsWithPrototype;
+import static org.perlonjava.parser.SignatureParser.parseSignature;
 import static org.perlonjava.parser.SpecialBlockParser.runSpecialBlock;
 
 public class SubroutineParser {
@@ -108,6 +109,14 @@ public class SubroutineParser {
             // If a prototype exists, we parse it using 'parseRawString' method which handles it like the 'q()' operator.
             // This means it will take everything inside the parentheses as a literal string.
             prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
+            if (parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures")) {
+                parser.ctx.logDebug("Signatures feature enabled: " + prototype);
+                // If the signatures feature is enabled, we parse the prototype as a signature.
+                Node sigAst = parseSignature(parser, prototype);
+                // TODO integrate the AST for the signature into the subroutine definition
+                parser.ctx.logDebug("Signature AST: " + sigAst);
+                prototype = null;
+            }
         }
 
         // Initialize a list to store any attributes the subroutine might have.
