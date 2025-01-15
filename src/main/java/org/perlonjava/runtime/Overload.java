@@ -138,7 +138,7 @@ public class Overload {
                     // First try: Look for number overload method
                     perlMethod = InheritanceResolver.findMethodInHierarchy("(0+", perlClassName, null, 0);
 
-                    // Handle fallback mechanism if string overload not found
+                    // Handle fallback mechanism if number overload not found
                     if (perlMethod == null && methodFallback != null) {
                         RuntimeScalar fallback = RuntimeCode.apply(methodFallback, new RuntimeArray(), SCALAR).getFirst();
 
@@ -204,20 +204,20 @@ public class Overload {
                     RuntimeArray perlMethodArgs = new RuntimeArray(runtimeScalar);
                     RuntimeScalar perlMethod;
 
-                    // First try: Look for number overload method
+                    // First try: Look for bool overload method
                     perlMethod = InheritanceResolver.findMethodInHierarchy("(bool", perlClassName, null, 0);
 
-                    // Handle fallback mechanism if string overload not found
+                    // Handle fallback mechanism if bool overload not found
                     if (perlMethod == null && methodFallback != null) {
                         RuntimeScalar fallback = RuntimeCode.apply(methodFallback, new RuntimeArray(), SCALAR).getFirst();
 
                         // If fallback is undefined or true, try alternative methods
                         if (!fallback.getDefinedBoolean() || fallback.getBoolean()) {
-                            // Try string conversion method
+                            // Try number conversion method
                             if (perlMethod == null) {
                                 perlMethod = InheritanceResolver.findMethodInHierarchy("(0+", perlClassName, null, 0);
                             }
-                            // Try boolean conversion method
+                            // Try string conversion method
                             if (perlMethod == null) {
                                 perlMethod = InheritanceResolver.findMethodInHierarchy("(\"\"", perlClassName, null, 0);
                             }
@@ -243,7 +243,7 @@ public class Overload {
             }
         }
 
-        // Default number conversion for non-blessed or non-overloaded objects
+        // Default bool conversion for non-blessed or non-overloaded objects
         return new RuntimeScalar(switch (runtimeScalar.type) {
             case REFERENCE -> ((RuntimeScalarReference) runtimeScalar.value).getBooleanRef();
             case ARRAYREFERENCE -> ((RuntimeArray) runtimeScalar.value).getBooleanRef();
