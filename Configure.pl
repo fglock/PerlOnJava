@@ -50,7 +50,7 @@ handle_dependencies() if ($search || $direct);
 # Function to display help message and usage instructions
 sub show_help {
     print
-        'Usage: ./Configure [options]
+        'Usage: ./Configure.pl [options]
 
 Configuration Options:
     -h, --help                      Show this help message
@@ -62,9 +62,9 @@ Dependency Management Options:
     --verbose                       Enable verbose output
 
 Examples:
-    ./Configure -D strict_mode=true -D enable_optimizations=false
-    ./Configure --search org.h2.Driver
-    ./Configure --direct com.h2database:h2:2.2.224
+    ./Configure.pl -D strict_mode=true -D enable_optimizations=false
+    ./Configure.pl --search org.h2.Driver
+    ./Configure.pl --direct com.h2database:h2:2.2.224
 ';
     exit;
 }
