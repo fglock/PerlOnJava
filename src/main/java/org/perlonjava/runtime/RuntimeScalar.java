@@ -203,9 +203,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
      */
     public static RuntimeScalar bless(RuntimeScalar runtimeScalar, RuntimeScalar className) {
         switch (runtimeScalar.type) {
-            case REFERENCE:
-            case ARRAYREFERENCE:
-            case HASHREFERENCE:
+            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE:
                 String str = className.toString();
                 if (str.isEmpty()) {
                     str = "main";
@@ -275,12 +273,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar refaddr() {
         switch (type) {
-            case REFERENCE:
-            case ARRAYREFERENCE:
-            case HASHREFERENCE:
-            case CODE:
-            case GLOB:
-            case GLOBREFERENCE:
+            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOB, GLOBREFERENCE:
                 return getScalarInt(System.identityHashCode(value));
             default:
                 return scalarUndef;
@@ -503,13 +496,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     public String toStringRef() {
         String ref = switch (type) {
             case UNDEF -> "SCALAR(0x14500834042)";
-            case CODE -> {
-                if (value == null) {
-                    yield "CODE(0x14500834042)";
-                }
-                yield ((RuntimeCode) value).toStringRef();
-            }
-            case GLOB -> {
+            case CODE, GLOB -> {
                 if (value == null) {
                     yield "CODE(0x14500834042)";
                 }
@@ -633,9 +620,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar blessed() {
         return switch (type) {
-            case REFERENCE:
-            case ARRAYREFERENCE:
-            case HASHREFERENCE: {
+            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE: {
                 int id = ((RuntimeBaseEntity) value).blessId;
                 yield (id != 0
                         ? new RuntimeScalar(NameNormalizer.getBlessStr(id))
