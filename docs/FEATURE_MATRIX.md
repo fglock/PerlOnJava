@@ -73,7 +73,6 @@
 - ✔️   **`local` special cases**: `local` works for typeglobs and filehandles.
 - ✔️   **Typeglob as hash**: `*$val{$k}` for `SCALAR`, `ARRAY`, `HASH`, `CODE`, `IO` is implemented.
 - ❌  **Tied Scalars**: Support for tying scalars to classes is missing.
-- ❌  **Overload**: overloading Perl operations is missing.
 - ❌  **Unicode**: Support for non-Unicode strings is not implemented.
 - ❌  **Taint checks**: Support for taint checks is not implemented.
 - ❌  **`local` special cases**: Variable localization in for-loops is missing.
@@ -319,6 +318,7 @@
 - 🚧  **builtin** pragma:
   - ✔️  Implemented: `true` `false` `is_bool` `inf` `nan` `weaken` `unweaken` `is_weak` `blessed` `refaddr` `reftype` `created_as_string` `created_as_number` `stringify` `ceil` `floor` `indexed` `trim` `is_tainted`.
 - 🚧  **overload** pragma:
+  - ✔️  Implemented: `""`.
 - ❌  **overloading** pragma
 
 

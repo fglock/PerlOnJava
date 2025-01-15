@@ -72,12 +72,16 @@ public class NameNormalizer {
 
         char firstLetter = variable.charAt(0);
         if (variable.equals("_") || !(firstLetter == '_' || Character.isLetter(firstLetter)) || SPECIAL_VARIABLES.contains(variable)) {
-            defaultPackage = "main";    // special variables are always in main
-            if (variable.length() == 2 && variable.charAt(0) == '^' && variable.charAt(1) >= 'A' && variable.charAt(1) <= 'Z') {
-                // For $^A to $^Z, convert the second character to the corresponding ASCII control character.
-                // For example, $^A should become ${chr(1)}
-                char controlChar = (char) (variable.charAt(1) - 64);
-                variable = String.valueOf(controlChar);
+            if (variable.length() > 1 && variable.startsWith("(")) {
+                // Looks like a overload method
+            } else {
+                defaultPackage = "main";    // special variables are always in main
+                if (variable.length() == 2 && variable.charAt(0) == '^' && variable.charAt(1) >= 'A' && variable.charAt(1) <= 'Z') {
+                    // For $^A to $^Z, convert the second character to the corresponding ASCII control character.
+                    // For example, $^A should become ${chr(1)}
+                    char controlChar = (char) (variable.charAt(1) - 64);
+                    variable = String.valueOf(controlChar);
+                }
             }
         }
 

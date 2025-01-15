@@ -1,6 +1,7 @@
 package org.perlonjava.runtime;
 
 import static org.perlonjava.runtime.RuntimeContextType.SCALAR;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
  * The {@code Overload} class implements Perl's operator overloading system in Java.
@@ -53,12 +54,14 @@ public class Overload {
                 RuntimeScalar methodOverloaded = InheritanceResolver.findMethodInHierarchy("((", perlClassName, null, 0);
                 RuntimeScalar methodFallback = InheritanceResolver.findMethodInHierarchy("()", perlClassName, null, 0);
                 if (methodOverloaded != null || methodFallback != null) {
+                    RuntimeArray perlMethodArgs = new RuntimeArray(runtimeScalar);
                     // handle blessed & overloaded objects
                     RuntimeScalar perlMethod;
                     // handle stringification with '(""'
                     perlMethod = InheritanceResolver.findMethodInHierarchy("(\"\"", perlClassName, null, 0);
                     if (methodFallback != null) {
-                        // handle overload fallback
+                        // handle overload `fallback`
+                        // TODO check if fallback is undef/true/false
                         if (perlMethod == null) {
                             perlMethod = InheritanceResolver.findMethodInHierarchy("(0+", perlClassName, null, 0);
                         }
@@ -66,8 +69,17 @@ public class Overload {
                             perlMethod = InheritanceResolver.findMethodInHierarchy("(bool", perlClassName, null, 0);
                         }
                     }
+                    // handle overload `nomethod`
+                    if (perlMethod == null) {
+                        perlMethod = InheritanceResolver.findMethodInHierarchy("(nomethod", perlClassName, null, 0);
+                        if (perlMethod != null) {
+                            RuntimeArray.push(perlMethodArgs, scalarUndef);
+                            RuntimeArray.push(perlMethodArgs, scalarUndef);
+                            RuntimeArray.push(perlMethodArgs, new RuntimeScalar("(\"\""));
+                        }
+                    }
                     if (perlMethod != null) {
-                        return RuntimeCode.apply(perlMethod, new RuntimeArray(runtimeScalar), SCALAR).toString();
+                        return RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR).toString();
                     }
                 }
             }

@@ -50,7 +50,7 @@ sub OVERLOAD {
                 $sub = \&nil;
             }
             my $sym_ref = Symbol::qualify_to_ref("($_", $package);
-            *$sym_ref = \&{$sub};
+            *$sym_ref = $sub;
         }
     }
 }
