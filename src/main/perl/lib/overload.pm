@@ -38,8 +38,8 @@ sub OVERLOAD {
     for (keys %arg) {
         if ($_ eq 'fallback') {
             my $sym_ref = Symbol::qualify_to_ref("()", $package);
-            *$sym_ref = \&nil;
-            $sym_ref = $arg{$_};
+            my $value = $arg{$_};
+            *$sym_ref = sub () { $value };
         } else {
             warnings::warnif("overload arg '$_' is invalid")
                 unless exists $ops_seen{$_};
