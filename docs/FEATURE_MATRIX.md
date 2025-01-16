@@ -382,24 +382,16 @@ PerlOnJava implements most core Perl features with some key differences:
 
 ### DBI module
 
-#### Adding JDBC Drivers
-
-Please see [Adding JDBC Drivers](../README.md#adding-jdbc-drivers) in README.md.
+#### JDBC Integration
+The DBI module provides seamless integration with JDBC drivers:
+- Configure JDBC drivers: See [Adding JDBC Drivers](../README.md#adding-jdbc-drivers)
+- Connect to databases: See [Database Connection Examples](JDBC_GUIDE.md#database-connection-examples)
 
 #### Implemented Methods
-- `connect`
-- `prepare`
-- `execute`
-- `fetchrow_arrayref`, `fetchrow_array`, `fetchrow_hashref`
-- `selectrow_array`, `selectrow_arrayref`, `selectrow_hashref`
-- `fetchall_arrayref`, `selectall_arrayref`
-- `fetchall_hashref`, `selectall_hashref`
-- `rows`
-- `disconnect`
-- `err`, `errstr`, `state`
-- `do`
-- `finish`
-- `last_insert_id`
+- `connect`, `prepare`, `execute`
+- `fetchrow_arrayref`, `fetchrow_array`, `fetchrow_hashref`, `selectrow_array`, `selectrow_arrayref`, `selectrow_hashref`
+- `fetchall_arrayref`, `selectall_arrayref`, `fetchall_hashref`, `selectall_hashref`
+- `rows`, `disconnect`, `err`, `errstr`, `state`, `do`, `finish`, `last_insert_id`
 - `begin_work`, `commit`, `rollback`
 - `bind_param`, `bind_param_inout`, `bind_col`, `bind_columns`
 - `table_info`, `column_info`, `primary_key_info`, `foreign_key_info`, `type_info`
@@ -408,24 +400,10 @@ Please see [Adding JDBC Drivers](../README.md#adding-jdbc-drivers) in README.md.
 - `prepare_cached`, `connect_cached`
 
 #### Database Handle Attributes
-- `RaiseError`
-- `PrintError`
-- `Username`
-- `Password`
-- `Name`
-- `Active`
-- `Type`
-- `ReadOnly`
-- `Executed`
-- `AutoCommit`
+- `RaiseError`, `PrintError`, `Username`, `Password`, `Name`, `Active`, `Type`, `ReadOnly`, `Executed`, `AutoCommit`
 
 #### Statement Handle Attributes
-- `NAME`, `NAME_lc`, `NAME_uc`
-- `NUM_OF_FIELDS`
-- `NUM_OF_PARAMS`
-- `Database`
-
-For database connection examples see [Database Connection Examples](JDBC_GUIDE.md#database-connection-examples) in [JDBC_GUIDE.md](JDBC_GUIDE.md).
+- `NAME`, `NAME_lc`, `NAME_uc`, `NUM_OF_FIELDS`, `NUM_OF_PARAMS`, `Database`
 
 
 ## Non-strict and Obsolete Features
