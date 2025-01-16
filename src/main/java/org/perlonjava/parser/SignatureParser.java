@@ -48,6 +48,7 @@ public class SignatureParser {
             } else {
                 variables.add(new OperatorNode("undef", null, tokenIndex));
             }
+            sigParser.ctx.logDebug("signature variable: " + variable);
 
             // Handle slurpy params (@array or %hash)
             if (sigil.equals("@") || sigil.equals("%")) {
@@ -85,19 +86,26 @@ public class SignatureParser {
             throw new PerlCompilerException("Expected ')' in signature prototype");
         }
 
-//        // AST:  Add parameter count validation
-//        nodes.add(0, new BinaryOperatorNode(
-//                "(",
-//                new OperatorNode("&",
-//                        new IdentifierNode("_check_param_count", tokenIndex), tokenIndex),
-//                new ListNode(
-//                        List.of(
-//                                new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex),
-//                                new NumberNode(Integer.toString(minParams), tokenIndex),
-//                                new NumberNode(Integer.toString(maxParams), tokenIndex)),
-//                        tokenIndex),
-//                tokenIndex)
-//        );
+        sigParser.ctx.logDebug("signature min: " + minParams + " max: " + maxParams + " slurpy: " + hasSlurpy);
+
+        // AST:   (10 < @_ < 20) || die "bad number of arguments"
+        nodes.add(0, new BinaryOperatorNode(
+                "||",
+                new ListNode(List.of(
+                        new BinaryOperatorNode("<=",
+                                new BinaryOperatorNode("<=",
+                                        new NumberNode(Integer.toString(minParams), tokenIndex),
+                                        new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex),
+                                        tokenIndex),
+                                new NumberNode(Integer.toString(maxParams), tokenIndex),
+                                tokenIndex)
+                ), tokenIndex),
+                new OperatorNode("die",
+                        new ListNode(List.of(
+                                new StringNode("Bad number of arguments", tokenIndex)
+                        ), tokenIndex),
+                        tokenIndex),
+                tokenIndex));
 
         // AST:  my ($a, $b) = @_
         nodes.add(0,
