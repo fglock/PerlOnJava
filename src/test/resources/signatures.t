@@ -93,11 +93,11 @@ sub multi_optional ($a = 1, $b = 2, $c = 3) {
 print "not " if multi_optional(10) != 15;  # 10 + 2 + 3
 say "ok # Multiple optional parameters";
 
-## # Attribute with signature
-## sub marked :lvalue ($x) {
-##     my $val = $x * 2;
-##     return $val;
-## }
-## print "not " if marked(5) != 10;
-## say "ok # Attribute with signature";
+# Attribute with signature
+sub marked :lvalue ($x) {
+    my $val = $x * 2;
+    return $val;
+}
+print "not " if marked(5) != 10;
+say "ok # Attribute with signature";
 

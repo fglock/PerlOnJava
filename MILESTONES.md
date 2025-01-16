@@ -154,7 +154,6 @@
   - lexical utf8 source code.
   - preprocessor `# line` directive.
   - subroutine prototypes.
-  - subroutine signatures.
   - `goto` special cases - for `Text::Balanced`.
   - indirect object special cases - for `GetOpt::Long`.
   - Here documents.

@@ -189,7 +189,6 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **alternate subroutine call syntax**: `&$sub`, `&$sub(args)` syntax is implemented.
 - 🚧  **Subroutine prototypes**: Prototypes `$`, `@`, `%`, `&`, `;`, `_`, empty string and undef are supported.
 - ✅  **Subroutine signatures**: Formal parameters are implemented.
-- ❌  **Subroutine signatures**: Formal parameter count checking and error messages are not implemented.
 - 🚧  **Subroutine attributes**: `prototype` is implemented. Other subroutine attributes are not yet supported.
 - ✅  **`lvalue` subroutines**: Subroutines with attribute `:lvalue` are supported.
 - ❌  **Lexical subroutines**: Subroutines declared `my`, `state`, or `our` are not yet supported.
