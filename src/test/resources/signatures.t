@@ -17,12 +17,13 @@ sub add ($left, $right) {
 print "not " if add(2, 3) != 5;
 say "ok # Basic mandatory parameters";
 
-## # Ignored parameter
-## sub process ($first, $, $third) {
-##     return "$first:$third";
-## }
-## print "not " if process('a', 'b', 'c') ne 'a:c';
-## say "ok # Ignored parameter";
+# Ignored parameter
+sub process ($first, $, $third) {
+    return "$first:$third";
+}
+my $process = process('a', 'b', 'c');
+print "not " if $process ne 'a:c';
+say "ok # Ignored parameter <$process>";
 
 # Optional parameters with default values
 sub greet ($name = "World") {
@@ -71,19 +72,19 @@ sub format_user ($prefix, %data) {
 print "not " if format_user('User', name => 'Alice', age => 30) ne 'User: Alice is 30';
 say "ok # Slurpy hash";
 
-## # Nameless slurpy array
-## sub first_only ($first, @) {
-##     return $first;
-## }
-## print "not " if first_only(1, 2, 3) != 1;
-## say "ok # Nameless slurpy array";
+# Nameless slurpy array
+sub first_only ($first, @) {
+    return $first;
+}
+print "not " if first_only(1, 2, 3) != 1;
+say "ok # Nameless slurpy array";
 
-## # Nameless slurpy hash
-## sub prefix_only ($prefix, %) {
-##     return $prefix;
-## }
-## print "not " if prefix_only('test', a => 1, b => 2) ne 'test';
-## say "ok # Nameless slurpy hash";
+# Nameless slurpy hash
+sub prefix_only ($prefix, %) {
+    return $prefix;
+}
+print "not " if prefix_only('test', a => 1, b => 2) ne 'test';
+say "ok # Nameless slurpy hash";
 
 # Multiple optional parameters
 sub multi_optional ($a = 1, $b = 2, $c = 3) {
@@ -99,4 +100,4 @@ say "ok # Multiple optional parameters";
 ## }
 ## print "not " if marked(5) != 10;
 ## say "ok # Attribute with signature";
-## 
+
