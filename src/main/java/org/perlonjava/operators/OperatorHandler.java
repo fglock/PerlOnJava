@@ -84,7 +84,7 @@ public class OperatorHandler {
         put("ucfirst", "ucfirst", "org/perlonjava/operators/StringOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("rindex", "rindex", "org/perlonjava/operators/StringOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("index", "index", "org/perlonjava/operators/StringOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
-        put(".", "stringConcat", "org/perlonjava/runtime/RuntimeScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put(".", "stringConcat", "org/perlonjava/operators/StringOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         // Time
         put("time", "time", "org/perlonjava/operators/Time", "()Lorg/perlonjava/runtime/RuntimeScalar;");
@@ -139,7 +139,7 @@ public class OperatorHandler {
         put("..", "createRange", "org/perlonjava/runtime/PerlRange", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/PerlRange;");
 
         put("substr", "substr", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
-        put("sprintf", "sprintf", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("sprintf", "sprintf", "org/perlonjava/operators/SprintfOperator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         put("systemCommand", "systemCommand", "org/perlonjava/operators/SystemOperator", "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;");
         put("indexLastElem", "indexLastElem", "org/perlonjava/runtime/RuntimeArray", "(Lorg/perlonjava/runtime/RuntimeArray;)Lorg/perlonjava/runtime/RuntimeScalar;");

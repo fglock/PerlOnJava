@@ -173,4 +173,8 @@ public class StringOperators {
         // Return the index or -1 if not found
         return getScalarInt(result);
     }
+
+    public static RuntimeScalar stringConcat(RuntimeScalar runtimeScalar, RuntimeScalar b) {
+        return new RuntimeScalar(runtimeScalar + b.toString());
+    }
 }
