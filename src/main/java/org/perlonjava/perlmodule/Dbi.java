@@ -1,5 +1,6 @@
 package org.perlonjava.perlmodule;
 
+import org.perlonjava.operators.ReferenceOperators;
 import org.perlonjava.runtime.*;
 
 import java.sql.*;
@@ -149,7 +150,7 @@ public class Dbi extends PerlModuleBase {
             dbh.put("Name", new RuntimeScalar(jdbcUrl));
 
             // Create blessed reference for Perl compatibility
-            RuntimeScalar dbhRef = RuntimeScalar.bless(dbh.createReference(), new RuntimeScalar("DBI"));
+            RuntimeScalar dbhRef = ReferenceOperators.bless(dbh.createReference(), new RuntimeScalar("DBI"));
             return dbhRef.getList();
         } catch (SQLException e) {
             setError(dbh, e);
@@ -227,7 +228,7 @@ public class Dbi extends PerlModuleBase {
             sth.put("NUM_OF_PARAMS", new RuntimeScalar(numParams));
 
             // Create blessed reference for statement handle
-            RuntimeScalar sthRef = RuntimeScalar.bless(sth.createReference(), new RuntimeScalar("DBI"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI"));
 
             dbh.get("sth").set(sthRef);
 

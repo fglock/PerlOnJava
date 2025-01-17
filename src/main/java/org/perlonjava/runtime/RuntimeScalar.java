@@ -2,7 +2,6 @@ package org.perlonjava.runtime;
 
 import org.perlonjava.operators.Operator;
 import org.perlonjava.parser.NumberParser;
-import org.perlonjava.perlmodule.Universal;
 
 import java.util.*;
 
@@ -184,86 +183,12 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return getScalarInt(1).getList();
     }
 
-    // Implements the isa operator
-    public static RuntimeScalar isa(RuntimeScalar runtimeScalar, RuntimeScalar className) {
-        RuntimeArray args = new RuntimeArray();
-        RuntimeArray.push(args, runtimeScalar);
-        RuntimeArray.push(args, className);
-        return Universal.isa(args, RuntimeContextType.SCALAR).scalar();
-    }
-
-    /**
-     * "Blesses" a Perl reference into an object by associating it with a class name.
-     * This method is used to convert a Perl reference into an object of a specified class.
-     *
-     * @param runtimeScalar
-     * @param className     A RuntimeScalar representing the name of the class to bless the reference into.
-     * @return A RuntimeScalar representing the blessed object.
-     */
-    public static RuntimeScalar bless(RuntimeScalar runtimeScalar, RuntimeScalar className) {
-        switch (runtimeScalar.type) {
-            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE:
-                String str = className.toString();
-                if (str.isEmpty()) {
-                    str = "main";
-                }
-                ((RuntimeBaseEntity) runtimeScalar.value).setBlessId(NameNormalizer.getBlessId(str));
-                break;
-            default:
-                throw new PerlCompilerException("Can't bless non-reference value");
-        }
-        return runtimeScalar;
-    }
-
     public static RuntimeScalar stringConcat(RuntimeScalar runtimeScalar, RuntimeScalar b) {
         return new RuntimeScalar(runtimeScalar + b.toString());
     }
 
     public static RuntimeScalar repeat(RuntimeScalar runtimeScalar, RuntimeScalar arg) {
         return (RuntimeScalar) Operator.repeat(runtimeScalar, arg, RuntimeContextType.SCALAR);
-    }
-
-    public static RuntimeScalar ref(RuntimeScalar runtimeScalar) {
-        String str;
-        int blessId;
-        switch (runtimeScalar.type) {
-            case CODE:
-                str = "CODE";
-                break;
-            case GLOB:
-                str = "";
-                break;
-            case REGEX:
-                str = "Regexp";
-                break;
-            case REFERENCE:
-                String ref = "REF";
-                if (runtimeScalar.value instanceof RuntimeScalar scalar) {
-                    ref = switch (scalar.type) {
-                        case VSTRING -> "VSTRING";
-                        case REGEX, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE -> "REF";
-                        case GLOB -> "GLOB";
-                        default -> "SCALAR";
-                    };
-                }
-                blessId = ((RuntimeBaseEntity) runtimeScalar.value).blessId;
-                str = blessId == 0 ? ref : NameNormalizer.getBlessStr(blessId);
-                break;
-            case ARRAYREFERENCE:
-                blessId = ((RuntimeBaseEntity) runtimeScalar.value).blessId;
-                str = blessId == 0 ? "ARRAY" : NameNormalizer.getBlessStr(blessId);
-                break;
-            case HASHREFERENCE:
-                blessId = ((RuntimeBaseEntity) runtimeScalar.value).blessId;
-                str = blessId == 0 ? "HASH" : NameNormalizer.getBlessStr(blessId);
-                break;
-            case GLOBREFERENCE:
-                str = "GLOB";
-                break;
-            default:
-                return scalarEmptyString;
-        }
-        return new RuntimeScalar(str);
     }
 
     public static RuntimeScalar not(RuntimeScalar runtimeScalar) {

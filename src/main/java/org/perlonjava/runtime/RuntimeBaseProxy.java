@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.operators.ReferenceOperators;
+
 /**
  * An abstract class that serves as a proxy for a RuntimeScalar object.
  * It provides methods to manipulate and access the underlying scalar value.
@@ -23,7 +25,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
      */
     public static RuntimeScalar bless(RuntimeBaseProxy runtimeBaseProxy, RuntimeScalar className) {
         runtimeBaseProxy.vivify();
-        RuntimeScalar ret = RuntimeScalar.bless(runtimeBaseProxy.lvalue, className);
+        RuntimeScalar ret = ReferenceOperators.bless(runtimeBaseProxy.lvalue, className);
         runtimeBaseProxy.type = runtimeBaseProxy.lvalue.type;
         runtimeBaseProxy.value = runtimeBaseProxy.lvalue.value;
         return ret;
