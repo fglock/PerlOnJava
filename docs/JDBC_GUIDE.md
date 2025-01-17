@@ -37,9 +37,21 @@ gradle clean build
     - Download the JDBC database driver jar file
     - Run your Perl script with the full class path including the JDBC driver:
 
-```bash
-java -cp "jdbc-drivers/h2-2.2.224.jar:target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main myscript.pl
-```
+   Unix/Linux/Mac:
+    ```bash
+    CLASSPATH="jdbc-drivers/h2-2.2.224.jar" ./jperl myscript.pl
+    ```
+
+   Windows:
+    ```bash
+    set CLASSPATH=jdbc-drivers\h2-2.2.224.jar
+    jperl myscript.pl
+    ```
+   
+    Calling java directly with the classpath is also possible:
+    ```bash
+    java -cp "jdbc-drivers/h2-2.2.224.jar:target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main myscript.pl
+    ```
 
 ## Database Connection Examples
 

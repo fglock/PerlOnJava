@@ -1,2 +1,3 @@
 @echo off
-java -Xmx512m -jar target/perlonjava-1.0-SNAPSHOT.jar %*
+set SCRIPT_DIR=%~dp0
+java -Xmx512m -cp "%CLASSPATH%;%SCRIPT_DIR%target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main %*

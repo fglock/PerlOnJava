@@ -41,35 +41,42 @@ For detailed reasoning on when to use PerlOnJava, see [Why PerlOnJava](docs/WHY_
 ## Quick Start
 
 1. Build the project:
-```bash
-mvn clean package
-```
+   ```bash
+   mvn clean package
+   ```
 
 2. Run a simple Perl script:
-```bash
-java -jar target/perlonjava-1.0-SNAPSHOT.jar -E 'print "Hello from Perl!\n"'
-```
+
+   Unix/Linux/Mac:
+   ```bash
+   ./jperl -E 'print "Hello World"'
+   ```
+
+   Windows:
+   ```bash
+   jperl -E "print 'Hello World'"
+   ```
 
 3. Use Perl in your Java application:
-```java
-import javax.script.*;
-
-public class TestPerl {
-   public static void main(String[] args) throws Exception {
-      ScriptEngineManager manager = new ScriptEngineManager();
-      ScriptEngine engine = manager.getEngineByName("perl");
-      engine.eval("print 'Hello from Java-integrated Perl!\n'");
+   ```java
+   import javax.script.*;
+   
+   public class TestPerl {
+      public static void main(String[] args) throws Exception {
+         ScriptEngineManager manager = new ScriptEngineManager();
+         ScriptEngine engine = manager.getEngineByName("perl");
+         engine.eval("print 'Hello from Java-integrated Perl!\n'");
+      }
    }
-}
-```
+   ```
 
 4. Connect to a database:
-```perl
-use DBI;
-my $dbh = DBI->connect("jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1");
-$dbh->do("CREATE TABLE test (id INT, name VARCHAR(50))");
-$dbh->do("INSERT INTO test VALUES (1, 'Hello World')");
-```
+   ```perl
+   use DBI;
+   my $dbh = DBI->connect("jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1");
+   $dbh->do("CREATE TABLE test (id INT, name VARCHAR(50))");
+   $dbh->do("INSERT INTO test VALUES (1, 'Hello World')");
+   ```
 
 ## Features and Limitations
 
@@ -163,9 +170,17 @@ JDBC Database drivers can be added in two ways:
     ````
 
 2. Using Java classpath:
-    ````bash
-    java -cp "jdbc-drivers/h2-2.2.224.jar:target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main myscript.pl
-    ````
+
+   Unix/Linux/Mac:
+    ```bash
+    CLASSPATH="jdbc-drivers/h2-2.2.224.jar" ./jperl myscript.pl
+    ```
+
+   Windows:
+    ```bash
+    set CLASSPATH=jdbc-drivers\h2-2.2.224.jar
+    jperl myscript.pl
+    ```
 
 For detailed instructions and database connection examples, see [JDBC Database Guide](docs/JDBC_GUIDE.md).
 
@@ -181,53 +196,47 @@ For detailed instructions and database connection examples, see [JDBC Database G
 1. **Show Instructions**:
 
     ```bash
-    java -jar target/perlonjava-1.0-SNAPSHOT.jar --help
+    ./jperl --help
     ```
 
 2. **Execute Something**:
 
     ```bash
-    java -jar target/perlonjava-1.0-SNAPSHOT.jar -E ' print 123 '
+    ./jperl -E 'print 123'
     ```
-
+   
 Setting `lib` path with `-I` to access Perl modules is optional. Standard modules are included in the jar file.
 
 ## Debugging Tools
 
 1. **Execute Emitting Debug Information**:
-
     ```bash
-    java -jar target/perlonjava-1.0-SNAPSHOT.jar --debug -E ' print 123 '
+    ./jperl --debug -E 'print 123'
     ```
 
 2. **Compile Only; Can Be Combined with --debug**:
-
     ```bash
-    java -jar target/perlonjava-1.0-SNAPSHOT.jar -c -E ' print 123 '
+    ./jperl -c -E 'print 123'
     ```
-
     ```bash
-    java -jar target/perlonjava-1.0-SNAPSHOT.jar --debug -c -E ' print 123 '
+    ./jperl --debug -c -E 'print 123'
     ```
 
 3. **Execute and Emit Disassembled ASM Code**:
-
     ```bash
-    java -jar target/perlonjava-1.0-SNAPSHOT.jar --disassemble -E ' print 123 '
+    ./jperl --disassemble -E 'print 123'
     ```
 
 4. **Run the Lexer Only**:
-
     ```bash
-    java -jar target/perlonjava-1.0-SNAPSHOT.jar --tokenize -E ' print 123 '
+    ./jperl --tokenize -E 'print 123'
     ```
 
 5. **Run the Parser Only**:
-
     ```bash
-    java -jar target/perlonjava-1.0-SNAPSHOT.jar --parse -E ' print 123 '
+    ./jperl --parse -E 'print 123'
     ```
-
+   
 ## Community and Support
 
 ### Quick Links
