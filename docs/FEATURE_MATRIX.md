@@ -48,6 +48,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - System-level operations (fork, exec)
 
 ## Compiler Usability
+- ✅  **Wrapper scripts**: (jperl/jperl.bat) for easier command-line usage.
 - ✅  **Perl-like compile-time error messages**: Error messages mimic those in Perl for consistency.
 - ✅  **Perl line numbers in bytecode**: Bytecode includes line numbers for better debugging.
 - ✅  **Perl-like runtime error messages**: Runtime errors are formatted similarly to Perl's.

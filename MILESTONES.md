@@ -5,6 +5,7 @@
 - [Completed Milestones](#completed-milestones)
 - [Work in progress](#work-in-progress)
 - [Upcoming Milestones](#upcoming-milestones)
+- [Future Development Areas](#future-development-areas)
 
 ## Completed Milestones
 
@@ -193,6 +194,7 @@
 - **v2.3.0**: Next minor version
   - Project description updated in `README.md` to "A Perl Distribution for the JVM"
   - Added module porting guide at `docs/PORTING_MODULES.md`
+  - Added wrapper scripts (`jperl`/`jperl.bat`) for easier command-line usage
   - Added `Text::Balanced` module.
   - Added subroutine signatures and `signature` feature.
   - Added chained operators.
@@ -215,8 +217,46 @@
   - Add advanced data manipulation features, such as JSON/XML parsing and data transformation.
   - Allow users to define their own operators and macros for greater flexibility.
 
-- **v5.0.0**: Major Release with Breaking Changes
-  - Perform comprehensive refactoring and optimization.
-  - Introduce significant new features and improvements.
-  - Ensure full compliance with relevant standards and best practices.
+## Future Development Areas
 
+- **Mobile Development**
+  - Android app with native UI for Perl scripting
+  - Integration with Android's file system and permissions
+  - Mobile-optimized performance settings
+
+- **Distribution and Packaging**
+  - Native installers for Windows/Linux/MacOS
+  - Docker containers and Kubernetes configurations
+  - Maven Central Repository publishing
+  - Integration with package managers (apt, yum, chocolatey, homebrew)
+
+- **Development Tools**
+  - IDE plugins for IntelliJ IDEA, Eclipse, VSCode
+  - Interactive debugger with breakpoints and variable inspection
+  - Code formatting and static analysis tools
+  - Performance profiling tools
+
+- **Enterprise Features**
+  - Monitoring and metrics with Prometheus/Grafana
+  - Integration with logging frameworks (Log4j, SLF4J)
+  - Security hardening and vulnerability scanning
+  - Cloud deployment templates (AWS, Azure, GCP)
+
+- **GraalVM Integration**
+  - Native image compilation for instant startup
+  - Polyglot integration with JavaScript, Python, Ruby
+  - Ahead-of-time compilation optimizations
+  - Reduced memory footprint for cloud deployments
+  - SubstrateVM support for containerized environments
+
+- **Native System Integration**
+  - JNI/XS bridge to enable native code modules
+    - Integration with existing Perl XS ecosystem
+  - Core system operations
+    - Process control (fork, exec)
+    - Direct memory access (mmap)
+    - Native sockets and file descriptors
+  - Platform-specific features
+    - Unix: ptrace, signals, IPC
+    - Windows: Registry, COM objects
+    - MacOS: FSEvents, CoreFoundation, Security framework
