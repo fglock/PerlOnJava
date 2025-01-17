@@ -44,6 +44,7 @@ Need help? Check out our [Community and Support](docs/SUPPORT.md) section.
 - **Compiler and Language Enthusiasts**: Offers insights into translating high-level languages into JVM bytecode.
 - **Experimenters and Tinkerers**: A tool for experimenting with language interoperability.
 
+
 ## Quick Start
 
 Get started quickly with PerlOnJava. For a complete list of capabilities, see our [Feature Matrix](docs/FEATURE_MATRIX.md).
@@ -55,15 +56,21 @@ Get started quickly with PerlOnJava. For a complete list of capabilities, see ou
 
 2. Run a simple Perl script:
 
-=== "Linux/Mac"
+<details>
+<summary>Linux/Mac</summary>
+
 ```bash
 ./jperl -E 'say "Hello World"'
 ```
+</details>
 
-=== "Windows"
+<details>
+<summary>Windows</summary>
+
 ```bash
 jperl -E "say 'Hello World'"
 ```
+</details>
 
 3. Use Perl in your Java application:
    ```java
@@ -89,83 +96,131 @@ jperl -E "say 'Hello World'"
 ## Running the JAR File
 
 1. **Show Instructions**:
-=== "Linux/Mac"
- ```bash
- ./jperl --help
- ```
-=== "Windows"
+<details>
+<summary>Linux/Mac</summary>
+
+```bash
+./jperl --help
+```
+</details>
+
+<details>
+<summary>Windows</summary>
+
 ```bash
 jperl --help
 ```
+</details>
 
 2. **Execute Something**:
-=== "Linux/Mac"
- ```bash
- ./jperl -E 'print 123'
- ```
-=== "Windows"
+<details>
+<summary>Linux/Mac</summary>
+
+```bash
+./jperl -E 'print 123'
+```
+</details>
+
+<details>
+<summary>Windows</summary>
+
 ```bash
 jperl -E "print 123"
 ```
-
-Setting `lib` path with `-I` to access Perl modules is optional. Standard modules are included in the jar file.
+</details>
 
 ## Debugging Tools
 
 1. **Execute Emitting Debug Information**:
-=== "Linux/Mac"
-    ```bash
-    ./jperl --debug -E 'print 123'
-    ```
-=== "Windows"
-    ```bash
-    jperl --debug -E "print 123"
-    ```
+<details>
+<summary>Linux/Mac</summary>
+
+```bash
+./jperl --debug -E 'print 123'
+```
+</details>
+
+<details>
+<summary>Windows</summary>
+
+```bash
+jperl --debug -E "print 123"
+```
+</details>
 
 2. **Compile Only; Can Be Combined with --debug**:
-=== "Linux/Mac"
-    ```bash
-    ./jperl -c -E 'print 123'
-    ./jperl --debug -c -E 'print 123'
-    ```
-=== "Windows"
-    ```bash
-    jperl -c -E "print 123"
-    jperl --debug -c -E "print 123"
-    ```
+<details>
+<summary>Linux/Mac</summary>
+
+```bash
+./jperl -c -E 'print 123'
+./jperl --debug -c -E 'print 123'
+```
+</details>
+
+<details>
+<summary>Windows</summary>
+
+```bash
+jperl -c -E "print 123"
+jperl --debug -c -E "print 123"
+```
+</details>
 
 3. **Execute and Emit Disassembled ASM Code**:
-=== "Linux/Mac"
-    ```bash
-    ./jperl --disassemble -E 'print 123'
-    ```
-=== "Windows"
-    ```bash
-    jperl --disassemble -E "print 123"
-    ```
+<details>
+<summary>Linux/Mac</summary>
+
+```bash
+./jperl --disassemble -E 'print 123'
+```
+</details>
+
+<details>
+<summary>Windows</summary>
+
+```bash
+jperl --disassemble -E "print 123"
+```
+</details>
 
 4. **Run the Lexer Only**:
-=== "Linux/Mac"
-    ```bash
-    ./jperl --tokenize -E 'print 123'
-    ```
-=== "Windows"
-    ```bash
-    jperl --tokenize -E "print 123"
-    ```
+<details>
+<summary>Linux/Mac</summary>
+
+```bash
+./jperl --tokenize -E 'print 123'
+```
+</details>
+
+<details>
+<summary>Windows</summary>
+
+```bash
+jperl --tokenize -E "print 123"
+```
+</details>
 
 5. **Run the Parser Only**:
-=== "Linux/Mac"
-    ```bash
-    ./jperl --parse -E 'print 123'
-    ```
-=== "Windows"
-    ```bash
-    jperl --parse -E "print 123"
-    ```
+<details>
+<summary>Linux/Mac</summary>
+
+```bash
+./jperl --parse -E 'print 123'
+```
+</details>
+
+<details>
+<summary>Windows</summary>
+
+```bash
+jperl --parse -E "print 123"
+```
+</details>
 
 ## License
 
 This project is licensed under the Perl Artistic License 2.0 - see the [LICENSE](LICENSE.md) file for details.
 
 ![Java CI with Maven](https://github.com/fglock/PerlOnJava/workflows/Java%20CI%20with%20Maven/badge.svg)
+
