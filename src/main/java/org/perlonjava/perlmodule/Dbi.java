@@ -373,8 +373,7 @@ public class Dbi extends PerlModuleBase {
                 ResultSetMetaData metaData = rs.getMetaData();
                 // Convert each column value to string and add to row array
                 for (int i = 1; i <= metaData.getColumnCount(); i++) {
-                    Object value = rs.getObject(i);
-                    RuntimeArray.push(row, RuntimeScalar.newScalarOrString(value));
+                    RuntimeArray.push(row, RuntimeScalar.newScalarOrString(rs.getObject(i)));
                 }
                 return row.createReference().getList();
             }
@@ -730,11 +729,8 @@ public class Dbi extends PerlModuleBase {
 
             // Bind each column reference
             for (int i = 1; i < args.size(); i++) {
-                RuntimeArray bindArgs = new RuntimeArray();
-                RuntimeArray.push(bindArgs, args.get(0));  // sth
-                RuntimeArray.push(bindArgs, new RuntimeScalar(i));  // column index
-                RuntimeArray.push(bindArgs, args.get(i));  // value reference
-                bind_col(bindArgs, ctx);
+                // bind sth, colIndex, valueRef
+                bind_col(new RuntimeArray(args.get(0), new RuntimeScalar(i), args.get(i)), ctx);
             }
 
             return scalarTrue.getList();
@@ -1037,12 +1033,7 @@ public class Dbi extends PerlModuleBase {
                 return cachedStmt.getList();
             }
 
-            RuntimeArray prepareArgs = new RuntimeArray();
-            RuntimeArray.push(prepareArgs, args.get(0));
-            RuntimeArray.push(prepareArgs, args.get(1));
-            RuntimeArray.push(prepareArgs, attr);
-
-            RuntimeList result = prepare(prepareArgs, ctx);
+            RuntimeList result = prepare(new RuntimeArray(args.get(0), args.get(1), attr), ctx);
 
             CACHED_STATEMENTS.put(cacheKey, result.getFirst());
 
