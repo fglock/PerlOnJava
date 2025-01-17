@@ -56,7 +56,7 @@ Get started quickly with PerlOnJava. For a complete list of capabilities, see ou
 
 2. Run a simple Perl script:
 
-<details>
+<details open>
 <summary>Linux/Mac</summary>
 
 ```bash
@@ -96,7 +96,7 @@ jperl -E "say 'Hello World'"
 ## Running the JAR File
 
 1. **Show Instructions**:
-<details>
+<details open>
 <summary>Linux/Mac</summary>
 
 ```bash
@@ -113,7 +113,7 @@ jperl --help
 </details>
 
 2. **Execute Something**:
-<details>
+<details open>
 <summary>Linux/Mac</summary>
 
 ```bash
@@ -132,7 +132,7 @@ jperl -E "print 123"
 ## Debugging Tools
 
 1. **Execute Emitting Debug Information**:
-<details>
+<details open>
 <summary>Linux/Mac</summary>
 
 ```bash
@@ -149,7 +149,7 @@ jperl --debug -E "print 123"
 </details>
 
 2. **Compile Only; Can Be Combined with --debug**:
-<details>
+<details open>
 <summary>Linux/Mac</summary>
 
 ```bash
@@ -168,7 +168,7 @@ jperl --debug -c -E "print 123"
 </details>
 
 3. **Execute and Emit Disassembled ASM Code**:
-<details>
+<details open>
 <summary>Linux/Mac</summary>
 
 ```bash
@@ -185,7 +185,7 @@ jperl --disassemble -E "print 123"
 </details>
 
 4. **Run the Lexer Only**:
-<details>
+<details open>
 <summary>Linux/Mac</summary>
 
 ```bash
@@ -202,7 +202,7 @@ jperl --tokenize -E "print 123"
 </details>
 
 5. **Run the Parser Only**:
-<details>
+<details open>
 <summary>Linux/Mac</summary>
 
 ```bash
