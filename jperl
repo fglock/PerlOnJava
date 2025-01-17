@@ -1,2 +1,3 @@
 #!/bin/bash
-java -Xmx512m -jar target/perlonjava-1.0-SNAPSHOT.jar "$@"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+java -Xmx512m -cp "$CLASSPATH:$SCRIPT_DIR/target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main "$@"
