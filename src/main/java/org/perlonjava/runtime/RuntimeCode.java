@@ -48,17 +48,6 @@ public class RuntimeCode implements RuntimeScalarReference {
 
     public RuntimeList constantValue;
 
-    public static void copy(RuntimeCode code, RuntimeCode codeFrom) {
-        code.prototype = codeFrom.prototype;
-        code.attributes = codeFrom.attributes;
-        code.methodObject = codeFrom.methodObject;
-        code.codeObject = codeFrom.codeObject;
-    }
-
-    public boolean defined() {
-        return this.methodObject != null || this.constantValue != null;
-    }
-
     /**
      * Constructs a RuntimeCode instance with the specified prototype and attributes.
      *
@@ -92,6 +81,13 @@ public class RuntimeCode implements RuntimeScalarReference {
         this.methodObject = methodObject;
         this.codeObject = codeObject;
         this.prototype = prototype;
+    }
+
+    public static void copy(RuntimeCode code, RuntimeCode codeFrom) {
+        code.prototype = codeFrom.prototype;
+        code.attributes = codeFrom.attributes;
+        code.methodObject = codeFrom.methodObject;
+        code.codeObject = codeFrom.codeObject;
     }
 
     /**
@@ -401,6 +397,10 @@ public class RuntimeCode implements RuntimeScalarReference {
             return new RuntimeScalar(((RuntimeCode) code.value).prototype);
         }
         return scalarUndef;
+    }
+
+    public boolean defined() {
+        return this.methodObject != null || this.constantValue != null;
     }
 
     /**

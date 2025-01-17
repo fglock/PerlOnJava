@@ -153,9 +153,9 @@ public class InheritanceResolver {
      * Searches for a method in the class hierarchy starting from a specific index.
      * Uses method caching to improve performance for both found and not-found methods.
      *
-     * @param methodName The name of the method to find
-     * @param perlClassName The Perl class name to start the search from
-     * @param cacheKey The cache key to use for the method cache (null to use default cache key)
+     * @param methodName     The name of the method to find
+     * @param perlClassName  The Perl class name to start the search from
+     * @param cacheKey       The cache key to use for the method cache (null to use default cache key)
      * @param startFromIndex The index in the linearized hierarchy to start searching from (used for SUPER:: calls)
      * @return RuntimeScalar representing the found method, or null if not found
      */
