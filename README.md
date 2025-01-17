@@ -115,81 +115,7 @@ For a comprehensive overview of supported features, limitations, and implementat
 
 ## Build Instructions
 
-### Compile and Package with Maven
-
-1. **Ensure you have Maven installed**:
-   - You can download and install Maven from [Maven's official website](https://maven.apache.org/).
-
-2. **Compile and Package the Project**:
-   - Run the following Maven command to compile and package the project into a shaded JAR:
-
-    ```bash
-    mvn clean package
-    ```
-
-3. **Run the JAR**:
-   - After packaging, you can run the JAR file with:
-
-    ```bash
-    java -jar target/perlonjava-1.0-SNAPSHOT.jar
-    ```
-
-### Compile and Package with Gradle
-
-1. **Ensure you have Gradle installed**:
-   - You can download and install Gradle from [Gradle's official website](https://gradle.org/).
-
-2. **Compile and Package the Project**:
-   - Run the following Gradle command to compile and package the project into a shaded JAR:
-
-    ```bash
-    gradle clean build
-    ```
-
-3. **Run the JAR**:
-   - After packaging, you can run the JAR file with:
-
-    ```bash
-    java -jar target/perlonjava-1.0-SNAPSHOT.jar
-    ```
-
-### Dependencies
-
-- **JUnit**: For testing.
-- **ASM**: For bytecode manipulation.
-- **ICU4J**: For Unicode support.
-- **FASTJSON v2**: For JSON support.
-
-### Adding JDBC Drivers
-
-JDBC Database drivers can be added in two ways:
-
-1. Using Configure.pl:
-    ````bash
-    ./Configure.pl --search mysql-connector-java
-    ````
-
-2. Using Java classpath:
-
-   Unix/Linux/Mac:
-    ```bash
-    CLASSPATH="jdbc-drivers/h2-2.2.224.jar" ./jperl myscript.pl
-    ```
-
-   Windows:
-    ```bash
-    set CLASSPATH=jdbc-drivers\h2-2.2.224.jar
-    jperl myscript.pl
-    ```
-
-For detailed instructions and database connection examples, see [JDBC Database Guide](docs/JDBC_GUIDE.md).
-
-
-### Notes
-
-- The project uses the `maven-shade-plugin` for Maven to create a shaded JAR.
-- The project uses the `com.github.johnrengelman.shadow` plugin for Gradle to create a shaded JAR.
-- Both Maven and Gradle configurations are set to use Java 21.
+See [Build and Execution Guide](docs/BUILD.md).
 
 ## Running the JAR File
 
@@ -262,27 +188,7 @@ This project is licensed under the Perl Artistic License 2.0 - see the [LICENSE]
 
 ## Additional Information and Resources
 
-
-- Brian Jepson in TPJ, 1997 [JPL: The Java-Perl Library](https://www.foo.be/docs/tpj/issues/vol2_4/tpj0204-0003.html).
-
-- Kuhn, Bradley M. (January 2001). [Considerations on Porting Perl to the Java Virtual Machine](http://www.ebb.org/bkuhn/writings/technical/thesis/) (MS thesis). University of Cincinnati.
-
-- Bradley Kuhn, 2002 [perljvm: Using B to Facilitate a Perl Port To the Java Virtual Machine](https://www.ebb.org/bkuhn/articles/perljvm.html).
-
-- Ehud Lamm, 2004 [Tim Bray: Sun & Dynamic Java](http://lambda-the-ultimate.org/node/426).
-
-- Ben Evans in perl5.porters, 2009 [p5 on the JVM](https://www.nntp.perl.org/group/perl.perl5.porters/2009/08/msg150099.html).
-
-- Nikos Vaggalis, 2013 [All about Perl 6 – interview of Flávio Glock](http://www.josetteorama.com/all-about-perl-6-interview-of-flavio-glock/).
-
-- Andrew Shitov, 2015 [Interview with Flávio Glock](https://andrewshitov.com/2015/05/15/interview-with-flavio-glock/).
-
-- Nikos Vaggalis, 2024 [Flavio Glock On Perl, Java, Compilers And Virtual Machines](https://www.i-programmer.info/professional-programmer/103-i-programmer/17491-flavio-glock-on-perl-java-compilers-and-virtual-machines.html).
-
-- For more details on the relationship with the ["Perlito5" Perl to Java compiler and Perl to JavaScript compiler](https://github.com/fglock/Perlito), including its influence on this project and how it complements the PerlOnJava Perl Compiler, see [RELATION_WITH_PERLITO_COMPILER.md](docs/RELATION_WITH_PERLITO_COMPILER.md). This document provides insights into the historical context and technical decisions that shaped the development of this compiler.
-
-- [GraalVM Native Image Support Investigation](docs/GRAALVM.md) - Technical exploration of GraalVM integration.
-
+Please see [Additional Resources and References](docs/RESOURCES.md).
 
 ![Java CI with Maven](https://github.com/fglock/PerlOnJava/workflows/Java%20CI%20with%20Maven/badge.svg)
 
