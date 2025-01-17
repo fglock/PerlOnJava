@@ -55,15 +55,15 @@ Get started quickly with PerlOnJava. For a complete list of capabilities, see ou
 
 2. Run a simple Perl script:
 
-   Unix/Linux/Mac:
-   ```bash
-   ./jperl -E 'say "Hello World"'
-   ```
+=== "Linux/Mac"
+```bash
+./jperl -E 'say "Hello World"'
+```
 
-   Windows:
-   ```bash
-   jperl -E "say 'Hello World'"
-   ```
+=== "Windows"
+```bash
+jperl -E "say 'Hello World'"
+```
 
 3. Use Perl in your Java application:
    ```java
@@ -89,45 +89,79 @@ Get started quickly with PerlOnJava. For a complete list of capabilities, see ou
 ## Running the JAR File
 
 1. **Show Instructions**:
-    ```bash
-    ./jperl --help
-    ```
+=== "Linux/Mac"
+ ```bash
+ ./jperl --help
+ ```
+=== "Windows"
+```bash
+jperl --help
+```
 
 2. **Execute Something**:
-    ```bash
-    ./jperl -E 'print 123'
-    ```
+=== "Linux/Mac"
+ ```bash
+ ./jperl -E 'print 123'
+ ```
+=== "Windows"
+```bash
+jperl -E "print 123"
+```
 
 Setting `lib` path with `-I` to access Perl modules is optional. Standard modules are included in the jar file.
 
 ## Debugging Tools
 
 1. **Execute Emitting Debug Information**:
+=== "Linux/Mac"
     ```bash
     ./jperl --debug -E 'print 123'
     ```
+=== "Windows"
+    ```bash
+    jperl --debug -E "print 123"
+    ```
 
 2. **Compile Only; Can Be Combined with --debug**:
+=== "Linux/Mac"
     ```bash
     ./jperl -c -E 'print 123'
-    ```
-    ```bash
     ./jperl --debug -c -E 'print 123'
+    ```
+=== "Windows"
+    ```bash
+    jperl -c -E "print 123"
+    jperl --debug -c -E "print 123"
     ```
 
 3. **Execute and Emit Disassembled ASM Code**:
+=== "Linux/Mac"
     ```bash
     ./jperl --disassemble -E 'print 123'
     ```
+=== "Windows"
+    ```bash
+    jperl --disassemble -E "print 123"
+    ```
 
 4. **Run the Lexer Only**:
+=== "Linux/Mac"
     ```bash
     ./jperl --tokenize -E 'print 123'
     ```
+=== "Windows"
+    ```bash
+    jperl --tokenize -E "print 123"
+    ```
 
 5. **Run the Parser Only**:
+=== "Linux/Mac"
     ```bash
     ./jperl --parse -E 'print 123'
+    ```
+=== "Windows"
+    ```bash
+    jperl --parse -E "print 123"
     ```
 
 ## License
