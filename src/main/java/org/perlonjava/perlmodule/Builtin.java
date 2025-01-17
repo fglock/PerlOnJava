@@ -123,13 +123,42 @@ public class Builtin extends PerlModuleBase {
     public static RuntimeList refaddr(RuntimeArray args, int ctx) {
         RuntimeScalar ref = args.get(0);
         // Return memory address for reference
-        return new RuntimeList(ref.refaddr());
+        RuntimeScalar result;
+        switch (ref.type) {
+            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOB, GLOBREFERENCE:
+                result = getScalarInt(System.identityHashCode(ref.value));
+                break;
+            default:
+                result = scalarUndef;
+                break;
+        }
+        return new RuntimeList(result);
     }
 
     public static RuntimeList reftype(RuntimeArray args, int ctx) {
         RuntimeScalar ref = args.get(0);
         // Return reference type in capitals
-        return new RuntimeList(ref.reftype());
+        String type = switch (ref.type) {
+            case REFERENCE -> {
+                if (ref.value instanceof RuntimeScalar scalar) {
+                    yield switch (scalar.type) {
+                        // case ARRAYREFERENCE -> "ARRAY";
+                        // case HASHREFERENCE -> "HASH";
+                        case CODE -> "CODE";
+                        case GLOB, GLOBREFERENCE -> "GLOB";
+                        default -> "SCALAR";
+                    };
+                }
+                yield "REF";
+            }
+            case ARRAYREFERENCE -> "ARRAY";
+            case HASHREFERENCE -> "HASH";
+            case CODE -> "CODE";
+            case GLOB, GLOBREFERENCE -> "GLOB";
+            default -> null;
+        };
+
+        return new RuntimeList(type != null ? new RuntimeScalar(type) : scalarUndef);
     }
 
     public static RuntimeList ceil(RuntimeArray args, int ctx) {

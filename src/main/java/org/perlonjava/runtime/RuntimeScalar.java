@@ -195,39 +195,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return getScalarBoolean(!runtimeScalar.getBoolean());
     }
 
-    public RuntimeScalar refaddr() {
-        switch (type) {
-            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOB, GLOBREFERENCE:
-                return getScalarInt(System.identityHashCode(value));
-            default:
-                return scalarUndef;
-        }
-    }
-
-    public RuntimeScalar reftype() {
-        String type = switch (this.type) {
-            case REFERENCE -> {
-                if (value instanceof RuntimeScalar scalar) {
-                    yield switch (scalar.type) {
-                        // case ARRAYREFERENCE -> "ARRAY";
-                        // case HASHREFERENCE -> "HASH";
-                        case CODE -> "CODE";
-                        case GLOB, GLOBREFERENCE -> "GLOB";
-                        default -> "SCALAR";
-                    };
-                }
-                yield "REF";
-            }
-            case ARRAYREFERENCE -> "ARRAY";
-            case HASHREFERENCE -> "HASH";
-            case CODE -> "CODE";
-            case GLOB, GLOBREFERENCE -> "GLOB";
-            default -> null;
-        };
-
-        return type != null ? new RuntimeScalar(type) : scalarUndef;
-    }
-
     private void initializeWithLong(Long value) {
         if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
             this.type = RuntimeScalarType.DOUBLE;
