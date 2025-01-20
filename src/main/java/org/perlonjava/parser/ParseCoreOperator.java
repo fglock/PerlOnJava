@@ -274,6 +274,27 @@ public class ParseCoreOperator {
                     }
                 }
                 return StringParser.parseRawString(parser, token.text);
+            case "system", "dump", "read", "exec", "format", "write", "dbmclose", "dbmopen":
+                // Not implemented
+                throw new PerlCompilerException(parser.tokenIndex, "Not implemented: operator: " + token.text, parser.ctx.errorUtil);
+            case "accept", "bind", "connect", "getpeername", "getsockname", "getsockopt",
+                 "listen", "recv", "send", "setsockopt", "shutdown", "socketpair":
+                // Socket function
+                throw new PerlCompilerException(parser.tokenIndex, "Not implemented: socket operator: " + token.text, parser.ctx.errorUtil);
+            case "msgctl", "msgget", "msgrcv", "msgsnd", "semctl", "semget", "semop",
+                 "shmctl", "shmget", "shmread", "shmwrite":
+                // System V IPC functions
+                throw new PerlCompilerException(parser.tokenIndex, "Not implemented: System V IPC operator: " + token.text, parser.ctx.errorUtil);
+            case "endgrent", "endhostent", "endnetent", "endpwent", "getgrent", "getgrgid",
+                 "getgrnam", "getlogin", "getpwent", "getpwnam", "getpwuid", "setgrent", "setpwent":
+                // User/Group info functions
+                throw new PerlCompilerException(parser.tokenIndex, "Not implemented: User/Group info operator: " + token.text, parser.ctx.errorUtil);
+            case "endprotoent", "endservent", "gethostbyaddr", "gethostbyname", "gethostent",
+                 "getnetbyaddr", "getnetbyname", "getnetent", "getprotobyname", "getprotobynumber",
+                 "getprotoent", "getservbyname", "getservbyport", "getservent", "sethostent",
+                 "setnetent", "setprotoent", "setservent":
+                // Network info functions
+                throw new PerlCompilerException(parser.tokenIndex, "Not implemented: Network info operator: " + token.text, parser.ctx.errorUtil);
         }
         return null;
     }
