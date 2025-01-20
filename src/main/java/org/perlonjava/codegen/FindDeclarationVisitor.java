@@ -2,11 +2,35 @@ package org.perlonjava.codegen;
 
 import org.perlonjava.astnode.*;
 
+/**
+ * A visitor that traverses the AST to find specific operator declarations.
+ * Used primarily to locate 'local' and 'my' declarations within code blocks.
+ * This visitor is utilized by Local.java for managing dynamic variable scopes
+ * and by EmitLogicalOperator for handling variable declarations in logical operations.
+ */
 public class FindDeclarationVisitor implements Visitor {
+    /**
+     * Tracks whether the target operator has been found
+     */
     private boolean containsLocalOperator = false;
+
+    /**
+     * The name of the operator we are searching for (e.g., "local", "my")
+     */
     private String operatorName = null;
+
+    /**
+     * Stores the found operator node when located
+     */
     private OperatorNode operatorNode = null;
 
+    /**
+     * Static factory method to find a specific operator within an AST node.
+     *
+     * @param blockNode    The AST node to search within
+     * @param operatorName The name of the operator to find
+     * @return The found OperatorNode, or null if not found
+     */
     public static OperatorNode findOperator(Node blockNode, String operatorName) {
         FindDeclarationVisitor visitor = new FindDeclarationVisitor();
         visitor.operatorName = operatorName;
@@ -14,9 +38,13 @@ public class FindDeclarationVisitor implements Visitor {
         return visitor.operatorNode;
     }
 
+    /**
+     * Visits a block node and searches through its elements.
+     * Stops searching once an operator is found.
+     */
     @Override
     public void visit(BlockNode node) {
-        if (!containsLocalOperator) { // Only continue if not already found
+        if (!containsLocalOperator) {
             for (Node element : node.elements) {
                 element.accept(this);
                 if (containsLocalOperator) {
@@ -26,6 +54,9 @@ public class FindDeclarationVisitor implements Visitor {
         }
     }
 
+    /**
+     * Visits an operator node and checks if it matches the target operator.
+     */
     @Override
     public void visit(OperatorNode node) {
         if (this.operatorName.equals(node.operator)) {
