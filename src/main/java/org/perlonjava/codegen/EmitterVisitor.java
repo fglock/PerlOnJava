@@ -7,13 +7,28 @@ import org.perlonjava.runtime.RuntimeContextType;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * EmitterVisitor implements the Visitor pattern to traverse the AST and generate bytecode.
+ * It works in conjunction with EmitterContext to handle different runtime context types
+ * during code generation.
+ */
 public class EmitterVisitor implements Visitor {
-    public final EmitterContext ctx;
     /**
-     * Cache for EmitterVisitor instances with different ContextTypes
+     * The emission context containing the current state and configuration
+     */
+    public final EmitterContext ctx;
+
+    /**
+     * Cache for EmitterVisitor instances with different ContextTypes.
+     * Keys are context type integers, values are the corresponding EmitterVisitor instances.
      */
     private final Map<Integer, EmitterVisitor> visitorCache = new HashMap<>();
 
+    /**
+     * Creates a new EmitterVisitor with the specified context.
+     *
+     * @param ctx The EmitterContext to use for code generation
+     */
     public EmitterVisitor(EmitterContext ctx) {
         this.ctx = ctx;
     }
@@ -43,6 +58,9 @@ public class EmitterVisitor implements Visitor {
         return newVisitor;
     }
 
+    /**
+     * Pushes the current call context onto the stack.
+     */
     public void pushCallContext() {
         // push call context to stack
         if (ctx.contextType == RuntimeContextType.RUNTIME) {
@@ -53,6 +71,11 @@ public class EmitterVisitor implements Visitor {
         }
     }
 
+    /**
+     * Visit methods for different AST node types.
+     * Each method delegates to specialized emitter classes that handle
+     * the bytecode generation for that specific node type.
+     */
     @Override
     public void visit(NumberNode node) {
         EmitLiteral.emitNumber(ctx, node);
