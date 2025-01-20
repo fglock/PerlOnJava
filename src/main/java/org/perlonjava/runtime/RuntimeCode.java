@@ -10,6 +10,9 @@ import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.parser.Parser;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -39,14 +42,15 @@ public class RuntimeCode implements RuntimeScalarReference {
     public String prototype;
     // Attributes associated with the subroutine
     public List<String> attributes = new ArrayList<>();
-
     // State variables
     public Map<String, Boolean> stateVariableInitialized = new HashMap<>();
     public Map<String, RuntimeScalar> stateVariable = new HashMap<>();
     public Map<String, RuntimeArray> stateArray = new HashMap<>();
     public Map<String, RuntimeHash> stateHash = new HashMap<>();
-
     public RuntimeList constantValue;
+    // MethodHandle cache
+    private MethodHandle cachedHandle;
+    private boolean isStaticMethod;
 
     /**
      * Constructs a RuntimeCode instance with the specified prototype and attributes.
@@ -355,7 +359,7 @@ public class RuntimeCode implements RuntimeScalarReference {
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
             if (code.defined()) {
                 // Cast the value to RuntimeCode and call apply()
-                return code.apply(subroutineName, a, callContext);
+                return code.apply(a, callContext);
             }
 
             // Does AUTOLOAD exist?
@@ -417,25 +421,33 @@ public class RuntimeCode implements RuntimeScalarReference {
             return new RuntimeList(constantValue);
         }
         try {
-            return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
+            if (cachedHandle == null && methodObject != null) {
+                MethodType type = MethodType.methodType(RuntimeList.class, RuntimeArray.class, int.class);
+                isStaticMethod = java.lang.reflect.Modifier.isStatic(methodObject.getModifiers());
 
-    public RuntimeList apply(String subroutineName, RuntimeArray a, int callContext) {
-        if (constantValue != null) {
-            // Alternative way to create constants like: `$constant::{_CAN_PCS} = \$const`
-            return new RuntimeList(constantValue);
-        }
-        try {
-            return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
-        } catch (Exception e) {
-
-            if (!subroutineName.isEmpty() && this.methodObject == null) {
-                throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
+                if (isStaticMethod) {
+                    cachedHandle = MethodHandles.lookup().findStatic(
+                            methodObject.getDeclaringClass(),
+                            methodObject.getName(),
+                            type
+                    );
+                } else {
+                    cachedHandle = MethodHandles.lookup().findVirtual(
+                            methodObject.getDeclaringClass(),
+                            methodObject.getName(),
+                            type
+                    );
+                }
             }
 
+            if (this.cachedHandle == null) {
+                throw new PerlCompilerException("An undefined subroutine was called");
+            }
+
+            return (RuntimeList) (isStaticMethod ?
+                    cachedHandle.invoke(a, callContext) :
+                    cachedHandle.invoke(codeObject, a, callContext));
+        } catch (Throwable e) {
             throw new RuntimeException(e);
         }
     }
