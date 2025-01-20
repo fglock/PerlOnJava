@@ -1,17 +1,11 @@
 package org.perlonjava.codegen;
 
-import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
-import org.perlonjava.operators.OperatorHandler;
-import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.RuntimeContextType;
-import org.perlonjava.runtime.ScalarUtils;
 
 import java.util.HashMap;
 import java.util.Map;
-
-import static org.perlonjava.codegen.EmitOperator.emitOperator;
 
 public class EmitterVisitor implements Visitor {
     public final EmitterContext ctx;
@@ -74,194 +68,9 @@ public class EmitterVisitor implements Visitor {
         EmitBinaryOperatorNode.emitBinaryOperatorNode(this, node);
     }
 
-    void handleBinaryOperator(BinaryOperatorNode node, OperatorHandler operatorHandler) {
-        EmitterVisitor scalarVisitor =
-                this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
-        ctx.logDebug("handleBinaryOperator: " + node.toString());
-
-        // Optimization
-        if ((node.operator.equals("+")
-                || node.operator.equals("-")
-                || node.operator.equals("=="))
-                && node.right instanceof NumberNode right) {
-            String value = right.value;
-            boolean isInteger = ScalarUtils.isInteger(value);
-            if (isInteger) {
-                node.left.accept(scalarVisitor); // target - left parameter
-                int intValue = Integer.parseInt(value);
-                ctx.mv.visitLdcInsn(intValue);
-                ctx.mv.visitMethodInsn(
-                        operatorHandler.getMethodType(),
-                        operatorHandler.getClassName(),
-                        operatorHandler.getMethodName(),
-                        operatorHandler.getDescriptorWithIntParameter(),
-                        false);
-                if (ctx.contextType == RuntimeContextType.VOID) {
-                    ctx.mv.visitInsn(Opcodes.POP);
-                }
-                return;
-            }
-        }
-
-        node.left.accept(scalarVisitor); // left parameter
-        node.right.accept(scalarVisitor); // right parameter
-        // stack: [left, right]
-        emitOperator(node.operator, this);
-    }
-
-    void handleCompoundAssignment(BinaryOperatorNode node) {
-        // compound assignment operators like `+=`
-        EmitterVisitor scalarVisitor =
-                this.with(RuntimeContextType.SCALAR); // execute operands in scalar context
-        node.left.accept(scalarVisitor); // target - left parameter
-        ctx.mv.visitInsn(Opcodes.DUP);
-        node.right.accept(scalarVisitor); // right parameter
-        // stack: [left, left, right]
-        // perform the operation
-        String baseOperator = node.operator.substring(0, node.operator.length() - 1);
-        emitOperator(baseOperator, scalarVisitor);
-        // assign to the Lvalue
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            ctx.mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    /**
-     * Emits a call to a unary built-in method on the RuntimeScalar class.
-     *
-     * @param operator The name of the built-in method to call.
-     */
-    void handleUnaryBuiltin(OperatorNode node, String operator) {
-        MethodVisitor mv = ctx.mv;
-        OperatorHandler operatorHandler = OperatorHandler.get(operator);
-        if (node.operand == null) {
-            // Unary operator with no arguments, or with optional arguments called without arguments
-            // example: undef()  wantarray()  time()  times()
-            if (operator.equals("wantarray")) {
-                // Retrieve wantarray value from JVM local vars
-                mv.visitVarInsn(Opcodes.ILOAD, ctx.symbolTable.getVariableIndex("wantarray"));
-            }
-            emitOperator(operator, this);
-            return;
-        } else if (operator.equals("undef")) {
-            operator = "undefine";
-            node.operand.accept(this.with(RuntimeContextType.RUNTIME));
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", operator, "()Lorg/perlonjava/runtime/RuntimeList;", false);
-        } else if (operator.equals("gmtime") || operator.equals("localtime") || operator.equals("caller") || operator.equals("reset") || operator.equals("select")) {
-            node.operand.accept(this.with(RuntimeContextType.LIST));
-            pushCallContext();
-            emitOperator(operator, this);
-            return;
-        } else if (operator.equals("prototype")) {
-            node.operand.accept(this.with(RuntimeContextType.SCALAR));
-            ctx.mv.visitLdcInsn(ctx.symbolTable.getCurrentPackage());
-            emitOperator(operator, this);
-            return;
-        } else if (operator.equals("require")) {
-            node.operand.accept(this.with(RuntimeContextType.SCALAR));
-            ctx.mv.visitLdcInsn(node.getBooleanAnnotation("module_true"));
-            emitOperator(operator, this);
-            return;
-        } else if ((operator.equals("stat") || operator.equals("lstat"))
-                && (node.operand instanceof IdentifierNode && ((IdentifierNode) node.operand).name.equals("_"))) {
-            // `stat _`
-            ctx.mv.visitMethodInsn(
-                    Opcodes.INVOKESTATIC,
-                    "org/perlonjava/operators/Stat",
-                    operator + "LastHandle",
-                    "()Lorg/perlonjava/runtime/RuntimeList;", false);
-        } else {
-            node.operand.accept(this.with(RuntimeContextType.SCALAR));
-            if (operatorHandler != null) {
-                emitOperator(operator, this);
-                return;
-            } else {
-                // System.out.println("Missing operator " + operator);
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
-            }
-        }
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-        }
-    }
-
-    void handleArrayUnaryBuiltin(OperatorNode node, String operator) {
-        // Handle:  $#array  $#$array_ref  shift @array  pop @array
-        Node operand = node.operand;
-        ctx.logDebug("handleArrayUnaryBuiltin " + operand);
-        if (operand instanceof ListNode) {
-            operand = ((ListNode) operand).elements.getFirst();
-        }
-        operand.accept(this.with(RuntimeContextType.LIST));
-        emitOperator(operator, this);
-    }
-
     @Override
     public void visit(OperatorNode node) {
         EmitOperatorNode.emitOperatorNode(this, node);
-    }
-
-    void handleCreateReference(OperatorNode node) {
-        MethodVisitor mv = ctx.mv;
-        if (node.operand instanceof ListNode) {
-            // operand is a list:  `\(1,2,3)`
-            node.operand.accept(this.with(RuntimeContextType.LIST));
-            ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/RuntimeList",
-                    "createListReference",
-                    "()Lorg/perlonjava/runtime/RuntimeList;", false);
-            if (ctx.contextType == RuntimeContextType.VOID) {
-                mv.visitInsn(Opcodes.POP);
-            }
-        } else {
-            if (node.operand instanceof OperatorNode operatorNode && operatorNode.operator.equals("&")) {
-                ctx.logDebug("Handle \\& " + operatorNode.operand);
-                if (operatorNode.operand instanceof OperatorNode || operatorNode.operand instanceof BlockNode) {
-                    // \&$a or \&{$a}
-                    operatorNode.operand.accept(this.with(RuntimeContextType.SCALAR));
-                    ctx.mv.visitLdcInsn(ctx.symbolTable.getCurrentPackage());
-                    ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                            "org/perlonjava/runtime/RuntimeCode",
-                            "createCodeReference",
-                            "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                            false);
-                } else {
-                    // assume \&var, which is already a reference
-                    node.operand.accept(this.with(RuntimeContextType.LIST));
-                }
-            } else {
-                node.operand.accept(this.with(RuntimeContextType.LIST));
-                ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "createReference", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
-            }
-            if (ctx.contextType == RuntimeContextType.VOID) {
-                mv.visitInsn(Opcodes.POP);
-            }
-        }
-    }
-
-    public void emitFileHandle(Node node) {
-        // Emit File Handle
-        if (node instanceof IdentifierNode) {
-            // `print FILE 123`
-            // retrieve STDOUT, STDERR from GlobalIORef
-            // fetch a global fileHandle by name
-
-            // resolve the full name of the file handle
-            String name = ((IdentifierNode) node).name;
-            name = NameNormalizer.normalizeVariableName(name, ctx.symbolTable.getCurrentPackage());
-
-            ctx.mv.visitLdcInsn(name);
-            ctx.mv.visitMethodInsn(
-                    Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/GlobalVariable",
-                    "getGlobalIO",
-                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                    false);
-        } else if (node instanceof BlockNode) {
-            // {STDERR}  or  {$fh}
-            // TODO
-        }
     }
 
     @Override

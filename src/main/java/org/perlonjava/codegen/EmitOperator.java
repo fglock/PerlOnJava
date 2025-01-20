@@ -77,7 +77,7 @@ public class EmitOperator {
                 node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
             } else {
                 // Otherwise, emit the file handle directly.
-                emitterVisitor.emitFileHandle(node.left);
+                emitFileHandle(emitterVisitor.ctx, node.left);
             }
             node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
             emitOperator(node.operator, emitterVisitor);
@@ -90,7 +90,7 @@ public class EmitOperator {
             node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         } else {
             // Otherwise, emit the file handle directly.
-            emitterVisitor.emitFileHandle(node.left);
+            emitFileHandle(emitterVisitor.ctx, node.left);
         }
 
         if (operator.equals("readline")) {
@@ -121,7 +121,7 @@ public class EmitOperator {
             node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         } else {
             // Otherwise, emit the file handle directly.
-            emitterVisitor.emitFileHandle(node.left);
+            emitFileHandle(emitterVisitor.ctx, node.left);
         }
 
         // Call the operator, return Scalar
@@ -465,4 +465,27 @@ public class EmitOperator {
         }
     }
 
+    public static void emitFileHandle(EmitterContext ctx, Node node) {
+        // Emit File Handle
+        if (node instanceof IdentifierNode) {
+            // `print FILE 123`
+            // retrieve STDOUT, STDERR from GlobalIORef
+            // fetch a global fileHandle by name
+
+            // resolve the full name of the file handle
+            String name = ((IdentifierNode) node).name;
+            name = NameNormalizer.normalizeVariableName(name, ctx.symbolTable.getCurrentPackage());
+
+            ctx.mv.visitLdcInsn(name);
+            ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/GlobalVariable",
+                    "getGlobalIO",
+                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+        } else if (node instanceof BlockNode) {
+            // {STDERR}  or  {$fh}
+            // TODO
+        }
+    }
 }
