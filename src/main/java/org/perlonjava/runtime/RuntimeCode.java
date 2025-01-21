@@ -202,7 +202,7 @@ public class RuntimeCode implements RuntimeScalarReference {
     /**
      * Call a method in a Perl-like class hierarchy using the C3 linearization algorithm.
      *
-     * @param runtimeScalar
+     * @param runtimeScalar  The object to call the method on.
      * @param method         The method to resolve.
      * @param currentPackage The package to resolve SUPER::method in.
      * @param args           The arguments to pass to the method.
@@ -325,11 +325,11 @@ public class RuntimeCode implements RuntimeScalarReference {
             if (info != null) {
                 // Compile-time stack trace
                 if (ctx == RuntimeContextType.SCALAR) {
-                    res.add(new RuntimeScalar(info.packageName));
+                    res.add(new RuntimeScalar(info.packageName()));
                 } else {
-                    res.add(new RuntimeScalar(info.packageName));
-                    res.add(new RuntimeScalar(info.filename));
-                    res.add(new RuntimeScalar(info.line));
+                    res.add(new RuntimeScalar(info.packageName()));
+                    res.add(new RuntimeScalar(info.filename()));
+                    res.add(new RuntimeScalar(info.line()));
                 }
             }
         }

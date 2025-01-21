@@ -72,7 +72,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     /**
      * Removes and returns the last value of the array.
      *
-     * @param runtimeArray
+     * @param runtimeArray The array to pop the last value from
      * @return The last value of the array, or undefined if empty.
      */
     public static RuntimeScalar pop(RuntimeArray runtimeArray) {
@@ -85,7 +85,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     /**
      * Removes and returns the first value of the array.
      *
-     * @param runtimeArray
+     * @param runtimeArray The array to shift the first value from
      * @return The first value of the array, or undefined if empty.
      */
     public static RuntimeScalar shift(RuntimeArray runtimeArray) {
@@ -96,10 +96,10 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     }
 
     /**
-     * Gets the index of the last element.
+     * Gets the index of the last element in the array.
      *
-     * @param runtimeArray
-     * @return A scalar representing the index of the last element.
+     * @param runtimeArray The array to get the last index from
+     * @return A RuntimeScalar containing the integer index of the last element, or -1 if the array is empty
      */
     public static RuntimeScalar indexLastElem(RuntimeArray runtimeArray) {
         return getScalarInt(runtimeArray.elements.size() - 1);
@@ -108,7 +108,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     /**
      * Adds values to the end of the array.
      *
-     * @param runtimeArray
+     * @param runtimeArray The array to add values to.
      * @param value        The values to add.
      * @return A scalar representing the new size of the array.
      */
@@ -120,7 +120,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     /**
      * Adds values to the beginning of the array.
      *
-     * @param runtimeArray
+     * @param runtimeArray The array to add values to.
      * @param value        The values to add.
      * @return A scalar representing the new size of the array.
      */

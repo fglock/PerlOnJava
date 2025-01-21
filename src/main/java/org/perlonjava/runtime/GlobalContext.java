@@ -98,7 +98,7 @@ public class GlobalContext {
         // Initialize STDOUT, STDERR, STDIN
         initStdHandles();
         // ARGV file handle - If no files are specified, use standard input
-        if (GlobalVariable.getGlobalArray("main::ARGV").size() == 0) {
+        if (GlobalVariable.getGlobalArray("main::ARGV").isEmpty()) {
             GlobalVariable.getGlobalIO("main::ARGV").set(GlobalVariable.getGlobalIO("main::STDIN"));
         }
 

@@ -130,22 +130,24 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
      * Tries to store the value as a known type if possible, otherwise stores it as Object.
      *
      * @param value the value to store in the new RuntimeScalar instance
-     * @return a new RuntimeScalar instance with the given value
      */
     public RuntimeScalar(Object value) {
         // System.out.println("RuntimeScalar " + (value == null ? "null" : value.getClass()));
-        if (value == null) {
-            this.type = RuntimeScalarType.UNDEF;
-            this.value = null;
-        } else if (value instanceof RuntimeScalar scalar) {
-            this.type = scalar.type;
-            this.value = scalar.value;
-        } else if (value instanceof Long longValue) {
-            initializeWithLong(longValue);
-        } else {
-            // Look for a known type, default to OBJECT if not found
-            this.type = typeMap.getOrDefault(value.getClass(), RuntimeScalarType.OBJECT);
-            this.value = value;
+        switch (value) {
+            case null -> {
+                this.type = RuntimeScalarType.UNDEF;
+                this.value = null;
+            }
+            case RuntimeScalar scalar -> {
+                this.type = scalar.type;
+                this.value = scalar.value;
+            }
+            case Long longValue -> initializeWithLong(longValue);
+            default -> {
+                // Look for a known type, default to OBJECT if not found
+                this.type = typeMap.getOrDefault(value.getClass(), RuntimeScalarType.OBJECT);
+                this.value = value;
+            }
         }
     }
 

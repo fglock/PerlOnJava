@@ -69,7 +69,7 @@ public class DiamondIO {
             if (!readingStarted) {
                 readingStarted = true;
                 // If no files are specified, use standard input (represented by "-")
-                if (getGlobalArray("main::ARGV").size() == 0) {
+                if (getGlobalArray("main::ARGV").isEmpty()) {
                     RuntimeArray.push(getGlobalArray("main::ARGV"), new RuntimeScalar("-"));
                 }
             }

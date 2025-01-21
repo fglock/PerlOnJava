@@ -65,11 +65,7 @@ public class CallerStack {
      * The CallerInfo class represents an entry in the calling stack, containing information
      * about the package, filename, and line number of a call.
      */
-    public static class CallerInfo {
-        public final String packageName;
-        public final String filename;
-        public final int line;
-
+    public record CallerInfo(String packageName, String filename, int line) {
         /**
          * Constructs a new CallerInfo object with the specified package name, filename, and line number.
          *
@@ -77,10 +73,7 @@ public class CallerStack {
          * @param filename    The name of the file where the call originated.
          * @param line        The line number in the file where the call originated.
          */
-        public CallerInfo(String packageName, String filename, int line) {
-            this.packageName = packageName;
-            this.filename = filename;
-            this.line = line;
+        public CallerInfo {
         }
 
         @Override
