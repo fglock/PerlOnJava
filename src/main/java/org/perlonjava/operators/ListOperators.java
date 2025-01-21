@@ -66,8 +66,7 @@ public class ListOperators {
      */
     public static RuntimeList sort(RuntimeList runtimeList, RuntimeScalar perlComparatorClosure, String packageName) {
         // Create a new list from the elements of this RuntimeArray
-        RuntimeArray array = new RuntimeArray();
-        runtimeList.setArrayOfAlias(array);
+        RuntimeArray array = runtimeList.getArrayOfAlias();
 
         RuntimeScalar varA = getGlobalVariable(packageName + "::a");
         RuntimeScalar varB = getGlobalVariable(packageName + "::b");
@@ -107,8 +106,7 @@ public class ListOperators {
      * @throws RuntimeException If the Perl filter subroutine throws an exception.
      */
     public static RuntimeList grep(RuntimeList runtimeList, RuntimeScalar perlFilterClosure) {
-        RuntimeArray array = new RuntimeArray();
-        runtimeList.setArrayOfAlias(array);
+        RuntimeArray array = runtimeList.getArrayOfAlias();
 
         // Create a new list to hold the filtered elements
         List<RuntimeBaseEntity> filteredElements = new ArrayList<>();
