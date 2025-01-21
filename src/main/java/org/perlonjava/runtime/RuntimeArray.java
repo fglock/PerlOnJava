@@ -350,8 +350,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
      * @return The updated array with aliases.
      */
     public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
-        List<RuntimeScalar> arrElements = arr.elements;
-        arrElements.addAll(this.elements);
+        arr.elements.addAll(this.elements);
         return arr;
     }
 
