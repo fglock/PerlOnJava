@@ -190,15 +190,12 @@ public class EmitSubroutine {
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // Target - left parameter: Code ref
         emitterVisitor.ctx.mv.visitLdcInsn(subroutineName);
         node.right.accept(emitterVisitor.with(RuntimeContextType.LIST)); // Right parameter: parameter list
-
-        // Transform the value in the stack to RuntimeArray
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", true);
         emitterVisitor.pushCallContext();   // Push call context to stack
         emitterVisitor.ctx.mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/RuntimeCode",
                 "apply",
-                "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
+                "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeDataProvider;I)Lorg/perlonjava/runtime/RuntimeList;",
                 false); // Generate an .apply() call
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             // Transform the value in the stack to RuntimeScalar
