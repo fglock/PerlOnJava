@@ -16,12 +16,11 @@ public class CompareOperators {
     /**
      * Checks if the first RuntimeScalar is less than the second.
      *
-     * @param runtimeScalar The first scalar to compare.
-     * @param arg2          The second scalar to compare.
+     * @param arg1 The first scalar to compare.
+     * @param arg2 The second scalar to compare.
      * @return A RuntimeScalar representing a boolean value (true if arg1 < arg2).
      */
-    public static RuntimeScalar lessThan(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        RuntimeScalar arg1 = runtimeScalar;
+    public static RuntimeScalar lessThan(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Convert strings to numbers if necessary
         if (arg1.type == RuntimeScalarType.STRING) {
             arg1 = NumberParser.parseNumber(arg1);
@@ -40,12 +39,11 @@ public class CompareOperators {
     /**
      * Checks if the first RuntimeScalar is less than or equal to the second.
      *
-     * @param runtimeScalar The first scalar to compare.
-     * @param arg2          The second scalar to compare.
+     * @param arg1 The first scalar to compare.
+     * @param arg2 The second scalar to compare.
      * @return A RuntimeScalar representing a boolean value (true if arg1 <= arg2).
      */
-    public static RuntimeScalar lessThanOrEqual(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        RuntimeScalar arg1 = runtimeScalar;
+    public static RuntimeScalar lessThanOrEqual(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Convert strings to numbers if necessary
         if (arg1.type == RuntimeScalarType.STRING) {
             arg1 = NumberParser.parseNumber(arg1);
@@ -64,12 +62,11 @@ public class CompareOperators {
     /**
      * Checks if the first RuntimeScalar is greater than the second.
      *
-     * @param runtimeScalar The first scalar to compare.
-     * @param arg2          The second scalar to compare.
+     * @param arg1 The first scalar to compare.
+     * @param arg2 The second scalar to compare.
      * @return A RuntimeScalar representing a boolean value (true if arg1 > arg2).
      */
-    public static RuntimeScalar greaterThan(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        RuntimeScalar arg1 = runtimeScalar;
+    public static RuntimeScalar greaterThan(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Convert strings to numbers if necessary
         if (arg1.type == RuntimeScalarType.STRING) {
             arg1 = NumberParser.parseNumber(arg1);
@@ -88,12 +85,11 @@ public class CompareOperators {
     /**
      * Checks if the first RuntimeScalar is greater than or equal to the second.
      *
-     * @param runtimeScalar The first scalar to compare.
-     * @param arg2          The second scalar to compare.
+     * @param arg1 The first scalar to compare.
+     * @param arg2 The second scalar to compare.
      * @return A RuntimeScalar representing a boolean value (true if arg1 >= arg2).
      */
-    public static RuntimeScalar greaterThanOrEqual(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        RuntimeScalar arg1 = runtimeScalar;
+    public static RuntimeScalar greaterThanOrEqual(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Convert strings to numbers if necessary
         if (arg1.type == RuntimeScalarType.STRING) {
             arg1 = NumberParser.parseNumber(arg1);
@@ -112,12 +108,11 @@ public class CompareOperators {
     /**
      * Checks if the first RuntimeScalar is equal to the second integer.
      *
-     * @param runtimeScalar The scalar to compare.
-     * @param arg2          The integer to compare.
+     * @param arg1 The scalar to compare.
+     * @param arg2 The integer to compare.
      * @return A RuntimeScalar representing a boolean value (true if arg1 == arg2).
      */
-    public static RuntimeScalar equalTo(RuntimeScalar runtimeScalar, int arg2) {
-        RuntimeScalar arg1 = runtimeScalar;
+    public static RuntimeScalar equalTo(RuntimeScalar arg1, int arg2) {
         // Convert strings to numbers if necessary
         if (arg1.type == RuntimeScalarType.STRING) {
             arg1 = NumberParser.parseNumber(arg1);
@@ -133,12 +128,11 @@ public class CompareOperators {
     /**
      * Checks if the first RuntimeScalar is equal to the second.
      *
-     * @param runtimeScalar The first scalar to compare.
-     * @param arg2          The second scalar to compare.
+     * @param arg1 The first scalar to compare.
+     * @param arg2 The second scalar to compare.
      * @return A RuntimeScalar representing a boolean value (true if arg1 == arg2).
      */
-    public static RuntimeScalar equalTo(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        RuntimeScalar arg1 = runtimeScalar;
+    public static RuntimeScalar equalTo(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Convert strings to numbers if necessary
         if (arg1.type == RuntimeScalarType.STRING) {
             arg1 = NumberParser.parseNumber(arg1);
@@ -157,12 +151,11 @@ public class CompareOperators {
     /**
      * Checks if the first RuntimeScalar is not equal to the second.
      *
-     * @param runtimeScalar The first scalar to compare.
-     * @param arg2          The second scalar to compare.
+     * @param arg1 The first scalar to compare.
+     * @param arg2 The second scalar to compare.
      * @return A RuntimeScalar representing a boolean value (true if arg1 != arg2).
      */
-    public static RuntimeScalar notEqualTo(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        RuntimeScalar arg1 = runtimeScalar;
+    public static RuntimeScalar notEqualTo(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Convert strings to numbers if necessary
         if (arg1.type == RuntimeScalarType.STRING) {
             arg1 = NumberParser.parseNumber(arg1);
@@ -181,12 +174,11 @@ public class CompareOperators {
     /**
      * Compares two RuntimeScalars using the spaceship operator.
      *
-     * @param runtimeScalar The first scalar to compare.
-     * @param arg2          The second scalar to compare.
+     * @param arg1 The first scalar to compare.
+     * @param arg2 The second scalar to compare.
      * @return A RuntimeScalar representing an integer (-1, 0, 1) based on comparison.
      */
-    public static RuntimeScalar spaceship(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        RuntimeScalar arg1 = runtimeScalar;
+    public static RuntimeScalar spaceship(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Convert strings to numbers if necessary
         if (arg1.type == RuntimeScalarType.STRING) {
             arg1 = NumberParser.parseNumber(arg1);
