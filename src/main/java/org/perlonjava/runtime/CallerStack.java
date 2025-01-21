@@ -62,16 +62,19 @@ public class CallerStack {
     }
 
     /**
-     * The CallerInfo class represents an entry in the calling stack, containing information
-     * about the package, filename, and line number of a call.
+     * The CallerInfo record represents a single frame in the calling stack.
+     * Each frame contains the source location information including package,
+     * file and line number where the call originated.
      */
     public record CallerInfo(String packageName, String filename, int line) {
         /**
-         * Constructs a new CallerInfo object with the specified package name, filename, and line number.
+         * Creates a CallerInfo frame with source location details.
+         * The canonical constructor is used since no additional validation
+         * or processing is needed for the parameters.
          *
-         * @param packageName The name of the package where the call originated.
-         * @param filename    The name of the file where the call originated.
-         * @param line        The line number in the file where the call originated.
+         * @param packageName The fully qualified package name of the calling code
+         * @param filename    The source file name containing the call
+         * @param line        The source line number of the call
          */
         public CallerInfo {
         }
