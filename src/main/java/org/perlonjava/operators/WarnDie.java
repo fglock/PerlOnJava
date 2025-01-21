@@ -37,8 +37,7 @@ public class WarnDie {
 
         RuntimeScalar sig = getGlobalHash("main::SIG").get("__WARN__");
         if (sig.getDefinedBoolean()) {
-            RuntimeArray args = new RuntimeArray();
-            new RuntimeScalar(out).setArrayOfAlias(args);
+            RuntimeArray args = new RuntimeScalar(out).getArrayOfAlias();
 
             RuntimeScalar sigHandler = new RuntimeScalar(sig);
 
@@ -88,8 +87,7 @@ public class WarnDie {
 
         RuntimeScalar sig = getGlobalHash("main::SIG").get("__DIE__");
         if (sig.getDefinedBoolean()) {
-            RuntimeArray args = new RuntimeArray();
-            new RuntimeScalar(out).setArrayOfAlias(args);
+            RuntimeArray args = new RuntimeScalar(out).getArrayOfAlias();
             return RuntimeCode.apply(sig, args, RuntimeContextType.SCALAR);
         }
 
