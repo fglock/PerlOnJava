@@ -42,9 +42,9 @@ public class ReferenceOperators {
      *
      * @param runtimeScalar The scalar to check
      * @return A RuntimeScalar containing the reference type as a string:
-     *         - "SCALAR", "ARRAY", "HASH", "CODE", "REF", "GLOB", "REGEXP", etc.
-     *         - The blessed package name if the reference is blessed
-     *         - Empty string if not a reference
+     * - "SCALAR", "ARRAY", "HASH", "CODE", "REF", "GLOB", "REGEXP", etc.
+     * - The blessed package name if the reference is blessed
+     * - Empty string if not a reference
      */
     public static RuntimeScalar ref(RuntimeScalar runtimeScalar) {
         String str;
@@ -95,7 +95,7 @@ public class ReferenceOperators {
      * Delegates the actual check to Universal.isa().
      *
      * @param runtimeScalar The object to check
-     * @param className The class name to check against
+     * @param className     The class name to check against
      * @return A RuntimeScalar containing the boolean result of the inheritance check
      */
     public static RuntimeScalar isa(RuntimeScalar runtimeScalar, RuntimeScalar className) {

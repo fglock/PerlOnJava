@@ -320,9 +320,7 @@ public class NumberParser {
         }
 
         // Cache the result if the cache is not full
-        if (numificationCache.size() < MAX_NUMIFICATION_CACHE_SIZE) {
-            numificationCache.put(str, result);
-        }
+        numificationCache.put(str, result);
 
         return result;
     }
