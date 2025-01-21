@@ -3,6 +3,7 @@ package org.perlonjava.operators;
 import org.perlonjava.runtime.*;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
@@ -17,8 +18,6 @@ public class ListOperators {
      * @throws RuntimeException If the Perl map subroutine throws an exception.
      */
     public static RuntimeList map(RuntimeList runtimeList, RuntimeScalar perlMapClosure) {
-        RuntimeArray array = new RuntimeArray();
-        runtimeList.setArrayOfAlias(array);
 
         // Create a new list to hold the transformed elements
         List<RuntimeBaseEntity> transformedElements = new ArrayList<>();
@@ -27,10 +26,11 @@ public class ListOperators {
         RuntimeArray mapArgs = new RuntimeArray();
 
         // Iterate over each element in the current RuntimeArray
-        for (RuntimeScalar element : array.elements) {
+        Iterator<RuntimeScalar> iterator = runtimeList.iterator();
+        while (iterator.hasNext()) {
             try {
                 // Create $_ argument for the map subroutine
-                var_.set(element);
+                var_.set(iterator.next());
 
                 // Apply the Perl map subroutine with the argument
                 RuntimeList result = RuntimeCode.apply(perlMapClosure, mapArgs, RuntimeContextType.LIST);
