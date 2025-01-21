@@ -41,8 +41,7 @@ public class MathOperators {
      * @param arg2          The second RuntimeScalar to add.
      * @return A new RuntimeScalar representing the sum.
      */
-    public static RuntimeScalar add(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        RuntimeScalar arg1 = runtimeScalar;
+    public static RuntimeScalar add(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Convert string type to number if necessary
         if (arg1.type == RuntimeScalarType.STRING) {
             arg1 = NumberParser.parseNumber(arg1);
