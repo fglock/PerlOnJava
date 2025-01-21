@@ -76,9 +76,7 @@ public class Overload {
                         // If fallback is undefined or true, try alternative methods
                         if (!fallback.getDefinedBoolean() || fallback.getBoolean()) {
                             // Try numeric conversion method
-                            if (perlMethod == null) {
-                                perlMethod = InheritanceResolver.findMethodInHierarchy("(0+", perlClassName, null, 0);
-                            }
+                            perlMethod = InheritanceResolver.findMethodInHierarchy("(0+", perlClassName, null, 0);
                             // Try boolean conversion method
                             if (perlMethod == null) {
                                 perlMethod = InheritanceResolver.findMethodInHierarchy("(bool", perlClassName, null, 0);
@@ -145,9 +143,7 @@ public class Overload {
                         // If fallback is undefined or true, try alternative methods
                         if (!fallback.getDefinedBoolean() || fallback.getBoolean()) {
                             // Try string conversion method
-                            if (perlMethod == null) {
-                                perlMethod = InheritanceResolver.findMethodInHierarchy("(\"\"", perlClassName, null, 0);
-                            }
+                            perlMethod = InheritanceResolver.findMethodInHierarchy("(\"\"", perlClassName, null, 0);
                             // Try boolean conversion method
                             if (perlMethod == null) {
                                 perlMethod = InheritanceResolver.findMethodInHierarchy("(bool", perlClassName, null, 0);
@@ -214,9 +210,7 @@ public class Overload {
                         // If fallback is undefined or true, try alternative methods
                         if (!fallback.getDefinedBoolean() || fallback.getBoolean()) {
                             // Try number conversion method
-                            if (perlMethod == null) {
-                                perlMethod = InheritanceResolver.findMethodInHierarchy("(0+", perlClassName, null, 0);
-                            }
+                            perlMethod = InheritanceResolver.findMethodInHierarchy("(0+", perlClassName, null, 0);
                             // Try string conversion method
                             if (perlMethod == null) {
                                 perlMethod = InheritanceResolver.findMethodInHierarchy("(\"\"", perlClassName, null, 0);

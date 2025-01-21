@@ -50,7 +50,7 @@ public class SpecialBlock {
      * Executes all code blocks stored in the endBlocks array in LIFO order.
      */
     public static void runEndBlocks() {
-        while (endBlocks.size() > 0) {
+        while (!endBlocks.isEmpty()) {
             RuntimeScalar block = RuntimeArray.pop(endBlocks);
             if (block.getDefinedBoolean()) {
                 RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
@@ -62,7 +62,7 @@ public class SpecialBlock {
      * Executes all code blocks stored in the initBlocks array in FIFO order.
      */
     public static void runInitBlocks() {
-        while (initBlocks.size() > 0) {
+        while (!initBlocks.isEmpty()) {
             RuntimeScalar block = RuntimeArray.pop(initBlocks);
             if (block.getDefinedBoolean()) {
                 RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
@@ -74,7 +74,7 @@ public class SpecialBlock {
      * Executes all code blocks stored in the checkBlocks array in LIFO order.
      */
     public static void runCheckBlocks() {
-        while (checkBlocks.size() > 0) {
+        while (!checkBlocks.isEmpty()) {
             RuntimeScalar block = RuntimeArray.pop(checkBlocks);
             if (block.getDefinedBoolean()) {
                 RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
@@ -88,7 +88,7 @@ public class SpecialBlock {
      * @param unitcheckBlocks the array of code blocks to be executed
      */
     public static void runUnitcheckBlocks(RuntimeArray unitcheckBlocks) {
-        while (unitcheckBlocks.size() > 0) {
+        while (!unitcheckBlocks.isEmpty()) {
             RuntimeScalar block = RuntimeArray.pop(unitcheckBlocks);
             if (block.getDefinedBoolean()) {
                 RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);

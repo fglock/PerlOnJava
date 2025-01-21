@@ -56,8 +56,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
      * @return A RuntimeHash object representing the stash.
      */
     public static RuntimeHash getStash(String namespace) {
-        RuntimeStash stash = new RuntimeStash(namespace);
-        return stash;
+        return new RuntimeStash(namespace);
     }
 
     /**

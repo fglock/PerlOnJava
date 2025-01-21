@@ -166,7 +166,12 @@ public class ScalarUtils {
         }
     }
 
-    // Helper method to autoincrement a String variable
+    /**
+     * Helper method to autoincrement a String variable
+     *
+     * @param runtimeScalar The scalar to be autoincremented
+     * @return The autoincremented scalar
+     */
     public static RuntimeScalar stringIncrement(RuntimeScalar runtimeScalar) {
         // Retrieve the current value as a String
         String str = (String) runtimeScalar.value;
@@ -196,7 +201,7 @@ public class ScalarUtils {
     /**
      * This is used by evalbytes to assert that the operand contains only byte characters.
      *
-     * @param str
+     * @param str The string to check
      */
     public static void assertBytes(RuntimeScalar str) {
         for (char c : str.toString().toCharArray()) {

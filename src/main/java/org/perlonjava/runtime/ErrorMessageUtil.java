@@ -84,8 +84,7 @@ public class ErrorMessageUtil {
         for (ArrayList<String> line : ExceptionFormatter.formatException(t)) {
             sb.append("        ").append(line.get(0)).append(" at ").append(line.get(1)).append(" line ").append(line.get(2)).append("\n");
         }
-        String errorMessage = sb.toString();
-        return errorMessage;
+        return sb.toString();
     }
 
     /**
