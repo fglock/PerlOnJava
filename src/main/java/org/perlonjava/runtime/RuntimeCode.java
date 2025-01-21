@@ -349,9 +349,13 @@ public class RuntimeCode implements RuntimeScalarReference {
     }
 
     // Method to apply (execute) a subroutine reference
-    public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeArray a, int callContext) {
+    public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeDataProvider list, int callContext) {
         // Check if the type of this RuntimeScalar is CODE
         if (runtimeScalar.type == RuntimeScalarType.CODE) {
+
+            // Transform the value in the stack to RuntimeArray of aliases (Perl variable `@_`)
+            RuntimeArray a = list.getArrayOfAlias();
+
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
             if (code.defined()) {
                 // Cast the value to RuntimeCode and call apply()
