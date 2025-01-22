@@ -45,11 +45,13 @@ public class YamlPP extends PerlModuleBase {
 
             // Set up exports
             yamlPP.initializeExporter();
-            yamlPP.defineExport("EXPORT", "Load", "Dump", "LoadFile", "DumpFile");
+            yamlPP.defineExport("EXPORT_OK", "Load", "Dump", "LoadFile", "DumpFile");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing YAML::PP method: " + e.getMessage());
         }
     }
+
+    static RuntimeScalar perlClassName = new RuntimeScalar("YAML::PP");
 
     /**
      * Creates a new YAML::PP instance with default settings.
@@ -59,15 +61,31 @@ public class YamlPP extends PerlModuleBase {
      */
     public static RuntimeList new_(RuntimeArray args, int ctx) {
         RuntimeHash instance = new RuntimeHash();
-        // Configure YAML dump settings with block style
-        DumpSettings settings = DumpSettings.builder()
+        RuntimeHash options = new RuntimeHash();
+
+        // Skip first argument (class name)
+        args.elements.removeFirst();
+        options.setFromList(args.getList());
+
+        // Configure dump settings
+        DumpSettings dumpSettings = DumpSettings.builder()
                 .setDefaultFlowStyle(FlowStyle.BLOCK)
+                .setIndent(options.containsKey("indent") ? options.get("indent").getInt() : 2)
+                .setExplicitStart(options.containsKey("header") ? options.get("header").getBoolean() : true)
+                .setExplicitEnd(options.containsKey("footer") ? options.get("footer").getBoolean() : false)
+                .setWidth(options.containsKey("width") ? options.get("width").getInt() : 80)
                 .build();
-        LoadSettings loadSettings = LoadSettings.builder().build();
+
+        // Configure load settings
+        LoadSettings loadSettings = LoadSettings.builder()
+                .setAllowDuplicateKeys(options.containsKey("duplicate_keys") ?
+                        options.get("duplicate_keys").getBoolean() : false)
+                .build();
 
         // Store dump and load instances
-        instance.put("_dump", new RuntimeScalar(new Dump(settings)));
+        instance.put("_dump", new RuntimeScalar(new Dump(dumpSettings)));
         instance.put("_load", new RuntimeScalar(new Load(loadSettings)));
+        instance.put("_options", new RuntimeScalar(options));
 
         // Bless the instance into YAML::PP package
         RuntimeScalar instanceRef = instance.createReference();
@@ -166,7 +184,7 @@ public class YamlPP extends PerlModuleBase {
      */
     public static RuntimeList staticLoad(RuntimeArray args, int ctx) {
         RuntimeArray newArgs = new RuntimeArray();
-        newArgs.elements.add(new_(new RuntimeArray(), ctx).getFirst());
+        newArgs.elements.add(new_(new RuntimeArray(perlClassName), ctx).getFirst());
         newArgs.elements.add(args.get(0));
         return load_string(newArgs, ctx);
     }
@@ -176,7 +194,7 @@ public class YamlPP extends PerlModuleBase {
      */
     public static RuntimeList staticDump(RuntimeArray args, int ctx) {
         RuntimeArray newArgs = new RuntimeArray();
-        newArgs.elements.add(new_(new RuntimeArray(), ctx).getFirst());
+        newArgs.elements.add(new_(new RuntimeArray(perlClassName), ctx).getFirst());
         newArgs.elements.addAll(args.elements);
         return dump_string(newArgs, ctx);
     }
@@ -186,7 +204,7 @@ public class YamlPP extends PerlModuleBase {
      */
     public static RuntimeList staticLoadFile(RuntimeArray args, int ctx) {
         RuntimeArray newArgs = new RuntimeArray();
-        newArgs.elements.add(new_(new RuntimeArray(), ctx).getFirst());
+        newArgs.elements.add(new_(new RuntimeArray(perlClassName), ctx).getFirst());
         newArgs.elements.add(args.get(0));
         return load_file(newArgs, ctx);
     }
@@ -196,7 +214,7 @@ public class YamlPP extends PerlModuleBase {
      */
     public static RuntimeList staticDumpFile(RuntimeArray args, int ctx) {
         RuntimeArray newArgs = new RuntimeArray();
-        newArgs.elements.add(new_(new RuntimeArray(), ctx).getFirst());
+        newArgs.elements.add(new_(new RuntimeArray(perlClassName), ctx).getFirst());
         newArgs.elements.addAll(args.elements);
         return dump_file(newArgs, ctx);
     }

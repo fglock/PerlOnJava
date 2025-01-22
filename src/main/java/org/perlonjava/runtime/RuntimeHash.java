@@ -150,6 +150,10 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         return new RuntimeScalar(elements.containsKey(key));
     }
 
+    public boolean containsKey(String key) {
+        return elements.containsKey(key);
+    }
+
     /**
      * Deletes a key-value pair from the hash.
      *
