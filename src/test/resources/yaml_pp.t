@@ -1,6 +1,7 @@
 use feature 'say';
 use strict;
 use YAML::PP;
+use JSON;
 
 # Basic OO interface tests
 my $ypp = YAML::PP->new(cyclic_refs => "allow");
