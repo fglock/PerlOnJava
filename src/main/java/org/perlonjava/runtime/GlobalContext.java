@@ -126,6 +126,7 @@ public class GlobalContext {
         Json.initialize();
         HttpTiny.initialize();
         Dbi.initialize();
+        YamlPP.initialize();
 
         // Reset method cache after initializing UNIVERSAL
         InheritanceResolver.invalidateCache();

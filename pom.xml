@@ -55,6 +55,11 @@
             <artifactId>fastjson2</artifactId>
             <version>2.0.54.android8</version>
         </dependency>
+        <dependency>
+            <groupId>org.snakeyaml</groupId>
+            <artifactId>snakeyaml-engine</artifactId>
+            <version>2.9</version>
+        </dependency>
     </dependencies>
     <build>
         <resources>
