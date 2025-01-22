@@ -150,7 +150,6 @@
   - `lexical_subs` feature.
   - `use VERSION`, `require VERSION`.
   - lexical warnings.
-  - lexical features.
   - lexical strictness.
   - lexical utf8 source code.
   - preprocessor `# line` directive.
@@ -159,6 +158,7 @@
   - indirect object special cases - for `GetOpt::Long`.
   - Here documents.
   - Implement localization of regex variables.
+- Class subsystem
 - DBI subsystem
   - Additional methods.
 - Overload subsystem
@@ -202,6 +202,7 @@
   - Added `module_true` feature.
   - Added `/c` regex modifier.
   - Added overload: `""`, `0+`, `bool`, `fallback`, `nomethod`.
+  - Added `class` feature and `class` keyword.
   - Library upgrades.
     Maven:  `mvn versions:use-latest-versions`.
     Gradle: `./gradlew useLatestVersions`.

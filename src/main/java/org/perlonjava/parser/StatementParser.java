@@ -419,6 +419,7 @@ public class StatementParser {
         }
         IdentifierNode nameNode = new IdentifierNode(packageName, parser.tokenIndex);
         OperatorNode packageNode = new OperatorNode(token.text, nameNode, parser.tokenIndex);
+        packageNode.setAnnotation("isClassDeclaration", token.text.equals("class"));
 
         // Parse Version string
         // XXX use the Version string

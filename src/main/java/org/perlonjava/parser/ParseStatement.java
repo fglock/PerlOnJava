@@ -49,6 +49,12 @@ public class ParseStatement {
                 case "package":
                     // Parse package declarations
                     return StatementParser.parsePackageDeclaration(parser, token);
+                case "class":
+                    // Parse class if the feature is enabled
+                    if (parser.ctx.symbolTable.isFeatureCategoryEnabled("class")) {
+                        return StatementParser.parsePackageDeclaration(parser, token);
+                    }
+                    break;
                 case "use", "no":
                     // Parse use/no declarations
                     return StatementParser.parseUseDeclaration(parser, token);
