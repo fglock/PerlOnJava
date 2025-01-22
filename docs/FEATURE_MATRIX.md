@@ -114,8 +114,8 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **Version check**: Method `VERSION ( [ REQUIRE ] )` is implemented.
 - ✅  **Inheritance**: `SUPER::method` is implemented.
 - ✅  **Autoload**: `AUTOLOAD` mechanism is implemented; `$AUTOLOAD` variable is implemented.
+- ✅  **`class`**: `class` token is supported.
 - ❌  **`__CLASS__`**: `__CLASS__` token is not yet supported.
-- ❌  **`class`**: `class` token is not yet supported.
 - ❌  **`:isa`**: `:isa` class attribute is not yet supported.
 - ❌  **`method`**: `method` block is not yet supported.
 - ❌  **`field`**: `field` token is not yet supported.
@@ -327,7 +327,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **subs** pragma
 - 🚧  **utf8** pragma: utf8 is always on. Disabling utf8 might work in a future version.
 - ✅  **feature** pragma
-  - ✅ Features implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `bitwise`, `postderef`, `evalbytes`, `module_true`, `signatures`.
+  - ✅ Features implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `bitwise`, `postderef`, `evalbytes`, `module_true`, `signatures`, `class`.
   - ❌ Features missing: `postderef_qq`, `unicode_eval`, `unicode_strings`, `defer`.
 - 🚧  **warnings** pragma
 - ❌  **version** pragma: version objects are not yet supported.

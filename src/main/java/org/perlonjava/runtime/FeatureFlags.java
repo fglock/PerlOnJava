@@ -50,6 +50,7 @@ public class FeatureFlags {
         for (Map.Entry<String, String[]> entry : featureBundles.entrySet()) {
             featureSet.addAll(Arrays.asList(entry.getValue()));
         }
+        featureSet.add("class");
         return new ArrayList<>(featureSet);
     }
 
