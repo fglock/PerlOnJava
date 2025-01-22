@@ -141,7 +141,9 @@ public class YamlPP extends PerlModuleBase {
 
         RuntimeArray result = new RuntimeArray();
         for (Object doc : documents) {
-            result.elements.add(convertYamlToRuntimeScalar(doc));
+            result.elements.add(convertYamlToRuntimeScalar(
+                    doc,
+                    new IdentityHashMap<>()));
         }
         return result.getList();
     }
@@ -178,7 +180,9 @@ public class YamlPP extends PerlModuleBase {
 
         // Convert all documents to YAML
         for (int i = 1; i < args.size(); i++) {
-            documents.add(convertRuntimeScalarToYaml(args.get(i)));
+            documents.add(convertRuntimeScalarToYaml(
+                    args.get(i),
+                    new IdentityHashMap<>()));
         }
 
         Dump dump = (Dump) instance.hashDeref().get("_dump").value;
@@ -261,23 +265,31 @@ public class YamlPP extends PerlModuleBase {
      * @param yaml YAML object to convert
      * @return RuntimeScalar representation
      */
-    private static RuntimeScalar convertYamlToRuntimeScalar(Object yaml) {
+    private static RuntimeScalar convertYamlToRuntimeScalar(Object yaml, IdentityHashMap<Object, RuntimeScalar> seen) {
         if (yaml == null) {
             return new RuntimeScalar();
         }
 
-        return switch (yaml) {
+        if (seen.containsKey(yaml)) {
+            return seen.get(yaml);
+        }
+
+        RuntimeScalar result = switch (yaml) {
             case Map map -> {
                 RuntimeHash hash = new RuntimeHash();
+                RuntimeScalar hashRef = hash.createReference();
+                seen.put(yaml, hashRef);
                 map.forEach((key, value) ->
-                        hash.put(key.toString(), convertYamlToRuntimeScalar(value)));
-                yield hash.createReference();
+                        hash.put(key.toString(), convertYamlToRuntimeScalar(value, seen)));
+                yield hashRef;
             }
             case List list -> {
                 RuntimeArray array = new RuntimeArray();
+                RuntimeScalar arrayRef = array.createReference();
+                seen.put(yaml, arrayRef);
                 list.forEach(item ->
-                        array.elements.add(convertYamlToRuntimeScalar(item)));
-                yield array.createReference();
+                        array.elements.add(convertYamlToRuntimeScalar(item, seen)));
+                yield arrayRef;
             }
             case String s -> new RuntimeScalar(s);
             case Integer i -> new RuntimeScalar(i);
@@ -286,6 +298,8 @@ public class YamlPP extends PerlModuleBase {
             case Boolean b -> new RuntimeScalar(b);
             default -> new RuntimeScalar(yaml.toString());
         };
+
+        return result;
     }
 
     /**
@@ -294,20 +308,30 @@ public class YamlPP extends PerlModuleBase {
      * @param scalar RuntimeScalar to convert
      * @return YAML-compatible object
      */
-    private static Object convertRuntimeScalarToYaml(RuntimeScalar scalar) {
-        return switch (scalar.type) {
+    private static Object convertRuntimeScalarToYaml(RuntimeScalar scalar, IdentityHashMap<Object, Object> seen) {
+        if (scalar == null) {
+            return null;
+        }
+
+        if (seen.containsKey(scalar.value)) {
+            return seen.get(scalar.value);
+        }
+
+        Object result = switch (scalar.type) {
             case HASHREFERENCE -> {
                 Map<String, Object> map = new LinkedHashMap<>();
+                seen.put(scalar.value, map);
                 RuntimeHash hash = (RuntimeHash) scalar.value;
                 hash.elements.forEach((key, value) ->
-                        map.put(key, convertRuntimeScalarToYaml(value)));
+                        map.put(key, convertRuntimeScalarToYaml(value, seen)));
                 yield map;
             }
             case ARRAYREFERENCE -> {
                 List<Object> list = new ArrayList<>();
+                seen.put(scalar.value, list);
                 RuntimeArray array = (RuntimeArray) scalar.value;
                 array.elements.forEach(element ->
-                        list.add(convertRuntimeScalarToYaml(element)));
+                        list.add(convertRuntimeScalarToYaml(element, seen)));
                 yield list;
             }
             case STRING -> scalar.toString();
@@ -316,5 +340,7 @@ public class YamlPP extends PerlModuleBase {
             case BOOLEAN -> scalar.getBoolean();
             default -> null;
         };
+
+        return result;
     }
 }

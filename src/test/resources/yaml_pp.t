@@ -92,3 +92,19 @@ print "not " unless
     $loaded_types->{float} < 3.15;
 say "ok # Data types preservation";
 
+# Circular reference test
+my $circular = {};
+$circular->{self} = $circular;
+$yaml = $ypp->dump_string($circular);
+my $loaded_circular = ($ypp->load_string($yaml))[0];
+print "not " unless $loaded_circular->{self} == $loaded_circular;
+say "ok # Circular reference handling";
+
+# More complex circular structure
+my $a = {};
+my $b = { a => $a };
+$a->{b} = $b;
+$yaml = $ypp->dump_string($a);
+my $loaded_a = ($ypp->load_string($yaml))[0];
+print "not " unless $loaded_a->{b}{a} == $loaded_a;
+say "ok # Complex circular reference handling";
