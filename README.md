@@ -3,7 +3,7 @@
 PerlOnJava provides a Perl distribution designed to run natively on the Java Virtual Machine (JVM).
 It allows Perl scripts to integrate seamlessly with Java-based ecosystems while offering familiar tools and modules for Perl development.
 
-The JAR package features a variety of Perl modules, such as `DBI` (with JDBC support), `HTTP::Tiny`, `JSON`, `File::Find`, and `Data::Dumper`.
+The JAR package features a variety of Perl modules, such as `DBI` (with JDBC support), `HTTP::Tiny`, `JSON`, `YAML::PP`, `File::Find`, and `Data::Dumper`.
 Users can also add their own database JDBC drivers, making it a flexible solution for cross-platform Perl applications.
 
 ## Table of Contents
