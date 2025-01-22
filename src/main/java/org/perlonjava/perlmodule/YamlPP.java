@@ -60,6 +60,13 @@ public class YamlPP extends PerlModuleBase {
         }
     }
 
+    private enum CyclicRefsBehavior {
+        FATAL,
+        WARN,
+        IGNORE,
+        ALLOW
+    }
+
     /**
      * Creates a new YAML::PP instance with default settings.
      *
@@ -98,6 +105,17 @@ public class YamlPP extends PerlModuleBase {
             default -> new CoreSchema(); // fallback to Core schema
         };
 
+        CyclicRefsBehavior cyclicRefs = CyclicRefsBehavior.FATAL; // Default value
+        if (options.containsKey("cyclic_refs")) {
+            String cyclicRefsOption = options.get("cyclic_refs").toString().toLowerCase();
+            cyclicRefs = switch (cyclicRefsOption) {
+                case "warn" -> CyclicRefsBehavior.WARN;
+                case "ignore" -> CyclicRefsBehavior.IGNORE;
+                case "allow" -> CyclicRefsBehavior.ALLOW;
+                default -> CyclicRefsBehavior.FATAL;
+            };
+        }
+
         // Configure dump settings with schema
         DumpSettings dumpSettings = DumpSettings.builder()
                 .setDefaultFlowStyle(FlowStyle.BLOCK)
@@ -118,6 +136,7 @@ public class YamlPP extends PerlModuleBase {
         instance.put("_dump", new RuntimeScalar(new Dump(dumpSettings)));
         instance.put("_load", new RuntimeScalar(new Load(loadSettings)));
         instance.put("_options", new RuntimeScalar(options));
+        instance.put("_cyclic_refs", new RuntimeScalar(cyclicRefs.name()));
 
         // Bless the instance into YAML::PP package
         RuntimeScalar instanceRef = instance.createReference();
@@ -143,7 +162,8 @@ public class YamlPP extends PerlModuleBase {
         for (Object doc : documents) {
             result.elements.add(convertYamlToRuntimeScalar(
                     doc,
-                    new IdentityHashMap<>()));
+                    new IdentityHashMap<>(),
+                    instance.hashDeref()));
         }
         return result.getList();
     }
@@ -265,13 +285,22 @@ public class YamlPP extends PerlModuleBase {
      * @param yaml YAML object to convert
      * @return RuntimeScalar representation
      */
-    private static RuntimeScalar convertYamlToRuntimeScalar(Object yaml, IdentityHashMap<Object, RuntimeScalar> seen) {
+    private static RuntimeScalar convertYamlToRuntimeScalar(Object yaml, IdentityHashMap<Object, RuntimeScalar> seen, RuntimeHash instance) {
         if (yaml == null) {
             return new RuntimeScalar();
         }
 
         if (seen.containsKey(yaml)) {
-            return seen.get(yaml);
+            String cyclicBehavior = instance.get("_cyclic_refs").toString();
+            return switch (CyclicRefsBehavior.valueOf(cyclicBehavior)) {
+                case FATAL -> throw new RuntimeException("Cyclic reference detected in YAML structure");
+                case WARN -> {
+                    System.err.println("Warning: Cyclic reference detected in YAML structure");
+                    yield new RuntimeScalar();
+                }
+                case IGNORE -> new RuntimeScalar();
+                case ALLOW -> seen.get(yaml);
+            };
         }
 
         RuntimeScalar result = switch (yaml) {
@@ -280,7 +309,7 @@ public class YamlPP extends PerlModuleBase {
                 RuntimeScalar hashRef = hash.createReference();
                 seen.put(yaml, hashRef);
                 map.forEach((key, value) ->
-                        hash.put(key.toString(), convertYamlToRuntimeScalar(value, seen)));
+                        hash.put(key.toString(), convertYamlToRuntimeScalar(value, seen, instance)));
                 yield hashRef;
             }
             case List list -> {
@@ -288,7 +317,7 @@ public class YamlPP extends PerlModuleBase {
                 RuntimeScalar arrayRef = array.createReference();
                 seen.put(yaml, arrayRef);
                 list.forEach(item ->
-                        array.elements.add(convertYamlToRuntimeScalar(item, seen)));
+                        array.elements.add(convertYamlToRuntimeScalar(item, seen, instance)));
                 yield arrayRef;
             }
             case String s -> new RuntimeScalar(s);

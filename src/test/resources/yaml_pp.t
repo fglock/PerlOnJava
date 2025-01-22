@@ -3,7 +3,7 @@ use strict;
 use YAML::PP;
 
 # Basic OO interface tests
-my $ypp = YAML::PP->new;
+my $ypp = YAML::PP->new(cyclic_refs => "allow");
 print "not " unless defined $ypp;
 say "ok # YAML::PP constructor";
 
