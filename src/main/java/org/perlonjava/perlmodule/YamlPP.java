@@ -2,8 +2,15 @@ package org.perlonjava.perlmodule;
 
 import org.perlonjava.operators.ReferenceOperators;
 import org.perlonjava.runtime.*;
-import org.snakeyaml.engine.v2.api.*;
+import org.snakeyaml.engine.v2.api.Dump;
+import org.snakeyaml.engine.v2.api.DumpSettings;
+import org.snakeyaml.engine.v2.api.Load;
+import org.snakeyaml.engine.v2.api.LoadSettings;
 import org.snakeyaml.engine.v2.common.FlowStyle;
+import org.snakeyaml.engine.v2.schema.CoreSchema;
+import org.snakeyaml.engine.v2.schema.FailsafeSchema;
+import org.snakeyaml.engine.v2.schema.JsonSchema;
+import org.snakeyaml.engine.v2.schema.Schema;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -16,6 +23,8 @@ import java.util.*;
  * Provides YAML parsing and generation functionality compatible with Perl's YAML::PP module.
  */
 public class YamlPP extends PerlModuleBase {
+
+    static RuntimeScalar perlClassName = new RuntimeScalar("YAML::PP");
 
     /**
      * Constructor for YamlPP module.
@@ -51,12 +60,11 @@ public class YamlPP extends PerlModuleBase {
         }
     }
 
-    static RuntimeScalar perlClassName = new RuntimeScalar("YAML::PP");
-
     /**
      * Creates a new YAML::PP instance with default settings.
+     *
      * @param args Runtime arguments (unused)
-     * @param ctx Context flag
+     * @param ctx  Context flag
      * @return New YAML::PP instance
      */
     public static RuntimeList new_(RuntimeArray args, int ctx) {
@@ -67,19 +75,43 @@ public class YamlPP extends PerlModuleBase {
         args.elements.removeFirst();
         options.setFromList(args.getList());
 
-        // Configure dump settings
+        // Handle schema option
+        String schemaName = "Core"; // default schema
+        if (options.containsKey("schema")) {
+            RuntimeScalar schemaOption = options.get("schema");
+            if (schemaOption.type == RuntimeScalarType.ARRAYREFERENCE) {
+                // Take first schema from array if multiple are provided
+                RuntimeArray schemaArray = (RuntimeArray) schemaOption.value;
+                if (!schemaArray.elements.isEmpty()) {
+                    schemaName = schemaArray.elements.getFirst().toString();
+                }
+            } else {
+                schemaName = schemaOption.toString();
+            }
+        }
+
+        // Map schema name to SnakeYAML schema
+        Schema schema = switch (schemaName) {
+            case "Failsafe" -> new FailsafeSchema();
+            case "JSON" -> new JsonSchema();
+            case "Core" -> new CoreSchema();
+            default -> new CoreSchema(); // fallback to Core schema
+        };
+
+        // Configure dump settings with schema
         DumpSettings dumpSettings = DumpSettings.builder()
                 .setDefaultFlowStyle(FlowStyle.BLOCK)
                 .setIndent(options.containsKey("indent") ? options.get("indent").getInt() : 2)
-                .setExplicitStart(options.containsKey("header") ? options.get("header").getBoolean() : true)
-                .setExplicitEnd(options.containsKey("footer") ? options.get("footer").getBoolean() : false)
+                .setExplicitStart(!options.containsKey("header") || options.get("header").getBoolean())
+                .setExplicitEnd(options.containsKey("footer") && options.get("footer").getBoolean())
                 .setWidth(options.containsKey("width") ? options.get("width").getInt() : 80)
+                .setSchema(schema)
                 .build();
 
-        // Configure load settings
+        // Configure load settings with schema
         LoadSettings loadSettings = LoadSettings.builder()
-                .setAllowDuplicateKeys(options.containsKey("duplicate_keys") ?
-                        options.get("duplicate_keys").getBoolean() : false)
+                .setAllowDuplicateKeys(options.containsKey("duplicate_keys") && options.get("duplicate_keys").getBoolean())
+                .setSchema(schema)
                 .build();
 
         // Store dump and load instances
@@ -95,8 +127,9 @@ public class YamlPP extends PerlModuleBase {
 
     /**
      * Loads YAML from a string.
+     *
      * @param args [instance, yaml_string]
-     * @param ctx Context flag
+     * @param ctx  Context flag
      * @return List of parsed YAML documents
      */
     public static RuntimeList load_string(RuntimeArray args, int ctx) {
@@ -115,8 +148,9 @@ public class YamlPP extends PerlModuleBase {
 
     /**
      * Loads YAML from a file.
+     *
      * @param args [instance, filename]
-     * @param ctx Context flag
+     * @param ctx  Context flag
      * @return List of parsed YAML documents
      */
     public static RuntimeList load_file(RuntimeArray args, int ctx) {
@@ -133,8 +167,9 @@ public class YamlPP extends PerlModuleBase {
 
     /**
      * Dumps data structures to YAML string.
+     *
      * @param args [instance, ...documents]
-     * @param ctx Context flag
+     * @param ctx  Context flag
      * @return YAML string representation
      */
     public static RuntimeList dump_string(RuntimeArray args, int ctx) {
@@ -155,8 +190,9 @@ public class YamlPP extends PerlModuleBase {
 
     /**
      * Dumps data structures to a YAML file.
+     *
      * @param args [instance, filename, ...documents]
-     * @param ctx Context flag
+     * @param ctx  Context flag
      * @return Success status
      */
     public static RuntimeList dump_file(RuntimeArray args, int ctx) {
@@ -221,6 +257,7 @@ public class YamlPP extends PerlModuleBase {
 
     /**
      * Converts YAML objects to RuntimeScalar representations.
+     *
      * @param yaml YAML object to convert
      * @return RuntimeScalar representation
      */
@@ -253,6 +290,7 @@ public class YamlPP extends PerlModuleBase {
 
     /**
      * Converts RuntimeScalar objects to YAML-compatible representations.
+     *
      * @param scalar RuntimeScalar to convert
      * @return YAML-compatible object
      */
