@@ -60,13 +60,6 @@ public class YamlPP extends PerlModuleBase {
         }
     }
 
-    private enum CyclicRefsBehavior {
-        FATAL,
-        WARN,
-        IGNORE,
-        ALLOW
-    }
-
     /**
      * Creates a new YAML::PP instance with default settings.
      *
@@ -237,8 +230,6 @@ public class YamlPP extends PerlModuleBase {
         }
     }
 
-    // Static convenience methods
-
     /**
      * Static method to load YAML from a string.
      */
@@ -248,6 +239,8 @@ public class YamlPP extends PerlModuleBase {
         newArgs.elements.add(args.get(0));
         return load_string(newArgs, ctx);
     }
+
+    // Static convenience methods
 
     /**
      * Static method to dump data to YAML string.
@@ -371,5 +364,12 @@ public class YamlPP extends PerlModuleBase {
         };
 
         return result;
+    }
+
+    private enum CyclicRefsBehavior {
+        FATAL,
+        WARN,
+        IGNORE,
+        ALLOW
     }
 }
