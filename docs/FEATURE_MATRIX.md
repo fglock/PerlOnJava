@@ -381,6 +381,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **HTTP::CookieJar** module.
 - ✅  **JSON** module.
 - ✅  **YAML::PP** module.
+- ✅  **YAML** module.
 
 ### DBI module
 
