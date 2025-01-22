@@ -195,7 +195,7 @@
   - Project description updated in `README.md` to "A Perl Distribution for the JVM"
   - Added module porting guide at `docs/PORTING_MODULES.md`
   - Added wrapper scripts (`jperl`/`jperl.bat`) for easier command-line usage
-  - Added `YAML::PP` module.
+  - Added `YAML` and `YAML::PP` modules.
   - Added `Text::Balanced` module.
   - Added subroutine signatures and `signature` feature.
   - Added chained operators.
