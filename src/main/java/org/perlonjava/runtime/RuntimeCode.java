@@ -423,7 +423,7 @@ public class RuntimeCode implements RuntimeScalarReference {
         try {
             return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
         } catch (Exception e) {
-            throw new PerlCompilerException("subroutine call error: " + e.getMessage());
+            throw new RuntimeException(e);
         }
     }
 
@@ -440,7 +440,7 @@ public class RuntimeCode implements RuntimeScalarReference {
                 throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
             }
 
-            throw new PerlCompilerException("subroutine call error: " + e.getMessage());
+            throw new RuntimeException(e);
         }
     }
 
