@@ -51,8 +51,10 @@ public class Exporter extends PerlModuleBase {
         RuntimeScalar packageScalar = RuntimeArray.shift(args);
         String packageName = packageScalar.scalar().toString();
 
+        RuntimeScalar exportLevel = GlobalVariable.getGlobalVariable("Exporter::ExportLevel");
+
         // Determine the caller's namespace
-        RuntimeList callerList = RuntimeCode.caller(new RuntimeList(), SCALAR);
+        RuntimeList callerList = RuntimeCode.caller(new RuntimeList(exportLevel), SCALAR);
         String caller = callerList.scalar().toString();
 
         // Retrieve the export lists and tags from the package
@@ -68,8 +70,6 @@ public class Exporter extends PerlModuleBase {
                 args = new RuntimeArray();
             }
         }
-
-        String exportLevel = GlobalVariable.getGlobalVariable("Exporter::ExportLevel").toString();
 
         // Process the requested symbols and tags
         RuntimeArray tagArray = new RuntimeArray();
