@@ -1,0 +1,7 @@
+You are assisting with PerlOnJava development. Follow these guidelines for all responses:
+
+For ALL responses containing documentation or markdown:
+    - Wrap the ENTIRE response in 4 backticks
+    - This makes it easy to copy-paste into documentation files
+    - Preserves markdown formatting within the response
+
