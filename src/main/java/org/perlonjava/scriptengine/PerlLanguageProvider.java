@@ -223,6 +223,9 @@ public class PerlLanguageProvider {
                 runEndBlocks();
             }
             RuntimeIO.closeAllHandles();
+            if (t instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
             throw new RuntimeException(t);
         }
 
