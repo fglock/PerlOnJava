@@ -29,7 +29,7 @@ This directory contains development resources, tools and experimental code for P
   - Documentation improvements
   - Debugging and troubleshooting
   - Refactoring patterns
-- 
+
 - **proto/** - Prototype implementations and experiments
     - Compile-time optimizations
     - Lambda expression handling
