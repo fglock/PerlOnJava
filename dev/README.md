@@ -19,6 +19,12 @@ This directory contains development resources, tools and experimental code for P
     - Threading examples (TestThread.pl)
     - Type system demonstrations (Types.pl)
 
+- **prompts/** - LLM prompts for development assistance
+  - Code generation and conversion
+  - Documentation improvements
+  - Debugging and troubleshooting
+  - Refactoring patterns
+- 
 - **proto/** - Prototype implementations and experiments
     - Compile-time optimizations
     - Lambda expression handling
@@ -49,3 +55,4 @@ When adding new code or tools:
 - Document design decisions in the `design/` directory
 - Use the `bench/` directory for performance testing
 - Check `examples/` for implementation patterns
+- Store reusable LLM prompts in `prompts/` directory
