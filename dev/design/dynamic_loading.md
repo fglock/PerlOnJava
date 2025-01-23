@@ -343,3 +343,121 @@ This modular structure lets users:
 
 The shadow plugin bundles dependencies into executable JARs, making distribution and execution straightforward.
 
+
+
+# Testing Extensions
+
+## Testing Strategy
+
+### Test Structure
+```
+perlonjava-module-name/
+  src/
+    test/
+      resources/
+        module_name.t      # Perl test file
+      java/
+        org/perlonjava/module/
+          ModuleTest.java  # Java integration tests
+```
+
+### Maven Configuration
+
+Add to module's pom.xml:
+```xml:perlonjava-module-name/pom.xml
+<build>
+    <plugins>
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-failsafe-plugin</artifactId>
+            <version>3.2.5</version>
+            <executions>
+                <execution>
+                    <goals>
+                        <goal>integration-test</goal>
+                        <goal>verify</goal>
+                    </goals>
+                </execution>
+            </executions>
+        </plugin>
+    </plugins>
+</build>
+```
+
+### Gradle Configuration
+
+Add to module's build.gradle:
+```gradle:perlonjava-module-name/build.gradle
+tasks.register('perlTest', JavaExec) {
+    dependsOn tasks.testClasses
+    group = 'Verification'
+    description = 'Runs Perl integration tests'
+    
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'org.perlonjava.test.PerlTestRunner'
+    
+    systemProperty 'test.perl.files', fileTree(dir: 'src/test/resources', include: '*.t')
+}
+
+test.dependsOn perlTest
+```
+
+### Example Test File (YAML::PP)
+
+Based on the existing yaml_pp.t test file pattern:
+
+```perl:perlonjava-module-yaml/src/test/resources/yaml_pp.t
+use feature 'say';
+use strict;
+use YAML::PP;
+
+my $ypp = YAML::PP->new();
+print "not " unless defined $ypp;
+say "ok # YAML::PP constructor";
+
+# Additional tests...
+```
+
+### Test Runner Implementation
+
+```java:perlonjava/src/main/java/org/perlonjava/test/PerlTestRunner.java
+public class PerlTestRunner {
+    public static void main(String[] args) {
+        String testFiles = System.getProperty("test.perl.files");
+        PerlEngine engine = new PerlEngine();
+        
+        for (String file : testFiles.split(File.pathSeparator)) {
+            System.out.println("Running " + file);
+            try {
+                engine.executeFile(new File(file));
+            } catch (Exception e) {
+                System.err.println("Test failed: " + file);
+                e.printStackTrace();
+                System.exit(1);
+            }
+        }
+    }
+}
+```
+
+### Running Tests
+
+Maven:
+```bash
+mvn verify
+```
+
+Gradle:
+```bash
+./gradlew test
+```
+
+This approach:
+- Uses standard build tool test infrastructure
+- Integrates with CI/CD pipelines
+- Provides detailed test reporting
+- Supports both unit and integration tests
+- Maintains Perl's test style while running in JVM
+- Allows testing modules with full runtime context
+
+The test results appear in standard Maven/Gradle test reports, making them easy to integrate with existing development workflows.
