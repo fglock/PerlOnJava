@@ -1,6 +1,7 @@
 package org.perlonjava.perlmodule;
 
 import org.perlonjava.operators.ReferenceOperators;
+import org.perlonjava.operators.WarnDie;
 import org.perlonjava.runtime.*;
 import org.snakeyaml.engine.v2.api.Dump;
 import org.snakeyaml.engine.v2.api.DumpSettings;
@@ -176,7 +177,7 @@ public class YamlPP extends PerlModuleBase {
             String content = Files.readString(new File(filename).toPath());
             return load_string(new RuntimeArray(Arrays.asList(instance, new RuntimeScalar(content))), ctx);
         } catch (IOException e) {
-            throw new RuntimeException("Failed to read YAML file: " + filename, e);
+            return WarnDie.die(new RuntimeScalar("Failed to read YAML file: " + filename), new RuntimeScalar("\n")).getList();
         }
     }
 
@@ -226,7 +227,7 @@ public class YamlPP extends PerlModuleBase {
             writer.write(yamlContent);
             return RuntimeScalarCache.scalarTrue.getList();
         } catch (IOException e) {
-            throw new RuntimeException("Failed to write YAML file: " + filename, e);
+            return WarnDie.die(new RuntimeScalar("Failed to write YAML file: " + filename), new RuntimeScalar("\n")).getList();
         }
     }
 
@@ -286,9 +287,10 @@ public class YamlPP extends PerlModuleBase {
         if (seen.containsKey(yaml)) {
             String cyclicBehavior = instance.get("_cyclic_refs").toString();
             return switch (CyclicRefsBehavior.valueOf(cyclicBehavior)) {
-                case FATAL -> throw new RuntimeException("Cyclic reference detected in YAML structure");
+                case FATAL ->
+                        WarnDie.die(new RuntimeScalar("Cyclic reference detected in YAML structure"), new RuntimeScalar("\n")).scalar();
                 case WARN -> {
-                    System.err.println("Warning: Cyclic reference detected in YAML structure");
+                    WarnDie.warn(new RuntimeScalar("Cyclic reference detected in YAML structure"), new RuntimeScalar("\n"));
                     yield new RuntimeScalar();
                 }
                 case IGNORE -> new RuntimeScalar();
