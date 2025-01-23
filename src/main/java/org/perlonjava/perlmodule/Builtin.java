@@ -115,9 +115,7 @@ public class Builtin extends PerlModuleBase {
     }
 
     public static RuntimeList blessed(RuntimeArray args, int ctx) {
-        RuntimeScalar ref = args.get(0);
-        // Return package name for object reference
-        return new RuntimeList(ref.blessed());
+        return ScalarUtil.blessed(args, ctx);
     }
 
     public static RuntimeList refaddr(RuntimeArray args, int ctx) {

@@ -2,6 +2,8 @@ package org.perlonjava.perlmodule;
 
 import org.perlonjava.runtime.*;
 
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
+
 /**
  * Utility class for Scalar operations in Perl.
  * Extends PerlModuleBase to leverage module initialization and method registration.
@@ -60,7 +62,14 @@ public class ScalarUtil extends PerlModuleBase {
         }
         RuntimeScalar scalar = args.get(0);
         // System.out.println("ScalarUtil.blessed: " + scalar + " : " + scalar.blessId);
-        return scalar.blessed().getList();
+        return (switch (scalar.type) {
+            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE: {
+                int id = ((RuntimeBaseEntity) scalar.value).blessId;
+                yield (id != 0 ? new RuntimeScalar(NameNormalizer.getBlessStr(id)) : scalarUndef);
+            }
+            default:
+                yield scalarUndef;
+        }).getList();
     }
 
     /**
