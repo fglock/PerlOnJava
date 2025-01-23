@@ -14,10 +14,15 @@ This directory contains development resources, tools and experimental code for P
     - Feature specifications and roadmaps
 
 - **examples/** - Sample code and usage demonstrations
-    - GUI applications (GuiHelloWorld.pl)
-    - Network programming (GameServer.pl, Http.pl)
-    - Threading examples (TestThread.pl)
-    - Type system demonstrations (Types.pl)
+
+  Mix of working examples and feature concepts for design exploration. Not all examples are guaranteed to run.
+
+  - GUI applications (GuiHelloWorld.pl)
+  - Network programming (GameServer.pl, Http.pl)
+  - Threading examples (TestThread.pl)
+  - Type system ideas (Types.pl, Types2.pl)
+  - Advanced threading patterns (TestThreadEval.pl)
+  - Core language extensions (core_global_override.pl)
 
 - **prompts/** - LLM prompts for development assistance
   - Code generation and conversion
