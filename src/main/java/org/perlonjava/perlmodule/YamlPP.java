@@ -31,7 +31,7 @@ public class YamlPP extends PerlModuleBase {
      * Constructor for YamlPP module.
      */
     public YamlPP() {
-        super("YAML::PP", true);
+        super("YAML::PP", false);
     }
 
     /**
@@ -46,16 +46,6 @@ public class YamlPP extends PerlModuleBase {
             yamlPP.registerMethod("load_file", null);
             yamlPP.registerMethod("dump_string", null);
             yamlPP.registerMethod("dump_file", null);
-
-            // Register static methods with their prototypes
-            yamlPP.registerMethod("Load", "staticLoad", "$");
-            yamlPP.registerMethod("Dump", "staticDump", "@");
-            yamlPP.registerMethod("LoadFile", "staticLoadFile", "$");
-            yamlPP.registerMethod("DumpFile", "staticDumpFile", "$@");
-
-            // Set up exports
-            yamlPP.initializeExporter();
-            yamlPP.defineExport("EXPORT_OK", "Load", "Dump", "LoadFile", "DumpFile");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing YAML::PP method: " + e.getMessage());
         }
@@ -229,48 +219,6 @@ public class YamlPP extends PerlModuleBase {
         } catch (IOException e) {
             return WarnDie.die(new RuntimeScalar("Failed to write YAML file: " + filename), new RuntimeScalar("\n")).getList();
         }
-    }
-
-    /**
-     * Static method to load YAML from a string.
-     */
-    public static RuntimeList staticLoad(RuntimeArray args, int ctx) {
-        RuntimeArray newArgs = new RuntimeArray();
-        newArgs.elements.add(new_(new RuntimeArray(perlClassName), ctx).getFirst());
-        newArgs.elements.add(args.get(0));
-        return load_string(newArgs, ctx);
-    }
-
-    // Static convenience methods
-
-    /**
-     * Static method to dump data to YAML string.
-     */
-    public static RuntimeList staticDump(RuntimeArray args, int ctx) {
-        RuntimeArray newArgs = new RuntimeArray();
-        newArgs.elements.add(new_(new RuntimeArray(perlClassName), ctx).getFirst());
-        newArgs.elements.addAll(args.elements);
-        return dump_string(newArgs, ctx);
-    }
-
-    /**
-     * Static method to load YAML from a file.
-     */
-    public static RuntimeList staticLoadFile(RuntimeArray args, int ctx) {
-        RuntimeArray newArgs = new RuntimeArray();
-        newArgs.elements.add(new_(new RuntimeArray(perlClassName), ctx).getFirst());
-        newArgs.elements.add(args.get(0));
-        return load_file(newArgs, ctx);
-    }
-
-    /**
-     * Static method to dump data to a YAML file.
-     */
-    public static RuntimeList staticDumpFile(RuntimeArray args, int ctx) {
-        RuntimeArray newArgs = new RuntimeArray();
-        newArgs.elements.add(new_(new RuntimeArray(perlClassName), ctx).getFirst());
-        newArgs.elements.addAll(args.elements);
-        return dump_file(newArgs, ctx);
     }
 
     /**
