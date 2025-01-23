@@ -1,11 +1,11 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.operators.Operator;
+import org.perlonjava.operators.StringOperators;
 import org.perlonjava.parser.NumberParser;
 
 import java.util.*;
 
-import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 /**
@@ -623,55 +623,11 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar chop() {
-        String str = this.toString();
-        if (str.isEmpty()) {
-            return new RuntimeScalar();
-        }
-        String lastChar = str.substring(str.length() - 1);
-        this.type = RuntimeScalarType.STRING;
-        this.value = str.substring(0, str.length() - 1);
-        return new RuntimeScalar(lastChar);
+        return StringOperators.chopScalar(this);
     }
 
     public RuntimeScalar chomp() {
-        String str = this.toString();
-        if (str.isEmpty()) {
-            return getScalarInt(0);
-        }
-
-        RuntimeScalar separatorScalar = getGlobalVariable("main::/");
-        if (separatorScalar.type == RuntimeScalarType.UNDEF) {
-            // Slurp mode: don't remove anything
-            return getScalarInt(0);
-        }
-
-        String separator = separatorScalar.toString();
-        int charsRemoved = 0;
-
-        if (separator.isEmpty()) {
-            // Paragraph mode: remove all trailing newlines
-            int endIndex = str.length();
-            while (endIndex > 0 && str.charAt(endIndex - 1) == '\n') {
-                endIndex--;
-                charsRemoved++;
-            }
-            if (charsRemoved > 0) {
-                str = str.substring(0, endIndex);
-            }
-        } else if (!separator.equals("\0")) {
-            // Normal mode: remove trailing separator
-            if (str.endsWith(separator)) {
-                str = str.substring(0, str.length() - separator.length());
-                charsRemoved = separator.length();
-            }
-        }
-        // Note: In slurp mode ($/ = undef) or fixed-length record mode, we don't remove anything
-
-        if (charsRemoved > 0) {
-            this.type = RuntimeScalarType.STRING;
-            this.value = str;
-        }
-        return getScalarInt(charsRemoved);
+        return StringOperators.chompScalar(this);
     }
 
     public RuntimeScalar integer() {
@@ -680,10 +636,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar pos() {
         return RuntimePosLvalue.pos(this);
-    }
-
-    public RuntimeScalar chr() {
-        return new RuntimeScalar(String.valueOf((char) this.getInt()));
     }
 
     // keys() operator

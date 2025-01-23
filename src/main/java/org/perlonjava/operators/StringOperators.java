@@ -5,6 +5,7 @@ import com.ibm.icu.text.Normalizer2;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarType;
 
+import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 
 /**
@@ -176,5 +177,61 @@ public class StringOperators {
 
     public static RuntimeScalar stringConcat(RuntimeScalar runtimeScalar, RuntimeScalar b) {
         return new RuntimeScalar(runtimeScalar + b.toString());
+    }
+
+    public static RuntimeScalar chompScalar(RuntimeScalar runtimeScalar) {
+        String str = runtimeScalar.toString();
+        if (str.isEmpty()) {
+            return getScalarInt(0);
+        }
+
+        RuntimeScalar separatorScalar = getGlobalVariable("main::/");
+        if (separatorScalar.type == RuntimeScalarType.UNDEF) {
+            // Slurp mode: don't remove anything
+            return getScalarInt(0);
+        }
+
+        String separator = separatorScalar.toString();
+        int charsRemoved = 0;
+
+        if (separator.isEmpty()) {
+            // Paragraph mode: remove all trailing newlines
+            int endIndex = str.length();
+            while (endIndex > 0 && str.charAt(endIndex - 1) == '\n') {
+                endIndex--;
+                charsRemoved++;
+            }
+            if (charsRemoved > 0) {
+                str = str.substring(0, endIndex);
+            }
+        } else if (!separator.equals("\0")) {
+            // Normal mode: remove trailing separator
+            if (str.endsWith(separator)) {
+                str = str.substring(0, str.length() - separator.length());
+                charsRemoved = separator.length();
+            }
+        }
+        // Note: In slurp mode ($/ = undef) or fixed-length record mode, we don't remove anything
+
+        if (charsRemoved > 0) {
+            runtimeScalar.type = RuntimeScalarType.STRING;
+            runtimeScalar.value = str;
+        }
+        return getScalarInt(charsRemoved);
+    }
+
+    public static RuntimeScalar chopScalar(RuntimeScalar runtimeScalar) {
+        String str = runtimeScalar.toString();
+        if (str.isEmpty()) {
+            return new RuntimeScalar();
+        }
+        String lastChar = str.substring(str.length() - 1);
+        runtimeScalar.type = RuntimeScalarType.STRING;
+        runtimeScalar.value = str.substring(0, str.length() - 1);
+        return new RuntimeScalar(lastChar);
+    }
+
+    public static RuntimeScalar chr(RuntimeScalar runtimeScalar) {
+        return new RuntimeScalar(String.valueOf((char) runtimeScalar.getInt()));
     }
 }
