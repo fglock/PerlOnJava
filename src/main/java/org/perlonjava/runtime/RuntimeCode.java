@@ -11,6 +11,7 @@ import org.perlonjava.parser.Parser;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -422,6 +423,14 @@ public class RuntimeCode implements RuntimeScalarReference {
         }
         try {
             return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
+        } catch (NullPointerException e) {
+            throw new PerlCompilerException("Undefined subroutine called at ");
+        } catch (InvocationTargetException e) {
+            Throwable targetException = e.getTargetException();
+            if (!(targetException instanceof RuntimeException)) {
+                throw new RuntimeException(targetException);
+            }
+            throw (RuntimeException) targetException;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -434,12 +443,15 @@ public class RuntimeCode implements RuntimeScalarReference {
         }
         try {
             return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
-        } catch (Exception e) {
-
-            if (!subroutineName.isEmpty() && this.methodObject == null) {
-                throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
+        } catch (NullPointerException e) {
+            throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
+        } catch (InvocationTargetException e) {
+            Throwable targetException = e.getTargetException();
+            if (!(targetException instanceof RuntimeException)) {
+                throw new RuntimeException(targetException);
             }
-
+            throw (RuntimeException) targetException;
+        } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
