@@ -40,7 +40,6 @@ public class YamlPP extends PerlModuleBase {
     public static void initialize() {
         YamlPP yamlPP = new YamlPP();
         try {
-            // Register instance methods
             yamlPP.registerMethod("new", "new_", null);
             yamlPP.registerMethod("load_string", null);
             yamlPP.registerMethod("load_file", null);
@@ -54,7 +53,7 @@ public class YamlPP extends PerlModuleBase {
     /**
      * Creates a new YAML::PP instance with default settings.
      *
-     * @param args Runtime arguments (unused)
+     * @param args Runtime arguments
      * @param ctx  Context flag
      * @return New YAML::PP instance
      */
@@ -62,16 +61,13 @@ public class YamlPP extends PerlModuleBase {
         RuntimeHash instance = new RuntimeHash();
         RuntimeHash options = new RuntimeHash();
 
-        // Skip first argument (class name)
         args.elements.removeFirst();
         options.setFromList(args.getList());
 
-        // Handle schema option
-        String schemaName = "Core"; // default schema
+        String schemaName = "Core";
         if (options.containsKey("schema")) {
             RuntimeScalar schemaOption = options.get("schema");
             if (schemaOption.type == RuntimeScalarType.ARRAYREFERENCE) {
-                // Take first schema from array if multiple are provided
                 RuntimeArray schemaArray = (RuntimeArray) schemaOption.value;
                 if (!schemaArray.elements.isEmpty()) {
                     schemaName = schemaArray.elements.getFirst().toString();
@@ -81,15 +77,14 @@ public class YamlPP extends PerlModuleBase {
             }
         }
 
-        // Map schema name to SnakeYAML schema
         Schema schema = switch (schemaName) {
             case "Failsafe" -> new FailsafeSchema();
             case "JSON" -> new JsonSchema();
             case "Core" -> new CoreSchema();
-            default -> new CoreSchema(); // fallback to Core schema
+            default -> new CoreSchema();
         };
 
-        CyclicRefsBehavior cyclicRefs = CyclicRefsBehavior.FATAL; // Default value
+        CyclicRefsBehavior cyclicRefs = CyclicRefsBehavior.FATAL;
         if (options.containsKey("cyclic_refs")) {
             String cyclicRefsOption = options.get("cyclic_refs").toString().toLowerCase();
             cyclicRefs = switch (cyclicRefsOption) {
@@ -100,7 +95,6 @@ public class YamlPP extends PerlModuleBase {
             };
         }
 
-        // Configure dump settings with schema
         DumpSettings dumpSettings = DumpSettings.builder()
                 .setDefaultFlowStyle(FlowStyle.BLOCK)
                 .setIndent(options.containsKey("indent") ? options.get("indent").getInt() : 2)
@@ -110,19 +104,16 @@ public class YamlPP extends PerlModuleBase {
                 .setSchema(schema)
                 .build();
 
-        // Configure load settings with schema
         LoadSettings loadSettings = LoadSettings.builder()
                 .setAllowDuplicateKeys(options.containsKey("duplicate_keys") && options.get("duplicate_keys").getBoolean())
                 .setSchema(schema)
                 .build();
 
-        // Store dump and load instances
         instance.put("_dump", new RuntimeScalar(new Dump(dumpSettings)));
         instance.put("_load", new RuntimeScalar(new Load(loadSettings)));
         instance.put("_options", new RuntimeScalar(options));
         instance.put("_cyclic_refs", new RuntimeScalar(cyclicRefs.name()));
 
-        // Bless the instance into YAML::PP package
         RuntimeScalar instanceRef = instance.createReference();
         ReferenceOperators.bless(instanceRef, new RuntimeScalar("YAML::PP"));
         return instanceRef.getList();
@@ -135,6 +126,7 @@ public class YamlPP extends PerlModuleBase {
      * @param ctx  Context flag
      * @return List of parsed YAML documents
      */
+    @SuppressWarnings("unchecked")
     public static RuntimeList load_string(RuntimeArray args, int ctx) {
         RuntimeScalar instance = args.get(0);
         String yamlString = args.get(1).toString();
@@ -146,7 +138,7 @@ public class YamlPP extends PerlModuleBase {
         for (Object doc : documents) {
             result.elements.add(convertYamlToRuntimeScalar(
                     doc,
-                    new IdentityHashMap<>(),
+                    new IdentityHashMap<Object, RuntimeScalar>(),
                     instance.hashDeref()));
         }
         return result.getList();
@@ -180,13 +172,12 @@ public class YamlPP extends PerlModuleBase {
      */
     public static RuntimeList dump_string(RuntimeArray args, int ctx) {
         RuntimeScalar instance = args.get(0);
-        List<Object> documents = new ArrayList<>();
+        List<Object> documents = new ArrayList<Object>();
 
-        // Convert all documents to YAML
         for (int i = 1; i < args.size(); i++) {
             documents.add(convertRuntimeScalarToYaml(
                     args.get(i),
-                    new IdentityHashMap<>()));
+                    new IdentityHashMap<Object, Object>()));
         }
 
         Dump dump = (Dump) instance.hashDeref().get("_dump").value;
@@ -225,8 +216,11 @@ public class YamlPP extends PerlModuleBase {
      * Converts YAML objects to RuntimeScalar representations.
      *
      * @param yaml YAML object to convert
+     * @param seen Map of already processed objects
+     * @param instance RuntimeHash instance
      * @return RuntimeScalar representation
      */
+    @SuppressWarnings("unchecked")
     private static RuntimeScalar convertYamlToRuntimeScalar(Object yaml, IdentityHashMap<Object, RuntimeScalar> seen, RuntimeHash instance) {
         if (yaml == null) {
             return new RuntimeScalar();
@@ -247,15 +241,15 @@ public class YamlPP extends PerlModuleBase {
         }
 
         RuntimeScalar result = switch (yaml) {
-            case Map map -> {
+            case Map<?,?> map -> {
                 RuntimeHash hash = new RuntimeHash();
                 RuntimeScalar hashRef = hash.createReference();
                 seen.put(yaml, hashRef);
-                map.forEach((key, value) ->
+                ((Map<Object,Object>)map).forEach((key, value) ->
                         hash.put(key.toString(), convertYamlToRuntimeScalar(value, seen, instance)));
                 yield hashRef;
             }
-            case List list -> {
+            case List<?> list -> {
                 RuntimeArray array = new RuntimeArray();
                 RuntimeScalar arrayRef = array.createReference();
                 seen.put(yaml, arrayRef);
@@ -278,6 +272,7 @@ public class YamlPP extends PerlModuleBase {
      * Converts RuntimeScalar objects to YAML-compatible representations.
      *
      * @param scalar RuntimeScalar to convert
+     * @param seen Map of already processed objects
      * @return YAML-compatible object
      */
     private static Object convertRuntimeScalarToYaml(RuntimeScalar scalar, IdentityHashMap<Object, Object> seen) {
@@ -291,7 +286,7 @@ public class YamlPP extends PerlModuleBase {
 
         Object result = switch (scalar.type) {
             case HASHREFERENCE -> {
-                Map<String, Object> map = new LinkedHashMap<>();
+                Map<String, Object> map = new LinkedHashMap<String, Object>();
                 seen.put(scalar.value, map);
                 RuntimeHash hash = (RuntimeHash) scalar.value;
                 hash.elements.forEach((key, value) ->
@@ -299,7 +294,7 @@ public class YamlPP extends PerlModuleBase {
                 yield map;
             }
             case ARRAYREFERENCE -> {
-                List<Object> list = new ArrayList<>();
+                List<Object> list = new ArrayList<Object>();
                 seen.put(scalar.value, list);
                 RuntimeArray array = (RuntimeArray) scalar.value;
                 array.elements.forEach(element ->
