@@ -32,9 +32,11 @@ public class ScopedSymbolTable {
         }
     }
 
+    public record PackageInfo(String packageName, boolean isClass) {}
+
     // A stack to manage nested scopes of symbol tables.
     private final Stack<SymbolTable> symbolTableStack = new Stack<>();
-    private final Stack<String> packageStack = new Stack<>();
+    private final Stack<PackageInfo> packageStack = new Stack<>();
     // Stack to manage warning categories for each scope
     private final Stack<Integer> warningFlagsStack = new Stack<>();
     // Stack to manage feature categories for each scope
@@ -56,7 +58,7 @@ public class ScopedSymbolTable {
         // Initialize the strict options stack with 0 for the global scope
         strictOptionsStack.push(0);
         // Initialize the package name
-        packageStack.push("main");
+        packageStack.push(new PackageInfo("main", false));
         // Initialize an empty symbol table
         symbolTableStack.push(new SymbolTable(0));
     }
@@ -230,7 +232,11 @@ public class ScopedSymbolTable {
      * @return The name of the current package, or "main" if no package is in scope.
      */
     public String getCurrentPackage() {
-        return packageStack.peek();
+        return packageStack.peek().packageName;
+    }
+
+    public boolean currentPackageIsClass() {
+        return packageStack.peek().isClass;
     }
 
     /**
@@ -238,9 +244,9 @@ public class ScopedSymbolTable {
      *
      * @param packageName The name of the package to set as the current scope.
      */
-    public void setCurrentPackage(String packageName) {
+    public void setCurrentPackage(String packageName, boolean isClass) {
         packageStack.pop();
-        packageStack.push(packageName);
+        packageStack.push(new PackageInfo(packageName, isClass));
     }
 
     /**
@@ -260,7 +266,7 @@ public class ScopedSymbolTable {
         }
 
         // Clone the current package
-        st.setCurrentPackage(this.getCurrentPackage());
+        st.setCurrentPackage(this.getCurrentPackage(), this.currentPackageIsClass());
 
         // Clone warning flags
         st.warningFlagsStack.pop(); // Remove the initial value pushed by enterScope
@@ -307,8 +313,8 @@ public class ScopedSymbolTable {
         sb.append("  ],\n");
 
         sb.append("  packageStack: [\n");
-        for (String pkg : packageStack) {
-            sb.append("    ").append(pkg).append(",\n");
+        for (PackageInfo pkg : packageStack) {
+            sb.append("    ").append(pkg.packageName).append(" ").append(pkg.isClass).append(",\n");
         }
         sb.append("  ],\n");
 
