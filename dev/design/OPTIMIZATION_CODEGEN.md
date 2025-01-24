@@ -20,6 +20,28 @@ Defer class generation until the subroutine is actually called
 Currently all classes are generated eagerly during compilation
 Lazy loading would improve initial compilation time
 
+During initial parsing in SubroutineParser.java, instead of immediately generating the class via runSpecialBlock(), we could store just the AST node and metadata:
+```
+String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+// Store AST + metadata for lazy loading
+RuntimeCode code = new RuntimeCode(prototype, attributes);
+code.pendingNode = subroutineNode;
+GlobalVariable.getGlobalCodeRef(fullName).set(code);
+```
+Add support in RuntimeCode.java for lazy initialization:
+```
+public Node pendingNode; // Store AST until needed
+
+public RuntimeList apply(RuntimeArray a, int callContext) {
+    if (methodObject == null && pendingNode != null) {
+        // Generate class on first use
+        generateCodeFromNode(pendingNode);
+        pendingNode = null; // Clear AST after generation
+    }
+    // Existing apply logic...
+}
+```
+
 Shared Constant Pool:
 Implement a shared constant pool across generated classes
 Common strings and constant values could be referenced rather than duplicated
