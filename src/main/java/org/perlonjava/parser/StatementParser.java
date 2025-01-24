@@ -417,9 +417,10 @@ public class StatementParser {
         if (packageName == null) {
             throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
         }
+        boolean isClass = token.text.equals("class");
         IdentifierNode nameNode = new IdentifierNode(packageName, parser.tokenIndex);
         OperatorNode packageNode = new OperatorNode(token.text, nameNode, parser.tokenIndex);
-        packageNode.setAnnotation("isClassDeclaration", token.text.equals("class"));
+        packageNode.setAnnotation("isClass", isClass);
 
         // Parse Version string
         // XXX use the Version string
@@ -430,7 +431,7 @@ public class StatementParser {
         if (block != null) return block;
 
         ParseStatement.parseStatementTerminator(parser);
-        parser.ctx.symbolTable.setCurrentPackage(nameNode.name);
+        parser.ctx.symbolTable.setCurrentPackage(nameNode.name, isClass);
         return packageNode;
     }
 
@@ -449,7 +450,7 @@ public class StatementParser {
             // package NAME BLOCK
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
             parser.ctx.symbolTable.enterScope();
-            parser.ctx.symbolTable.setCurrentPackage(nameNode.name);
+            parser.ctx.symbolTable.setCurrentPackage(nameNode.name, packageNode.getBooleanAnnotation("isClass"));
             BlockNode block = ParseBlock.parseBlock(parser);
 
             // Insert packageNode as first statement in block

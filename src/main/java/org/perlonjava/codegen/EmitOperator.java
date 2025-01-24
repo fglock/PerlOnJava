@@ -455,7 +455,7 @@ public class EmitOperator {
         // Extract the package name from the operand.
         String name = ((IdentifierNode) node.operand).name;
         // Set the current package in the symbol table.
-        emitterVisitor.ctx.symbolTable.setCurrentPackage(name);
+        emitterVisitor.ctx.symbolTable.setCurrentPackage(name, node.getBooleanAnnotation("isClass"));
         // Set debug information for the file name.
         ByteCodeSourceMapper.setDebugInfoFileName(emitterVisitor.ctx);
         if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
