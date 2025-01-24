@@ -520,8 +520,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar defined() {
-        if (type == RuntimeScalarType.CODE && !((RuntimeCode) value).defined()) {
-            return scalarFalse;
+        if (type == RuntimeScalarType.CODE) {
+            return ((RuntimeCode) value).defined() ? scalarTrue : scalarFalse;
         }
         if (type == RuntimeScalarType.BOOLEAN) {
             return (boolean) value ? scalarTrue : scalarFalse;
@@ -530,10 +530,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public boolean getDefinedBoolean() {
-        if (type == RuntimeScalarType.GLOB && value == null) {
-            // getGlobalCodeRef returns an "empty glob" if the codeRef is not set
-            // XXX TODO implement a better response in getGlobalCodeRef
-            return false;
+        if (type == RuntimeScalarType.CODE) {
+            return ((RuntimeCode) value).defined();
         }
         if (type == RuntimeScalarType.BOOLEAN) {
             return (boolean) value;
