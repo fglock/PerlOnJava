@@ -520,23 +520,15 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar defined() {
-        if (type == RuntimeScalarType.CODE) {
-            return ((RuntimeCode) value).defined() ? scalarTrue : scalarFalse;
-        }
-        if (type == RuntimeScalarType.BOOLEAN) {
-            return (boolean) value ? scalarTrue : scalarFalse;
-        }
-        return getScalarBoolean(type != RuntimeScalarType.UNDEF);
+        return getScalarBoolean(getDefinedBoolean());
     }
 
     public boolean getDefinedBoolean() {
-        if (type == RuntimeScalarType.CODE) {
-            return ((RuntimeCode) value).defined();
-        }
-        if (type == RuntimeScalarType.BOOLEAN) {
-            return (boolean) value;
-        }
-        return type != RuntimeScalarType.UNDEF;
+        return switch (type) {
+            case CODE -> ((RuntimeCode) value).defined();
+            case BOOLEAN -> (boolean) value;
+            default -> type != RuntimeScalarType.UNDEF;
+        };
     }
 
     public RuntimeScalar preAutoIncrement() {
