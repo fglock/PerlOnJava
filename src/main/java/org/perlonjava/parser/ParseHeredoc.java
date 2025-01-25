@@ -30,6 +30,7 @@ public class ParseHeredoc {
         } else if (token.type == LexerTokenType.IDENTIFIER) {
             delimiter = "\"";
             identifier = tokenText;
+            TokenUtils.consume(parser);
         } else {
             throw new PerlCompilerException(parser.tokenIndex, "Use of bare << to mean <<\"\" is forbidden", parser.ctx.errorUtil);
         }
@@ -46,10 +47,12 @@ public class ParseHeredoc {
         node.setAnnotation("identifier", identifier);
 
         parser.ctx.logDebug("Heredoc " + node);
+        parser.getHeredocNodes().add(node);
+        return node;
+    }
 
-        // TODO WIP
-        throw new PerlCompilerException(parser.tokenIndex, "Not implemented: Heredoc", parser.ctx.errorUtil);
-
-        // return node;
+    static void heredocError(Parser parser) {
+        OperatorNode heredoc = parser.getHeredocNodes().getLast();
+        throw new PerlCompilerException(parser.tokenIndex, "Can't find string terminator \"" + heredoc.getAnnotation("identifier") + "\" anywhere before EOF", parser.ctx.errorUtil);
     }
 }

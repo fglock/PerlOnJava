@@ -1,14 +1,12 @@
 package org.perlonjava.parser;
 
 import org.perlonjava.astnode.Node;
+import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import static org.perlonjava.parser.TokenUtils.peek;
 
@@ -65,6 +63,8 @@ public class Parser {
     public boolean parsingForLoopVariable = false;
     public boolean parsingTakeReference = false;
 
+    private final List<OperatorNode> heredocNodes = new ArrayList<>();
+
     public Parser(EmitterContext ctx, List<LexerToken> tokens) {
         this.ctx = ctx;
         this.tokens = tokens;
@@ -76,6 +76,10 @@ public class Parser {
         }
     }
 
+    public List<OperatorNode> getHeredocNodes() {
+        return heredocNodes;
+    }
+
     public int getPrecedence(String operator) {
         return precedenceMap.getOrDefault(operator, 24);
     }
@@ -85,7 +89,11 @@ public class Parser {
             // looks like pod: insert a newline to trigger pod parsing
             tokens.addFirst(new LexerToken(LexerTokenType.NEWLINE, "\n"));
         }
-        return ParseBlock.parseBlock(this);
+        Node ast = ParseBlock.parseBlock(this);
+        if (!getHeredocNodes().isEmpty()) {
+            ParseHeredoc.heredocError(this);
+        }
+        return ast;
     }
 
     /**
