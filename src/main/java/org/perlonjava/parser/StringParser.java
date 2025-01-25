@@ -116,7 +116,7 @@ public class StringParser {
         return new ParsedString(index, tokPos, buffers, startDelim, endDelim, ' ', ' ');
     }
 
-    public static ParsedString parseRawStrings(EmitterContext ctx, List<LexerToken> tokens, int tokenIndex, int stringCount) {
+    public static ParsedString parseRawStrings(Parser parser, EmitterContext ctx, List<LexerToken> tokens, int tokenIndex, int stringCount) {
         int pos = tokenIndex;
         boolean redo = (stringCount == 3);
         ParsedString ast = parseRawStringWithDelimiter(ctx, tokens, pos, redo); // use redo flag to extract 2 strings
@@ -128,7 +128,7 @@ public class StringParser {
         if (stringCount == 3) { // fetch the second of 3 strings: s{aaa}{SECOND}ig
             char delim = ast.startDelim; // / or {
             if (QUOTE_PAIR.containsKey(delim)) {
-                pos = Whitespace.skipWhitespace(pos, tokens);
+                pos = Whitespace.skipWhitespace(parser, pos, tokens);
                 ParsedString ast2 = parseRawStringWithDelimiter(ctx, tokens, pos, false);
                 ast.buffers.add(ast2.buffers.getFirst());
                 ast.next = ast2.next;
@@ -259,7 +259,7 @@ public class StringParser {
             case "m", "qr", "/", "//", "/=" -> 2;
             default -> 1;    // m{str}modifier
         };
-        rawStr = parseRawStrings(parser.ctx, parser.tokens, parser.tokenIndex, stringParts);
+        rawStr = parseRawStrings(parser, parser.ctx, parser.tokens, parser.tokenIndex, stringParts);
         parser.tokenIndex = rawStr.next;
 
         switch (operator) {

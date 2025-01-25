@@ -21,7 +21,7 @@ public class IdentifierParser {
         int saveIndex = parser.tokenIndex;
 
         // Skip any leading whitespace to find the start of the identifier
-        parser.tokenIndex = Whitespace.skipWhitespace(parser.tokenIndex, parser.tokens);
+        parser.tokenIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
 
         // Check if the identifier is enclosed in braces
         boolean insideBraces = false;
@@ -36,7 +36,7 @@ public class IdentifierParser {
         // If an identifier was found, and it was inside braces, ensure the braces are properly closed
         if (identifier != null && insideBraces) {
             // Skip any whitespace after the identifier
-            parser.tokenIndex = Whitespace.skipWhitespace(parser.tokenIndex, parser.tokens);
+            parser.tokenIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
 
             // Check for the closing brace
             if (parser.tokens.get(parser.tokenIndex).text.equals("}")) {
@@ -67,7 +67,7 @@ public class IdentifierParser {
      */
     public static String parseComplexIdentifierInner(Parser parser, boolean insideBraces) {
         // Skip any leading whitespace to find the start of the identifier
-        parser.tokenIndex = Whitespace.skipWhitespace(parser.tokenIndex, parser.tokens);
+        parser.tokenIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
 
         boolean isFirstToken = true;
         StringBuilder variableName = new StringBuilder();
@@ -155,7 +155,7 @@ public class IdentifierParser {
      */
     public static String parseSubroutineIdentifier(Parser parser) {
         // Skip any leading whitespace to find the start of the identifier
-        parser.tokenIndex = Whitespace.skipWhitespace(parser.tokenIndex, parser.tokens);
+        parser.tokenIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
         StringBuilder variableName = new StringBuilder();
         LexerToken token = parser.tokens.get(parser.tokenIndex);
         LexerToken nextToken = parser.tokens.get(parser.tokenIndex + 1);
