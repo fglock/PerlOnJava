@@ -7,6 +7,8 @@ import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
+import java.util.List;
+
 import static org.perlonjava.parser.StringParser.parseRawString;
 
 public class ParseHeredoc {
@@ -54,5 +56,54 @@ public class ParseHeredoc {
     static void heredocError(Parser parser) {
         OperatorNode heredoc = parser.getHeredocNodes().getLast();
         throw new PerlCompilerException(parser.tokenIndex, "Can't find string terminator \"" + heredoc.getAnnotation("identifier") + "\" anywhere before EOF", parser.ctx.errorUtil);
+    }
+
+    public static void parseHeredocAfterNewline(Parser parser) {
+        List<OperatorNode> heredocNodes = parser.getHeredocNodes();
+        List<LexerToken> tokens = parser.tokens;
+        int newlineIndex = parser.tokenIndex;
+
+        for (OperatorNode heredocNode : heredocNodes) {
+            String delimiter = (String) heredocNode.getAnnotation("delimiter");
+            String identifier = (String) heredocNode.getAnnotation("identifier");
+            boolean indent = heredocNode.getBooleanAnnotation("indent");
+
+            parser.ctx.logDebug("Whitespace Heredoc " + heredocNode);
+
+            // Consume the heredoc content
+            StringBuilder content = new StringBuilder();
+            int currentIndex = newlineIndex + 1;
+            while (currentIndex < tokens.size()) {
+                LexerToken nextToken = tokens.get(currentIndex);
+                if (nextToken.text.equals(identifier)) {
+                    // End of heredoc
+                    break;
+                }
+                content.append(nextToken.text);
+                currentIndex++;
+            }
+
+            // Handle indentation
+            if (indent) {
+                String[] lines = content.toString().split("\n");
+                StringBuilder strippedContent = new StringBuilder();
+                for (String line : lines) {
+                    strippedContent.append(line.stripLeading()).append("\n");
+                }
+                content = strippedContent;
+            }
+
+            // Store the content in the node
+            heredocNode.setAnnotation("content", "<<" + content.toString() + ">>");
+
+            parser.ctx.logDebug("Whitespace Heredoc after: " + heredocNode);
+
+            // Update the token index to skip the heredoc content
+            newlineIndex = currentIndex;
+        }
+
+        // Clear the list of heredoc nodes after processing
+        heredocNodes.clear();
+        parser.tokenIndex = newlineIndex;
     }
 }

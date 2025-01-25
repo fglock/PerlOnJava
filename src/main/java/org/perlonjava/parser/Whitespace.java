@@ -32,9 +32,10 @@ public class Whitespace {
                     break;
 
                 case NEWLINE:
-                    if (parser != null) {
+                    if (!parser.getHeredocNodes().isEmpty()) {
                         // Process heredocs before advancing past the NEWLINE
-                        // processHeredocs(heredocNodes, tokens, tokenIndex);
+                        ParseHeredoc.parseHeredocAfterNewline(parser);
+                        tokenIndex = parser.tokenIndex;
                     }
 
                     tokenIndex++;
