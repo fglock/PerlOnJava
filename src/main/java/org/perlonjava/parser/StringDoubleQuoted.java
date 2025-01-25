@@ -95,7 +95,7 @@ public class StringDoubleQuoted {
                     if (TokenUtils.peek(parser).text.equals("{")) {
                         // Block-like
                         // Extract the string between brackets
-                        StringParser.ParsedString rawStr2 = StringParser.parseRawStrings(ctx, parser.tokens, parser.tokenIndex, 1);
+                        StringParser.ParsedString rawStr2 = StringParser.parseRawStrings(parser, ctx, parser.tokens, parser.tokenIndex, 1);
                         String blockStr = rawStr2.buffers.getFirst();
                         ctx.logDebug("str block-like: " + blockStr);
                         blockStr = sigil + "{" + blockStr + "}";

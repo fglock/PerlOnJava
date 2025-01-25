@@ -41,7 +41,7 @@ public class TokenUtils {
      * @return The next non-whitespace LexerToken, or an EOF token if the end of the list is reached.
      */
     public static LexerToken peek(Parser parser) {
-        parser.tokenIndex = Whitespace.skipWhitespace(parser.tokenIndex, parser.tokens);
+        parser.tokenIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
         if (parser.tokenIndex >= parser.tokens.size()) {
             return new LexerToken(LexerTokenType.EOF, "");
         }
@@ -104,7 +104,7 @@ public class TokenUtils {
      * @return The consumed LexerToken, or an EOF token if the end of the list is reached.
      */
     public static LexerToken consume(Parser parser) {
-        parser.tokenIndex = Whitespace.skipWhitespace(parser.tokenIndex, parser.tokens);
+        parser.tokenIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
         if (parser.tokenIndex >= parser.tokens.size()) {
             return new LexerToken(LexerTokenType.EOF, "");
         }

@@ -18,11 +18,12 @@ public class Whitespace {
      * starting from the specified index. It returns the index of the next non-whitespace
      * and non-comment token.
      *
+     * @param parser     The parser object
      * @param tokenIndex The starting index in the list of tokens.
      * @param tokens     The list of LexerToken objects to process.
      * @return The index of the next non-whitespace and non-comment token.
      */
-    public static int skipWhitespace(int tokenIndex, List<LexerToken> tokens) {
+    public static int skipWhitespace(Parser parser, int tokenIndex, List<LexerToken> tokens) {
         while (tokenIndex < tokens.size()) {
             LexerToken token = tokens.get(tokenIndex);
             switch (token.type) {
@@ -31,6 +32,11 @@ public class Whitespace {
                     break;
 
                 case NEWLINE:
+                    if (parser != null) {
+                        // Process heredocs before advancing past the NEWLINE
+                        // processHeredocs(heredocNodes, tokens, tokenIndex);
+                    }
+
                     tokenIndex++;
                     if (tokenIndex < tokens.size() && tokens.get(tokenIndex).text.equals("=")) {
                         // Check for pod section after '='
