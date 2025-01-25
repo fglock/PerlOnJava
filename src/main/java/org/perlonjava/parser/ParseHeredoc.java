@@ -1,5 +1,6 @@
 package org.perlonjava.parser;
 
+import org.perlonjava.astnode.ListNode;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.astnode.StringNode;
@@ -146,13 +147,15 @@ public class ParseHeredoc {
                     operand = new StringNode(string, newlineIndex);
                     break;
                 case "\"":
-                    ArrayList<String> buffers = new ArrayList<>();
-                    buffers.add(string);
-                    StringParser.ParsedString rawStr = new StringParser.ParsedString(newlineIndex, newlineIndex, buffers, ' ', ' ', ' ', ' ');
-                    operand = parseDoubleQuotedString(parser.ctx, rawStr, true);
+                    operand = interpolateString(parser, string, newlineIndex);
                     break;
                 case "`":
-                    // TODO
+                    Node interpolated = interpolateString(parser, string, newlineIndex);;
+                    List<Node> elements = new ArrayList<>();
+                    elements.add(interpolated);
+                    ListNode list = new ListNode(elements, newlineIndex);
+                    operand = new OperatorNode("qx", list, newlineIndex);
+                    break;
                 default:
                     throw new PerlCompilerException(newlineIndex, "Unsupported delimiter in heredoc", parser.ctx.errorUtil);
             }
@@ -168,5 +171,12 @@ public class ParseHeredoc {
         // Clear the list of heredoc nodes after processing
         heredocNodes.clear();
         parser.tokenIndex = newlineIndex;
+    }
+
+    private static Node interpolateString(Parser parser, String string, int newlineIndex) {
+        ArrayList<String> buffers = new ArrayList<>();
+        buffers.add(string);
+        StringParser.ParsedString rawStr = new StringParser.ParsedString(newlineIndex, newlineIndex, buffers, ' ', ' ', ' ', ' ');
+        return parseDoubleQuotedString(parser.ctx, rawStr, true);
     }
 }
