@@ -78,6 +78,7 @@ public class StringDoubleQuoted {
                             || token1.text.equals("%")
                             || token1.text.equals("|")
                             || token1.text.equals("]")
+                            || token1.text.equals("#")
                             || token1.text.equals("\"")
                             || token1.text.equals("\\")) {
                         // Space, `)`, `%`, `|`, `\` after $ or @

@@ -156,7 +156,6 @@
   - subroutine prototypes.
   - `goto` special cases - for `Text::Balanced`.
   - indirect object special cases - for `GetOpt::Long`.
-  - Here documents.
   - Implement localization of regex variables.
 - Class subsystem
 - DBI subsystem
@@ -201,6 +200,7 @@
   - Added chained operators.
   - Added stacked file test operators.
   - Added `module_true` feature.
+  - Added `<<` and `<<~` Here documents.
   - Added `/c` regex modifier.
   - Added overload: `""`, `0+`, `bool`, `fallback`, `nomethod`.
   - Added `class` feature and `class` keyword.

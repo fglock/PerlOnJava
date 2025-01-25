@@ -266,7 +266,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **`CHECK`**: special block is implemented.
 - ✅  **`UNITCHECK`**: special block is implemented.
 - ✅  **Labels**: Labels are implemented.
-- ❌  **Here-docs**: Here-docs for multiline string literals are not yet implemented.
+- ✅  **Here-docs**: Here-docs for multiline string literals are implemented.
 - ❌  **Preprocessor**: `# line` directive is not yet implemented.
 - ✅  **`glob`**: `glob` operator is implemented.
 - ✅  **`<>`**: `<>` operator is implemented.

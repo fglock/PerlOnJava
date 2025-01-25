@@ -62,11 +62,6 @@ And Unix newlines\n
 END
 is($mixed_newlines_heredoc, "This heredoc has mixed newlines\r\n\nAnd Unix newlines\n\n", 'Heredoc with mixed newlines');
 
-## # Test 10: Heredoc with no trailing newline
-## my $no_trailing_newline_heredoc = <<'END';
-## This heredoc has no trailing newlineEND
-## is($no_trailing_newline_heredoc, "This heredoc has no trailing newline", 'Heredoc with no trailing newline');
-
 # Test 11: Heredoc with quotes in the content
 my $quotes_heredoc = <<'END';
 This heredoc contains "quotes"
@@ -115,11 +110,6 @@ my $mixed_indentation_heredoc = <<~'END';
     Line 3
     END
 is($mixed_indentation_heredoc, "Line 1\n    Line 2\nLine 3\n", 'Indented heredoc with mixed indentation');
-
-## # Test 18: Indented heredoc with no trailing newline
-## my $indented_no_trailing_newline_heredoc = <<~'END';
-##     This heredoc has no trailing newlineEND
-## is($indented_no_trailing_newline_heredoc, "This heredoc has no trailing newline", 'Indented heredoc with no trailing newline');
 
 # Test 19: Indented heredoc with interpolation
 my $indented_interpolated_var = "interpolated";
