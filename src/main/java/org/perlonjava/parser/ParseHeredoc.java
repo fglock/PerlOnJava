@@ -3,12 +3,15 @@ package org.perlonjava.parser;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.astnode.StringNode;
+import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
+import java.util.ArrayList;
 import java.util.List;
 
+import static org.perlonjava.parser.StringDoubleQuoted.parseDoubleQuotedString;
 import static org.perlonjava.parser.StringParser.parseRawString;
 
 public class ParseHeredoc {
@@ -149,7 +152,11 @@ public class ParseHeredoc {
                     operand = new StringNode(string, newlineIndex);
                     break;
                 case "\"":
-                    // TODO
+                    ArrayList<String> buffers = new ArrayList<>();
+                    buffers.add(string);
+                    StringParser.ParsedString rawStr = new StringParser.ParsedString(newlineIndex, newlineIndex, buffers, ' ', ' ', ' ', ' ');
+                    operand = parseDoubleQuotedString(parser.ctx, rawStr, true);
+                    break;
                 case "`":
                     // TODO
                 default:
