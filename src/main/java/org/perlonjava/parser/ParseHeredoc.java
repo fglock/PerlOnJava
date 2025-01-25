@@ -3,7 +3,6 @@ package org.perlonjava.parser;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.astnode.StringNode;
-import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
@@ -62,14 +61,6 @@ public class ParseHeredoc {
         throw new PerlCompilerException(parser.tokenIndex, "Can't find string terminator \"" + heredoc.getAnnotation("identifier") + "\" anywhere before EOF", parser.ctx.errorUtil);
     }
 
-    // Define states for the state machine
-    enum HeredocState {
-        START,      // Initial state, waiting for the end marker
-        INDENT,     // Detected whitespace before the identifier (indentation case)
-        CONTENT,    // Consuming the heredoc content
-        END         // Detected the end marker, finished parsing
-    }
-
     public static void parseHeredocAfterNewline(Parser parser) {
         List<OperatorNode> heredocNodes = parser.getHeredocNodes();
         List<LexerToken> tokens = parser.tokens;
@@ -81,8 +72,6 @@ public class ParseHeredoc {
             boolean indent = heredocNode.getBooleanAnnotation("indent");
 
             parser.ctx.logDebug("Processing heredoc with identifier: " + identifier);
-
-            //------------------------------
 
             // Consume the heredoc content
             List<String> lines = new ArrayList<>();
@@ -124,7 +113,7 @@ public class ParseHeredoc {
                 }
             }
 
-// Handle indentation
+            // Handle indentation
             if (indent) {
                 // Determine the common indentation (minimum indentation across all lines)
                 indentWhitespace = lines.stream()
@@ -147,7 +136,7 @@ public class ParseHeredoc {
                 }
             }
 
-// Reconstruct the content
+            // Reconstruct the content
             StringBuilder content = new StringBuilder();
             for (String line : lines) {
                 content.append(line).append("\n");

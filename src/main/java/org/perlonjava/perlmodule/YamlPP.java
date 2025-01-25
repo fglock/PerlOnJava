@@ -215,8 +215,8 @@ public class YamlPP extends PerlModuleBase {
     /**
      * Converts YAML objects to RuntimeScalar representations.
      *
-     * @param yaml YAML object to convert
-     * @param seen Map of already processed objects
+     * @param yaml     YAML object to convert
+     * @param seen     Map of already processed objects
      * @param instance RuntimeHash instance
      * @return RuntimeScalar representation
      */
@@ -241,11 +241,11 @@ public class YamlPP extends PerlModuleBase {
         }
 
         RuntimeScalar result = switch (yaml) {
-            case Map<?,?> map -> {
+            case Map<?, ?> map -> {
                 RuntimeHash hash = new RuntimeHash();
                 RuntimeScalar hashRef = hash.createReference();
                 seen.put(yaml, hashRef);
-                ((Map<Object,Object>)map).forEach((key, value) ->
+                map.forEach((key, value) ->
                         hash.put(key.toString(), convertYamlToRuntimeScalar(value, seen, instance)));
                 yield hashRef;
             }
@@ -272,7 +272,7 @@ public class YamlPP extends PerlModuleBase {
      * Converts RuntimeScalar objects to YAML-compatible representations.
      *
      * @param scalar RuntimeScalar to convert
-     * @param seen Map of already processed objects
+     * @param seen   Map of already processed objects
      * @return YAML-compatible object
      */
     private static Object convertRuntimeScalarToYaml(RuntimeScalar scalar, IdentityHashMap<Object, Object> seen) {
