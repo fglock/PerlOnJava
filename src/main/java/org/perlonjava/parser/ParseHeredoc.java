@@ -1,9 +1,13 @@
 package org.perlonjava.parser;
 
+import org.perlonjava.astnode.Node;
 import org.perlonjava.astnode.OperatorNode;
+import org.perlonjava.astnode.StringNode;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
+
+import static org.perlonjava.parser.StringParser.parseRawString;
 
 public class ParseHeredoc {
     static OperatorNode parseHeredoc(Parser parser, String tokenText) {
@@ -31,7 +35,13 @@ public class ParseHeredoc {
         }
         node.setAnnotation("delimiter", delimiter);
         if (identifier.isEmpty()) {
-            // TODO consume identifier string
+            // Consume identifier string using `q()`
+            Node identifierNode = parseRawString(parser, "q");
+            if (identifierNode instanceof StringNode stringNode) {
+                identifier = stringNode.value;
+            } else {
+                throw new PerlCompilerException(parser.tokenIndex, "Use of bare << to mean <<\"\" is forbidden", parser.ctx.errorUtil);
+            }
         }
         node.setAnnotation("identifier", identifier);
 
