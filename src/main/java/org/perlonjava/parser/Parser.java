@@ -59,11 +59,10 @@ public class Parser {
 
     public final EmitterContext ctx;
     public final List<LexerToken> tokens;
+    private final List<OperatorNode> heredocNodes = new ArrayList<>();
     public int tokenIndex = 0;
     public boolean parsingForLoopVariable = false;
     public boolean parsingTakeReference = false;
-
-    private final List<OperatorNode> heredocNodes = new ArrayList<>();
 
     public Parser(EmitterContext ctx, List<LexerToken> tokens) {
         this.ctx = ctx;

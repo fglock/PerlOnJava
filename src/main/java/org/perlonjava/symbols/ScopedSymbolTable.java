@@ -32,8 +32,6 @@ public class ScopedSymbolTable {
         }
     }
 
-    public record PackageInfo(String packageName, boolean isClass) {}
-
     // A stack to manage nested scopes of symbol tables.
     private final Stack<SymbolTable> symbolTableStack = new Stack<>();
     private final Stack<PackageInfo> packageStack = new Stack<>();
@@ -45,7 +43,6 @@ public class ScopedSymbolTable {
     private final Stack<Integer> strictOptionsStack = new Stack<>();
     // Cache for the getAllVisibleVariables method
     private Map<Integer, SymbolTable.SymbolEntry> visibleVariablesCache;
-
     /**
      * Constructs a ScopedSymbolTable.
      * Initializes the warning, feature categories, and strict options stacks with default values for the global scope.
@@ -342,8 +339,6 @@ public class ScopedSymbolTable {
         return sb.toString();
     }
 
-    // Methods for managing warnings
-
     // Methods for managing warnings using bit positions
     public void enableWarningCategory(String category) {
         Integer bitPosition = warningBitPositions.get(category);
@@ -351,6 +346,8 @@ public class ScopedSymbolTable {
             warningFlagsStack.push(warningFlagsStack.pop() | (1 << bitPosition));
         }
     }
+
+    // Methods for managing warnings
 
     public void disableWarningCategory(String category) {
         Integer bitPosition = warningBitPositions.get(category);
@@ -430,5 +427,8 @@ public class ScopedSymbolTable {
         // Copy strict options
         this.strictOptionsStack.pop();
         this.strictOptionsStack.push(source.strictOptionsStack.peek());
+    }
+
+    public record PackageInfo(String packageName, boolean isClass) {
     }
 }
