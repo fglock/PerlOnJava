@@ -138,20 +138,26 @@ public class ParseHeredoc {
                 content = strippedContent;
             }
 
-            // Store the content in the node
-            heredocNode.setAnnotation("content", content.toString());
+            String string = content.toString();
 
-            // Debug: Log final content
-            parser.ctx.logDebug("Final heredoc content: <<" + content.toString() + ">>");
+            parser.ctx.logDebug("Final heredoc content: <<" + string + ">>");
 
-            //------------------------------
-
-            parser.ctx.logDebug("Whitespace Heredoc after: " + heredocNode);
-
-            // TODO
             // Rewrite the heredoc node, according to the delimiter
+            Node operand = null;
+            switch (delimiter) {
+                case "'":
+                    operand = new StringNode(string, newlineIndex);
+                    break;
+                case "\"":
+                    // TODO
+                case "`":
+                    // TODO
+                default:
+                    throw new PerlCompilerException(newlineIndex, "Unsupported delimiter in heredoc", parser.ctx.errorUtil);
+            }
+
             heredocNode.operator = "scalar";
-            heredocNode.operand = new StringNode(content.toString(), newlineIndex);
+            heredocNode.operand = operand;
             heredocNode.annotations.clear();
 
             // Update the token index to skip the heredoc content
