@@ -9,6 +9,7 @@ import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 import static org.perlonjava.parser.StringDoubleQuoted.parseDoubleQuotedString;
@@ -84,9 +85,10 @@ public class ParseHeredoc {
             //------------------------------
 
             // Consume the heredoc content
-            StringBuilder content = new StringBuilder();
+            List<String> lines = new ArrayList<>();
             int currentIndex = newlineIndex + 1; // Start after the newline
             String indentWhitespace = "";
+            StringBuilder currentLine = new StringBuilder();
 
             while (currentIndex < tokens.size()) {
                 LexerToken token = tokens.get(currentIndex);
@@ -94,55 +96,64 @@ public class ParseHeredoc {
                 // Debug: Log current token
                 parser.ctx.logDebug("Current token: " + token.text + ", type: " + token.type);
 
-                // Check for the end marker
-                if (token.type == LexerTokenType.IDENTIFIER && token.text.equals(identifier)) {
-                    // Check if the end marker is preceded by whitespace (for indentation)
-                    if (indent && currentIndex > 0 && tokens.get(currentIndex - 1).type == LexerTokenType.WHITESPACE) {
-                        indentWhitespace = tokens.get(currentIndex - 1).text;
-                        parser.ctx.logDebug("Detected indentation: '" + indentWhitespace + "'");
+                if (token.type == LexerTokenType.NEWLINE) {
+                    // End of the current line
+                    String line = currentLine.toString();
+                    lines.add(line);
+                    currentLine.setLength(0); // Reset the current line
+
+                    // Check if this line is the end marker
+                    String lineToCompare = line;
+                    if (indent) {
+                        // Left-trim the line if indentation is enabled
+                        lineToCompare = line.stripLeading();
                     }
 
-                    // Check that the identifier is followed by NEWLINE or EOF
+                    if (lineToCompare.equals(identifier)) {
+                        // End of heredoc - remove the end marker line from the content
+                        lines.remove(lines.size() - 1);
+                        parser.ctx.logDebug("Detected end marker: " + identifier);
+                        break;
+                    }
+
                     currentIndex++;
-                    if (currentIndex < tokens.size() && tokens.get(currentIndex).type != LexerTokenType.NEWLINE) {
-                        throw new PerlCompilerException(currentIndex, "Invalid heredoc end marker: identifier must be followed by NEWLINE or EOF", parser.ctx.errorUtil);
-                    }
-
-                    // End of heredoc
-                    parser.ctx.logDebug("Detected end marker: " + identifier);
-                    break;
+                } else {
+                    // Append the token to the current line
+                    currentLine.append(token.text);
+                    currentIndex++;
                 }
-
-                // Append the token to the content
-                content.append(token.text);
-                currentIndex++;
             }
 
-            // Handle indentation
+// Handle indentation
             if (indent) {
-                // Split at \n without removing \n
-                String[] lines = content.toString().split("(?<=\\n)");
+                // Determine the common indentation (minimum indentation across all lines)
+                indentWhitespace = lines.stream()
+                        .filter(line -> !line.trim().isEmpty()) // Skip empty lines
+                        .map(line -> line.replaceAll("^(\\s*).*", "$1")) // Extract leading whitespace
+                        .min(Comparator.comparingInt(String::length)) // Find the minimum indentation
+                        .orElse("");
 
-                StringBuilder strippedContent = new StringBuilder();
-                for (String line : lines) {
-                    parser.ctx.logDebug("Line: "+line.length()+" <<" + line + ">>");
-                    if (line.equals("\n")) {
-                        // empty line
-                        parser.ctx.logDebug("Line: <<empty>>");
-                    } else if (line.startsWith(indentWhitespace)) {
-                        // Strip only the common indentation (matching indentWhitespace)
-                        parser.ctx.logDebug("Line: remove <<"+indentWhitespace+">>");
-                        strippedContent.append(line.substring(indentWhitespace.length()));
-                    } else {
-                        // The line doesn't start with the expected indentation
+                parser.ctx.logDebug("Detected common indentation: '" + indentWhitespace + "'");
+
+                // Strip the common indentation from each line
+                for (int i = 0; i < lines.size(); i++) {
+                    String line = lines.get(i);
+                    if (line.startsWith(indentWhitespace)) {
+                        lines.set(i, line.substring(indentWhitespace.length()));
+                    } else if (!line.trim().isEmpty()) {
+                        // If the line doesn't start with the expected indentation, throw an error
                         throw new PerlCompilerException(newlineIndex, "Indentation of here-doc doesn't match delimiter", parser.ctx.errorUtil);
                     }
                 }
-                content = strippedContent;
+            }
+
+// Reconstruct the content
+            StringBuilder content = new StringBuilder();
+            for (String line : lines) {
+                content.append(line).append("\n");
             }
 
             String string = content.toString();
-
             parser.ctx.logDebug("Final heredoc content: <<" + string + ">>");
 
             // Rewrite the heredoc node, according to the delimiter
