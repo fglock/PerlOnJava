@@ -101,7 +101,10 @@ public class ParseHeredoc {
                     if (lineToCompare.equals(identifier)) {
                         // End of heredoc - remove the end marker line from the content
                         lines.remove(lines.size() - 1);
-                        parser.ctx.logDebug("Detected end marker: " + identifier);
+
+                        // Determine the indentation of the end marker
+                        indentWhitespace = line.substring(0, line.length() - lineToCompare.length());
+                        parser.ctx.logDebug("Detected end marker indentation: '" + indentWhitespace + "'");
                         break;
                     }
 
@@ -115,16 +118,7 @@ public class ParseHeredoc {
 
             // Handle indentation
             if (indent) {
-                // Determine the common indentation (minimum indentation across all lines)
-                indentWhitespace = lines.stream()
-                        .filter(line -> !line.trim().isEmpty()) // Skip empty lines
-                        .map(line -> line.replaceAll("^(\\s*).*", "$1")) // Extract leading whitespace
-                        .min(Comparator.comparingInt(String::length)) // Find the minimum indentation
-                        .orElse("");
-
-                parser.ctx.logDebug("Detected common indentation: '" + indentWhitespace + "'");
-
-                // Strip the common indentation from each line
+                // Strip the end marker's indentation from each line
                 for (int i = 0; i < lines.size(); i++) {
                     String line = lines.get(i);
                     if (line.startsWith(indentWhitespace)) {
