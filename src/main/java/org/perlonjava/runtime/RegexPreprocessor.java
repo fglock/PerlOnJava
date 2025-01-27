@@ -74,18 +74,21 @@ public class RegexPreprocessor {
         }
     }
 
+    public record Pair(String processed, int consumed) {}
+
     /**
      * Preprocesses a given regex string to make it compatible with Java's regex engine.
      * This involves handling various constructs and escape sequences that Java does not
      * natively support or requires in a different format.
      *
-     * @param s       The regex string to preprocess.
-     * @param flag_xx A flag indicating whether to treat spaces as tokens.
+     * @param s                  The regex string to preprocess.
+     * @param flag_xx            A flag indicating whether to treat spaces as tokens.
+     * @param stopAtClosingParen A flag indicating whether to stop processing at the first closing parenthesis.
      * @return A preprocessed regex string compatible with Java's regex engine.
+     * @throws IllegalArgumentException If there are unmatched parentheses in the regex.
      */
-    static String preProcessRegex(String s, boolean flag_xx) {
+    static Pair preProcessRegex(String s, boolean flag_xx, boolean stopAtClosingParen) {
         final int length = s.length();
-        int named_capture_count = 0;
         StringBuilder sb = new StringBuilder();
         StringBuilder rejected = new StringBuilder();
         int offset = 0;
@@ -105,18 +108,33 @@ public class RegexPreprocessor {
                     offset = handleCharacterClass(s, flag_xx, sb, c, offset, length, rejected);
                     break;
                 case '(':
-                    offset = handleParentheses(s, offset, length, sb, c);
+                    offset = handleParentheses(s, offset, length, sb, c, flag_xx);
+
+                    // Ensure the closing parenthesis is consumed
+                    if (offset >= length || s.codePointAt(offset) != ')') {
+                        throw new IllegalArgumentException("Unterminated ( in regex; marked by <-- HERE in m/" +
+                                s.substring(0, offset) + " <-- HERE " + s.substring(offset) + "/");
+                    }
+                    sb.append(')');
                     break;
+                case ')':
+                    if (stopAtClosingParen) {
+                        return new Pair(sb.toString(), offset);
+                    }
+                    // Check for unmatched closing parenthesis
+                    throw new IllegalArgumentException("Unmatched ) in regex; marked by <-- HERE in m/" +
+                            s.substring(0, offset) + " <-- HERE " + s.substring(offset) + "/");
                 default:    // Append normal characters
                     sb.append(Character.toChars(c));
                     break;
             }
             offset++;
         }
-        return sb.toString();
+
+        return new Pair(sb.toString(), offset);
     }
 
-    private static int handleParentheses(String s, int offset, int length, StringBuilder sb, int c) {
+    private static int handleParentheses(String s, int offset, int length, StringBuilder sb, int c, boolean flag_xx) {
         boolean append = true;
         if (offset < length - 3) {
             int c2 = s.codePointAt(offset + 1);
@@ -126,19 +144,53 @@ public class RegexPreprocessor {
                 // Remove inline comments (?# ... )
                 offset = handleSkipComment(offset, s, length);
                 append = false;
+            } else if (c2 == '?' && c3 == '^') {
+                // Handle (?^ism: ... ) construct
+                offset = handleFlagModifiers(s, offset, length, sb, flag_xx);
+                append = false;
+            } else if (c2 == '?' && c3 == '<' && c4 != '=') {
+                // Handle named capture (?<name> ... )
+                offset = handleNamedCapture(s, offset, length, sb, flag_xx);
+                append = false;
+            } else {
+                // Recursively preprocess the content inside the parentheses
+                sb.append('(');
+                Pair insideParens = preProcessRegex(s.substring(offset + 1), flag_xx, true);
+                sb.append(insideParens.processed);
+                offset += insideParens.consumed + 1; // Move past the processed content
+                append = false;
             }
-
-            // Named capture (?<name> ... ) - WIP
-            // Replace underscore in name
-            // This section is currently commented out and marked as work in progress.
-            //
-            // } else handleUnderscoreInNamedCapture(c2, c3, c4);
-
         }
         if (append) {
             sb.append(Character.toChars(c));
         }
         return offset;
+    }
+
+    private static int handleFlagModifiers(String s, int offset, int length, StringBuilder sb, boolean flag_xx) {
+        int start = offset + 3; // Skip past '(?^'
+        int end = s.indexOf(':', start);
+        if (end == -1) {
+            throw new IllegalArgumentException("Unterminated flag modifiers in regex; marked by <-- HERE in m/" +
+                    s.substring(0, start) + " <-- HERE " + s.substring(start) + "/");
+        }
+        String flags = s.substring(start, end);
+        Pair content = preProcessRegex(s.substring(end + 1), flag_xx, true);
+        sb.append("(?:").append(flags).append(":").append(content.processed);
+        return offset + 3 + flags.length() + content.consumed + 1; // Move past the processed content
+    }
+
+    private static int handleNamedCapture(String s, int offset, int length, StringBuilder sb, boolean flag_xx) {
+        int start = offset + 3; // Skip past '(?<'
+        int end = s.indexOf('>', start);
+        if (end == -1) {
+            throw new IllegalArgumentException("Unterminated named capture in regex; marked by <-- HERE in m/" +
+                    s.substring(0, start) + " <-- HERE " + s.substring(start) + "/");
+        }
+        String name = s.substring(start, end);
+        Pair content = preProcessRegex(s.substring(end + 1), flag_xx, true); // Process content inside the group
+        sb.append("(?<").append(name).append(">").append(content.processed);
+        return end + content.consumed + 1;
     }
 
     private static int handleCharacterClass(String s, boolean flag_xx, StringBuilder sb, int c, int offset, int length, StringBuilder rejected) {

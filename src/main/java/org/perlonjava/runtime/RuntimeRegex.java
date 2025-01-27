@@ -83,10 +83,10 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 // Check for \G and set useGAssertion
                 regex.useGAssertion = patternString.contains("\\G");
 
-                String javaPatternString = preProcessRegex(patternString, flag_xx);
+                RegexPreprocessor.Pair javaPattern = preProcessRegex(patternString, flag_xx, false);
 
                 // Compile the regex pattern
-                regex.pattern = Pattern.compile(javaPatternString, flags);
+                regex.pattern = Pattern.compile(javaPattern.processed(), flags);
             } catch (Exception e) {
                 throw new PerlCompilerException("Regex compilation failed: " + e.getMessage());
             }
