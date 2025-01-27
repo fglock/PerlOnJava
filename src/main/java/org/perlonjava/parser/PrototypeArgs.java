@@ -29,7 +29,8 @@ public class PrototypeArgs {
         ListNode args = new ListNode(parser.tokenIndex);
         boolean isOptional = false;
         boolean needComma = false;
-        // System.out.println("prototype start " + prototype);
+        boolean inBackslashGroup = false;
+        StringBuilder backslashGroup = new StringBuilder();
 
         boolean hasParentheses = false;
         if (TokenUtils.peek(parser).text.equals("(")) {
@@ -45,7 +46,20 @@ public class PrototypeArgs {
             while (!prototype.isEmpty()) {
                 String prototypeStart = prototype.substring(0, 1);
                 prototype = prototype.substring(1);
-                // System.out.println("prototype " + prototype + " needComma:" + needComma + " optional:" + isOptional);
+
+                if (inBackslashGroup) {
+                    if (prototypeStart.equals("]")) {
+                        inBackslashGroup = false;
+                        // Handle backslash group
+                        handleBackslashGroup(parser, args, backslashGroup.toString(), isOptional, needComma);
+                        backslashGroup.setLength(0); // Reset the group
+                        needComma = true;
+                    } else {
+                        backslashGroup.append(prototypeStart);
+                    }
+                    continue;
+                }
+
                 switch (prototypeStart) {
                     case " ", "\t", "\n":
                         // Ignore whitespace characters in the prototype
@@ -55,7 +69,7 @@ public class PrototypeArgs {
                         isOptional = true;
                         break;
                     case "_":
-                        // Underscore indicates a scalar argument
+                        // Underscore indicates a scalar argument (defaults to $_ if not provided)
                         if (needComma) {
                             if (!isComma(TokenUtils.peek(parser))) {
                                 args.elements.add(scalarUnderscore(parser));
@@ -72,7 +86,7 @@ public class PrototypeArgs {
                         needComma = true;
                         break;
                     case "*":
-                        // Asterisk indicates a file handle argument
+                        // Asterisk indicates a file handle or typeglob argument
                         if (needComma) {
                             if (!isComma(TokenUtils.peek(parser))) {
                                 if (isOptional) {
@@ -82,13 +96,12 @@ public class PrototypeArgs {
                             }
                             consumeCommas(parser);
                         }
-                        // TODO: Handle different file handle formats:  STDERR  /  *STDERR  /  \*STDERR  /  $fh  / my $fh
                         Node argList5 = FileHandle.parseFileHandle(parser);
                         if (argList5 == null) {
                             if (isOptional) {
                                 break;
                             }
-                            throw new PerlCompilerException("syntax error, expected file handle");
+                            throw new PerlCompilerException("syntax error, expected file handle or typeglob");
                         }
                         args.elements.add(argList5);
                         needComma = true;
@@ -159,18 +172,109 @@ public class PrototypeArgs {
                             throw new PerlCompilerException("syntax error, expected block");
                         }
                         break;
+                    case "+":
+                        // Plus sign indicates a hash or array reference argument
+                        // The + prototype is a special alternative to $ that will act like \[@%] when given a literal array or hash variable, but will otherwise force scalar context on the argument. This is useful for functions which should accept either a literal array or an array reference as the argument
+
+                        if (needComma) {
+                            if (!isComma(TokenUtils.peek(parser))) {
+                                if (isOptional) {
+                                    break;
+                                }
+                                throw new PerlCompilerException("syntax error, expected comma");
+                            }
+                            consumeCommas(parser);
+                        }
+                        ListNode argList3 = ListParser.parseZeroOrOneList(parser, 0);
+                        if (argList3.elements.isEmpty()) {
+                            if (isOptional) {
+                                break;
+                            }
+                            throw new PerlCompilerException("syntax error, expected hash or array reference");
+                        }
+
+                        // TODO WIP
+                        // args.elements.add(new OperatorNode("ref", argList3.elements.getFirst(), argList3.elements.getFirst().getIndex(), "+"));
+                        args.elements.addAll(argList3.elements);
+
+                        needComma = true;
+                        break;
+                    case "\\":
+                        // Backslash indicates the start of a backslash group
+                        if (prototype.startsWith("[")) {
+                            inBackslashGroup = true;
+                            prototype = prototype.substring(1); // Skip the '['
+                        } else {
+                            // Single backslashed character
+                            String refType = prototype.substring(0, 1);
+                            prototype = prototype.substring(1);
+                            if (needComma) {
+                                if (!isComma(TokenUtils.peek(parser))) {
+                                    if (isOptional) {
+                                        break;
+                                    }
+                                    throw new PerlCompilerException("syntax error, expected comma");
+                                }
+                                consumeCommas(parser);
+                            }
+                            ListNode argList4 = ListParser.parseZeroOrOneList(parser, 0);
+                            if (argList4.elements.isEmpty()) {
+                                if (isOptional) {
+                                    break;
+                                }
+                                throw new PerlCompilerException("syntax error, expected reference");
+                            }
+
+                            // TODO WIP
+                            // args.elements.add(new OperatorNode("ref", argList4.elements.getFirst(), argList4.elements.getFirst().getIndex(), refType));
+                            args.elements.addAll(argList4.elements);
+
+                            needComma = true;
+                        }
+                        break;
                     default:
-                        throw new PerlCompilerException("syntax error, unexpected prototype " + prototype);
+                        throw new PerlCompilerException("syntax error, unexpected prototype " + prototypeStart);
                 }
             }
         }
-
-        // TODO: Check for "Too many arguments" error
 
         if (hasParentheses) {
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
         }
 
         return args;
+    }
+
+    /**
+     * Handles a backslash group in the prototype.
+     *
+     * @param parser       The parser instance used for parsing.
+     * @param args         The list of arguments to add to.
+     * @param group        The backslash group string (e.g., "$@%&*").
+     * @param isOptional   Whether the argument is optional.
+     * @param needComma    Whether a comma is needed before parsing the argument.
+     */
+    private static void handleBackslashGroup(Parser parser, ListNode args, String group, boolean isOptional, boolean needComma) {
+        if (needComma) {
+            if (!isComma(TokenUtils.peek(parser))) {
+                if (isOptional) {
+                    return;
+                }
+                throw new PerlCompilerException("syntax error, expected comma");
+            }
+            consumeCommas(parser);
+        }
+        ListNode argList = ListParser.parseZeroOrOneList(parser, 0);
+        if (argList.elements.isEmpty()) {
+            if (isOptional) {
+                return;
+            }
+            throw new PerlCompilerException("syntax error, expected reference");
+        }
+
+        // TODO WIP
+        // args.elements.add(new OperatorNode("ref", argList.elements.getFirst(), argList.elements.getFirst().getIndex(), group));
+        args.elements.addAll(argList.elements);
+
     }
 }
