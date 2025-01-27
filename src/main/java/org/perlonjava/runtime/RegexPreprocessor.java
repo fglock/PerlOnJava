@@ -179,8 +179,7 @@ public class RegexPreprocessor {
         String flags = s.substring(start, end);
 
         // Apply the caret semantics: reset to defaults (d-imnsx) and apply additional flags
-        String defaultFlags = "d-imnsx"; // System defaults in Perl
-        String effectiveFlags = applyCaretSemantics(defaultFlags, flags);
+        String effectiveFlags = applyCaretSemantics(flags);
 
         // Translate Perl flags to Java-compatible flags
         String javaFlags = translatePerlFlagsToJava(effectiveFlags);
@@ -199,12 +198,12 @@ public class RegexPreprocessor {
      * Applies the caret semantics to the flags.
      * Resets the flags to the defaults and then applies any additional flags.
      *
-     * @param defaultFlags The default flags (e.g., "d-imnsx").
      * @param flags The flags specified after the caret.
      * @return The effective flags after applying the caret semantics.
      */
-    private static String applyCaretSemantics(String defaultFlags, String flags) {
-        // Start with the default flags
+    private static String applyCaretSemantics(String flags) {
+        // Start with the default flags (d-imnsx)
+        String defaultFlags = "d-imnx";
         StringBuilder effectiveFlags = new StringBuilder(defaultFlags);
 
         // Apply additional flags
