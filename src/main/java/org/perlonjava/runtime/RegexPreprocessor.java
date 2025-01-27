@@ -174,10 +174,97 @@ public class RegexPreprocessor {
             throw new IllegalArgumentException("Unterminated flag modifiers in regex; marked by <-- HERE in m/" +
                     s.substring(0, start) + " <-- HERE " + s.substring(start) + "/");
         }
+
+        // Extract the flags after the caret
         String flags = s.substring(start, end);
+
+        // Apply the caret semantics: reset to defaults (d-imnsx) and apply additional flags
+        String defaultFlags = "d-imnsx"; // System defaults in Perl
+        String effectiveFlags = applyCaretSemantics(defaultFlags, flags);
+
+        // Translate Perl flags to Java-compatible flags
+        String javaFlags = translatePerlFlagsToJava(effectiveFlags);
+
+        // Preprocess the subpattern (the part after the ':')
         Pair content = preProcessRegex(s.substring(end + 1), flag_xx, true);
-        sb.append("(?:").append(flags).append(":").append(content.processed);
+
+        // Append the modified regex to the StringBuilder
+        sb.append("(?").append(javaFlags).append(":").append(content.processed);
+
+        // Calculate the new offset
         return offset + 3 + flags.length() + content.consumed + 1; // Move past the processed content
+    }
+
+    /**
+     * Applies the caret semantics to the flags.
+     * Resets the flags to the defaults and then applies any additional flags.
+     *
+     * @param defaultFlags The default flags (e.g., "d-imnsx").
+     * @param flags The flags specified after the caret.
+     * @return The effective flags after applying the caret semantics.
+     */
+    private static String applyCaretSemantics(String defaultFlags, String flags) {
+        // Start with the default flags
+        StringBuilder effectiveFlags = new StringBuilder(defaultFlags);
+
+        // Apply additional flags
+        for (char flag : flags.toCharArray()) {
+            // If the flag is positive (e.g., 'i', 'x'), enable it
+            if (isPositiveFlag(flag)) {
+                // Remove the negative version of the flag (if any)
+                if (effectiveFlags.indexOf(String.valueOf("-" + flag)) != -1) {
+                    effectiveFlags.deleteCharAt(effectiveFlags.indexOf("-" + flag));
+                }
+                // Add the positive version of the flag
+                if (effectiveFlags.indexOf(String.valueOf(flag)) == -1) {
+                    effectiveFlags.append(flag);
+                }
+            }
+        }
+
+        return effectiveFlags.toString();
+    }
+
+    /**
+     * Checks if a flag is positive (i.e., enables a feature).
+     *
+     * @param flag The flag to check.
+     * @return True if the flag is positive, false otherwise.
+     */
+    private static boolean isPositiveFlag(char flag) {
+        // Positive flags are those that enable a feature (e.g., 'i', 'x')
+        return "imnsx".indexOf(flag) != -1;
+    }
+
+    /**
+     * Translates Perl flags to Java-compatible flags.
+     *
+     * @param perlFlags The Perl flags (e.g., "d-imnsx").
+     * @return The Java-compatible flags.
+     */
+    private static String translatePerlFlagsToJava(String perlFlags) {
+        StringBuilder javaFlags = new StringBuilder();
+
+        // Translate each flag
+        for (char flag : perlFlags.toCharArray()) {
+            switch (flag) {
+                case 'i': // Case-insensitive matching
+                    javaFlags.append('i');
+                    break;
+                case 'm': // Multiline mode
+                    javaFlags.append('m');
+                    break;
+                case 's': // Single-line mode (dot matches newline)
+                    javaFlags.append('s');
+                    break;
+                case 'x': // Free-spacing mode (ignore whitespace and comments)
+                    javaFlags.append('x');
+                    break;
+                // 'd', 'n' are not supported in Java, so they are ignored
+            }
+        }
+
+        return javaFlags.toString();
     }
 
     private static int handleNamedCapture(String s, int offset, int length, StringBuilder sb, boolean flag_xx) {
