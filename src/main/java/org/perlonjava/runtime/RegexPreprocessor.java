@@ -199,13 +199,13 @@ public class RegexPreprocessor {
             char flag = flags.charAt(i);
             if (flag == '-' && i + 1 < flags.length()) {
                 negativeFlags.add(flags.charAt(++i));
-            } else if ("imnsx".indexOf(flag) != -1) {
+            } else if ("imsx".indexOf(flag) != -1) {
                 positiveFlags.add(flag);
             }
         }
 
         // Add negative versions of standard flags not explicitly set
-        for (char standardFlag : "imnsx".toCharArray()) {
+        for (char standardFlag : "imsx".toCharArray()) {
             if (!positiveFlags.contains(standardFlag) && !negativeFlags.contains(standardFlag)) {
                 negativeFlags.add(standardFlag);
             }
@@ -224,7 +224,7 @@ public class RegexPreprocessor {
         // Add negative flags
         if (!negativeFlags.isEmpty()) {
             javaFlags.append('-');
-            for (char flag : "msx".toCharArray()) {
+            for (char flag : "imsx".toCharArray()) {
                 if (negativeFlags.contains(flag)) {
                     javaFlags.append(flag);
                 }
