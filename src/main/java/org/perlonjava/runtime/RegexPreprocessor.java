@@ -155,7 +155,23 @@ public class RegexPreprocessor {
             }
         }
         // Recursively preprocess the content inside the parentheses
-        sb.append('(');
+
+        if (flag_n) {
+            // Check if it's already a non-capturing group
+            boolean isNonCapturing = offset + 1 < length &&
+                    s.charAt(offset + 1) == '?' &&
+                    s.charAt(offset + 2) == ':';
+
+            // If not already non-capturing and not a special construct, make it non-capturing
+            if (!isNonCapturing && s.charAt(offset + 1) != '?') {
+                sb.append("(?:");
+            } else {
+                sb.append('(');
+            }
+        } else {
+            sb.append('(');
+        }
+
         Pair insideParens = preProcessRegex(s.substring(offset + 1), flag_xx, flag_n, true);
         sb.append(insideParens.processed);
         offset += insideParens.consumed + 1; // Move past the processed content
