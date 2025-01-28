@@ -88,13 +88,16 @@ public class RegexPreprocessor {
      * @throws IllegalArgumentException If there are unmatched parentheses in the regex.
      */
     static Pair preProcessRegex(String s, boolean flag_xx, boolean flag_n, boolean stopAtClosingParen) {
+        return preProcessRegex(s, 0, flag_xx, flag_n, stopAtClosingParen);
+    }
+
+    static Pair preProcessRegex(String s, int offset, boolean flag_xx, boolean flag_n, boolean stopAtClosingParen) {
         final int length = s.length();
         StringBuilder sb = new StringBuilder();
         StringBuilder rejected = new StringBuilder();
-        int offset = 0;
 
         // Remove \G from the pattern string for Java compilation
-        if (s.startsWith("\\G")) {
+        if (s.startsWith("\\G", offset)) {
             offset += 2;
         }
 
@@ -172,9 +175,10 @@ public class RegexPreprocessor {
             sb.append('(');
         }
 
-        Pair insideParens = preProcessRegex(s.substring(offset + 1), flag_xx, flag_n, true);
+        Pair insideParens = preProcessRegex(s, offset + 1, flag_xx, flag_n, true);
         sb.append(insideParens.processed);
-        offset += insideParens.consumed + 1; // Move past the processed content
+        offset = insideParens.consumed;
+
         return offset;
     }
 
