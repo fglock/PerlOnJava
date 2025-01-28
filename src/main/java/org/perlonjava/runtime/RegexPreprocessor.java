@@ -296,7 +296,6 @@ public class RegexPreprocessor {
         char nextChar = s.charAt(offset);
         if (nextChar == 'Q') {
             // Handle \Q - quote until \E or end of pattern
-            System.out.println("Start \\Q-quoted string");
             sb.append('Q');
             offset++;
             while (offset < length) {
