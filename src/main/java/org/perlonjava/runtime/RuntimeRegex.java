@@ -42,6 +42,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
     // Compiled regex pattern
     public Pattern pattern;
     int patternFlags;
+    String patternString;
 
     // Flags for regex behavior
     boolean isGlobalMatch;   // Flag for global matching
@@ -89,6 +90,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 // Compile the regex pattern
                 regex.pattern = Pattern.compile(javaPattern.processed(), flags);
                 regex.patternFlags = flags;
+                regex.patternString = patternString;
             } catch (Exception e) {
                 throw new PerlCompilerException("Regex compilation failed: " + e.getMessage());
             }
@@ -398,7 +400,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
         if ((flags & COMMENTS) != 0) flagString.append('x');
 
         // Construct the Perl-like regex string with flags
-        return "(?^" + flagString + ":" + pattern + ")";
+        return "(?^" + flagString + ":" + patternString + ")";
     }
 
     /**
