@@ -76,8 +76,6 @@ public class RegexPreprocessor {
         }
     }
 
-    public record Pair(String processed, int consumed) {}
-
     /**
      * Preprocesses a given regex string to make it compatible with Java's regex engine.
      * This involves handling various constructs and escape sequences that Java does not
@@ -145,27 +143,22 @@ public class RegexPreprocessor {
             if (c2 == '?' && c3 == '#') {
                 // Remove inline comments (?# ... )
                 offset = handleSkipComment(offset, s, length);
-                append = false;
+                return offset;
             } else if (c2 == '?' && c3 == '^') {
                 // Handle (?^ism: ... ) construct
                 offset = handleFlagModifiers(s, offset, length, sb, flag_xx);
-                append = false;
+                return offset;
             } else if (c2 == '?' && c3 == '<' && c4 != '=') {
                 // Handle named capture (?<name> ... )
                 offset = handleNamedCapture(s, offset, length, sb, flag_xx);
-                append = false;
-            } else {
-                // Recursively preprocess the content inside the parentheses
-                sb.append('(');
-                Pair insideParens = preProcessRegex(s.substring(offset + 1), flag_xx, true);
-                sb.append(insideParens.processed);
-                offset += insideParens.consumed + 1; // Move past the processed content
-                append = false;
+                return offset;
             }
         }
-        if (append) {
-            sb.append(Character.toChars(c));
-        }
+        // Recursively preprocess the content inside the parentheses
+        sb.append('(');
+        Pair insideParens = preProcessRegex(s.substring(offset + 1), flag_xx, true);
+        sb.append(insideParens.processed);
+        offset += insideParens.consumed + 1; // Move past the processed content
         return offset;
     }
 
@@ -577,5 +570,8 @@ public class RegexPreprocessor {
 //                                        append = false;
 //                                    }
         }
+    }
+
+    public record Pair(String processed, int consumed) {
     }
 }
