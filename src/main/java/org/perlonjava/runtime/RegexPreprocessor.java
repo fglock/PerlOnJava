@@ -171,14 +171,24 @@ public class RegexPreprocessor {
 
     private static int handleFlagModifiers(String s, int offset, int length, StringBuilder sb, boolean flag_xx) {
         int start = offset + 3; // Skip past '(?^'
-        int end = s.indexOf(':', start);
-        if (end == -1) {
-            throw new IllegalArgumentException("Unterminated flag modifiers in regex; marked by <-- HERE in m/" +
-                    s.substring(0, start) + " <-- HERE " + s.substring(start) + "/");
+        int colonPos = s.indexOf(':', start);
+        int closeParen = s.indexOf(')', start);
+
+        if (colonPos == -1 || closeParen < colonPos) {
+            // (?^i)pattern - flags apply to rest of pattern
+            if (closeParen == -1) {
+                throw new IllegalArgumentException("Unterminated ( in regex; marked by <-- HERE in m/" +
+                        s.substring(0, start) + " <-- HERE " + s.substring(start) + "/");
+            }
+            String flags = s.substring(start, closeParen);
+            String effectiveFlags = applyCaretSemantics(flags);
+            String javaFlags = translatePerlFlagsToJava(effectiveFlags);
+            sb.append("(?").append(javaFlags);
+            return closeParen;
         }
 
         // Extract the flags after the caret
-        String flags = s.substring(start, end);
+        String flags = s.substring(start, colonPos);
 
         // Apply the caret semantics: reset to defaults (d-imnsx) and apply additional flags
         String effectiveFlags = applyCaretSemantics(flags);
@@ -187,7 +197,7 @@ public class RegexPreprocessor {
         String javaFlags = translatePerlFlagsToJava(effectiveFlags);
 
         // Preprocess the subpattern (the part after the ':')
-        Pair content = preProcessRegex(s.substring(end + 1), flag_xx, true);
+        Pair content = preProcessRegex(s.substring(colonPos + 1), flag_xx, true);
 
         // Append the modified regex to the StringBuilder
         sb.append("(?").append(javaFlags).append(":").append(content.processed);
