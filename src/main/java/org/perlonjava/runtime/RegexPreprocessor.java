@@ -259,30 +259,32 @@ public class RegexPreprocessor {
      */
     private static String translatePerlFlagsToJava(String perlFlags) {
         StringBuilder javaFlags = new StringBuilder();
+        Set<Character> positiveFlags = new HashSet<>();
+        Set<Character> negativeFlags = new HashSet<>();
 
-        // First collect all negative flags
-        Set<Character> negatedFlags = new HashSet<>();
+        // Parse the flags into positive and negative sets
         for (int i = 0; i < perlFlags.length(); i++) {
-            if (perlFlags.charAt(i) == '-' && i + 1 < perlFlags.length()) {
-                negatedFlags.add(perlFlags.charAt(++i));
+            char flag = perlFlags.charAt(i);
+            if (flag == '-' && i + 1 < perlFlags.length()) {
+                negativeFlags.add(perlFlags.charAt(++i));
+            } else if ("imsx".indexOf(flag) != -1) {
+                positiveFlags.add(flag);
             }
         }
 
-        // Then process each flag
-        for (int i = 0; i < perlFlags.length(); i++) {
-            char flag = perlFlags.charAt(i);
-            if (flag == '-') {
-                continue;  // Skip the minus sign
+        // Add all positive flags first
+        for (char flag : "imsx".toCharArray()) {
+            if (positiveFlags.contains(flag)) {
+                javaFlags.append(flag);
             }
+        }
 
-            // Only add the flag if it's not negated
-            if (!negatedFlags.contains(flag)) {
-                switch (flag) {
-                    case 'i': javaFlags.append('i'); break;
-                    case 'm': javaFlags.append('m'); break;
-                    case 's': javaFlags.append('s'); break;
-                    case 'x': javaFlags.append('x'); break;
-                    // 'd', 'n' are ignored as Java doesn't support them
+        // Add negative flags if present
+        if (!negativeFlags.isEmpty()) {
+            javaFlags.append('-');
+            for (char flag : "msx".toCharArray()) {
+                if (negativeFlags.contains(flag)) {
+                    javaFlags.append(flag);
                 }
             }
         }
