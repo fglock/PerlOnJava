@@ -100,10 +100,10 @@ public class RegexPreprocessor {
             final int c = s.codePointAt(offset);
             switch (c) {
                 case '\\':  // Handle escape sequences
-                    offset = handleEscapeSequences(s, sb, c, offset, length);
+                    offset = handleEscapeSequences(s, sb, c, offset);
                     break;
                 case '[':   // Handle character classes
-                    offset = handleCharacterClass(s, flag_xx, sb, c, offset, length);
+                    offset = handleCharacterClass(s, flag_xx, sb, c, offset);
                     break;
                 case '(':
                     offset = handleParentheses(s, offset, length, sb, c, flag_xx, flag_n);
@@ -262,7 +262,8 @@ public class RegexPreprocessor {
         return content.consumed;
     }
 
-    private static int handleCharacterClass(String s, boolean flag_xx, StringBuilder sb, int c, int offset, int length) {
+    private static int handleCharacterClass(String s, boolean flag_xx, StringBuilder sb, int c, int offset) {
+        final int length = s.length();
         int len = sb.length();
         sb.append(Character.toChars(c));
         offset++;
@@ -283,8 +284,10 @@ public class RegexPreprocessor {
         return offset;
     }
 
-    private static int handleEscapeSequences(String s, StringBuilder sb, int c, int offset, int length) {
+    private static int handleEscapeSequences(String s, StringBuilder sb, int c, int offset) {
         sb.append(Character.toChars(c));
+        final int length = s.length();
+
         offset++;
         if (offset >= length) {
             return offset;
