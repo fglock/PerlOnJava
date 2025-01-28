@@ -90,7 +90,6 @@ public class RegexPreprocessor {
     static Pair preProcessRegex(String s, int offset, boolean flag_xx, boolean flag_n, boolean stopAtClosingParen) {
         final int length = s.length();
         StringBuilder sb = new StringBuilder();
-        StringBuilder rejected = new StringBuilder();
 
         // Remove \G from the pattern string for Java compilation
         if (s.startsWith("\\G", offset)) {
@@ -104,7 +103,7 @@ public class RegexPreprocessor {
                     offset = handleEscapeSequences(s, sb, c, offset, length);
                     break;
                 case '[':   // Handle character classes
-                    offset = handleCharacterClass(s, flag_xx, sb, c, offset, length, rejected);
+                    offset = handleCharacterClass(s, flag_xx, sb, c, offset, length);
                     break;
                 case '(':
                     offset = handleParentheses(s, offset, length, sb, c, flag_xx, flag_n);
@@ -263,10 +262,11 @@ public class RegexPreprocessor {
         return content.consumed;
     }
 
-    private static int handleCharacterClass(String s, boolean flag_xx, StringBuilder sb, int c, int offset, int length, StringBuilder rejected) {
+    private static int handleCharacterClass(String s, boolean flag_xx, StringBuilder sb, int c, int offset, int length) {
         int len = sb.length();
         sb.append(Character.toChars(c));
         offset++;
+        StringBuilder rejected = new StringBuilder();
         offset = handleRegexCharacterClassEscape(offset, s, sb, length, flag_xx, rejected);
         if (!rejected.isEmpty()) {
             // Process \b inside character class
