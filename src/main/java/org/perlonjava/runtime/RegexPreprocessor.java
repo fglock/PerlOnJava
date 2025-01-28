@@ -182,23 +182,29 @@ public class RegexPreprocessor {
         int colonPos = s.indexOf(':', start);
         int closeParen = s.indexOf(')', start);
 
+        if (closeParen == -1) {
+            return closeParen; // No valid closing parenthesis
+        }
+
+        // Determine the end position for the flags
+        int flagsEnd = (colonPos == -1 || closeParen < colonPos) ? closeParen : colonPos;
+
+        // Extract and handle the flags
+        handleFlags result = getHandleFlags(s, start, flagsEnd);
+
+        // Append the flags to the StringBuilder
+        sb.append("(?").append(result.javaFlags());
+
+        // If there's no colon or the close paren is before the colon, flags apply to the rest of the pattern
         if (colonPos == -1 || closeParen < colonPos) {
-            if (closeParen == -1) {
-                return closeParen;
-            }
-            // (?^i)pattern - flags apply to rest of pattern
-            handleFlags result = getHandleFlags(s, start, closeParen);
-            sb.append("(?").append(result.javaFlags);
             return closeParen;
         }
 
-        handleFlags result = getHandleFlags(s, start, colonPos);
-
-        // Preprocess the subpattern (the part after the ':')
+        // Otherwise, preprocess the subpattern (the part after the ':')
         Pair content = preProcessRegex(s, colonPos + 1, flag_xx, flag_n, true);
 
         // Append the modified regex to the StringBuilder
-        sb.append("(?").append(result.javaFlags()).append(":").append(content.processed);
+        sb.append(":").append(content.processed);
 
         // Calculate the new offset
         return content.consumed; // Move past the processed content
