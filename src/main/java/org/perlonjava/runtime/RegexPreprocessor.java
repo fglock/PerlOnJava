@@ -212,41 +212,21 @@ public class RegexPreprocessor {
 
     private static handleFlags getHandleFlags(String s, int start, int colonPos) {
         String flags = s.substring(start, colonPos);
-        Set<Character> positiveFlags = new HashSet<>();
-        Set<Character> negativeFlags = new HashSet<>();
-
-        // Single pass to collect flags
-        for (int i = 0; i < flags.length(); i++) {
-            char flag = flags.charAt(i);
-            if (flag == '-' && i + 1 < flags.length()) {
-                negativeFlags.add(flags.charAt(++i));
-            } else if ("imsx".indexOf(flag) != -1) {
-                positiveFlags.add(flag);
-            }
-        }
-
-        // Add negative versions of standard flags not explicitly set
-        for (char standardFlag : "imsx".toCharArray()) {
-            if (!positiveFlags.contains(standardFlag)) {
-                negativeFlags.add(standardFlag);
-            }
-        }
-
-        // Build Java flags string
         StringBuilder javaFlags = new StringBuilder();
 
-        // Add positive flags
+        // Check for positive flags
         for (char flag : "imsx".toCharArray()) {
-            if (positiveFlags.contains(flag)) {
+            if (flags.contains(String.valueOf(flag))) {
                 javaFlags.append(flag);
             }
         }
 
-        // Add negative flags
+        // Check for negative flags
+        String negativeFlags = flags.replaceAll("[^-]", ""); // Extract all '-' characters
         if (!negativeFlags.isEmpty()) {
             javaFlags.append('-');
             for (char flag : "imsx".toCharArray()) {
-                if (negativeFlags.contains(flag)) {
+                if (flags.contains("-" + flag)) {
                     javaFlags.append(flag);
                 }
             }
