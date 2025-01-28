@@ -157,6 +157,8 @@
   - `goto` special cases - for `Text::Balanced`.
   - indirect object special cases - for `GetOpt::Long`.
   - Implement localization of regex variables.
+- Regex subsystem
+  - `/n` modifier.
 - Class subsystem
 - DBI subsystem
   - Additional methods.

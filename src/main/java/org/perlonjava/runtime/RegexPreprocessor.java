@@ -87,7 +87,7 @@ public class RegexPreprocessor {
      * @return A preprocessed regex string compatible with Java's regex engine.
      * @throws IllegalArgumentException If there are unmatched parentheses in the regex.
      */
-    static Pair preProcessRegex(String s, boolean flag_xx, boolean stopAtClosingParen) {
+    static Pair preProcessRegex(String s, boolean flag_xx, boolean flag_n, boolean stopAtClosingParen) {
         final int length = s.length();
         StringBuilder sb = new StringBuilder();
         StringBuilder rejected = new StringBuilder();
@@ -108,7 +108,7 @@ public class RegexPreprocessor {
                     offset = handleCharacterClass(s, flag_xx, sb, c, offset, length, rejected);
                     break;
                 case '(':
-                    offset = handleParentheses(s, offset, length, sb, c, flag_xx);
+                    offset = handleParentheses(s, offset, length, sb, c, flag_xx, flag_n);
 
                     // Ensure the closing parenthesis is consumed
                     if (offset >= length || s.codePointAt(offset) != ')') {
@@ -134,7 +134,7 @@ public class RegexPreprocessor {
         return new Pair(sb.toString(), offset);
     }
 
-    private static int handleParentheses(String s, int offset, int length, StringBuilder sb, int c, boolean flag_xx) {
+    private static int handleParentheses(String s, int offset, int length, StringBuilder sb, int c, boolean flag_xx, boolean flag_n) {
         boolean append = true;
         if (offset < length - 3) {
             int c2 = s.codePointAt(offset + 1);
@@ -146,23 +146,23 @@ public class RegexPreprocessor {
                 return offset;
             } else if (c2 == '?' && c3 == '^') {
                 // Handle (?^ism: ... ) construct
-                offset = handleFlagModifiers(s, offset, length, sb, flag_xx);
+                offset = handleFlagModifiers(s, offset, length, sb, flag_xx, flag_n);
                 return offset;
             } else if (c2 == '?' && c3 == '<' && c4 != '=') {
                 // Handle named capture (?<name> ... )
-                offset = handleNamedCapture(s, offset, length, sb, flag_xx);
+                offset = handleNamedCapture(s, offset, length, sb, flag_xx, flag_n);
                 return offset;
             }
         }
         // Recursively preprocess the content inside the parentheses
         sb.append('(');
-        Pair insideParens = preProcessRegex(s.substring(offset + 1), flag_xx, true);
+        Pair insideParens = preProcessRegex(s.substring(offset + 1), flag_xx, flag_n, true);
         sb.append(insideParens.processed);
         offset += insideParens.consumed + 1; // Move past the processed content
         return offset;
     }
 
-    private static int handleFlagModifiers(String s, int offset, int length, StringBuilder sb, boolean flag_xx) {
+    private static int handleFlagModifiers(String s, int offset, int length, StringBuilder sb, boolean flag_xx, boolean flag_n) {
         int start = offset + 3; // Skip past '(?^'
         int colonPos = s.indexOf(':', start);
         int closeParen = s.indexOf(')', start);
@@ -180,7 +180,7 @@ public class RegexPreprocessor {
         handleFlags result = getHandleFlags(s, start, colonPos);
 
         // Preprocess the subpattern (the part after the ':')
-        Pair content = preProcessRegex(s.substring(colonPos + 1), flag_xx, true);
+        Pair content = preProcessRegex(s.substring(colonPos + 1), flag_xx, flag_n, true);
 
         // Append the modified regex to the StringBuilder
         sb.append("(?").append(result.javaFlags()).append(":").append(content.processed);
@@ -237,7 +237,7 @@ public class RegexPreprocessor {
     private record handleFlags(String flags, String javaFlags) {
     }
 
-    private static int handleNamedCapture(String s, int offset, int length, StringBuilder sb, boolean flag_xx) {
+    private static int handleNamedCapture(String s, int offset, int length, StringBuilder sb, boolean flag_xx, boolean flag_n) {
         int start = offset + 3; // Skip past '(?<'
         int end = s.indexOf('>', start);
         if (end == -1) {
@@ -245,7 +245,7 @@ public class RegexPreprocessor {
                     s.substring(0, start) + " <-- HERE " + s.substring(start) + "/");
         }
         String name = s.substring(start, end);
-        Pair content = preProcessRegex(s.substring(end + 1), flag_xx, true); // Process content inside the group
+        Pair content = preProcessRegex(s.substring(end + 1), flag_xx, flag_n, true); // Process content inside the group
         sb.append("(?<").append(name).append(">").append(content.processed);
         return end + content.consumed + 1;
     }
