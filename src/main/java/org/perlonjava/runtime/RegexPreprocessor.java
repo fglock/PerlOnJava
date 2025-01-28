@@ -192,80 +192,48 @@ public class RegexPreprocessor {
     }
 
     private static handleFlags getHandleFlags(String s, int start, int colonPos) {
-        // Extract the flags after the caret
         String flags = s.substring(start, colonPos);
-
-        // Apply the caret semantics: reset to defaults (d-imnsx) and apply additional flags
-
-        // Translate Perl flags to Java-compatible flags
-        StringBuilder effectiveFlags = new StringBuilder();
-
-        // Track which flags are explicitly set
-        Set<Character> setFlags = new HashSet<>();
-
-        // First pass: collect explicitly set flags
-        for (int i = 0; i < flags.length(); i++) {
-            char flag = flags.charAt(i);
-            if (flag == '-' && i + 1 < flags.length()) {
-                i++;
-                setFlags.add(flags.charAt(i));
-            } else if ("imnsx".indexOf(flag) != -1) {
-                setFlags.add(flag);
-            }
-        }
-
-        // Add negative versions of all standard flags that weren't explicitly set
-        for (char standardFlag : "imnsx".toCharArray()) {
-            if (!setFlags.contains(standardFlag)) {
-                effectiveFlags.append("-").append(standardFlag);
-            }
-        }
-
-        // Add the explicitly set flags
-        for (int i = 0; i < flags.length(); i++) {
-            char flag = flags.charAt(i);
-            if (flag == '-' && i + 1 < flags.length()) {
-                i++;
-                effectiveFlags.append("-").append(flags.charAt(i));
-            } else if ("imnsx".indexOf(flag) != -1) {
-                effectiveFlags.append(flag);
-            }
-        }
-
-        String perlFlags = effectiveFlags.toString();
-        StringBuilder javaFlags1 = new StringBuilder();
         Set<Character> positiveFlags = new HashSet<>();
         Set<Character> negativeFlags = new HashSet<>();
 
-        // Parse the flags into positive and negative sets
-        for (int i = 0; i < perlFlags.length(); i++) {
-            char flag = perlFlags.charAt(i);
-            if (flag == '-' && i + 1 < perlFlags.length()) {
-                negativeFlags.add(perlFlags.charAt(++i));
-            } else if ("imsx".indexOf(flag) != -1) {
+        // Single pass to collect flags
+        for (int i = 0; i < flags.length(); i++) {
+            char flag = flags.charAt(i);
+            if (flag == '-' && i + 1 < flags.length()) {
+                negativeFlags.add(flags.charAt(++i));
+            } else if ("imnsx".indexOf(flag) != -1) {
                 positiveFlags.add(flag);
             }
         }
 
-        // Add all positive flags first
-        for (char flag : "imsx".toCharArray()) {
-            if (positiveFlags.contains(flag)) {
-                javaFlags1.append(flag);
+        // Add negative versions of standard flags not explicitly set
+        for (char standardFlag : "imnsx".toCharArray()) {
+            if (!positiveFlags.contains(standardFlag) && !negativeFlags.contains(standardFlag)) {
+                negativeFlags.add(standardFlag);
             }
         }
 
-        // Add negative flags if present
+        // Build Java flags string
+        StringBuilder javaFlags = new StringBuilder();
+
+        // Add positive flags
+        for (char flag : "imsx".toCharArray()) {
+            if (positiveFlags.contains(flag)) {
+                javaFlags.append(flag);
+            }
+        }
+
+        // Add negative flags
         if (!negativeFlags.isEmpty()) {
-            javaFlags1.append('-');
+            javaFlags.append('-');
             for (char flag : "msx".toCharArray()) {
                 if (negativeFlags.contains(flag)) {
-                    javaFlags1.append(flag);
+                    javaFlags.append(flag);
                 }
             }
         }
 
-        String javaFlags = javaFlags1.toString();
-        return new handleFlags(flags, javaFlags);
+        return new handleFlags(flags, javaFlags.toString());
     }
 
     private record handleFlags(String flags, String javaFlags) {
