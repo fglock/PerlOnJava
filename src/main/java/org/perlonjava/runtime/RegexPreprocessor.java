@@ -173,40 +173,31 @@ public class RegexPreprocessor {
                 throw new IllegalArgumentException("Unterminated ( in regex; marked by <-- HERE in m/" +
                         s.substring(0, start) + " <-- HERE " + s.substring(start) + "/");
             }
-            String flags = s.substring(start, closeParen);
-            String effectiveFlags = applyCaretSemantics(flags);
-            String javaFlags = translatePerlFlagsToJava(effectiveFlags);
-            sb.append("(?").append(javaFlags);
+            handleFlags result = getHandleFlags(s, start, closeParen);
+
+            sb.append("(?").append(result.javaFlags);
             return closeParen;
         }
 
-        // Extract the flags after the caret
-        String flags = s.substring(start, colonPos);
-
-        // Apply the caret semantics: reset to defaults (d-imnsx) and apply additional flags
-        String effectiveFlags = applyCaretSemantics(flags);
-
-        // Translate Perl flags to Java-compatible flags
-        String javaFlags = translatePerlFlagsToJava(effectiveFlags);
+        handleFlags result = getHandleFlags(s, start, colonPos);
 
         // Preprocess the subpattern (the part after the ':')
         Pair content = preProcessRegex(s.substring(colonPos + 1), flag_xx, true);
 
         // Append the modified regex to the StringBuilder
-        sb.append("(?").append(javaFlags).append(":").append(content.processed);
+        sb.append("(?").append(result.javaFlags()).append(":").append(content.processed);
 
         // Calculate the new offset
-        return offset + 3 + flags.length() + content.consumed + 1; // Move past the processed content
+        return offset + 3 + result.flags().length() + content.consumed + 1; // Move past the processed content
     }
 
-    /**
-     * Applies the caret semantics to the flags.
-     * Resets the flags to the defaults and then applies any additional flags.
-     *
-     * @param flags The flags specified after the caret.
-     * @return The effective flags after applying the caret semantics.
-     */
-    private static String applyCaretSemantics(String flags) {
+    private static handleFlags getHandleFlags(String s, int start, int colonPos) {
+        // Extract the flags after the caret
+        String flags = s.substring(start, colonPos);
+
+        // Apply the caret semantics: reset to defaults (d-imnsx) and apply additional flags
+
+        // Translate Perl flags to Java-compatible flags
         StringBuilder effectiveFlags = new StringBuilder();
 
         // Track which flags are explicitly set
@@ -241,17 +232,8 @@ public class RegexPreprocessor {
             }
         }
 
-        return effectiveFlags.toString();
-    }
-
-    /**
-     * Translates Perl flags to Java-compatible flags.
-     *
-     * @param perlFlags The Perl flags (e.g., "d-imnsx").
-     * @return The Java-compatible flags.
-     */
-    private static String translatePerlFlagsToJava(String perlFlags) {
-        StringBuilder javaFlags = new StringBuilder();
+        String perlFlags = effectiveFlags.toString();
+        StringBuilder javaFlags1 = new StringBuilder();
         Set<Character> positiveFlags = new HashSet<>();
         Set<Character> negativeFlags = new HashSet<>();
 
@@ -268,21 +250,25 @@ public class RegexPreprocessor {
         // Add all positive flags first
         for (char flag : "imsx".toCharArray()) {
             if (positiveFlags.contains(flag)) {
-                javaFlags.append(flag);
+                javaFlags1.append(flag);
             }
         }
 
         // Add negative flags if present
         if (!negativeFlags.isEmpty()) {
-            javaFlags.append('-');
+            javaFlags1.append('-');
             for (char flag : "msx".toCharArray()) {
                 if (negativeFlags.contains(flag)) {
-                    javaFlags.append(flag);
+                    javaFlags1.append(flag);
                 }
             }
         }
 
-        return javaFlags.toString();
+        String javaFlags = javaFlags1.toString();
+        return new handleFlags(flags, javaFlags);
+    }
+
+    private record handleFlags(String flags, String javaFlags) {
     }
 
     private static int handleNamedCapture(String s, int offset, int length, StringBuilder sb, boolean flag_xx) {
