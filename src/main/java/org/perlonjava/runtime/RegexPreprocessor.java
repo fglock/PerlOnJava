@@ -142,7 +142,7 @@ public class RegexPreprocessor {
                 return offset;
             } else if (c2 == '?' && c3 == '^') {
                 // Handle (?^ism: ... ) construct
-                offset = handleFlagModifiers(s, offset, sb, flag_xx, flag_n);
+                offset = handleCaretFlagModifiers(s, offset, sb, flag_xx, flag_n);
                 return offset;
             } else if (c2 == '?' && c3 == '<' && c4 != '=') {
                 // Handle named capture (?<name> ... )
@@ -175,7 +175,7 @@ public class RegexPreprocessor {
         return offset;
     }
 
-    private static int handleFlagModifiers(String s, int offset, StringBuilder sb, boolean flag_xx, boolean flag_n) {
+    private static int handleCaretFlagModifiers(String s, int offset, StringBuilder sb, boolean flag_xx, boolean flag_n) {
         int start = offset + 3; // Skip past '(?^'
         int colonPos = s.indexOf(':', start);
         int closeParen = s.indexOf(')', start);
