@@ -87,10 +87,6 @@ public class RegexPreprocessor {
      * @return A preprocessed regex string compatible with Java's regex engine.
      * @throws IllegalArgumentException If there are unmatched parentheses in the regex.
      */
-    static Pair preProcessRegex(String s, boolean flag_xx, boolean flag_n, boolean stopAtClosingParen) {
-        return preProcessRegex(s, 0, flag_xx, flag_n, stopAtClosingParen);
-    }
-
     static Pair preProcessRegex(String s, int offset, boolean flag_xx, boolean flag_n, boolean stopAtClosingParen) {
         final int length = s.length();
         StringBuilder sb = new StringBuilder();
@@ -200,13 +196,13 @@ public class RegexPreprocessor {
         handleFlags result = getHandleFlags(s, start, colonPos);
 
         // Preprocess the subpattern (the part after the ':')
-        Pair content = preProcessRegex(s.substring(colonPos + 1), flag_xx, flag_n, true);
+        Pair content = preProcessRegex(s, colonPos + 1, flag_xx, flag_n, true);
 
         // Append the modified regex to the StringBuilder
         sb.append("(?").append(result.javaFlags()).append(":").append(content.processed);
 
         // Calculate the new offset
-        return offset + 3 + result.flags().length() + content.consumed + 1; // Move past the processed content
+        return content.consumed; // Move past the processed content
     }
 
     private static handleFlags getHandleFlags(String s, int start, int colonPos) {
@@ -226,7 +222,7 @@ public class RegexPreprocessor {
 
         // Add negative versions of standard flags not explicitly set
         for (char standardFlag : "imsx".toCharArray()) {
-            if (!positiveFlags.contains(standardFlag) && !negativeFlags.contains(standardFlag)) {
+            if (!positiveFlags.contains(standardFlag)) {
                 negativeFlags.add(standardFlag);
             }
         }
@@ -252,9 +248,6 @@ public class RegexPreprocessor {
         }
 
         return new handleFlags(flags, javaFlags.toString());
-    }
-
-    private record handleFlags(String flags, String javaFlags) {
     }
 
     private static int handleNamedCapture(String s, int offset, int length, StringBuilder sb, boolean flag_xx, boolean flag_n) {
@@ -567,6 +560,9 @@ public class RegexPreprocessor {
         }
 
         return sb.toString();
+    }
+
+    private record handleFlags(String flags, String javaFlags) {
     }
 
     public record Pair(String processed, int consumed) {
