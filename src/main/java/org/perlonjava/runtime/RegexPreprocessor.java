@@ -110,8 +110,7 @@ public class RegexPreprocessor {
 
                     // Ensure the closing parenthesis is consumed
                     if (offset >= length || s.codePointAt(offset) != ')') {
-                        throw new IllegalArgumentException("Unterminated ( in regex; marked by <-- HERE in m/" +
-                                s.substring(0, offset) + " <-- HERE " + s.substring(offset) + "/");
+                        regexError(s, offset, "Unterminated ( in regex");
                     }
                     sb.append(')');
                     break;
@@ -119,9 +118,8 @@ public class RegexPreprocessor {
                     if (stopAtClosingParen) {
                         return new Pair(sb.toString(), offset);
                     }
-                    // Check for unmatched closing parenthesis
-                    throw new IllegalArgumentException("Unmatched ) in regex; marked by <-- HERE in m/" +
-                            s.substring(0, offset) + " <-- HERE " + s.substring(offset) + "/");
+                    regexError(s, offset, "Unmatched ) in regex");
+                    break;
                 default:    // Append normal characters
                     sb.append(Character.toChars(c));
                     break;
@@ -130,6 +128,11 @@ public class RegexPreprocessor {
         }
 
         return new Pair(sb.toString(), offset);
+    }
+
+    private static void regexError(String s, int offset, String errMsg) {
+        throw new IllegalArgumentException(errMsg + "; marked by <-- HERE in m/" +
+                s.substring(0, offset) + " <-- HERE " + s.substring(offset) + "/");
     }
 
     private static int handleParentheses(String s, int offset, int length, StringBuilder sb, int c, boolean flag_xx, boolean flag_n) {
@@ -230,8 +233,7 @@ public class RegexPreprocessor {
         int start = offset + 3; // Skip past '(?<'
         int end = s.indexOf('>', start);
         if (end == -1) {
-            throw new IllegalArgumentException("Unterminated named capture in regex; marked by <-- HERE in m/" +
-                    s.substring(0, start) + " <-- HERE " + s.substring(start) + "/");
+            regexError(s, offset, "Unterminated named capture in regex");
         }
         String name = s.substring(start, end);
         Pair content = preProcessRegex(s, end + 1, flag_xx, flag_n, true); // Process content inside the group
@@ -283,7 +285,7 @@ public class RegexPreprocessor {
                 sb.append(String.format("x{%X}", codePoint));
                 offset = endBrace;
             } else {
-                throw new IllegalArgumentException("Unmatched brace in \\N{name} construct");
+                regexError(s, offset, "Unmatched brace in \\N{name} construct");
             }
         } else {
             int c2 = s.codePointAt(offset);
@@ -355,7 +357,7 @@ public class RegexPreprocessor {
                             sb.append(String.format("x{%X}", codePoint));
                             offset = endBrace;
                         } else {
-                            throw new IllegalArgumentException("Unmatched brace in \\N{name} construct");
+                            regexError(s, offset, "Unmatched brace in \\N{name} construct");
                         }
                     } else if (s.codePointAt(offset) == 'b') {
                         rejected.append("\\b"); // Java doesn't support \b inside [...]
