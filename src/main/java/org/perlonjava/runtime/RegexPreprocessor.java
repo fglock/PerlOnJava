@@ -80,7 +80,9 @@ public class RegexPreprocessor {
      * natively support or requires in a different format.
      *
      * @param s                  The regex string to preprocess.
+     * @param offset             The position in the string.
      * @param flag_xx            A flag indicating whether to treat spaces as tokens.
+     * @param flag_n             A flag indicating whether to disable captures.
      * @param stopAtClosingParen A flag indicating whether to stop processing at the first closing parenthesis.
      * @return A preprocessed regex string compatible with Java's regex engine.
      * @throws IllegalArgumentException If there are unmatched parentheses in the regex.
