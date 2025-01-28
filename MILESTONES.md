@@ -202,6 +202,7 @@
   - Added `module_true` feature.
   - Added `<<` and `<<~` Here documents.
   - Added `/c` regex modifier.
+  - Added `(?^` regex embedded pattern-match modifier.
   - Added overload: `""`, `0+`, `bool`, `fallback`, `nomethod`.
   - Added `class` feature and `class` keyword.
   - Library upgrades.

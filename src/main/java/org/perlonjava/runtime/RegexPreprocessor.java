@@ -328,7 +328,28 @@ public class RegexPreprocessor {
     private static int handleEscapeSequences(String s, StringBuilder sb, int c, int offset, int length) {
         sb.append(Character.toChars(c));
         offset++;
-        if (offset < length && s.charAt(offset) == 'N' && offset + 1 < length && s.charAt(offset + 1) == '{') {
+        if (offset >= length) {
+            return offset;
+        }
+
+        char nextChar = s.charAt(offset);
+        if (nextChar == 'Q') {
+            // Handle \Q - quote until \E or end of pattern
+            System.out.println("Start \\Q-quoted string");
+            sb.append('Q');
+            offset++;
+            while (offset < length) {
+                int currentChar = s.codePointAt(offset);
+                if (currentChar == '\\' && offset + 1 < length && s.charAt(offset + 1) == 'E') {
+                    sb.append("\\E");
+                    return offset + 1;
+                }
+                sb.append(Character.toChars(currentChar));
+                offset++;
+            }
+            sb.append("\\E");
+            return offset - 1;
+        } else if (nextChar == 'N' && offset + 1 < length && s.charAt(offset + 1) == '{') {
             // Handle \N{name} constructs
             offset += 2; // Skip past \N{
             int endBrace = s.indexOf('}', offset);
