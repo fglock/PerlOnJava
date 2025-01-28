@@ -3,7 +3,9 @@ package org.perlonjava.runtime;
 import com.ibm.icu.lang.UCharacter;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The RegexPreprocessor class provides functionality to preprocess regular expressions
@@ -202,37 +204,41 @@ public class RegexPreprocessor {
      * @return The effective flags after applying the caret semantics.
      */
     private static String applyCaretSemantics(String flags) {
-        // Start with the default flags (d-imnsx)
-        String defaultFlags = "d-imnx";
-        StringBuilder effectiveFlags = new StringBuilder(defaultFlags);
+        StringBuilder effectiveFlags = new StringBuilder();
 
-        // Apply additional flags
-        for (char flag : flags.toCharArray()) {
-            // If the flag is positive (e.g., 'i', 'x'), enable it
-            if (isPositiveFlag(flag)) {
-                // Remove the negative version of the flag (if any)
-                if (effectiveFlags.indexOf(String.valueOf("-" + flag)) != -1) {
-                    effectiveFlags.deleteCharAt(effectiveFlags.indexOf("-" + flag));
-                }
-                // Add the positive version of the flag
-                if (effectiveFlags.indexOf(String.valueOf(flag)) == -1) {
-                    effectiveFlags.append(flag);
-                }
+        // Track which flags are explicitly set
+        Set<Character> setFlags = new HashSet<>();
+
+        // First pass: collect explicitly set flags
+        for (int i = 0; i < flags.length(); i++) {
+            char flag = flags.charAt(i);
+            if (flag == '-' && i + 1 < flags.length()) {
+                i++;
+                setFlags.add(flags.charAt(i));
+            } else if ("imnsx".indexOf(flag) != -1) {
+                setFlags.add(flag);
+            }
+        }
+
+        // Add negative versions of all standard flags that weren't explicitly set
+        for (char standardFlag : "imnsx".toCharArray()) {
+            if (!setFlags.contains(standardFlag)) {
+                effectiveFlags.append("-").append(standardFlag);
+            }
+        }
+
+        // Add the explicitly set flags
+        for (int i = 0; i < flags.length(); i++) {
+            char flag = flags.charAt(i);
+            if (flag == '-' && i + 1 < flags.length()) {
+                i++;
+                effectiveFlags.append("-").append(flags.charAt(i));
+            } else if ("imnsx".indexOf(flag) != -1) {
+                effectiveFlags.append(flag);
             }
         }
 
         return effectiveFlags.toString();
-    }
-
-    /**
-     * Checks if a flag is positive (i.e., enables a feature).
-     *
-     * @param flag The flag to check.
-     * @return True if the flag is positive, false otherwise.
-     */
-    private static boolean isPositiveFlag(char flag) {
-        // Positive flags are those that enable a feature (e.g., 'i', 'x')
-        return "imnsx".indexOf(flag) != -1;
     }
 
     /**
@@ -244,22 +250,30 @@ public class RegexPreprocessor {
     private static String translatePerlFlagsToJava(String perlFlags) {
         StringBuilder javaFlags = new StringBuilder();
 
-        // Translate each flag
-        for (char flag : perlFlags.toCharArray()) {
-            switch (flag) {
-                case 'i': // Case-insensitive matching
-                    javaFlags.append('i');
-                    break;
-                case 'm': // Multiline mode
-                    javaFlags.append('m');
-                    break;
-                case 's': // Single-line mode (dot matches newline)
-                    javaFlags.append('s');
-                    break;
-                case 'x': // Free-spacing mode (ignore whitespace and comments)
-                    javaFlags.append('x');
-                    break;
-                // 'd', 'n' are not supported in Java, so they are ignored
+        // First collect all negative flags
+        Set<Character> negatedFlags = new HashSet<>();
+        for (int i = 0; i < perlFlags.length(); i++) {
+            if (perlFlags.charAt(i) == '-' && i + 1 < perlFlags.length()) {
+                negatedFlags.add(perlFlags.charAt(++i));
+            }
+        }
+
+        // Then process each flag
+        for (int i = 0; i < perlFlags.length(); i++) {
+            char flag = perlFlags.charAt(i);
+            if (flag == '-') {
+                continue;  // Skip the minus sign
+            }
+
+            // Only add the flag if it's not negated
+            if (!negatedFlags.contains(flag)) {
+                switch (flag) {
+                    case 'i': javaFlags.append('i'); break;
+                    case 'm': javaFlags.append('m'); break;
+                    case 's': javaFlags.append('s'); break;
+                    case 'x': javaFlags.append('x'); break;
+                    // 'd', 'n' are ignored as Java doesn't support them
+                }
             }
         }
 
