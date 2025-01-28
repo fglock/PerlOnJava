@@ -265,9 +265,9 @@ public class RegexPreprocessor {
                     s.substring(0, start) + " <-- HERE " + s.substring(start) + "/");
         }
         String name = s.substring(start, end);
-        Pair content = preProcessRegex(s.substring(end + 1), flag_xx, flag_n, true); // Process content inside the group
+        Pair content = preProcessRegex(s, end + 1, flag_xx, flag_n, true); // Process content inside the group
         sb.append("(?<").append(name).append(">").append(content.processed);
-        return end + content.consumed + 1;
+        return content.consumed;
     }
 
     private static int handleCharacterClass(String s, boolean flag_xx, StringBuilder sb, int c, int offset, int length, StringBuilder rejected) {
