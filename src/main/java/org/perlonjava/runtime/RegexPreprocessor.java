@@ -3,9 +3,7 @@ package org.perlonjava.runtime;
 import com.ibm.icu.lang.UCharacter;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * The RegexPreprocessor class provides functionality to preprocess regular expressions
@@ -144,7 +142,7 @@ public class RegexPreprocessor {
                 return offset;
             } else if (c2 == '?' && c3 == '^') {
                 // Handle (?^ism: ... ) construct
-                offset = handleFlagModifiers(s, offset, length, sb, flag_xx, flag_n);
+                offset = handleFlagModifiers(s, offset, sb, flag_xx, flag_n);
                 return offset;
             } else if (c2 == '?' && c3 == '<' && c4 != '=') {
                 // Handle named capture (?<name> ... )
@@ -177,7 +175,7 @@ public class RegexPreprocessor {
         return offset;
     }
 
-    private static int handleFlagModifiers(String s, int offset, int length, StringBuilder sb, boolean flag_xx, boolean flag_n) {
+    private static int handleFlagModifiers(String s, int offset, StringBuilder sb, boolean flag_xx, boolean flag_n) {
         int start = offset + 3; // Skip past '(?^'
         int colonPos = s.indexOf(':', start);
         int closeParen = s.indexOf(')', start);
@@ -190,10 +188,26 @@ public class RegexPreprocessor {
         int flagsEnd = (colonPos == -1 || closeParen < colonPos) ? closeParen : colonPos;
 
         // Extract and handle the flags
-        handleFlags result = getHandleFlags(s, start, flagsEnd);
+        String flags = s.substring(start, flagsEnd);
+        sb.append("(?");
 
-        // Append the flags to the StringBuilder
-        sb.append("(?").append(result.javaFlags());
+        // Check for positive flags
+        for (char flag : "imsx".toCharArray()) {
+            if (flags.contains(String.valueOf(flag))) {
+                sb.append(flag);
+            }
+        }
+
+        // Check for negative flags
+        String negativeFlags = flags.replaceAll("[^-]", ""); // Extract all '-' characters
+        if (!negativeFlags.isEmpty()) {
+            sb.append('-');
+            for (char flag : "imsx".toCharArray()) {
+                if (flags.contains("-" + flag)) {
+                    sb.append(flag);
+                }
+            }
+        }
 
         // If there's no colon or the close paren is before the colon, flags apply to the rest of the pattern
         if (colonPos == -1 || closeParen < colonPos) {
@@ -208,31 +222,6 @@ public class RegexPreprocessor {
 
         // Calculate the new offset
         return content.consumed; // Move past the processed content
-    }
-
-    private static handleFlags getHandleFlags(String s, int start, int colonPos) {
-        String flags = s.substring(start, colonPos);
-        StringBuilder javaFlags = new StringBuilder();
-
-        // Check for positive flags
-        for (char flag : "imsx".toCharArray()) {
-            if (flags.contains(String.valueOf(flag))) {
-                javaFlags.append(flag);
-            }
-        }
-
-        // Check for negative flags
-        String negativeFlags = flags.replaceAll("[^-]", ""); // Extract all '-' characters
-        if (!negativeFlags.isEmpty()) {
-            javaFlags.append('-');
-            for (char flag : "imsx".toCharArray()) {
-                if (flags.contains("-" + flag)) {
-                    javaFlags.append(flag);
-                }
-            }
-        }
-
-        return new handleFlags(flags, javaFlags.toString());
     }
 
     private static int handleNamedCapture(String s, int offset, int length, StringBuilder sb, boolean flag_xx, boolean flag_n) {
@@ -549,9 +538,6 @@ public class RegexPreprocessor {
         }
 
         return sb.toString();
-    }
-
-    private record handleFlags(String flags, String javaFlags) {
     }
 
     public record Pair(String processed, int consumed) {
