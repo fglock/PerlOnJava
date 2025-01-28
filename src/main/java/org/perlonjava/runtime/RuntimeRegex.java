@@ -91,7 +91,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
                     patternString = escapeQ(patternString);
                 }
 
-                RegexPreprocessor.Pair javaPattern = preProcessRegex(patternString, flag_xx, flag_n, false);
+                RegexPreprocessor.Pair javaPattern = preProcessRegex(patternString, 0, flag_xx, flag_n, false);
 
                 // Compile the regex pattern
                 regex.pattern = Pattern.compile(javaPattern.processed(), flags);
