@@ -41,6 +41,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
 
     // Compiled regex pattern
     public Pattern pattern;
+    int patternFlags;
 
     // Flags for regex behavior
     boolean isGlobalMatch;   // Flag for global matching
@@ -87,6 +88,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
 
                 // Compile the regex pattern
                 regex.pattern = Pattern.compile(javaPattern.processed(), flags);
+                regex.patternFlags = flags;
             } catch (Exception e) {
                 throw new PerlCompilerException("Regex compilation failed: " + e.getMessage());
             }
@@ -387,7 +389,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
     @Override
     public String toString() {
         // Extract the flags from the pattern
-        int flags = pattern.flags();
+        int flags = patternFlags;
         StringBuilder flagString = new StringBuilder();
 
         if ((flags & MULTILINE) != 0) flagString.append('m');
@@ -395,15 +397,8 @@ public class RuntimeRegex implements RuntimeScalarReference {
         if ((flags & CASE_INSENSITIVE) != 0) flagString.append('i');
         if ((flags & COMMENTS) != 0) flagString.append('x');
 
-        // Check if no flags are set
-        if (flagString.isEmpty()) {
-            // XXX TODO Java regex doesn't support '^'
-            // return "(?^:" + pattern.toString() + ")";
-            return pattern.toString();
-        }
-
         // Construct the Perl-like regex string with flags
-        return "(?" + flagString + ":" + pattern + ")";
+        return "(?^" + flagString + ":" + pattern + ")";
     }
 
     /**
