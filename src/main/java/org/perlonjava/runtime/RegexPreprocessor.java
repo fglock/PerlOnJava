@@ -168,13 +168,11 @@ public class RegexPreprocessor {
         int closeParen = s.indexOf(')', start);
 
         if (colonPos == -1 || closeParen < colonPos) {
-            // (?^i)pattern - flags apply to rest of pattern
             if (closeParen == -1) {
-                throw new IllegalArgumentException("Unterminated ( in regex; marked by <-- HERE in m/" +
-                        s.substring(0, start) + " <-- HERE " + s.substring(start) + "/");
+                return closeParen;
             }
+            // (?^i)pattern - flags apply to rest of pattern
             handleFlags result = getHandleFlags(s, start, closeParen);
-
             sb.append("(?").append(result.javaFlags);
             return closeParen;
         }
