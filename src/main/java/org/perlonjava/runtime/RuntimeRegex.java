@@ -7,6 +7,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static java.util.regex.Pattern.COMMENTS;
+import static org.perlonjava.runtime.RegexPreprocessor.escapeQ;
 import static org.perlonjava.runtime.RegexPreprocessor.preProcessRegex;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
@@ -85,6 +86,10 @@ public class RuntimeRegex implements RuntimeScalarReference {
 
                 // Check for \G and set useGAssertion
                 regex.useGAssertion = patternString.contains("\\G");
+
+                if (patternString.contains("\\Q")) {
+                    patternString = escapeQ(patternString);
+                }
 
                 RegexPreprocessor.Pair javaPattern = preProcessRegex(patternString, flag_xx, flag_n, false);
 
@@ -401,14 +406,6 @@ public class RuntimeRegex implements RuntimeScalarReference {
         if ((flags & COMMENTS) != 0) flagString.append('x');
 
         // Construct the Perl-like regex string with flags
-
-        if (patternString.contains("\\Q")) {
-            // XXX TODO make this more robust
-            if (!patternString.contains("\\E")) {
-                patternString = patternString + "\\E";
-            }
-        }
-
         return "(?^" + flagString + ":" + patternString + ")";
     }
 

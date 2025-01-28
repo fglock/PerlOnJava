@@ -293,23 +293,10 @@ public class RegexPreprocessor {
             return offset;
         }
 
+        // Note: \Q .. \E sequences are handled separately, in escapeQ()
+
         char nextChar = s.charAt(offset);
-        if (nextChar == 'Q') {
-            // Handle \Q - quote until \E or end of pattern
-            sb.append('Q');
-            offset++;
-            while (offset < length) {
-                int currentChar = s.codePointAt(offset);
-                if (currentChar == '\\' && offset + 1 < length && s.charAt(offset + 1) == 'E') {
-                    sb.append("\\E");
-                    return offset + 1;
-                }
-                sb.append(Character.toChars(currentChar));
-                offset++;
-            }
-            sb.append("\\E");
-            return offset - 1;
-        } else if (nextChar == 'N' && offset + 1 < length && s.charAt(offset + 1) == '{') {
+        if (nextChar == 'N' && offset + 1 < length && s.charAt(offset + 1) == '{') {
             // Handle \N{name} constructs
             offset += 2; // Skip past \N{
             int endBrace = s.indexOf('}', offset);
@@ -537,6 +524,45 @@ public class RegexPreprocessor {
 //                                        append = false;
 //                                    }
         }
+    }
+
+    public static String escapeQ(String s) {
+        StringBuilder sb = new StringBuilder();
+        int len = s.length();
+        int offset = 0;
+
+        // Predefined set of regex metacharacters
+        final String regexMetacharacters = "-.+*?[](){}^$|\\";
+
+        while (offset < len) {
+            char c = s.charAt(offset);
+            if (c == '\\' && offset + 1 < len && s.charAt(offset + 1) == 'Q') {
+                // Skip past \Q
+                offset += 2;
+
+                // Process characters until \E or end of string
+                while (offset < len) {
+                    if (s.charAt(offset) == '\\' && offset + 1 < len && s.charAt(offset + 1) == 'E') {
+                        // Skip past \E and stop quoting
+                        offset += 2;
+                        break;
+                    }
+
+                    // Escape regex metacharacters
+                    char currentChar = s.charAt(offset);
+                    if (regexMetacharacters.indexOf(currentChar) != -1) {
+                        sb.append('\\'); // Escape the metacharacter
+                    }
+                    sb.append(currentChar);
+                    offset++;
+                }
+            } else {
+                sb.append(c);
+                offset++;
+            }
+        }
+
+        return sb.toString();
     }
 
     public record Pair(String processed, int consumed) {
