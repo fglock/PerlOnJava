@@ -401,6 +401,14 @@ public class RuntimeRegex implements RuntimeScalarReference {
         if ((flags & COMMENTS) != 0) flagString.append('x');
 
         // Construct the Perl-like regex string with flags
+
+        if (patternString.contains("\\Q")) {
+            // XXX TODO make this more robust
+            if (!patternString.contains("\\E")) {
+                patternString = patternString + "\\E";
+            }
+        }
+
         return "(?^" + flagString + ":" + patternString + ")";
     }
 
