@@ -119,7 +119,7 @@ public class RegexPreprocessor {
                     break;
                 case ')':
                     if (stopAtClosingParen) {
-                        return new Pair(sb.toString(), offset);
+                        return new Pair(sb, offset, flag_n);
                     }
                     regexError(s, offset, "Unmatched ) in regex");
                     break;
@@ -130,7 +130,7 @@ public class RegexPreprocessor {
             offset++;
         }
 
-        return new Pair(sb.toString(), offset);
+        return new Pair(sb, offset, flag_n);
     }
 
     private static void regexError(String s, int offset, String errMsg) {
@@ -150,7 +150,7 @@ public class RegexPreprocessor {
                 return offset;
             } else if (c2 == '?' && ((c3 >= 'a' && c3 <= 'z') || c3 == '-' || c3 == '^')) {
                 // Handle (?modifiers: ... ) construct
-                FlagModifierResult flagModifierResult = handleFlagModifiers(s, offset, sb, flag_xx, flag_n);
+                Pair flagModifierResult = handleFlagModifiers(s, offset, sb, flag_xx, flag_n);
                 offset = flagModifierResult.offset;
                 flag_n = flagModifierResult.flag_n;
                 return offset;
@@ -180,18 +180,18 @@ public class RegexPreprocessor {
 
         Pair insideParens = preProcessRegex(s, offset + 1, flag_xx, flag_n, true);
         sb.append(insideParens.processed);
-        offset = insideParens.consumed;
+        offset = insideParens.offset;
 
         return offset;
     }
 
-    private static FlagModifierResult handleFlagModifiers(String s, int offset, StringBuilder sb, boolean flag_xx, boolean flag_n) {
+    private static Pair handleFlagModifiers(String s, int offset, StringBuilder sb, boolean flag_xx, boolean flag_n) {
         int start = offset + 2; // Skip past '(?'
         int colonPos = s.indexOf(':', start);
         int closeParen = s.indexOf(')', start);
 
         if (closeParen == -1) {
-            return new FlagModifierResult(closeParen, flag_n);
+            return new Pair(sb, closeParen, flag_n);
         }
 
         int flagsEnd = (colonPos == -1 || closeParen < colonPos) ? closeParen : colonPos;
@@ -236,16 +236,14 @@ public class RegexPreprocessor {
         }
 
         if (colonPos == -1 || closeParen < colonPos) {
-            return new FlagModifierResult(closeParen, newFlagN);
+            return new Pair(sb, closeParen, newFlagN);
         }
 
         Pair content = preProcessRegex(s, colonPos + 1, flag_xx, newFlagN, true);
         sb.append(":").append(content.processed);
 
-        return new FlagModifierResult(content.consumed, flag_n);
+        return new Pair(sb, content.offset, flag_n);
     }
-
-    private record FlagModifierResult(int offset, boolean flag_n) {}
 
     private static int handleNamedCapture(String s, int offset, int length, StringBuilder sb, boolean flag_xx, boolean flag_n) {
         int start = offset + 3; // Skip past '(?<'
@@ -256,7 +254,7 @@ public class RegexPreprocessor {
         String name = s.substring(start, end);
         Pair content = preProcessRegex(s, end + 1, flag_xx, flag_n, true); // Process content inside the group
         sb.append("(?<").append(name).append(">").append(content.processed);
-        return content.consumed;
+        return content.offset;
     }
 
     private static int handleCharacterClass(String s, boolean flag_xx, StringBuilder sb, int c, int offset) {
@@ -562,6 +560,6 @@ public class RegexPreprocessor {
         return sb.toString();
     }
 
-    public record Pair(String processed, int consumed) {
+    public record Pair(StringBuilder processed, int offset, boolean flag_n) {
     }
 }
