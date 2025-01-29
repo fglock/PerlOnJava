@@ -145,9 +145,9 @@ public class RegexPreprocessor {
                 // Remove inline comments (?# ... )
                 offset = handleSkipComment(offset, s, length);
                 return offset;
-            } else if (c2 == '?' && c3 == '^') {
-                // Handle (?^ism: ... ) construct
-                offset = handleCaretFlagModifiers(s, offset, sb, flag_xx, flag_n);
+            } else if (c2 == '?' && ((c3 >= 'a' && c3 <= 'z') || c3 == '-' || c3 == '^')) {
+                // Handle (?modifiers: ... ) construct
+                offset = handleFlagModifiers(s, offset, sb, flag_xx, flag_n);
                 return offset;
             } else if (c2 == '?' && c3 == '<' && c4 != '=') {
                 // Handle named capture (?<name> ... )
@@ -180,8 +180,8 @@ public class RegexPreprocessor {
         return offset;
     }
 
-    private static int handleCaretFlagModifiers(String s, int offset, StringBuilder sb, boolean flag_xx, boolean flag_n) {
-        int start = offset + 3; // Skip past '(?^'
+    private static int handleFlagModifiers(String s, int offset, StringBuilder sb, boolean flag_xx, boolean flag_n) {
+        int start = offset + 2; // Skip past '(?'
         int colonPos = s.indexOf(':', start);
         int closeParen = s.indexOf(')', start);
 
@@ -196,22 +196,28 @@ public class RegexPreprocessor {
         String flags = s.substring(start, flagsEnd);
         sb.append("(?");
 
-        // Check for positive flags
-        for (char flag : "imsx".toCharArray()) {
-            if (flags.contains(String.valueOf(flag))) {
-                sb.append(flag);
-            }
-        }
-
-        // Check for negative flags
-        String negativeFlags = flags.replaceAll("[^-]", ""); // Extract all '-' characters
-        if (!negativeFlags.isEmpty()) {
-            sb.append('-');
+        // Only reprocess if starts with caret
+        if (flags.startsWith("^")) {
+            flags = flags.substring(1); // Remove the caret
+            // Check for positive flags
             for (char flag : "imsx".toCharArray()) {
-                if (flags.contains("-" + flag)) {
+                if (flags.contains(String.valueOf(flag))) {
                     sb.append(flag);
                 }
             }
+
+            // Check for negative flags
+            String negativeFlags = flags.replaceAll("[^-]", "");
+            if (!negativeFlags.isEmpty()) {
+                sb.append('-');
+                for (char flag : "imsx".toCharArray()) {
+                    if (flags.contains("-" + flag)) {
+                        sb.append(flag);
+                    }
+                }
+            }
+        } else {
+            sb.append(flags);
         }
 
         // If there's no colon or the close paren is before the colon, flags apply to the rest of the pattern
