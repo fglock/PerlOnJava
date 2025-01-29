@@ -238,7 +238,6 @@ This list is under review.
 - ❌  **`/ee` Modifier**: The `/ee` double eval modifier for `s///` operations is not supported.
 - ❌  **Backreferences to Named Groups**: Using `\k<name>` or `\g{name}` for backreferences to named groups is not supported.
 - ❌  **Relative Backreferences**: Using `\g{-n}` for relative backreferences is not supported.
-- ❌  **`/ee` Modifier**: The `/ee` double-eval modifier for `s///` operations is not supported.
 - ❌  **Subroutine Calls in Regex**: Calling named capture groups as subroutines with `(?&name)` or numbered groups with `(?1)`, `(?2)`, etc., is not supported.
 - ❌  **Regex Debugging**: Debugging patterns with `use re 'debug';` to inspect regex engine operations is not supported.
 - ❌  **Regex Optimizations**: Using `use re 'eval';` for runtime regex compilation is not supported.
