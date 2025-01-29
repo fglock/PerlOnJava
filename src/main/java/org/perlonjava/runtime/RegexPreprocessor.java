@@ -77,6 +77,10 @@ public class RegexPreprocessor {
         }
     }
 
+    static Pair preProcessRegex(String s, boolean flag_xx, boolean flag_n) {
+        return preProcessRegex(s, 0, flag_xx, flag_n, false);
+    }
+
     /**
      * Preprocesses a given regex string to make it compatible with Java's regex engine.
      * This involves handling various constructs and escape sequences that Java does not
