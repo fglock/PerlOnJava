@@ -143,7 +143,6 @@ public class RegexPreprocessor {
     }
 
     private static int handleParentheses(String s, int offset, int length, StringBuilder sb, int c, boolean flag_xx, boolean flag_n) {
-        boolean append = true;
         if (offset < length - 3) {
             int c2 = s.codePointAt(offset + 1);
             int c3 = s.codePointAt(offset + 2);
@@ -151,21 +150,25 @@ public class RegexPreprocessor {
             if (c2 == '?' && c3 == '#') {
                 // Remove inline comments (?# ... )
                 offset = handleSkipComment(offset, s, length);
-                return offset;
             } else if (c2 == '?' && ((c3 >= 'a' && c3 <= 'z') || c3 == '-' || c3 == '^')) {
                 // Handle (?modifiers: ... ) construct
                 Pair flagModifierResult = handleFlagModifiers(s, offset, sb, flag_xx, flag_n);
                 offset = flagModifierResult.offset;
                 flag_n = flagModifierResult.flag_n;
-                return offset;
             } else if (c2 == '?' && c3 == '<' && c4 != '=') {
                 // Handle named capture (?<name> ... )
                 offset = handleNamedCapture(s, offset, length, sb, flag_xx, flag_n);
-                return offset;
+            } else {
+                offset = handleRegularParentheses(s, offset, length, sb, flag_xx, flag_n);
             }
+        } else {
+            // Recursively preprocess the content inside the parentheses
+            offset = handleRegularParentheses(s, offset, length, sb, flag_xx, flag_n);
         }
-        // Recursively preprocess the content inside the parentheses
+        return offset;
+    }
 
+    private static int handleRegularParentheses(String s, int offset, int length, StringBuilder sb, boolean flag_xx, boolean flag_n) {
         if (flag_n) {
             // Check if it's already a non-capturing group
             boolean isNonCapturing = offset + 1 < length &&
@@ -185,7 +188,6 @@ public class RegexPreprocessor {
         Pair insideParens = preProcessRegex(s, offset + 1, flag_xx, flag_n, true);
         sb.append(insideParens.processed);
         offset = insideParens.offset;
-
         return offset;
     }
 
