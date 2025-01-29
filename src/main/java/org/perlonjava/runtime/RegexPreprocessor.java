@@ -114,12 +114,6 @@ public class RegexPreprocessor {
                     break;
                 case '(':
                     offset = handleParentheses(s, offset, length, sb, c, flag_xx, flag_n);
-
-                    // Ensure the closing parenthesis is consumed
-                    if (offset >= length || s.codePointAt(offset) != ')') {
-                        regexError(s, offset, "Unterminated ( in regex");
-                    }
-                    sb.append(')');
                     break;
                 case ')':
                     if (stopAtClosingParen) {
@@ -165,6 +159,12 @@ public class RegexPreprocessor {
             // Recursively preprocess the content inside the parentheses
             offset = handleRegularParentheses(s, offset, length, sb, flag_xx, flag_n);
         }
+
+        // Ensure the closing parenthesis is consumed
+        if (offset >= length || s.codePointAt(offset) != ')') {
+            regexError(s, offset, "Unterminated ( in regex");
+        }
+        sb.append(')');
         return offset;
     }
 
