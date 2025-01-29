@@ -132,6 +132,9 @@ public class RegexPreprocessor {
     }
 
     private static void regexError(String s, int offset, String errMsg) {
+        if (offset > s.length()) {
+            offset = s.length();
+        }
         throw new IllegalArgumentException(errMsg + "; marked by <-- HERE in m/" +
                 s.substring(0, offset) + " <-- HERE " + s.substring(offset) + "/");
     }
@@ -146,9 +149,7 @@ public class RegexPreprocessor {
                 offset = handleSkipComment(offset, s, length);
             } else if (c2 == '?' && ((c3 >= 'a' && c3 <= 'z') || c3 == '-' || c3 == '^')) {
                 // Handle (?modifiers: ... ) construct
-                Pair flagModifierResult = handleFlagModifiers(s, offset, sb, flag_xx, flag_n);
-                offset = flagModifierResult.offset;
-                flag_n = flagModifierResult.flag_n;
+                return handleFlagModifiers(s, offset, sb, flag_xx, flag_n);
             } else if (c2 == '?' && c3 == '<' && c4 != '=') {
                 // Handle named capture (?<name> ... )
                 offset = handleNamedCapture(s, offset, length, sb, flag_xx, flag_n);
@@ -191,13 +192,13 @@ public class RegexPreprocessor {
         return offset;
     }
 
-    private static Pair handleFlagModifiers(String s, int offset, StringBuilder sb, boolean flag_xx, boolean flag_n) {
+    private static int handleFlagModifiers(String s, int offset, StringBuilder sb, boolean flag_xx, boolean flag_n) {
         int start = offset + 2; // Skip past '(?'
         int colonPos = s.indexOf(':', start);
         int closeParen = s.indexOf(')', start);
 
         if (closeParen == -1) {
-            return new Pair(sb, closeParen, flag_n);
+            regexError(s, offset, "Unterminated ( in regex");
         }
 
         int flagsEnd = (colonPos == -1 || closeParen < colonPos) ? closeParen : colonPos;
@@ -242,13 +243,28 @@ public class RegexPreprocessor {
         }
 
         if (colonPos == -1 || closeParen < colonPos) {
-            return new Pair(sb, closeParen, newFlagN);
+            // Case: `(?flags)pattern`
+            Pair content = preProcessRegex(s, closeParen + 1, flag_xx, newFlagN, true);
+            sb.append(")").append(content.processed);
+            offset = content.offset;
+            // The closing parenthesis, if any, is consumed by the caller
+            if (offset < s.length()) {
+                offset--;
+            }
+            return offset;
         }
 
+        // Case: `(?flags:pattern)`
         Pair content = preProcessRegex(s, colonPos + 1, flag_xx, newFlagN, true);
         sb.append(":").append(content.processed);
+        offset = content.offset;
 
-        return new Pair(sb, content.offset, flag_n);
+        // Ensure the closing parenthesis is consumed
+        if (offset >= s.length() || s.codePointAt(offset) != ')') {
+            regexError(s, offset, "Unterminated ( in regex");
+        }
+        sb.append(')');
+        return content.offset;
     }
 
     private static int handleNamedCapture(String s, int offset, int length, StringBuilder sb, boolean flag_xx, boolean flag_n) {
