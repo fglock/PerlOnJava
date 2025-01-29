@@ -77,6 +77,17 @@ public class RegexPreprocessor {
         }
     }
 
+    /**
+     * Preprocesses a given regex string to make it compatible with Java's regex engine.
+     * This involves handling various constructs and escape sequences that Java does not
+     * natively support or requires in a different format.
+     *
+     * @param s                  The regex string to preprocess.
+     * @param flag_xx            A flag indicating whether to treat spaces as tokens.
+     * @param flag_n             A flag indicating whether to disable captures.
+     * @return A preprocessed regex string compatible with Java's regex engine.
+     * @throws IllegalArgumentException If there are unmatched parentheses in the regex.
+     */
     static Pair preProcessRegex(String s, boolean flag_xx, boolean flag_n) {
         return preProcessRegex(s, 0, flag_xx, flag_n, false);
     }
