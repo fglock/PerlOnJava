@@ -196,7 +196,7 @@ PerlOnJava implements most core Perl features with some key differences:
 
 ## Regular Expressions
 - ✅  **Basic Matching**: Operators `qr//`, `m//`, `s///`, `split` are implemented.
-- ✅  **Regex modifiers**: Modifiers `/i` `/m` `/s` `/g` `/c` `/r` `/e` `/x` `/xx` are implemented.
+- ✅  **Regex modifiers**: Modifiers `/i` `/m` `/s` `/n` `/g` `/c` `/r` `/e` `/x` `/xx` are implemented.
 - ✅  **Special variables**: The special variables `$1`, `$2`... are implemented.
 - ✅  **Transliteration**: `tr` and `y` transliteration operators are implemented.
 - ✅  **`pos`**: `pos` operator is implemented.
@@ -212,7 +212,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **Inline comments**: `(?#comment)` in regex is implemented.
 - ✅  **caret modifier**: `(?^` embedded pattern-match modifier, shorthand equivalent to "d-imnsx".
 - ✅  **\b inside character class**: `[\b]` is supported in regex.
-- ❌  **Perl-specific Regex Features**: Some features like `/n`, `/ee` are missing.
+- ❌  **Perl-specific Regex Features**: Some features like `/ee` are missing.
 - ❌  **Dynamically-scoped regex variables**: Regex variables are not dynamically-scoped.
 - ❌  Missing regex features include:
   - `(?<test_field>test)` the name in named captures cannot have underscores.

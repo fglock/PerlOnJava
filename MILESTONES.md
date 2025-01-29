@@ -158,7 +158,6 @@
   - indirect object special cases - for `GetOpt::Long`.
   - Implement localization of regex variables.
 - Regex subsystem
-  - `/n` modifier.
 - Class subsystem
 - DBI subsystem
   - Additional methods.
@@ -203,8 +202,8 @@
   - Added stacked file test operators.
   - Added `module_true` feature.
   - Added `<<` and `<<~` Here documents.
-  - Added `/c` regex modifier.
-  - Added `(?^` regex embedded pattern-match modifier.
+  - Added `/c`, `/n` regex modifiers.
+  - Added regex `(?^` clear embedded pattern-match modifier.
   - Added overload: `""`, `0+`, `bool`, `fallback`, `nomethod`.
   - Added `class` feature and `class` keyword.
   - Library upgrades.
