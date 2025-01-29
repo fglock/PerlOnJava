@@ -3,7 +3,10 @@ package org.perlonjava.runtime;
 import com.ibm.icu.lang.UCharacter;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The RegexPreprocessor class provides functionality to preprocess regular expressions
@@ -147,7 +150,9 @@ public class RegexPreprocessor {
                 return offset;
             } else if (c2 == '?' && ((c3 >= 'a' && c3 <= 'z') || c3 == '-' || c3 == '^')) {
                 // Handle (?modifiers: ... ) construct
-                offset = handleFlagModifiers(s, offset, sb, flag_xx, flag_n);
+                FlagModifierResult flagModifierResult = handleFlagModifiers(s, offset, sb, flag_xx, flag_n);
+                offset = flagModifierResult.offset;
+                flag_n = flagModifierResult.flag_n;
                 return offset;
             } else if (c2 == '?' && c3 == '<' && c4 != '=') {
                 // Handle named capture (?<name> ... )
@@ -180,60 +185,67 @@ public class RegexPreprocessor {
         return offset;
     }
 
-    private static int handleFlagModifiers(String s, int offset, StringBuilder sb, boolean flag_xx, boolean flag_n) {
+    private static FlagModifierResult handleFlagModifiers(String s, int offset, StringBuilder sb, boolean flag_xx, boolean flag_n) {
         int start = offset + 2; // Skip past '(?'
         int colonPos = s.indexOf(':', start);
         int closeParen = s.indexOf(')', start);
 
         if (closeParen == -1) {
-            return closeParen; // No valid closing parenthesis
+            return new FlagModifierResult(closeParen, flag_n);
         }
 
-        // Determine the end position for the flags
         int flagsEnd = (colonPos == -1 || closeParen < colonPos) ? closeParen : colonPos;
-
-        // Extract and handle the flags
         String flags = s.substring(start, flagsEnd);
         sb.append("(?");
 
-        // Only reprocess if starts with caret
-        if (flags.startsWith("^")) {
-            flags = flags.substring(1); // Remove the caret
-            // Check for positive flags
-            for (char flag : "imsx".toCharArray()) {
-                if (flags.contains(String.valueOf(flag))) {
-                    sb.append(flag);
-                }
-            }
+        // Split into positive and negative parts
+        String[] parts = flags.split("-", 2);
+        String positiveFlags = parts[0];
+        String negativeFlags = parts.length > 1 ? parts[1] : "";
 
-            // Check for negative flags
-            String negativeFlags = flags.replaceAll("[^-]", "");
-            if (!negativeFlags.isEmpty()) {
-                sb.append('-');
-                for (char flag : "imsx".toCharArray()) {
-                    if (flags.contains("-" + flag)) {
-                        sb.append(flag);
-                    }
-                }
+        // Handle caret case
+        if (positiveFlags.charAt(0) == '^') {
+            positiveFlags = positiveFlags.substring(1);
+            Set<Character> negSet = new HashSet<>();
+            for (char c : (negativeFlags + "imnsx").toCharArray()) {
+                negSet.add(c);
             }
-        } else {
-            sb.append(flags);
+            // Remove any negative flags that appear in positive flags
+            for (char c : positiveFlags.toCharArray()) {
+                negSet.remove(c);
+            }
+            negativeFlags = negSet.stream()
+                    .map(String::valueOf)
+                    .collect(Collectors.joining());
         }
 
-        // If there's no colon or the close paren is before the colon, flags apply to the rest of the pattern
+        boolean newFlagN = flag_n;
+        if (positiveFlags.indexOf('n') >= 0) {
+            newFlagN = true;
+            positiveFlags = positiveFlags.replace("n", "");
+        }
+        if (negativeFlags.indexOf('n') >= 0) {
+            newFlagN = false;
+            negativeFlags = negativeFlags.replace("n", "");
+        }
+
+        // Build the final flag string
+        sb.append(positiveFlags);
+        if (!negativeFlags.isEmpty()) {
+            sb.append('-').append(negativeFlags);
+        }
+
         if (colonPos == -1 || closeParen < colonPos) {
-            return closeParen;
+            return new FlagModifierResult(closeParen, newFlagN);
         }
 
-        // Otherwise, preprocess the subpattern (the part after the ':')
-        Pair content = preProcessRegex(s, colonPos + 1, flag_xx, flag_n, true);
-
-        // Append the modified regex to the StringBuilder
+        Pair content = preProcessRegex(s, colonPos + 1, flag_xx, newFlagN, true);
         sb.append(":").append(content.processed);
 
-        // Calculate the new offset
-        return content.consumed; // Move past the processed content
+        return new FlagModifierResult(content.consumed, flag_n);
     }
+
+    private record FlagModifierResult(int offset, boolean flag_n) {}
 
     private static int handleNamedCapture(String s, int offset, int length, StringBuilder sb, boolean flag_xx, boolean flag_n) {
         int start = offset + 3; // Skip past '(?<'
