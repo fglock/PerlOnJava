@@ -212,11 +212,39 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **Inline comments**: `(?#comment)` in regex is implemented.
 - ✅  **caret modifier**: `(?^` embedded pattern-match modifier, shorthand equivalent to "d-imnsx".
 - ✅  **\b inside character class**: `[\b]` is supported in regex.
-- ❌  **Perl-specific Regex Features**: Some features like `/ee` are missing.
+- ✅  **Variable Interpolation in Regex**: Features like `${var}` for embedding variables.
+- ✅  **Non-capturing groups**: `(?:...)` is implemented.
+
+### Missing Regular Expression Features
+
+This list is under review.
+
 - ❌  **Dynamically-scoped regex variables**: Regex variables are not dynamically-scoped.
-- ❌  Missing regex features include:
-  - `(?<test_field>test)` the name in named captures cannot have underscores.
-  - `(?{ code })` code blocks in regex is not implemented.
+- ❌  **Underscore in named captures** `(?<test_field>test)` the name in named captures cannot have underscores.
+- ❌  **Recursive Patterns**: Features like `(?R)`, `(?0)` or `(??{ code })` for recursive matching are not supported.
+- ❌  **Atomic Grouping**: Use of `(?>...)` for atomic groups is not supported.
+- ❌  **Backtracking Control**: Features like `(?>...)`, `(?(DEFINE)...)`, or `(?>.*)` to prevent or control backtracking are not supported.
+- ❌  **Lookbehind Assertions**: Variable-length negative or positive lookbehind assertions, e.g., `(?<=...)` or `(?<!...)`, are not supported.
+- ❌  **Named Capture Groups**: Defining named capture groups using `(?<name>...)` or `(?'name'...)` is not supported (although accessing them via `%+` or `%-` is supported).
+- ❌  **Unicode Properties**: Matching with `\p{...}` and `\P{...}` (e.g., `\p{L}` for letters) is not supported, although `\N{name}` is supported.
+- ❌  **Possessive Quantifiers**: Quantifiers like `*+`, `++`, `?+`, or `{n,m}+`, which disable backtracking, are not supported.
+- ❌  **Branch Reset Groups**: Use of `(?|...)` to reset group numbering across branches is not supported.
+- ❌  **Advanced Subroutine Calls**: Sub-pattern calls with numbered or named references like `(?1)`, `(?&name)` are not supported.
+- ❌  **Conditional Expressions**: Use of `(?(condition)yes|no)` for conditional matching is not supported.
+- ❌  **Extended Unicode Regex Features**: Beyond basic Unicode escape support, extended Unicode regex functionalities are not supported.
+- ❌  **Extended Grapheme Clusters**: Matching with `\X` for extended grapheme clusters is not supported.
+- ❌  **Regex Debugging**: Support for features like `use re 'debug';` to visualize the regex engine’s operation is not supported.
+- ❌  **Embedded Code in Regex**: Inline Perl code execution with `(?{ code })` or `(??{ code })` is not supported.
+- ❌  **`/ee` Modifier**: The `/ee` double eval modifier for `s///` operations is not supported.
+- ❌  **Backreferences to Named Groups**: Using `\k<name>` or `\g{name}` for backreferences to named groups is not supported.
+- ❌  **Relative Backreferences**: Using `\g{-n}` for relative backreferences is not supported.
+- ❌  **`/ee` Modifier**: The `/ee` double-eval modifier for `s///` operations is not supported.
+- ❌  **Subroutine Calls in Regex**: Calling named capture groups as subroutines with `(?&name)` or numbered groups with `(?1)`, `(?2)`, etc., is not supported.
+- ❌  **Regex Debugging**: Debugging patterns with `use re 'debug';` to inspect regex engine operations is not supported.
+- ❌  **Regex Optimizations**: Using `use re 'eval';` for runtime regex compilation is not supported.
+- ❌  **Regex Compilation Flags**: Setting default regex flags with `use re '/flags';` is not supported.
+- ❌  **Overloading**: `qr` overloading is not implemented.
+
 
 ## Statements and Special Operators
 - ✅  **Context void, scalar, list**: Contexts for void, scalar, and list are supported.
