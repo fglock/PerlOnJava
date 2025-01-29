@@ -52,6 +52,10 @@ allprojects {
     }
 }
 
+test {
+    useJUnitPlatform()
+}
+
 shadowJar {
     archiveClassifier.set('')
     destinationDirectory = file("$buildDir/../target")
