@@ -355,7 +355,10 @@ public class RuntimeRegex implements RuntimeScalarReference {
     }
 
     public static String captureString(int group) {
-        return globalMatcher == null ? null : globalMatcher.group(group);
+        if (globalMatcher == null || group < 0 || group > globalMatcher.groupCount()) {
+            return null;
+        }
+        return globalMatcher.group(group);
     }
 
     public static String lastCaptureString() {
