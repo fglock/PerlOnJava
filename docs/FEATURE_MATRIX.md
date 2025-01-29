@@ -214,6 +214,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **\b inside character class**: `[\b]` is supported in regex.
 - ✅  **Variable Interpolation in Regex**: Features like `${var}` for embedding variables.
 - ✅  **Non-capturing groups**: `(?:...)` is implemented.
+- ✅  **Named Capture Groups**: Defining named capture groups using `(?<name>...)` or `(?'name'...)` is supported.
 
 ### Missing Regular Expression Features
 
@@ -225,7 +226,6 @@ This list is under review.
 - ❌  **Atomic Grouping**: Use of `(?>...)` for atomic groups is not supported.
 - ❌  **Backtracking Control**: Features like `(?>...)`, `(?(DEFINE)...)`, or `(?>.*)` to prevent or control backtracking are not supported.
 - ❌  **Lookbehind Assertions**: Variable-length negative or positive lookbehind assertions, e.g., `(?<=...)` or `(?<!...)`, are not supported.
-- ❌  **Named Capture Groups**: Defining named capture groups using `(?<name>...)` or `(?'name'...)` is not supported (although accessing them via `%+` or `%-` is supported).
 - ❌  **Unicode Properties**: Matching with `\p{...}` and `\P{...}` (e.g., `\p{L}` for letters) is not supported, although `\N{name}` is supported.
 - ❌  **Possessive Quantifiers**: Quantifiers like `*+`, `++`, `?+`, or `{n,m}+`, which disable backtracking, are not supported.
 - ❌  **Branch Reset Groups**: Use of `(?|...)` to reset group numbering across branches is not supported.

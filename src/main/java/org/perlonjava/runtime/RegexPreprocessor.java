@@ -163,7 +163,10 @@ public class RegexPreprocessor {
                 return handleFlagModifiers(s, offset, sb, flag_xx, flag_n);
             } else if (c2 == '?' && c3 == '<' && c4 != '=') {
                 // Handle named capture (?<name> ... )
-                offset = handleNamedCapture(s, offset, length, sb, flag_xx, flag_n);
+                offset = handleNamedCapture(c3, s, offset, length, sb, flag_xx, flag_n);
+            } else if (c2 == '?' && c3 == '\'') {
+                // Handle named capture (?'name' ... )
+                offset = handleNamedCapture(c3, s, offset, length, sb, flag_xx, flag_n);
             } else {
                 offset = handleRegularParentheses(s, offset, length, sb, flag_xx, flag_n);
             }
@@ -278,9 +281,11 @@ public class RegexPreprocessor {
         return content.offset;
     }
 
-    private static int handleNamedCapture(String s, int offset, int length, StringBuilder sb, boolean flag_xx, boolean flag_n) {
+    private static int handleNamedCapture(int c, String s, int offset, int length, StringBuilder sb, boolean flag_xx, boolean flag_n) {
         int start = offset + 3; // Skip past '(?<'
-        int end = s.indexOf('>', start);
+        int end = c == '<'
+                ? s.indexOf('>', start)
+                : s.indexOf('\'', start);
         if (end == -1) {
             regexError(s, offset, "Unterminated named capture in regex");
         }
