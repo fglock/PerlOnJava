@@ -296,7 +296,7 @@ public class RegexPreprocessor {
                 if (ref.startsWith("-")) {
                     // Handle relative backreference
                     int relativeRef = Integer.parseInt(ref);
-                    int absoluteRef = captureGroupCount + relativeRef + 1;
+                    int absoluteRef = captureGroupCount + relativeRef;
                     if (absoluteRef > 0) {
                         sb.setLength(sb.length() - 1); // Remove the backslash
                         sb.append("\\").append(absoluteRef);
