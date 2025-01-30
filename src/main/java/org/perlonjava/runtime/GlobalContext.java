@@ -127,6 +127,7 @@ public class GlobalContext {
         HttpTiny.initialize();
         Dbi.initialize();
         YamlPP.initialize();
+        UnicodeNormalize.initialize();
 
         // Reset method cache after initializing UNIVERSAL
         InheritanceResolver.invalidateCache();

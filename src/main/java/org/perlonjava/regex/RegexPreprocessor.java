@@ -6,6 +6,8 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static org.perlonjava.regex.UnicodeResolver.translateUnicodeProperty;
+
 /**
  * The RegexPreprocessor class provides functionality to preprocess regular expressions
  * to make them compatible with Java's regex engine. It handles various regex constructs
@@ -325,6 +327,20 @@ public class RegexPreprocessor {
                 offset = endBrace;
             } else {
                 regexError(s, offset, "Unmatched brace in \\N{name} construct");
+            }
+        } else if (nextChar == 'p' || nextChar == 'P') {
+            // Handle \p{...} and \P{...} constructs
+            boolean negated = (nextChar == 'P');
+            offset += 2; // Skip past \p or \P
+            int endBrace = s.indexOf('}', offset);
+            if (endBrace != -1) {
+                String property = s.substring(offset, endBrace).trim();
+                String translatedProperty = translateUnicodeProperty(property, negated);
+                sb.setLength(sb.length() - 1); // Remove the backslash
+                sb.append(translatedProperty);
+                offset = endBrace;
+            } else {
+                regexError(s, offset, "Unmatched brace in \\p{...} or \\P{...} construct");
             }
         } else {
             int c2 = s.codePointAt(offset);

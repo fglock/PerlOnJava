@@ -397,6 +397,7 @@ This list is under review.
 - ✅  **Text::Balanced** use the same version as Perl.
 - 🚧  **HTTP::Tiny** some features untested: proxy settings.
 - 🚧  **DynaLoader** placeholder module.
+- 🚧  **Unicode::Normalize** `normalize`, `NFC`, `NFD`, `NFKC`, `NFKD`.
 - ❌  **IO::Socket** module, and related modules or asynchronous I/O operations.
 - ❌  **Safe** module.
 - ❌  **Digest::MD5** module.
