@@ -238,7 +238,6 @@ This list is under review.
 - ❌  **Regex Debugging**: Support for features like `use re 'debug';` to visualize the regex engine’s operation is not supported.
 - ❌  **Embedded Code in Regex**: Inline Perl code execution with `(?{ code })` or `(??{ code })` is not supported.
 - ❌  **`/ee` Modifier**: The `/ee` double eval modifier for `s///` operations is not supported.
-- ❌  **Subroutine Calls in Regex**: Calling named capture groups as subroutines with `(?&name)` or numbered groups with `(?1)`, `(?2)`, etc., is not supported.
 - ❌  **Regex Debugging**: Debugging patterns with `use re 'debug';` to inspect regex engine operations is not supported.
 - ❌  **Regex Optimizations**: Using `use re 'eval';` for runtime regex compilation is not supported.
 - ❌  **Regex Compilation Flags**: Setting default regex flags with `use re '/flags';` is not supported.
