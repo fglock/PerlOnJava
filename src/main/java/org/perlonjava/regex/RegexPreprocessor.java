@@ -1,10 +1,6 @@
 package org.perlonjava.regex;
 
-import com.ibm.icu.lang.UCharacter;
-
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -332,7 +328,7 @@ public class RegexPreprocessor {
             int endBrace = s.indexOf('}', offset);
             if (endBrace != -1) {
                 String name = s.substring(offset, endBrace).trim();
-                int codePoint = getCodePointFromName(name);
+                int codePoint = UnicodeResolver.getCodePointFromName(name);
                 sb.append(String.format("x{%X}", codePoint));
                 offset = endBrace;
             } else {
@@ -404,7 +400,7 @@ public class RegexPreprocessor {
                         int endBrace = s.indexOf('}', offset);
                         if (endBrace != -1) {
                             String name = s.substring(offset, endBrace).trim();
-                            int codePoint = getCodePointFromName(name);
+                            int codePoint = UnicodeResolver.getCodePointFromName(name);
                             sb.append(String.format("x{%X}", codePoint));
                             offset = endBrace;
                         } else {
@@ -501,30 +497,6 @@ public class RegexPreprocessor {
             offset3++;
         }
         return offset;  // possible error - end of comment not found
-    }
-
-    /**
-     * Retrieves the Unicode code point for a given character name.
-     *
-     * @param name The name of the Unicode character.
-     * @return The Unicode code point.
-     * @throws IllegalArgumentException If the name is invalid or not found.
-     */
-    private static int getCodePointFromName(String name) {
-        int codePoint;
-        if (name.startsWith("U+")) {
-            try {
-                codePoint = Integer.parseInt(name.substring(2), 16);
-            } catch (NumberFormatException e) {
-                throw new IllegalArgumentException("Invalid Unicode code point: " + name);
-            }
-        } else {
-            codePoint = UCharacter.getCharFromName(name);
-            if (codePoint == -1) {
-                throw new IllegalArgumentException("Invalid Unicode character name: " + name);
-            }
-        }
-        return codePoint;
     }
 
     /**
