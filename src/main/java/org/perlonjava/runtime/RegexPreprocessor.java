@@ -126,7 +126,7 @@ public class RegexPreprocessor {
                     break;
                 case ')':
                     if (stopAtClosingParen) {
-                        return new Pair(sb, offset, regexFlags.isNonCapturing());
+                        return new Pair(sb, offset);
                     }
                     regexError(s, offset, "Unmatched ) in regex");
                     break;
@@ -137,7 +137,7 @@ public class RegexPreprocessor {
             offset++;
         }
 
-        return new Pair(sb, offset, regexFlags.isNonCapturing());
+        return new Pair(sb, offset);
     }
 
     private static void regexError(String s, int offset, String errMsg) {
@@ -627,6 +627,6 @@ public class RegexPreprocessor {
         return sb.toString();
     }
 
-    public record Pair(StringBuilder processed, int offset, boolean flag_n) {
+    public record Pair(StringBuilder processed, int offset) {
     }
 }
