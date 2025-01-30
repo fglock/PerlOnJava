@@ -1,5 +1,7 @@
 package org.perlonjava.regex;
 
+import org.perlonjava.runtime.PerlCompilerException;
+
 import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -45,7 +47,7 @@ public class RegexPreprocessor {
      * @param s          The regex string to preprocess.
      * @param regexFlags The regex flags to use.
      * @return A preprocessed regex string compatible with Java's regex engine.
-     * @throws IllegalArgumentException If there are unmatched parentheses in the regex.
+     * @throws PerlCompilerException If there are unmatched parentheses in the regex.
      */
     static String preProcessRegex(String s, RegexFlags regexFlags) {
         captureGroupCount = 0;
@@ -65,7 +67,7 @@ public class RegexPreprocessor {
      * @param regexFlags         The regex flags to use.
      * @param stopAtClosingParen A flag indicating whether to stop processing at the first closing parenthesis.
      * @return The position in the string after the preprocessed regex.
-     * @throws IllegalArgumentException If there are unmatched parentheses in the regex.
+     * @throws PerlCompilerException If there are unmatched parentheses in the regex.
      */
     static int handleRegex(String s, int offset, StringBuilder sb, RegexFlags regexFlags, boolean stopAtClosingParen) {
         final int length = s.length();
@@ -107,7 +109,7 @@ public class RegexPreprocessor {
         if (offset > s.length()) {
             offset = s.length();
         }
-        throw new IllegalArgumentException(errMsg + "; marked by <-- HERE in m/" +
+        throw new PerlCompilerException(errMsg + "; marked by <-- HERE in m/" +
                 s.substring(0, offset) + " <-- HERE " + s.substring(offset) + "/");
     }
 
@@ -156,7 +158,9 @@ public class RegexPreprocessor {
                 sb.append("(?:");
             } else {
                 sb.append('(');
-                captureGroupCount++; // Increment counter for capturing groups
+                if (!isNonCapturing) {
+                    captureGroupCount++; // Only increment for capturing groups
+                }
             }
         } else {
             sb.append('(');

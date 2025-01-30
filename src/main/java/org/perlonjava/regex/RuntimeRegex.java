@@ -70,16 +70,16 @@ public class RuntimeRegex implements RuntimeScalarReference {
         RuntimeRegex regex = regexCache.get(cacheKey);
         if (regex == null) {
             regex = new RuntimeRegex();
+            if (patternString.contains("\\Q")) {
+                patternString = escapeQ(patternString);
+            }
+
+            regex.regexFlags = fromModifiers(modifiers, patternString);
+            regex.patternFlags = regex.regexFlags.toPatternFlags();
+
+            String javaPattern = preProcessRegex(patternString, regex.regexFlags);
+
             try {
-                if (patternString.contains("\\Q")) {
-                    patternString = escapeQ(patternString);
-                }
-
-                regex.regexFlags = fromModifiers(modifiers, patternString);
-                regex.patternFlags = regex.regexFlags.toPatternFlags();
-
-                String javaPattern = preProcessRegex(patternString, regex.regexFlags);
-
                 // Compile the regex pattern
                 regex.pattern = Pattern.compile(javaPattern, regex.patternFlags);
                 regex.patternString = patternString;

@@ -158,6 +158,7 @@
   - indirect object special cases - for `GetOpt::Long`.
   - Implement localization of regex variables.
 - Regex subsystem
+  - Added regex `\g{-n}` for relative backreferences.
 - Class subsystem
 - DBI subsystem
   - Additional methods.
@@ -206,7 +207,6 @@
   - Added regex `(?^` clear embedded pattern-match modifier.
   - Added regex `(?'name'...)` named capture groups.
   - Added regex `\k<name>` and `\g{name}` backreferences to named groups.
-  - Added regex `\g{-n}` for relative backreferences.
   - Added overload: `""`, `0+`, `bool`, `fallback`, `nomethod`.
   - Added `class` feature and `class` keyword.
   - Library upgrades.
