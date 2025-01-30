@@ -88,7 +88,9 @@ public class RegexPreprocessor {
      * @throws IllegalArgumentException If there are unmatched parentheses in the regex.
      */
     static String preProcessRegex(String s, RegexFlags regexFlags) {
-        return handleRegex(s, 0, new StringBuilder(), regexFlags, false).processed.toString();
+        StringBuilder sb = new StringBuilder();
+        handleRegex(s, 0, sb, regexFlags, false);
+        return sb.toString();
     }
 
     /**
@@ -103,7 +105,7 @@ public class RegexPreprocessor {
      * @return A preprocessed regex string compatible with Java's regex engine.
      * @throws IllegalArgumentException If there are unmatched parentheses in the regex.
      */
-    static Pair handleRegex(String s, int offset, StringBuilder sb, RegexFlags regexFlags, boolean stopAtClosingParen) {
+    static int handleRegex(String s, int offset, StringBuilder sb, RegexFlags regexFlags, boolean stopAtClosingParen) {
         final int length = s.length();
 
         // Remove \G from the pattern string for Java compilation
@@ -125,7 +127,7 @@ public class RegexPreprocessor {
                     break;
                 case ')':
                     if (stopAtClosingParen) {
-                        return new Pair(sb, offset);
+                        return offset;
                     }
                     regexError(s, offset, "Unmatched ) in regex");
                     break;
@@ -136,7 +138,7 @@ public class RegexPreprocessor {
             offset++;
         }
 
-        return new Pair(sb, offset);
+        return offset;
     }
 
     private static void regexError(String s, int offset, String errMsg) {
@@ -197,9 +199,7 @@ public class RegexPreprocessor {
             sb.append('(');
         }
 
-        Pair insideParens = handleRegex(s, offset + 1, sb, regexFlags, true);
-        offset = insideParens.offset;
-        return offset;
+        return handleRegex(s, offset + 1, sb, regexFlags, true);
     }
 
     private static int handleFlagModifiers(String s, int offset, StringBuilder sb, RegexFlags regexFlags) {
@@ -286,8 +286,7 @@ public class RegexPreprocessor {
         if (colonPos == -1 || closeParen < colonPos) {
             // Case: `(?flags)pattern`
             sb.append(")");
-            Pair content = handleRegex(s, closeParen + 1, sb, newFlags, true);
-            offset = content.offset;
+            offset = handleRegex(s, closeParen + 1, sb, newFlags, true);
             // The closing parenthesis, if any, is consumed by the caller
             if (offset < s.length()) {
                 offset--;
@@ -297,15 +296,14 @@ public class RegexPreprocessor {
 
         // Case: `(?flags:pattern)`
         sb.append(":");
-        Pair content = handleRegex(s, colonPos + 1, sb, newFlags, true);
-        offset = content.offset;
+        offset = handleRegex(s, colonPos + 1, sb, newFlags, true);
 
         // Ensure the closing parenthesis is consumed
         if (offset >= s.length() || s.codePointAt(offset) != ')') {
             regexError(s, offset, "Unterminated ( in regex");
         }
         sb.append(')');
-        return content.offset;
+        return offset;
     }
 
     private static int handleNamedCapture(int c, String s, int offset, int length, StringBuilder sb, RegexFlags regexFlags) {
@@ -318,8 +316,7 @@ public class RegexPreprocessor {
         }
         String name = s.substring(start, end);
         sb.append("(?<").append(name).append(">");
-        Pair content = handleRegex(s, end + 1, sb, regexFlags, true); // Process content inside the group
-        return content.offset;
+        return handleRegex(s, end + 1, sb, regexFlags, true); // Process content inside the group
     }
 
     private static int handleCharacterClass(String s, boolean flag_xx, StringBuilder sb, int c, int offset) {
@@ -594,8 +591,5 @@ public class RegexPreprocessor {
 //                                        append = false;
 //                                    }
         }
-    }
-
-    public record Pair(StringBuilder processed, int offset) {
     }
 }
