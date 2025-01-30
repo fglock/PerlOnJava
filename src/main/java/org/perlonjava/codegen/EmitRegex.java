@@ -50,7 +50,7 @@ public class EmitRegex {
         node.left.accept(scalarVisitor);
         emitterVisitor.pushCallContext();
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/RuntimeRegex", "matchRegex",
+                "org/perlonjava/regex/RuntimeRegex", "matchRegex",
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
 
         // If the context type is VOID, pop the result off the stack
@@ -133,7 +133,7 @@ public class EmitRegex {
                     variable = operand.elements.get(3);
                 }
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/RuntimeRegex", "getReplacementRegex",
+                        "org/perlonjava/regex/RuntimeRegex", "getReplacementRegex",
                         "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
             }
             default -> {
@@ -144,7 +144,7 @@ public class EmitRegex {
                     variable = operand.elements.get(2);
                 }
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/RuntimeRegex", "getQuotedRegex",
+                        "org/perlonjava/regex/RuntimeRegex", "getQuotedRegex",
                         "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
             }
         }
@@ -162,7 +162,7 @@ public class EmitRegex {
 
         emitterVisitor.pushCallContext();
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/RuntimeRegex", "matchRegex",
+                "org/perlonjava/regex/RuntimeRegex", "matchRegex",
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
 
         // If the context type is VOID, pop the result off the stack
