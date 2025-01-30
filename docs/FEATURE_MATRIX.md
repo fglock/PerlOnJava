@@ -215,6 +215,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **Variable Interpolation in Regex**: Features like `${var}` for embedding variables.
 - ✅  **Non-capturing groups**: `(?:...)` is implemented.
 - ✅  **Named Capture Groups**: Defining named capture groups using `(?<name>...)` or `(?'name'...)` is supported.
+- ✅  **Backreferences to Named Groups**: Using `\k<name>` or `\g{name}` for backreferences to named groups is supported.
 
 ### Missing Regular Expression Features
 
@@ -236,7 +237,6 @@ This list is under review.
 - ❌  **Regex Debugging**: Support for features like `use re 'debug';` to visualize the regex engine’s operation is not supported.
 - ❌  **Embedded Code in Regex**: Inline Perl code execution with `(?{ code })` or `(??{ code })` is not supported.
 - ❌  **`/ee` Modifier**: The `/ee` double eval modifier for `s///` operations is not supported.
-- ❌  **Backreferences to Named Groups**: Using `\k<name>` or `\g{name}` for backreferences to named groups is not supported.
 - ❌  **Relative Backreferences**: Using `\g{-n}` for relative backreferences is not supported.
 - ❌  **Subroutine Calls in Regex**: Calling named capture groups as subroutines with `(?&name)` or numbered groups with `(?1)`, `(?2)`, etc., is not supported.
 - ❌  **Regex Debugging**: Debugging patterns with `use re 'debug';` to inspect regex engine operations is not supported.
