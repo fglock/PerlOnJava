@@ -9,8 +9,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static java.util.regex.Pattern.COMMENTS;
-import static org.perlonjava.regex.RegexQuoteMeta.escapeQ;
 import static org.perlonjava.regex.RegexPreprocessor.preProcessRegex;
+import static org.perlonjava.regex.RegexQuoteMeta.escapeQ;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
