@@ -38,6 +38,8 @@ public class RuntimeRegex implements RuntimeScalarReference {
     // Global matcher used for regex operations
     public static Matcher globalMatcher;    // Provides Perl regex variables like %+, %-
     public static String globalMatchString; // Provides Perl regex variables like $&
+    // Indicates if \G assertion is used
+    private final boolean useGAssertion = false;
     // Compiled regex pattern
     public Pattern pattern;
     int patternFlags;
@@ -48,8 +50,6 @@ public class RuntimeRegex implements RuntimeScalarReference {
     private RuntimeScalar replacement = null;
     // Tracks if a match has occurred: this is used as a counter for m?PAT?
     private boolean matched = false;
-    // Indicates if \G assertion is used
-    private final boolean useGAssertion = false;
 
     public RuntimeRegex() {
         this.regexFlags = null;
@@ -91,7 +91,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
                     patternString = escapeQ(patternString);
                 }
 
-                String  javaPattern = preProcessRegex(patternString, regex.regexFlags);
+                String javaPattern = preProcessRegex(patternString, regex.regexFlags);
 
                 // Compile the regex pattern
                 regex.pattern = Pattern.compile(javaPattern, regex.patternFlags);
