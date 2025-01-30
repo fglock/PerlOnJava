@@ -197,6 +197,7 @@
   - Added wrapper scripts (`jperl`/`jperl.bat`) for easier command-line usage
   - Added `YAML` and `YAML::PP` modules.
   - Added `Text::Balanced` module.
+  - Added `Unicode::Normalize` module.
   - Added subroutine signatures and `signature` feature.
   - Added chained operators.
   - Added stacked file test operators.
