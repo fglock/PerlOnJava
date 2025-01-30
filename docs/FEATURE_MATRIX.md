@@ -218,6 +218,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **Backreferences to Named Groups**: Using `\k<name>` or `\g{name}` for backreferences to named groups is supported.
 - ✅  **Relative Backreferences**: Using `\g{-n}` for relative backreferences.
 - ✅  **Unicode Properties**: Matching with `\p{...}` and `\P{...}` (e.g., `\p{L}` for letters).
+- ✅  **Possessive Quantifiers**: Quantifiers like `*+`, `++`, `?+`, or `{n,m}+`, which disable backtracking, are not supported.
 
 ### Missing Regular Expression Features
 
@@ -229,7 +230,6 @@ This list is under review.
 - ❌  **Atomic Grouping**: Use of `(?>...)` for atomic groups is not supported.
 - ❌  **Backtracking Control**: Features like `(?>...)`, `(?(DEFINE)...)`, or `(?>.*)` to prevent or control backtracking are not supported.
 - ❌  **Lookbehind Assertions**: Variable-length negative or positive lookbehind assertions, e.g., `(?<=...)` or `(?<!...)`, are not supported.
-- ❌  **Possessive Quantifiers**: Quantifiers like `*+`, `++`, `?+`, or `{n,m}+`, which disable backtracking, are not supported.
 - ❌  **Branch Reset Groups**: Use of `(?|...)` to reset group numbering across branches is not supported.
 - ❌  **Advanced Subroutine Calls**: Sub-pattern calls with numbered or named references like `(?1)`, `(?&name)` are not supported.
 - ❌  **Conditional Expressions**: Use of `(?(condition)yes|no)` for conditional matching is not supported.

@@ -208,6 +208,7 @@
   - Added regex `\k<name>` and `\g{name}` backreferences to named groups.
   - Added regex `\p{...}` and `\P{...}` for Unicode properties.
   - Added regex `\g{-n}` for relative backreferences.
+  - Added regex `*+`, `++`, `?+`, `{n,m}+` possessive quantifiers.
   - Added overload: `""`, `0+`, `bool`, `fallback`, `nomethod`.
   - Added `class` feature and `class` keyword.
   - Library upgrades.
