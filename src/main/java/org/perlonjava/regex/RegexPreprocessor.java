@@ -100,9 +100,10 @@ public class RegexPreprocessor {
      *
      * @param s                  The regex string to preprocess.
      * @param offset             The position in the string.
+     * @param sb                 The string builder to append the preprocessed regex to.
      * @param regexFlags         The regex flags to use.
      * @param stopAtClosingParen A flag indicating whether to stop processing at the first closing parenthesis.
-     * @return A preprocessed regex string compatible with Java's regex engine.
+     * @return The position in the string after the preprocessed regex.
      * @throws IllegalArgumentException If there are unmatched parentheses in the regex.
      */
     static int handleRegex(String s, int offset, StringBuilder sb, RegexFlags regexFlags, boolean stopAtClosingParen) {
