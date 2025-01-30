@@ -202,7 +202,7 @@
   - Added stacked file test operators.
   - Added `module_true` feature.
   - Added `<<` and `<<~` Here documents.
-  - Added `/c`, `/n` regex modifiers.
+  - Added `/p`, `/c`, `/n` regex modifiers.
   - Added regex `(?^` clear embedded pattern-match modifier.
   - Added regex `(?'name'...)` named capture groups.
   - Added regex `\k<name>` and `\g{name}` backreferences to named groups.
