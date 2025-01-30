@@ -35,6 +35,8 @@ public class RegexPreprocessor {
     // WIP:
     // named capture (?<one> ... ) replace underscore in name
 
+    private static int captureGroupCount;
+
     /**
      * Preprocesses a given regex string to make it compatible with Java's regex engine.
      * This involves handling various constructs and escape sequences that Java does not
@@ -46,6 +48,7 @@ public class RegexPreprocessor {
      * @throws IllegalArgumentException If there are unmatched parentheses in the regex.
      */
     static String preProcessRegex(String s, RegexFlags regexFlags) {
+        captureGroupCount = 0;
         StringBuilder sb = new StringBuilder();
         handleRegex(s, 0, sb, regexFlags, false);
         return sb.toString();
@@ -153,9 +156,11 @@ public class RegexPreprocessor {
                 sb.append("(?:");
             } else {
                 sb.append('(');
+                captureGroupCount++; // Increment counter for capturing groups
             }
         } else {
             sb.append('(');
+            captureGroupCount++; // Increment counter for capturing groups
         }
 
         return handleRegex(s, offset + 1, sb, regexFlags, true);
@@ -244,6 +249,7 @@ public class RegexPreprocessor {
         }
         String name = s.substring(start, end);
         sb.append("(?<").append(name).append(">");
+        captureGroupCount++; // Increment counter for capturing groups
         return handleRegex(s, end + 1, sb, regexFlags, true); // Process content inside the group
     }
 
@@ -286,9 +292,22 @@ public class RegexPreprocessor {
             offset += 2; // Skip past \g{
             int endBrace = s.indexOf('}', offset);
             if (endBrace != -1) {
-                String name = s.substring(offset, endBrace);
-                sb.setLength(sb.length() - 1); // Remove the backslash
-                sb.append("\\k<").append(name).append(">");
+                String ref = s.substring(offset, endBrace);
+                if (ref.startsWith("-")) {
+                    // Handle relative backreference
+                    int relativeRef = Integer.parseInt(ref);
+                    int absoluteRef = captureGroupCount + relativeRef + 1;
+                    if (absoluteRef > 0) {
+                        sb.setLength(sb.length() - 1); // Remove the backslash
+                        sb.append("\\").append(absoluteRef);
+                    } else {
+                        throw new IllegalArgumentException("Invalid relative backreference: " + ref);
+                    }
+                } else {
+                    // Handle named backreference
+                    sb.setLength(sb.length() - 1); // Remove the backslash
+                    sb.append("\\k<").append(ref).append(">");
+                }
                 offset = endBrace;
             }
         } else if (nextChar == 'N' && offset + 1 < length && s.charAt(offset + 1) == '{') {
