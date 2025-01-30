@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
-use Test::More tests => 10;
+use Test::More tests => 16;
 
 # Test case 1: Simple named capture
 my $string1 = 'foo';
@@ -55,12 +55,12 @@ if ($string6 =~ /(?i)(?<creature>rat)\k<creature>/) {
     fail('Test case 6: Pattern did not match');
 }
 
-__END__
-
 # Test case 7: Relative backreference with \g{-1}
 my $string7 = 'fishfish';
 if ($string7 =~ /(fish)\g{-1}/) {
-    is($1, 'fish', 'Test case 7: Relative backreference \g{-1}');
+    my $v = $1;
+    is($v, 'fish', 'Test case 7: Relative backreference \g{-1} <<' . $v . '>>');
+    is($1, 'fish', 'Test case 7: Relative backreference \g{-1} <<' . $1 . '>>');
 } else {
     fail('Test case 7: Pattern did not match');
 }
@@ -68,8 +68,8 @@ if ($string7 =~ /(fish)\g{-1}/) {
 # Test case 8: Multiple captures with \g{-2}
 my $string8 = 'catdogcat';
 if ($string8 =~ /(cat)(dog)\g{-2}/) {
-    is($1, 'cat', 'Test case 8: First capture in \g{-2} pattern');
-    is($2, 'dog', 'Test case 8: Second capture in \g{-2} pattern');
+    is($1, 'cat', 'Test case 8: First capture in \g{-2} pattern <<' . $1 . '>>');
+    is($2, 'dog', 'Test case 8: Second capture in \g{-2} pattern <<' . $2 . '>>');
 } else {
     fail('Test case 8: Pattern did not match');
 }
@@ -77,9 +77,10 @@ if ($string8 =~ /(cat)(dog)\g{-2}/) {
 # Test case 9: Mixed named and relative backreferences
 my $string9 = 'mouseratmouse';
 if ($string9 =~ /(?<first>mouse)(rat)\g{-2}/) {
-    is($+{first}, 'mouse', 'Test case 9: Named capture with relative backreference');
-    is($2, 'rat', 'Test case 9: Regular capture in mixed pattern');
-    is($1, 'mouse', 'Test case 9: Relative backreference match');  # Add this line
+    is($2, 'rat', 'Test case 9: Regular capture in mixed pattern <<' . $2 . '>>');
+    is($1, 'mouse', 'Test case 9: Relative backreference match <<' . $1 . '>>');
+} else {
+    fail('Test case 9: Pattern did not match');
 }
 
 done_testing();

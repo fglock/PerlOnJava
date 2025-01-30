@@ -216,7 +216,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **Non-capturing groups**: `(?:...)` is implemented.
 - ✅  **Named Capture Groups**: Defining named capture groups using `(?<name>...)` or `(?'name'...)` is supported.
 - ✅  **Backreferences to Named Groups**: Using `\k<name>` or `\g{name}` for backreferences to named groups is supported.
-- ❌  **Relative Backreferences**: Using `\g{-n}` for relative backreferences.
+- ✅  **Relative Backreferences**: Using `\g{-n}` for relative backreferences.
 
 ### Missing Regular Expression Features
 
