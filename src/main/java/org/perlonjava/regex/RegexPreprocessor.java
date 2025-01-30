@@ -283,13 +283,8 @@ public class RegexPreprocessor {
 
     private static String generateGraphemeClusterRegex() {
         return "(?x:                            # Free-spacing mode for readability\n" +
-                "  (?:                           # Start of a single grapheme cluster\n" +
-                "    [\\P{M}\\p{M}]              # Base character (non-mark) or combining mark\n" +
-                "    |                           # OR\n" +
-                "    (?:                         # Surrogate pairs (outside BMP)\n" +
-                "      [\\uD800-\\uDBFF]         # High surrogate\n" +
-                "      [\\uDC00-\\uDFFF]         # Low surrogate\n" +
-                "    )\n" +
+                "  (                             # Start of a single grapheme cluster\n" +
+                "    \\P{M}\\p{M}*               # Base character with optional combining marks\n" +
                 "    |                           # OR\n" +
                 "    (?:                         # Emoji sequences\n" +
                 "      [\\x{1F600}-\\x{1F64F}]  # Emoticons\n" +
@@ -298,14 +293,19 @@ public class RegexPreprocessor {
                 "      | [\\x{2600}-\\x{26FF}]    # Misc symbols\n" +
                 "      | [\\x{2700}-\\x{27BF}]    # Dingbats\n" +
                 "    )\n" +
-                "    (?:                         # Handle optional modifiers or sequences\n" +
-                "      [\\x{1F3FB}-\\x{1F3FF}]?  # Skin tone modifiers\n" +
-                "      (?:\\x{200D}              # Zero-width joiner for sequences\n" +
-                "        [\\P{M}\\p{M}]          # Followed by base character or combining mark\n" +
+                "    (?:                         # Optional emoji modifiers and ZWJ sequences\n" +
+                "      [\\x{1F3FB}-\\x{1F3FF}]?  # Optional skin tone modifiers\n" +
+                "      (?:\\x{200D}              # Zero-width joiner\n" +
+                "        [\\P{M}\\p{M}*]         # Base character with optional combining marks\n" +
                 "      )*                        # Repeat for joined sequences\n" +
                 "    )\n" +
+                "    |                           # OR\n" +
+                "    (?:                         # Surrogate pairs (outside BMP)\n" +
+                "      [\\uD800-\\uDBFF]         # High surrogate\n" +
+                "      [\\uDC00-\\uDFFF]         # Low surrogate\n" +
+                "    )\n" +
                 "  )\n" +
-                "  (?!\\p{M})                    # Ensure no trailing combining marks\n" +
+                "  \\p{M}*                       # Allow trailing combining marks\n" +
                 ")";
     }
 
