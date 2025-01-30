@@ -82,8 +82,8 @@ public class RegexPreprocessor {
      * This involves handling various constructs and escape sequences that Java does not
      * natively support or requires in a different format.
      *
-     * @param s                  The regex string to preprocess.
-     * @param regexFlags         The regex flags to use.
+     * @param s          The regex string to preprocess.
+     * @param regexFlags The regex flags to use.
      * @return A preprocessed regex string compatible with Java's regex engine.
      * @throws IllegalArgumentException If there are unmatched parentheses in the regex.
      */
@@ -119,14 +119,14 @@ public class RegexPreprocessor {
                     offset = handleEscapeSequences(s, sb, c, offset);
                     break;
                 case '[':   // Handle character classes
-                    offset = handleCharacterClass(s, regexFlags.flagXx(), sb, c, offset);
+                    offset = handleCharacterClass(s, regexFlags.isExtendedWhitespace(), sb, c, offset);
                     break;
                 case '(':
                     offset = handleParentheses(s, offset, length, sb, c, regexFlags, stopAtClosingParen);
                     break;
                 case ')':
                     if (stopAtClosingParen) {
-                        return new Pair(sb, offset, regexFlags.flagN());
+                        return new Pair(sb, offset, regexFlags.isNonCapturing());
                     }
                     regexError(s, offset, "Unmatched ) in regex");
                     break;
@@ -137,7 +137,7 @@ public class RegexPreprocessor {
             offset++;
         }
 
-        return new Pair(sb, offset, regexFlags.flagN());
+        return new Pair(sb, offset, regexFlags.isNonCapturing());
     }
 
     private static void regexError(String s, int offset, String errMsg) {
@@ -182,7 +182,7 @@ public class RegexPreprocessor {
     }
 
     private static int handleRegularParentheses(String s, int offset, int length, StringBuilder sb, RuntimeRegex.RegexFlags regexFlags) {
-        if (regexFlags.flagN()) {
+        if (regexFlags.isNonCapturing()) {
             // Check if it's already a non-capturing group
             boolean isNonCapturing = offset + 1 < length &&
                     s.charAt(offset + 1) == '?' &&
@@ -238,7 +238,7 @@ public class RegexPreprocessor {
                     .collect(Collectors.joining());
         }
 
-        boolean newFlagN = regexFlags.flagN();
+        boolean newFlagN = regexFlags.isNonCapturing();
         boolean newIsCaseInsensitive = regexFlags.isCaseInsensitive();
         boolean newIsMultiLine = regexFlags.isMultiLine();
         boolean newIsDotAll = regexFlags.isDotAll();
@@ -270,9 +270,9 @@ public class RegexPreprocessor {
                 regexFlags.isNonDestructive(),
                 regexFlags.isMatchExactlyOnce(),
                 regexFlags.useGAssertion(),
-                regexFlags.flagXx(),
+                regexFlags.isExtendedWhitespace(),
                 newFlagN,
-                regexFlags.flagO(),
+                regexFlags.isOptimized(),
                 newIsCaseInsensitive,
                 newIsMultiLine,
                 newIsDotAll,

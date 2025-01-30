@@ -20,33 +20,12 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
  */
 public class RuntimeRegex implements RuntimeScalarReference {
 
-    public RuntimeRegex() {
-        this.flags = new RegexFlags(false, false, false, false, false, false, false, false, false, false, false, false);
-    }
-
-    public record RegexFlags(
-            boolean isGlobalMatch,
-            boolean keepCurrentPosition,
-            boolean isNonDestructive,
-            boolean isMatchExactlyOnce,
-            boolean useGAssertion,
-            boolean flagXx,
-            boolean flagN,
-            boolean flagO,
-            boolean isCaseInsensitive,     // i flag
-            boolean isMultiLine,           // m flag
-            boolean isDotAll,              // s flag
-            boolean isExtended             // x flag
-    ) {}
-
     // Constants for regex pattern flags
     private static final int CASE_INSENSITIVE = Pattern.CASE_INSENSITIVE;
     private static final int MULTILINE = Pattern.MULTILINE;
     private static final int DOTALL = Pattern.DOTALL;
-
     // Maximum size for the regex cache
     private static final int MAX_REGEX_CACHE_SIZE = 1000;
-
     // Cache to store compiled regex patterns
     private static final Map<String, RuntimeRegex> regexCache = new LinkedHashMap<String, RuntimeRegex>(MAX_REGEX_CACHE_SIZE, 0.75f, true) {
         @Override
@@ -54,27 +33,25 @@ public class RuntimeRegex implements RuntimeScalarReference {
             return size() > MAX_REGEX_CACHE_SIZE;
         }
     };
-
     // Global matcher used for regex operations
     public static Matcher globalMatcher;    // Provides Perl regex variables like %+, %-
     public static String globalMatchString; // Provides Perl regex variables like $&
-
     // Compiled regex pattern
     public Pattern pattern;
     int patternFlags;
     String patternString;
-
     // Flags for regex behavior
-    private RegexFlags flags;
-
+    private RegexFlags regexFlags;
     // Replacement string for substitutions
     private RuntimeScalar replacement = null;
-
     // Tracks if a match has occurred: this is used as a counter for m?PAT?
     private boolean matched = false;
-
     // Indicates if \G assertion is used
-    private boolean useGAssertion = false;
+    private final boolean useGAssertion = false;
+
+    public RuntimeRegex() {
+        this.regexFlags = null;
+    }
 
     /**
      * Compiles a regex pattern string with optional modifiers into a RuntimeRegex object.
@@ -93,7 +70,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
             regex = new RuntimeRegex();
             try {
                 int flags = regex.convertModifiers(modifiers);
-                regex.flags = new RegexFlags(
+                regex.regexFlags = new RegexFlags(
                         modifiers.contains("g"),
                         modifiers.contains("c"),
                         modifiers.contains("r"),
@@ -112,7 +89,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
                     patternString = escapeQ(patternString);
                 }
 
-                RegexPreprocessor.Pair javaPattern = preProcessRegex(patternString, regex.flags);
+                RegexPreprocessor.Pair javaPattern = preProcessRegex(patternString, regex.regexFlags);
 
                 // Compile the regex pattern
                 regex.pattern = Pattern.compile(javaPattern.processed().toString(), flags);
@@ -179,7 +156,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
             return replaceRegex(quotedRegex, string, ctx);
         }
 
-        if (regex.flags.isMatchExactlyOnce && regex.matched) {
+        if (regex.regexFlags.isMatchExactlyOnce && regex.matched) {
             // m?PAT? already matched once; now return false
             if (ctx == RuntimeContextType.LIST) {
                 return new RuntimeList();
@@ -220,7 +197,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
 
             found = true;
             int captureCount = matcher.groupCount();
-            if (regex.flags.isGlobalMatch && captureCount < 1 && ctx == RuntimeContextType.LIST) {
+            if (regex.regexFlags.isGlobalMatch && captureCount < 1 && ctx == RuntimeContextType.LIST) {
                 // Global match and no captures, in list context return the matched string
                 String matchedStr = matcher.group(0);
                 matchedGroups.add(new RuntimeScalar(matchedStr));
@@ -240,7 +217,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 }
             }
 
-            if (regex.flags.isGlobalMatch) {
+            if (regex.regexFlags.isGlobalMatch) {
                 // Update the position for the next match
                 if (ctx == RuntimeContextType.SCALAR || ctx == RuntimeContextType.VOID) {
                     // Set pos to the end of the current match to prepare for the next search
@@ -252,13 +229,13 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 }
             }
 
-            if (!regex.flags.isGlobalMatch) {
+            if (!regex.regexFlags.isGlobalMatch) {
                 break;
             }
         }
 
         // Reset pos() on failed match with /g, unless /c is set
-        if (!found && regex.flags.isGlobalMatch && !regex.flags.keepCurrentPosition) {
+        if (!found && regex.regexFlags.isGlobalMatch && !regex.regexFlags.keepCurrentPosition) {
             posScalar.set(scalarUndef);
         }
 
@@ -327,7 +304,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
             }
 
             // If not a global match, break after the first replacement
-            if (!regex.flags.isGlobalMatch) {
+            if (!regex.regexFlags.isGlobalMatch) {
                 break;
             }
         }
@@ -335,7 +312,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
         matcher.appendTail(resultBuffer);
 
         if (found > 0) {
-            if (regex.flags.isNonDestructive) {
+            if (regex.regexFlags.isNonDestructive) {
                 return new RuntimeScalar(resultBuffer.toString());
             }
             // Save the modified string back to the original scalar
@@ -343,7 +320,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
             // Return the number of substitutions made
             return RuntimeScalarCache.getScalarInt(found);
         } else {
-            if (regex.flags.isNonDestructive) {
+            if (regex.regexFlags.isNonDestructive) {
                 return string;
             }
             // Return `undef`
@@ -420,14 +397,13 @@ public class RuntimeRegex implements RuntimeScalarReference {
 
     @Override
     public String toString() {
-        // Extract the flags from the pattern
-        int flags = patternFlags;
         StringBuilder flagString = new StringBuilder();
 
-        if ((flags & MULTILINE) != 0) flagString.append('m');
-        if ((flags & DOTALL) != 0) flagString.append('s');
-        if ((flags & CASE_INSENSITIVE) != 0) flagString.append('i');
-        if ((flags & COMMENTS) != 0) flagString.append('x');
+        if (regexFlags.isCaseInsensitive()) flagString.append('i');
+        if (regexFlags.isMultiLine()) flagString.append('m');
+        if (regexFlags.isDotAll()) flagString.append('s');
+        if (regexFlags.isNonCapturing()) flagString.append('n');
+        if (regexFlags.isExtended()) flagString.append('x');
 
         // Construct the Perl-like regex string with flags
         return "(?^" + flagString + ":" + patternString + ")";
@@ -492,5 +468,21 @@ public class RuntimeRegex implements RuntimeScalarReference {
         // /g (global) is not an actual flag for Pattern, it's used for matching multiple occurrences.
         // /r (non-destructive) is also not an actual flag for Pattern, it returns the replacement.
         return flags;
+    }
+
+    public record RegexFlags(
+            boolean isGlobalMatch,         // g flag - match globally (find all occurrences)
+            boolean keepCurrentPosition,   // c flag - continue matching from last match position
+            boolean isNonDestructive,      // r flag - non-destructive match (leaves target string unchanged)
+            boolean isMatchExactlyOnce,    // m?PAT? flag - match pattern exactly once
+            boolean useGAssertion,         // \G assertion - match must occur at previous match end
+            boolean isExtendedWhitespace,  // xx flag - ignore whitespace and comments in pattern
+            boolean isNonCapturing,        // n flag - make groups non-capturing by default
+            boolean isOptimized,           // o flag - compile pattern only once
+            boolean isCaseInsensitive,     // i flag - case insensitive matching
+            boolean isMultiLine,           // m flag - multiline mode (^ and $ match line boundaries)
+            boolean isDotAll,              // s flag - dot matches all characters including newline
+            boolean isExtended             // x flag - ignore whitespace and # comments in pattern
+    ) {
     }
 }
