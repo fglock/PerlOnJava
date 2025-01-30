@@ -158,6 +158,16 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     }
 
     /**
+     * Adds this entity to the specified RuntimeList.
+     *
+     * @param list the RuntimeList to which this entity will be added
+     */
+    @Override
+    public void addToList(RuntimeList list) {
+        list.add(this.getValueAsScalar());
+    }
+
+    /**
      * Enum to represent the id of the special variable.
      *
      * <p>This enum defines the different types of special variables that can be
