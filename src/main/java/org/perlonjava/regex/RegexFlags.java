@@ -15,11 +15,12 @@ public class RegexFlags {
     private final boolean isMultiLine;           // m flag - multiline mode (^ and $ match line boundaries)
     private final boolean isDotAll;              // s flag - dot matches all characters including newline
     private final boolean isExtended;            // x flag - ignore whitespace and # comments in pattern
+    private final boolean preservesMatch;        // p flag - preserve match after failed matches
 
     public RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boolean isNonDestructive,
                       boolean isMatchExactlyOnce, boolean useGAssertion, boolean isExtendedWhitespace,
                       boolean isNonCapturing, boolean isOptimized, boolean isCaseInsensitive,
-                      boolean isMultiLine, boolean isDotAll, boolean isExtended) {
+                      boolean isMultiLine, boolean isDotAll, boolean isExtended, boolean preservesMatch) {
         this.isGlobalMatch = isGlobalMatch;
         this.keepCurrentPosition = keepCurrentPosition;
         this.isNonDestructive = isNonDestructive;
@@ -32,6 +33,7 @@ public class RegexFlags {
         this.isMultiLine = isMultiLine;
         this.isDotAll = isDotAll;
         this.isExtended = isExtended;
+        this.preservesMatch = preservesMatch;
     }
 
     public static RegexFlags fromModifiers(String modifiers, String patternString) {
@@ -47,7 +49,8 @@ public class RegexFlags {
                 modifiers.contains("i"),
                 modifiers.contains("m"),
                 modifiers.contains("s"),
-                modifiers.contains("x")
+                modifiers.contains("x"),
+                modifiers.contains("p")
         );
     }
 
@@ -74,6 +77,7 @@ public class RegexFlags {
         boolean newIsMultiLine = this.isMultiLine;
         boolean newIsDotAll = this.isDotAll;
         boolean newIsExtended = this.isExtended;
+        boolean newPreservesMatch = this.preservesMatch;
 
         // Handle positive flags
         if (positiveFlags.indexOf('n') >= 0) newFlagN = true;
@@ -81,6 +85,7 @@ public class RegexFlags {
         if (positiveFlags.indexOf('m') >= 0) newIsMultiLine = true;
         if (positiveFlags.indexOf('s') >= 0) newIsDotAll = true;
         if (positiveFlags.indexOf('x') >= 0) newIsExtended = true;
+        if (positiveFlags.indexOf('p') >= 0) newPreservesMatch = true;
 
         // Handle negative flags
         if (negativeFlags.indexOf('n') >= 0) newFlagN = false;
@@ -101,8 +106,22 @@ public class RegexFlags {
                 newIsCaseInsensitive,
                 newIsMultiLine,
                 newIsDotAll,
-                newIsExtended
+                newIsExtended,
+                newPreservesMatch
         );
+    }
+
+    public String toFlagString() {
+        StringBuilder flagString = new StringBuilder();
+
+        if (preservesMatch) flagString.append('p');
+        if (isCaseInsensitive) flagString.append('i');
+        if (isMultiLine) flagString.append('m');
+        if (isDotAll) flagString.append('s');
+        if (isNonCapturing) flagString.append('n');
+        if (isExtended) flagString.append('x');
+
+        return flagString.toString();
     }
 
     // Getters
@@ -152,5 +171,9 @@ public class RegexFlags {
 
     public boolean isExtended() {
         return isExtended;
+    }
+
+    public boolean preservesMatch() {
+        return preservesMatch;
     }
 }

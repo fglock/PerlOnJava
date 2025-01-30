@@ -385,16 +385,8 @@ public class RuntimeRegex implements RuntimeScalarReference {
 
     @Override
     public String toString() {
-        StringBuilder flagString = new StringBuilder();
-
-        if (regexFlags.isCaseInsensitive()) flagString.append('i');
-        if (regexFlags.isMultiLine()) flagString.append('m');
-        if (regexFlags.isDotAll()) flagString.append('s');
-        if (regexFlags.isNonCapturing()) flagString.append('n');
-        if (regexFlags.isExtended()) flagString.append('x');
-
         // Construct the Perl-like regex string with flags
-        return "(?^" + flagString + ":" + patternString + ")";
+        return "(?^" + regexFlags.toFlagString() + ":" + patternString + ")";
     }
 
     /**
