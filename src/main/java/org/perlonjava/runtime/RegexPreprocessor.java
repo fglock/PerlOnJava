@@ -83,13 +83,12 @@ public class RegexPreprocessor {
      * natively support or requires in a different format.
      *
      * @param s                  The regex string to preprocess.
-     * @param flag_xx            A flag indicating whether to treat spaces as tokens.
-     * @param flag_n             A flag indicating whether to disable captures.
+     * @param regexFlags         The regex flags to use.
      * @return A preprocessed regex string compatible with Java's regex engine.
      * @throws IllegalArgumentException If there are unmatched parentheses in the regex.
      */
-    static Pair preProcessRegex(String s, boolean flag_xx, boolean flag_n) {
-        return preProcessRegex(s, 0, flag_xx, flag_n, false);
+    static Pair preProcessRegex(String s, RuntimeRegex.RegexFlags regexFlags) {
+        return preProcessRegex(s, 0, regexFlags, false);
     }
 
     /**
@@ -99,13 +98,12 @@ public class RegexPreprocessor {
      *
      * @param s                  The regex string to preprocess.
      * @param offset             The position in the string.
-     * @param flag_xx            A flag indicating whether to treat spaces as tokens.
-     * @param flag_n             A flag indicating whether to disable captures.
+     * @param regexFlags         The regex flags to use.
      * @param stopAtClosingParen A flag indicating whether to stop processing at the first closing parenthesis.
      * @return A preprocessed regex string compatible with Java's regex engine.
      * @throws IllegalArgumentException If there are unmatched parentheses in the regex.
      */
-    static Pair preProcessRegex(String s, int offset, boolean flag_xx, boolean flag_n, boolean stopAtClosingParen) {
+    static Pair preProcessRegex(String s, int offset, RuntimeRegex.RegexFlags regexFlags, boolean stopAtClosingParen) {
         final int length = s.length();
         StringBuilder sb = new StringBuilder();
 
@@ -121,14 +119,14 @@ public class RegexPreprocessor {
                     offset = handleEscapeSequences(s, sb, c, offset);
                     break;
                 case '[':   // Handle character classes
-                    offset = handleCharacterClass(s, flag_xx, sb, c, offset);
+                    offset = handleCharacterClass(s, regexFlags.flagXx(), sb, c, offset);
                     break;
                 case '(':
-                    offset = handleParentheses(s, offset, length, sb, c, flag_xx, flag_n);
+                    offset = handleParentheses(s, offset, length, sb, c, regexFlags, stopAtClosingParen);
                     break;
                 case ')':
                     if (stopAtClosingParen) {
-                        return new Pair(sb, offset, flag_n);
+                        return new Pair(sb, offset, regexFlags.flagN());
                     }
                     regexError(s, offset, "Unmatched ) in regex");
                     break;
@@ -139,7 +137,7 @@ public class RegexPreprocessor {
             offset++;
         }
 
-        return new Pair(sb, offset, flag_n);
+        return new Pair(sb, offset, regexFlags.flagN());
     }
 
     private static void regexError(String s, int offset, String errMsg) {
@@ -150,7 +148,7 @@ public class RegexPreprocessor {
                 s.substring(0, offset) + " <-- HERE " + s.substring(offset) + "/");
     }
 
-    private static int handleParentheses(String s, int offset, int length, StringBuilder sb, int c, boolean flag_xx, boolean flag_n) {
+    private static int handleParentheses(String s, int offset, int length, StringBuilder sb, int c, RuntimeRegex.RegexFlags regexFlags, boolean stopAtClosingParen) {
         if (offset < length - 3) {
             int c2 = s.codePointAt(offset + 1);
             int c3 = s.codePointAt(offset + 2);
@@ -160,19 +158,19 @@ public class RegexPreprocessor {
                 offset = handleSkipComment(offset, s, length);
             } else if (c2 == '?' && ((c3 >= 'a' && c3 <= 'z') || c3 == '-' || c3 == '^')) {
                 // Handle (?modifiers: ... ) construct
-                return handleFlagModifiers(s, offset, sb, flag_xx, flag_n);
+                return handleFlagModifiers(s, offset, sb, regexFlags);
             } else if (c2 == '?' && c3 == '<' && c4 != '=') {
                 // Handle named capture (?<name> ... )
-                offset = handleNamedCapture(c3, s, offset, length, sb, flag_xx, flag_n);
+                offset = handleNamedCapture(c3, s, offset, length, sb, regexFlags);
             } else if (c2 == '?' && c3 == '\'') {
                 // Handle named capture (?'name' ... )
-                offset = handleNamedCapture(c3, s, offset, length, sb, flag_xx, flag_n);
+                offset = handleNamedCapture(c3, s, offset, length, sb, regexFlags);
             } else {
-                offset = handleRegularParentheses(s, offset, length, sb, flag_xx, flag_n);
+                offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
             }
         } else {
             // Recursively preprocess the content inside the parentheses
-            offset = handleRegularParentheses(s, offset, length, sb, flag_xx, flag_n);
+            offset = handleRegularParentheses(s, offset, length, sb, regexFlags);
         }
 
         // Ensure the closing parenthesis is consumed
@@ -183,8 +181,8 @@ public class RegexPreprocessor {
         return offset;
     }
 
-    private static int handleRegularParentheses(String s, int offset, int length, StringBuilder sb, boolean flag_xx, boolean flag_n) {
-        if (flag_n) {
+    private static int handleRegularParentheses(String s, int offset, int length, StringBuilder sb, RuntimeRegex.RegexFlags regexFlags) {
+        if (regexFlags.flagN()) {
             // Check if it's already a non-capturing group
             boolean isNonCapturing = offset + 1 < length &&
                     s.charAt(offset + 1) == '?' &&
@@ -200,13 +198,13 @@ public class RegexPreprocessor {
             sb.append('(');
         }
 
-        Pair insideParens = preProcessRegex(s, offset + 1, flag_xx, flag_n, true);
+        Pair insideParens = preProcessRegex(s, offset + 1, regexFlags, true);
         sb.append(insideParens.processed);
         offset = insideParens.offset;
         return offset;
     }
 
-    private static int handleFlagModifiers(String s, int offset, StringBuilder sb, boolean flag_xx, boolean flag_n) {
+    private static int handleFlagModifiers(String s, int offset, StringBuilder sb, RuntimeRegex.RegexFlags regexFlags) {
         int start = offset + 2; // Skip past '(?'
         int colonPos = s.indexOf(':', start);
         int closeParen = s.indexOf(')', start);
@@ -240,7 +238,7 @@ public class RegexPreprocessor {
                     .collect(Collectors.joining());
         }
 
-        boolean newFlagN = flag_n;
+        boolean newFlagN = regexFlags.flagN();
         if (positiveFlags.indexOf('n') >= 0) {
             newFlagN = true;
             positiveFlags = positiveFlags.replace("n", "");
@@ -249,8 +247,18 @@ public class RegexPreprocessor {
             newFlagN = false;
             negativeFlags = negativeFlags.replace("n", "");
         }
+        RuntimeRegex.RegexFlags newFlags = new RuntimeRegex.RegexFlags(
+                regexFlags.isGlobalMatch(),
+                regexFlags.keepCurrentPosition(),
+                regexFlags.isNonDestructive(),
+                regexFlags.isMatchExactlyOnce(),
+                regexFlags.useGAssertion(),
+                regexFlags.flagXx(),
+                newFlagN, // Only change flagN
+                regexFlags.flagO()
+        );
 
-        // Build the final flag string
+        // Build the new flag string
         sb.append(positiveFlags);
         if (!negativeFlags.isEmpty()) {
             sb.append('-').append(negativeFlags);
@@ -258,7 +266,7 @@ public class RegexPreprocessor {
 
         if (colonPos == -1 || closeParen < colonPos) {
             // Case: `(?flags)pattern`
-            Pair content = preProcessRegex(s, closeParen + 1, flag_xx, newFlagN, true);
+            Pair content = preProcessRegex(s, closeParen + 1, newFlags, true);
             sb.append(")").append(content.processed);
             offset = content.offset;
             // The closing parenthesis, if any, is consumed by the caller
@@ -269,7 +277,7 @@ public class RegexPreprocessor {
         }
 
         // Case: `(?flags:pattern)`
-        Pair content = preProcessRegex(s, colonPos + 1, flag_xx, newFlagN, true);
+        Pair content = preProcessRegex(s, colonPos + 1, newFlags, true);
         sb.append(":").append(content.processed);
         offset = content.offset;
 
@@ -281,7 +289,7 @@ public class RegexPreprocessor {
         return content.offset;
     }
 
-    private static int handleNamedCapture(int c, String s, int offset, int length, StringBuilder sb, boolean flag_xx, boolean flag_n) {
+    private static int handleNamedCapture(int c, String s, int offset, int length, StringBuilder sb, RuntimeRegex.RegexFlags regexFlags) {
         int start = offset + 3; // Skip past '(?<'
         int end = c == '<'
                 ? s.indexOf('>', start)
@@ -290,7 +298,7 @@ public class RegexPreprocessor {
             regexError(s, offset, "Unterminated named capture in regex");
         }
         String name = s.substring(start, end);
-        Pair content = preProcessRegex(s, end + 1, flag_xx, flag_n, true); // Process content inside the group
+        Pair content = preProcessRegex(s, end + 1, regexFlags, true); // Process content inside the group
         sb.append("(?<").append(name).append(">").append(content.processed);
         return content.offset;
     }
