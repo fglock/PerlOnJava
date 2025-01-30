@@ -39,44 +39,6 @@ public class RegexPreprocessor {
     // WIP:
     // named capture (?<one> ... ) replace underscore in name
 
-    private static final Map<String, String> CHARACTER_CLASSES = new HashMap<>();
-
-    static {
-        String[][] characterClasses = {
-                {"[:ascii:]", "\\p{ASCII}"},
-                {"[:^ascii:]", "\\P{ASCII}"},
-                {"[:alpha:]", "\\p{Alpha}"},
-                {"[:^alpha:]", "\\P{Alpha}"},
-                {"[:alnum:]", "\\p{Alnum}"},
-                {"[:^alnum:]", "\\P{Alnum}"},
-                {"[:blank:]", "\\p{Blank}"},
-                {"[:^blank:]", "\\P{Blank}"},
-                {"[:cntrl:]", "\\p{Cntrl}"},
-                {"[:^cntrl:]", "\\P{Cntrl}"},
-                {"[:digit:]", "\\p{Digit}"},
-                {"[:^digit:]", "\\P{Digit}"},
-                {"[:graph:]", "\\p{Graph}"},
-                {"[:^graph:]", "\\P{Graph}"},
-                {"[:lower:]", "\\p{Lower}"},
-                {"[:^lower:]", "\\P{Lower}"},
-                {"[:print:]", "\\p{Print}"},
-                {"[:^print:]", "\\P{Print}"},
-                {"[:punct:]", "\\p{Punct}"},
-                {"[:^punct:]", "\\P{Punct}"},
-                {"[:space:]", "\\p{Space}"},
-                {"[:^space:]", "\\P{Space}"},
-                {"[:upper:]", "\\p{Upper}"},
-                {"[:^upper:]", "\\P{Upper}"},
-                {"[:word:]", "\\p{Alnum}_"},
-                {"[:^word:]", "\\P{Alnum}_"},
-                {"[:xdigit:]", "\\p{XDigit}"},
-                {"[:^xdigit:]", "\\P{XDigit}"}
-        };
-        for (String[] characterClass : characterClasses) {
-            CHARACTER_CLASSES.put(characterClass[0], characterClass[1]);
-        }
-    }
-
     /**
      * Preprocesses a given regex string to make it compatible with Java's regex engine.
      * This involves handling various constructs and escape sequences that Java does not
@@ -501,7 +463,7 @@ public class RegexPreprocessor {
      * @return The updated offset after processing the character class.
      */
     private static int handleCharacterClass(int offset, String s, StringBuilder sb, int length) {
-        for (Map.Entry<String, String> entry : CHARACTER_CLASSES.entrySet()) {
+        for (Map.Entry<String, String> entry : CharacterClassMapper.getAllMappings().entrySet()) {
             String className = entry.getKey();
             String classReplacement = entry.getValue();
             if (offset + className.length() - 1 < length && s.startsWith(className, offset)) {
