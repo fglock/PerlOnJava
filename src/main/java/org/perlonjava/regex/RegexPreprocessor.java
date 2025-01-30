@@ -283,32 +283,34 @@ public class RegexPreprocessor {
 
     private static String generateGraphemeClusterRegex() {
         return "(?x:                            # Free-spacing mode for readability\n" +
-                "  (                             # Start of a single grapheme cluster\n" +
-                "    \\P{M}\\p{M}*               # Base character with optional combining marks\n" +
-                "    |                           # OR\n" +
-                "    (?:                         # Emoji sequences\n" +
-                "      [\\x{1F600}-\\x{1F64F}]  # Emoticons\n" +
-                "      | [\\x{1F300}-\\x{1F5FF}]  # Misc symbols and pictographs\n" +
-                "      | [\\x{1F680}-\\x{1F6FF}]  # Transport and map symbols\n" +
-                "      | [\\x{2600}-\\x{26FF}]    # Misc symbols\n" +
-                "      | [\\x{2700}-\\x{27BF}]    # Dingbats\n" +
+                "  (?>                           # Atomic group to prevent backtracking\n" +
+                "    (                           # Start of a single grapheme cluster\n" +
+                "      \\P{M}\\p{M}*             # Base character with optional combining marks\n" +
+                "      |                         # OR\n" +
+                "      (?:                       # Emoji sequences\n" +
+                "        [\\x{1F600}-\\x{1F64F}]  # Emoticons\n" +
+                "        | [\\x{1F300}-\\x{1F5FF}]  # Misc symbols and pictographs\n" +
+                "        | [\\x{1F680}-\\x{1F6FF}]  # Transport and map symbols\n" +
+                "        | [\\x{2600}-\\x{26FF}]    # Misc symbols\n" +
+                "        | [\\x{2700}-\\x{27BF}]    # Dingbats\n" +
+                "      )\n" +
+                "      (?:                       # Optional emoji modifiers and ZWJ sequences\n" +
+                "        [\\x{1F3FB}-\\x{1F3FF}]?  # Optional skin tone modifiers\n" +
+                "        (?:\\x{200D}            # Zero-width joiner\n" +
+                "          [\\P{M}\\p{M}*]       # Base character with optional combining marks\n" +
+                "        )*                      # Repeat for joined sequences\n" +
+                "      )\n" +
+                "      |                         # OR\n" +
+                "      (?:                       # Surrogate pairs (outside BMP)\n" +
+                "        [\\uD800-\\uDBFF]       # High surrogate\n" +
+                "        [\\uDC00-\\uDFFF]       # Low surrogate\n" +
+                "      )\n" +
                 "    )\n" +
-                "    (?:                         # Optional emoji modifiers and ZWJ sequences\n" +
-                "      [\\x{1F3FB}-\\x{1F3FF}]?  # Optional skin tone modifiers\n" +
-                "      (?:\\x{200D}              # Zero-width joiner\n" +
-                "        [\\P{M}\\p{M}*]         # Base character with optional combining marks\n" +
-                "      )*                        # Repeat for joined sequences\n" +
-                "    )\n" +
-                "    |                           # OR\n" +
-                "    (?:                         # Surrogate pairs (outside BMP)\n" +
-                "      [\\uD800-\\uDBFF]         # High surrogate\n" +
-                "      [\\uDC00-\\uDFFF]         # Low surrogate\n" +
-                "    )\n" +
+                "    \\p{M}*                     # Allow trailing combining marks\n" +
                 "  )\n" +
-                "  \\p{M}*                       # Allow trailing combining marks\n" +
                 ")";
     }
-
+    
     private static int handleEscapeSequences(String s, StringBuilder sb, int c, int offset) {
         sb.append(Character.toChars(c));
         final int length = s.length();
