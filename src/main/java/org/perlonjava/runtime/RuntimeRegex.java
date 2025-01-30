@@ -69,7 +69,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
         if (regex == null) {
             regex = new RuntimeRegex();
             try {
-                int flags = regex.convertModifiers(modifiers);
+                regex.patternFlags = regex.convertModifiers(modifiers);
                 regex.regexFlags = new RegexFlags(
                         modifiers.contains("g"),
                         modifiers.contains("c"),
@@ -92,8 +92,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 RegexPreprocessor.Pair javaPattern = preProcessRegex(patternString, regex.regexFlags);
 
                 // Compile the regex pattern
-                regex.pattern = Pattern.compile(javaPattern.processed().toString(), flags);
-                regex.patternFlags = flags;
+                regex.pattern = Pattern.compile(javaPattern.processed().toString(), regex.patternFlags);
                 regex.patternString = patternString;
             } catch (Exception e) {
                 throw new PerlCompilerException("Regex compilation failed: " + e.getMessage());
