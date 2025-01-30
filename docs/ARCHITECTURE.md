@@ -35,6 +35,9 @@
 │   │               |   ├── OperatorHandler.java
 │   │               |   ├── ArithmeticOperators.java
 │   │               |   └── other operator handling classes
+│   │               ├── regex/
+│   │               │   ├── RuntimeRegex.java
+│   │               │   └── other regex classes
 │   │               ├── io/
 │   │               |   ├── SocketIO.java
 │   │               |   └── other io classes
