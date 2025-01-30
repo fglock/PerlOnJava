@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static java.util.regex.Pattern.COMMENTS;
+import static org.perlonjava.regex.RegexFlags.fromModifiers;
 import static org.perlonjava.regex.RegexPreprocessor.preProcessRegex;
 import static org.perlonjava.regex.RegexQuoteMeta.escapeQ;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
@@ -71,25 +71,12 @@ public class RuntimeRegex implements RuntimeScalarReference {
         if (regex == null) {
             regex = new RuntimeRegex();
             try {
-                regex.patternFlags = regex.convertModifiers(modifiers);
-                regex.regexFlags = new RegexFlags(
-                        modifiers.contains("g"),
-                        modifiers.contains("c"),
-                        modifiers.contains("r"),
-                        modifiers.contains("?"),
-                        patternString.contains("\\G"),
-                        modifiers.contains("xx"),
-                        modifiers.contains("n"),
-                        modifiers.contains("o"),
-                        modifiers.contains("i"),
-                        modifiers.contains("m"),
-                        modifiers.contains("s"),
-                        modifiers.contains("x")
-                );
-
                 if (patternString.contains("\\Q")) {
                     patternString = escapeQ(patternString);
                 }
+
+                regex.regexFlags = fromModifiers(modifiers, patternString);
+                regex.patternFlags = regex.regexFlags.toPatternFlags();
 
                 String javaPattern = preProcessRegex(patternString, regex.regexFlags);
 
@@ -444,30 +431,5 @@ public class RuntimeRegex implements RuntimeScalarReference {
      */
     public boolean getBooleanRef() {
         return true;
-    }
-
-    /**
-     * Converts modifier string to Pattern flags.
-     *
-     * @param modifiers The string of modifiers (e.g., "i", "g").
-     * @return The Pattern flags corresponding to the modifiers.
-     */
-    private int convertModifiers(String modifiers) {
-        int flags = 0;
-        if (modifiers.contains("i")) {
-            flags |= CASE_INSENSITIVE;
-        }
-        if (modifiers.contains("m")) {
-            flags |= MULTILINE;
-        }
-        if (modifiers.contains("s")) {
-            flags |= DOTALL;
-        }
-        if (modifiers.contains("x")) {
-            flags |= COMMENTS;
-        }
-        // /g (global) is not an actual flag for Pattern, it's used for matching multiple occurrences.
-        // /r (non-destructive) is also not an actual flag for Pattern, it returns the replacement.
-        return flags;
     }
 }
