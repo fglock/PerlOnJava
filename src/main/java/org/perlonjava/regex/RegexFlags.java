@@ -68,6 +68,43 @@ public class RegexFlags {
         return flags;
     }
 
+    public RegexFlags with(String positiveFlags, String negativeFlags) {
+        boolean newFlagN = this.isNonCapturing;
+        boolean newIsCaseInsensitive = this.isCaseInsensitive;
+        boolean newIsMultiLine = this.isMultiLine;
+        boolean newIsDotAll = this.isDotAll;
+        boolean newIsExtended = this.isExtended;
+
+        // Handle positive flags
+        if (positiveFlags.indexOf('n') >= 0) newFlagN = true;
+        if (positiveFlags.indexOf('i') >= 0) newIsCaseInsensitive = true;
+        if (positiveFlags.indexOf('m') >= 0) newIsMultiLine = true;
+        if (positiveFlags.indexOf('s') >= 0) newIsDotAll = true;
+        if (positiveFlags.indexOf('x') >= 0) newIsExtended = true;
+
+        // Handle negative flags
+        if (negativeFlags.indexOf('n') >= 0) newFlagN = false;
+        if (negativeFlags.indexOf('i') >= 0) newIsCaseInsensitive = false;
+        if (negativeFlags.indexOf('m') >= 0) newIsMultiLine = false;
+        if (negativeFlags.indexOf('s') >= 0) newIsDotAll = false;
+        if (negativeFlags.indexOf('x') >= 0) newIsExtended = false;
+
+        return new RegexFlags(
+                this.isGlobalMatch,
+                this.keepCurrentPosition,
+                this.isNonDestructive,
+                this.isMatchExactlyOnce,
+                this.useGAssertion,
+                this.isExtendedWhitespace,
+                newFlagN,
+                this.isOptimized,
+                newIsCaseInsensitive,
+                newIsMultiLine,
+                newIsDotAll,
+                newIsExtended
+        );
+    }
+
     // Getters
     public boolean isGlobalMatch() {
         return isGlobalMatch;
