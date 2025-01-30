@@ -45,12 +45,4 @@ public class CharacterClassMapper {
     public static String getMappedClass(String className) {
         return CHARACTER_CLASSES.get(className);
     }
-
-    public static boolean hasMapping(String className) {
-        return CHARACTER_CLASSES.containsKey(className);
-    }
-
-    public static Map<String, String> getAllMappings() {
-        return new HashMap<>(CHARACTER_CLASSES);
-    }
 }
