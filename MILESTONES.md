@@ -209,6 +209,7 @@
   - Added regex `\p{...}` and `\P{...}` for Unicode properties.
   - Added regex `\g{-n}` for relative backreferences.
   - Added regex `*+`, `++`, `?+`, `{n,m}+` possessive quantifiers.
+  - Added regex `(?>...)` for atomic groups.
   - Added overload: `""`, `0+`, `bool`, `fallback`, `nomethod`.
   - Added `class` feature and `class` keyword.
   - Library upgrades.
