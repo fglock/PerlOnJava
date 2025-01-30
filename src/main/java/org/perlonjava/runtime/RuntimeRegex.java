@@ -21,7 +21,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 public class RuntimeRegex implements RuntimeScalarReference {
 
     public RuntimeRegex() {
-        this.flags = new RegexFlags(false, false, false, false, false, false, false, false);
+        this.flags = new RegexFlags(false, false, false, false, false, false, false, false, false, false, false, false);
     }
 
     public record RegexFlags(
@@ -32,7 +32,11 @@ public class RuntimeRegex implements RuntimeScalarReference {
             boolean useGAssertion,
             boolean flagXx,
             boolean flagN,
-            boolean flagO
+            boolean flagO,
+            boolean isCaseInsensitive,     // i flag
+            boolean isMultiLine,           // m flag
+            boolean isDotAll,              // s flag
+            boolean isExtended             // x flag
     ) {}
 
     // Constants for regex pattern flags
@@ -97,7 +101,11 @@ public class RuntimeRegex implements RuntimeScalarReference {
                         patternString.contains("\\G"),
                         modifiers.contains("xx"),
                         modifiers.contains("n"),
-                        modifiers.contains("o")
+                        modifiers.contains("o"),
+                        modifiers.contains("i"),
+                        modifiers.contains("m"),
+                        modifiers.contains("s"),
+                        modifiers.contains("x")
                 );
 
                 if (patternString.contains("\\Q")) {

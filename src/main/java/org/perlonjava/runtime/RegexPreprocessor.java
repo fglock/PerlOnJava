@@ -239,14 +239,31 @@ public class RegexPreprocessor {
         }
 
         boolean newFlagN = regexFlags.flagN();
+        boolean newIsCaseInsensitive = regexFlags.isCaseInsensitive();
+        boolean newIsMultiLine = regexFlags.isMultiLine();
+        boolean newIsDotAll = regexFlags.isDotAll();
+        boolean newIsExtended = regexFlags.isExtended();
+
+        // Handle positive flags
         if (positiveFlags.indexOf('n') >= 0) {
             newFlagN = true;
             positiveFlags = positiveFlags.replace("n", "");
         }
+        if (positiveFlags.indexOf('i') >= 0) newIsCaseInsensitive = true;
+        if (positiveFlags.indexOf('m') >= 0) newIsMultiLine = true;
+        if (positiveFlags.indexOf('s') >= 0) newIsDotAll = true;
+        if (positiveFlags.indexOf('x') >= 0) newIsExtended = true;
+
+        // Handle negative flags
         if (negativeFlags.indexOf('n') >= 0) {
             newFlagN = false;
             negativeFlags = negativeFlags.replace("n", "");
         }
+        if (negativeFlags.indexOf('i') >= 0) newIsCaseInsensitive = false;
+        if (negativeFlags.indexOf('m') >= 0) newIsMultiLine = false;
+        if (negativeFlags.indexOf('s') >= 0) newIsDotAll = false;
+        if (negativeFlags.indexOf('x') >= 0) newIsExtended = false;
+
         RuntimeRegex.RegexFlags newFlags = new RuntimeRegex.RegexFlags(
                 regexFlags.isGlobalMatch(),
                 regexFlags.keepCurrentPosition(),
@@ -254,8 +271,12 @@ public class RegexPreprocessor {
                 regexFlags.isMatchExactlyOnce(),
                 regexFlags.useGAssertion(),
                 regexFlags.flagXx(),
-                newFlagN, // Only change flagN
-                regexFlags.flagO()
+                newFlagN,
+                regexFlags.flagO(),
+                newIsCaseInsensitive,
+                newIsMultiLine,
+                newIsDotAll,
+                newIsExtended
         );
 
         // Build the new flag string
