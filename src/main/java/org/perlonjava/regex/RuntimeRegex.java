@@ -91,10 +91,10 @@ public class RuntimeRegex implements RuntimeScalarReference {
                     patternString = escapeQ(patternString);
                 }
 
-                RegexPreprocessor.Pair javaPattern = preProcessRegex(patternString, regex.regexFlags);
+                String  javaPattern = preProcessRegex(patternString, regex.regexFlags);
 
                 // Compile the regex pattern
-                regex.pattern = Pattern.compile(javaPattern.processed().toString(), regex.patternFlags);
+                regex.pattern = Pattern.compile(javaPattern, regex.patternFlags);
                 regex.patternString = patternString;
             } catch (Exception e) {
                 throw new PerlCompilerException("Regex compilation failed: " + e.getMessage());

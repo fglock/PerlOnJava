@@ -87,8 +87,8 @@ public class RegexPreprocessor {
      * @return A preprocessed regex string compatible with Java's regex engine.
      * @throws IllegalArgumentException If there are unmatched parentheses in the regex.
      */
-    static Pair preProcessRegex(String s, RegexFlags regexFlags) {
-        return preProcessRegex(s, 0, regexFlags, false);
+    static String preProcessRegex(String s, RegexFlags regexFlags) {
+        return preProcessRegex(s, 0, regexFlags, false).processed.toString();
     }
 
     /**
