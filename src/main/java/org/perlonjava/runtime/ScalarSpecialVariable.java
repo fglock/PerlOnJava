@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.regex.RuntimeRegex;
+
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 

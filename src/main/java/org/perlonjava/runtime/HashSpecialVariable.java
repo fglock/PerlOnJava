@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.regex.RuntimeRegex;
+
 import java.util.AbstractMap;
 import java.util.HashSet;
 import java.util.Map;

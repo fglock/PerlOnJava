@@ -1,4 +1,4 @@
-package org.perlonjava.runtime;
+package org.perlonjava.regex;
 
 import com.ibm.icu.lang.UCharacter;
 

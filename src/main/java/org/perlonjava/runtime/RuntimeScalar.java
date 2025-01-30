@@ -3,6 +3,7 @@ package org.perlonjava.runtime;
 import org.perlonjava.operators.Operator;
 import org.perlonjava.operators.StringOperators;
 import org.perlonjava.parser.NumberParser;
+import org.perlonjava.regex.RuntimeRegex;
 
 import java.util.*;
 

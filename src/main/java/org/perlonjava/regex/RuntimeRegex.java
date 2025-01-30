@@ -1,4 +1,6 @@
-package org.perlonjava.runtime;
+package org.perlonjava.regex;
+
+import org.perlonjava.runtime.*;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -7,8 +9,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static java.util.regex.Pattern.COMMENTS;
-import static org.perlonjava.runtime.RegexPreprocessor.escapeQ;
-import static org.perlonjava.runtime.RegexPreprocessor.preProcessRegex;
+import static org.perlonjava.regex.RegexPreprocessor.escapeQ;
+import static org.perlonjava.regex.RegexPreprocessor.preProcessRegex;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 

@@ -1,5 +1,6 @@
 package org.perlonjava.operators;
 
+import org.perlonjava.regex.RuntimeRegex;
 import org.perlonjava.runtime.*;
 
 import java.io.IOException;
