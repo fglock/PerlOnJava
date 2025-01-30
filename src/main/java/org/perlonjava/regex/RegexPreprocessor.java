@@ -281,6 +281,34 @@ public class RegexPreprocessor {
         return offset;
     }
 
+    private static String generateGraphemeClusterRegex() {
+        return "(?x:                            # Free-spacing mode for readability\n" +
+                "  (?:                           # Start of a single grapheme cluster\n" +
+                "    [\\P{M}\\p{M}]              # Base character (non-mark) or combining mark\n" +
+                "    |                           # OR\n" +
+                "    (?:                         # Surrogate pairs (outside BMP)\n" +
+                "      [\\uD800-\\uDBFF]         # High surrogate\n" +
+                "      [\\uDC00-\\uDFFF]         # Low surrogate\n" +
+                "    )\n" +
+                "    |                           # OR\n" +
+                "    (?:                         # Emoji sequences\n" +
+                "      [\\x{1F600}-\\x{1F64F}]  # Emoticons\n" +
+                "      | [\\x{1F300}-\\x{1F5FF}]  # Misc symbols and pictographs\n" +
+                "      | [\\x{1F680}-\\x{1F6FF}]  # Transport and map symbols\n" +
+                "      | [\\x{2600}-\\x{26FF}]    # Misc symbols\n" +
+                "      | [\\x{2700}-\\x{27BF}]    # Dingbats\n" +
+                "    )\n" +
+                "    (?:                         # Handle optional modifiers or sequences\n" +
+                "      [\\x{1F3FB}-\\x{1F3FF}]?  # Skin tone modifiers\n" +
+                "      (?:\\x{200D}              # Zero-width joiner for sequences\n" +
+                "        [\\P{M}\\p{M}]          # Followed by base character or combining mark\n" +
+                "      )*                        # Repeat for joined sequences\n" +
+                "    )\n" +
+                "  )\n" +
+                "  (?!\\p{M})                    # Ensure no trailing combining marks\n" +
+                ")";
+    }
+
     private static int handleEscapeSequences(String s, StringBuilder sb, int c, int offset) {
         sb.append(Character.toChars(c));
         final int length = s.length();
@@ -293,7 +321,12 @@ public class RegexPreprocessor {
         // Note: \Q .. \E sequences are handled separately, in escapeQ()
 
         char nextChar = s.charAt(offset);
-        if (nextChar == 'g' && offset + 1 < length && s.charAt(offset + 1) == '{') {
+        if (nextChar == 'X') {
+            // Translate \X to a Java-compatible grapheme cluster pattern
+            sb.setLength(sb.length() - 1); // Remove the backslash
+            sb.append(generateGraphemeClusterRegex());
+            offset++; // Skip past 'X'
+        } else if (nextChar == 'g' && offset + 1 < length && s.charAt(offset + 1) == '{') {
             // Handle \g{name} backreference
             offset += 2; // Skip past \g{
             int endBrace = s.indexOf('}', offset);
