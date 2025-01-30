@@ -463,12 +463,13 @@ public class RegexPreprocessor {
      * @return The updated offset after processing the character class.
      */
     private static int handleCharacterClass(int offset, String s, StringBuilder sb, int length) {
-        for (Map.Entry<String, String> entry : CharacterClassMapper.getAllMappings().entrySet()) {
-            String className = entry.getKey();
-            String classReplacement = entry.getValue();
-            if (offset + className.length() - 1 < length && s.startsWith(className, offset)) {
-                sb.append(classReplacement);
-                return offset + className.length() - 1;
+        int endDelimiter = s.indexOf(":]", offset);
+        if (endDelimiter > -1) {
+            String potentialClass = s.substring(offset, endDelimiter + 2);
+            String mapping = CharacterClassMapper.getMappedClass(potentialClass);
+            if (mapping != null) {
+                sb.append(mapping);
+                return endDelimiter + 1;
             }
         }
         sb.append("\\[");
