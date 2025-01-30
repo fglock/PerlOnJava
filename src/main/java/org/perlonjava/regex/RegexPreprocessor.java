@@ -88,7 +88,7 @@ public class RegexPreprocessor {
      * @throws IllegalArgumentException If there are unmatched parentheses in the regex.
      */
     static String preProcessRegex(String s, RegexFlags regexFlags) {
-        return preProcessRegex(s, 0, regexFlags, false).processed.toString();
+        return handleRegex(s, 0, new StringBuilder(), regexFlags, false).processed.toString();
     }
 
     /**
@@ -103,9 +103,8 @@ public class RegexPreprocessor {
      * @return A preprocessed regex string compatible with Java's regex engine.
      * @throws IllegalArgumentException If there are unmatched parentheses in the regex.
      */
-    static Pair preProcessRegex(String s, int offset, RegexFlags regexFlags, boolean stopAtClosingParen) {
+    static Pair handleRegex(String s, int offset, StringBuilder sb, RegexFlags regexFlags, boolean stopAtClosingParen) {
         final int length = s.length();
-        StringBuilder sb = new StringBuilder();
 
         // Remove \G from the pattern string for Java compilation
         if (s.startsWith("\\G", offset)) {
@@ -198,8 +197,7 @@ public class RegexPreprocessor {
             sb.append('(');
         }
 
-        Pair insideParens = preProcessRegex(s, offset + 1, regexFlags, true);
-        sb.append(insideParens.processed);
+        Pair insideParens = handleRegex(s, offset + 1, sb, regexFlags, true);
         offset = insideParens.offset;
         return offset;
     }
@@ -287,8 +285,8 @@ public class RegexPreprocessor {
 
         if (colonPos == -1 || closeParen < colonPos) {
             // Case: `(?flags)pattern`
-            Pair content = preProcessRegex(s, closeParen + 1, newFlags, true);
-            sb.append(")").append(content.processed);
+            sb.append(")");
+            Pair content = handleRegex(s, closeParen + 1, sb, newFlags, true);
             offset = content.offset;
             // The closing parenthesis, if any, is consumed by the caller
             if (offset < s.length()) {
@@ -298,8 +296,8 @@ public class RegexPreprocessor {
         }
 
         // Case: `(?flags:pattern)`
-        Pair content = preProcessRegex(s, colonPos + 1, newFlags, true);
-        sb.append(":").append(content.processed);
+        sb.append(":");
+        Pair content = handleRegex(s, colonPos + 1, sb, newFlags, true);
         offset = content.offset;
 
         // Ensure the closing parenthesis is consumed
@@ -319,8 +317,8 @@ public class RegexPreprocessor {
             regexError(s, offset, "Unterminated named capture in regex");
         }
         String name = s.substring(start, end);
-        Pair content = preProcessRegex(s, end + 1, regexFlags, true); // Process content inside the group
-        sb.append("(?<").append(name).append(">").append(content.processed);
+        sb.append("(?<").append(name).append(">");
+        Pair content = handleRegex(s, end + 1, sb, regexFlags, true); // Process content inside the group
         return content.offset;
     }
 
