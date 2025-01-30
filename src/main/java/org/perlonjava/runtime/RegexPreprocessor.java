@@ -358,7 +358,17 @@ public class RegexPreprocessor {
         // Note: \Q .. \E sequences are handled separately, in escapeQ()
 
         char nextChar = s.charAt(offset);
-        if (nextChar == 'N' && offset + 1 < length && s.charAt(offset + 1) == '{') {
+        if (nextChar == 'g' && offset + 1 < length && s.charAt(offset + 1) == '{') {
+            // Handle \g{name} backreference
+            offset += 2; // Skip past \g{
+            int endBrace = s.indexOf('}', offset);
+            if (endBrace != -1) {
+                String name = s.substring(offset, endBrace);
+                sb.setLength(sb.length() - 1); // Remove the backslash
+                sb.append("\\k<").append(name).append(">");
+                offset = endBrace;
+            }
+        } else if (nextChar == 'N' && offset + 1 < length && s.charAt(offset + 1) == '{') {
             // Handle \N{name} constructs
             offset += 2; // Skip past \N{
             int endBrace = s.indexOf('}', offset);

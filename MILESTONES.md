@@ -205,6 +205,7 @@
   - Added `/c`, `/n` regex modifiers.
   - Added regex `(?^` clear embedded pattern-match modifier.
   - Added regex `(?'name'...)` named capture groups.
+  - Added regex `\k<name>` and `\g{name}` backreferences to named groups.
   - Added overload: `""`, `0+`, `bool`, `fallback`, `nomethod`.
   - Added `class` feature and `class` keyword.
   - Library upgrades.
