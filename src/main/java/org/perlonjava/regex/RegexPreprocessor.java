@@ -87,7 +87,7 @@ public class RegexPreprocessor {
      * @return A preprocessed regex string compatible with Java's regex engine.
      * @throws IllegalArgumentException If there are unmatched parentheses in the regex.
      */
-    static Pair preProcessRegex(String s, RuntimeRegex.RegexFlags regexFlags) {
+    static Pair preProcessRegex(String s, RegexFlags regexFlags) {
         return preProcessRegex(s, 0, regexFlags, false);
     }
 
@@ -103,7 +103,7 @@ public class RegexPreprocessor {
      * @return A preprocessed regex string compatible with Java's regex engine.
      * @throws IllegalArgumentException If there are unmatched parentheses in the regex.
      */
-    static Pair preProcessRegex(String s, int offset, RuntimeRegex.RegexFlags regexFlags, boolean stopAtClosingParen) {
+    static Pair preProcessRegex(String s, int offset, RegexFlags regexFlags, boolean stopAtClosingParen) {
         final int length = s.length();
         StringBuilder sb = new StringBuilder();
 
@@ -148,7 +148,7 @@ public class RegexPreprocessor {
                 s.substring(0, offset) + " <-- HERE " + s.substring(offset) + "/");
     }
 
-    private static int handleParentheses(String s, int offset, int length, StringBuilder sb, int c, RuntimeRegex.RegexFlags regexFlags, boolean stopAtClosingParen) {
+    private static int handleParentheses(String s, int offset, int length, StringBuilder sb, int c, RegexFlags regexFlags, boolean stopAtClosingParen) {
         if (offset < length - 3) {
             int c2 = s.codePointAt(offset + 1);
             int c3 = s.codePointAt(offset + 2);
@@ -181,7 +181,7 @@ public class RegexPreprocessor {
         return offset;
     }
 
-    private static int handleRegularParentheses(String s, int offset, int length, StringBuilder sb, RuntimeRegex.RegexFlags regexFlags) {
+    private static int handleRegularParentheses(String s, int offset, int length, StringBuilder sb, RegexFlags regexFlags) {
         if (regexFlags.isNonCapturing()) {
             // Check if it's already a non-capturing group
             boolean isNonCapturing = offset + 1 < length &&
@@ -204,7 +204,7 @@ public class RegexPreprocessor {
         return offset;
     }
 
-    private static int handleFlagModifiers(String s, int offset, StringBuilder sb, RuntimeRegex.RegexFlags regexFlags) {
+    private static int handleFlagModifiers(String s, int offset, StringBuilder sb, RegexFlags regexFlags) {
         int start = offset + 2; // Skip past '(?'
         int colonPos = s.indexOf(':', start);
         int closeParen = s.indexOf(')', start);
@@ -264,7 +264,7 @@ public class RegexPreprocessor {
         if (negativeFlags.indexOf('s') >= 0) newIsDotAll = false;
         if (negativeFlags.indexOf('x') >= 0) newIsExtended = false;
 
-        RuntimeRegex.RegexFlags newFlags = new RuntimeRegex.RegexFlags(
+        RegexFlags newFlags = new RegexFlags(
                 regexFlags.isGlobalMatch(),
                 regexFlags.keepCurrentPosition(),
                 regexFlags.isNonDestructive(),
@@ -310,7 +310,7 @@ public class RegexPreprocessor {
         return content.offset;
     }
 
-    private static int handleNamedCapture(int c, String s, int offset, int length, StringBuilder sb, RuntimeRegex.RegexFlags regexFlags) {
+    private static int handleNamedCapture(int c, String s, int offset, int length, StringBuilder sb, RegexFlags regexFlags) {
         int start = offset + 3; // Skip past '(?<'
         int end = c == '<'
                 ? s.indexOf('>', start)
@@ -596,45 +596,6 @@ public class RegexPreprocessor {
 //                                        append = false;
 //                                    }
         }
-    }
-
-    public static String escapeQ(String s) {
-        StringBuilder sb = new StringBuilder();
-        int len = s.length();
-        int offset = 0;
-
-        // Predefined set of regex metacharacters
-        final String regexMetacharacters = "-.+*?[](){}^$|\\";
-
-        while (offset < len) {
-            char c = s.charAt(offset);
-            if (c == '\\' && offset + 1 < len && s.charAt(offset + 1) == 'Q') {
-                // Skip past \Q
-                offset += 2;
-
-                // Process characters until \E or end of string
-                while (offset < len) {
-                    if (s.charAt(offset) == '\\' && offset + 1 < len && s.charAt(offset + 1) == 'E') {
-                        // Skip past \E and stop quoting
-                        offset += 2;
-                        break;
-                    }
-
-                    // Escape regex metacharacters
-                    char currentChar = s.charAt(offset);
-                    if (regexMetacharacters.indexOf(currentChar) != -1) {
-                        sb.append('\\'); // Escape the metacharacter
-                    }
-                    sb.append(currentChar);
-                    offset++;
-                }
-            } else {
-                sb.append(c);
-                offset++;
-            }
-        }
-
-        return sb.toString();
     }
 
     public record Pair(StringBuilder processed, int offset) {
