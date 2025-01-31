@@ -318,21 +318,22 @@ public class RegexPreprocessor {
                 "      \\P{M}\\p{M}*\n" +
                 "      |\n" +
                 "      # Regional indicators for flags\n" +
-                "      [\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]\n" +
+                "      (?:[\uD83C][\uDDE6-\uDDFF]){2}\n" +
                 "      |\n" +
                 "      # Emoji with modifiers and ZWJ sequences\n" +
-                "      (?:[\uD83C-\uD83E][\uDC00-\uDFFF]|[\u2600-\u27BF])\n" +
+                "      (?:[\uD83C-\uDBFF\uDC00-\uDFFF]|[\u2600-\u27BF])\n" +
                 "      (?:[\uD83C][\uDFFB-\uDFFF])?\n" +
                 "      (?:\u200D\n" +
-                "        (?:[\uD83C-\uD83E][\uDC00-\uDFFF]|[\u2600-\u27BF])\n" +
+                "        (?:[\uD83C-\uDBFF\uDC00-\uDFFF]|[\u2600-\u27BF])\n" +
                 "        (?:[\uD83C][\uDFFB-\uDFFF])?\n" +
                 "      )*\n" +
                 "      (?:[\uFE00-\uFE0F])?\n" +
                 "    )\n" +
                 "  )\n" +
-                "  (?!\\P{M}|[\\uD800-\\uDBFF])       # Boundary check\n" +
+                "  (?!\\p{M}|[\uDC00-\uDFFF])       # Boundary check\n" +
                 ")";
     }
+
 
 
 
