@@ -311,18 +311,29 @@ public class RegexPreprocessor {
 //    }
 
     private static String generateGraphemeClusterRegex() {
-        return "(?x:                                # Free-spacing mode for readability\n" +
-                "  (?>                               # Atomic group to prevent backtracking\n" +
-                "    (?:                             # Grapheme cluster\n" +
-                "      \\P{M}                        # Base character (non-mark)\n" +
-                "      \\p{M}*                       # Zero or more combining marks\n" +
-                "      |                             # OR\n" +
-                "      [\\uD800-\\uDBFF][\\uDC00-\\uDFFF]  # Surrogate pair (non-BMP character)\n" +
+        return "(?x:                                # Free-spacing mode\n" +
+                "  (?>                               # Atomic group\n" +
+                "    (?:                             # Main alternation\n" +
+                "      # Basic grapheme cluster\n" +
+                "      \\P{M}\\p{M}*\n" +
+                "      |\n" +
+                "      # Regional indicators for flags\n" +
+                "      [\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]\n" +
+                "      |\n" +
+                "      # Emoji with modifiers and ZWJ sequences\n" +
+                "      (?:[\uD83C-\uD83E][\uDC00-\uDFFF]|[\u2600-\u27BF])\n" +
+                "      (?:[\uD83C][\uDFFB-\uDFFF])?\n" +
+                "      (?:\u200D\n" +
+                "        (?:[\uD83C-\uD83E][\uDC00-\uDFFF]|[\u2600-\u27BF])\n" +
+                "        (?:[\uD83C][\uDFFB-\uDFFF])?\n" +
+                "      )*\n" +
+                "      (?:[\uFE00-\uFE0F])?\n" +
                 "    )\n" +
                 "  )\n" +
-                "  (?!\\P{M}|[\\uD800-\\uDBFF])       # Negative lookahead: ensure no extra base character or surrogate\n" +
+                "  (?!\\P{M}|[\\uD800-\\uDBFF])       # Boundary check\n" +
                 ")";
     }
+
 
 
 
