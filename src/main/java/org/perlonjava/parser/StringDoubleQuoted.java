@@ -300,7 +300,7 @@ public class StringDoubleQuoted {
                         escape = text.substring(0, 2);
                         token.text = text.substring(2);
                     }
-                    str.append((char) Integer.parseInt(escape, 16));
+                    str.append(Character.toChars(Integer.parseInt(escape, 16)));
                 } else if (text.equals("{")) {
                     // Handle \x{...} for Unicode
                     parser.tokenIndex++;
@@ -314,7 +314,7 @@ public class StringDoubleQuoted {
                         }
                         unicodeSeq.append(token.text);
                     }
-                    str.append((char) Integer.parseInt(unicodeSeq.toString().trim(), 16));
+                    str.append(Character.toChars(Integer.parseInt(unicodeSeq.toString().trim(), 16)));
                 } else {
                     throw new PerlCompilerException(tokenIndex, "Expected '{' after \\x", ctx.errorUtil);
                 }

@@ -281,6 +281,20 @@ public class RegexPreprocessor {
         return offset;
     }
 
+//    public static void hexPrinter(String emojiString) {
+//        // Print each code point as a hex value
+//        System.out.println("String: <<" + emojiString + ">>");
+//        System.out.println("Hexadecimal representation:");
+//        emojiString.codePoints()
+//                .forEach(codePoint -> System.out.printf("U+%04X ", codePoint));
+//
+//        // Optional: Print raw UTF-16 encoding
+//        System.out.println("\n\nUTF-16 Encoding:");
+//        for (char c : emojiString.toCharArray()) {
+//            System.out.printf("\\u%04X ", (int) c);
+//        }
+//    }
+
     private static String generateGraphemeClusterRegex() {
         return "(?x:                                # Free-spacing mode\n" +
                 "      # Basic grapheme cluster\n" +
