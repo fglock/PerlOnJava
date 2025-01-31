@@ -52,3 +52,14 @@ print "not " if !$match; say "ok 8 # Family emoji sequence matches as single gra
 $string = "\x{1F469}\x{200D}\x{1F3EB}"; # Woman teacher
 $match = $string =~ $pattern;
 print "not " if !$match; say "ok 9 # Professional emoji with ZWJ matches as single grapheme cluster";
+
+# Test 10: Multiple combining marks
+$string = "a\x{0301}\x{0302}";  # a with acute and circumflex accents
+$match = $string =~ $pattern;
+print "not " if !$match; say "ok 10 # 'a\\x{0301}\\x{0302}' matches '^\\X$' as single grapheme cluster";
+
+# Test 11: Allowing backtracking with \X+\X
+ $string = "e\x{0301}e\x{0301}";  # Two grapheme clusters: é and é
+ $pattern = qr/^\X+\X$/;          # Pattern to match one or more grapheme clusters followed by exactly one grapheme cluster
+ $match = $string =~ $pattern;
+print "not " if !$match; say "ok 11 # 'e\\x{0301}e\\x{0301}' matches '^\\X+\\X$' allowing backtracking";
