@@ -283,7 +283,6 @@ public class RegexPreprocessor {
 
     private static String generateGraphemeClusterRegex() {
         return "(?x:                                # Free-spacing mode\n" +
-                "  (?>                               # Atomic group\n" +
                 "    (?:                             # Main alternation\n" +
                 "      # Basic grapheme cluster\n" +
                 "      \\P{M}\\p{M}*\n" +
@@ -300,11 +299,10 @@ public class RegexPreprocessor {
                 "      )*\n" +
                 "      (?:[\uFE00-\uFE0F])?\n" +
                 "    )\n" +
-                "  )\n" +
-                "  (?!\\p{M}|\\p{L}|[\uDC00-\uDFFF]|[\uD800-\uDBFF]) # Boundary check\n" +
                 ")";
     }
-    
+
+
     private static int handleEscapeSequences(String s, StringBuilder sb, int c, int offset) {
         sb.append(Character.toChars(c));
         final int length = s.length();
@@ -321,7 +319,6 @@ public class RegexPreprocessor {
             // Translate \X to a Java-compatible grapheme cluster pattern
             sb.setLength(sb.length() - 1); // Remove the backslash
             sb.append(generateGraphemeClusterRegex());
-            offset++; // Skip past 'X'
         } else if (nextChar == 'g' && offset + 1 < length && s.charAt(offset + 1) == '{') {
             // Handle \g{name} backreference
             offset += 2; // Skip past \g{
