@@ -159,6 +159,8 @@ public class RuntimeRegex implements RuntimeScalarReference {
         String inputStr = string.toString();
         Matcher matcher = pattern.matcher(inputStr);
 
+        // hexPrinter(inputStr);
+
         // Use RuntimePosLvalue to get the current position
         RuntimeScalar posScalar = RuntimePosLvalue.pos(string);
         boolean isPosDefined = posScalar.getDefinedBoolean();

@@ -232,6 +232,12 @@ public class StringOperators {
     }
 
     public static RuntimeScalar chr(RuntimeScalar runtimeScalar) {
-        return new RuntimeScalar(String.valueOf((char) runtimeScalar.getInt()));
+        int codePoint = runtimeScalar.getInt(); // Get the integer representing the code point
+
+        // Convert the code point to a char array (to handle both BMP and non-BMP)
+        char[] chars = Character.toChars(codePoint);
+
+        // Create a string from the char array
+        return new RuntimeScalar(String.valueOf(chars));
     }
 }
