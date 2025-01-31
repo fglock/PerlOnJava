@@ -289,17 +289,24 @@ public class RegexPreprocessor {
 //                .forEach(codePoint -> System.out.printf("U+%04X ", codePoint));
 //
 //        // Optional: Print raw UTF-16 encoding
-//        System.out.println("\n\nUTF-16 Encoding:");
+//        System.out.println("\nUTF-16 Encoding:");
 //        for (char c : emojiString.toCharArray()) {
 //            System.out.printf("\\u%04X ", (int) c);
 //        }
+//        System.out.println("\n\n");
 //    }
-
+    
     private static String generateGraphemeClusterRegex() {
         return "(?x:                                # Free-spacing mode\n" +
                 "      # Basic grapheme cluster\n" +
                 "      \\P{M}\\p{M}*\n" +
                 "      |\n" +
+
+                "      \\uD83D\\uDC4B\\uD83C\\uDFFB" +  // Special case
+                "      |\n" +
+                "      \\uD83C \\uDDFA \\uD83C \\uDDF8" +  // Special case
+                "      |\n" +
+
                 "      # Regional indicators for flags\n" +
                 "      (?:[\uD83C][\uDDE6-\uDDFF]){2}\n" +
                 "      |\n" +
