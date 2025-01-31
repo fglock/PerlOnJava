@@ -281,35 +281,6 @@ public class RegexPreprocessor {
         return offset;
     }
 
-//    private static String generateGraphemeClusterRegex() {
-//        return "(?x:                              # Free-spacing mode\n" +
-//                "  (?>                             # Atomic group to prevent backtracking\n" +
-//                "    # CASE 1: Base character + combining marks\n" +
-//                "    (?:\\P{M}\\p{M}*)\n" +
-//                "    |\n" +
-//                "    # CASE 2: Emoji sequences (with modifiers and ZWJ)\n" +
-//                "    (?:[\uD83D\uDE00-\uD83D\uDE4F]                # Emoticons\n" +
-//                "      | [\uD83C\uDF00-\uD83C\uDFFF]                # Misc symbols\n" +
-//                "      | [\uD83D\uDE80-\uD83D\uDEFF]                # Transport/map\n" +
-//                "      | [\u2600-\u26FF]                            # Misc symbols\n" +
-//                "      | [\u2700-\u27BF]                            # Dingbats\n" +
-//                "    )\n" +
-//                "    (?:[\uD83C\uDFFB-\uD83C\uDFFF])?               # Skin tone modifier\n" +
-//                "    (?:\u200D                                     # ZWJ\n" +
-//                "      (?:[\uD83D\uDE00-\uD83D\uDE4F]              # Emoticons\n" +
-//                "        | [\uD83C\uDF00-\uD83C\uDFFF]              # Misc symbols\n" +
-//                "        | \\P{M}                                  # Base character\n" +
-//                "        | [\uD800-\uDBFF][\uDC00-\uDFFF]           # Surrogate pair\n" +
-//                "      )\n" +
-//                "      (?:[\uD83C\uDFFB-\uD83C\uDFFF])?             # Skin tone modifier\n" +
-//                "    )*\n" +
-//                "    |\n" +
-//                "    # CASE 3: Surrogate pairs (non-BMP characters)\n" +
-//                "    [\uD800-\uDBFF][\uDC00-\uDFFF]\n" +
-//                "  )\n" +
-//                ")";
-//    }
-
     private static String generateGraphemeClusterRegex() {
         return "(?x:                                # Free-spacing mode\n" +
                 "  (?>                               # Atomic group\n" +
@@ -330,14 +301,10 @@ public class RegexPreprocessor {
                 "      (?:[\uFE00-\uFE0F])?\n" +
                 "    )\n" +
                 "  )\n" +
-                "  (?!\\p{M}|[\uDC00-\uDFFF])       # Boundary check\n" +
+                "  (?!\\p{M}|\\p{L}|[\uDC00-\uDFFF]|[\uD800-\uDBFF]) # Boundary check\n" +
                 ")";
     }
-
-
-
-
-
+    
     private static int handleEscapeSequences(String s, StringBuilder sb, int c, int offset) {
         sb.append(Character.toChars(c));
         final int length = s.length();
