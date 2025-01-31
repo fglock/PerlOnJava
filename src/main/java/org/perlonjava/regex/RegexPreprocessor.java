@@ -283,7 +283,6 @@ public class RegexPreprocessor {
 
     private static String generateGraphemeClusterRegex() {
         return "(?x:                                # Free-spacing mode\n" +
-                "    (?:                             # Main alternation\n" +
                 "      # Basic grapheme cluster\n" +
                 "      \\P{M}\\p{M}*\n" +
                 "      |\n" +
@@ -298,7 +297,6 @@ public class RegexPreprocessor {
                 "        (?:[\uD83C][\uDFFB-\uDFFF])?\n" +
                 "      )*\n" +
                 "      (?:[\uFE00-\uFE0F])?\n" +
-                "    )\n" +
                 ")";
     }
 
