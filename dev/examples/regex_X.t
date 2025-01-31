@@ -33,3 +33,22 @@ $string = "A";  # Basic Latin character
 $match = $string =~ $pattern;
 print "not " if !$match; say "ok 5 # 'A' matches '^\\X\$' as single grapheme cluster";
 
+# Test 6: \X matches regional indicator symbols
+$string = "\x{1F1FA}\x{1F1F8}";  # US flag
+$match = $string =~ $pattern;
+print "not " if !$match; say "ok 6 # Regional indicator symbols match as single grapheme cluster";
+
+# Test 7: \X matches emoji + variation selector
+$string = "\x{2764}\x{FE0F}";  # Red heart with variation selector
+$match = $string =~ $pattern;
+print "not " if !$match; say "ok 7 # Emoji with variation selector matches as single grapheme cluster";
+
+# Test 8: \X matches family emoji sequence
+$string = "\x{1F468}\x{200D}\x{1F469}\x{200D}\x{1F467}"; # Family MWG
+$match = $string =~ $pattern;
+print "not " if !$match; say "ok 8 # Family emoji sequence matches as single grapheme cluster";
+
+# Test 9: \X matches profession emoji with ZWJ
+$string = "\x{1F469}\x{200D}\x{1F3EB}"; # Woman teacher
+$match = $string =~ $pattern;
+print "not " if !$match; say "ok 9 # Professional emoji with ZWJ matches as single grapheme cluster";
