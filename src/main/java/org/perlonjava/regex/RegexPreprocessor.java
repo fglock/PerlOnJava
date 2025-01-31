@@ -281,44 +281,51 @@ public class RegexPreprocessor {
         return offset;
     }
 
+//    private static String generateGraphemeClusterRegex() {
+//        return "(?x:                              # Free-spacing mode\n" +
+//                "  (?>                             # Atomic group to prevent backtracking\n" +
+//                "    # CASE 1: Base character + combining marks\n" +
+//                "    (?:\\P{M}\\p{M}*)\n" +
+//                "    |\n" +
+//                "    # CASE 2: Emoji sequences (with modifiers and ZWJ)\n" +
+//                "    (?:[\uD83D\uDE00-\uD83D\uDE4F]                # Emoticons\n" +
+//                "      | [\uD83C\uDF00-\uD83C\uDFFF]                # Misc symbols\n" +
+//                "      | [\uD83D\uDE80-\uD83D\uDEFF]                # Transport/map\n" +
+//                "      | [\u2600-\u26FF]                            # Misc symbols\n" +
+//                "      | [\u2700-\u27BF]                            # Dingbats\n" +
+//                "    )\n" +
+//                "    (?:[\uD83C\uDFFB-\uD83C\uDFFF])?               # Skin tone modifier\n" +
+//                "    (?:\u200D                                     # ZWJ\n" +
+//                "      (?:[\uD83D\uDE00-\uD83D\uDE4F]              # Emoticons\n" +
+//                "        | [\uD83C\uDF00-\uD83C\uDFFF]              # Misc symbols\n" +
+//                "        | \\P{M}                                  # Base character\n" +
+//                "        | [\uD800-\uDBFF][\uDC00-\uDFFF]           # Surrogate pair\n" +
+//                "      )\n" +
+//                "      (?:[\uD83C\uDFFB-\uD83C\uDFFF])?             # Skin tone modifier\n" +
+//                "    )*\n" +
+//                "    |\n" +
+//                "    # CASE 3: Surrogate pairs (non-BMP characters)\n" +
+//                "    [\uD800-\uDBFF][\uDC00-\uDFFF]\n" +
+//                "  )\n" +
+//                ")";
+//    }
+
     private static String generateGraphemeClusterRegex() {
-        return "(?x:                            # Free-spacing mode for readability\n" +
-                "  (?>                           # Atomic group to prevent backtracking\n" +
-                "    (                           # Start of a single grapheme cluster\n" +
-                "      \\P{M}                    # Base character (exactly one)\n" +
-                "      (?:\\p{M}{1,3})?          # Optional combining marks (1 to 3)\n" +
-                "      |                         # OR\n" +
-                "      (?:                       # Emoji sequences\n" +
-                "        [\\x{1F600}-\\x{1F64F}]  # Emoticons\n" +
-                "        | [\\x{1F300}-\\x{1F5FF}]  # Misc symbols and pictographs\n" +
-                "        | [\\x{1F680}-\\x{1F6FF}]  # Transport and map symbols\n" +
-                "        | [\\x{2600}-\\x{26FF}]    # Misc symbols\n" +
-                "        | [\\x{2700}-\\x{27BF}]    # Dingbats\n" +
-                "      )\n" +
-                "      (?:                       # Optional emoji modifiers and ZWJ sequences\n" +
-                "        [\\x{1F3FB}-\\x{1F3FF}]?  # Optional skin tone modifiers\n" +
-                "        (?:\\x{200D}            # Zero-width joiner\n" +
-                "          (?:                   # Base character or emoji\n" +
-                "            \\P{M}              # Base character (exactly one)\n" +
-                "            | [\\x{1F600}-\\x{1F64F}]  # Emoticons\n" +
-                "            | [\\x{1F300}-\\x{1F5FF}]  # Misc symbols and pictographs\n" +
-                "            | [\\x{1F680}-\\x{1F6FF}]  # Transport and map symbols\n" +
-                "            | [\\x{2600}-\\x{26FF}]    # Misc symbols\n" +
-                "            | [\\x{2700}-\\x{27BF}]    # Dingbats\n" +
-                "          )\n" +
-                "          (?:\\p{M}{1,3})?      # Optional combining marks (1 to 3)\n" +
-                "        )?                      # Optional ZWJ sequence (limit to one)\n" +
-                "      )\n" +
-                "      |                         # OR\n" +
-                "      (?:                       # Surrogate pairs (outside BMP)\n" +
-                "        [\\uD800-\\uDBFF]       # High surrogate\n" +
-                "        [\\uDC00-\\uDFFF]       # Low surrogate\n" +
-                "      )\n" +
+        return "(?x:                                # Free-spacing mode for readability\n" +
+                "  (?>                               # Atomic group to prevent backtracking\n" +
+                "    (?:                             # Grapheme cluster\n" +
+                "      \\P{M}                        # Base character (non-mark)\n" +
+                "      \\p{M}*                       # Zero or more combining marks\n" +
+                "      |                             # OR\n" +
+                "      [\\uD800-\\uDBFF][\\uDC00-\\uDFFF]  # Surrogate pair (non-BMP character)\n" +
                 "    )\n" +
                 "  )\n" +
+                "  (?!\\P{M}|[\\uD800-\\uDBFF])       # Negative lookahead: ensure no extra base character or surrogate\n" +
                 ")";
     }
-    
+
+
+
     private static int handleEscapeSequences(String s, StringBuilder sb, int c, int offset) {
         sb.append(Character.toChars(c));
         final int length = s.length();
