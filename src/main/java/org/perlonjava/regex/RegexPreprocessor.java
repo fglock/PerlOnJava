@@ -296,31 +296,30 @@ public class RegexPreprocessor {
 //        System.out.println("\n\n");
 //    }
     
-    private static String generateGraphemeClusterRegex() {
-        return "(?x:                                # Free-spacing mode\n" +
-                "      # Basic grapheme cluster\n" +
-                "      \\P{M}\\p{M}*\n" +
-                "      |\n" +
-
-                "      \\uD83D\\uDC4B\\uD83C\\uDFFB" +  // Special case
-                "      |\n" +
-                "      \\uD83C \\uDDFA \\uD83C \\uDDF8" +  // Special case
-                "      |\n" +
-
-                "      # Regional indicators for flags\n" +
-                "      (?:[\uD83C][\uDDE6-\uDDFF]){2}\n" +
-                "      |\n" +
-                "      # Emoji with modifiers and ZWJ sequences\n" +
-                "      (?:[\uD83C-\uDBFF\uDC00-\uDFFF]|[\u2600-\u27BF])\n" +
-                "      (?:[\uD83C][\uDFFB-\uDFFF])?\n" +
-                "      (?:\u200D\n" +
-                "        (?:[\uD83C-\uDBFF\uDC00-\uDFFF]|[\u2600-\u27BF])\n" +
-                "        (?:[\uD83C][\uDFFB-\uDFFF])?\n" +
-                "      )*\n" +
-                "      (?:[\uFE00-\uFE0F])?\n" +
-                ")";
-    }
-
+//    private static String generateGraphemeClusterRegex() {
+//        return "(?x:                                # Free-spacing mode\n" +
+//                "      # Basic grapheme cluster\n" +
+//                "      \\P{M}\\p{M}*\n" +
+//                "      |\n" +
+//
+//                "      \\uD83D\\uDC4B\\uD83C\\uDFFB" +  // Special case
+//                "      |\n" +
+//                "      \\uD83C \\uDDFA \\uD83C \\uDDF8" +  // Special case
+//                "      |\n" +
+//
+//                "      # Regional indicators for flags\n" +
+//                "      (?:[\uD83C][\uDDE6-\uDDFF]){2}\n" +
+//                "      |\n" +
+//                "      # Emoji with modifiers and ZWJ sequences\n" +
+//                "      (?:[\uD83C-\uDBFF\uDC00-\uDFFF]|[\u2600-\u27BF])\n" +
+//                "      (?:[\uD83C][\uDFFB-\uDFFF])?\n" +
+//                "      (?:\u200D\n" +
+//                "        (?:[\uD83C-\uDBFF\uDC00-\uDFFF]|[\u2600-\u27BF])\n" +
+//                "        (?:[\uD83C][\uDFFB-\uDFFF])?\n" +
+//                "      )*\n" +
+//                "      (?:[\uFE00-\uFE0F])?\n" +
+//                ")";
+//    }
 
     private static int handleEscapeSequences(String s, StringBuilder sb, int c, int offset) {
         sb.append(Character.toChars(c));
@@ -334,11 +333,12 @@ public class RegexPreprocessor {
         // Note: \Q .. \E sequences are handled separately, in escapeQ()
 
         char nextChar = s.charAt(offset);
-        if (nextChar == 'X') {
-            // Translate \X to a Java-compatible grapheme cluster pattern
-            sb.setLength(sb.length() - 1); // Remove the backslash
-            sb.append(generateGraphemeClusterRegex());
-        } else if (nextChar == 'g' && offset + 1 < length && s.charAt(offset + 1) == '{') {
+//        if (nextChar == 'X') {
+//            // Translate \X to a Java-compatible grapheme cluster pattern
+//            sb.setLength(sb.length() - 1); // Remove the backslash
+//            sb.append(generateGraphemeClusterRegex());
+//        } else
+        if (nextChar == 'g' && offset + 1 < length && s.charAt(offset + 1) == '{') {
             // Handle \g{name} backreference
             offset += 2; // Skip past \g{
             int endBrace = s.indexOf('}', offset);
