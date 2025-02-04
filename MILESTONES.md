@@ -9,6 +9,32 @@
 
 ## Completed Milestones
 
+- **v2.3.0**: Modern Perl Features, Expanded Modules, and Developer Tools
+  - Project description updated in `README.md` to "A Perl Distribution for the JVM"
+  - Added module porting guide at `docs/PORTING_MODULES.md`
+  - Added wrapper scripts (`jperl`/`jperl.bat`) for easier command-line usage
+  - Added `YAML` and `YAML::PP` modules.
+  - Added `Text::Balanced` module.
+  - Added `Unicode::Normalize` module.
+  - Added subroutine signatures and `signature` feature.
+  - Added chained operators.
+  - Added stacked file test operators.
+  - Added `module_true` feature.
+  - Added `<<` and `<<~` Here documents.
+  - Added `/p`, `/c`, `/n` regex modifiers.
+  - Added regex `(?^` clear embedded pattern-match modifier.
+  - Added regex `(?'name'...)` named capture groups.
+  - Added regex `\k<name>` and `\g{name}` backreferences to named groups.
+  - Added regex `\p{...}` and `\P{...}` for Unicode properties.
+  - Added regex `\g{-n}` for relative backreferences.
+  - Added regex `*+`, `++`, `?+`, `{n,m}+` possessive quantifiers.
+  - Added regex `(?>...)` for atomic groups.
+  - Added overload: `""`, `0+`, `bool`, `fallback`, `nomethod`.
+  - Added `class` feature and `class` keyword.
+  - Library upgrades.
+    Maven:  `mvn versions:use-latest-versions`.
+    Gradle: `./gradlew useLatestVersions`.
+
 - **v2.2.0**: Core modules
   - Perl version is now v5.40.0
   - `for` loop can iterate over multiple values at the same time.
@@ -191,31 +217,7 @@
 
 ## Upcoming Milestones
 
-- **v2.3.0**: Next minor version
-  - Project description updated in `README.md` to "A Perl Distribution for the JVM"
-  - Added module porting guide at `docs/PORTING_MODULES.md`
-  - Added wrapper scripts (`jperl`/`jperl.bat`) for easier command-line usage
-  - Added `YAML` and `YAML::PP` modules.
-  - Added `Text::Balanced` module.
-  - Added `Unicode::Normalize` module.
-  - Added subroutine signatures and `signature` feature.
-  - Added chained operators.
-  - Added stacked file test operators.
-  - Added `module_true` feature.
-  - Added `<<` and `<<~` Here documents.
-  - Added `/p`, `/c`, `/n` regex modifiers.
-  - Added regex `(?^` clear embedded pattern-match modifier.
-  - Added regex `(?'name'...)` named capture groups.
-  - Added regex `\k<name>` and `\g{name}` backreferences to named groups.
-  - Added regex `\p{...}` and `\P{...}` for Unicode properties.
-  - Added regex `\g{-n}` for relative backreferences.
-  - Added regex `*+`, `++`, `?+`, `{n,m}+` possessive quantifiers.
-  - Added regex `(?>...)` for atomic groups.
-  - Added overload: `""`, `0+`, `bool`, `fallback`, `nomethod`.
-  - Added `class` feature and `class` keyword.
-  - Library upgrades.
-    Maven:  `mvn versions:use-latest-versions`.
-    Gradle: `./gradlew useLatestVersions`.
+- **v2.4.0**: Next minor version
   - Planned release date: 2025-02-10
 
 - **v3.0.0**: Concurrency and Security Features
