@@ -145,8 +145,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             }
             case Long longValue -> initializeWithLong(longValue);
             default -> {
-                // Look for a known type, default to OBJECT if not found
-                this.type = typeMap.getOrDefault(value.getClass(), RuntimeScalarType.OBJECT);
+                // Look for a known type, default to JAVAOBJECT if not found
+                this.type = typeMap.getOrDefault(value.getClass(), RuntimeScalarType.JAVAOBJECT);
                 this.value = value;
             }
         }
@@ -161,7 +161,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
      */
     public static RuntimeScalar newScalarOrString(Object value) {
         RuntimeScalar newScalar = new RuntimeScalar(value);
-        if (newScalar.type == RuntimeScalarType.OBJECT) {
+        if (newScalar.type == RuntimeScalarType.JAVAOBJECT) {
             // Unknown type, convert to string
             newScalar.type = RuntimeScalarType.STRING;
             newScalar.value = value.toString();
@@ -378,7 +378,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case BOOLEAN -> (boolean) value ? "1" : "";
             case REFERENCE, ARRAYREFERENCE, HASHREFERENCE -> Overload.stringify(this).toString();
             case CODE -> this.toStringRef();
-            case OBJECT -> value.toString();
+            case JAVAOBJECT -> value.toString();
             default -> ((RuntimeScalarReference) value).toStringRef();
         };
     }
