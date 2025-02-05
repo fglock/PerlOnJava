@@ -15,5 +15,5 @@ public enum RuntimeScalarType {
     GLOBREFERENCE,
     VSTRING,
     BOOLEAN,
-    OBJECT
+    JAVAOBJECT
 }
