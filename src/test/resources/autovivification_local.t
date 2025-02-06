@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 6;
+use Test::More tests => 7;
 use Data::Dumper;
 
 # Test autovivification with local() on array reference
@@ -32,4 +32,5 @@ use Data::Dumper;
         local $v->{aaa};
         is_deeply($v, { aaa => undef }, 'Hash reference autovivified with local after assignment');
     }
+    is_deeply($v, { aaa => 123 }, 'Hash reference autovivified with local after assignment');
 }
