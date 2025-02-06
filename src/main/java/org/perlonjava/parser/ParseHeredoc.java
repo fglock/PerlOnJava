@@ -9,7 +9,6 @@ import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 import static org.perlonjava.parser.StringDoubleQuoted.parseDoubleQuotedString;
@@ -150,7 +149,7 @@ public class ParseHeredoc {
                     operand = interpolateString(parser, string, newlineIndex);
                     break;
                 case "`":
-                    Node interpolated = interpolateString(parser, string, newlineIndex);;
+                    Node interpolated = interpolateString(parser, string, newlineIndex);
                     List<Node> elements = new ArrayList<>();
                     elements.add(interpolated);
                     ListNode list = new ListNode(elements, newlineIndex);

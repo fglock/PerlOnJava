@@ -295,7 +295,7 @@ public class RegexPreprocessor {
 //        }
 //        System.out.println("\n\n");
 //    }
-    
+
 //    private static String generateGraphemeClusterRegex() {
 //        return "(?x:                                # Free-spacing mode\n" +
 //                "      # Basic grapheme cluster\n" +

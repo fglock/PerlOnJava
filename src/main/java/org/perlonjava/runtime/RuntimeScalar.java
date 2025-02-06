@@ -34,6 +34,8 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         typeMap.put(String.class, RuntimeScalarType.STRING);
         typeMap.put(Double.class, RuntimeScalarType.DOUBLE);
         typeMap.put(Boolean.class, RuntimeScalarType.BOOLEAN);
+        typeMap.put(RuntimeCode.class, RuntimeScalarType.CODE);
+        typeMap.put(RuntimeRegex.class, RuntimeScalarType.REGEX);
         // Add other known types if necessary
     }
 
@@ -138,6 +140,16 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case null -> {
                 this.type = RuntimeScalarType.UNDEF;
                 this.value = null;
+            }
+            case RuntimeGlob v -> {
+                RuntimeScalar tmp = new RuntimeScalar(v);
+                this.type = tmp.type;
+                this.value = v;
+            }
+            case RuntimeIO v -> {
+                RuntimeScalar tmp = new RuntimeScalar(v);
+                this.type = tmp.type;
+                this.value = v;
             }
             case RuntimeScalar scalar -> {
                 this.type = scalar.type;
@@ -352,6 +364,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         this.type = RuntimeScalarType.GLOB;
         this.value = value;
         return this;
+    }
+    
+    public RuntimeScalar set(Object value) {
+        return set(new RuntimeScalar(value));
     }
 
     public RuntimeArray setFromList(RuntimeList value) {
