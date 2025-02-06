@@ -56,6 +56,7 @@ public class RuntimeHashProxy extends RuntimeBaseProxy {
         // Create a new RuntimeScalar to save the current state
         if (this.lvalue == null) {
             dynamicStateStack.push(null);
+            vivify();
         } else {
             RuntimeScalar currentState = new RuntimeScalar();
             // Copy the current type and value to the new state
