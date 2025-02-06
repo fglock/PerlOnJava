@@ -198,6 +198,10 @@ public class StringParser {
             replace = StringSingleQuoted.parseSingleQuotedString(rawStr);
         }
 
+        if (modifierStr.contains("ee")) {
+            replace = new OperatorNode("eval", new ListNode(List.of(replace), rawStr.index), rawStr.index);
+        }
+
         // If replace is not a plain string, make it an anonymous subroutine
         if (!(replace instanceof StringNode)) {
             if (!(replace instanceof BlockNode)) {
