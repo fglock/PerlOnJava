@@ -43,6 +43,7 @@ public class ScopedSymbolTable {
     private final Stack<Integer> strictOptionsStack = new Stack<>();
     // Cache for the getAllVisibleVariables method
     private Map<Integer, SymbolTable.SymbolEntry> visibleVariablesCache;
+
     /**
      * Constructs a ScopedSymbolTable.
      * Initializes the warning, feature categories, and strict options stacks with default values for the global scope.

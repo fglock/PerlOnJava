@@ -248,11 +248,11 @@ public class PrototypeArgs {
     /**
      * Handles a backslash group in the prototype.
      *
-     * @param parser       The parser instance used for parsing.
-     * @param args         The list of arguments to add to.
-     * @param group        The backslash group string (e.g., "$@%&*").
-     * @param isOptional   Whether the argument is optional.
-     * @param needComma    Whether a comma is needed before parsing the argument.
+     * @param parser     The parser instance used for parsing.
+     * @param args       The list of arguments to add to.
+     * @param group      The backslash group string (e.g., "$@%&*").
+     * @param isOptional Whether the argument is optional.
+     * @param needComma  Whether a comma is needed before parsing the argument.
      */
     private static void handleBackslashGroup(Parser parser, ListNode args, String group, boolean isOptional, boolean needComma) {
         if (needComma) {

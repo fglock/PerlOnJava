@@ -28,7 +28,7 @@ public class UnicodeResolver {
         return codePoint;
     }
 
-   public static String translateUnicodeProperty(String property, boolean negated) {
+    public static String translateUnicodeProperty(String property, boolean negated) {
         try {
             // Remove common prefixes like "Script=", "Block=", "In=", or "Is="
             if (property.startsWith("Script=")) {
