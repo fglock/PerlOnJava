@@ -18,3 +18,5 @@ gradlew.bat
 *.iws
 *.ipr
 out/
+src/test/_Deparsed_XSubs.pm
+
