@@ -1,5 +1,20 @@
 # Build and Execution Guide
 
+## Table of Contents
+1. [Prerequisites](#prerequisites)
+2. [Build Options](#build-options)
+    - [Using Maven](#using-maven)
+    - [Using Gradle](#using-gradle)
+3. [Dependencies](#dependencies)
+4. [Running PerlOnJava](#running-perlonjava)
+    - [Platform-Specific Instructions](#platform-specific-instructions)
+    - [Common Options](#common-options)
+5. [Database Integration](#database-integration)
+    - [Adding JDBC Drivers](#adding-jdbc-drivers)
+    - [Database Connection Example](#database-connection-example)
+6. [Build Notes](#build-notes)
+7. [Java Library Upgrades](#java-library-upgrades)
+
 ## Prerequisites
 - Java 21 or higher
 - Maven or Gradle
@@ -28,14 +43,14 @@ gradle clean package
 
 ### Platform-Specific Instructions
 
-Unix/Linux/Mac:
+**Unix/Linux/Mac:**
 ```bash
 ./jperl -E 'print "Hello World"'
 ./jperl myscript.pl
 CLASSPATH="jdbc-drivers/h2-2.2.224.jar" ./jperl myscript.pl
 ```
 
-Windows:
+**Windows:**
 ```bash
 jperl -E "print 'Hello World'"
 jperl myscript.pl
@@ -73,3 +88,12 @@ See [JDBC Database Guide](JDBC_GUIDE.md) for detailed connection examples and su
 - Gradle builds use `com.github.johnrengelman.shadow` plugin
 - Both configurations target Java 21
 
+## Java Library Upgrades
+
+**Maven:**
+
+`mvn versions:use-latest-versions`.
+
+**Gradle:**
+
+`./gradlew useLatestVersions`.
