@@ -170,67 +170,142 @@
 - **v1.0.0**: Initial proof of concept for the parser and execution engine.
 
 
-## Work in progress
+## Work in Progress
 
-- Compiler subsystem
-  - `lexical_subs` feature.
-  - `use VERSION`, `require VERSION`.
-  - lexical warnings.
-  - lexical strictness.
-  - lexical utf8 source code.
-  - preprocessor `# line` directive.
-  - subroutine prototypes.
-  - `goto` special cases - for `Text::Balanced`.
-  - indirect object special cases - for `GetOpt::Long`.
-  - Implement localization of regex variables.
-- Regex subsystem
-- Class subsystem
-- DBI subsystem
-  - Additional methods.
-- Overload subsystem
-  - Additional methods.
-- I/O subsystem
-  - in-memory I/O
-  - `socket` and related operators.
-  - `truncate`, `seek` operators.
-  - `read` operator.
-  - IO layers.
-  - Experiment with memory-mapped I/O.
-- Threads subsystem
-  - Added preliminary docs.
-  - Plan for fork emulation, interpreter clone.
-  - Plan for `multiplicity`.
-  - Adjust `exit` semantics, to exit the current thread only.
-  - Add `ThreadLocal` to global variables, special variables (like regex, current directory, current handle, ENV), and caches (like `InheritanceResolver`). Provide tear down hooks to clean up; use `remove()`.
-- Feature and Warnings internals
-  - Add metadata to AST nodes.
-  - This can be used to add context to `EvalOperatorNode` for example.
-- CPAN support
-  - Port `cpan`, `prove`.
-  - Add module testing for PerlOnJava core modules.
-- Optimization
-  - Inline `map` and related blocks.
-  - Inline constant subroutines.
-- Compilation with GraalVM
-  - Added [docs/GRAALVM.md](docs/GRAALVM.md) with preliminary results.
+The following areas are currently under active development to enhance the functionality and performance of PerlOnJava:
+
+- **Compiler Subsystem**
+  - Implementing the `lexical_subs` feature.
+  - Enhancing version control with `use VERSION` and `require VERSION`.
+  - Introducing lexical warnings and strictness for improved code safety.
+  - Supporting lexical UTF-8 source code.
+  - Adding preprocessor `# line` directive.
+  - Developing subroutine prototypes.
+  - Handling `goto` special cases for `Text::Balanced`.
+  - Addressing indirect object special cases for `GetOpt::Long`.
+  - Localizing regex variables.
+
+- **Regex Subsystem**
+  - Ongoing improvements and feature additions.
+
+- **Class Subsystem**
+  - Enhancements and new feature implementations.
+
+- **DBI Subsystem**
+  - Adding additional methods for database interaction.
+
+- **Overload Subsystem**
+  - Expanding with additional methods.
+
+- **I/O Subsystem**
+  - Implementing in-memory I/O operations.
+  - Developing `socket` and related operators.
+  - Enhancing `truncate`, `seek`, and `read` operators.
+  - Introducing IO layers and experimenting with memory-mapped I/O.
+
+- **Threads Subsystem**
+  - Documenting preliminary features.
+  - Planning for fork emulation and interpreter cloning.
+  - Developing `multiplicity` support.
+  - Adjusting `exit` semantics to exit the current thread only.
+  - Adding `ThreadLocal` to global variables, special variables, and caches, with tear down hooks for cleanup.
+
+- **Feature and Warnings Internals**
+  - Adding metadata to AST nodes for enhanced context, such as in `EvalOperatorNode`.
+
+- **CPAN Support**
+  - Porting `cpan` and `prove`.
+  - Adding module testing for PerlOnJava core modules.
+
+- **Optimization**
+  - Inlining `map` and related blocks.
+  - Inlining constant subroutines.
+
+- **Compilation with GraalVM**
+  - Documenting preliminary results in [docs/GRAALVM.md](docs/GRAALVM.md).
 
 
 ## Upcoming Milestones
 
 - **v2.4.0**: Next minor version
-  - Planned release date: 2025-02-10
+  - Planned release date: 2025-04-10
 
-- **v3.0.0**: Concurrency and Security Features
+### v3.0.0 Milestone (Planned Release Date: 2026-04-10)
+
+**Objective:** Enhance core functionality and improve developer experience with a focus on integration and performance.
+
+1. **Concurrency and Security Enhancements**
+  - **Specific:** Implement basic concurrency support with threads and async/await capabilities.
+  - **Measurable:** Ensure at least 50% of core modules support concurrent execution.
+  - **Achievable:** Utilize existing JVM concurrency features.
+  - **Relevant:** Addresses modern application requirements for parallel processing.
+  - **Time-bound:** Complete by Q1 2026.
+
+2. **External Integration**
+  - **Specific:** Integrate with popular external libraries for HTTP requests and database access.
+  - **Measurable:** Provide at least two integration examples in documentation.
+  - **Achievable:** Leverage existing Java libraries for integration.
+  - **Relevant:** Enhances PerlOnJava's utility in web and data applications.
+  - **Time-bound:** Complete by Q1 2026.
+
+3. **Development Tools**
+  - **Specific:** Develop an interactive debugger with breakpoints and variable inspection.
+  - **Measurable:** Debugger should support at least 80% of core language features.
+  - **Achievable:** Build on existing JVM debugging capabilities.
+  - **Relevant:** Improves developer productivity and code quality.
+  - **Time-bound:** Complete by Q1 2026.
+
+4. **Distribution and Packaging**
+  - **Specific:** Provide Docker containers and Kubernetes configurations for easy deployment.
+  - **Measurable:** Ensure compatibility with at least two major cloud platforms.
+  - **Achievable:** Use standard containerization practices.
+  - **Relevant:** Facilitates deployment in modern cloud environments.
+  - **Time-bound:** Complete by Q1 2026.
+
+### v4.0.0 Milestone (Planned Release Date: 2027-04-10)
+
+**Objective:** Expand platform capabilities and improve performance with advanced features and optimizations.
+
+1. **GraalVM Integration**
+  - **Specific:** Implement native image compilation for instant startup and reduced memory footprint.
+  - **Measurable:** Achieve at least a 30% reduction in startup time and memory usage.
+  - **Achievable:** Collaborate with GraalVM community for support.
+  - **Relevant:** Enhances performance for cloud and serverless applications.
+  - **Time-bound:** Complete by Q1 2027.
+
+2. **Mobile Development**
+  - **Specific:** Develop an Android app with native UI for Perl scripting.
+  - **Measurable:** Ensure app compatibility with at least 80% of Android devices.
+  - **Achievable:** Utilize existing Android development frameworks.
+  - **Relevant:** Expands PerlOnJava's reach to mobile developers.
+  - **Time-bound:** Complete by Q1 2027.
+
+3. **Advanced Data Manipulation**
+  - **Specific:** Add JSON/XML parsing and data transformation features.
+  - **Measurable:** Provide at least three example scripts demonstrating these capabilities.
+  - **Achievable:** Use existing Java libraries for data manipulation.
+  - **Relevant:** Increases PerlOnJava's applicability in data-driven applications.
+  - **Time-bound:** Complete by Q1 2027.
+
+4. **Enterprise Features**
+  - **Specific:** Integrate with logging frameworks and provide monitoring with Prometheus/Grafana.
+  - **Measurable:** Ensure logging and monitoring support for at least 70% of core modules.
+  - **Achievable:** Leverage existing enterprise tools and frameworks.
+  - **Relevant:** Meets enterprise requirements for observability and security.
+  - **Time-bound:** Complete by Q1 2027.
+
+
+## Future Development Areas
+
+- **Concurrency and Security Features**
   - Add support for concurrency and parallelism, such as threads and async/await.
   - Enhance security features, including sandboxing and input validation.
   - Increase test coverage.
 
-- **v4.0.0**: External Integration and Advanced Data Manipulation
+- **External Integration and Advanced Data Manipulation**
   - Integrate with external libraries and APIs for tasks like HTTP requests and database access.
   - Add advanced data manipulation features, such as JSON/XML parsing and data transformation.
   - Allow users to define their own operators and macros for greater flexibility.
-
-## Future Development Areas
 
 - **Mobile Development**
   - Android app with native UI for Perl scripting
