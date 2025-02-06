@@ -74,6 +74,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 patternString = escapeQ(patternString);
             }
 
+            // Note: flags /e /ee are processed at parse time, in parseRegexReplace()
             regex.regexFlags = fromModifiers(modifiers, patternString);
             regex.patternFlags = regex.regexFlags.toPatternFlags();
 

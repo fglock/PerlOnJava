@@ -228,6 +228,7 @@ The following areas are currently under active development to enhance the functi
 ## Upcoming Milestones
 
 - **v2.4.0**: Next minor version
+  - Added `/ee` regex modifier.
   - Planned release date: 2025-04-10
 
 ### v3.0.0 Milestone (Planned Release Date: 2026-04-10)

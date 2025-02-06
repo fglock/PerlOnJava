@@ -196,7 +196,7 @@ PerlOnJava implements most core Perl features with some key differences:
 
 ## Regular Expressions
 - ✅  **Basic Matching**: Operators `qr//`, `m//`, `s///`, `split` are implemented.
-- ✅  **Regex modifiers**: Modifiers `/p` `/i` `/m` `/s` `/n` `/g` `/c` `/r` `/e` `/x` `/xx` are implemented.
+- ✅  **Regex modifiers**: Modifiers `/p` `/i` `/m` `/s` `/n` `/g` `/c` `/r` `/e` `/ee` `/x` `/xx` are implemented.
 - ✅  **Special variables**: The special variables `$1`, `$2`... are implemented.
 - ✅  **Transliteration**: `tr` and `y` transliteration operators are implemented.
 - ✅  **`pos`**: `pos` operator is implemented.
@@ -237,7 +237,6 @@ This list is under review.
 - ❌  **Extended Grapheme Clusters**: Matching with `\X` for extended grapheme clusters is not supported.
 - ❌  **Regex Debugging**: Support for features like `use re 'debug';` to visualize the regex engine’s operation is not supported.
 - ❌  **Embedded Code in Regex**: Inline Perl code execution with `(?{ code })` or `(??{ code })` is not supported.
-- ❌  **`/ee` Modifier**: The `/ee` double eval modifier for `s///` operations is not supported.
 - ❌  **Regex Debugging**: Debugging patterns with `use re 'debug';` to inspect regex engine operations is not supported.
 - ❌  **Regex Optimizations**: Using `use re 'eval';` for runtime regex compilation is not supported.
 - ❌  **Regex Compilation Flags**: Setting default regex flags with `use re '/flags';` is not supported.
