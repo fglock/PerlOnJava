@@ -354,18 +354,14 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return this;
     }
 
-    public RuntimeScalar set(RuntimeGlob val) {
-        this.type = val.type;
-        this.value = val;
-        return this;
+    public RuntimeScalar set(RuntimeGlob value) {
+        return set(new RuntimeScalar(value));
     }
 
     public RuntimeScalar set(RuntimeIO value) {
-        this.type = RuntimeScalarType.GLOB;
-        this.value = value;
-        return this;
+        return set(new RuntimeScalar(value));
     }
-    
+
     public RuntimeScalar set(Object value) {
         return set(new RuntimeScalar(value));
     }
