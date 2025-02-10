@@ -35,7 +35,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - DBI with JDBC integration
 
 🚧 Partially Supported:
-- Warnings and strict pragma (always enabled)
+- Warnings and strict pragma
 - Some core modules and pragmas
 - Method Resolution Order (C3 only)
 - Subroutine prototypes
@@ -98,6 +98,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **File handles**: Support for file handles is implemented.
 - ✅  **`local` special cases**: `local` works for typeglobs and filehandles.
 - ✅  **Typeglob as hash**: `*$val{$k}` for `SCALAR`, `ARRAY`, `HASH`, `CODE`, `IO` is implemented.
+- ✅  **Use string as a scalar reference**: Support for scalar references from strings is implemented.
 - ❌  **Tied Scalars**: Support for tying scalars to classes is missing.
 - ❌  **Unicode**: Support for non-Unicode strings is not implemented.
 - ❌  **Taint checks**: Support for taint checks is not implemented.
@@ -344,7 +345,7 @@ This list is under review.
 
 - 🚧  **strict** pragma:.
   - ✅ all `use strict` modes are implemented.
-  - ✅ `no strict vars`, `no strict subs` is implemented.
+  - ✅ `no strict vars`, `no strict subs` are implemented.
   - 🚧 `no strict refs` is partially implemented: scalar, glob references.
   - ❌ `no strict refs` works with global variables only. `my` variables can not be accessed by name.
 - ✅  **parent** pragma
@@ -440,7 +441,6 @@ The DBI module provides seamless integration with JDBC drivers:
 
 
 ## Non-strict and Obsolete Features
-- ❌  **Use string as a scalar reference**: Support for scalar references from strings is not yet implemented.
 - ❌  **`format` operator**: `format` and `write` functions for report generation are not implemented.
 - ❌  **DBM file support**: `dbmclose`, `dbmopen` are not implemented.
 - ❌  **`reset("A-Z")`** resetting global variables is not implemented.
@@ -464,48 +464,8 @@ The DBI module provides seamless integration with JDBC drivers:
 
 ## Language Differences and Workarounds
 
+This section is being worked on.
 
-### Using `strict` mode everywhere
-
-To ensure Perl strict is used everywhere and avoid disabling it with `no strict 'refs'`, 
-you can refactor the code using Perl's `Symbol` module, 
-which allows for dynamic symbol table manipulation in a safer way. 
-
-The goal here is to avoid symbolic references (`*{ $callpkg . "::Dumper" }`) while keeping `strict` mode enabled.
-
-```perl
-    sub import {
-        no strict 'refs';
-        my $pkg     = shift;
-        my $callpkg = caller(0);
-        *{ $callpkg . "::Dumper" } = \&Dumper;
-        return;
-    }
-```
-
-Here’s an alternative approach using the Exporter module:
-
-```perl
-    use Exporter 'import';
-    our @EXPORT = qw(Dumper);
-```
-
-Here’s an alternative approach using the Symbol module:
-
-```perl
-    use Symbol;
-    
-    sub import {
-        my $pkg     = shift;
-        my $callpkg = caller(0);
-    
-        # Dynamically assign the Dumper function to the caller's namespace
-        my $sym_ref = qualify_to_ref('Dumper', $callpkg);
-        *$sym_ref = \&Dumper;
-    
-        return;
-    }
-```
 
 ## Optimizations
 
