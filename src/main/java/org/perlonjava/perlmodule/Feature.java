@@ -1,9 +1,9 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.FeatureFlags;
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.*;
+
+import static org.perlonjava.runtime.FeatureFlags.featureExists;
+import static org.perlonjava.runtime.FeatureFlags.getFeatureList;
 
 /**
  * The FeatureFlags class provides functionalities similar to the Perl feature module.
@@ -46,6 +46,9 @@ public class Feature extends PerlModuleBase {
     public static RuntimeList useFeature(RuntimeArray args, int ctx) {
         for (int i = 1; i < args.size(); i++) {
             String bundle = args.get(i).toString();
+            if (!featureExists(bundle)) {
+                throw new PerlCompilerException("Unknown feature category '" + bundle + "'");
+            }
             featureManager.enableFeatureBundle(bundle);
         }
         return new RuntimeScalar().getList();
@@ -61,8 +64,11 @@ public class Feature extends PerlModuleBase {
     public static RuntimeList noFeature(RuntimeArray args, int ctx) {
         for (int i = 1; i < args.size(); i++) {
             String bundle = args.get(i).toString();
+            if (!":all".equals(bundle) && !featureExists(bundle)) {
+                throw new PerlCompilerException("Unknown feature category '" + bundle + "'");
+            }
             if (":all".equals(bundle)) {
-                for (String feature : FeatureFlags.getFeatureList()) {
+                for (String feature : getFeatureList()) {
                     featureManager.disableFeatureBundle(feature);
                 }
             } else {
@@ -97,7 +103,7 @@ public class Feature extends PerlModuleBase {
      */
     public static RuntimeList features_enabled(RuntimeArray args, int ctx) {
         RuntimeList enabledFeatures = new RuntimeList();
-        for (String feature : FeatureFlags.getFeatureList()) {
+        for (String feature : getFeatureList()) {
             if (featureManager.isFeatureEnabled(feature)) {
                 enabledFeatures.elements.add(new RuntimeScalar(feature));
             }
