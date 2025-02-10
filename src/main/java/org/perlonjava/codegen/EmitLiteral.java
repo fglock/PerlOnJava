@@ -6,6 +6,7 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 
+import static org.perlonjava.perlmodule.Strict.STRICT_SUBS;
 import static org.perlonjava.runtime.ScalarUtils.isInteger;
 
 /**
@@ -208,9 +209,13 @@ public class EmitLiteral {
      * @param node The IdentifierNode to be processed
      * @throws PerlCompilerException if the bare word is not implemented
      */
-    static void emitIdentifier(EmitterContext ctx, IdentifierNode node) {
-        // Emit code for identifier
-        throw new PerlCompilerException(
-                node.tokenIndex, "Bareword \"" + node.name + "\" not allowed while \"strict subs\" in use", ctx.errorUtil);
+    static void emitIdentifier(EmitterVisitor visitor, EmitterContext ctx, IdentifierNode node) {
+        if (ctx.symbolTable.isStrictOptionEnabled(STRICT_SUBS)) {
+            throw new PerlCompilerException(
+                    node.tokenIndex, "Bareword \"" + node.name + "\" not allowed while \"strict subs\" in use", ctx.errorUtil);
+        } else {
+            // Emit identifier as string
+            new StringNode(node.name, node.tokenIndex).accept(visitor);
+        }
     }
 }
