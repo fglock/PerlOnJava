@@ -342,8 +342,11 @@ This list is under review.
 
 ### Pragmas
 
-- 🚧  **strict**: `strict` pragma is set to ignore `no strict`, the compiler works always in `strict` mode. `no strict` might work in a future version.
-  - strict `vars` is implemented.
+- 🚧  **strict** pragma:.
+  - ✅ strict `vars` is implemented.
+  - 🚧 strict `refs` is partially implemented.
+  - ❌ strict `subs` is not implemented.
+  - ❌ `no strict refs` works with global variables only. `my` variables can not be accessed by name.
 - ✅  **parent** pragma
 - ✅  **base** pragma
 - ✅  **constant** pragma
