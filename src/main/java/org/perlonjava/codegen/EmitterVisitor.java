@@ -3,6 +3,7 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.runtime.RuntimeContextType;
+import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -158,5 +159,18 @@ public class EmitterVisitor implements Visitor {
 
     @Override
     public void visit(CompilerFlagNode node) {
+        ScopedSymbolTable currentScope = ctx.symbolTable;
+
+        // Set the warning flags
+        currentScope.warningFlagsStack.pop();
+        currentScope.warningFlagsStack.push(node.getWarningFlags());
+
+        // Set the feature flags
+        currentScope.featureFlagsStack.pop();
+        currentScope.featureFlagsStack.push(node.getFeatureFlags());
+
+        // Set the strict options
+        currentScope.strictOptionsStack.pop();
+        currentScope.strictOptionsStack.push(node.getStrictOptions());
     }
 }
