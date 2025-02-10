@@ -9,6 +9,7 @@ import org.perlonjava.runtime.*;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.perlonjava.perlmodule.Strict.STRICT_REFS;
 import static org.perlonjava.perlmodule.Strict.STRICT_VARS;
 
 public class EmitVariable {
@@ -156,8 +157,15 @@ public class EmitVariable {
             case "$":
                 // `$$a`
                 emitterVisitor.ctx.logDebug("GETVAR `$$a`");
-                node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "scalarDeref", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(STRICT_REFS)) {
+                    node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "scalarDeref", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                } else {
+                    // no strict refs
+                    node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.ctx.mv.visitLdcInsn(emitterVisitor.ctx.symbolTable.getCurrentPackage());
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "scalarDerefNonStrict", "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                }
                 return;
             case "*":
                 // `*$a`

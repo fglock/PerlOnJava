@@ -210,9 +210,6 @@ The following areas are currently under active development to enhance the functi
   - Adjusting `exit` semantics to exit the current thread only.
   - Adding `ThreadLocal` to global variables, special variables, and caches, with tear down hooks for cleanup.
 
-- **Feature and Warnings Internals**
-  - Adding metadata to AST nodes for enhanced context, such as in `EvalOperatorNode`.
-
 - **CPAN Support**
   - Porting `cpan` and `prove`.
   - Adding module testing for PerlOnJava core modules.

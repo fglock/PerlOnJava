@@ -65,6 +65,10 @@ public class NameNormalizer {
         // Create a cache key based on both the variable and the default package
         String cacheKey = defaultPackage + "::" + variable;
 
+        if (variable.isEmpty()) {
+            return cacheKey;
+        }
+
         // Check the cache first
         if (nameCache.containsKey(cacheKey)) {
             return nameCache.get(cacheKey);
