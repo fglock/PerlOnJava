@@ -507,6 +507,17 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         };
     }
 
+    // Method to implement `$$v`, when "no strict refs" is in effect
+    public RuntimeScalar scalarDerefNonStrict(String packageName) {
+        return switch (type) {
+            case REFERENCE -> (RuntimeScalar) value;
+            default -> {
+                String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
+                yield  GlobalVariable.getGlobalVariable(varName);
+            }
+        };
+    }
+
     // Method to implement `*$v`
     public RuntimeGlob globDeref() {
         return switch (type) {
