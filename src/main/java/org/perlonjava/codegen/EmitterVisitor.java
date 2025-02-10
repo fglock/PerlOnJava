@@ -156,4 +156,7 @@ public class EmitterVisitor implements Visitor {
         EmitLabel.emitLabel(ctx, node);
     }
 
+    @Override
+    public void visit(CompilerFlagNode node) {
+    }
 }

@@ -123,6 +123,11 @@ public class EmitVariable {
                 // Autovivify if the name is fully qualified, or if it is a regex variable like `$1`
                 // TODO special variables: `$,` `$$`
                 boolean createIfNotExists = name.contains("::") || ScalarUtils.isInteger(name);
+
+                // Implement `no strict "vars"`
+                // boolean strictVars = ctx.symbolTable.isStrictOptionEnabled(STRICT_VARS);
+                // if (!strictVars) { createIfNotExists = true; }
+
                 fetchGlobalVariable(emitterVisitor.ctx, createIfNotExists, sigil, name, node.getIndex());
             } else {
                 // retrieve the `my` or `our` variable from local vars

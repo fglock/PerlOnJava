@@ -1,6 +1,7 @@
 package org.perlonjava.symbols;
 
 import org.perlonjava.astnode.OperatorNode;
+import org.perlonjava.perlmodule.Strict;
 import org.perlonjava.runtime.FeatureFlags;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.WarningFlags;
@@ -438,6 +439,56 @@ public class ScopedSymbolTable {
         // Copy strict options
         this.strictOptionsStack.pop();
         this.strictOptionsStack.push(source.strictOptionsStack.peek());
+    }
+
+    public static String stringifyFeatureFlags(int featureFlags) {
+        StringBuilder result = new StringBuilder();
+        for (Map.Entry<String, Integer> entry : featureBitPositions.entrySet()) {
+            String featureName = entry.getKey();
+            int bitPosition = entry.getValue();
+            if ((featureFlags & (1 << bitPosition)) != 0) {
+                if (!result.isEmpty()) {
+                    result.append(", ");
+                }
+                result.append(featureName);
+            }
+        }
+        return result.toString();
+    }
+
+    public static String stringifyWarningFlags(int warningFlags) {
+        StringBuilder result = new StringBuilder();
+        for (Map.Entry<String, Integer> entry : warningBitPositions.entrySet()) {
+            String warningName = entry.getKey();
+            int bitPosition = entry.getValue();
+            if ((warningFlags & (1 << bitPosition)) != 0) {
+                if (!result.isEmpty()) {
+                    result.append(", ");
+                }
+                result.append(warningName);
+            }
+        }
+        return result.toString();
+    }
+
+    public static String stringifyStrictOptions(int strictOptions) {
+        StringBuilder result = new StringBuilder();
+        if ((strictOptions & Strict.STRICT_REFS) != 0) {
+            result.append("STRICT_REFS");
+        }
+        if ((strictOptions & Strict.STRICT_SUBS) != 0) {
+            if (!result.isEmpty()) {
+                result.append(", ");
+            }
+            result.append("STRICT_SUBS");
+        }
+        if ((strictOptions & Strict.STRICT_VARS) != 0) {
+            if (!result.isEmpty()) {
+                result.append(", ");
+            }
+            result.append("STRICT_VARS");
+        }
+        return result.toString();
     }
 
     public record PackageInfo(String packageName, boolean isClass) {
