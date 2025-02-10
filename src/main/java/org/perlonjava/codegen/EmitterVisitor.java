@@ -84,7 +84,7 @@ public class EmitterVisitor implements Visitor {
 
     @Override
     public void visit(IdentifierNode node) {
-        EmitLiteral.emitIdentifier(ctx, node);
+        EmitLiteral.emitIdentifier(this, ctx, node);
     }
 
     @Override
