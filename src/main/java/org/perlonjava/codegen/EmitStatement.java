@@ -25,7 +25,7 @@ public class EmitStatement {
         emitterVisitor.ctx.logDebug("IF start: " + node.operator);
 
         // Enter a new scope in the symbol table
-        emitterVisitor.ctx.symbolTable.enterScope();
+        int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
 
         // Create labels for the else and end branches
         Label elseLabel = new Label();
@@ -63,7 +63,7 @@ public class EmitStatement {
         emitterVisitor.ctx.mv.visitLabel(endLabel);
 
         // Exit the scope in the symbol table
-        emitterVisitor.ctx.symbolTable.exitScope();
+        emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
         emitterVisitor.ctx.logDebug("IF end");
     }
@@ -84,8 +84,9 @@ public class EmitStatement {
             EmitterVisitor voidVisitor = emitterVisitor.with(RuntimeContextType.VOID); // some parts have context VOID
 
             // Enter a new scope in the symbol table
+            int scopeIndex = -1;
             if (node.useNewScope) {
-                emitterVisitor.ctx.symbolTable.enterScope();
+                scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
             }
 
             // Create labels for the start of the loop and the end of the loop
@@ -158,7 +159,7 @@ public class EmitStatement {
 
             // Exit the scope in the symbol table
             if (node.useNewScope) {
-                emitterVisitor.ctx.symbolTable.exitScope();
+                emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
             }
 
             // If the context is not VOID, push "undef" to the stack
@@ -181,7 +182,7 @@ public class EmitStatement {
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
         // Enter a new scope in the symbol table
-        emitterVisitor.ctx.symbolTable.enterScope();
+        int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
 
         // Create labels
         Label startLabel = new Label();
@@ -210,7 +211,7 @@ public class EmitStatement {
         mv.visitLabel(endLabel);
 
         // Exit the scope in the symbol table
-        emitterVisitor.ctx.symbolTable.exitScope();
+        emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
         // If the context is not VOID, push "undef" to the stack
         if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {

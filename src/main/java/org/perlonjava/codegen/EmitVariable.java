@@ -9,6 +9,8 @@ import org.perlonjava.runtime.*;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.perlonjava.perlmodule.Strict.STRICT_VARS;
+
 public class EmitVariable {
     private static void fetchGlobalVariable(EmitterContext ctx, boolean createIfNotExists, String sigil, String varName, int tokenIndex) {
 

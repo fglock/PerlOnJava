@@ -37,7 +37,7 @@ public class StatementParser {
     public static Node parseWhileStatement(Parser parser, String label) {
         LexerToken operator = TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "while" "until"
 
-        parser.ctx.symbolTable.enterScope();
+        int scopeIndex = parser.ctx.symbolTable.enterScope();
 
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
         Node condition = parser.parseExpression(0);
@@ -60,7 +60,7 @@ public class StatementParser {
             condition = new OperatorNode("not", condition, condition.getIndex());
         }
 
-        parser.ctx.symbolTable.exitScope();
+        parser.ctx.symbolTable.exitScope(scopeIndex);
 
         return new For3Node(label, true, null,
                 condition, null, body, continueNode, false, parser.tokenIndex);
@@ -76,7 +76,7 @@ public class StatementParser {
     public static Node parseForStatement(Parser parser, String label) {
         TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "for" or "foreach"
 
-        parser.ctx.symbolTable.enterScope();
+        int scopeIndex = parser.ctx.symbolTable.enterScope();
 
         // Parse optional loop variable
         Node varNode = null;
@@ -102,14 +102,14 @@ public class StatementParser {
             if (token.text.equals(")")) {
                 // 1-argument for loop (foreach-like)
                 Node node = parseOneArgumentForLoop(parser, label, varNode, initialization);
-                parser.ctx.symbolTable.exitScope();
+                parser.ctx.symbolTable.exitScope(scopeIndex);
                 return node;
             }
         }
 
         // 3-argument for loop
         Node node = parseThreeArgumentForLoop(parser, label, varNode, initialization);
-        parser.ctx.symbolTable.exitScope();
+        parser.ctx.symbolTable.exitScope(scopeIndex);
         return node;
     }
 
@@ -449,14 +449,14 @@ public class StatementParser {
         if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
             // package NAME BLOCK
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-            parser.ctx.symbolTable.enterScope();
+            int scopeIndex = parser.ctx.symbolTable.enterScope();
             parser.ctx.symbolTable.setCurrentPackage(nameNode.name, packageNode.getBooleanAnnotation("isClass"));
             BlockNode block = ParseBlock.parseBlock(parser);
 
             // Insert packageNode as first statement in block
             block.elements.addFirst(packageNode);
 
-            parser.ctx.symbolTable.exitScope();
+            parser.ctx.symbolTable.exitScope(scopeIndex);
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             return block;
         }

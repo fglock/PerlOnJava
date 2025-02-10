@@ -11,8 +11,9 @@ public class EmitForeach {
     static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
         emitterVisitor.ctx.logDebug("FOR1 start");
 
+        int scopeIndex = -1;
         if (node.useNewScope) {
-            emitterVisitor.ctx.symbolTable.enterScope();
+            scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
         }
 
         MethodVisitor mv = emitterVisitor.ctx.mv;
@@ -146,7 +147,7 @@ public class EmitForeach {
         }
 
         if (node.useNewScope) {
-            emitterVisitor.ctx.symbolTable.exitScope();
+            emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
         }
 
         emitterVisitor.ctx.logDebug("FOR1 end");
