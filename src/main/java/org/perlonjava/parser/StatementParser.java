@@ -400,8 +400,12 @@ public class StatementParser {
             CallerStack.pop();
         }
 
-        // return an empty list
-        return new ListNode(parser.tokenIndex);
+        // return the current compiler flags
+        return new CompilerFlagNode(
+                ctx.symbolTable.warningFlagsStack.getLast(),
+                ctx.symbolTable.featureFlagsStack.getLast(),
+                ctx.symbolTable.strictOptionsStack.getLast(),
+                parser.tokenIndex);
     }
 
     /**
