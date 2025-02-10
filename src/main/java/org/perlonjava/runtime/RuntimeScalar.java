@@ -513,7 +513,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case REFERENCE -> (RuntimeScalar) value;
             default -> {
                 String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
-                yield  GlobalVariable.getGlobalVariable(varName);
+                yield GlobalVariable.getGlobalVariable(varName);
             }
         };
     }
@@ -526,6 +526,17 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case STRING ->
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as a symbol ref while \"strict refs\" in use");
             default -> throw new PerlCompilerException("Variable does not contain a glob reference");
+        };
+    }
+
+    // Method to implement `*$v`, when "no strict refs" is in effect
+    public RuntimeGlob globDerefNonStrict(String packageName) {
+        return switch (type) {
+            case GLOB, GLOBREFERENCE -> (RuntimeGlob) value;
+            default -> {
+                String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
+                yield new RuntimeGlob(varName);
+            }
         };
     }
 

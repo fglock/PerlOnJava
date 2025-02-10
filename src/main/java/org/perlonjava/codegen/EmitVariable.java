@@ -170,8 +170,15 @@ public class EmitVariable {
             case "*":
                 // `*$a`
                 emitterVisitor.ctx.logDebug("GETVAR `*$a`");
-                node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "globDeref", "()Lorg/perlonjava/runtime/RuntimeGlob;", false);
+                if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(STRICT_REFS)) {
+                    node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "globDeref", "()Lorg/perlonjava/runtime/RuntimeGlob;", false);
+                } else {
+                    // no strict refs
+                    node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.ctx.mv.visitLdcInsn(emitterVisitor.ctx.symbolTable.getCurrentPackage());
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "globDerefNonStrict", "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeGlob;", false);
+                }
                 return;
             case "&":
                 // `&$a`
