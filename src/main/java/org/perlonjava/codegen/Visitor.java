@@ -126,5 +126,7 @@ public interface Visitor {
     void visit(TryNode node);
 
     void visit(LabelNode node);
+
+    void visit(CompilerFlagNode node);
 }
 

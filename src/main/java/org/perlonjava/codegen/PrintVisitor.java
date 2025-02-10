@@ -1,8 +1,10 @@
 package org.perlonjava.codegen;
 
 import org.perlonjava.astnode.*;
+import org.perlonjava.symbols.ScopedSymbolTable;
 
 import static org.perlonjava.runtime.ScalarUtils.printable;
+import static org.perlonjava.symbols.ScopedSymbolTable.*;
 
 /*
  *
@@ -383,6 +385,24 @@ public class PrintVisitor implements Visitor {
     public void visit(LabelNode node) {
         appendIndent();
         sb.append("LabelNode: ").append(node.label).append(":\n");
+    }
+
+    @Override
+    public void visit(CompilerFlagNode node) {
+        appendIndent();
+        sb.append("CompilerFlagNode:\n");
+        indentLevel++;
+
+        appendIndent();
+        sb.append("Warning Flags: ").append(stringifyWarningFlags(node.getWarningFlags())).append("\n");
+
+        appendIndent();
+        sb.append("Feature Flags: ").append(stringifyFeatureFlags(node.getFeatureFlags())).append("\n");
+
+        appendIndent();
+        sb.append("Strict Options: ").append(stringifyStrictOptions(node.getStrictOptions())).append("\n");
+
+        indentLevel--;
     }
 }
 

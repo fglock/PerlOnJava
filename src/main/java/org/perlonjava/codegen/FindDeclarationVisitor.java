@@ -174,4 +174,8 @@ public class FindDeclarationVisitor implements Visitor {
     @Override
     public void visit(LabelNode node) {
     }
+
+    @Override
+    public void visit(CompilerFlagNode node) {
+    }
 }
