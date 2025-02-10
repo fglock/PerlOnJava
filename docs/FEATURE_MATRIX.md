@@ -343,6 +343,7 @@ This list is under review.
 ### Pragmas
 
 - 🚧  **strict**: `strict` pragma is set to ignore `no strict`, the compiler works always in `strict` mode. `no strict` might work in a future version.
+  - strict `vars` is implemented.
 - ✅  **parent** pragma
 - ✅  **base** pragma
 - ✅  **constant** pragma
