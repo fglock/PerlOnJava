@@ -122,12 +122,9 @@ public class EmitVariable {
                 // Fetch a global variable.
                 // Autovivify if the name is fully qualified, or if it is a regex variable like `$1`
                 // TODO special variables: `$,` `$$`
-                boolean createIfNotExists = name.contains("::") || ScalarUtils.isInteger(name);
-
-                // Implement `no strict "vars"`
-                // boolean strictVars = ctx.symbolTable.isStrictOptionEnabled(STRICT_VARS);
-                // if (!strictVars) { createIfNotExists = true; }
-
+                boolean createIfNotExists = name.contains("::") // Fully qualified name
+                        || ScalarUtils.isInteger(name)  // Regex variable always exists
+                        || !emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(STRICT_VARS);  // `no strict "vars"`
                 fetchGlobalVariable(emitterVisitor.ctx, createIfNotExists, sigil, name, node.getIndex());
             } else {
                 // retrieve the `my` or `our` variable from local vars
