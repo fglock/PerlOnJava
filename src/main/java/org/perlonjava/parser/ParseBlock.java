@@ -35,7 +35,7 @@ public class ParseBlock {
         int currentIndex = parser.tokenIndex;
 
         // Create new scope for variables declared in this block
-        parser.ctx.symbolTable.enterScope();
+        int scopeIndex = parser.ctx.symbolTable.enterScope();
 
         // Container for all statements in the block
         List<Node> statements = new ArrayList<>();
@@ -87,7 +87,7 @@ public class ParseBlock {
         }
 
         // Exit the current scope before returning
-        parser.ctx.symbolTable.exitScope();
+        parser.ctx.symbolTable.exitScope(scopeIndex);
 
         // Create and return the block node with all parsed statements
         BlockNode blockNode = new BlockNode(statements, currentIndex);

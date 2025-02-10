@@ -19,7 +19,7 @@ public class EmitBlock {
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
         emitterVisitor.ctx.logDebug("generateCodeBlock start context:" + emitterVisitor.ctx.contextType);
-        emitterVisitor.ctx.symbolTable.enterScope();
+        int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
         EmitterVisitor voidVisitor =
                 emitterVisitor.with(RuntimeContextType.VOID); // statements in the middle of the block have context VOID
         List<Node> list = node.elements;
@@ -82,7 +82,7 @@ public class EmitBlock {
 
         Local.localTeardown(localRecord, mv);
 
-        emitterVisitor.ctx.symbolTable.exitScope();
+        emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
         emitterVisitor.ctx.logDebug("generateCodeBlock end");
     }
 }

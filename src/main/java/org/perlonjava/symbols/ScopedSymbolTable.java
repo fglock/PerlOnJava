@@ -64,8 +64,10 @@ public class ScopedSymbolTable {
     /**
      * Enters a new scope by pushing a new SymbolTable onto the stack.
      * Copies the current state of warnings, features, and strict options to the new scope.
+     *
+     * @return The index representing the starting point of the new scope.
      */
-    public void enterScope() {
+    public int enterScope() {
         clearVisibleVariablesCache();
 
         // Push a new SymbolTable onto the stack and set its index
@@ -78,19 +80,27 @@ public class ScopedSymbolTable {
         featureFlagsStack.push(featureFlagsStack.peek());
         // Push a copy of the current strict options onto the stack
         strictOptionsStack.push(strictOptionsStack.peek());
+
+        // Return the current size of the symbol table stack as the scope index
+        return symbolTableStack.size() - 1;
     }
 
     /**
      * Exits the current scope by popping the top SymbolTable from the stack.
      * Also removes the top state of warnings, features, and strict options.
+     *
+     * @param scopeIndex The index representing the starting point of the scope to exit.
      */
-    public void exitScope() {
+    public void exitScope(int scopeIndex) {
         clearVisibleVariablesCache();
-        symbolTableStack.pop();
-        packageStack.pop();
-        warningFlagsStack.pop();
-        featureFlagsStack.pop();
-        strictOptionsStack.pop();
+        // Pop entries from the stacks until reaching the specified scope index
+        while (symbolTableStack.size() > scopeIndex) {
+            symbolTableStack.pop();
+            packageStack.pop();
+            warningFlagsStack.pop();
+            featureFlagsStack.pop();
+            strictOptionsStack.pop();
+        }
     }
 
     /**
