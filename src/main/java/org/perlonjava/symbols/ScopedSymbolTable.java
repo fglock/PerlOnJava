@@ -37,11 +37,11 @@ public class ScopedSymbolTable {
     private final Stack<SymbolTable> symbolTableStack = new Stack<>();
     private final Stack<PackageInfo> packageStack = new Stack<>();
     // Stack to manage warning categories for each scope
-    private final Stack<Integer> warningFlagsStack = new Stack<>();
+    public final Stack<Integer> warningFlagsStack = new Stack<>();
     // Stack to manage feature categories for each scope
-    private final Stack<Integer> featureFlagsStack = new Stack<>();
+    public final Stack<Integer> featureFlagsStack = new Stack<>();
     // Stack to manage strict options for each scope
-    private final Stack<Integer> strictOptionsStack = new Stack<>();
+    public final Stack<Integer> strictOptionsStack = new Stack<>();
     // Cache for the getAllVisibleVariables method
     private Map<Integer, SymbolTable.SymbolEntry> visibleVariablesCache;
 
