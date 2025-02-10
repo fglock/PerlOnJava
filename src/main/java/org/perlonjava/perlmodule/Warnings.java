@@ -1,9 +1,6 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.WarningFlags;
+import org.perlonjava.runtime.*;
 
 /**
  * The Warnings class provides functionalities similar to the Perl warnings module.
@@ -48,8 +45,14 @@ public class Warnings extends PerlModuleBase {
         for (int i = 1; i < args.size(); i++) {
             String category = args.get(i).toString();
             if (category.startsWith("-")) {
+                if (!warningExists(category)) {
+                    throw new PerlCompilerException("Unknown warnings category '" + category + "'");
+                }
                 warningManager.disableWarning(category.substring(1));
             } else {
+                if (!warningExists(category)) {
+                    throw new PerlCompilerException("Unknown warnings category '" + category + "'");
+                }
                 warningManager.enableWarning(category);
             }
         }
@@ -66,12 +69,25 @@ public class Warnings extends PerlModuleBase {
     public static RuntimeList noWarnings(RuntimeArray args, int ctx) {
         for (int i = 1; i < args.size(); i++) {
             String category = args.get(i).toString();
+            if (!warningExists(category)) {
+                throw new PerlCompilerException("Unknown warnings category '" + category + "'");
+            }
             warningManager.disableWarning(category);
         }
         return new RuntimeScalar().getList();
     }
 
     /**
+     * Checks if a warning category exists.
+     *
+     * @param category The name of the warning category to check.
+     * @return True if the warning category exists, false otherwise.
+     */
+    public static boolean warningExists(String category) {
+        return WarningFlags.getWarningList().contains(category);
+    }
+
+     /**
      * Checks if a warning is enabled.
      *
      * @param args The arguments passed to the method.

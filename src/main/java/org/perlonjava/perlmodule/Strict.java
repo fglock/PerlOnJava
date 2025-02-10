@@ -85,20 +85,25 @@ public class Strict extends PerlModuleBase {
      */
     public static RuntimeList noStrict(RuntimeArray args, int ctx) {
         ScopedSymbolTable symbolTable = getCurrentScope();
-        for (int i = 1; i < args.size(); i++) {
-            String category = args.get(i).toString();
-            switch (category) {
-                case "refs":
-                    symbolTable.disableStrictOption(STRICT_REFS);
-                    break;
-                case "subs":
-                    symbolTable.disableStrictOption(STRICT_SUBS);
-                    break;
-                case "vars":
-                    symbolTable.disableStrictOption(STRICT_VARS);
-                    break;
-                default:
-                    throw new IllegalArgumentException("Unknown strict category: " + category);
+        if (args.size() == 1) {
+            // Disable all strict options if no specific category is provided
+            symbolTable.disableStrictOption(STRICT_REFS | STRICT_SUBS | STRICT_VARS);
+        } else {
+            for (int i = 1; i < args.size(); i++) {
+                String category = args.get(i).toString();
+                switch (category) {
+                    case "refs":
+                        symbolTable.disableStrictOption(STRICT_REFS);
+                        break;
+                    case "subs":
+                        symbolTable.disableStrictOption(STRICT_SUBS);
+                        break;
+                    case "vars":
+                        symbolTable.disableStrictOption(STRICT_VARS);
+                        break;
+                    default:
+                        throw new IllegalArgumentException("Unknown strict category: " + category);
+                }
             }
         }
         return new RuntimeScalar().getList();

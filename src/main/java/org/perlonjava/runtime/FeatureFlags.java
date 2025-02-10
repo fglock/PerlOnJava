@@ -32,6 +32,8 @@ public class FeatureFlags {
         featureBundles.put(":5.36", new String[]{"bareword_filehandles", "bitwise", "current_sub", "evalbytes", "fc", "isa", "postderef_qq", "say", "signatures", "state", "unicode_eval", "unicode_strings"});
         featureBundles.put(":5.38", new String[]{"bitwise", "current_sub", "evalbytes", "fc", "isa", "module_true", "postderef_qq", "say", "signatures", "state", "unicode_eval", "unicode_strings"});
         featureBundles.put(":5.40", new String[]{"bitwise", "current_sub", "evalbytes", "fc", "isa", "module_true", "postderef_qq", "say", "signatures", "state", "try", "unicode_eval", "unicode_strings"});
+        // Not bundled:
+        featureBundles.put("postderef", new String[]{"postderef"});
     }
 
     /**
@@ -52,6 +54,16 @@ public class FeatureFlags {
         }
         featureSet.add("class");
         return new ArrayList<>(featureSet);
+    }
+
+    /**
+     * Checks if a feature exists.
+     *
+     * @param feature The name of the feature to check.
+     * @return True if the feature exists, false otherwise.
+     */
+    public static boolean featureExists(String feature) {
+        return getFeatureList().contains(feature);
     }
 
     public void initializeEnabledFeatures() {
