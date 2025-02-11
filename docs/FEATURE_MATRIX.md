@@ -336,6 +336,8 @@ This list is under review.
 - ✅  **I/O symbols**: `STDOUT`, `STDERR`, `STDIN`, `ARGV`, `ARGVOUT` are implemented.
 - ✅  **Stash manipulation**: Alternative ways to create constants like: `$constant::{_CAN_PCS} = \$const`.
 - ❌  **Thread-safe `@_`, `$_`, and regex variables**: Thread safety for global special variables is missing.
+- ❌  **Compiler flags**:  The special variables `$^H`, `%^H`, `${^WARNING_BITS}` are not implemented.
+- ❌  **Call stack information**: Extended call stack information via `(caller($level))[9]` is not implemented.
 
 ## Perl Modules, Pragmas, Features
 
