@@ -14,10 +14,10 @@ public class CompilerFlagNode extends AbstractNode {
     /**
      * Constructs a new CompilerFlagNode with the specified flag states.
      *
-     * @param warningFlags the bitmask representing the state of warning flags
-     * @param featureFlags the bitmask representing the state of feature flags
+     * @param warningFlags  the bitmask representing the state of warning flags
+     * @param featureFlags  the bitmask representing the state of feature flags
      * @param strictOptions the bitmask representing the state of strict options
-     * @param tokenIndex the index of the token in the source code
+     * @param tokenIndex    the index of the token in the source code
      */
     public CompilerFlagNode(int warningFlags, int featureFlags, int strictOptions, int tokenIndex) {
         this.warningFlags = warningFlags;

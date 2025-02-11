@@ -102,7 +102,7 @@ public class Universal extends PerlModuleBase {
 
         // Retrieve Perl class name
         String perlClassName;
-        RuntimeScalarType type = object.type;
+        int type = object.type;
         switch (type) {
             case REFERENCE:
             case ARRAYREFERENCE:

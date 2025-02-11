@@ -6,6 +6,7 @@ import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarType;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 /**
  * The Builtin class provides functionalities similar to the Perl builtin module.

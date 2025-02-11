@@ -3,6 +3,7 @@ package org.perlonjava.perlmodule;
 import org.perlonjava.runtime.*;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 /**
  * Utility class for Scalar operations in Perl.

@@ -5,6 +5,7 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
+import org.perlonjava.runtime.RuntimeScalarType;
 
 import static org.perlonjava.perlmodule.Strict.STRICT_SUBS;
 import static org.perlonjava.runtime.ScalarUtils.isInteger;
@@ -107,8 +108,8 @@ public class EmitLiteral {
             if (node.isVString) {
                 // Set the RuntimeScalar type to VSTRING
                 mv.visitInsn(Opcodes.DUP); // Duplicate the RuntimeScalar reference
-                mv.visitFieldInsn(Opcodes.GETSTATIC, "org/perlonjava/runtime/RuntimeScalarType", "VSTRING", "Lorg/perlonjava/runtime/RuntimeScalarType;");
-                mv.visitFieldInsn(Opcodes.PUTFIELD, "org/perlonjava/runtime/RuntimeScalar", "type", "Lorg/perlonjava/runtime/RuntimeScalarType;");
+                mv.visitLdcInsn(RuntimeScalarType.VSTRING); // emit "VSTRING" constant
+                mv.visitFieldInsn(Opcodes.PUTFIELD, "org/perlonjava/runtime/RuntimeScalar", "type", "I");
             }
         } else {
             mv.visitLdcInsn(node.value); // emit string
