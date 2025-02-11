@@ -77,7 +77,7 @@ PerlOnJava implements most core Perl features with some key differences:
 
 ## Testing
 - ✅  **TAP tests**: Running standard Perl testing protocol.
-- ✅  **CI/CD**: Github testing pipeline in Ubuntu.
+- ✅  **CI/CD**: Github testing pipeline in Ubuntu and Windows.
 
 ## Scalars
 - ✅  **`my` variable declaration**: Local variables can be declared using `my`.
