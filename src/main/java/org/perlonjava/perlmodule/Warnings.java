@@ -87,7 +87,7 @@ public class Warnings extends PerlModuleBase {
         return WarningFlags.getWarningList().contains(category);
     }
 
-     /**
+    /**
      * Checks if a warning is enabled.
      *
      * @param args The arguments passed to the method.

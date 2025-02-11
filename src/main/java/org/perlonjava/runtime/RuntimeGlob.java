@@ -2,6 +2,8 @@ package org.perlonjava.runtime;
 
 import java.util.Iterator;
 
+import static org.perlonjava.runtime.RuntimeScalarType.*;
+
 /**
  * Represents a runtime typeglob in Perl. Typeglobs are special symbols that can represent
  * all types of Perl variables (scalars, arrays, hashes, subroutines, filehandles) with the same name.

@@ -19,6 +19,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.*;
 
+import static org.perlonjava.runtime.RuntimeScalarType.*;
+
 /**
  * YAML::PP module implementation for PerlonJava.
  * Provides YAML parsing and generation functionality compatible with Perl's YAML::PP module.

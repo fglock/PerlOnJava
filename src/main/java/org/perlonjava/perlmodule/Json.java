@@ -9,6 +9,7 @@ import org.perlonjava.runtime.*;
 import java.math.BigDecimal;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 /**
  * The {@code Json} class provides methods for encoding and decoding JSON data

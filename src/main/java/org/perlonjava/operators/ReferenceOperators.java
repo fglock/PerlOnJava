@@ -4,6 +4,7 @@ import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarEmptyString;
+import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 /**
  * Provides implementations of Perl's reference-related operators.

@@ -20,6 +20,7 @@ import java.util.Map;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.RuntimeScalarType.*;
 import static org.perlonjava.runtime.SpecialBlock.runUnitcheckBlocks;
 
 /**

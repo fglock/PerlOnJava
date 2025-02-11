@@ -8,6 +8,7 @@ import org.perlonjava.regex.RuntimeRegex;
 import java.util.*;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 /**
  * The RuntimeScalar class simulates Perl scalar variables.
@@ -27,12 +28,12 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     private static final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
 
     // Type map for scalar types to their corresponding enum
-    private static final Map<Class<?>, RuntimeScalarType> typeMap = new HashMap<>();
+    private static final Map<Class<?>, Integer> typeMap = new HashMap<>();
 
     static {
         typeMap.put(Integer.class, RuntimeScalarType.INTEGER);
         typeMap.put(String.class, RuntimeScalarType.STRING);
-        typeMap.put(Double.class, RuntimeScalarType.DOUBLE);
+        typeMap.put(Double.class, DOUBLE);
         typeMap.put(Boolean.class, RuntimeScalarType.BOOLEAN);
         typeMap.put(RuntimeCode.class, RuntimeScalarType.CODE);
         typeMap.put(RuntimeRegex.class, RuntimeScalarType.REGEX);
@@ -40,12 +41,12 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     // Fields to store the type and value of the scalar variable
-    public RuntimeScalarType type;
+    public int type;
     public Object value;
 
     // Constructors
     public RuntimeScalar() {
-        this.type = RuntimeScalarType.UNDEF;
+        this.type = UNDEF;
     }
 
     public RuntimeScalar(long value) {
@@ -67,18 +68,18 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar(double value) {
-        this.type = RuntimeScalarType.DOUBLE;
+        this.type = DOUBLE;
         this.value = value;
     }
 
     public RuntimeScalar(Double value) {
-        this.type = RuntimeScalarType.DOUBLE;
+        this.type = DOUBLE;
         this.value = value;
     }
 
     public RuntimeScalar(String value) {
         if (value == null) {
-            this.type = RuntimeScalarType.UNDEF;
+            this.type = UNDEF;
         } else {
             this.type = RuntimeScalarType.STRING;
         }
@@ -112,7 +113,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar(RuntimeIO value) {
         if (value == null) {
-            this.type = RuntimeScalarType.UNDEF;
+            this.type = UNDEF;
         } else {
             this.type = RuntimeScalarType.GLOB;
         }
@@ -121,7 +122,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar(RuntimeGlob value) {
         if (value == null) {
-            this.type = RuntimeScalarType.UNDEF;
+            this.type = UNDEF;
         } else {
             this.type = value.type;
         }
@@ -138,7 +139,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         // System.out.println("RuntimeScalar " + (value == null ? "null" : value.getClass()));
         switch (value) {
             case null -> {
-                this.type = RuntimeScalarType.UNDEF;
+                this.type = UNDEF;
                 this.value = null;
             }
             case RuntimeGlob v -> {
@@ -208,7 +209,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     private void initializeWithLong(Long value) {
         if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
-            this.type = RuntimeScalarType.DOUBLE;
+            this.type = DOUBLE;
             this.value = (double) value;
         } else {
             this.type = RuntimeScalarType.INTEGER;
@@ -329,7 +330,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar set(long value) {
         if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
-            this.type = RuntimeScalarType.DOUBLE;
+            this.type = DOUBLE;
             this.value = (double) value;
         } else {
             this.type = RuntimeScalarType.INTEGER;
@@ -346,7 +347,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     public RuntimeScalar set(String value) {
         if (value == null) {
-            this.type = RuntimeScalarType.UNDEF;
+            this.type = UNDEF;
         } else {
             this.type = RuntimeScalarType.STRING;
         }
@@ -549,7 +550,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public RuntimeScalar undefine() {
-        this.type = RuntimeScalarType.UNDEF;
+        this.type = UNDEF;
         this.value = null;
         return this;
     }
@@ -562,7 +563,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return switch (type) {
             case CODE -> ((RuntimeCode) value).defined();
             case BOOLEAN -> (boolean) value;
-            default -> type != RuntimeScalarType.UNDEF;
+            default -> type != UNDEF;
         };
     }
 
@@ -703,7 +704,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         // Push the current state onto the stack
         dynamicStateStack.push(currentState);
         // Clear the current type and value
-        this.type = RuntimeScalarType.UNDEF;
+        this.type = UNDEF;
         this.value = null;
         this.blessId = 0;
     }

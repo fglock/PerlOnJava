@@ -2,6 +2,8 @@ package org.perlonjava.runtime;
 
 import org.perlonjava.parser.NumberParser;
 
+import static org.perlonjava.runtime.RuntimeScalarType.*;
+
 /**
  * Utility class for scalar operations in the Perlon Java runtime.
  */
@@ -180,7 +182,7 @@ public class ScalarUtils {
         if (str.isEmpty()) {
             // If empty, set the value to 1 and update type to INTEGER
             runtimeScalar.value = 1;
-            runtimeScalar.type = RuntimeScalarType.INTEGER; // RuntimeScalarType is an enum that holds different scalar types
+            runtimeScalar.type = INTEGER; // RuntimeScalarType is an enum that holds different scalar types
             return runtimeScalar; // Return the current instance
         }
 

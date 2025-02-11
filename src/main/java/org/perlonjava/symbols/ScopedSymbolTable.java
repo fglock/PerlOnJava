@@ -33,15 +33,15 @@ public class ScopedSymbolTable {
         }
     }
 
-    // A stack to manage nested scopes of symbol tables.
-    private final Stack<SymbolTable> symbolTableStack = new Stack<>();
-    private final Stack<PackageInfo> packageStack = new Stack<>();
     // Stack to manage warning categories for each scope
     public final Stack<Integer> warningFlagsStack = new Stack<>();
     // Stack to manage feature categories for each scope
     public final Stack<Integer> featureFlagsStack = new Stack<>();
     // Stack to manage strict options for each scope
     public final Stack<Integer> strictOptionsStack = new Stack<>();
+    // A stack to manage nested scopes of symbol tables.
+    private final Stack<SymbolTable> symbolTableStack = new Stack<>();
+    private final Stack<PackageInfo> packageStack = new Stack<>();
     // Cache for the getAllVisibleVariables method
     private Map<Integer, SymbolTable.SymbolEntry> visibleVariablesCache;
 
@@ -60,6 +60,56 @@ public class ScopedSymbolTable {
         packageStack.push(new PackageInfo("main", false));
         // Initialize an empty symbol table
         symbolTableStack.push(new SymbolTable(0));
+    }
+
+    public static String stringifyFeatureFlags(int featureFlags) {
+        StringBuilder result = new StringBuilder();
+        for (Map.Entry<String, Integer> entry : featureBitPositions.entrySet()) {
+            String featureName = entry.getKey();
+            int bitPosition = entry.getValue();
+            if ((featureFlags & (1 << bitPosition)) != 0) {
+                if (!result.isEmpty()) {
+                    result.append(", ");
+                }
+                result.append(featureName);
+            }
+        }
+        return result.toString();
+    }
+
+    public static String stringifyWarningFlags(int warningFlags) {
+        StringBuilder result = new StringBuilder();
+        for (Map.Entry<String, Integer> entry : warningBitPositions.entrySet()) {
+            String warningName = entry.getKey();
+            int bitPosition = entry.getValue();
+            if ((warningFlags & (1 << bitPosition)) != 0) {
+                if (!result.isEmpty()) {
+                    result.append(", ");
+                }
+                result.append(warningName);
+            }
+        }
+        return result.toString();
+    }
+
+    public static String stringifyStrictOptions(int strictOptions) {
+        StringBuilder result = new StringBuilder();
+        if ((strictOptions & Strict.STRICT_REFS) != 0) {
+            result.append("STRICT_REFS");
+        }
+        if ((strictOptions & Strict.STRICT_SUBS) != 0) {
+            if (!result.isEmpty()) {
+                result.append(", ");
+            }
+            result.append("STRICT_SUBS");
+        }
+        if ((strictOptions & Strict.STRICT_VARS) != 0) {
+            if (!result.isEmpty()) {
+                result.append(", ");
+            }
+            result.append("STRICT_VARS");
+        }
+        return result.toString();
     }
 
     /**
@@ -292,6 +342,8 @@ public class ScopedSymbolTable {
         return st;
     }
 
+    // Methods for managing warnings
+
     /**
      * Allocates a new JVM local variable index in the current scope.
      * This method is used to create internal variables, such as those needed
@@ -358,8 +410,6 @@ public class ScopedSymbolTable {
             warningFlagsStack.push(warningFlagsStack.pop() | (1 << bitPosition));
         }
     }
-
-    // Methods for managing warnings
 
     public void disableWarningCategory(String category) {
         Integer bitPosition = warningBitPositions.get(category);
@@ -439,56 +489,6 @@ public class ScopedSymbolTable {
         // Copy strict options
         this.strictOptionsStack.pop();
         this.strictOptionsStack.push(source.strictOptionsStack.peek());
-    }
-
-    public static String stringifyFeatureFlags(int featureFlags) {
-        StringBuilder result = new StringBuilder();
-        for (Map.Entry<String, Integer> entry : featureBitPositions.entrySet()) {
-            String featureName = entry.getKey();
-            int bitPosition = entry.getValue();
-            if ((featureFlags & (1 << bitPosition)) != 0) {
-                if (!result.isEmpty()) {
-                    result.append(", ");
-                }
-                result.append(featureName);
-            }
-        }
-        return result.toString();
-    }
-
-    public static String stringifyWarningFlags(int warningFlags) {
-        StringBuilder result = new StringBuilder();
-        for (Map.Entry<String, Integer> entry : warningBitPositions.entrySet()) {
-            String warningName = entry.getKey();
-            int bitPosition = entry.getValue();
-            if ((warningFlags & (1 << bitPosition)) != 0) {
-                if (!result.isEmpty()) {
-                    result.append(", ");
-                }
-                result.append(warningName);
-            }
-        }
-        return result.toString();
-    }
-
-    public static String stringifyStrictOptions(int strictOptions) {
-        StringBuilder result = new StringBuilder();
-        if ((strictOptions & Strict.STRICT_REFS) != 0) {
-            result.append("STRICT_REFS");
-        }
-        if ((strictOptions & Strict.STRICT_SUBS) != 0) {
-            if (!result.isEmpty()) {
-                result.append(", ");
-            }
-            result.append("STRICT_SUBS");
-        }
-        if ((strictOptions & Strict.STRICT_VARS) != 0) {
-            if (!result.isEmpty()) {
-                result.append(", ");
-            }
-            result.append("STRICT_VARS");
-        }
-        return result.toString();
     }
 
     public record PackageInfo(String packageName, boolean isClass) {

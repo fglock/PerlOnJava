@@ -2,6 +2,7 @@ package org.perlonjava.runtime;
 
 import static org.perlonjava.runtime.RuntimeContextType.SCALAR;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 /**
  * The {@code Overload} class implements Perl's operator overloading system in Java.

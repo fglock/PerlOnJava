@@ -2,8 +2,7 @@ package org.perlonjava.runtime;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
-import static org.perlonjava.runtime.RuntimeScalarType.ARRAYREFERENCE;
-import static org.perlonjava.runtime.RuntimeScalarType.REFERENCE;
+import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 /**
  * Represents a stash entry in Perl.
