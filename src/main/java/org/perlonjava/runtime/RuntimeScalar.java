@@ -33,7 +33,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     static {
         typeMap.put(Integer.class, RuntimeScalarType.INTEGER);
         typeMap.put(String.class, RuntimeScalarType.STRING);
-        typeMap.put(Double.class, DOUBLE);
+        typeMap.put(Double.class, RuntimeScalarType.DOUBLE);
         typeMap.put(Boolean.class, RuntimeScalarType.BOOLEAN);
         typeMap.put(RuntimeCode.class, RuntimeScalarType.CODE);
         typeMap.put(RuntimeRegex.class, RuntimeScalarType.REGEX);
