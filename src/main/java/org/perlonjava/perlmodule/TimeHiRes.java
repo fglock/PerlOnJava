@@ -20,7 +20,7 @@ public class TimeHiRes extends PerlModuleBase {
             module.registerMethod("usleep", null);
             module.registerMethod("nanosleep", null);
             module.registerMethod("gettimeofday", null);
-            module.registerMethod("time", null);
+            module.registerMethod("time", "");
             module.registerMethod("sleep", null);
             module.registerMethod("alarm", null);
         } catch (NoSuchMethodException e) {
