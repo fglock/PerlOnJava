@@ -1,9 +1,7 @@
 package org.perlonjava.codegen;
 
-import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.LabelNode;
 import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.RuntimeContextType;
 
 /**
  * EmitLabel handles the bytecode generation for Perl label statements.
@@ -30,19 +28,7 @@ public class EmitLabel {
         // Generate the actual label in the bytecode
         ctx.mv.visitLabel(targetLabel.gotoLabel);
 
-        // Handle non-void context cases
-        // When a label is the last statement in a block and the block's result is used,
-        // we need to ensure a value is pushed onto the stack
-        if (ctx.contextType != RuntimeContextType.VOID) {
-            // Create a new empty RuntimeList as the result value
-            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
-            ctx.mv.visitInsn(Opcodes.DUP);  // Duplicate reference for constructor
-            // Initialize the empty RuntimeList
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
-                    "org/perlonjava/runtime/RuntimeList",
-                    "<init>",
-                    "()V",
-                    false);
-        }
+        EmitterContext.fixupContext(ctx);
     }
+
 }
