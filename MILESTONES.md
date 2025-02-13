@@ -225,7 +225,7 @@ The following areas are currently under active development to enhance the functi
 ## Upcoming Milestones
 
 - **v2.4.0**: Next minor version
-  - Added `Time::HiRes` module.
+  - Added `Time::HiRes`, `Benchmark` modules.
   - Added `/ee` regex modifier.
   - Added no strict `vars`, `subs`.
   - Planned release date: 2025-04-10
