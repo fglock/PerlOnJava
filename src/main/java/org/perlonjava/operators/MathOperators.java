@@ -37,8 +37,8 @@ public class MathOperators {
     /**
      * Adds two RuntimeScalar objects and returns the result.
      *
-     * @param runtimeScalar The first RuntimeScalar to add.
-     * @param arg2          The second RuntimeScalar to add.
+     * @param arg1 The first RuntimeScalar to add.
+     * @param arg2 The second RuntimeScalar to add.
      * @return A new RuntimeScalar representing the sum.
      */
     public static RuntimeScalar add(RuntimeScalar arg1, RuntimeScalar arg2) {

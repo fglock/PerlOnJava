@@ -128,6 +128,7 @@ public class GlobalContext {
         Dbi.initialize();
         YamlPP.initialize();
         UnicodeNormalize.initialize();
+        TimeHiRes.initialize();
 
         // Reset method cache after initializing UNIVERSAL
         InheritanceResolver.invalidateCache();
