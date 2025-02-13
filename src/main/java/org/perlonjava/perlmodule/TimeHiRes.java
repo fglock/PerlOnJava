@@ -2,12 +2,11 @@ package org.perlonjava.perlmodule;
 
 import org.perlonjava.operators.MathOperators;
 import org.perlonjava.operators.Time;
-import org.perlonjava.runtime.*;
+import org.perlonjava.runtime.RuntimeArray;
+import org.perlonjava.runtime.RuntimeList;
+import org.perlonjava.runtime.RuntimeScalar;
 
-import java.lang.management.ManagementFactory;
-import java.lang.management.ThreadMXBean;
 import java.time.Instant;
-import java.util.concurrent.TimeUnit;
 
 public class TimeHiRes extends PerlModuleBase {
 

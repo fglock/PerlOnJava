@@ -111,11 +111,18 @@ public class ParseCoreOperator {
                 return new OperatorNode(token.text, operand, currentIndex);
             case "bless":
                 // Handle 'bless' operator with special handling for class name
-                operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
-                Node ref = ((ListNode) operand).elements.get(0);
-                Node className = ((ListNode) operand).elements.get(1);
-                if (className == null) {
-                    className = new StringNode("main", currentIndex);
+                ListNode operand1 = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
+                Node ref = operand1.elements.get(0);
+                Node className;
+                if (operand1.elements.size() > 1) {
+                    className = operand1.elements.get(1);
+                    if (className instanceof StringNode && ((StringNode) className).value.isEmpty()) {
+                        // default to main package if empty class name is provided
+                        className = new StringNode("main", currentIndex);
+                    }
+                } else {
+                    // default to current package if no class name is provided
+                    className = new StringNode(parser.ctx.symbolTable.getCurrentPackage(), currentIndex);
                 }
                 return new BinaryOperatorNode("bless", ref, className, currentIndex);
             case "split":
