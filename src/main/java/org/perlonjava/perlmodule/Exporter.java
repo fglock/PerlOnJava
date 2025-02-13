@@ -1,5 +1,6 @@
 package org.perlonjava.perlmodule;
 
+import org.perlonjava.operators.MathOperators;
 import org.perlonjava.runtime.*;
 
 import static org.perlonjava.runtime.RuntimeContextType.SCALAR;
@@ -24,6 +25,7 @@ public class Exporter extends PerlModuleBase {
         try {
             // Load Exporter methods into Perl namespace
             exporter.registerMethod("import", "importSymbols", null);
+            exporter.registerMethod("export_to_level", "exportToLevel", null);
             exporter.registerMethod("export_tags", "exportTags", null);
             exporter.registerMethod("export_ok_tags", "exportOkTags", null);
 
@@ -43,15 +45,33 @@ public class Exporter extends PerlModuleBase {
      * @throws PerlCompilerException if there are issues with the import process.
      */
     public static RuntimeList importSymbols(RuntimeArray args, int ctx) {
+        // MyPackage->import(@what_to_export)
         if (args.size() < 1) {
             throw new PerlCompilerException("Not enough arguments for import");
         }
+        RuntimeScalar exportLevel = GlobalVariable.getGlobalVariable("Exporter::ExportLevel");
+        args.elements.add(1, MathOperators.add(exportLevel, 1));  // add 1 to the current export level, to hide the import() call
+
+        RuntimeScalar packageScalar = args.get(0);
+        args.elements.add(2, packageScalar);
+
+        return exportToLevel(args, ctx);
+    }
+
+    public static RuntimeList exportToLevel(RuntimeArray args, int ctx) {
+        // MyPackage->export_to_level($where_to_export, $package, @what_to_export)
+        if (args.size() < 2) {
+            throw new PerlCompilerException("Not enough arguments for export_to_level");
+        }
+        RuntimeArray.shift(args);   // $self
+
+        RuntimeScalar exportLevel = RuntimeArray.shift(args); // $where_to_export
+        // add 1 to the current export level, to hide the export_to_level() call
+        // exportLevel = MathOperators.add(exportLevel, 1);
 
         // Extract the package name from the arguments
-        RuntimeScalar packageScalar = RuntimeArray.shift(args);
+        RuntimeScalar packageScalar = RuntimeArray.shift(args); // $package
         String packageName = packageScalar.scalar().toString();
-
-        RuntimeScalar exportLevel = GlobalVariable.getGlobalVariable("Exporter::ExportLevel");
 
         // Determine the caller's namespace
         RuntimeList callerList = RuntimeCode.caller(new RuntimeList(exportLevel), SCALAR);
