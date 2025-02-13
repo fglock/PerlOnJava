@@ -398,6 +398,7 @@ This list is under review.
 - ✅  **Getopt::Long** module.
 - ✅  **Term::ANSIColor** module.
 - ✅  **Time::Local** module.
+- ✅  **Time::HiRes** module.
 - ✅  **HTTP::Date** module.
 - ✅  **URI::Escape** module.
 - ✅  **Text::Balanced** use the same version as Perl.
