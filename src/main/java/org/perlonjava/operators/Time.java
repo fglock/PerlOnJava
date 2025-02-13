@@ -139,7 +139,7 @@ public class Time {
     public static RuntimeScalar sleep(RuntimeScalar runtimeScalar) {
         RuntimeIO.flushAllHandles();
 
-        long s = (long) runtimeScalar.getDouble() * 1000;
+        long s = (long) (runtimeScalar.getDouble() * 1000);
 
         if (s < 0) {
             getGlobalVariable("main::!").set("Invalid argument");
@@ -151,7 +151,7 @@ public class Time {
             return getScalarInt(0);
         }
 
-        long startTime = System.currentTimeMillis();
+        long startTime = System.nanoTime();
         try {
             TimeUnit.MILLISECONDS.sleep(s);
         } catch (InterruptedException e) {
@@ -162,8 +162,8 @@ public class Time {
                 RuntimeCode.apply(alarmHandler, args, RuntimeContextType.SCALAR);
             }
         }
-        long endTime = System.currentTimeMillis();
+        long endTime = System.nanoTime();
         long actualSleepTime = endTime - startTime;
-        return new RuntimeScalar(actualSleepTime / 1000.0);
+        return new RuntimeScalar(actualSleepTime / 1_000_000_000.0);
     }
 }
