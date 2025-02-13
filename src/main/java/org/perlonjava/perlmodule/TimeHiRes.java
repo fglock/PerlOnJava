@@ -54,7 +54,7 @@ public class TimeHiRes extends PerlModuleBase {
     public static RuntimeList gettimeofday(RuntimeArray args, int ctx) {
         Instant now = Instant.now();
         long seconds = now.getEpochSecond();
-        long microseconds = now.getNano() / 1000;
+        double microseconds = now.getNano() / 1000.0;
         RuntimeList result = new RuntimeList();
         result.add(new RuntimeScalar(seconds));
         result.add(new RuntimeScalar(microseconds));
