@@ -23,7 +23,7 @@ public class EmitForeach {
 
         // Check if the variable is global
         boolean loopVariableIsGlobal = false;
-        if (node.variable instanceof OperatorNode opNode) {
+        if (node.variable instanceof OperatorNode opNode && opNode.operator.equals("$")) {
             if (opNode.operand instanceof IdentifierNode idNode) {
                 int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(opNode.operator + idNode.name);
                 if (varIndex == -1) {
