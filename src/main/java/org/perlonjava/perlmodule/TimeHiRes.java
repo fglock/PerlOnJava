@@ -10,6 +10,17 @@ import java.time.Instant;
 
 public class TimeHiRes extends PerlModuleBase {
 
+    private static final double NANO_OFFSET;
+
+    static {
+        // Capture the initial values
+        long initialMillis = System.currentTimeMillis();
+        long initialNano = System.nanoTime();
+
+        // Calculate the offset
+        NANO_OFFSET = (initialMillis / 1000.0) - (initialNano / 1_000_000_000.0);
+    }
+
     public TimeHiRes() {
         super("Time::HiRes", false);
     }
@@ -50,8 +61,15 @@ public class TimeHiRes extends PerlModuleBase {
         return result;
     }
 
+    /**
+     * Returns the current time in seconds since the Unix epoch with high precision.
+     *
+     * @return a RuntimeScalar representing the current time in seconds.
+     */
     public static RuntimeList time(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(System.currentTimeMillis() / 1000.0).getList();
+        // Convert to fractional seconds
+        double preciseEpochTime = System.nanoTime() / 1_000_000_000.0 + NANO_OFFSET;
+        return new RuntimeScalar(preciseEpochTime).getList();
     }
 
     public static RuntimeList sleep(RuntimeArray args, int ctx) {

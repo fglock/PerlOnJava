@@ -21,28 +21,13 @@ import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
  */
 public class Time {
 
-    private static final double NANO_OFFSET;
-
-    static {
-        // Capture the initial values
-        long initialMillis = System.currentTimeMillis();
-        long initialNano = System.nanoTime();
-
-        // Calculate the offset
-        NANO_OFFSET = (initialMillis / 1000.0) - (initialNano / 1_000_000_000.0);
-    }
-
     /**
-     * Returns the current time in seconds since the Unix epoch with high precision.
+     * Returns the current time in seconds since the Unix epoch with second precision.
      *
      * @return a RuntimeScalar representing the current time in seconds.
      */
     public static RuntimeScalar time() {
-
-        // Convert to seconds
-        double preciseEpochTime = System.nanoTime() / 1_000_000_000.0 + NANO_OFFSET;
-
-        return new RuntimeScalar(preciseEpochTime);
+        return new RuntimeScalar(System.currentTimeMillis() / 1000L);
     }
 
     /**
