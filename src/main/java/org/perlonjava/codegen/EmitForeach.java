@@ -21,12 +21,26 @@ public class EmitForeach {
         Label loopEnd = new Label();
         Label continueLabel = new Label();
 
-        // Handle $_ by declaring it as 'our'
-        if (node.variable instanceof OperatorNode opNode &&
-                opNode.operator.equals("$") &&
-                opNode.operand instanceof IdentifierNode idNode &&
-                idNode.name.equals("_")) {
-            node.variable = new OperatorNode("our", node.variable, node.variable.getIndex());
+        // Check if the variable is global
+        boolean loopVariableIsGlobal = false;
+        if (node.variable instanceof OperatorNode opNode) {
+            if (opNode.operand instanceof IdentifierNode idNode) {
+                int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(opNode.operator + idNode.name);
+                if (varIndex == -1) {
+                    loopVariableIsGlobal = true;
+                }
+            }
+        }
+
+        if (loopVariableIsGlobal) {
+            // TODO - special case if loopVariableIsGlobal
+            // FIXME - Workaround: Handle $_ by declaring it as 'our'
+            if (node.variable instanceof OperatorNode opNode &&
+                    opNode.operator.equals("$") &&
+                    opNode.operand instanceof IdentifierNode idNode &&
+                    idNode.name.equals("_")) {
+                node.variable = new OperatorNode("our", node.variable, node.variable.getIndex());
+            }
         }
 
         // First declare the variables if it's a my/our operator
