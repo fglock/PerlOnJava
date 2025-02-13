@@ -402,6 +402,7 @@ This list is under review.
 - ✅  **HTTP::Date** module.
 - ✅  **URI::Escape** module.
 - ✅  **Text::Balanced** use the same version as Perl.
+- ✅  **Benchmark** use the same version as Perl.
 - 🚧  **HTTP::Tiny** some features untested: proxy settings.
 - 🚧  **DynaLoader** placeholder module.
 - 🚧  **Unicode::Normalize** `normalize`, `NFC`, `NFD`, `NFKC`, `NFKD`.
