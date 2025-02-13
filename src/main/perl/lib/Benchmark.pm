@@ -691,11 +691,11 @@ sub runloop {
 
     my ($subcode, $subref);
     if (ref $c eq 'CODE') {
-	$subcode = "sub { for (1 .. $n) { local \$_; package $pack; &\$c; } }";
+	$subcode = "sub { for my \$loop (1 .. $n) { local \$_; package $pack; &\$c; } }";
         $subref  = eval $subcode;
     }
     else {
-	$subcode = "sub { for (1 .. $n) { local \$_; package $pack; $c;} }";
+	$subcode = "sub { for my \$loop (1 .. $n) { local \$_; package $pack; $c;} }";
         $subref  = _doeval($subcode);
     }
     croak "runloop unable to compile '$c': $@\ncode: $subcode\n" if $@;
