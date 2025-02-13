@@ -39,8 +39,14 @@ public class StatementParser {
 
         int scopeIndex = parser.ctx.symbolTable.enterScope();
 
+        Node condition;
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
-        Node condition = parser.parseExpression(0);
+        if (TokenUtils.peek(parser).text.equals(")")) {
+            // Special case for `while ()` to become `while (1)`
+            condition = new NumberNode("1", parser.tokenIndex);
+        } else {
+            condition = parser.parseExpression(0);
+        }
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
 
         // Parse the body of the loop
