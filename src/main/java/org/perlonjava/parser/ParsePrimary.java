@@ -101,7 +101,7 @@ public class ParsePrimary {
             if (existsGlobalCodeRef(parser.ctx.symbolTable.getCurrentPackage() + "::" + operator)) {
                 // ' use subs "hex"; sub hex { 456 } print hex("123"), "\n" '
                 parser.tokenIndex = startIndex;   // backtrack
-                return SubroutineParser.parseSubroutineCall(parser);
+                return SubroutineParser.parseSubroutineCall(parser, false);
             }
             if (existsGlobalCodeRef("CORE::GLOBAL::" + operator)) {
                 // ' BEGIN { *CORE::GLOBAL::hex = sub { 456 } } print hex("123"), "\n" '
@@ -111,7 +111,7 @@ public class ParsePrimary {
                 parser.tokens.add(startIndex + 1, new LexerToken(LexerTokenType.OPERATOR, "::"));
                 parser.tokens.add(startIndex + 2, new LexerToken(LexerTokenType.IDENTIFIER, "GLOBAL"));
                 parser.tokens.add(startIndex + 3, new LexerToken(LexerTokenType.OPERATOR, "::"));
-                return SubroutineParser.parseSubroutineCall(parser);
+                return SubroutineParser.parseSubroutineCall(parser, false);
             }
         }
 
@@ -128,7 +128,7 @@ public class ParsePrimary {
 
         // Handle any other identifier as a subroutine call or identifier node
         parser.tokenIndex = startIndex;   // backtrack
-        return SubroutineParser.parseSubroutineCall(parser);
+        return SubroutineParser.parseSubroutineCall(parser, false);
     }
 
     private static Node parseOperator(Parser parser, LexerToken token, String operator) {

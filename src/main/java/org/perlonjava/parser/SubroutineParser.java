@@ -19,7 +19,7 @@ public class SubroutineParser {
      * @param parser The parser object
      * @return A Node representing the parsed subroutine call.
      */
-    static Node parseSubroutineCall(Parser parser) {
+    static Node parseSubroutineCall(Parser parser, boolean isMethod) {
         // Parse the subroutine name as a complex identifier
         // Alternately, this could be the start of a v-string like v10.20.30
         int currentIndex = parser.tokenIndex;
@@ -36,8 +36,9 @@ public class SubroutineParser {
         // Create an identifier node for the subroutine name
         IdentifierNode nameNode = new IdentifierNode(subName, parser.tokenIndex);
 
-        // Check if the subroutine exists in the global namespace
-        boolean subExists = GlobalVariable.existsGlobalCodeRef(fullName);
+        // Check if we are parsing a method;
+        // Otherwise, check that the subroutine exists in the global namespace - then fetch prototype and attributes
+        boolean subExists = !isMethod && GlobalVariable.existsGlobalCodeRef(fullName);
         String prototype = null;
         List<String> attributes = null;
         if (subExists) {
