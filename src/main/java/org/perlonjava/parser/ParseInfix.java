@@ -128,9 +128,12 @@ public class ParseInfix {
                     default:
                         parser.parsingForLoopVariable = true;
                         if (nextText.equals("$")) {
+                            // Method call with ->$var or ->$var()
                             right = parser.parseExpression(precedence);
                         } else {
-                            right = SubroutineParser.parseSubroutineCall(parser);
+                            // Method call with ->method or ->method()
+                            right = SubroutineParser.parseSubroutineCall(parser, true);
+                            parser.ctx.logDebug("method call -> " + right);
                         }
                         parser.parsingForLoopVariable = false;
 
