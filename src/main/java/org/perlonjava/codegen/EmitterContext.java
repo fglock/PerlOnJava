@@ -2,9 +2,11 @@ package org.perlonjava.codegen;
 
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.Opcodes;
 import org.perlonjava.ArgumentParser;
 import org.perlonjava.runtime.ErrorMessageUtil;
 import org.perlonjava.runtime.RuntimeArray;
+import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.util.HashMap;
@@ -100,6 +102,23 @@ public class EmitterContext {
         this.errorUtil = errorUtil;
         this.compilerOptions = compilerOptions;
         this.unitcheckBlocks = unitcheckBlocks;
+    }
+
+    static void fixupContext(EmitterContext ctx) {
+        // Handle non-void context cases
+        // When a label is the last statement in a block and the block's result is used,
+        // we need to ensure a value is pushed onto the stack
+        if (ctx.contextType != RuntimeContextType.VOID) {
+            // Create a new empty RuntimeList as the result value
+            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
+            ctx.mv.visitInsn(Opcodes.DUP);  // Duplicate reference for constructor
+            // Initialize the empty RuntimeList
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/RuntimeList",
+                    "<init>",
+                    "()V",
+                    false);
+        }
     }
 
     /**

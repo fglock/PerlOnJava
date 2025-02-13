@@ -172,5 +172,7 @@ public class EmitterVisitor implements Visitor {
         // Set the strict options
         currentScope.strictOptionsStack.pop();
         currentScope.strictOptionsStack.push(node.getStrictOptions());
+
+        EmitterContext.fixupContext(ctx);
     }
 }
