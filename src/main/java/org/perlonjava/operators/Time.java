@@ -61,7 +61,6 @@ public class Time {
      * @return a RuntimeList containing formatted local time components.
      */
     public static RuntimeList localtime(RuntimeList args, int ctx) {
-        RuntimeList res = new RuntimeList();
         ZonedDateTime date;
         if (args.isEmpty()) {
             date = ZonedDateTime.now();
@@ -69,22 +68,7 @@ public class Time {
             long arg = args.getFirst().getInt();
             date = Instant.ofEpochSecond(arg).atZone(ZoneId.systemDefault());
         }
-        if (ctx == RuntimeContextType.SCALAR) {
-            res.add(date.format(DateTimeFormatter.RFC_1123_DATE_TIME));
-            return res;
-        }
-        //      0    1    2     3     4    5     6     7     8
-        //   ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)
-        res.add(date.getSecond());
-        res.add(date.getMinute());
-        res.add(date.getHour());
-        res.add(date.getDayOfMonth());
-        res.add(date.getMonth().getValue() - 1);
-        res.add(date.getYear() - 1900);
-        res.add(date.getDayOfWeek().getValue());
-        res.add(date.getDayOfYear() - 1);
-        res.add(date.getZone().getRules().isDaylightSavings(date.toInstant()) ? 1 : 0);
-        return res;
+        return getTimeComponents(ctx, date);
     }
 
     /**
@@ -95,7 +79,6 @@ public class Time {
      * @return a RuntimeList containing formatted UTC time components.
      */
     public static RuntimeList gmtime(RuntimeList args, int ctx) {
-        RuntimeList res = new RuntimeList();
         ZonedDateTime date;
         if (args.isEmpty()) {
             date = ZonedDateTime.now(ZoneOffset.UTC);
@@ -103,6 +86,11 @@ public class Time {
             long arg = args.getFirst().getInt();
             date = Instant.ofEpochSecond(arg).atZone(ZoneId.of("UTC"));
         }
+        return getTimeComponents(ctx, date);
+    }
+
+    private static RuntimeList getTimeComponents(int ctx, ZonedDateTime date) {
+        RuntimeList res = new RuntimeList();
         if (ctx == RuntimeContextType.SCALAR) {
             res.add(date.format(DateTimeFormatter.RFC_1123_DATE_TIME));
             return res;
