@@ -17,5 +17,4 @@ sub loop_with_eval {
 # Use timethis to benchmark the loop_with_eval subroutine
 timethis(100000, sub {loop_with_eval()});
 
-# print "count $count\n";
 print "done\n";

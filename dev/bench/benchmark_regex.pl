@@ -1,18 +1,18 @@
-my $count;
+use strict;
+use warnings;
+use Benchmark;
 
-my $i = 0;
-while ( $i < 400 ) {
-    my $j = 0;
-    while ( $j < 400 ) {
-        my $k = 0;
-        while ( $k < 400 ) {
-            $k = $k + 1;
-            $count = $count + 1 if $k =~ /42/;
-        }
-        $j = $j + 1;
+my $count = 0;
+
+sub loop_with_regex {
+    my $i = 0;
+    while ( $i < 400 ) {
+        $count = $count + 1 if $i =~ /42/;
+        $i = $i + 1;
     }
-    $i = $i + 1;
 }
 
-print "done $count\n";
+# Use timethis to benchmark the loop_with_regex subroutine
+timethis(100000, sub { loop_with_regex() });
 
+print "done\n";

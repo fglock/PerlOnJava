@@ -1,19 +1,20 @@
-my $count;
+use strict;
+use warnings;
+use Benchmark;
+
+my $count = 0;
 my $s = "a";
-my $i = 0;
-while ( $i < 400 ) {
-    my $j = 0;
-    while ( $j < 400 ) {
-        my $k = 0;
-        while ( $k < 400 ) {
-            $k++;
-            $s++;
-            $count++;
-        }
-        $j++;
+
+sub loop_with_string {
+    my $i = 0;
+    while ( $i < 400 ) {
+        $s++;
+        $count++;
+        $i++;
     }
-    $i++;
 }
 
-print "done $count $s\n";
+# Use timethis to benchmark the loop_with_string subroutine
+timethis(100000, sub { loop_with_string() });
 
+print "done $count $s\n";
