@@ -1,18 +1,18 @@
-our ($i, $j, $k, $count);
+no strict;
+use warnings;
+use Benchmark;
 
-$i = 0;
-while ( $i < 400 ) {
-    $j = 0;
-    while ( $j < 400 ) {
-        $k = 0;
-        while ( $k < 400 ) {
-            $k = $k + 1;
-            $count = $count + 1;
-        }
-        $j = $j + 1;
+$count = 0;
+
+sub loop_with_global {
+    $i = 0;
+    while ( $i < 400 ) {
+        $count++;
+        $i++;
     }
-    $i = $i + 1;
 }
 
-print "done $count\n";
+# Use timethis to benchmark the loop_with_global subroutine
+timethis(1000000, sub { loop_with_global() });
 
+print "done\n";
