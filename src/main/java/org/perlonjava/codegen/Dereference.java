@@ -75,7 +75,7 @@ public class Dereference {
             }
         }
         if (node.left instanceof ListNode list) { // ("a","b","c")[2]
-            // transform to:  ["a","b","c"]->2]
+            // transform to:  ["a","b","c"]->[2]
             BinaryOperatorNode refNode = new BinaryOperatorNode("->",
                     new ArrayLiteralNode(list.elements, list.getIndex()),
                     node.right, node.tokenIndex);
