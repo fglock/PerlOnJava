@@ -38,7 +38,7 @@ public class EmitForeach {
             if (node.variable instanceof OperatorNode opNode &&
                     opNode.operator.equals("$") &&
                     opNode.operand instanceof IdentifierNode idNode &&
-                    idNode.name.equals("_")) {
+                    !idNode.name.contains("::")) {
                 node.variable = new OperatorNode("our", node.variable, node.variable.getIndex());
             }
         }
