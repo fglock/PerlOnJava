@@ -140,7 +140,6 @@ public class EmitForeach {
         emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 
         mv.visitLabel(continueLabel);
-        Local.localTeardown(localRecord, mv);
 
         if (node.continueBlock != null) {
             node.continueBlock.accept(emitterVisitor.with(RuntimeContextType.VOID));
