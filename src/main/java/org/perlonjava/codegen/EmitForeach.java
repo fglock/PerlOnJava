@@ -128,8 +128,6 @@ public class EmitForeach {
         Label redoLabel = new Label();
         mv.visitLabel(redoLabel);
 
-        Local.localTeardown(localRecord, mv);
-
         emitterVisitor.ctx.javaClassInfo.pushLoopLabels(
                 node.labelName,
                 continueLabel,
