@@ -326,6 +326,7 @@ This list is under review.
 - ✅  **`...` ellipsis statement**: `...` is supported.
 - ❌  **`exec` operator**: `exec` is not implemented.
 - ❌  **`fork` operator**: `fork` is not implemented.
+- ❌  **`system` operator**: `system` is not implemented.
 
 ## Namespaces and Global Variables
 - ✅  **Global variable infrastructure**: Support for global variables is implemented.
