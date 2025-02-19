@@ -225,6 +225,8 @@ The following areas are currently under active development to enhance the functi
 ## Upcoming Milestones
 
 - **v2.4.0**: Next minor version
+  - Added `--upgrade` option to `Configure.pl` to upgrade dependencies.
+  - Added `Dockerfile` configuration.
   - Added `Time::HiRes`, `Benchmark` modules.
   - Added `/ee` regex modifier.
   - Added no strict `vars`, `subs`.
