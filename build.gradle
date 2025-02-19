@@ -22,11 +22,11 @@ dependencies {
     implementation 'org.ow2.asm:asm:9.7.1'
     implementation 'org.ow2.asm:asm-util:9.7.1'
     implementation 'com.ibm.icu:icu4j:76.1'
-    implementation 'com.alibaba.fastjson2:fastjson2:2.0.54'
+    implementation 'com.alibaba.fastjson2:fastjson2:2.0.55'
     implementation 'org.snakeyaml:snakeyaml-engine:2.9'
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.12.0-RC1'
-    testImplementation 'org.junit.jupiter:junit-jupiter-engine:5.12.0-RC1'
-    testImplementation 'org.junit.jupiter:junit-jupiter-params:5.12.0-RC1'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.12.0-RC2'
+    testImplementation 'org.junit.jupiter:junit-jupiter-engine:5.12.0-RC2'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params:5.12.0-RC2'
 }
 
 testing {
