@@ -68,7 +68,7 @@ public class StatementResolver {
                     parser.tokenIndex = currentIndex;
                     break;
                 case "our", "my", "state":
-                    // Parse variable declarations
+                    // Parse special subroutine declarations
                     String declaration = consume(parser).text;
                     if (consume(parser).text.equals("sub") && peek(parser).type == LexerTokenType.IDENTIFIER) {
                         // my sub name
