@@ -22,6 +22,7 @@ use URI::Escape;
 my $search = 0;   # Flag to indicate if a search for JDBC driver by class name is requested
 my $direct = 0;   # Flag to indicate if direct Maven coordinates are provided
 my $verbose = 0;  # Flag to enable verbose output for debugging
+my $upgrade = 0;  # Flag to upgrade dependencies to their latest versions
 my %config;       # Hash to store key-value pairs for configuration updates
 my $help = 0;     # Flag to show help message
 
@@ -32,6 +33,7 @@ GetOptions(
     "search" => \$search,    # Search by driver class name
     "direct" => \$direct,    # Use direct Maven coordinates
     "verbose" => \$verbose,  # Enable verbose output
+    "upgrade" => \$upgrade,  # Upgrade dependencies to latest versions
     "D=s%" => \%config,      # Key-value configuration pairs
 ) or show_help();
 
@@ -39,13 +41,16 @@ GetOptions(
 show_help() if $help;
 
 # Show current configuration if no specific actions are requested
-show_config() unless ($search || $direct || %config || @ARGV);
+show_config() unless ($search || $direct || $upgrade || %config || @ARGV);
 
 # Update configuration if any key-value pairs are provided
 update_configuration(\%config) if %config;
 
 # Handle dependency management if search or direct options are provided
 handle_dependencies() if ($search || $direct);
+
+# Upgrade dependencies to their latest versions if the upgrade option is provided
+update_to_latest_versions() if $upgrade;
 
 # Function to display help message and usage instructions
 sub show_help {
@@ -60,11 +65,13 @@ Dependency Management Options:
     --search                        Search for JDBC driver by class name
     --direct                        Use direct Maven coordinates
     --verbose                       Enable verbose output
+    --upgrade                       Upgrade dependencies to their latest versions
 
 Examples:
     ./Configure.pl -D strict_mode=true -D enable_optimizations=false
     ./Configure.pl --search org.h2.Driver
     ./Configure.pl --direct com.h2database:h2:2.2.224
+    ./Configure.pl --upgrade
 ';
     exit;
 }
@@ -197,7 +204,7 @@ sub update_build_files {
     # Add to build.gradle if present
     if (-f 'build.gradle') {
         my $gradle = read_file('build.gradle');
-        unless ($gradle =~ /implementation ['"]$maven_coords['"]/) {
+        unless ($gradle =~ /implementation ['"]${maven_coords}['"]/) {
             $gradle =~ s/(dependencies \{)/$1\n    implementation "$maven_coords"/;
             write_file('build.gradle', $gradle);
             print "Updated build.gradle\n";
@@ -221,6 +228,38 @@ sub update_build_files {
             $pom =~ s/(<dependencies>)/$1$dep/;
             write_file('pom.xml', $pom);
             print "Updated pom.xml\n";
+        }
+    }
+}
+
+# Function to update project dependencies to their latest versions
+sub update_to_latest_versions {
+    print "Upgrading project dependencies to latest versions...\n";
+    # Update Maven dependencies
+    if (-f 'pom.xml') {
+        print "Updating Maven dependencies to latest versions...\n";
+        my $maven_output = `mvn versions:use-latest-versions`;
+        my $maven_status = $? >> 8;
+        if ($maven_status != 0) {
+            warn "Failed to update Maven dependencies. Exit status: $maven_status\n";
+            warn "Output: $maven_output\n";
+        } else {
+            print "Maven dependencies updated successfully.\n";
+            print "Output: $maven_output\n";
+        }
+    }
+
+    # Update Gradle dependencies
+    if (-f 'build.gradle') {
+        print "Updating Gradle dependencies to latest versions...\n";
+        my $gradle_output = `./gradlew useLatestVersions`;
+        my $gradle_status = $? >> 8;
+        if ($gradle_status != 0) {
+            warn "Failed to update Gradle dependencies. Exit status: $gradle_status\n";
+            warn "Output: $gradle_output\n";
+        } else {
+            print "Gradle dependencies updated successfully.\n";
+            print "Output: $gradle_output\n";
         }
     }
 }
