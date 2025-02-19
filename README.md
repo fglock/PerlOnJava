@@ -14,14 +14,15 @@ Users can also add their own database JDBC drivers, making it a flexible solutio
 4. [Quick Start](#quick-start)
 5. [Features and Limitations](docs/FEATURE_MATRIX.md)
 6. [Build Instructions](docs/BUILD.md)
-7. [Running the JAR File](#running-the-jar-file)
-8. [Debugging Tools](#debugging-tools)
-9. [Architecture](docs/ARCHITECTURE.md)
-10. [Porting Modules](docs/PORTING_MODULES.md)
-11. [Milestones](MILESTONES.md)
-12. [Community and Support](docs/SUPPORT.md)
-13. [License](#license)
-14. [Additional Resources](docs/RESOURCES.md)
+7. [Running with Docker](docs/DOCKER.md)
+8. [Running the JAR File](#running-the-jar-file)
+9. [Debugging Tools](#debugging-tools)
+10. [Architecture](docs/ARCHITECTURE.md)
+11. [Porting Modules](docs/PORTING_MODULES.md)
+12. [Milestones](MILESTONES.md)
+13. [Community and Support](docs/SUPPORT.md)
+14. [License](#license)
+15. [Additional Resources](docs/RESOURCES.md)
 
 ## Introduction
 
