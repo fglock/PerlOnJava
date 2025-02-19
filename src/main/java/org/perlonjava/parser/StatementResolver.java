@@ -9,10 +9,10 @@ import static org.perlonjava.parser.TokenUtils.consume;
 import static org.perlonjava.parser.TokenUtils.peek;
 
 /**
- * The ParseStatement class is responsible for parsing individual statements in the source code.
+ * The StatementResolver class is responsible for parsing individual statements in the source code.
  * It handles various types of statements such as control structures, declarations, and expressions.
  */
-public class ParseStatement {
+public class StatementResolver {
 
     /**
      * Parses a single statement from the parser's token stream.
