@@ -76,7 +76,7 @@ public class ParseBlock {
             }
 
             // Parse the actual statement, passing any label found
-            statements.add(ParseStatement.parseStatement(parser, label));
+            statements.add(StatementResolver.parseStatement(parser, label));
 
             token = peek(parser);
         }

@@ -11,12 +11,12 @@ import static org.perlonjava.parser.TokenUtils.consume;
 import static org.perlonjava.parser.TokenUtils.peek;
 
 /**
- * The ParseCoreOperator class is responsible for parsing core operators in the Perl language.
+ * The CoreOperatorResolver class is responsible for parsing core operators in the Perl language.
  * It provides a static method to interpret tokens and convert them into corresponding AST nodes.
  * This class handles a wide range of Perl operators, including unary, binary, and operators with
  * varying numbers of arguments.
  */
-public class ParseCoreOperator {
+public class CoreOperatorResolver {
 
     /**
      * Parses a core operator from the given token and returns the corresponding AST node.
