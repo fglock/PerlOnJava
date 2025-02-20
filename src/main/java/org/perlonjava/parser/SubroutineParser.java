@@ -208,7 +208,7 @@ public class SubroutineParser {
         return new SubroutineNode(subName, prototype, attributes, block, false, currentIndex);
     }
 
-    private static RuntimeCode blockASTtoCode(EmitterContext ctx, BlockNode block) {
+    public static RuntimeCode blockASTtoCode(EmitterContext ctx, BlockNode block) {
 
         // Optimization - https://github.com/fglock/PerlOnJava/issues/8
         // Prepare capture variables

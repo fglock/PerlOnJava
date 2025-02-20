@@ -341,7 +341,7 @@ public class StatementParser {
 
         // Parse the parameter list
         boolean hasParentheses = TokenUtils.peek(parser).text.equals("(");
-        Node list = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
+        ListNode list = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
         ctx.logDebug("Use statement list hasParentheses:" + hasParentheses + " ast:" + list);
 
         StatementResolver.parseStatementTerminator(parser);
@@ -377,7 +377,8 @@ public class StatementParser {
             // or Module->unimport( LIST )
 
             // Execute the argument list immediately
-            RuntimeList args = runSpecialBlock(parser, "BEGIN", list);
+            System.out.println("Args: " + list);
+            RuntimeList args = runSpecialBlock(parser, "BEGIN", new BlockNode(list.elements, parser.tokenIndex));
 
             ctx.logDebug("Use statement list: " + args);
             if (hasParentheses && args.size() == 0) {
