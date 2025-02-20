@@ -281,7 +281,7 @@ public class CoreOperatorResolver {
                     }
                 }
                 return StringParser.parseRawString(parser, token.text);
-            case "system", "dump", "read", "exec", "format", "write", "dbmclose", "dbmopen":
+            case "binmode", "system", "dump", "read", "exec", "format", "write", "dbmclose", "dbmopen":
                 // Not implemented
                 throw new PerlCompilerException(parser.tokenIndex, "Not implemented: operator: " + token.text, parser.ctx.errorUtil);
             case "accept", "bind", "connect", "getpeername", "getsockname", "getsockopt",
