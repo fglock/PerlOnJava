@@ -173,38 +173,41 @@ public class SubroutineParser {
         }
 
         if (subName == null) {
-            // Now we check if the next token is one of the illegal characters that cannot follow a subroutine.
-            // These are '(', '{', and '['. If any of these follow, we throw a syntax error.
-            LexerToken token = TokenUtils.peek(parser);
-            if (token.text.equals("(") || token.text.equals("{") || token.text.equals("[")) {
-                // Throw an exception indicating a syntax error.
-                throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
-            }
+            return handleAnonSub(parser, subName, prototype, attributes, block, currentIndex);
+        } else {
+            handleNamedSub(parser, subName, prototype, attributes, block, currentIndex);
+            // return an empty AST list
+            return new ListNode(parser.tokenIndex);
         }
+    }
 
+    private static SubroutineNode handleAnonSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, int currentIndex) {
+        // Now we check if the next token is one of the illegal characters that cannot follow a subroutine.
+        // These are '(', '{', and '['. If any of these follow, we throw a syntax error.
+        LexerToken token = TokenUtils.peek(parser);
+        if (token.text.equals("(") || token.text.equals("{") || token.text.equals("[")) {
+            // Throw an exception indicating a syntax error.
+            throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+        }
+        // Finally, we return a new 'SubroutineNode' object with the parsed data: the name, prototype, attributes, block,
+        // `useTryCatch` flag, and token position.
+        return new SubroutineNode(subName, prototype, attributes, block, false, currentIndex);
+    }
+
+    private static void handleNamedSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, int currentIndex) {
         // Finally, we create a new 'SubroutineNode' object with the parsed data: the name, prototype, attributes, block,
         // `useTryCatch` flag, and token position.
         SubroutineNode subroutineNode = new SubroutineNode(subName, prototype, attributes, block, false, currentIndex);
 
-        if (subName != null) {
-            // Additional steps for named subroutine:
+        // Create the subroutine immediately
+        RuntimeList result = runSpecialBlock(parser, "BEGIN", subroutineNode);
+        RuntimeCode codeFrom = (RuntimeCode) result.getFirst().value;
 
-            // Create the subroutine immediately
-            RuntimeList result = runSpecialBlock(parser, "BEGIN", subroutineNode);
-            RuntimeCode codeFrom = (RuntimeCode) result.getFirst().value;
+        // - register the subroutine in the namespace
+        String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
 
-            // - register the subroutine in the namespace
-            String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
-
-            RuntimeCode code = (RuntimeCode) GlobalVariable.getGlobalCodeRef(fullName).value;
-            RuntimeCode.copy(code, codeFrom);
-
-            // return an empty AST list
-            return new ListNode(parser.tokenIndex);
-        }
-
-        // return anonymous subroutine
-        return subroutineNode;
+        RuntimeCode code = (RuntimeCode) GlobalVariable.getGlobalCodeRef(fullName).value;
+        RuntimeCode.copy(code, codeFrom);
     }
 
 }
