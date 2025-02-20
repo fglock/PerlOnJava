@@ -314,6 +314,8 @@ This list is under review.
 - ✅  **Directory operators**: `readdir`, `opendir`, `closedir`, `telldir`, `seekdir`, `rewinddir`, `mkdir`, `rmdir`, `chdir`.
 - ✅  **`for` loop variable**: The `for` loop variable is aliased to list elements.
 - ✅  **`for` loop variable**: Iterate over multiple values at a time is implemented.
+- ❌  **`for` loop variable**: If the variable used in a `for` loop is a global variable, it gets converted to an `our` variable before being linked to the elements of the list. This change means the variable is no longer global, which can lead to issues. For instance, if you expect to use the `$_` variable within a subroutine call, this behavior might cause problems.
+- ❌  **`for` loop variable**: You cannot use fully qualified global variables as the variable in a for loop.
 - ✅  **loop control operators**: `next`, `last`, `redo` with labels are implemented.
 - ❌  **loop control operators**: `next`, `last`, `redo` with expression are not implemented.
 - ❌  **loop control operators**: `next`, `last`, `redo` going to a different place in the call stack are not implemented. Label searching in the call stack is missing.
