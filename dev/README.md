@@ -30,15 +30,13 @@ This directory contains development resources, tools and experimental code for P
   - Debugging and troubleshooting
   - Refactoring patterns
 
-- **proto/** - Prototype implementations and experiments
-    - Compile-time optimizations
-    - Lambda expression handling
-    - Stack management prototypes
-
 - **sandbox/** - Quick tests and proof of concepts
     - IO operations testing
     - Command line handling
     - Regular expression experiments
+    - Compile-time optimizations
+    - Lambda expression handling
+    - Stack management prototypes
 
 - **tools/** - Development utilities and helpers
     - Java implementation utilities
