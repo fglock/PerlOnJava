@@ -7,6 +7,7 @@ import org.perlonjava.codegen.JavaClassInfo;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.*;
+import org.perlonjava.symbols.ScopedSymbolTable;
 import org.perlonjava.symbols.SymbolTable;
 
 import java.lang.reflect.Constructor;
@@ -212,7 +213,8 @@ public class SubroutineParser {
 
         // Optimization - https://github.com/fglock/PerlOnJava/issues/8
         // Prepare capture variables
-        Map<Integer, SymbolTable.SymbolEntry> outerVars = ctx.symbolTable.getAllVisibleVariables();
+        ScopedSymbolTable symbolTable = ctx.symbolTable.snapShot();
+        Map<Integer, SymbolTable.SymbolEntry> outerVars = symbolTable.getAllVisibleVariables();
         ArrayList<Class> classList = new ArrayList<>();
         ArrayList<Object> paramList = new ArrayList<>();
         for (SymbolTable.SymbolEntry entry : outerVars.values()) {
@@ -255,7 +257,7 @@ public class SubroutineParser {
         }
         EmitterContext newCtx = new EmitterContext(
                 new JavaClassInfo(),
-                ctx.symbolTable.snapShot(),
+                symbolTable,
                 null,
                 null,
                 RuntimeContextType.RUNTIME,
