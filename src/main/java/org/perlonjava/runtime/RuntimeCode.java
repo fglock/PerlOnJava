@@ -13,10 +13,7 @@ import org.perlonjava.symbols.ScopedSymbolTable;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
@@ -28,6 +25,15 @@ import static org.perlonjava.runtime.SpecialBlock.runUnitcheckBlocks;
  * It provides functionality to compile, store, and execute Perl subroutines and eval strings.
  */
 public class RuntimeCode implements RuntimeScalarReference {
+
+    // Cache for memoization of evalStringHelper results
+    private static final int CLASS_CACHE_SIZE = 100;
+    private static final Map<String, Class<?>> evalCache = new LinkedHashMap<String, Class<?>>(CLASS_CACHE_SIZE, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Class<?>> eldest) {
+            return size() > CLASS_CACHE_SIZE;
+        }
+    };
 
     // Temporary storage for anonymous subroutines and eval string compiler context
     public static HashMap<String, Class<?>> anonSubs = new HashMap<>(); // temp storage for makeCodeObject()
@@ -104,6 +110,15 @@ public class RuntimeCode implements RuntimeScalarReference {
      * @throws Exception if an error occurs during compilation
      */
     public static Class<?> evalStringHelper(RuntimeScalar code, String evalTag) throws Exception {
+
+        // Check if the result is already cached
+        String cacheKey = code.toString() + '\0' + evalTag;
+        synchronized (evalCache) {
+            if (evalCache.containsKey(cacheKey)) {
+                return evalCache.get(cacheKey);
+            }
+        }
+
         // Retrieve the eval context that was saved at program compile-time
         EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
         ScopedSymbolTable symbolTable = ctx.symbolTable.snapShot();
@@ -158,6 +173,12 @@ public class RuntimeCode implements RuntimeScalarReference {
                     false
             );
         }
+
+        // Cache the result
+        synchronized (evalCache) {
+            evalCache.put(cacheKey, generatedClass);
+        }
+
         return generatedClass;
     }
 
