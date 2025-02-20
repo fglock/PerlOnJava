@@ -10,6 +10,9 @@ import org.perlonjava.operators.ModuleOperators;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static org.perlonjava.parser.NumberParser.parseNumber;
 import static org.perlonjava.parser.SpecialBlockParser.runSpecialBlock;
 import static org.perlonjava.parser.SpecialBlockParser.setCurrentScope;
@@ -377,10 +380,18 @@ public class StatementParser {
             // or Module->unimport( LIST )
 
             // Execute the argument list immediately
-            System.out.println("Args: " + list);
-            RuntimeList args = runSpecialBlock(parser, "BEGIN", new BlockNode(list.elements, parser.tokenIndex));
+            System.out.println("Args1: " + list);
+            RuntimeList args = new RuntimeList();
+            if (!list.elements.isEmpty()) {
+                ArrayList<Node> elements = new ArrayList<>();
+                elements.add(list);
+                BlockNode blockNode = new BlockNode(elements, parser.tokenIndex);
+                // System.out.println("Block: " + blockNode);
+                args = runSpecialBlock(parser, "BEGIN", blockNode);
+            }
+            System.out.println("Args2: " + args + " size=" + args.size());
 
-            ctx.logDebug("Use statement list: " + args);
+            ctx.logDebug("Use statement list: " + args + " size=" + args.size());
             if (hasParentheses && args.size() == 0) {
                 // do not import
             } else {

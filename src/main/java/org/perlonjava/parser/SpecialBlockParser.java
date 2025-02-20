@@ -67,9 +67,6 @@ public class SpecialBlockParser {
      */
     static RuntimeList runSpecialBlock(Parser parser, String blockPhase, BlockNode blockNode) {
         RuntimeList result = new RuntimeList();
-        if (blockNode.elements.isEmpty()) {
-            return result;
-        }
 
         // Emit as first operation inside the block: local ${^GLOBAL_PHASE} = "BEGIN"
         String phaseName = blockPhase.equals("BEGIN") || blockPhase.equals("UNITCHECK")
@@ -85,6 +82,7 @@ public class SpecialBlockParser {
                                 tokenIndex),
                         new StringNode(phaseName, tokenIndex),
                         tokenIndex));
+        // System.out.println("Block: " + blockNode);
         RuntimeCode code = blockASTtoCode(parser.ctx, blockNode);
 
         if (blockPhase.equals("BEGIN")) {
@@ -95,8 +93,7 @@ public class SpecialBlockParser {
                     parser.ctx.compilerOptions.fileName,
                     parser.ctx.errorUtil.getLineNumber(parser.tokenIndex));
             result = code.apply(new RuntimeArray(), RuntimeContextType.LIST);
-            System.out.println("Block: " + blockNode);
-            System.out.println("Result: " + result);
+            // System.out.println("Result: " + result);
 
 //            String message = t.getMessage();
 //            if (!message.endsWith("\n")) {
