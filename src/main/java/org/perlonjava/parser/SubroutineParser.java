@@ -1,16 +1,21 @@
 package org.perlonjava.parser;
 
+import org.perlonjava.ArgumentParser;
 import org.perlonjava.astnode.*;
+import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.*;
+import org.perlonjava.scriptengine.PerlLanguageProvider;
+import org.perlonjava.symbols.SymbolTable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.perlonjava.parser.PrototypeArgs.consumeArgsWithPrototype;
 import static org.perlonjava.parser.SignatureParser.parseSignature;
-import static org.perlonjava.parser.SpecialBlockParser.runSpecialBlock;
+import static org.perlonjava.runtime.NameNormalizer.normalizeVariableName;
 
 public class SubroutineParser {
     /**
@@ -31,7 +36,7 @@ public class SubroutineParser {
         }
 
         // Normalize the subroutine name to include the current package
-        String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+        String fullName = normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
 
         // Create an identifier node for the subroutine name
         IdentifierNode nameNode = new IdentifierNode(subName, parser.tokenIndex);
@@ -150,7 +155,7 @@ public class SubroutineParser {
 
         if (wantName && !TokenUtils.peek(parser).text.equals("{")) {
             // A named subroutine can be predeclared without a block of code.
-            String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+            String fullName = normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
             RuntimeCode codeRef = (RuntimeCode) GlobalVariable.getGlobalCodeRef(fullName).value;
             codeRef.prototype = prototype;
             codeRef.attributes = attributes;
@@ -200,11 +205,102 @@ public class SubroutineParser {
         SubroutineNode subroutineNode = new SubroutineNode(subName, prototype, attributes, block, false, currentIndex);
 
         // Create the subroutine immediately
-        RuntimeList result = runSpecialBlock(parser, "BEGIN", subroutineNode);
+        int tokenIndex = parser.tokenIndex;
+
+        // Create AST nodes for setting up the capture variables and package declaration
+        List<Node> nodes = new ArrayList<>();
+
+        // Declare capture variables
+        Map<Integer, SymbolTable.SymbolEntry> outerVars = parser.ctx.symbolTable.getAllVisibleVariables();
+        for (SymbolTable.SymbolEntry entry : outerVars.values()) {
+            if (!entry.name().equals("@_") && !entry.decl().isEmpty()) {
+                String packageName;
+                if (entry.decl().equals("our")) {
+                    // "our" variable lives in a Perl package
+                    packageName = entry.perlPackage();
+                } else {
+                    // "my" or "state" variable live in a special BEGIN package
+                    // Retrieve the variable id from the AST; create a new id if needed
+                    OperatorNode ast = entry.ast();
+                    if (ast.id == 0) {
+                        ast.id = EmitterMethodCreator.classCounter++;
+                    }
+                    packageName = PersistentVariable.beginPackage(ast.id);
+                }
+                // Emit: our $var
+                String varName = normalizeVariableName(entry.name().substring(1), packageName);
+                System.out.println("our " + varName);
+                nodes.add(
+                        new OperatorNode(
+                                "our",
+                                new OperatorNode(
+                                        entry.name().substring(0, 1),
+                                        new IdentifierNode(varName, tokenIndex),
+                                        tokenIndex),
+                                tokenIndex));
+            }
+        }
+        // Emit: package PKG
+        nodes.add(
+                new OperatorNode("package",
+                        new IdentifierNode(
+                                parser.ctx.symbolTable.getCurrentPackage(), tokenIndex), tokenIndex));
+
+        SubroutineNode anonSub =
+                new SubroutineNode(
+                        null,
+                        null,
+                        null,
+                        subroutineNode,
+                        false,
+                        tokenIndex);
+
+        nodes.add(
+                new BinaryOperatorNode(
+                        "->",
+                        anonSub,
+                        new ListNode(tokenIndex),
+                        tokenIndex
+                )
+        );
+
+        ArgumentParser.CompilerOptions parsedArgs = parser.ctx.compilerOptions.clone();
+        parsedArgs.compileOnly = false; // Special blocks are always run
+        parser.ctx.logDebug("Special block captures " + parser.ctx.symbolTable.getAllVisibleVariables());
+        RuntimeList result1;
+        // Setup the caller stack for BEGIN
+        CallerStack.push(
+                parser.ctx.symbolTable.getCurrentPackage(),
+                parser.ctx.compilerOptions.fileName,
+                parser.ctx.errorUtil.getLineNumber(parser.tokenIndex));
+        try {
+            SpecialBlockParser.setCurrentScope(parser.ctx.symbolTable);
+            result1 = PerlLanguageProvider.executePerlAST(
+                    new BlockNode(nodes, tokenIndex),
+                    parser.tokens,
+                    parsedArgs);
+        } catch (Throwable t) {
+            if (parsedArgs.debugEnabled) {
+                // Print full JVM stack
+                t.printStackTrace();
+                System.out.println();
+            }
+
+            String message = t.getMessage();
+            if (!message.endsWith("\n")) {
+                message += "\n";
+            }
+            message += "BEGIN" + " failed--compilation aborted";
+            throw new PerlCompilerException(parser.tokenIndex, message, parser.ctx.errorUtil);
+        }
+        CallerStack.pop();  // restore the caller stack
+        GlobalVariable.getGlobalVariable("main::@").set(""); // Reset error variable
+
+        RuntimeList result = result1;
         RuntimeCode codeFrom = (RuntimeCode) result.getFirst().value;
 
         // - register the subroutine in the namespace
-        String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+        String fullName = normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
 
         RuntimeCode code = (RuntimeCode) GlobalVariable.getGlobalCodeRef(fullName).value;
         RuntimeCode.copy(code, codeFrom);
