@@ -91,6 +91,13 @@ public class RuntimeCode implements RuntimeScalarReference {
         this.prototype = prototype;
     }
 
+    public RuntimeCode(Method methodObject, Object codeObject, String prototype, List<String> attributes) {
+        this.methodObject = methodObject;
+        this.codeObject = codeObject;
+        this.prototype = prototype;
+        this.attributes = attributes;
+    }
+
     public static void copy(RuntimeCode code, RuntimeCode codeFrom) {
         code.prototype = codeFrom.prototype;
         code.attributes = codeFrom.attributes;

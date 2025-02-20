@@ -1,16 +1,22 @@
 package org.perlonjava.parser;
 
 import org.perlonjava.astnode.*;
+import org.perlonjava.codegen.EmitterContext;
+import org.perlonjava.codegen.EmitterMethodCreator;
+import org.perlonjava.codegen.JavaClassInfo;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.*;
+import org.perlonjava.symbols.SymbolTable;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.perlonjava.parser.PrototypeArgs.consumeArgsWithPrototype;
 import static org.perlonjava.parser.SignatureParser.parseSignature;
-import static org.perlonjava.parser.SpecialBlockParser.runSpecialBlock;
 
 public class SubroutineParser {
     /**
@@ -196,40 +202,88 @@ public class SubroutineParser {
 
     private static void handleNamedSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, int currentIndex) {
 
-//        // WIP Optimization - https://github.com/fglock/PerlOnJava/issues/8
-//        EmitterContext ctx = new EmitterContext(
-//                new JavaClassInfo(),
-//                parser.ctx.symbolTable.snapShot(),
-//                null,
-//                null,
-//                RuntimeContextType.RUNTIME,
-//                true,
-//                parser.ctx.errorUtil,
-//                parser.ctx.compilerOptions,
-//                new RuntimeArray()
-//        );
-//        Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
-//                ctx,
-//                block,
-//                false
-//        );
-//        System.out.println("Class " + generatedClass);
-//        EmitterMethodCreator.debugInspectClass(generatedClass);
+        // Optimization - https://github.com/fglock/PerlOnJava/issues/8
+        // Prepare capture variables
+        Map<Integer, SymbolTable.SymbolEntry> outerVars = parser.ctx.symbolTable.getAllVisibleVariables();
+        ArrayList<Class> classList = new ArrayList<>();
+        ArrayList<Object> paramList = new ArrayList<>();
+        for (SymbolTable.SymbolEntry entry : outerVars.values()) {
+            if (!entry.name().equals("@_") && !entry.decl().isEmpty()) {
+                String sigil = entry.name().substring(0, 1);
+                String variableName = null;
+                if (entry.decl().equals("our")) {
+                    variableName = NameNormalizer.normalizeVariableName(
+                            entry.name().substring(1),
+                            entry.perlPackage());
+                } else {
+                    // "my" or "state" variable live in a special BEGIN package
+                    // Retrieve the variable id from the AST; create a new id if needed
+                    OperatorNode ast = entry.ast();
+                    if (ast.id == 0) {
+                        ast.id = EmitterMethodCreator.classCounter++;
+                    }
+                    variableName = NameNormalizer.normalizeVariableName(
+                            entry.name().substring(1),
+                            PersistentVariable.beginPackage(ast.id));
+                }
+                classList.add(
+                        switch (sigil) {
+                            case "$" -> RuntimeScalar.class;
+                            case "%" -> RuntimeHash.class;
+                            case "@" -> RuntimeArray.class;
+                            default -> throw new IllegalStateException("Unexpected value: " + sigil);
+                        }
+                );
+                paramList.add(
+                        switch (sigil) {
+                            case "$" -> GlobalVariable.getGlobalVariable(variableName);
+                            case "%" -> GlobalVariable.getGlobalHash(variableName);
+                            case "@" -> GlobalVariable.getGlobalArray(variableName);
+                            default -> throw new IllegalStateException("Unexpected value: " + sigil);
+                        }
+                );
+                // System.out.println("Capture " + entry.decl() + " " + entry.name() + " as " + variableName);
+            }
+        }
+        EmitterContext ctx = new EmitterContext(
+                new JavaClassInfo(),
+                parser.ctx.symbolTable.snapShot(),
+                null,
+                null,
+                RuntimeContextType.RUNTIME,
+                true,
+                parser.ctx.errorUtil,
+                parser.ctx.compilerOptions,
+                new RuntimeArray()
+        );
+        Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
+                ctx,
+                block,
+                false
+        );
+        // System.out.println("Class " + generatedClass);
+        // EmitterMethodCreator.debugInspectClass(generatedClass);
+        try {
+            Class<?>[] parameterTypes = classList.toArray(new Class<?>[0]);
+            Constructor<?> constructor = generatedClass.getConstructor(parameterTypes);
+            // System.out.println("Constructor: " + constructor);
 
+            Object[] parameters = paramList.toArray();
+            Object instance = constructor.newInstance(parameters);
+            // System.out.println("Instance: " + instance);
 
-        // Finally, we create a new 'SubroutineNode' object with the parsed data: the name, prototype, attributes, block,
-        // `useTryCatch` flag, and token position.
-        SubroutineNode subroutineNode = new SubroutineNode(subName, prototype, attributes, block, false, currentIndex);
+            Method method = generatedClass.getMethod("apply", RuntimeArray.class, int.class);
+            // System.out.println("Method: " + method);
 
-        // Create the subroutine immediately
-        RuntimeList result = runSpecialBlock(parser, "BEGIN", subroutineNode);
-        RuntimeCode codeFrom = (RuntimeCode) result.getFirst().value;
+            RuntimeCode codeFrom = new RuntimeCode(method, instance, prototype, attributes);
 
-        // - register the subroutine in the namespace
-        String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
-
-        RuntimeCode code = (RuntimeCode) GlobalVariable.getGlobalCodeRef(fullName).value;
-        RuntimeCode.copy(code, codeFrom);
+            // - register the subroutine in the namespace
+            String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+            RuntimeCode code = (RuntimeCode) GlobalVariable.getGlobalCodeRef(fullName).value;
+            RuntimeCode.copy(code, codeFrom);
+        } catch (Exception e) {
+            throw new PerlCompilerException("Subroutine error: " + e.getMessage());
+        }
     }
 
 }
