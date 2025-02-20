@@ -181,7 +181,15 @@ public class SubroutineParser {
         if (subName == null) {
             return handleAnonSub(parser, subName, prototype, attributes, block, currentIndex);
         } else {
-            handleNamedSub(parser, subName, prototype, attributes, block, currentIndex);
+            RuntimeCode codeFrom = blockASTtoCode(parser.ctx, block);
+
+            // - register the subroutine in the namespace
+            String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+            RuntimeCode code = (RuntimeCode) GlobalVariable.getGlobalCodeRef(fullName).value;
+            RuntimeCode.copy(code, codeFrom);
+            code.prototype = prototype;
+            code.attributes = attributes;
+
             // return an empty AST list
             return new ListNode(parser.tokenIndex);
         }
@@ -200,11 +208,11 @@ public class SubroutineParser {
         return new SubroutineNode(subName, prototype, attributes, block, false, currentIndex);
     }
 
-    private static void handleNamedSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, int currentIndex) {
+    private static RuntimeCode blockASTtoCode(EmitterContext ctx, BlockNode block) {
 
         // Optimization - https://github.com/fglock/PerlOnJava/issues/8
         // Prepare capture variables
-        Map<Integer, SymbolTable.SymbolEntry> outerVars = parser.ctx.symbolTable.getAllVisibleVariables();
+        Map<Integer, SymbolTable.SymbolEntry> outerVars = ctx.symbolTable.getAllVisibleVariables();
         ArrayList<Class> classList = new ArrayList<>();
         ArrayList<Object> paramList = new ArrayList<>();
         for (SymbolTable.SymbolEntry entry : outerVars.values()) {
@@ -245,19 +253,19 @@ public class SubroutineParser {
                 // System.out.println("Capture " + entry.decl() + " " + entry.name() + " as " + variableName);
             }
         }
-        EmitterContext ctx = new EmitterContext(
+        EmitterContext newCtx = new EmitterContext(
                 new JavaClassInfo(),
-                parser.ctx.symbolTable.snapShot(),
+                ctx.symbolTable.snapShot(),
                 null,
                 null,
                 RuntimeContextType.RUNTIME,
                 true,
-                parser.ctx.errorUtil,
-                parser.ctx.compilerOptions,
+                ctx.errorUtil,
+                ctx.compilerOptions,
                 new RuntimeArray()
         );
         Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
-                ctx,
+                newCtx,
                 block,
                 false
         );
@@ -275,12 +283,7 @@ public class SubroutineParser {
             Method method = generatedClass.getMethod("apply", RuntimeArray.class, int.class);
             // System.out.println("Method: " + method);
 
-            RuntimeCode codeFrom = new RuntimeCode(method, instance, prototype, attributes);
-
-            // - register the subroutine in the namespace
-            String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
-            RuntimeCode code = (RuntimeCode) GlobalVariable.getGlobalCodeRef(fullName).value;
-            RuntimeCode.copy(code, codeFrom);
+            return new RuntimeCode(method, instance);
         } catch (Exception e) {
             throw new PerlCompilerException("Subroutine error: " + e.getMessage());
         }
