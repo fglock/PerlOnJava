@@ -8,6 +8,8 @@ import org.perlonjava.runtime.RuntimeContextType;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.*;
 
 /**
  * EmitterMethodCreator is a utility class that uses the ASM library to dynamically generate Java
@@ -303,5 +305,82 @@ public class EmitterMethodCreator implements Opcodes {
 
         // Define the class using the custom class loader
         return loader.defineClass(javaClassNameDot, classData);
+    }
+
+    public static void debugInspectClass(Class<?> generatedClass) {
+        System.out.println("Class Information for: " + generatedClass.getName());
+        System.out.println("===========================================");
+
+        // Print superclass
+        System.out.println("\nSuperclass:");
+        System.out.println(generatedClass.getSuperclass().getName());
+
+        // Print implemented interfaces
+        System.out.println("\nImplemented Interfaces:");
+        for (Class<?> iface : generatedClass.getInterfaces()) {
+            System.out.println(iface.getName());
+        }
+
+        // Print fields
+        System.out.println("\nFields:");
+        for (Field field : generatedClass.getDeclaredFields()) {
+            // Get modifiers (public, private, etc)
+            String modifiers = Modifier.toString(field.getModifiers());
+
+            System.out.printf("%s %s %s%n",
+                    modifiers,
+                    field.getType().getName(),
+                    field.getName()
+            );
+
+            // Print annotations if any
+            for (Annotation annotation : field.getAnnotations()) {
+                System.out.println("  @" + annotation.annotationType().getSimpleName());
+            }
+        }
+
+        // Print constructors
+        System.out.println("\nConstructors:");
+        for (Constructor<?> constructor : generatedClass.getDeclaredConstructors()) {
+            System.out.println(Modifier.toString(constructor.getModifiers()) + " " +
+                    generatedClass.getSimpleName() + "(");
+
+            // Print parameter types
+            Parameter[] params = constructor.getParameters();
+            for (int i = 0; i < params.length; i++) {
+                System.out.println("  " + params[i].getType().getName() + " " + params[i].getName() +
+                        (i < params.length - 1 ? "," : ""));
+            }
+            System.out.println(")");
+        }
+
+        // Print methods
+        System.out.println("\nMethods:");
+        for (Method method : generatedClass.getDeclaredMethods()) {
+            // Get modifiers
+            String modifiers = Modifier.toString(method.getModifiers());
+
+            // Get return type
+            String returnType = method.getReturnType().getName();
+
+            System.out.printf("%s %s %s(%n",
+                    modifiers,
+                    returnType,
+                    method.getName()
+            );
+
+            // Print parameters
+            Parameter[] params = method.getParameters();
+            for (int i = 0; i < params.length; i++) {
+                System.out.println("  " + params[i].getType().getName() + " " + params[i].getName() +
+                        (i < params.length - 1 ? "," : ""));
+            }
+            System.out.println(")");
+
+            // Print annotations if any
+            for (Annotation annotation : method.getAnnotations()) {
+                System.out.println("  @" + annotation.annotationType().getSimpleName());
+            }
+        }
     }
 }

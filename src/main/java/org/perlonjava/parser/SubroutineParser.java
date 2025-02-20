@@ -195,6 +195,28 @@ public class SubroutineParser {
     }
 
     private static void handleNamedSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, int currentIndex) {
+
+//        // WIP Optimization - https://github.com/fglock/PerlOnJava/issues/8
+//        EmitterContext ctx = new EmitterContext(
+//                new JavaClassInfo(),
+//                parser.ctx.symbolTable.snapShot(),
+//                null,
+//                null,
+//                RuntimeContextType.RUNTIME,
+//                true,
+//                parser.ctx.errorUtil,
+//                parser.ctx.compilerOptions,
+//                new RuntimeArray()
+//        );
+//        Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
+//                ctx,
+//                block,
+//                false
+//        );
+//        System.out.println("Class " + generatedClass);
+//        EmitterMethodCreator.debugInspectClass(generatedClass);
+
+
         // Finally, we create a new 'SubroutineNode' object with the parsed data: the name, prototype, attributes, block,
         // `useTryCatch` flag, and token position.
         SubroutineNode subroutineNode = new SubroutineNode(subName, prototype, attributes, block, false, currentIndex);
