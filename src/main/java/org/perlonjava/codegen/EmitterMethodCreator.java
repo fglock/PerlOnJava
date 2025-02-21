@@ -88,6 +88,12 @@ public class EmitterMethodCreator implements Opcodes {
      */
     public static Class<?> createClassWithMethod(EmitterContext ctx, Node ast, boolean useTryCatch) {
 
+        byte[] classData = getBytecode(ctx, ast, useTryCatch);
+
+        return loadBytecode(ctx, classData);
+    }
+
+    public static byte[] getBytecode(EmitterContext ctx, Node ast, boolean useTryCatch) {
         String[] env = ctx.symbolTable.getVariableNames();
 
         // Create a ClassWriter with COMPUTE_FRAMES and COMPUTE_MAXS options for automatic frame and max
@@ -290,7 +296,10 @@ public class EmitterMethodCreator implements Opcodes {
 
             System.out.println(sw);
         }
+        return classData;
+    }
 
+    public static Class<?> loadBytecode(EmitterContext ctx, byte[] classData) {
         // Custom class loader to load generated classes.
         //
         // Note: This class loader is not cached to allow for garbage collection of

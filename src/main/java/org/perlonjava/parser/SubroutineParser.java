@@ -10,7 +10,6 @@ import org.perlonjava.runtime.*;
 import org.perlonjava.symbols.SymbolTable;
 
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -187,20 +186,97 @@ public class SubroutineParser {
             code.prototype = prototype;
             code.attributes = attributes;
 
-            blockASTtoCode(parser.ctx, block, code);
+            // Optimization - https://github.com/fglock/PerlOnJava/issues/8
+            // Prepare capture variables
+            Map<Integer, SymbolTable.SymbolEntry> outerVars = parser.ctx.symbolTable.getAllVisibleVariables();
+            ArrayList<Class> classList = new ArrayList<>();
+            ArrayList<Object> paramList = new ArrayList<>();
+            for (SymbolTable.SymbolEntry entry : outerVars.values()) {
+                if (!entry.name().equals("@_") && !entry.decl().isEmpty()) {
+                    String sigil = entry.name().substring(0, 1);
+                    String variableName = null;
+                    if (entry.decl().equals("our")) {
+                        variableName = NameNormalizer.normalizeVariableName(
+                                entry.name().substring(1),
+                                entry.perlPackage());
+                    } else {
+                        // "my" or "state" variable live in a special BEGIN package
+                        // Retrieve the variable id from the AST; create a new id if needed
+                        OperatorNode ast = entry.ast();
+                        if (ast.id == 0) {
+                            ast.id = EmitterMethodCreator.classCounter++;
+                        }
+                        variableName = NameNormalizer.normalizeVariableName(
+                                entry.name().substring(1),
+                                PersistentVariable.beginPackage(ast.id));
+                    }
+                    classList.add(
+                            switch (sigil) {
+                                case "$" -> RuntimeScalar.class;
+                                case "%" -> RuntimeHash.class;
+                                case "@" -> RuntimeArray.class;
+                                default -> throw new IllegalStateException("Unexpected value: " + sigil);
+                            }
+                    );
+                    paramList.add(
+                            switch (sigil) {
+                                case "$" -> GlobalVariable.getGlobalVariable(variableName);
+                                case "%" -> GlobalVariable.getGlobalHash(variableName);
+                                case "@" -> GlobalVariable.getGlobalArray(variableName);
+                                default -> throw new IllegalStateException("Unexpected value: " + sigil);
+                            }
+                    );
+                    // System.out.println("Capture " + entry.decl() + " " + entry.name() + " as " + variableName);
+                }
+            }
+            EmitterContext newCtx = new EmitterContext(
+                    new JavaClassInfo(),
+                    parser.ctx.symbolTable.snapShot(),
+                    null,
+                    null,
+                    RuntimeContextType.RUNTIME,
+                    true,
+                    parser.ctx.errorUtil,
+                    parser.ctx.compilerOptions,
+                    new RuntimeArray()
+            );
 
-//            // Create a Runnable to execute the subroutine creation
-//            Runnable subroutineCreationTask = () -> {
-//                // Clear the compilerThread once done
-//                code.compilerThread = null;
-//            };
-//
-//            // Start the subroutine creation in a new thread
-//            Thread subroutineThread = new Thread(subroutineCreationTask);
-//            subroutineThread.start();
-//
-//            // Set the compilerThread in the RuntimeCode instance
-//            code.compilerThread = subroutineThread;
+            byte[] classData = EmitterMethodCreator.getBytecode(newCtx, block, false);
+
+            // Create a Runnable to execute the subroutine creation
+            Runnable subroutineCreationTask = () -> {
+                // System.out.println("Creating subroutine " + fullName);
+                Class<?> generatedClass = EmitterMethodCreator.loadBytecode(newCtx, classData);
+
+                // System.out.println("Class " + generatedClass);
+                // EmitterMethodCreator.debugInspectClass(generatedClass);
+                try {
+                    Class<?>[] parameterTypes = classList.toArray(new Class<?>[0]);
+                    Constructor<?> constructor = generatedClass.getConstructor(parameterTypes);
+                    // System.out.println("Constructor: " + constructor);
+
+                    Object[] parameters = paramList.toArray();
+                    code.codeObject = constructor.newInstance(parameters);
+                    // System.out.println("Instance: " + instance);
+
+                    code.methodObject = generatedClass.getMethod("apply", RuntimeArray.class, int.class);
+                    // System.out.println("Method: " + method);
+
+                } catch (Exception e) {
+                    throw new PerlCompilerException("Subroutine error: " + e.getMessage());
+                }
+                // System.out.println("Subroutine " + fullName + " created");
+
+                // Clear the compilerThread once done
+                code.compilerThread = null;
+            };
+
+            // Start the subroutine creation in a new thread
+            Thread subroutineThread = new Thread(subroutineCreationTask);
+            subroutineThread.start();
+
+            // Set the compilerThread in the RuntimeCode instance
+            code.compilerThread = subroutineThread;
 
             // return an empty AST list
             return new ListNode(parser.tokenIndex);
@@ -218,86 +294,6 @@ public class SubroutineParser {
         // Finally, we return a new 'SubroutineNode' object with the parsed data: the name, prototype, attributes, block,
         // `useTryCatch` flag, and token position.
         return new SubroutineNode(subName, prototype, attributes, block, false, currentIndex);
-    }
-
-    private static void blockASTtoCode(EmitterContext ctx, BlockNode block, RuntimeCode code) {
-
-        // Optimization - https://github.com/fglock/PerlOnJava/issues/8
-        // Prepare capture variables
-        Map<Integer, SymbolTable.SymbolEntry> outerVars = ctx.symbolTable.getAllVisibleVariables();
-        ArrayList<Class> classList = new ArrayList<>();
-        ArrayList<Object> paramList = new ArrayList<>();
-        for (SymbolTable.SymbolEntry entry : outerVars.values()) {
-            if (!entry.name().equals("@_") && !entry.decl().isEmpty()) {
-                String sigil = entry.name().substring(0, 1);
-                String variableName = null;
-                if (entry.decl().equals("our")) {
-                    variableName = NameNormalizer.normalizeVariableName(
-                            entry.name().substring(1),
-                            entry.perlPackage());
-                } else {
-                    // "my" or "state" variable live in a special BEGIN package
-                    // Retrieve the variable id from the AST; create a new id if needed
-                    OperatorNode ast = entry.ast();
-                    if (ast.id == 0) {
-                        ast.id = EmitterMethodCreator.classCounter++;
-                    }
-                    variableName = NameNormalizer.normalizeVariableName(
-                            entry.name().substring(1),
-                            PersistentVariable.beginPackage(ast.id));
-                }
-                classList.add(
-                        switch (sigil) {
-                            case "$" -> RuntimeScalar.class;
-                            case "%" -> RuntimeHash.class;
-                            case "@" -> RuntimeArray.class;
-                            default -> throw new IllegalStateException("Unexpected value: " + sigil);
-                        }
-                );
-                paramList.add(
-                        switch (sigil) {
-                            case "$" -> GlobalVariable.getGlobalVariable(variableName);
-                            case "%" -> GlobalVariable.getGlobalHash(variableName);
-                            case "@" -> GlobalVariable.getGlobalArray(variableName);
-                            default -> throw new IllegalStateException("Unexpected value: " + sigil);
-                        }
-                );
-                // System.out.println("Capture " + entry.decl() + " " + entry.name() + " as " + variableName);
-            }
-        }
-        EmitterContext newCtx = new EmitterContext(
-                new JavaClassInfo(),
-                ctx.symbolTable.snapShot(),
-                null,
-                null,
-                RuntimeContextType.RUNTIME,
-                true,
-                ctx.errorUtil,
-                ctx.compilerOptions,
-                new RuntimeArray()
-        );
-        Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
-                newCtx,
-                block,
-                false
-        );
-        // System.out.println("Class " + generatedClass);
-        // EmitterMethodCreator.debugInspectClass(generatedClass);
-        try {
-            Class<?>[] parameterTypes = classList.toArray(new Class<?>[0]);
-            Constructor<?> constructor = generatedClass.getConstructor(parameterTypes);
-            // System.out.println("Constructor: " + constructor);
-
-            Object[] parameters = paramList.toArray();
-            code.codeObject = constructor.newInstance(parameters);
-            // System.out.println("Instance: " + instance);
-
-            code.methodObject = generatedClass.getMethod("apply", RuntimeArray.class, int.class);
-            // System.out.println("Method: " + method);
-
-        } catch (Exception e) {
-            throw new PerlCompilerException("Subroutine error: " + e.getMessage());
-        }
     }
 
 }
