@@ -230,6 +230,8 @@ The following areas are currently under active development to enhance the functi
   - Added `Time::HiRes`, `Benchmark` modules.
   - Added `/ee` regex modifier.
   - Added no strict `vars`, `subs`.
+  - Bytecode generation and class loading execute in a separate thread, for faster module loading.
+  - Use `int` instead of `enum` to reduce the memory overhead of scalar variables.
   - Planned release date: 2025-04-10
 
 ### v3.0.0 Milestone (Planned Release Date: 2026-04-10)
