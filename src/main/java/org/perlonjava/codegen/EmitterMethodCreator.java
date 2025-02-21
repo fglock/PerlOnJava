@@ -10,6 +10,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * EmitterMethodCreator is a utility class that uses the ASM library to dynamically generate Java
@@ -77,6 +78,8 @@ public class EmitterMethodCreator implements Opcodes {
         };
     }
 
+    private static final ReentrantLock lock = new ReentrantLock();
+
     /**
      * Creates a new class with a method based on the provided context, environment, and abstract
      * syntax tree (AST).
@@ -87,10 +90,15 @@ public class EmitterMethodCreator implements Opcodes {
      * @return The generated class.
      */
     public static Class<?> createClassWithMethod(EmitterContext ctx, Node ast, boolean useTryCatch) {
-
-        byte[] classData = getBytecode(ctx, ast, useTryCatch);
-
-        return loadBytecode(ctx, classData);
+        lock.lock();
+        Class<?> aClass;
+        try {
+            byte[] classData = getBytecode(ctx, ast, useTryCatch);
+            aClass = loadBytecode(ctx, classData);
+        } finally {
+            lock.unlock();
+        }
+        return aClass;
     }
 
     public static byte[] getBytecode(EmitterContext ctx, Node ast, boolean useTryCatch) {
