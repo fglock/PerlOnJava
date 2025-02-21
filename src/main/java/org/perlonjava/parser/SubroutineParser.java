@@ -246,21 +246,26 @@ public class SubroutineParser {
                     new RuntimeArray()
             );
 
+            byte[] classData = EmitterMethodCreator.getBytecode(newCtx, block, false);
+            // System.out.println("Creating subroutine " + fullName);
+            Class<?> generatedClass = EmitterMethodCreator.loadBytecode(newCtx, classData);
+
             // Create a Runnable to execute the subroutine creation
             Runnable subroutineCreationTask = () -> {
-                Class<?> generatedClass = null;
-                try {
-                    semaphore.acquire();
-                    byte[] classData = EmitterMethodCreator.getBytecode(newCtx, block, false);
-                    // System.out.println("Creating subroutine " + fullName);
-                    generatedClass = EmitterMethodCreator.loadBytecode(newCtx, classData);
 
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                } finally {
-                    // Release the semaphore
-                    semaphore.release();
-                }
+//                Class<?> generatedClass = null;
+//                try {
+//                    semaphore.acquire();
+//                    byte[] classData = EmitterMethodCreator.getBytecode(newCtx, block, false);
+//                    // System.out.println("Creating subroutine " + fullName);
+//                    generatedClass = EmitterMethodCreator.loadBytecode(newCtx, classData);
+//
+//                } catch (InterruptedException e) {
+//                    throw new RuntimeException(e);
+//                } finally {
+//                    // Release the semaphore
+//                    semaphore.release();
+//                }
 
                 // System.out.println("Class " + generatedClass);
                 // EmitterMethodCreator.debugInspectClass(generatedClass);
