@@ -13,6 +13,9 @@ import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 
 import static org.perlonjava.parser.PrototypeArgs.consumeArgsWithPrototype;
@@ -185,74 +188,87 @@ public class SubroutineParser {
         if (subName == null) {
             return handleAnonSub(parser, subName, prototype, attributes, block, currentIndex);
         } else {
-            // - register the subroutine in the namespace
-            String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
-            RuntimeCode code = (RuntimeCode) GlobalVariable.getGlobalCodeRef(fullName).value;
-            code.prototype = prototype;
-            code.attributes = attributes;
+            return handleNamedSub(parser, subName, prototype, attributes, block);
+        }
+    }
 
-            // Optimization - https://github.com/fglock/PerlOnJava/issues/8
-            // Prepare capture variables
-            Map<Integer, SymbolTable.SymbolEntry> outerVars = parser.ctx.symbolTable.getAllVisibleVariables();
-            ArrayList<Class> classList = new ArrayList<>();
-            ArrayList<Object> paramList = new ArrayList<>();
-            for (SymbolTable.SymbolEntry entry : outerVars.values()) {
-                if (!entry.name().equals("@_") && !entry.decl().isEmpty()) {
-                    String sigil = entry.name().substring(0, 1);
-                    String variableName = null;
-                    if (entry.decl().equals("our")) {
-                        variableName = NameNormalizer.normalizeVariableName(
-                                entry.name().substring(1),
-                                entry.perlPackage());
-                    } else {
-                        // "my" or "state" variable live in a special BEGIN package
-                        // Retrieve the variable id from the AST; create a new id if needed
-                        OperatorNode ast = entry.ast();
-                        if (ast.id == 0) {
-                            ast.id = EmitterMethodCreator.classCounter++;
-                        }
-                        variableName = NameNormalizer.normalizeVariableName(
-                                entry.name().substring(1),
-                                PersistentVariable.beginPackage(ast.id));
+    private static ListNode handleNamedSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block) {
+        // - register the subroutine in the namespace
+        String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+        RuntimeCode code = (RuntimeCode) GlobalVariable.getGlobalCodeRef(fullName).value;
+        code.prototype = prototype;
+        code.attributes = attributes;
+
+        // Optimization - https://github.com/fglock/PerlOnJava/issues/8
+        // Prepare capture variables
+        Map<Integer, SymbolTable.SymbolEntry> outerVars = parser.ctx.symbolTable.getAllVisibleVariables();
+        ArrayList<Class> classList = new ArrayList<>();
+        ArrayList<Object> paramList = new ArrayList<>();
+        for (SymbolTable.SymbolEntry entry : outerVars.values()) {
+            if (!entry.name().equals("@_") && !entry.decl().isEmpty()) {
+                String sigil = entry.name().substring(0, 1);
+                String variableName = null;
+                if (entry.decl().equals("our")) {
+                    // Normalize variable name for 'our' declarations
+                    variableName = NameNormalizer.normalizeVariableName(
+                            entry.name().substring(1),
+                            entry.perlPackage());
+                } else {
+                    // Handle "my" or "state" variables which live in a special BEGIN package
+                    // Retrieve the variable id from the AST; create a new id if needed
+                    OperatorNode ast = entry.ast();
+                    if (ast.id == 0) {
+                        ast.id = EmitterMethodCreator.classCounter++;
                     }
-                    classList.add(
-                            switch (sigil) {
-                                case "$" -> RuntimeScalar.class;
-                                case "%" -> RuntimeHash.class;
-                                case "@" -> RuntimeArray.class;
-                                default -> throw new IllegalStateException("Unexpected value: " + sigil);
-                            }
-                    );
-                    paramList.add(
-                            switch (sigil) {
-                                case "$" -> GlobalVariable.getGlobalVariable(variableName);
-                                case "%" -> GlobalVariable.getGlobalHash(variableName);
-                                case "@" -> GlobalVariable.getGlobalArray(variableName);
-                                default -> throw new IllegalStateException("Unexpected value: " + sigil);
-                            }
-                    );
-                    // System.out.println("Capture " + entry.decl() + " " + entry.name() + " as " + variableName);
+                    // Normalize variable name for 'my' or 'state' declarations
+                    variableName = NameNormalizer.normalizeVariableName(
+                            entry.name().substring(1),
+                            PersistentVariable.beginPackage(ast.id));
                 }
+                // Determine the class type based on the sigil
+                classList.add(
+                        switch (sigil) {
+                            case "$" -> RuntimeScalar.class;
+                            case "%" -> RuntimeHash.class;
+                            case "@" -> RuntimeArray.class;
+                            default -> throw new IllegalStateException("Unexpected value: " + sigil);
+                        }
+                );
+                // Add the corresponding global variable to the parameter list
+                paramList.add(
+                        switch (sigil) {
+                            case "$" -> GlobalVariable.getGlobalVariable(variableName);
+                            case "%" -> GlobalVariable.getGlobalHash(variableName);
+                            case "@" -> GlobalVariable.getGlobalArray(variableName);
+                            default -> throw new IllegalStateException("Unexpected value: " + sigil);
+                        }
+                );
+                // System.out.println("Capture " + entry.decl() + " " + entry.name() + " as " + variableName);
             }
-            EmitterContext newCtx = new EmitterContext(
-                    new JavaClassInfo(),
-                    parser.ctx.symbolTable.snapShot(),
-                    null,
-                    null,
-                    RuntimeContextType.RUNTIME,
-                    true,
-                    parser.ctx.errorUtil,
-                    parser.ctx.compilerOptions,
-                    new RuntimeArray()
-            );
+        }
+        // Create a new EmitterContext for generating bytecode
+        EmitterContext newCtx = new EmitterContext(
+                new JavaClassInfo(),
+                parser.ctx.symbolTable.snapShot(),
+                null,
+                null,
+                RuntimeContextType.RUNTIME,
+                true,
+                parser.ctx.errorUtil,
+                parser.ctx.compilerOptions,
+                new RuntimeArray()
+        );
 
-            byte[] classData = EmitterMethodCreator.getBytecode(newCtx, block, false);
-            // System.out.println("Creating subroutine " + fullName);
-            Class<?> generatedClass = EmitterMethodCreator.loadBytecode(newCtx, classData);
+        // Generate bytecode for the subroutine block
+        byte[] classData = EmitterMethodCreator.getBytecode(newCtx, block, false);
+        // System.out.println("Creating subroutine " + fullName);
+        // Load the generated bytecode into a Class object
+        Class<?> generatedClass = EmitterMethodCreator.loadBytecode(newCtx, classData);
 
-            // Create a Runnable to execute the subroutine creation
-            Runnable subroutineCreationTask = () -> {
+        // Create a Runnable to execute the subroutine creation
+        Runnable subroutineCreationTask = () -> {
 
+            // The following commented-out code is a work in progress for handling concurrency
 //                Class<?> generatedClass = null;
 //                try {
 //                    semaphore.acquire();
@@ -267,39 +283,41 @@ public class SubroutineParser {
 //                    semaphore.release();
 //                }
 
-                // System.out.println("Class " + generatedClass);
-                // EmitterMethodCreator.debugInspectClass(generatedClass);
-                try {
-                    Class<?>[] parameterTypes = classList.toArray(new Class<?>[0]);
-                    Constructor<?> constructor = generatedClass.getConstructor(parameterTypes);
-                    // System.out.println("Constructor: " + constructor);
+            // System.out.println("Class " + generatedClass);
+            // EmitterMethodCreator.debugInspectClass(generatedClass);
+            try {
+                // Prepare constructor with the captured variable types
+                Class<?>[] parameterTypes = classList.toArray(new Class<?>[0]);
+                Constructor<?> constructor = generatedClass.getConstructor(parameterTypes);
+                // System.out.println("Constructor: " + constructor);
 
-                    Object[] parameters = paramList.toArray();
-                    code.codeObject = constructor.newInstance(parameters);
-                    // System.out.println("Instance: " + instance);
+                // Instantiate the subroutine with the captured variables
+                Object[] parameters = paramList.toArray();
+                code.codeObject = constructor.newInstance(parameters);
+                // System.out.println("Instance: " + instance);
 
-                    code.methodObject = generatedClass.getMethod("apply", RuntimeArray.class, int.class);
-                    // System.out.println("Method: " + method);
+                // Retrieve the 'apply' method from the generated class
+                code.methodObject = generatedClass.getMethod("apply", RuntimeArray.class, int.class);
+                // System.out.println("Method: " + method);
 
-                } catch (Exception e) {
-                    throw new PerlCompilerException("Subroutine error: " + e.getMessage());
-                }
-                // System.out.println("Subroutine " + fullName + " created");
+            } catch (Exception e) {
+                // Handle any exceptions during subroutine creation
+                throw new PerlCompilerException("Subroutine error: " + e.getMessage());
+            }
+            // System.out.println("Subroutine " + fullName + " created");
 
-                // Clear the compilerThread once done
-                code.compilerThread = null;
-            };
+            // Clear the compilerThread once done
+            code.compilerThread = null;
+        };
 
-            // Start the subroutine creation in a new thread
-            Thread subroutineThread = new Thread(subroutineCreationTask);
-            subroutineThread.start();
+        // Use an ExecutorService with virtual threads
+        ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+        Future<?> future = executor.submit(subroutineCreationTask);
+        executor.shutdown();
+        code.compilerThread = future;
 
-            // Set the compilerThread in the RuntimeCode instance
-            code.compilerThread = subroutineThread;
-
-            // return an empty AST list
-            return new ListNode(parser.tokenIndex);
-        }
+        // return an empty AST list
+        return new ListNode(parser.tokenIndex);
     }
 
     private static SubroutineNode handleAnonSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, int currentIndex) {
