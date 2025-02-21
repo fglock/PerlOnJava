@@ -181,14 +181,26 @@ public class SubroutineParser {
         if (subName == null) {
             return handleAnonSub(parser, subName, prototype, attributes, block, currentIndex);
         } else {
-            RuntimeCode codeFrom = blockASTtoCode(parser.ctx, block);
-
             // - register the subroutine in the namespace
             String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
             RuntimeCode code = (RuntimeCode) GlobalVariable.getGlobalCodeRef(fullName).value;
-            RuntimeCode.copy(code, codeFrom);
             code.prototype = prototype;
             code.attributes = attributes;
+
+            blockASTtoCode(parser.ctx, block, code);
+
+//            // Create a Runnable to execute the subroutine creation
+//            Runnable subroutineCreationTask = () -> {
+//                // Clear the compilerThread once done
+//                code.compilerThread = null;
+//            };
+//
+//            // Start the subroutine creation in a new thread
+//            Thread subroutineThread = new Thread(subroutineCreationTask);
+//            subroutineThread.start();
+//
+//            // Set the compilerThread in the RuntimeCode instance
+//            code.compilerThread = subroutineThread;
 
             // return an empty AST list
             return new ListNode(parser.tokenIndex);
@@ -208,7 +220,7 @@ public class SubroutineParser {
         return new SubroutineNode(subName, prototype, attributes, block, false, currentIndex);
     }
 
-    private static RuntimeCode blockASTtoCode(EmitterContext ctx, BlockNode block) {
+    private static void blockASTtoCode(EmitterContext ctx, BlockNode block, RuntimeCode code) {
 
         // Optimization - https://github.com/fglock/PerlOnJava/issues/8
         // Prepare capture variables
@@ -277,13 +289,12 @@ public class SubroutineParser {
             // System.out.println("Constructor: " + constructor);
 
             Object[] parameters = paramList.toArray();
-            Object instance = constructor.newInstance(parameters);
+            code.codeObject = constructor.newInstance(parameters);
             // System.out.println("Instance: " + instance);
 
-            Method method = generatedClass.getMethod("apply", RuntimeArray.class, int.class);
+            code.methodObject = generatedClass.getMethod("apply", RuntimeArray.class, int.class);
             // System.out.println("Method: " + method);
 
-            return new RuntimeCode(method, instance);
         } catch (Exception e) {
             throw new PerlCompilerException("Subroutine error: " + e.getMessage());
         }
