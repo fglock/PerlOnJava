@@ -14,6 +14,8 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
@@ -57,7 +59,7 @@ public class RuntimeCode implements RuntimeScalarReference {
     public RuntimeList constantValue;
 
     // Field to hold the thread compiling this code
-    public Thread compilerThread;
+    public Future<?> compilerThread;
 
     /**
      * Constructs a RuntimeCode instance with the specified prototype and attributes.
@@ -450,9 +452,11 @@ public class RuntimeCode implements RuntimeScalarReference {
             // Wait for the compilerThread to finish if it exists
             if (this.compilerThread != null) {
                 try {
-                    this.compilerThread.join(); // Wait for the thread to finish
+                    this.compilerThread.get(); // Wait for the task to finish
                 } catch (InterruptedException e) {
                     throw new PerlCompilerException("Thread interrupted while waiting for subroutine to compile: " + e.getMessage());
+                } catch (ExecutionException e) {
+                    throw new PerlCompilerException("Exception occurred during subroutine compilation: " + e.getCause().getMessage());
                 }
             }
 
@@ -479,9 +483,11 @@ public class RuntimeCode implements RuntimeScalarReference {
             // Wait for the compilerThread to finish if it exists
             if (this.compilerThread != null) {
                 try {
-                    this.compilerThread.join(); // Wait for the thread to finish
+                    this.compilerThread.get(); // Wait for the task to finish
                 } catch (InterruptedException e) {
                     throw new PerlCompilerException("Thread interrupted while waiting for subroutine to compile: " + e.getMessage());
+                } catch (ExecutionException e) {
+                    throw new PerlCompilerException("Exception occurred during subroutine compilation: " + e.getCause().getMessage());
                 }
             }
 
