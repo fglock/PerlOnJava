@@ -447,6 +447,15 @@ public class RuntimeCode implements RuntimeScalarReference {
             return new RuntimeList(constantValue);
         }
         try {
+            // Wait for the compilerThread to finish if it exists
+            if (this.compilerThread != null) {
+                try {
+                    this.compilerThread.join(); // Wait for the thread to finish
+                } catch (InterruptedException e) {
+                    throw new PerlCompilerException("Thread interrupted while waiting for subroutine to compile: " + e.getMessage());
+                }
+            }
+
             return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
         } catch (NullPointerException e) {
             throw new PerlCompilerException("Undefined subroutine called at ");

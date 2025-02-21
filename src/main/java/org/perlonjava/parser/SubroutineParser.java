@@ -13,11 +13,16 @@ import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
 
 import static org.perlonjava.parser.PrototypeArgs.consumeArgsWithPrototype;
 import static org.perlonjava.parser.SignatureParser.parseSignature;
 
 public class SubroutineParser {
+
+    // Create a static semaphore with 1 permit
+    private static final Semaphore semaphore = new Semaphore(1);
+
     /**
      * Parses a subroutine call.
      *
@@ -241,12 +246,21 @@ public class SubroutineParser {
                     new RuntimeArray()
             );
 
-            byte[] classData = EmitterMethodCreator.getBytecode(newCtx, block, false);
-
             // Create a Runnable to execute the subroutine creation
             Runnable subroutineCreationTask = () -> {
-                // System.out.println("Creating subroutine " + fullName);
-                Class<?> generatedClass = EmitterMethodCreator.loadBytecode(newCtx, classData);
+                Class<?> generatedClass = null;
+                try {
+                    semaphore.acquire();
+                    byte[] classData = EmitterMethodCreator.getBytecode(newCtx, block, false);
+                    // System.out.println("Creating subroutine " + fullName);
+                    generatedClass = EmitterMethodCreator.loadBytecode(newCtx, classData);
+
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                } finally {
+                    // Release the semaphore
+                    semaphore.release();
+                }
 
                 // System.out.println("Class " + generatedClass);
                 // EmitterMethodCreator.debugInspectClass(generatedClass);
