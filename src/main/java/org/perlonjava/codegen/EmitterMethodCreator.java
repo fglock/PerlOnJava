@@ -78,7 +78,8 @@ public class EmitterMethodCreator implements Opcodes {
         };
     }
 
-    private static final ReentrantLock lock = new ReentrantLock();
+    private static final ReentrantLock lockCodegen = new ReentrantLock();
+    private static final ReentrantLock lockLoad = new ReentrantLock();
 
     /**
      * Creates a new class with a method based on the provided context, environment, and abstract
@@ -90,13 +91,20 @@ public class EmitterMethodCreator implements Opcodes {
      * @return The generated class.
      */
     public static Class<?> createClassWithMethod(EmitterContext ctx, Node ast, boolean useTryCatch) {
-        lock.lock();
+        byte[] classData;
+        lockCodegen.lock();
+        try {
+            classData = getBytecode(ctx, ast, useTryCatch);
+        } finally {
+            lockCodegen.unlock();
+        }
+
+        lockLoad.lock();
         Class<?> aClass;
         try {
-            byte[] classData = getBytecode(ctx, ast, useTryCatch);
             aClass = loadBytecode(ctx, classData);
         } finally {
-            lock.unlock();
+            lockLoad.unlock();
         }
         return aClass;
     }
