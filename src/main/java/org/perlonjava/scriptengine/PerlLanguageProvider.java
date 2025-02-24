@@ -195,8 +195,7 @@ public class PerlLanguageProvider {
         Constructor<?> constructor = generatedClass.getConstructor();
         Object instance = constructor.newInstance();
 
-        CallSite callSite = new ConstantCallSite(RuntimeCode.lookup.findVirtual(generatedClass, "apply", RuntimeCode.methodType));
-        MethodHandle invoker = callSite.dynamicInvoker();
+        MethodHandle invoker = RuntimeCode.lookup.findVirtual(generatedClass, "apply", RuntimeCode.methodType);
 
         RuntimeList result;
         try {
