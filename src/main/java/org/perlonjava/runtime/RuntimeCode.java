@@ -10,6 +10,9 @@ import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.parser.Parser;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -29,6 +32,10 @@ import static org.perlonjava.runtime.SpecialBlock.runUnitcheckBlocks;
  */
 public class RuntimeCode implements RuntimeScalarReference {
 
+    // Lookup object for performing method handle operations
+    public static final MethodHandles.Lookup lookup = MethodHandles.lookup();
+    public static MethodType methodType = MethodType.methodType(RuntimeList.class, RuntimeArray.class, int.class);
+
     // Cache for memoization of evalStringHelper results
     private static final int CLASS_CACHE_SIZE = 100;
     private static final Map<String, Class<?>> evalCache = new LinkedHashMap<String, Class<?>>(CLASS_CACHE_SIZE, 0.75f, true) {
@@ -44,6 +51,7 @@ public class RuntimeCode implements RuntimeScalarReference {
 
     // Method object representing the compiled subroutine
     public Method methodObject;
+    public MethodHandle methodHandle;
     // Code object instance used during execution
     public Object codeObject;
     // Prototype of the subroutine
@@ -456,7 +464,10 @@ public class RuntimeCode implements RuntimeScalarReference {
                     this.compilerSupplier.get(); // Wait for the task to finish
             }
 
-            return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
+            if (methodObject != null) {
+                return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
+            }
+            return (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
         } catch (NullPointerException e) {
             throw new PerlCompilerException("Undefined subroutine called at ");
         } catch (InvocationTargetException e) {
@@ -465,7 +476,7 @@ public class RuntimeCode implements RuntimeScalarReference {
                 throw new RuntimeException(targetException);
             }
             throw (RuntimeException) targetException;
-        } catch (Exception e) {
+        } catch (Throwable e) {
             throw new RuntimeException(e);
         }
     }
@@ -482,7 +493,11 @@ public class RuntimeCode implements RuntimeScalarReference {
                     this.compilerSupplier.get(); // Wait for the task to finish
             }
 
-            return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
+            if (methodObject != null) {
+                return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
+            }
+            return (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
+
         } catch (NullPointerException e) {
             throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
         } catch (InvocationTargetException e) {
@@ -491,7 +506,7 @@ public class RuntimeCode implements RuntimeScalarReference {
                 throw new RuntimeException(targetException);
             }
             throw (RuntimeException) targetException;
-        } catch (Exception e) {
+        } catch (Throwable e) {
             throw new RuntimeException(e);
         }
     }
