@@ -441,7 +441,7 @@ public class RuntimeCode implements RuntimeScalarReference {
     }
 
     public boolean defined() {
-        return this.methodObject != null || this.constantValue != null || this.compilerSupplier != null;
+        return this.methodObject != null || this.constantValue != null || this.compilerSupplier != null || this.methodHandle != null;
     }
 
     /**

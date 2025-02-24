@@ -9,6 +9,7 @@ import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.*;
 import org.perlonjava.symbols.SymbolTable;
 
+import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.List;
@@ -275,8 +276,7 @@ public class SubroutineParser {
                     code.codeObject = constructor.newInstance(parameters);
 
                     // Retrieve the 'apply' method from the generated class
-                    code.methodObject = generatedClass.getMethod("apply", RuntimeArray.class, int.class);
-
+                    code.methodHandle = RuntimeCode.lookup.findVirtual(generatedClass, "apply", RuntimeCode.methodType);
                 } catch (Exception e) {
                     // Handle any exceptions during subroutine creation
                     throw new PerlCompilerException("Subroutine error: " + e.getMessage());
