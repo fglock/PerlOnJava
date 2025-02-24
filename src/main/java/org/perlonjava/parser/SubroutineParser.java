@@ -17,6 +17,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
+import java.util.function.Supplier;
 
 import static org.perlonjava.parser.PrototypeArgs.consumeArgsWithPrototype;
 import static org.perlonjava.parser.SignatureParser.parseSignature;
@@ -259,43 +260,36 @@ public class SubroutineParser {
                 new RuntimeArray()
         );
 
-        // Create a Runnable to execute the subroutine creation
-        Runnable subroutineCreationTask = () -> {
-            // Generate bytecode and load into a Class object
-            Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(newCtx, block, false);
-            // System.out.println("Class " + generatedClass);
-            // EmitterMethodCreator.debugInspectClass(generatedClass);
+        // Encapsulate the subroutine creation task in a Supplier
+        Supplier<Void> subroutineCreationTaskSupplier = () -> {
+                // Generate bytecode and load into a Class object
+                Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(newCtx, block, false);
 
-            try {
-                // Prepare constructor with the captured variable types
-                Class<?>[] parameterTypes = classList.toArray(new Class<?>[0]);
-                Constructor<?> constructor = generatedClass.getConstructor(parameterTypes);
-                // System.out.println("Constructor: " + constructor);
+                try {
+                    // Prepare constructor with the captured variable types
+                    Class<?>[] parameterTypes = classList.toArray(new Class<?>[0]);
+                    Constructor<?> constructor = generatedClass.getConstructor(parameterTypes);
 
-                // Instantiate the subroutine with the captured variables
-                Object[] parameters = paramList.toArray();
-                code.codeObject = constructor.newInstance(parameters);
-                // System.out.println("Instance: " + instance);
+                    // Instantiate the subroutine with the captured variables
+                    Object[] parameters = paramList.toArray();
+                    code.codeObject = constructor.newInstance(parameters);
 
-                // Retrieve the 'apply' method from the generated class
-                code.methodObject = generatedClass.getMethod("apply", RuntimeArray.class, int.class);
-                // System.out.println("Method: " + method);
+                    // Retrieve the 'apply' method from the generated class
+                    code.methodObject = generatedClass.getMethod("apply", RuntimeArray.class, int.class);
 
-            } catch (Exception e) {
-                // Handle any exceptions during subroutine creation
-                throw new PerlCompilerException("Subroutine error: " + e.getMessage());
-            }
-            // System.out.println("Subroutine " + fullName + " created");
+                } catch (Exception e) {
+                    // Handle any exceptions during subroutine creation
+                    throw new PerlCompilerException("Subroutine error: " + e.getMessage());
+                }
 
-            // Clear the compilerThread once done
-            code.compilerThread = null;
+                // Clear the compilerThread once done
+                code.compilerSupplier = null;
+                return null;
         };
 
-        // Use an ExecutorService with virtual threads
-        ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
-        Future<?> future = executor.submit(subroutineCreationTask);
-        executor.shutdown();
-        code.compilerThread = future;
+        // Store the supplier for later execution
+        code.compilerSupplier = subroutineCreationTaskSupplier;
+
 
         // return an empty AST list
         return new ListNode(parser.tokenIndex);
