@@ -16,6 +16,7 @@ import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.function.Supplier;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
@@ -59,7 +60,7 @@ public class RuntimeCode implements RuntimeScalarReference {
     public RuntimeList constantValue;
 
     // Field to hold the thread compiling this code
-    public Future<?> compilerThread;
+    public Supplier<Void> compilerSupplier;
 
     /**
      * Constructs a RuntimeCode instance with the specified prototype and attributes.
@@ -432,7 +433,7 @@ public class RuntimeCode implements RuntimeScalarReference {
     }
 
     public boolean defined() {
-        return this.methodObject != null || this.constantValue != null || this.compilerThread != null;
+        return this.methodObject != null || this.constantValue != null || this.compilerSupplier != null;
     }
 
     /**
@@ -450,14 +451,9 @@ public class RuntimeCode implements RuntimeScalarReference {
         }
         try {
             // Wait for the compilerThread to finish if it exists
-            if (this.compilerThread != null) {
-                try {
-                    this.compilerThread.get(); // Wait for the task to finish
-                } catch (InterruptedException e) {
-                    throw new PerlCompilerException("Thread interrupted while waiting for subroutine to compile: " + e.getMessage());
-                } catch (ExecutionException e) {
-                    throw new PerlCompilerException("Exception occurred during subroutine compilation: " + e.getCause().getMessage());
-                }
+            if (this.compilerSupplier != null) {
+                    // System.out.println("Waiting for compiler thread to finish...");
+                    this.compilerSupplier.get(); // Wait for the task to finish
             }
 
             return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
@@ -481,14 +477,9 @@ public class RuntimeCode implements RuntimeScalarReference {
         }
         try {
             // Wait for the compilerThread to finish if it exists
-            if (this.compilerThread != null) {
-                try {
-                    this.compilerThread.get(); // Wait for the task to finish
-                } catch (InterruptedException e) {
-                    throw new PerlCompilerException("Thread interrupted while waiting for subroutine to compile: " + e.getMessage());
-                } catch (ExecutionException e) {
-                    throw new PerlCompilerException("Exception occurred during subroutine compilation: " + e.getCause().getMessage());
-                }
+            if (this.compilerSupplier != null) {
+                    // System.out.println("Waiting for compiler thread to finish...");
+                    this.compilerSupplier.get(); // Wait for the task to finish
             }
 
             return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
