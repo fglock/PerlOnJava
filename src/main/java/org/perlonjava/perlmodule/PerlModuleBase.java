@@ -2,6 +2,7 @@ package org.perlonjava.perlmodule;
 
 import org.perlonjava.runtime.*;
 
+import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Method;
 
 /**
@@ -49,15 +50,13 @@ public abstract class PerlModuleBase {
      * @throws NoSuchMethodException If the method does not exist.
      */
     protected void registerMethod(String perlMethodName, String javaMethodName, String signature) throws NoSuchMethodException {
-        // Create a new RuntimeScalar instance
-        RuntimeScalar instance = new RuntimeScalar();
 
         // Retrieve the method from the current class using the Java method name
         Method method = this.getClass().getMethod(javaMethodName, RuntimeArray.class, int.class);
 
         // Set the method as a global code reference in the Perl namespace using the Perl method name
         GlobalVariable.getGlobalCodeRef(moduleName + "::" + perlMethodName).set(new RuntimeScalar(
-                new RuntimeCode(method, instance, signature)));
+                new RuntimeCode(method, this, signature)));
     }
 
     /**
@@ -112,18 +111,18 @@ public abstract class PerlModuleBase {
      * from the Exporter class.
      */
     protected void initializeExporter() {
-        // Imports the import() method from Exporter class
-        RuntimeScalar instance = new RuntimeScalar();
-        Method method = null;
         try {
-            // Retrieve the importSymbols method from the Exporter class
-            method = Exporter.class.getMethod("importSymbols", RuntimeArray.class, int.class);
-        } catch (NoSuchMethodException e) {
+            // Imports the import() method from Exporter class
+            Exporter instance = new Exporter();
+
+            // Retrieve the 'importSymbols' method from the Exporter class
+            MethodHandle methodHandle = RuntimeCode.lookup.findVirtual(Exporter.class, "importSymbols", RuntimeCode.methodType);
+
+            // Set the import method as a global code reference in the Perl namespace
+            GlobalVariable.getGlobalCodeRef(moduleName + "::import").set(new RuntimeScalar(
+                    new RuntimeCode(methodHandle, instance, null)));
+        } catch (NoSuchMethodException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
-
-        // Set the import method as a global code reference in the Perl namespace
-        GlobalVariable.getGlobalCodeRef(moduleName + "::import").set(new RuntimeScalar(
-                new RuntimeCode(method, instance, null)));
     }
 }
