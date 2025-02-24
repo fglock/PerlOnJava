@@ -40,8 +40,6 @@ import static org.perlonjava.runtime.SpecialBlock.*;
  */
 public class PerlLanguageProvider {
 
-    // Lookup object for performing method handle operations
-    private static final MethodHandles.Lookup lookup = MethodHandles.lookup();
     private static boolean globalInitialized = false;
 
     public static void resetAll() {
@@ -197,8 +195,7 @@ public class PerlLanguageProvider {
         Constructor<?> constructor = generatedClass.getConstructor();
         Object instance = constructor.newInstance();
 
-        MethodType methodType = MethodType.methodType(RuntimeList.class, RuntimeArray.class, int.class);
-        CallSite callSite = new ConstantCallSite(lookup.findVirtual(generatedClass, "apply", methodType));
+        CallSite callSite = new ConstantCallSite(RuntimeCode.lookup.findVirtual(generatedClass, "apply", RuntimeCode.methodType));
         MethodHandle invoker = callSite.dynamicInvoker();
 
         RuntimeList result;
