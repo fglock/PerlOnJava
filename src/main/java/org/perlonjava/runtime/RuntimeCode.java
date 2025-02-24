@@ -8,6 +8,7 @@ import org.perlonjava.codegen.JavaClassInfo;
 import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.parser.Parser;
+import org.perlonjava.perlmodule.Exporter;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.lang.invoke.MethodHandle;
@@ -228,12 +229,12 @@ public class RuntimeCode implements RuntimeScalarReference {
 
         // Get the 'apply' method from the class.
         // This method takes RuntimeArray and RuntimeContextType as parameters.
-        Method mm = clazz.getMethod("apply", RuntimeArray.class, int.class);
+        MethodHandle methodHandle = RuntimeCode.lookup.findVirtual(clazz, "apply", RuntimeCode.methodType);
 
         // Wrap the method and the code object in a RuntimeCode instance
         // This allows us to store both the method and the object it belongs to
         // Create a new RuntimeScalar instance to hold the CODE object
-        RuntimeScalar codeRef = new RuntimeScalar(new RuntimeCode(mm, codeObject, prototype));
+        RuntimeScalar codeRef = new RuntimeScalar(new RuntimeCode(methodHandle, codeObject, prototype));
 
         // Set the __SUB__ instance field
         Field field = clazz.getDeclaredField("__SUB__");
