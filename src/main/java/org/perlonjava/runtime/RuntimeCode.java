@@ -39,11 +39,18 @@ public class RuntimeCode implements RuntimeScalarReference {
             return size() > CLASS_CACHE_SIZE;
         }
     };
+    // Cache for method handles with eviction policy
+    private static final int METHOD_HANDLE_CACHE_SIZE = 100;
+    private static final Map<Class<?>, MethodHandle> methodHandleCache = new LinkedHashMap<Class<?>, MethodHandle>(METHOD_HANDLE_CACHE_SIZE, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<Class<?>, MethodHandle> eldest) {
+            return size() > METHOD_HANDLE_CACHE_SIZE;
+        }
+    };
     public static MethodType methodType = MethodType.methodType(RuntimeList.class, RuntimeArray.class, int.class);
     // Temporary storage for anonymous subroutines and eval string compiler context
     public static HashMap<String, Class<?>> anonSubs = new HashMap<>(); // temp storage for makeCodeObject()
     public static HashMap<String, EmitterContext> evalContext = new HashMap<>(); // storage for eval string compiler context
-
     // Method object representing the compiled subroutine
     public MethodHandle methodHandle;
     public boolean isStatic;
@@ -53,15 +60,12 @@ public class RuntimeCode implements RuntimeScalarReference {
     public String prototype;
     // Attributes associated with the subroutine
     public List<String> attributes = new ArrayList<>();
-
     // State variables
     public Map<String, Boolean> stateVariableInitialized = new HashMap<>();
     public Map<String, RuntimeScalar> stateVariable = new HashMap<>();
     public Map<String, RuntimeArray> stateArray = new HashMap<>();
     public Map<String, RuntimeHash> stateHash = new HashMap<>();
-
     public RuntimeList constantValue;
-
     // Field to hold the thread compiling this code
     public Supplier<Void> compilerSupplier;
 
@@ -198,9 +202,18 @@ public class RuntimeCode implements RuntimeScalarReference {
         // Retrieve the class of the provided code object
         Class<?> clazz = codeObject.getClass();
 
-        // Get the 'apply' method from the class.
-        // This method takes RuntimeArray and RuntimeContextType as parameters.
-        MethodHandle methodHandle = RuntimeCode.lookup.findVirtual(clazz, "apply", RuntimeCode.methodType);
+        // Check if the method handle is already cached
+        MethodHandle methodHandle;
+        synchronized (methodHandleCache) {
+            if (methodHandleCache.containsKey(clazz)) {
+                methodHandle = methodHandleCache.get(clazz);
+            } else {
+                // Get the 'apply' method from the class.
+                methodHandle = RuntimeCode.lookup.findVirtual(clazz, "apply", RuntimeCode.methodType);
+                // Cache the method handle
+                methodHandleCache.put(clazz, methodHandle);
+            }
+        }
 
         // Wrap the method and the code object in a RuntimeCode instance
         // This allows us to store both the method and the object it belongs to
