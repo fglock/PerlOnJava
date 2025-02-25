@@ -44,7 +44,7 @@ public class Exporter extends PerlModuleBase {
      * @return A RuntimeList representing the result of the import operation.
      * @throws PerlCompilerException if there are issues with the import process.
      */
-    public RuntimeList importSymbols(RuntimeArray args, int ctx) {
+    public static RuntimeList importSymbols(RuntimeArray args, int ctx) {
         // MyPackage->import(@what_to_export)
         if (args.size() < 1) {
             throw new PerlCompilerException("Not enough arguments for import");

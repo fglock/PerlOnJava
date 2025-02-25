@@ -11,7 +11,7 @@ import org.perlonjava.parser.Parser;
 import org.perlonjava.runtime.*;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
-import java.lang.invoke.*;
+import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Constructor;
 import java.util.List;
 
