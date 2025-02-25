@@ -51,6 +51,7 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::\\").set(compilerOptions.outputRecordSeparator);    // initialize $\
         GlobalVariable.getGlobalVariable("main::/").set(compilerOptions.inputRecordSeparator); // initialize $/
         GlobalVariable.getGlobalVariable("main::$").set(ProcessHandle.current().pid()); // initialize `$$` to process id
+        GlobalVariable.getGlobalVariable("main::?");
         GlobalVariable.getGlobalVariable("main::0").set(compilerOptions.fileName);
         GlobalVariable.getGlobalVariable(GLOBAL_PHASE).set(""); // ${^GLOBAL_PHASE}
         GlobalVariable.getGlobalVariable(TAINT); // ${^TAINT}
