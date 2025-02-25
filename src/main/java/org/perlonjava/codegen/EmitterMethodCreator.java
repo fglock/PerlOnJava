@@ -10,7 +10,6 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * EmitterMethodCreator is a utility class that uses the ASM library to dynamically generate Java

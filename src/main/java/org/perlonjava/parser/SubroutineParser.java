@@ -9,14 +9,10 @@ import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.*;
 import org.perlonjava.symbols.SymbolTable;
 
-import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.function.Supplier;
 
@@ -263,28 +259,28 @@ public class SubroutineParser {
 
         // Encapsulate the subroutine creation task in a Supplier
         Supplier<Void> subroutineCreationTaskSupplier = () -> {
-                // Generate bytecode and load into a Class object
-                Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(newCtx, block, false);
+            // Generate bytecode and load into a Class object
+            Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(newCtx, block, false);
 
-                try {
-                    // Prepare constructor with the captured variable types
-                    Class<?>[] parameterTypes = classList.toArray(new Class<?>[0]);
-                    Constructor<?> constructor = generatedClass.getConstructor(parameterTypes);
+            try {
+                // Prepare constructor with the captured variable types
+                Class<?>[] parameterTypes = classList.toArray(new Class<?>[0]);
+                Constructor<?> constructor = generatedClass.getConstructor(parameterTypes);
 
-                    // Instantiate the subroutine with the captured variables
-                    Object[] parameters = paramList.toArray();
-                    code.codeObject = constructor.newInstance(parameters);
+                // Instantiate the subroutine with the captured variables
+                Object[] parameters = paramList.toArray();
+                code.codeObject = constructor.newInstance(parameters);
 
-                    // Retrieve the 'apply' method from the generated class
-                    code.methodHandle = RuntimeCode.lookup.findVirtual(generatedClass, "apply", RuntimeCode.methodType);
-                } catch (Exception e) {
-                    // Handle any exceptions during subroutine creation
-                    throw new PerlCompilerException("Subroutine error: " + e.getMessage());
-                }
+                // Retrieve the 'apply' method from the generated class
+                code.methodHandle = RuntimeCode.lookup.findVirtual(generatedClass, "apply", RuntimeCode.methodType);
+            } catch (Exception e) {
+                // Handle any exceptions during subroutine creation
+                throw new PerlCompilerException("Subroutine error: " + e.getMessage());
+            }
 
-                // Clear the compilerThread once done
-                code.compilerSupplier = null;
-                return null;
+            // Clear the compilerThread once done
+            code.compilerSupplier = null;
+            return null;
         };
 
         // Store the supplier for later execution

@@ -8,7 +8,6 @@ import org.perlonjava.codegen.JavaClassInfo;
 import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.parser.Parser;
-import org.perlonjava.perlmodule.Exporter;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.lang.invoke.MethodHandle;
@@ -16,10 +15,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.*;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 import java.util.function.Supplier;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
@@ -35,8 +31,6 @@ public class RuntimeCode implements RuntimeScalarReference {
 
     // Lookup object for performing method handle operations
     public static final MethodHandles.Lookup lookup = MethodHandles.lookup();
-    public static MethodType methodType = MethodType.methodType(RuntimeList.class, RuntimeArray.class, int.class);
-
     // Cache for memoization of evalStringHelper results
     private static final int CLASS_CACHE_SIZE = 100;
     private static final Map<String, Class<?>> evalCache = new LinkedHashMap<String, Class<?>>(CLASS_CACHE_SIZE, 0.75f, true) {
@@ -45,14 +39,14 @@ public class RuntimeCode implements RuntimeScalarReference {
             return size() > CLASS_CACHE_SIZE;
         }
     };
-
+    public static MethodType methodType = MethodType.methodType(RuntimeList.class, RuntimeArray.class, int.class);
     // Temporary storage for anonymous subroutines and eval string compiler context
     public static HashMap<String, Class<?>> anonSubs = new HashMap<>(); // temp storage for makeCodeObject()
     public static HashMap<String, EmitterContext> evalContext = new HashMap<>(); // storage for eval string compiler context
 
     // Method object representing the compiled subroutine
-    public Method methodObject;
     public MethodHandle methodHandle;
+    public boolean isStatic;
     // Code object instance used during execution
     public Object codeObject;
     // Prototype of the subroutine
@@ -82,30 +76,6 @@ public class RuntimeCode implements RuntimeScalarReference {
         this.attributes = attributes;
     }
 
-    /**
-     * Constructs a RuntimeCode instance with the specified method object and code object.
-     *
-     * @param methodObject the method object representing the compiled subroutine
-     * @param codeObject   the code object instance used during execution
-     */
-    public RuntimeCode(Method methodObject, Object codeObject) {
-        this.methodObject = methodObject;
-        this.codeObject = codeObject;
-    }
-
-    /**
-     * Constructs a RuntimeCode instance with the specified method object, code object, and prototype.
-     *
-     * @param methodObject the method object representing the compiled subroutine
-     * @param codeObject   the code object instance used during execution
-     * @param prototype    the prototype of the subroutine
-     */
-    public RuntimeCode(Method methodObject, Object codeObject, String prototype) {
-        this.methodObject = methodObject;
-        this.codeObject = codeObject;
-        this.prototype = prototype;
-    }
-
     public RuntimeCode(MethodHandle methodObject, Object codeObject, String prototype) {
         this.methodHandle = methodObject;
         this.codeObject = codeObject;
@@ -115,7 +85,8 @@ public class RuntimeCode implements RuntimeScalarReference {
     public static void copy(RuntimeCode code, RuntimeCode codeFrom) {
         code.prototype = codeFrom.prototype;
         code.attributes = codeFrom.attributes;
-        code.methodObject = codeFrom.methodObject;
+        code.methodHandle = codeFrom.methodHandle;
+        code.isStatic = codeFrom.isStatic;
         code.codeObject = codeFrom.codeObject;
     }
 
@@ -448,7 +419,7 @@ public class RuntimeCode implements RuntimeScalarReference {
     }
 
     public boolean defined() {
-        return this.methodObject != null || this.constantValue != null || this.compilerSupplier != null || this.methodHandle != null;
+        return this.constantValue != null || this.compilerSupplier != null || this.methodHandle != null;
     }
 
     /**
@@ -467,14 +438,15 @@ public class RuntimeCode implements RuntimeScalarReference {
         try {
             // Wait for the compilerThread to finish if it exists
             if (this.compilerSupplier != null) {
-                    // System.out.println("Waiting for compiler thread to finish...");
-                    this.compilerSupplier.get(); // Wait for the task to finish
+                // System.out.println("Waiting for compiler thread to finish...");
+                this.compilerSupplier.get(); // Wait for the task to finish
             }
 
-            if (methodObject != null) {
-                return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
+            if (isStatic) {
+                return (RuntimeList) this.methodHandle.invoke(a, callContext);
+            } else {
+                return (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
             }
-            return (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
         } catch (NullPointerException e) {
             throw new PerlCompilerException("Undefined subroutine called at ");
         } catch (InvocationTargetException e) {
@@ -496,15 +468,15 @@ public class RuntimeCode implements RuntimeScalarReference {
         try {
             // Wait for the compilerThread to finish if it exists
             if (this.compilerSupplier != null) {
-                    // System.out.println("Waiting for compiler thread to finish...");
-                    this.compilerSupplier.get(); // Wait for the task to finish
+                // System.out.println("Waiting for compiler thread to finish...");
+                this.compilerSupplier.get(); // Wait for the task to finish
             }
 
-            if (methodObject != null) {
-                return (RuntimeList) this.methodObject.invoke(this.codeObject, a, callContext);
+            if (isStatic) {
+                return (RuntimeList) this.methodHandle.invoke(a, callContext);
+            } else {
+                return (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
             }
-            return (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
-
         } catch (NullPointerException e) {
             throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
         } catch (InvocationTargetException e) {

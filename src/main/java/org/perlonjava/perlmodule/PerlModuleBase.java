@@ -3,7 +3,6 @@ package org.perlonjava.perlmodule;
 import org.perlonjava.runtime.*;
 
 import java.lang.invoke.MethodHandle;
-import java.lang.reflect.Method;
 
 /**
  * Abstract base class for Perl modules in the Java environment.
@@ -50,13 +49,18 @@ public abstract class PerlModuleBase {
      * @throws NoSuchMethodException If the method does not exist.
      */
     protected void registerMethod(String perlMethodName, String javaMethodName, String signature) throws NoSuchMethodException {
+        try {
+            // Retrieve the method from the current class using the Java method name
+            MethodHandle methodHandle = RuntimeCode.lookup.findStatic(this.getClass(), javaMethodName, RuntimeCode.methodType);
 
-        // Retrieve the method from the current class using the Java method name
-        Method method = this.getClass().getMethod(javaMethodName, RuntimeArray.class, int.class);
+            RuntimeCode code = new RuntimeCode(methodHandle, this, signature);
+            code.isStatic = true;
 
-        // Set the method as a global code reference in the Perl namespace using the Perl method name
-        GlobalVariable.getGlobalCodeRef(moduleName + "::" + perlMethodName).set(new RuntimeScalar(
-                new RuntimeCode(method, this, signature)));
+            // Set the method as a global code reference in the Perl namespace using the Perl method name
+            GlobalVariable.getGlobalCodeRef(moduleName + "::" + perlMethodName).set(new RuntimeScalar(code));
+        } catch (NoSuchMethodException | IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -116,11 +120,13 @@ public abstract class PerlModuleBase {
             Exporter instance = new Exporter();
 
             // Retrieve the 'importSymbols' method from the Exporter class
-            MethodHandle methodHandle = RuntimeCode.lookup.findVirtual(Exporter.class, "importSymbols", RuntimeCode.methodType);
+            MethodHandle methodHandle = RuntimeCode.lookup.findStatic(Exporter.class, "importSymbols", RuntimeCode.methodType);
+
+            RuntimeCode code = new RuntimeCode(methodHandle, instance, null);
+            code.isStatic = true;
 
             // Set the import method as a global code reference in the Perl namespace
-            GlobalVariable.getGlobalCodeRef(moduleName + "::import").set(new RuntimeScalar(
-                    new RuntimeCode(methodHandle, instance, null)));
+            GlobalVariable.getGlobalCodeRef(moduleName + "::import").set(new RuntimeScalar(code));
         } catch (NoSuchMethodException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
