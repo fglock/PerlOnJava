@@ -326,13 +326,6 @@ public class RuntimeCode implements RuntimeScalarReference {
 //        for (int i = 0; i < stackTraceSize; i++) {
 //            System.out.println("#   " + i + ": " + stackTrace.get(i));
 //        }
-//        System.out.println("# CallerStack frames:");
-//        for (int i = 0; i < 3; i++) {
-//            CallerStack.CallerInfo info = CallerStack.peek(i);
-//            if (info != null) {
-//                System.out.println("#   " + i + ": " + info);
-//            }
-//        }
 //        System.out.println();
 
         if (stackTraceSize > 0) {
@@ -346,19 +339,6 @@ public class RuntimeCode implements RuntimeScalarReference {
                 res.add(new RuntimeScalar(stackTrace.get(frame).get(0)));
                 res.add(new RuntimeScalar(stackTrace.get(frame).get(1)));
                 res.add(new RuntimeScalar(stackTrace.get(frame).get(2)));
-            }
-        } else {
-            frame = frame - stackTraceSize;
-            CallerStack.CallerInfo info = CallerStack.peek(frame);
-            if (info != null) {
-                // Compile-time stack trace
-                if (ctx == RuntimeContextType.SCALAR) {
-                    res.add(new RuntimeScalar(info.packageName()));
-                } else {
-                    res.add(new RuntimeScalar(info.packageName()));
-                    res.add(new RuntimeScalar(info.filename()));
-                    res.add(new RuntimeScalar(info.line()));
-                }
             }
         }
         return res;
