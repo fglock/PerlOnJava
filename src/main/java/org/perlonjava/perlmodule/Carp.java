@@ -17,12 +17,12 @@ public class Carp extends PerlModuleBase {
         carp.defineExport("EXPORT", "carp", "croak", "confess");
         carp.defineExport("EXPORT_OK", "cluck", "longmess", "shortmess");
         try {
-            carp.registerMethod("carp", "$");
-            carp.registerMethod("croak", "$");
-            carp.registerMethod("confess", "$");
-            carp.registerMethod("cluck", "$");
-            carp.registerMethod("longmess", "$");
-            carp.registerMethod("shortmess", "$");
+            carp.registerMethod("carp", null);
+            carp.registerMethod("croak", null);
+            carp.registerMethod("confess", null);
+            carp.registerMethod("cluck", null);
+            carp.registerMethod("longmess", null);
+            carp.registerMethod("shortmess", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Carp method: " + e.getMessage());
         }
@@ -53,9 +53,6 @@ public class Carp extends PerlModuleBase {
     }
 
     private static RuntimeList warnOrDie(RuntimeArray args, int ctx, boolean die, boolean backtrace) {
-        if (args.size() != 1) {
-            throw new IllegalStateException("Bad number of arguments for Carp method");
-        }
         RuntimeScalar message = args.get(0);
         String formattedMessage = message.toString();
 
@@ -81,9 +78,6 @@ public class Carp extends PerlModuleBase {
     }
 
     private static RuntimeList formatMessage(RuntimeArray args, int ctx, boolean longFormat) {
-        if (args.size() != 1) {
-            throw new IllegalStateException("Bad number of arguments for Carp method");
-        }
         RuntimeScalar message = args.get(0);
         String formattedMessage = longFormat
                 ? ErrorMessageUtil.stringifyException(new Throwable(message.toString()))
