@@ -9,6 +9,16 @@
 
 ## Completed Milestones
 
+- **v3.0.0**: Performance Boost, New Modules, and Streamlined Configuration
+  - Added `--upgrade` option to `Configure.pl` to upgrade dependencies.
+  - Added `Dockerfile` configuration.
+  - Added `Time::HiRes`, `Benchmark` modules.
+  - Added `/ee` regex modifier.
+  - Added no strict `vars`, `subs`.
+  - Execute the code generation on demand, for faster module loading.
+  - Use `int` instead of `enum` to reduce the memory overhead of scalar variables.
+
+
 - **v2.3.0**: Modern Perl Features, Expanded Modules, and Developer Tools
   - Project description updated in `README.md` to "A Perl Distribution for the JVM"
   - Added module porting guide at `docs/PORTING_MODULES.md`
@@ -224,17 +234,10 @@ The following areas are currently under active development to enhance the functi
 
 ## Upcoming Milestones
 
-- **v2.4.0**: Next minor version
-  - Added `--upgrade` option to `Configure.pl` to upgrade dependencies.
-  - Added `Dockerfile` configuration.
-  - Added `Time::HiRes`, `Benchmark` modules.
-  - Added `/ee` regex modifier.
-  - Added no strict `vars`, `subs`.
-  - Execute the code generation on demand, for faster module loading.
-  - Use `int` instead of `enum` to reduce the memory overhead of scalar variables.
-  - Planned release date: 2025-04-10
+- **v3.0.1**: Next minor version
+  - Planned release date: 2025-05-10
 
-### v3.0.0 Milestone (Planned Release Date: 2026-04-10)
+### v4.0.0 Milestone (Planned Release Date: 2026-05-10)
 
 **Objective:** Enhance core functionality and improve developer experience with a focus on integration and performance.
 
@@ -266,7 +269,7 @@ The following areas are currently under active development to enhance the functi
   - **Relevant:** Facilitates deployment in modern cloud environments.
   - **Time-bound:** Complete by Q1 2026.
 
-### v4.0.0 Milestone (Planned Release Date: 2027-04-10)
+### v5.0.0 Milestone (Planned Release Date: 2027-04-10)
 
 **Objective:** Expand platform capabilities and improve performance with advanced features and optimizations.
 
