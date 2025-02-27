@@ -190,10 +190,13 @@ The following areas are currently under active development to enhance the functi
   - Introducing lexical warnings and strictness for improved code safety.
   - Supporting lexical UTF-8 source code.
   - Adding preprocessor `# line` directive.
+      - adjust codegen: visitLineNumber and visitSource
+      - ensure that stack traces are well-formed
   - Developing subroutine prototypes.
   - Handling `goto` special cases for `Text::Balanced`.
   - Addressing indirect object special cases for `GetOpt::Long`.
   - Localizing regex variables.
+  - Fix handling of global variable aliasing in `for`.
 
 - **Regex Subsystem**
   - Ongoing improvements and feature additions.
@@ -227,6 +230,7 @@ The following areas are currently under active development to enhance the functi
 - **Optimization**
   - Inlining `map` and related blocks.
   - Inlining constant subroutines.
+  - Prefetch named subroutines to lexical (`our`).
 
 - **Compilation with GraalVM**
   - Documenting preliminary results in [docs/GRAALVM.md](docs/GRAALVM.md).
