@@ -13,13 +13,15 @@ import java.util.Map;
  */
 public class ByteCodeSourceMapper {
     // Maps source files to their debug information
-    private static final Map<String, SourceFileInfo> sourceFiles = new HashMap<>();
+    private static final Map<Integer, SourceFileInfo> sourceFiles = new HashMap<>();
 
     // Pool of package names to optimize memory usage
     private static final ArrayList<String> packageNamePool = new ArrayList<>();
-
-    // Quick lookup for package name identifiers
     private static final Map<String, Integer> packageNameToId = new HashMap<>();
+
+    // Pool of file names to optimize memory usage
+    private static final ArrayList<String> fileNamePool = new ArrayList<>();
+    private static final Map<String, Integer> fileNameToId = new HashMap<>();
 
     /**
      * Gets or creates a unique identifier for a package name.
@@ -35,13 +37,26 @@ public class ByteCodeSourceMapper {
     }
 
     /**
+     * Gets or creates a unique identifier for a file name.
+     *
+     * @param fileName The name of the source file
+     * @return The unique identifier for the file
+     */
+    private static int getOrCreateFileId(String fileName) {
+        return fileNameToId.computeIfAbsent(fileName, name -> {
+            fileNamePool.add(name);
+            return fileNamePool.size() - 1;
+        });
+    }
+
+    /**
      * Sets the source file information in the bytecode metadata.
      *
      * @param ctx The current emitter context
      */
     static void setDebugInfoFileName(EmitterContext ctx) {
-        String sourceFile = ctx.compilerOptions.fileName;
-        sourceFiles.computeIfAbsent(sourceFile, SourceFileInfo::new);
+        int fileId = getOrCreateFileId(ctx.compilerOptions.fileName);
+        sourceFiles.computeIfAbsent(fileId, SourceFileInfo::new);
         ctx.cw.visitSource(ctx.compilerOptions.fileName, null);
     }
 
@@ -52,8 +67,8 @@ public class ByteCodeSourceMapper {
      * @param tokenIndex The index of the token in the source
      */
     static void setDebugInfoLineNumber(EmitterContext ctx, int tokenIndex) {
-        String sourceFile = ctx.compilerOptions.fileName;
-        SourceFileInfo info = sourceFiles.computeIfAbsent(sourceFile, SourceFileInfo::new);
+        int fileId = getOrCreateFileId(ctx.compilerOptions.fileName);
+        SourceFileInfo info = sourceFiles.computeIfAbsent(fileId, SourceFileInfo::new);
 
         info.tokenToLineInfo.put(tokenIndex, new LineInfo(
                 ctx.errorUtil.getLineNumber(tokenIndex),
@@ -72,17 +87,17 @@ public class ByteCodeSourceMapper {
      * @return The corresponding source code location
      */
     public static SourceLocation parseStackTraceElement(StackTraceElement element) {
-        String sourceFile = element.getFileName();
+        int fileId = fileNameToId.getOrDefault(element.getFileName(), -1);
         int tokenIndex = element.getLineNumber();
 
-        SourceFileInfo info = sourceFiles.get(sourceFile);
+        SourceFileInfo info = sourceFiles.get(fileId);
         if (info == null) {
-            return new SourceLocation(sourceFile, "", tokenIndex);
+            return new SourceLocation(element.getFileName(), "", tokenIndex);
         }
 
         LineInfo lineInfo = info.tokenToLineInfo.get(tokenIndex);
         return new SourceLocation(
-                sourceFile,
+                fileNamePool.get(fileId),
                 packageNamePool.get(lineInfo.packageNameId()),
                 lineInfo.lineNumber()
         );
@@ -93,11 +108,11 @@ public class ByteCodeSourceMapper {
      * mappings between token indices and line information.
      */
     private static class SourceFileInfo {
-        final String fileName;
+        final int fileId;
         final Map<Integer, LineInfo> tokenToLineInfo = new HashMap<>();
 
-        SourceFileInfo(String fileName) {
-            this.fileName = fileName;
+        SourceFileInfo(int fileId) {
+            this.fileId = fileId;
         }
     }
 
