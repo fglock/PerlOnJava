@@ -35,9 +35,11 @@ public class EmitEval {
         String[] newEnv = newSymbolTable.getVariableNames();
         emitterVisitor.ctx.logDebug("evalStringHelper newSymbolTable: " + newSymbolTable);
 
+        int counter = EmitterMethodCreator.classCounter++;
+
         // Create compiler options for the eval context
         ArgumentParser.CompilerOptions compilerOptions = emitterVisitor.ctx.compilerOptions.clone();
-        compilerOptions.fileName = "(eval)";
+        compilerOptions.fileName = "(eval " + counter + ")";
 
         // Explanation of evalTag:
         // The evalTag is used as a key in RuntimeCode.evalContext map.
@@ -47,7 +49,7 @@ public class EmitEval {
         // it uses this evalTag to retrieve the EmitterContext.
 
         // Generate a unique tag for this eval operation
-        String evalTag = "eval" + EmitterMethodCreator.classCounter++;
+        String evalTag = "eval" + counter;
 
         // Create an EmitterContext for the eval.
         // This context is used to compile the eval string with the correct
