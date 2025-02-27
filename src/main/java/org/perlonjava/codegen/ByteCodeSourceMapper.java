@@ -73,12 +73,26 @@ public class ByteCodeSourceMapper {
         ctx.mv.visitLineNumber(tokenIndex, thisLabel);
     }
 
+    /**
+     * Saves the source location information for a given token index.
+     * This method maps a token index to its corresponding line number
+     * and package context in the source file, storing this information
+     * in the source file's debug metadata.
+     *
+     * @param ctx        The current emitter context containing compilation details
+     * @param tokenIndex The index of the token in the source code
+     */
     public static void saveSourceLocation(EmitterContext ctx, int tokenIndex) {
+        // Retrieve or create a unique identifier for the source file
         int fileId = getOrCreateFileId(ctx.errorUtil.getFileName());
+
+        // Get or create the SourceFileInfo object for the file
         SourceFileInfo info = sourceFiles.computeIfAbsent(fileId, SourceFileInfo::new);
+
+        // Map the token index to a LineInfo object containing the line number and package ID
         info.tokenToLineInfo.put(tokenIndex, new LineInfo(
-                ctx.errorUtil.getLineNumber(tokenIndex),
-                getOrCreatePackageId(ctx.symbolTable.getCurrentPackage())
+                ctx.errorUtil.getLineNumber(tokenIndex), // Get the line number for the token
+                getOrCreatePackageId(ctx.symbolTable.getCurrentPackage()) // Get or create the package ID
         ));
     }
 
