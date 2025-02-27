@@ -1,6 +1,7 @@
 package org.perlonjava.parser;
 
 import org.perlonjava.astnode.*;
+import org.perlonjava.codegen.ByteCodeSourceMapper;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
@@ -25,6 +26,9 @@ public class StatementResolver {
         int currentIndex = parser.tokenIndex;
         LexerToken token = peek(parser);
         parser.ctx.logDebug("parseStatement `" + token.text + "`");
+
+        // Store the current source location - this will be used for stack trace generation
+        ByteCodeSourceMapper.saveSourceLocation(parser.ctx, parser.tokenIndex);
 
         if (token.type == LexerTokenType.IDENTIFIER) {
             switch (token.text) {
