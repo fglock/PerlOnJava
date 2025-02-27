@@ -235,6 +235,7 @@ The following areas are currently under active development to enhance the functi
 ## Upcoming Milestones
 
 - **v3.0.1**: Next minor version
+  - Added `# line` preprocessor directive.
   - Planned release date: 2025-05-10
 
 ### v4.0.0 Milestone (Planned Release Date: 2026-05-10)

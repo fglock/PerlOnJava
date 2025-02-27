@@ -65,14 +65,17 @@ public class Whitespace {
 
                 case OPERATOR:
                     if (token.text.equals("#")) {
+                        // # line directive must appear at the beginning of the line
+                        boolean maybeLineDirective = tokenIndex == 0 || tokens.get(tokenIndex - 1).type == LexerTokenType.NEWLINE;
+
                         // Skip optional whitespace after '#'
                         tokenIndex++;
                         while (tokenIndex < tokens.size() && tokens.get(tokenIndex).type == LexerTokenType.WHITESPACE) {
                             tokenIndex++;
                         }
                         // Check if it's a "# line" directive
-                        if (tokenIndex < tokens.size() && tokens.get(tokenIndex).text.equals("line")) {
-                            tokenIndex = parseLineDirective(tokenIndex, tokens);
+                        if (maybeLineDirective && tokenIndex < tokens.size() && tokens.get(tokenIndex).text.equals("line")) {
+                            tokenIndex = parseLineDirective(parser, tokenIndex, tokens);
                         }
                         // Skip comment until end of line
                         while (tokenIndex < tokens.size() && tokens.get(tokenIndex).type != LexerTokenType.NEWLINE) {
@@ -103,7 +106,7 @@ public class Whitespace {
         return tokenIndex;
     }
 
-    private static int parseLineDirective(int tokenIndex, List<LexerToken> tokens) {
+    private static int parseLineDirective(Parser parser, int tokenIndex, List<LexerToken> tokens) {
         tokenIndex++; // Skip 'line'
         // Skip optional whitespace after 'line'
         while (tokenIndex < tokens.size() && tokens.get(tokenIndex).type == LexerTokenType.WHITESPACE) {
@@ -115,6 +118,11 @@ public class Whitespace {
             try {
                 int lineNumber = Integer.parseInt(lineNumberStr);
                 tokenIndex++;
+
+                // Update the context (ErrorMessageUtil instance) with the new line number
+                parser.ctx.errorUtil.setLineNumber(lineNumber - 1);
+                parser.ctx.errorUtil.setTokenIndex(tokenIndex - 1);
+
                 // Skip optional whitespace before filename
                 while (tokenIndex < tokens.size() && tokens.get(tokenIndex).type == LexerTokenType.WHITESPACE) {
                     tokenIndex++;
@@ -130,8 +138,9 @@ public class Whitespace {
                     if (tokenIndex < tokens.size() && tokens.get(tokenIndex).type == LexerTokenType.OPERATOR && tokens.get(tokenIndex).text.equals("\"")) {
                         tokenIndex++; // Skip closing quote
                         String filename = filenameBuilder.toString();
-                        // Handle the line number and filename as needed
-                        // For example, update a state or context object
+
+                        // Update the context (ErrorMessageUtil instance) with the new file name
+                        parser.ctx.errorUtil.setFileName(filename);
                     }
                 }
             } catch (NumberFormatException e) {
