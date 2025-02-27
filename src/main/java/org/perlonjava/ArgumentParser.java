@@ -662,6 +662,9 @@ public class ArgumentParser {
             parsedArgs.code = perlCode.toString();
         }
 
+        // Force line number to start at 1
+        parsedArgs.code = "\n# line 1\n" + parsedArgs.code;
+
         String autoSplit = "";
         if (parsedArgs.autoSplit) {
             autoSplit = " our @F = split(" + parsedArgs.splitPattern + "); ";
