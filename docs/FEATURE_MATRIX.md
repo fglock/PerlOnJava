@@ -102,7 +102,6 @@ PerlOnJava implements most core Perl features with some key differences:
 - ❌  **Tied Scalars**: Support for tying scalars to classes is missing.
 - ❌  **Unicode**: Support for non-Unicode strings is not implemented.
 - ❌  **Taint checks**: Support for taint checks is not implemented.
-- ❌  **`local` special cases**: Variable localization in for-loops is missing.
 - ❌  **`local` special cases**: `local *HANDLE = *HANDLE` doesn't create a new typeglob.
 - ❌  **Variable attributes**: Variable attributes are not yet supported.
 
@@ -458,7 +457,7 @@ The DBI module provides seamless integration with JDBC drivers:
 
 ## Features Probably Incompatible with JVM
 - ❌  **`DESTROY`**: Handling of object destruction may be incompatible with JVM garbage collection.
-  - For more details see: `misc/snippets/auto_close.md`.
+  - For more details see: `dev/design/auto_close.md`.
   - Some modules that depend on `DESTROY`: `SelectSaver`, `File::Temp`.
 - ❌  **Perl `XS` code**: XS code interfacing with C is not supported on the JVM.
 - ❌  **Auto-close files**: File auto-close depends on handling of object destruction, may be incompatible with JVM garbage collection.
