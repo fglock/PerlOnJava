@@ -189,9 +189,7 @@ The following areas are currently under active development to enhance the functi
   - Enhancing version control with `use VERSION` and `require VERSION`.
   - Introducing lexical warnings and strictness for improved code safety.
   - Supporting lexical UTF-8 source code.
-  - Adding preprocessor `# line` directive.
-      - adjust codegen: visitLineNumber and visitSource
-      - ensure that stack traces are well-formed
+  - Ensure that stack traces are well-formed.
   - Developing subroutine prototypes.
   - Handling `goto` special cases for `Text::Balanced`.
   - Addressing indirect object special cases for `GetOpt::Long`.

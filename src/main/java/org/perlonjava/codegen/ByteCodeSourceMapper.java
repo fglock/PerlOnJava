@@ -5,6 +5,7 @@ import org.objectweb.asm.Label;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Maps bytecode positions to their corresponding Perl source code locations.
@@ -67,17 +68,18 @@ public class ByteCodeSourceMapper {
      * @param tokenIndex The index of the token in the source
      */
     static void setDebugInfoLineNumber(EmitterContext ctx, int tokenIndex) {
-        int fileId = getOrCreateFileId(ctx.compilerOptions.fileName);
-        SourceFileInfo info = sourceFiles.computeIfAbsent(fileId, SourceFileInfo::new);
+        Label thisLabel = new Label();
+        ctx.mv.visitLabel(thisLabel);
+        ctx.mv.visitLineNumber(tokenIndex, thisLabel);
+    }
 
+    public static void saveSourceLocation(EmitterContext ctx, int tokenIndex) {
+        int fileId = getOrCreateFileId(ctx.errorUtil.getFileName());
+        SourceFileInfo info = sourceFiles.computeIfAbsent(fileId, SourceFileInfo::new);
         info.tokenToLineInfo.put(tokenIndex, new LineInfo(
                 ctx.errorUtil.getLineNumber(tokenIndex),
                 getOrCreatePackageId(ctx.symbolTable.getCurrentPackage())
         ));
-
-        Label thisLabel = new Label();
-        ctx.mv.visitLabel(thisLabel);
-        ctx.mv.visitLineNumber(tokenIndex, thisLabel);
     }
 
     /**
@@ -95,7 +97,13 @@ public class ByteCodeSourceMapper {
             return new SourceLocation(element.getFileName(), "", tokenIndex);
         }
 
-        LineInfo lineInfo = info.tokenToLineInfo.get(tokenIndex);
+        // Use TreeMap's floorEntry to find the nearest defined token index
+        Map.Entry<Integer, LineInfo> entry = info.tokenToLineInfo.floorEntry(tokenIndex);
+        if (entry == null) {
+            return new SourceLocation(element.getFileName(), "", element.getLineNumber());
+        }
+
+        LineInfo lineInfo = entry.getValue();
         return new SourceLocation(
                 fileNamePool.get(fileId),
                 packageNamePool.get(lineInfo.packageNameId()),
@@ -109,7 +117,7 @@ public class ByteCodeSourceMapper {
      */
     private static class SourceFileInfo {
         final int fileId;
-        final Map<Integer, LineInfo> tokenToLineInfo = new HashMap<>();
+        final TreeMap<Integer, LineInfo> tokenToLineInfo = new TreeMap<>();
 
         SourceFileInfo(int fileId) {
             this.fileId = fileId;
