@@ -37,7 +37,7 @@ public class CoreOperatorResolver {
                 return new NumberNode(Integer.toString(parser.ctx.errorUtil.getLineNumber(parser.tokenIndex)), parser.tokenIndex);
             case "__FILE__":
                 // Returns the current file name as a StringNode
-                return new StringNode(parser.ctx.compilerOptions.fileName, parser.tokenIndex);
+                return new StringNode(parser.ctx.errorUtil.getFileName(), parser.tokenIndex);
             case "__PACKAGE__":
                 // Returns the current package name as a StringNode
                 return new StringNode(parser.ctx.symbolTable.getCurrentPackage(), parser.tokenIndex);
