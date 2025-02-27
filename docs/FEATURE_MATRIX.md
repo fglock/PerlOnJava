@@ -283,7 +283,6 @@ This list is under review.
 - ✅  **`require` operator**: The `require` operator implemented; version checks are implemented.
 - ✅  **`use` and `no` statements**: Module imports and version check via `use` and `no` are implemented; version checks are implemented. `use` arguments are executed at compile-time.
 - ✅  **`use version`**: `use version` enables the corresponding features, strictures, and warnings.
-- ✅  **`caller` operator**: `caller` returns ($package, $filename, $line). The remaining results are undef. This means we don't include subroutine names in error messages yet.
 - ✅  **Import methods**: `import`, `unimport` works.
 - ✅  **`__SUB__`**: The `__SUB__` keyword works.
 - ✅  **`BEGIN` block**: `BEGIN` special block is implemented.
@@ -341,7 +340,10 @@ This list is under review.
 - ✅  **Stash manipulation**: Alternative ways to create constants like: `$constant::{_CAN_PCS} = \$const`.
 - ❌  **Thread-safe `@_`, `$_`, and regex variables**: Thread safety for global special variables is missing.
 - ❌  **Compiler flags**:  The special variables `$^H`, `%^H`, `${^WARNING_BITS}` are not implemented.
-- ❌  **Call stack information**: Extended call stack information via `(caller($level))[9]` is not implemented.
+- ✅  **`caller` operator**: `caller` returns `($package, $filename, $line)`.
+  - ❌  **Extended call stack information**: extra debug information like `(caller($level))[9]` is not implemented.<br>
+        This means we don't include subroutine names in error messages yet.<br>
+        Extra debug information: `($package, $filename, $line, $subroutine, $hasargs, $wantarray, $evaltext, $is_require, $hints, $bitmask, $hinthash)`
 
 ## Perl Modules, Pragmas, Features
 
