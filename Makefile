@@ -10,3 +10,6 @@ test:
 
 clean:
 	./gradlew clean
+
+deb:
+	./gradlew buildDeb

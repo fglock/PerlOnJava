@@ -1,8 +1,45 @@
+buildscript {
+    repositories {
+        gradlePluginPortal()
+        maven {
+            url "https://plugins.gradle.org/m2/"
+        }
+        mavenCentral()
+        maven {
+            url "https://dl.bintray.com/nebula/gradle-plugins"
+        }
+    }
+}
+
 plugins {
     id 'java'
     id 'com.github.ben-manes.versions' version '0.52.0'
     id 'se.patrikerdes.use-latest-versions' version '0.2.18'
+    id 'application'
+    id 'com.netflix.nebula.ospackage' version '11.4.0'
     id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+application {
+    mainClass = 'org.perlonjava.Main'
+}
+
+tasks.buildDeb {
+    dependsOn installDist
+}
+
+ospackage {
+    packageName = 'perlonjava'
+    version = project.version
+    maintainer = 'Flavio Soibelmann Glock <fglock@gmail.com>'
+    requires('java-21-openjdk-headless')
+
+    into '/opt/perlonjava'
+    from('build/install/perlonjava') {
+        into '/opt/perlonjava'
+    }
+
+    link('/usr/local/bin/jperl', '/opt/perlonjava/bin/jperl')
 }
 
 group = 'org.perlonjava'

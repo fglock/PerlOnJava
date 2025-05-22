@@ -32,6 +32,7 @@ make          # same as 'make build'
 make build    # builds the project
 make test     # runs tests
 make clean    # cleans build artifacts
+make deb      # creates a Debian package
 ```
 
 ### Using Maven
@@ -41,7 +42,7 @@ mvn clean package
 
 ### Using Gradle
 ```bash
-gradle clean build
+./gradlew clean build
 ```
 
 ## Dependencies
