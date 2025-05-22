@@ -9,7 +9,12 @@ package org.perlonjava;
  * <p>
  * ./Configure.pl -D perlVersion=v5.40.0
  * <p>
- * This will update the perlVersion constant in this configuration class.
+ * To update the jar version across all files in the repository:
+ * <p>
+ * ./Configure.pl -D jarVersion=3.0.1
+ * <p>
+ * This will update both constants in this configuration class and replace
+ * all occurrences of perlonjava-3.0.0.jar with perlonjava-3.0.1.jar.
  */
 public final class Configuration {
 

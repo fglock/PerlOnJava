@@ -13,9 +13,10 @@ use URI::Escape;
 # The script can search for JDBC drivers by class name or use direct Maven
 # coordinates to update build files like build.gradle or pom.xml.
 
-# Note: This script can be run using the following command:
+# Note: This script can be run using the following commands:
 #
-# java -jar target/perlonjava-3.0.0.jar ./Configure.pl -D perlVersion=v5.40.0
+# ./Configure.pl -D perlVersion=v5.40.0
+# ./Configure.pl -D jarVersion=3.0.1
 #
 
 # Define supported actions and options for both dependency management and configuration
