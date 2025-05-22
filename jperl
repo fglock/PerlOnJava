@@ -1,3 +1,15 @@
 #!/bin/bash
+
+# Get the directory where this script is located, resolving symlinks
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-java -Xmx512m -cp "$CLASSPATH:$SCRIPT_DIR/target/perlonjava-3.0.0.jar" org.perlonjava.Main "$@"
+
+# Check development environment first (target directory)
+if [ -f "$SCRIPT_DIR/target/perlonjava-3.0.0.jar" ]; then
+    JAR_PATH="$SCRIPT_DIR/target/perlonjava-3.0.0.jar"
+else
+    # Use installed package path (when installed via deb package)
+    JAR_PATH="$SCRIPT_DIR/../lib/perlonjava-3.0.0.jar"
+fi
+
+# Launch Java
+java -cp "$CLASSPATH:$JAR_PATH" org.perlonjava.Main "$@"
