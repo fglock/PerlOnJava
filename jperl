@@ -1,4 +1,10 @@
 #!/bin/bash
+#
+# PerlOnJava Launcher Script
+# This script launches the PerlOnJava runtime environment, which provides
+# a Java-based implementation of the Perl programming language.
+# Repository: github.com/fglock/PerlOnJava
+#
 
 # Get the directory where this script is located, resolving symlinks
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
