@@ -24,6 +24,16 @@
 
 ## Build Options
 
+### Using Make
+The project includes a Makefile that wraps Gradle commands for a familiar build experience:
+
+```bash
+make          # same as 'make build'
+make build    # builds the project
+make test     # runs tests
+make clean    # cleans build artifacts
+```
+
 ### Using Maven
 ```bash
 mvn clean package
@@ -31,7 +41,7 @@ mvn clean package
 
 ### Using Gradle
 ```bash
-gradle clean package
+gradle clean build
 ```
 
 ## Dependencies
