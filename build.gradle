@@ -1,13 +1,7 @@
 buildscript {
     repositories {
         gradlePluginPortal()
-        maven {
-            url "https://plugins.gradle.org/m2/"
-        }
         mavenCentral()
-        maven {
-            url "https://dl.bintray.com/nebula/gradle-plugins"
-        }
     }
 }
 
