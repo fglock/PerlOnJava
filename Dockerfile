@@ -22,7 +22,7 @@ RUN mvn clean package
 FROM eclipse-temurin:21-jdk
 
 # Copy the built JAR file from the Maven container
-COPY --from=build /app/target/perlonjava-1.0-SNAPSHOT.jar /app/perlonjava.jar
+COPY --from=build /app/target/perlonjava-3.0.0.jar /app/perlonjava.jar
 
 # Set the entry point to run the JAR file
 ENTRYPOINT ["java", "-jar", "/app/perlonjava.jar"]

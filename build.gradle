@@ -1,3 +1,8 @@
+/*
+ * PerlOnJava Build Configuration
+ * This Gradle build script configures the build process for the PerlOnJava project
+ */
+
 buildscript {
     repositories {
         gradlePluginPortal()
@@ -5,23 +10,35 @@ buildscript {
     }
 }
 
+// Core plugins configuration
 plugins {
     id 'java'
+    // Plugin for checking dependency updates
     id 'com.github.ben-manes.versions' version '0.52.0'
+    // Plugin for automatically updating dependencies
     id 'se.patrikerdes.use-latest-versions' version '0.2.18'
     id 'application'
+    // Plugin for creating OS packages (deb)
     id 'com.netflix.nebula.ospackage' version '11.4.0'
+    // Plugin for creating fat/uber JARs
     id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
 
+// Main application class configuration
 application {
     mainClass = 'org.perlonjava.Main'
 }
 
+// Debian package build dependency
 tasks.buildDeb {
     dependsOn installDist
 }
 
+// Project metadata
+group = 'org.perlonjava'
+version = '3.0.0'
+
+// OS package configuration for Debian packaging
 ospackage {
     packageName = 'perlonjava'
     version = project.version
@@ -36,30 +53,34 @@ ospackage {
     link('/usr/local/bin/jperl', '/opt/perlonjava/bin/jperl')
 }
 
-group = 'org.perlonjava'
-version = '1.0-SNAPSHOT'
-
+// Java toolchain configuration - requires Java 21
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
     }
 }
 
+// Repository configuration
 repositories {
     mavenCentral()
 }
 
+// Project dependencies
 dependencies {
-    implementation 'org.ow2.asm:asm:9.8'
-    implementation 'org.ow2.asm:asm-util:9.8'
-    implementation 'com.ibm.icu:icu4j:77.1'
-    implementation 'com.alibaba.fastjson2:fastjson2:2.0.57'
-    implementation 'org.snakeyaml:snakeyaml-engine:2.9'
+    // Core dependencies
+    implementation 'org.ow2.asm:asm:9.8'                           // ByteCode manipulation
+    implementation 'org.ow2.asm:asm-util:9.8'                     // ASM utilities
+    implementation 'com.ibm.icu:icu4j:77.1'                       // Unicode support
+    implementation 'com.alibaba.fastjson2:fastjson2:2.0.57'       // JSON processing
+    implementation 'org.snakeyaml:snakeyaml-engine:2.9'           // YAML processing
+
+    // Testing dependencies
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.13.0-RC1'
     testImplementation 'org.junit.jupiter:junit-jupiter-engine:5.13.0-RC1'
     testImplementation 'org.junit.jupiter:junit-jupiter-params:5.13.0-RC1'
 }
 
+// JUnit configuration
 testing {
     suites {
         test {
@@ -68,25 +89,30 @@ testing {
     }
 }
 
+// Java compilation settings
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs << '-Xlint:-options'
     options.compilerArgs << '-Xlint:deprecation'
 }
 
+// Test execution configuration with native access
 tasks.withType(Test).configureEach {
     jvmArgs += '--enable-native-access=ALL-UNNAMED'
 }
 
+// Enable native access for all Java execution tasks
 allprojects {
     tasks.withType(JavaExec).configureEach {
         jvmArgs += '--enable-native-access=ALL-UNNAMED'
     }
 }
 
+// JUnit platform configuration
 test {
     useJUnitPlatform()
 }
 
+// Shadow JAR configuration for creating standalone executable
 shadowJar {
     archiveClassifier.set('')
     destinationDirectory = file("$buildDir/../target")
@@ -97,10 +123,12 @@ shadowJar {
     exclude 'META-INF/MANIFEST.MF'
 }
 
+// Make shadowJar part of the build process
 tasks.named('build') {
     dependsOn shadowJar
 }
 
+// Source sets configuration for including Perl resources
 sourceSets {
     main {
         resources {
@@ -117,6 +145,7 @@ sourceSets {
     }
 }
 
+// Resource processing configuration
 tasks.named('processResources', Copy) {
     from(sourceSets.main.resources.srcDirs) {
         include '**/*.pm'
@@ -126,6 +155,7 @@ tasks.named('processResources', Copy) {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
+// Test resource processing configuration
 tasks.named('processTestResources', Copy) {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }

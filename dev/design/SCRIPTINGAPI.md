@@ -7,7 +7,7 @@
 - Note that `jrunscript` creates a new scope every time, so it doesn't keep lexical variables from one line to the next.
 
   ```sh
-  $ jrunscript -cp target/perlonjava-1.0-SNAPSHOT.jar -l perl 
+  $ jrunscript -cp target/perlonjava-3.0.0.jar -l perl 
   Perl5> my $sub = sub { say $_[0] }; $sub->($_) for 4,5,6;
   4
   5

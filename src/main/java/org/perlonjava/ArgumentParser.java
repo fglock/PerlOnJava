@@ -695,7 +695,7 @@ public class ArgumentParser {
      * Prints the help message detailing the usage of the program and its options.
      */
     private static void printHelp() {
-        System.out.println("Usage: java -jar target/perlonjava-1.0-SNAPSHOT.jar [options] [file] [args]");
+        System.out.println("Usage: java -jar target/perlonjava-3.0.0.jar [options] [file] [args]");
         System.out.println();
         System.out.println("  -0[octal/hexadecimal] specify record separator (\\0, if no argument)");
         System.out.println("  -a                    autosplit mode with -n or -p (splits $_ into @F)");
