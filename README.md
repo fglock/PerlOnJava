@@ -52,7 +52,7 @@ Get started quickly with PerlOnJava. For a complete list of capabilities, see ou
 
 1. Build the project ([detailed instructions](docs/BUILD.md)):
    ```bash
-   mvn clean package
+   make
    ```
 
 2. Run a simple Perl script:
