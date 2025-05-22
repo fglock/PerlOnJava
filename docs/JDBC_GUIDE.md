@@ -50,7 +50,7 @@ gradle clean build
    
     Calling java directly with the classpath is also possible:
     ```bash
-    java -cp "jdbc-drivers/h2-2.2.224.jar:target/perlonjava-1.0-SNAPSHOT.jar" org.perlonjava.Main myscript.pl
+    java -cp "jdbc-drivers/h2-2.2.224.jar:target/perlonjava-3.0.0.jar" org.perlonjava.Main myscript.pl
     ```
 
 ## Database Connection Examples

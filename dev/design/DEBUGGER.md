@@ -28,7 +28,7 @@ This client would use JPDA to communicate with the JVM, but would present the de
 ## Run PerlOnJava with Debug Flags
 
 ```bash
-java -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005 -jar target/perlonjava-1.0-SNAPSHOT.jar myscript.pl
+java -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005 -jar target/perlonjava-3.0.0.jar myscript.pl
 ```
 
 ## Start Debugging

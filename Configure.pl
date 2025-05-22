@@ -15,7 +15,7 @@ use URI::Escape;
 
 # Note: This script can be run using the following command:
 #
-# java -jar target/perlonjava-1.0-SNAPSHOT.jar ./Configure.pl -D perlVersion=v5.40.0
+# java -jar target/perlonjava-3.0.0.jar ./Configure.pl -D perlVersion=v5.40.0
 #
 
 # Define supported actions and options for both dependency management and configuration

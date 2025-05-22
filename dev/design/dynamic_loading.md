@@ -220,7 +220,7 @@ The root build configurations that will build all subprojects:
     
     <groupId>org.perlonjava</groupId>
     <artifactId>perlonjava-parent</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>3.0.0</version>
     <packaging>pom</packaging>
 
     <modules>
@@ -291,7 +291,7 @@ subprojects {
     apply plugin: 'java'
     
     group = 'org.perlonjava'
-    version = '1.0-SNAPSHOT'
+    version = '3.0.0'
 
     java {
         toolchain {
@@ -332,8 +332,8 @@ The build creates multiple JAR files in target/:
 
 ```
 target/
-  perlonjava-1.0-SNAPSHOT.jar          # Core runtime
-  perlonjava-module-dbi-1.0-SNAPSHOT.jar   # DBI module
+  perlonjava-3.0.0.jar          # Core runtime
+  perlonjava-module-dbi-3.0.0.jar   # DBI module
 ```
 
 This modular structure lets users:
