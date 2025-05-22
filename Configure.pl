@@ -98,15 +98,34 @@ sub update_configuration {
         $value = "\"$value\"" if $value !~ /^(?:true|false|\d+)$/;
 
         if ($content =~ /public static final \w+\s+\Q$key\E\s*=\s*.+?;/) {
+            my $old_value = $1 if $content =~ /public static final \w+\s+\Q$key\E\s*=\s*"(.+?)";/;
             $content =~ s/(public static final \w+\s+\Q$key\E\s*=\s*).+?;/$1$value;/;
             print "Updated $key = $value\n";
+
+            # Special handling for jarVersion updates
+            if ($key eq 'jarVersion' && $old_value) {
+                my $old_jar = "perlonjava-$old_value.jar";
+                my $new_jar = "perlonjava-" . $value =~ s/"//gr . ".jar";
+
+                # Find and update all files in the repository
+                my @files = `find . -type f -not -path "*/\.*"`;
+                foreach my $file (@files) {
+                    chomp $file;
+                    next if -B $file;  # Skip binary files
+
+                    my $file_content = read_file($file);
+                    if ($file_content =~ s/\Q$old_jar\E/$new_jar/g) {
+                        write_file($file, $file_content);
+                        print "Updated jar version in $file\n";
+                    }
+                }
+            }
         }
     }
 
     write_file($file, $content);
     print "\nConfiguration updated successfully\n";
 }
-
 # Function to handle dependency management based on search or direct options
 sub handle_dependencies {
     # Show usage if no action specified
