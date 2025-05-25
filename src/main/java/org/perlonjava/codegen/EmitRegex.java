@@ -36,10 +36,20 @@ public class EmitRegex {
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
 
         if (node.right instanceof OperatorNode right) {
-            if (right.operand instanceof ListNode) {
+            if (right.operand instanceof ListNode listNode) {
                 // Regex operator: $v =~ /regex/;
                 // Bind the variable to the regex operation
-                ((ListNode) right.operand).elements.add(node.left);
+                listNode.elements.add(node.left);
+
+                if (right.operator.equals("replaceRegex")
+                        && listNode.elements.get(2) instanceof StringNode modifier
+                        && modifier.value.contains("r")
+                ) {
+                    // regex replace usually returns a list,
+                    // but with "r" modifier it returns scalar
+                    right = new OperatorNode("scalar", right, right.tokenIndex);
+                }
+
                 right.accept(emitterVisitor);
                 return;
             }
