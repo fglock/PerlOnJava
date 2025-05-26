@@ -35,38 +35,19 @@ public class EmitRegex {
         // Execute operands in scalar context
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
 
-        if (node.right instanceof OperatorNode right) {
-            if (right.operand instanceof ListNode listNode) {
+        if (node.right instanceof OperatorNode right
+            && right.operand instanceof ListNode listNode) {
                 // Regex operator: $v =~ /regex/;
                 // Bind the variable to the regex operation
                 listNode.elements.add(node.left);
-
-                if (right.operator.equals("replaceRegex")
-                        && listNode.elements.get(2) instanceof StringNode modifier
-                        && modifier.value.contains("r")
-                ) {
-                    // regex replace usually returns a list,
-                    // but with "r" modifier it returns scalar
-                    right = new OperatorNode("scalar", right, right.tokenIndex);
-                }
-
                 right.accept(emitterVisitor);
                 return;
-            }
         }
 
         // Not a regex operator: $v =~ $qr;
         node.right.accept(scalarVisitor);
         node.left.accept(scalarVisitor);
-        emitterVisitor.pushCallContext();
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/regex/RuntimeRegex", "matchRegex",
-                "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
-
-        // If the context type is VOID, pop the result off the stack
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        emitMatchRegex(emitterVisitor);
     }
 
     /**
@@ -78,13 +59,11 @@ public class EmitRegex {
     static void handleNotBindRegex(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         emitterVisitor.visit(
                 new OperatorNode("not",
-                        new OperatorNode("scalar",
-                                new BinaryOperatorNode(
-                                        "=~",
-                                        node.left,
-                                        node.right,
-                                        node.tokenIndex
-                                ), node.tokenIndex
+                        new BinaryOperatorNode(
+                                "=~",
+                                node.left,
+                                node.right,
+                                node.tokenIndex
                         ), node.tokenIndex
                 ));
     }
@@ -169,14 +148,20 @@ public class EmitRegex {
             variable = new OperatorNode("$", new IdentifierNode("_", node.tokenIndex), node.tokenIndex);
         }
         variable.accept(scalarVisitor);
+        emitMatchRegex(emitterVisitor);
+    }
 
+    private static void emitMatchRegex(EmitterVisitor emitterVisitor) {
         emitterVisitor.pushCallContext();
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/regex/RuntimeRegex", "matchRegex",
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
 
-        // If the context type is VOID, pop the result off the stack
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+            // If the context type is SCALAR, cast the result to Scalar
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+        } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+            // If the context type is VOID, pop the result off the stack
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
         }
     }
