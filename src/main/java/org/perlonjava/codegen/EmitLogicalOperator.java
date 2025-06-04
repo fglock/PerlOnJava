@@ -94,12 +94,10 @@ public class EmitLogicalOperator {
         node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // Evaluate right operand in scalar context
         // Stack is [left, right]
 
-        mv.visitInsn(Opcodes.DUP_X1); // Stack becomes [right, left, right]
-        mv.visitInsn(Opcodes.SWAP);   // Stack becomes [right, right, left]
+        mv.visitInsn(Opcodes.SWAP);   // Stack becomes [right, left]
 
         // Assign right to left
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "addToScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", true);
-        mv.visitInsn(Opcodes.POP);
         // Stack is [right]
 
         // At this point, the stack either has the left (if it was true) or the right (if left was false)
