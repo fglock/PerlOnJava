@@ -143,8 +143,20 @@ public class EmitOperatorNode {
             case "pop", "shift":
                 handleArrayUnaryBuiltin(emitterVisitor, node, operator);
                 break;
-            case "matchRegex", "quoteRegex", "replaceRegex", "tr", "y", "qx":
-                EmitRegex.handleRegex(emitterVisitor, node);
+            case "matchRegex":
+                EmitRegex.handleMatchRegex(emitterVisitor, node);
+                break;
+            case "quoteRegex":
+                EmitRegex.handleQuoteRegex(emitterVisitor, node);
+                break;
+            case "replaceRegex":
+                EmitRegex.handleReplaceRegex(emitterVisitor, node);
+                break;
+            case "tr", "y":
+                EmitRegex.handleTransliterate(emitterVisitor, node);
+                break;
+            case "qx":
+                EmitRegex.handleSystemCommand(emitterVisitor, node);
                 break;
             default:
                 if (operator.length() == 2 && operator.startsWith("-")) {
