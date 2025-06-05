@@ -21,7 +21,7 @@ public class EmitOperatorNode {
      * Processes various Perl operators and delegates to specific handler methods.
      *
      * @param emitterVisitor The visitor that walks the AST
-     * @param node The operator node to process
+     * @param node           The operator node to process
      */
     static void emitOperatorNode(EmitterVisitor emitterVisitor, OperatorNode node) {
         String operator = node.operator;
@@ -49,11 +49,61 @@ public class EmitOperatorNode {
             // Eval operations
             case "eval", "evalbytes" -> EmitEval.handleEvalOperator(emitterVisitor, node);
 
-            // Built-in functions requiring special handling
-            case "time", "times", "wantarray", "undef",
-                 "gmtime", "localtime", "caller", "reset", "select",
-                 "prototype", "require", "stat", "lstat" ->
-                    handleUnaryBuiltin(emitterVisitor, node, operator);
+            case "time", "times" -> {
+                emitOperator(operator, emitterVisitor);
+            }
+            case "wantarray" -> {
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ILOAD,
+                        emitterVisitor.ctx.symbolTable.getVariableIndex("wantarray"));
+                emitOperator("wantarray", emitterVisitor);
+            }
+            case "undef" -> {
+                if (node.operand == null) {
+                    emitOperator(operator, emitterVisitor);
+                    break;
+                }
+                node.operand.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/RuntimeList",
+                        "undefine",
+                        "()Lorg/perlonjava/runtime/RuntimeList;",
+                        false);
+                if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                    emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+                }
+            }
+            case "gmtime", "localtime", "caller", "reset", "select" -> {
+                node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
+                emitterVisitor.pushCallContext();
+                emitOperator(operator, emitterVisitor);
+            }
+            case "prototype" -> {
+                node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                emitterVisitor.ctx.mv.visitLdcInsn(
+                        emitterVisitor.ctx.symbolTable.getCurrentPackage());
+                emitOperator(operator, emitterVisitor);
+            }
+            case "require" -> {
+                node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                emitterVisitor.ctx.mv.visitLdcInsn(node.getBooleanAnnotation("module_true"));
+                emitOperator(operator, emitterVisitor);
+            }
+            case "stat", "lstat" -> {
+                if (node.operand instanceof IdentifierNode identNode &&
+                        identNode.name.equals("_")) {
+                    emitterVisitor.ctx.mv.visitMethodInsn(
+                            Opcodes.INVOKESTATIC,
+                            "org/perlonjava/operators/Stat",
+                            operator + "LastHandle",
+                            "()Lorg/perlonjava/runtime/RuntimeList;",
+                            false);
+                    if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                        emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+                    }
+                } else {
+                    handleUnaryDefaultCase(node, operator, emitterVisitor);
+                }
+            }
 
             // Unary operators
             case "unaryMinus" -> handleUnaryDefaultCase(node, "unaryMinus", emitterVisitor);
@@ -75,8 +125,7 @@ public class EmitOperatorNode {
                  "hex", "lc", "lcfirst", "length", "log",
                  "oct", "ord", "pos", "quotemeta", "rand", "ref",
                  "rewinddir", "rmdir", "sin", "sleep", "sqrt",
-                 "srand", "study", "telldir", "uc", "ucfirst" ->
-                    handleUnaryDefaultCase(node, operator, emitterVisitor);
+                 "srand", "study", "telldir", "uc", "ucfirst" -> handleUnaryDefaultCase(node, operator, emitterVisitor);
 
             // Miscellaneous operators
             case "+" -> EmitOperator.handleUnaryPlusOperator(emitterVisitor, node);
@@ -125,80 +174,10 @@ public class EmitOperatorNode {
     }
 
     /**
-     * Handles special unary builtin operators that require custom processing.
-     *
-     * @param emitterVisitor The visitor walking the AST
-     * @param node The operator node
-     * @param operator The operator string
-     */
-    static void handleUnaryBuiltin(EmitterVisitor emitterVisitor, OperatorNode node, String operator) {
-        MethodVisitor mv = emitterVisitor.ctx.mv;
-
-        switch (operator) {
-            case "time", "times" -> {
-                emitOperator(operator, emitterVisitor);
-            }
-            case "wantarray" -> {
-                mv.visitVarInsn(Opcodes.ILOAD,
-                        emitterVisitor.ctx.symbolTable.getVariableIndex("wantarray"));
-                emitOperator("wantarray", emitterVisitor);
-            }
-            case "undef" -> {
-                if (node.operand == null) {
-                    emitOperator(operator, emitterVisitor);
-                    return;
-                }
-                node.operand.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/RuntimeList",
-                        "undefine",
-                        "()Lorg/perlonjava/runtime/RuntimeList;",
-                        false);
-                if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-                    mv.visitInsn(Opcodes.POP);
-                }
-            }
-            case "gmtime", "localtime", "caller", "reset", "select" -> {
-                node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
-                emitterVisitor.pushCallContext();
-                emitOperator(operator, emitterVisitor);
-            }
-            case "prototype" -> {
-                node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-                emitterVisitor.ctx.mv.visitLdcInsn(
-                        emitterVisitor.ctx.symbolTable.getCurrentPackage());
-                emitOperator(operator, emitterVisitor);
-            }
-            case "require" -> {
-                node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-                emitterVisitor.ctx.mv.visitLdcInsn(node.getBooleanAnnotation("module_true"));
-                emitOperator(operator, emitterVisitor);
-            }
-            case "stat", "lstat" -> {
-                if (node.operand instanceof IdentifierNode identNode &&
-                        identNode.name.equals("_")) {
-                    emitterVisitor.ctx.mv.visitMethodInsn(
-                            Opcodes.INVOKESTATIC,
-                            "org/perlonjava/operators/Stat",
-                            operator + "LastHandle",
-                            "()Lorg/perlonjava/runtime/RuntimeList;",
-                            false);
-                    if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-                        mv.visitInsn(Opcodes.POP);
-                    }
-                } else {
-                    handleUnaryDefaultCase(node, operator, emitterVisitor);
-                }
-            }
-            default -> handleUnaryDefaultCase(node, operator, emitterVisitor);
-        }
-    }
-
-    /**
      * Handles standard unary operators with default processing logic.
      *
-     * @param node The operator node
-     * @param operator The operator string
+     * @param node           The operator node
+     * @param operator       The operator string
      * @param emitterVisitor The visitor walking the AST
      */
     private static void handleUnaryDefaultCase(OperatorNode node, String operator,
@@ -224,8 +203,8 @@ public class EmitOperatorNode {
      * Handles array-specific unary builtin operators.
      *
      * @param emitterVisitor The visitor walking the AST
-     * @param node The operator node
-     * @param operator The operator string
+     * @param node           The operator node
+     * @param operator       The operator string
      */
     static void handleArrayUnaryBuiltin(EmitterVisitor emitterVisitor, OperatorNode node,
                                         String operator) {
@@ -242,7 +221,7 @@ public class EmitOperatorNode {
      * Handles creation of references (backslash operator).
      *
      * @param emitterVisitor The visitor walking the AST
-     * @param node The operator node
+     * @param node           The operator node
      */
     static void handleCreateReference(EmitterVisitor emitterVisitor, OperatorNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
