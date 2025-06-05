@@ -177,22 +177,25 @@ public class EmitOperatorNode {
     static void handleUnaryBuiltin(EmitterVisitor emitterVisitor, OperatorNode node, String operator) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
-        if (node.operand == null) {
-            // Unary operator with no arguments, or with optional arguments called without arguments
-            // example: undef()  wantarray()  time()  times()
-            if (operator.equals("wantarray")) {
-                // Retrieve wantarray value from JVM local vars
-                mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.symbolTable.getVariableIndex("wantarray"));
-            }
-            emitOperator(operator, emitterVisitor);
-            return;
-        }
-
         switch (operator) {
+            case "time", "times":
+                // Unary operator with no arguments
+                emitOperator(operator, emitterVisitor);
+                return;
+
+            case "wantarray":
+                mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.symbolTable.getVariableIndex("wantarray"));
+                emitOperator("wantarray", emitterVisitor);
+                return;
+
             case "undef":
-                operator = "undefine";
+                if (node.operand == null) {
+                    // undef() operator with no arguments
+                    emitOperator(operator, emitterVisitor);
+                    return;
+                }
                 node.operand.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", operator, "()Lorg/perlonjava/runtime/RuntimeList;", false);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "undefine", "()Lorg/perlonjava/runtime/RuntimeList;", false);
                 if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
                     mv.visitInsn(Opcodes.POP);
                 }
