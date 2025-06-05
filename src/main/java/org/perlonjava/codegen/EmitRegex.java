@@ -89,17 +89,11 @@ public class EmitRegex {
     static void handleTransliterate(EmitterVisitor emitterVisitor, OperatorNode node) {
         ListNode operand = (ListNode) node.operand;
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
-        Node variable = null;
 
         // Process the three required components: source, target, and flags
         operand.elements.get(0).accept(scalarVisitor);  // Source characters
         operand.elements.get(1).accept(scalarVisitor);  // Target characters
         operand.elements.get(2).accept(scalarVisitor);  // Flags/modifiers
-
-        // Check for optional variable binding
-        if (operand.elements.size() > 3) {
-            variable = operand.elements.get(3);
-        }
 
         // Compile the transliteration operation
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -107,10 +101,7 @@ public class EmitRegex {
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/operators/RuntimeTransliterate;", false);
 
         // Use default variable $_ if none specified
-        if (variable == null) {
-            variable = new OperatorNode("$", new IdentifierNode("_", node.tokenIndex), node.tokenIndex);
-        }
-        variable.accept(scalarVisitor);
+        handleVariableBinding(operand, 3, scalarVisitor);
 
         // Execute the transliteration
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/operators/RuntimeTransliterate", "transliterate", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
@@ -128,17 +119,11 @@ public class EmitRegex {
     static void handleReplaceRegex(EmitterVisitor emitterVisitor, OperatorNode node) {
         ListNode operand = (ListNode) node.operand;
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
-        Node variable = null;
 
         // Process pattern, replacement, and flags
         operand.elements.get(0).accept(scalarVisitor);  // Pattern
         operand.elements.get(1).accept(scalarVisitor);  // Replacement
         operand.elements.get(2).accept(scalarVisitor);  // Flags
-
-        // Handle optional variable binding
-        if (operand.elements.size() > 3) {
-            variable = operand.elements.get(3);
-        }
 
         // Create the replacement regex
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -146,10 +131,8 @@ public class EmitRegex {
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
         // Use default variable $_ if none specified
-        if (variable == null) {
-            variable = new OperatorNode("$", new IdentifierNode("_", node.tokenIndex), node.tokenIndex);
-        }
-        variable.accept(scalarVisitor);
+        handleVariableBinding(operand, 3, scalarVisitor);
+
         emitMatchRegex(emitterVisitor);
     }
 
@@ -178,16 +161,10 @@ public class EmitRegex {
     static void handleMatchRegex(EmitterVisitor emitterVisitor, OperatorNode node) {
         ListNode operand = (ListNode) node.operand;
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
-        Node variable = null;
 
         // Process pattern and flags
         operand.elements.get(0).accept(scalarVisitor);  // Pattern
         operand.elements.get(1).accept(scalarVisitor);  // Flags
-
-        // Handle optional variable binding
-        if (operand.elements.size() > 2) {
-            variable = operand.elements.get(2);
-        }
 
         // Create the regex matcher
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -195,10 +172,8 @@ public class EmitRegex {
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
         // Use default variable $_ if none specified
-        if (variable == null) {
-            variable = new OperatorNode("$", new IdentifierNode("_", node.tokenIndex), node.tokenIndex);
-        }
-        variable.accept(scalarVisitor);
+        handleVariableBinding(operand, 2, scalarVisitor);
+
         emitMatchRegex(emitterVisitor);
     }
 
@@ -221,5 +196,28 @@ public class EmitRegex {
             // Discard result if in void context
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
         }
+    }
+
+    /**
+     * Handles variable binding for regex operations, using $_ as default if no variable is specified.
+     *
+     * @param operand       The ListNode containing operation elements
+     * @param variableIndex The index where the variable binding should be found in the operand list
+     * @param scalarVisitor The visitor used to emit scalar context bytecode
+     */
+    private static void handleVariableBinding(ListNode operand, int variableIndex, EmitterVisitor scalarVisitor) {
+        // Check if a variable was provided in the operand list
+        Node variable = null;
+        if (operand.elements.size() > variableIndex) {
+            variable = operand.elements.get(variableIndex);
+        }
+
+        // If no variable was specified, use the default $_ variable
+        if (variable == null) {
+            variable = new OperatorNode("$", new IdentifierNode("_", operand.tokenIndex), operand.tokenIndex);
+        }
+
+        // Generate bytecode for the variable access
+        variable.accept(scalarVisitor);
     }
 }
