@@ -58,4 +58,12 @@ public class EmitBinaryOperator {
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         EmitOperator.handleVoidContext(emitterVisitor);
     }
+
+    static void handleRangeOrFlipFlop(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+            EmitLogicalOperator.emitFlipFlopOperator(emitterVisitor, node);
+        } else {
+            EmitOperator.handleRangeOperator(emitterVisitor, node);
+        }
+    }
 }
