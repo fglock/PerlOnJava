@@ -102,15 +102,14 @@ public class EmitBinaryOperatorNode {
                  "==", "!=", "eq", "ne":
                 EmitOperatorChained.emitChainedComparison(emitterVisitor, node);
                 return;
+            case "%", "&", "&.", "*", "**", "+", "-", "/",
+                 "<<", "<=>", ">>", "^", "^.", "|", "|.",
+                 "bless", "cmp", "isa":
+                handleBinaryOperator(emitterVisitor, node, OperatorHandler.get(operator));
+                return;
+            default:
+                throw new PerlCompilerException(node.tokenIndex, "Unexpected infix operator: " + operator, emitterVisitor.ctx.errorUtil);
         }
-
-        OperatorHandler operatorHandler = OperatorHandler.get(operator);
-        if (operatorHandler != null) {
-            handleBinaryOperator(emitterVisitor, node, operatorHandler);
-            return;
-        }
-
-        throw new PerlCompilerException(node.tokenIndex, "Unexpected infix operator: " + operator, emitterVisitor.ctx.errorUtil);
     }
 
     static void handleBinaryOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node, OperatorHandler operatorHandler) {
