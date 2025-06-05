@@ -12,10 +12,9 @@ import static org.perlonjava.codegen.EmitOperator.emitOperator;
 
 public class EmitBinaryOperatorNode {
     static void emitBinaryOperatorNode(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        String operator = node.operator;
-        emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) " + operator + " in context " + emitterVisitor.ctx.contextType);
+        emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) " + node.operator + " in context " + emitterVisitor.ctx.contextType);
 
-        switch (operator) { // handle operators that support short-circuit or other special cases
+        switch (node.operator) { // handle operators that support short-circuit or other special cases
             case "||":
             case "or":
                 EmitLogicalOperator.emitLogicalOperator(emitterVisitor, node, Opcodes.IFNE, "getBoolean");
@@ -105,10 +104,10 @@ public class EmitBinaryOperatorNode {
             case "%", "&", "&.", "*", "**", "+", "-", "/",
                  "<<", "<=>", ">>", "^", "^.", "|", "|.",
                  "bless", "cmp", "isa":
-                handleBinaryOperator(emitterVisitor, node, OperatorHandler.get(operator));
+                handleBinaryOperator(emitterVisitor, node, OperatorHandler.get(node.operator));
                 return;
             default:
-                throw new PerlCompilerException(node.tokenIndex, "Unexpected infix operator: " + operator, emitterVisitor.ctx.errorUtil);
+                throw new PerlCompilerException(node.tokenIndex, "Unexpected infix operator: " + node.operator, emitterVisitor.ctx.errorUtil);
         }
     }
 
