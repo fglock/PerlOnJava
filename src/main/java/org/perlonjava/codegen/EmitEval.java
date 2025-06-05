@@ -173,13 +173,7 @@ public class EmitEval {
         // Stack: [RuntimeList]
 
         // Handle the result based on the context
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
-            // Stack: [RuntimeScalar]
-        } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-            // Stack: []
-        }
+        EmitOperator.handleVoidOrScalarContext(emitterVisitor);
         // If the context is LIST or RUNTIME, the stack remains as [RuntimeList]
     }
 }
