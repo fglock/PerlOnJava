@@ -4,106 +4,96 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.BinaryOperatorNode;
 import org.perlonjava.operators.OperatorHandler;
 import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.RuntimeContextType;
 
 public class EmitBinaryOperatorNode {
-    static void emitBinaryOperatorNode(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) " + node.operator + " in context " + emitterVisitor.ctx.contextType);
 
-        switch (node.operator) { // handle operators that support short-circuit or other special cases
-            case "||":
-            case "or":
-                EmitLogicalOperator.emitLogicalOperator(emitterVisitor, node, Opcodes.IFNE, "getBoolean");
-                return;
-            case "||=":
-                EmitLogicalOperator.emitLogicalAssign(emitterVisitor, node, Opcodes.IFNE, "getBoolean");
-                return;
-            case "&&":
-            case "and":
-                EmitLogicalOperator.emitLogicalOperator(emitterVisitor, node, Opcodes.IFEQ, "getBoolean");
-                return;
-            case "xor", "^^":
-                EmitLogicalOperator.emitXorOperator(emitterVisitor, node);
-                return;
-            case "&&=":
-                EmitLogicalOperator.emitLogicalAssign(emitterVisitor, node, Opcodes.IFEQ, "getBoolean");
-                return;
-            case "//":
-                EmitLogicalOperator.emitLogicalOperator(emitterVisitor, node, Opcodes.IFNE, "getDefinedBoolean");
-                return;
-            case "//=":
-                EmitLogicalOperator.emitLogicalAssign(emitterVisitor, node, Opcodes.IFNE, "getDefinedBoolean");
-                return;
-            case "=":
-                EmitVariable.handleAssignOperator(emitterVisitor, node);
-                return;
-            case ".":
-                EmitOperator.handleConcatOperator(emitterVisitor, node);
-                return;
-            case "->":
-                Dereference.handleArrowOperator(emitterVisitor, node);
-                return;
-            case "[":
-                Dereference.handleArrayElementOperator(emitterVisitor, node);
-                return;
-            case "{":
-                Dereference.handleHashElementOperator(emitterVisitor, node, "get");
-                return;
-            case "(":
-                EmitSubroutine.handleApplyOperator(emitterVisitor, node);
-                return;
-            case "push":
-            case "unshift":
-                EmitOperator.handlePushOperator(emitterVisitor, node);
-                return;
-            case "map":
-            case "sort":
-            case "grep":
-                EmitOperator.handleMapOperator(emitterVisitor, node);
-                return;
-            case "eof", "open", "printf", "print", "say":
-                EmitOperator.handleSayOperator(emitterVisitor, node);
-                return;
-            case "close", "readline", "fileno", "getc", "truncate":
-                EmitOperator.handleReadlineOperator(emitterVisitor, node);
-                return;
-            case "join", "split", "sprintf", "substr":
-                EmitOperator.handleSubstr(emitterVisitor, node);
-                return;
-            case "x":
-                EmitOperator.handleRepeat(emitterVisitor, node);
-                return;
-            case "!~":
-                EmitRegex.handleNotBindRegex(emitterVisitor, node);
-                return;
-            case "=~":
-                EmitRegex.handleBindRegex(emitterVisitor, node);
-                return;
-            case "**=", "+=", "*=", "&=", "&.=", "binary&=", "<<=", "-=", "/=", "|=", "|.=",
-                 "binary|=", ">>=", ".=", "%=", "^=", "^.=", "binary^=", "x=":
-                EmitBinaryOperator.handleCompoundAssignment(emitterVisitor, node);
-                return;
-            case "...":
-                EmitLogicalOperator.emitFlipFlopOperator(emitterVisitor, node);
-                return;
-            case "..":
-                if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
-                    EmitLogicalOperator.emitFlipFlopOperator(emitterVisitor, node);
-                    return;
-                }
-                EmitOperator.handleRangeOperator(emitterVisitor, node);
-                return;
+    static void emitBinaryOperatorNode(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
+        emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) %s in context %s"
+                .formatted(node.operator, emitterVisitor.ctx.contextType));
+
+        switch (node.operator) {
+            // Logical operators with short-circuit evaluation
+            case "||", "or" ->
+                    EmitLogicalOperator.emitLogicalOperator(emitterVisitor, node, Opcodes.IFNE, "getBoolean");
+
+            case "||=" ->
+                    EmitLogicalOperator.emitLogicalAssign(emitterVisitor, node, Opcodes.IFNE, "getBoolean");
+
+            case "&&", "and" ->
+                    EmitLogicalOperator.emitLogicalOperator(emitterVisitor, node, Opcodes.IFEQ, "getBoolean");
+
+            case "xor", "^^" ->
+                    EmitLogicalOperator.emitXorOperator(emitterVisitor, node);
+
+            case "&&=" ->
+                    EmitLogicalOperator.emitLogicalAssign(emitterVisitor, node, Opcodes.IFEQ, "getBoolean");
+
+            case "//" ->
+                    EmitLogicalOperator.emitLogicalOperator(emitterVisitor, node, Opcodes.IFNE, "getDefinedBoolean");
+
+            case "//=" ->
+                    EmitLogicalOperator.emitLogicalAssign(emitterVisitor, node, Opcodes.IFNE, "getDefinedBoolean");
+
+            // Assignment operator
+            case "=" -> EmitVariable.handleAssignOperator(emitterVisitor, node);
+
+            // String concatenation
+            case "." -> EmitOperator.handleConcatOperator(emitterVisitor, node);
+
+            // Dereference operators
+            case "->" -> Dereference.handleArrowOperator(emitterVisitor, node);
+            case "[" -> Dereference.handleArrayElementOperator(emitterVisitor, node);
+            case "{" -> Dereference.handleHashElementOperator(emitterVisitor, node, "get");
+            case "(" -> EmitSubroutine.handleApplyOperator(emitterVisitor, node);
+
+            // Array manipulation
+            case "push", "unshift" -> EmitOperator.handlePushOperator(emitterVisitor, node);
+
+            // Higher-order functions
+            case "map", "sort", "grep" -> EmitOperator.handleMapOperator(emitterVisitor, node);
+
+            // I/O operations
+            case "eof", "open", "printf", "print", "say" ->
+                    EmitOperator.handleSayOperator(emitterVisitor, node);
+
+            case "close", "readline", "fileno", "getc", "truncate" ->
+                    EmitOperator.handleReadlineOperator(emitterVisitor, node);
+
+            // String operations
+            case "join", "split", "sprintf", "substr" ->
+                    EmitOperator.handleSubstr(emitterVisitor, node);
+
+            case "x" -> EmitOperator.handleRepeat(emitterVisitor, node);
+
+            // Regex operations
+            case "!~" -> EmitRegex.handleNotBindRegex(emitterVisitor, node);
+            case "=~" -> EmitRegex.handleBindRegex(emitterVisitor, node);
+
+            // Compound assignment operators
+            case "**=", "+=", "*=", "&=", "&.=", "binary&=", "<<=", "-=", "/=",
+                 "|=", "|.=", "binary|=", ">>=", ".=", "%=", "^=", "^.=",
+                 "binary^=", "x=" ->
+                    EmitBinaryOperator.handleCompoundAssignment(emitterVisitor, node);
+
+            // Range and flip-flop operators
+            case "..." -> EmitLogicalOperator.emitFlipFlopOperator(emitterVisitor, node);
+
+            case ".." -> EmitBinaryOperator.handleRangeOrFlipFlop(emitterVisitor, node);
+
+            // Comparison operators (chained)
             case "<", ">", "<=", ">=", "lt", "gt", "le", "ge",
-                 "==", "!=", "eq", "ne":
-                EmitOperatorChained.emitChainedComparison(emitterVisitor, node);
-                return;
+                 "==", "!=", "eq", "ne" ->
+                    EmitOperatorChained.emitChainedComparison(emitterVisitor, node);
+
+            // Binary operators
             case "%", "&", "&.", "*", "**", "+", "-", "/",
                  "<<", "<=>", ">>", "^", "^.", "|", "|.",
-                 "bless", "cmp", "isa":
-                EmitBinaryOperator.handleBinaryOperator(emitterVisitor, node, OperatorHandler.get(node.operator));
-                return;
-            default:
-                throw new PerlCompilerException(node.tokenIndex, "Unexpected infix operator: " + node.operator, emitterVisitor.ctx.errorUtil);
+                 "bless", "cmp", "isa" ->
+                    EmitBinaryOperator.handleBinaryOperator(emitterVisitor, node,
+                            OperatorHandler.get(node.operator));
+
+            default -> throw new PerlCompilerException(node.tokenIndex,
+                    "Unexpected infix operator: " + node.operator, emitterVisitor.ctx.errorUtil);
         }
     }
 }
