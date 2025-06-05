@@ -76,9 +76,7 @@ public class EmitLiteral {
                 "createHashRef",
                 "(Lorg/perlonjava/runtime/RuntimeDataProvider;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-        }
+        EmitOperator.handleVoidContext(emitterVisitor);
         emitterVisitor.ctx.logDebug("visit(HashLiteralNode) end");
     }
 

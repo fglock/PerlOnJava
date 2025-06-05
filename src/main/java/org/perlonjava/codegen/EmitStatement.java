@@ -277,9 +277,7 @@ public class EmitStatement {
         mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Exception");
 
         // If the context is VOID, clear the stack
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-        }
+        EmitOperator.handleVoidContext(emitterVisitor);
 
         emitterVisitor.ctx.logDebug("emitTryCatch end");
     }
