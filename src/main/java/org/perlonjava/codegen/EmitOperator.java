@@ -557,8 +557,8 @@ public class EmitOperator {
                     operator,
                     "()Lorg/perlonjava/runtime/RuntimeScalar;",
                     false);
+            handleVoidContext(emitterVisitor);
         }
-        handleVoidContext(emitterVisitor);
     }
 
     /**
