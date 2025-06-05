@@ -106,16 +106,18 @@ public class EmitOperatorNode {
             case "tr", "y" -> EmitRegex.handleTransliterate(emitterVisitor, node);
             case "qx" -> EmitRegex.handleSystemCommand(emitterVisitor, node);
 
-            default -> {
-                // Handle file test operators (-f, -d, etc.)
-                if (operator.length() == 2 && operator.startsWith("-")) {
-                    EmitOperatorFileTest.handleFileTestBuiltin(emitterVisitor, node);
-                    return;
-                }
-                throw new PerlCompilerException(node.tokenIndex,
+            // File test operators
+            case "-r", "-w", "-x", "-o",
+                 "-R", "-W", "-X", "-O",
+                 "-e", "-z", "-s",
+                 "-f", "-d", "-l", "-p", "-S", "-b", "-c", "-t",
+                 "-u", "-g", "-k",
+                 "-T", "-B",
+                 "-M", "-A", "-C" -> EmitOperatorFileTest.handleFileTestBuiltin(emitterVisitor, node);
+
+            default -> throw new PerlCompilerException(node.tokenIndex,
                         "Not implemented: operator: " + operator,
                         emitterVisitor.ctx.errorUtil);
-            }
         }
     }
 }
