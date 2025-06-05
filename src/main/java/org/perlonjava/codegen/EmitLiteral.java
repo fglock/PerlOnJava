@@ -51,9 +51,7 @@ public class EmitLiteral {
         }
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "createReference", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
 
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        EmitOperator.handleVoidContext(emitterVisitor);
         emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) end");
     }
 
@@ -153,12 +151,7 @@ public class EmitLiteral {
         }
 
         // At this point, the stack has the fully populated RuntimeList instance
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
-            // Transform the value in the stack to RuntimeScalar
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        EmitOperator.handleVoidOrScalarContext(emitterVisitor);
         emitterVisitor.ctx.logDebug("visit(ListNode) end");
     }
 

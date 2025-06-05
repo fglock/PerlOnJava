@@ -197,13 +197,7 @@ public class EmitSubroutine {
                 "apply",
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeDataProvider;I)Lorg/perlonjava/runtime/RuntimeList;",
                 false); // Generate an .apply() call
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
-            // Transform the value in the stack to RuntimeScalar
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            // Remove the value from the stack
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        EmitOperator.handleVoidOrScalarContext(emitterVisitor);
     }
 
     /**

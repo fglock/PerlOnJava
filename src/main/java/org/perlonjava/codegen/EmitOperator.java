@@ -390,6 +390,18 @@ public class EmitOperator {
         }
     }
 
+    static void handleVoidOrScalarContext(EmitterVisitor emitterVisitor) {
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+            // Transform the value in the stack to RuntimeScalar
+            // emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+            // Stack: [RuntimeScalar]
+        } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+            // Stack: []
+        }
+    }
+
     // Handles the 'delete' and 'exists' operators for hash elements.
     static void handleDeleteExists(EmitterVisitor emitterVisitor, OperatorNode node) {
         //   OperatorNode: delete

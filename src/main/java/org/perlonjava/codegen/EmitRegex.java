@@ -187,13 +187,7 @@ public class EmitRegex {
                 "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
 
         // Handle the result based on context type
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
-            // Convert result to Scalar if in scalar context
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
-        } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            // Discard result if in void context
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        EmitOperator.handleVoidOrScalarContext(emitterVisitor);
     }
 
     /**

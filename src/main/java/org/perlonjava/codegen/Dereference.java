@@ -230,13 +230,7 @@ public class Dereference {
                     "call",
                     "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
                     false); // generate an .call()
-            if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
-                // Transform the value in the stack to RuntimeScalar
-                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
-            } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-                // Remove the value from the stack
-                emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-            }
+            EmitOperator.handleVoidOrScalarContext(emitterVisitor);
         }
     }
 
@@ -266,10 +260,7 @@ public class Dereference {
         };
 
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "arrayDerefGet", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            // Remove the value from the stack
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        EmitOperator.handleVoidContext(emitterVisitor);
     }
 
     public static void handleArrowHashDeref(EmitterVisitor emitterVisitor, BinaryOperatorNode node, String hashOperation) {
