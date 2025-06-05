@@ -45,9 +45,7 @@ public class Dereference {
 
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", "get", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
-                if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-                    emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-                }
+                EmitOperator.handleVoidContext(emitterVisitor);
                 return;
             }
             if (sigil.equals("@")) {
@@ -68,9 +66,7 @@ public class Dereference {
 
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", "getSlice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
 
-                if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-                    emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-                }
+                EmitOperator.handleVoidContext(emitterVisitor);
                 return;
             }
         }
@@ -130,9 +126,7 @@ public class Dereference {
 
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash", hashOperation, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
-                if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-                    emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-                }
+                EmitOperator.handleVoidContext(emitterVisitor);
                 return;
             }
             if (sigil.equals("@")) {
@@ -164,9 +158,7 @@ public class Dereference {
 
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash", hashOperation + "Slice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
 
-                if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-                    emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-                }
+                EmitOperator.handleVoidContext(emitterVisitor);
                 return;
             }
         }
@@ -308,9 +300,6 @@ public class Dereference {
         };
 
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", methodName, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            // Remove the value from the stack
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        EmitOperator.handleVoidContext(emitterVisitor);
     }
 }

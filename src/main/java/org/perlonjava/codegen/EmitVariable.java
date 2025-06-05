@@ -274,10 +274,7 @@ public class EmitVariable {
             default:
                 throw new PerlCompilerException("Unsupported assignment context: " + lvalueContext);
         }
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            // Remove the value from the stack
-            mv.visitInsn(Opcodes.POP);
-        }
+        EmitOperator.handleVoidContext(emitterVisitor);
         emitterVisitor.ctx.logDebug("SET end");
     }
 

@@ -81,9 +81,7 @@ public class EmitOperatorChained {
             emitterVisitor.ctx.mv.visitLabel(endLabel);
         }
 
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        EmitOperator.handleVoidContext(emitterVisitor);
     }
 
     static boolean isComparisonOperator(String operator) {

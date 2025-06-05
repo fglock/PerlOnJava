@@ -237,9 +237,6 @@ public class EmitSubroutine {
                 false);
 
         // Now we have a RuntimeScalar representing the current subroutine (__SUB__)
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            // Remove the value from the stack
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        EmitOperator.handleVoidContext(emitterVisitor);
     }
 }

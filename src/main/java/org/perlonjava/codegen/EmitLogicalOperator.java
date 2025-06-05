@@ -32,9 +32,7 @@ public class EmitLogicalOperator {
         mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Operator", "xor", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
         // If the context is VOID, pop the result from the stack
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-        }
+        EmitOperator.handleVoidContext(emitterVisitor);
     }
 
     /**
@@ -61,9 +59,7 @@ public class EmitLogicalOperator {
         mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/ScalarFlipFlopOperator", "evaluate", "(ILorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
         // If the context is VOID, pop the result from the stack
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-        }
+        EmitOperator.handleVoidContext(emitterVisitor);
     }
 
     /**
@@ -104,9 +100,7 @@ public class EmitLogicalOperator {
         mv.visitLabel(endLabel);
 
         // If the context is VOID, pop the result from the stack
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-        }
+        EmitOperator.handleVoidContext(emitterVisitor);
     }
 
     /**
@@ -154,9 +148,7 @@ public class EmitLogicalOperator {
         // Stack is [right]
 
         mv.visitLabel(endLabel);
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-        }
+        EmitOperator.handleVoidContext(emitterVisitor);
     }
 
     /**

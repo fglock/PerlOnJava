@@ -26,9 +26,7 @@ public class EmitOperator {
                 operatorHandler.getMethodType() == Opcodes.INVOKEINTERFACE
         );
         // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        handleVoidContext(emitterVisitor);
     }
 
     /**
@@ -104,9 +102,7 @@ public class EmitOperator {
         }
 
         // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        handleVoidContext(emitterVisitor);
     }
 
     // Handles the 'say' operator for outputting data.
@@ -127,9 +123,7 @@ public class EmitOperator {
         // Call the operator, return Scalar
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeList;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        handleVoidContext(emitterVisitor);
     }
 
     // Handles the unary plus operator, which is a no-op in many contexts.
@@ -137,9 +131,7 @@ public class EmitOperator {
         // Accept the operand in SCALAR context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        handleVoidContext(emitterVisitor);
     }
 
     // Handles the 'index' built-in function, which finds the position of a substring.
@@ -261,9 +253,7 @@ public class EmitOperator {
                     "readline",
                     "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
             // If the context is VOID, pop the result from the stack.
-            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-                mv.visitInsn(Opcodes.POP);
-            }
+            handleVoidContext(emitterVisitor);
         } else {
             // Handle globbing if the argument is not empty or "<>".
             node.operator = "glob";
@@ -282,9 +272,7 @@ public class EmitOperator {
                 node.operator,
                 "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
         // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-        }
+        handleVoidContext(emitterVisitor);
     }
 
     // Handles the 'glob' built-in function, which performs filename expansion.
@@ -346,9 +334,7 @@ public class EmitOperator {
         }
 
         // If the context is VOID, pop the result from the stack.
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        handleVoidContext(emitterVisitor);
     }
 
     // Handles the 'concat' operator, which concatenates two strings.
@@ -394,6 +380,10 @@ public class EmitOperator {
                     "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
                     false);
         }
+        handleVoidContext(emitterVisitor);
+    }
+
+    static void handleVoidContext(EmitterVisitor emitterVisitor) {
         // If the context is VOID, pop the result from the stack.
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
@@ -510,9 +500,7 @@ public class EmitOperator {
                 "undefine",
                 "()Lorg/perlonjava/runtime/RuntimeList;",
                 false);
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        handleVoidContext(emitterVisitor);
     }
 
     static void handleTimeRelatedOperator(EmitterVisitor emitterVisitor, OperatorNode node, String operator) {
@@ -543,9 +531,7 @@ public class EmitOperator {
                     operator + "LastHandle",
                     "()Lorg/perlonjava/runtime/RuntimeList;",
                     false);
-            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-                emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-            }
+            handleVoidContext(emitterVisitor);
         } else {
             handleUnaryDefaultCase(node, operator, emitterVisitor);
         }
@@ -572,9 +558,7 @@ public class EmitOperator {
                     "()Lorg/perlonjava/runtime/RuntimeScalar;",
                     false);
         }
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-        }
+        handleVoidContext(emitterVisitor);
     }
 
     /**
@@ -610,9 +594,7 @@ public class EmitOperator {
                     "createListReference",
                     "()Lorg/perlonjava/runtime/RuntimeList;",
                     false);
-            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-                mv.visitInsn(Opcodes.POP);
-            }
+            handleVoidContext(emitterVisitor);
         } else {
             if (node.operand instanceof OperatorNode operatorNode &&
                     operatorNode.operator.equals("&")) {
@@ -638,9 +620,7 @@ public class EmitOperator {
                         "()Lorg/perlonjava/runtime/RuntimeScalar;",
                         true);
             }
-            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-                mv.visitInsn(Opcodes.POP);
-            }
+            handleVoidContext(emitterVisitor);
         }
     }
 }

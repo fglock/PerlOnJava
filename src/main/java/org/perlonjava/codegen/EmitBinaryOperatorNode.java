@@ -135,9 +135,7 @@ public class EmitBinaryOperatorNode {
                         operatorHandler.getMethodName(),
                         operatorHandler.getDescriptorWithIntParameter(),
                         false);
-                if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-                    emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-                }
+                EmitOperator.handleVoidContext(emitterVisitor);
                 return;
             }
         }
@@ -161,8 +159,6 @@ public class EmitBinaryOperatorNode {
         emitOperator(baseOperator, scalarVisitor);
         // assign to the Lvalue
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        }
+        EmitOperator.handleVoidContext(emitterVisitor);
     }
 }
