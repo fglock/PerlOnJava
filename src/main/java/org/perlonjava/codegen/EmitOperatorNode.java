@@ -18,10 +18,9 @@ public class EmitOperatorNode {
      * @param node           The operator node to process
      */
     static void emitOperatorNode(EmitterVisitor emitterVisitor, OperatorNode node) {
-        String operator = node.operator;
-        emitterVisitor.ctx.logDebug("visit(OperatorNode) " + operator + " in context " + emitterVisitor.ctx.contextType);
+        emitterVisitor.ctx.logDebug("visit(OperatorNode) " + node.operator + " in context " + emitterVisitor.ctx.contextType);
 
-        switch (operator) {
+        switch (node.operator) {
             // Subroutine related
             case "__SUB__" -> EmitSubroutine.handleSelfCallOperator(emitterVisitor, node);
             case "package" -> EmitOperator.handlePackageOperator(emitterVisitor, node);
@@ -63,17 +62,17 @@ public class EmitOperatorNode {
                  "hex", "lc", "lcfirst", "length", "log",
                  "oct", "ord", "pos", "quotemeta", "rand", "ref",
                  "rewinddir", "rmdir", "sin", "sleep", "sqrt",
-                 "srand", "study", "telldir", "uc", "ucfirst" -> EmitOperator.handleUnaryDefaultCase(node, operator, emitterVisitor);
+                 "srand", "study", "telldir", "uc", "ucfirst" -> EmitOperator.handleUnaryDefaultCase(node, node.operator, emitterVisitor);
 
             // Miscellaneous operators
-            case "time", "times" -> EmitOperator.handleTimeOperator(emitterVisitor, operator);
+            case "time", "times" -> EmitOperator.handleTimeOperator(emitterVisitor, node.operator);
             case "wantarray" -> EmitOperator.handleWantArrayOperator(emitterVisitor);
-            case "undef" -> EmitOperator.handleUndefOperator(emitterVisitor, node, operator);
+            case "undef" -> EmitOperator.handleUndefOperator(emitterVisitor, node, node.operator);
             case "gmtime", "localtime", "caller", "reset", "select" ->
-                    EmitOperator.handleTimeRelatedOperator(emitterVisitor, node, operator);
+                    EmitOperator.handleTimeRelatedOperator(emitterVisitor, node, node.operator);
             case "prototype" -> EmitOperator.handlePrototypeOperator(emitterVisitor, node);
             case "require" -> EmitOperator.handleRequireOperator(emitterVisitor, node);
-            case "stat", "lstat" -> EmitOperator.handleStatOperator(emitterVisitor, node, operator);
+            case "stat", "lstat" -> EmitOperator.handleStatOperator(emitterVisitor, node, node.operator);
             case "+" -> EmitOperator.handleUnaryPlusOperator(emitterVisitor, node);
             case "<>" -> EmitOperator.handleDiamondBuiltin(emitterVisitor, node);
             case "chop", "chomp" -> EmitOperator.handleChompBuiltin(emitterVisitor, node);
@@ -97,7 +96,7 @@ public class EmitOperatorNode {
             // Array operations
             case "reverse", "unlink" -> EmitOperator.handleReverseBuiltin(emitterVisitor, node);
             case "splice" -> EmitOperator.handleSpliceBuiltin(emitterVisitor, node);
-            case "pop", "shift" -> EmitOperator.handleArrayUnaryBuiltin(emitterVisitor, node, operator);
+            case "pop", "shift" -> EmitOperator.handleArrayUnaryBuiltin(emitterVisitor, node, node.operator);
 
             // Regular expression operations
             case "matchRegex" -> EmitRegex.handleMatchRegex(emitterVisitor, node);
@@ -116,7 +115,7 @@ public class EmitOperatorNode {
                  "-M", "-A", "-C" -> EmitOperatorFileTest.handleFileTestBuiltin(emitterVisitor, node);
 
             default -> throw new PerlCompilerException(node.tokenIndex,
-                        "Not implemented: operator: " + operator,
+                        "Not implemented: operator: " + node.operator,
                         emitterVisitor.ctx.errorUtil);
         }
     }
