@@ -176,7 +176,6 @@ public class EmitOperatorNode {
      */
     static void handleUnaryBuiltin(EmitterVisitor emitterVisitor, OperatorNode node, String operator) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        OperatorHandler operatorHandler = OperatorHandler.get(operator);
 
         if (node.operand == null) {
             // Unary operator with no arguments, or with optional arguments called without arguments
@@ -194,7 +193,10 @@ public class EmitOperatorNode {
                 operator = "undefine";
                 node.operand.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", operator, "()Lorg/perlonjava/runtime/RuntimeList;", false);
-                break;
+                if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                    mv.visitInsn(Opcodes.POP);
+                }
+                return;
 
             case "gmtime":
             case "localtime":
@@ -226,29 +228,31 @@ public class EmitOperatorNode {
                             "org/perlonjava/operators/Stat",
                             operator + "LastHandle",
                             "()Lorg/perlonjava/runtime/RuntimeList;", false);
+                    if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                        mv.visitInsn(Opcodes.POP);
+                    }
                 } else {
-                    handleUnaryDefaultCase(node, operator, emitterVisitor, operatorHandler, mv);
+                    handleUnaryDefaultCase(node, operator, emitterVisitor, mv);
                 }
-                break;
+                return;
 
             default:
-                handleUnaryDefaultCase(node, operator, emitterVisitor, operatorHandler, mv);
-                break;
-        }
-
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
+                handleUnaryDefaultCase(node, operator, emitterVisitor, mv);
         }
     }
 
     private static void handleUnaryDefaultCase(OperatorNode node, String operator, EmitterVisitor emitterVisitor,
-                                               OperatorHandler operatorHandler, MethodVisitor mv) {
+                                               MethodVisitor mv) {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        OperatorHandler operatorHandler = OperatorHandler.get(operator);
         if (operatorHandler != null) {
             emitOperator(operator, emitterVisitor);
         } else {
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
                     operator, "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        }
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+            mv.visitInsn(Opcodes.POP);
         }
     }
 
