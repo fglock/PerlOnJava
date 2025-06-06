@@ -68,28 +68,8 @@ public class EmitOperator {
         String operator = node.operator;
         emitterVisitor.ctx.logDebug("handleReadlineOperator " + node);
 
-        if (operator.equals("truncate")) {
-            // Emit the File Handle or file name.
-            if (node.left instanceof OperatorNode || node.left instanceof StringNode) {
-                // If the left node is an operator, accept it in SCALAR context.
-                node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-            } else {
-                // Otherwise, emit the file handle directly.
-                emitFileHandle(emitterVisitor.ctx, node.left);
-            }
-            node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
-            emitOperator(node.operator, emitterVisitor);
-            return;
-        }
-
         // Emit the File Handle
-        if (node.left instanceof OperatorNode) {
-            // If the left node is an operator, accept it in SCALAR context.
-            node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        } else {
-            // Otherwise, emit the file handle directly.
-            emitFileHandle(emitterVisitor.ctx, node.left);
-        }
+        emitFileHandle(emitterVisitor.with(RuntimeContextType.SCALAR), node.left);
 
         if (operator.equals("readline")) {
             // Push call context for SCALAR or LIST context.
@@ -105,6 +85,22 @@ public class EmitOperator {
         handleVoidContext(emitterVisitor);
     }
 
+    static void handleTruncateOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
+        // Emit the File Handle or file name
+        if (node.left instanceof StringNode) {
+            // If the left node is a filename, accept it in SCALAR context
+            node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        } else {
+            emitFileHandle(emitterVisitor.with(RuntimeContextType.SCALAR), node.left);
+        }
+
+        // Accept the right operand in LIST context
+        node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+        // Emit the truncate operator
+        emitOperator("truncate", emitterVisitor);
+    }
+
     // Handles the 'say' operator for outputting data.
     static void handleSayOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         String operator = node.operator;
@@ -112,13 +108,7 @@ public class EmitOperator {
         node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
         // Emit the File Handle
-        if (node.left instanceof OperatorNode) {
-            // If the left node is an operator, accept it in SCALAR context.
-            node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        } else {
-            // Otherwise, emit the file handle directly.
-            emitFileHandle(emitterVisitor.ctx, node.left);
-        }
+        emitFileHandle(emitterVisitor.with(RuntimeContextType.SCALAR), node.left);
 
         // Call the operator, return Scalar
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeList;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
@@ -455,9 +445,14 @@ public class EmitOperator {
         }
     }
 
-    public static void emitFileHandle(EmitterContext ctx, Node node) {
-        // Emit File Handle
-        if (node instanceof IdentifierNode) {
+    public static void emitFileHandle(EmitterVisitor emitterVisitor, Node node) {
+        EmitterContext ctx = emitterVisitor.ctx;
+
+        // Emit the File Handle or file name
+        if (node instanceof OperatorNode) {
+            // If the left node is an operator, accept it in SCALAR context
+            node.accept(emitterVisitor);
+        } else if (node instanceof IdentifierNode) {
             // `print FILE 123`
             // retrieve STDOUT, STDERR from GlobalIORef
             // fetch a global fileHandle by name
