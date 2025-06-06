@@ -1,6 +1,6 @@
 package org.perlonjava.astnode;
 
-import org.perlonjava.codegen.Visitor;
+import org.perlonjava.astvisitor.Visitor;
 
 /**
  * The TryNode class represents a node in the abstract syntax tree (AST) that holds a "try-catch-finally" statement.

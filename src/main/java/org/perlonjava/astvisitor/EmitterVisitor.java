@@ -1,7 +1,8 @@
-package org.perlonjava.codegen;
+package org.perlonjava.astvisitor;
 
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
+import org.perlonjava.codegen.*;
 import org.perlonjava.runtime.RuntimeContextType;
 
 import java.util.HashMap;

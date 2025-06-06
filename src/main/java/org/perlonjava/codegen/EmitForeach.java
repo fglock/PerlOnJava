@@ -4,11 +4,12 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
+import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.perlmodule.Warnings;
 import org.perlonjava.runtime.RuntimeContextType;
 
 public class EmitForeach {
-    static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
+    public static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
         emitterVisitor.ctx.logDebug("FOR1 start");
 
         int scopeIndex = -1;

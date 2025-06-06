@@ -3,6 +3,7 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.*;
 import org.objectweb.asm.util.TraceClassVisitor;
 import org.perlonjava.astnode.Node;
+import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 

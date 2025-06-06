@@ -7,6 +7,7 @@ import org.perlonjava.astnode.BinaryOperatorNode;
 import org.perlonjava.astnode.IdentifierNode;
 import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.astnode.SubroutineNode;
+import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.RuntimeCode;
 import org.perlonjava.runtime.RuntimeContextType;
@@ -28,7 +29,7 @@ public class EmitSubroutine {
      * @param ctx  The context used for code emission.
      * @param node The subroutine node representing the subroutine.
      */
-    static void emitSubroutine(EmitterContext ctx, SubroutineNode node) {
+    public static void emitSubroutine(EmitterContext ctx, SubroutineNode node) {
         ctx.logDebug("SUB start");
         if (ctx.contextType == RuntimeContextType.VOID) {
             return;

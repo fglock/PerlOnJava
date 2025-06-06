@@ -3,6 +3,8 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
+import org.perlonjava.astvisitor.EmitterVisitor;
+import org.perlonjava.astvisitor.LValueVisitor;
 import org.perlonjava.perlmodule.Warnings;
 import org.perlonjava.runtime.*;
 

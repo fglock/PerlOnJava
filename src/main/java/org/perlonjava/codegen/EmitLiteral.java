@@ -3,6 +3,7 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
+import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.RuntimeScalarType;
@@ -22,7 +23,7 @@ public class EmitLiteral {
      * @param emitterVisitor The visitor for emitting bytecode
      * @param node           The ArrayLiteralNode to be processed
      */
-    static void emitArrayLiteral(EmitterVisitor emitterVisitor, ArrayLiteralNode node) {
+    public static void emitArrayLiteral(EmitterVisitor emitterVisitor, ArrayLiteralNode node) {
         emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
@@ -61,7 +62,7 @@ public class EmitLiteral {
      * @param emitterVisitor The visitor for emitting bytecode
      * @param node           The HashLiteralNode to be processed
      */
-    static void emitHashLiteral(EmitterVisitor emitterVisitor, HashLiteralNode node) {
+    public static void emitHashLiteral(EmitterVisitor emitterVisitor, HashLiteralNode node) {
         emitterVisitor.ctx.logDebug("visit(HashLiteralNode) in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
@@ -84,7 +85,7 @@ public class EmitLiteral {
      * @param ctx  The emission context
      * @param node The StringNode to be processed
      */
-    static void emitString(EmitterContext ctx, StringNode node) {
+    public static void emitString(EmitterContext ctx, StringNode node) {
         if (ctx.contextType == RuntimeContextType.VOID) {
             return;
         }
@@ -118,7 +119,7 @@ public class EmitLiteral {
      * @param emitterVisitor The visitor for emitting bytecode
      * @param node           The ListNode to be processed
      */
-    static void emitList(EmitterVisitor emitterVisitor, ListNode node) {
+    public static void emitList(EmitterVisitor emitterVisitor, ListNode node) {
         emitterVisitor.ctx.logDebug("visit(ListNode) in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
@@ -166,7 +167,7 @@ public class EmitLiteral {
      * @param ctx  The emission context
      * @param node The NumberNode to be processed
      */
-    static void emitNumber(EmitterContext ctx, NumberNode node) {
+    public static void emitNumber(EmitterContext ctx, NumberNode node) {
         ctx.logDebug("visit(NumberNode) in context " + ctx.contextType);
         if (ctx.contextType == RuntimeContextType.VOID) {
             return;
@@ -206,7 +207,7 @@ public class EmitLiteral {
      * @param node The IdentifierNode to be processed
      * @throws PerlCompilerException if the bare word is not implemented
      */
-    static void emitIdentifier(EmitterVisitor visitor, EmitterContext ctx, IdentifierNode node) {
+    public static void emitIdentifier(EmitterVisitor visitor, EmitterContext ctx, IdentifierNode node) {
         if (ctx.symbolTable.isStrictOptionEnabled(STRICT_SUBS)) {
             throw new PerlCompilerException(
                     node.tokenIndex, "Bareword \"" + node.name + "\" not allowed while \"strict subs\" in use", ctx.errorUtil);
