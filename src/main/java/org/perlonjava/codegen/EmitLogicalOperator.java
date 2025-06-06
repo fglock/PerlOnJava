@@ -6,6 +6,8 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.BinaryOperatorNode;
 import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.astnode.TernaryOperatorNode;
+import org.perlonjava.astvisitor.EmitterVisitor;
+import org.perlonjava.astvisitor.FindDeclarationVisitor;
 import org.perlonjava.operators.ScalarFlipFlopOperator;
 import org.perlonjava.runtime.RuntimeContextType;
 
@@ -157,7 +159,7 @@ public class EmitLogicalOperator {
      * @param emitterVisitor The visitor used for code emission.
      * @param node           The ternary operator node representing the operation.
      */
-    static void emitTernaryOperator(EmitterVisitor emitterVisitor, TernaryOperatorNode node) {
+    public static void emitTernaryOperator(EmitterVisitor emitterVisitor, TernaryOperatorNode node) {
         emitterVisitor.ctx.logDebug("TERNARY_OP start");
 
         // Create labels for the else and end branches

@@ -1,6 +1,6 @@
 package org.perlonjava.astnode;
 
-import org.perlonjava.codegen.Visitor;
+import org.perlonjava.astvisitor.Visitor;
 
 /**
  * The CompilerFlagNode class represents a node in the AST for handling

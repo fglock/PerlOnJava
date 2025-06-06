@@ -3,7 +3,7 @@ package org.perlonjava.parser;
 import org.perlonjava.Configuration;
 import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.EmitterContext;
-import org.perlonjava.codegen.ExtractValueVisitor;
+import org.perlonjava.astvisitor.ExtractValueVisitor;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.operators.ModuleOperators;

@@ -1,6 +1,7 @@
 package org.perlonjava.codegen;
 
 import org.perlonjava.astnode.*;
+import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.PerlCompilerException;
 
 /**
@@ -17,7 +18,7 @@ public class EmitOperatorNode {
      * @param emitterVisitor The visitor that walks the AST
      * @param node           The operator node to process
      */
-    static void emitOperatorNode(EmitterVisitor emitterVisitor, OperatorNode node) {
+    public static void emitOperatorNode(EmitterVisitor emitterVisitor, OperatorNode node) {
         emitterVisitor.ctx.logDebug("visit(OperatorNode) " + node.operator + " in context " + emitterVisitor.ctx.contextType);
 
         switch (node.operator) {

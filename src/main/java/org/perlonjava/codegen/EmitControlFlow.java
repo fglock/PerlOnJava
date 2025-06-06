@@ -6,6 +6,7 @@ import org.perlonjava.astnode.IdentifierNode;
 import org.perlonjava.astnode.ListNode;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.astnode.OperatorNode;
+import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 

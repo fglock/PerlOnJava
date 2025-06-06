@@ -1,6 +1,6 @@
 package org.perlonjava.astnode;
 
-import org.perlonjava.codegen.PrintVisitor;
+import org.perlonjava.astvisitor.PrintVisitor;
 
 /**
  * Abstract base class for AST nodes that includes an tokenIndex pointing

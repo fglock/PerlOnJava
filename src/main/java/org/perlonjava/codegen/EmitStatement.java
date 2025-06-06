@@ -7,6 +7,7 @@ import org.perlonjava.astnode.For3Node;
 import org.perlonjava.astnode.IfNode;
 import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.astnode.TryNode;
+import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.RuntimeContextType;
 
 /**
@@ -21,7 +22,7 @@ public class EmitStatement {
      * @param emitterVisitor The visitor used for code emission.
      * @param node           The if node representing the if statement.
      */
-    static void emitIf(EmitterVisitor emitterVisitor, IfNode node) {
+    public static void emitIf(EmitterVisitor emitterVisitor, IfNode node) {
         emitterVisitor.ctx.logDebug("IF start: " + node.operator);
 
         // Enter a new scope in the symbol table
@@ -74,7 +75,7 @@ public class EmitStatement {
      * @param emitterVisitor The visitor used for code emission.
      * @param node           The for-loop node representing the loop.
      */
-    static void emitFor3(EmitterVisitor emitterVisitor, For3Node node) {
+    public static void emitFor3(EmitterVisitor emitterVisitor, For3Node node) {
         if (node.isDoWhile) {
             emitDoWhile(emitterVisitor, node);
         } else {
@@ -221,7 +222,7 @@ public class EmitStatement {
         emitterVisitor.ctx.logDebug("DO-WHILE end");
     }
 
-    static void emitTryCatch(EmitterVisitor emitterVisitor, TryNode node) {
+    public static void emitTryCatch(EmitterVisitor emitterVisitor, TryNode node) {
         emitterVisitor.ctx.logDebug("emitTryCatch start");
 
         MethodVisitor mv = emitterVisitor.ctx.mv;

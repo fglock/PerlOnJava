@@ -2,6 +2,7 @@ package org.perlonjava.codegen;
 
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
+import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.RuntimeContextType;
 
 import static org.perlonjava.codegen.EmitOperator.emitOperator;

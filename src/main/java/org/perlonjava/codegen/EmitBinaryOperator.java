@@ -3,6 +3,7 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.BinaryOperatorNode;
 import org.perlonjava.astnode.NumberNode;
+import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.operators.OperatorHandler;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.ScalarUtils;

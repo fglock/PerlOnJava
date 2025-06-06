@@ -3,6 +3,7 @@ package org.perlonjava.codegen;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.Node;
+import org.perlonjava.astvisitor.FindDeclarationVisitor;
 
 /**
  * The Local class provides methods to handle the setup and teardown of local variables

@@ -15,7 +15,7 @@ public class EmitLabel {
      * @param node The AST node representing the label
      * @throws PerlCompilerException if the label is not found in the current scope
      */
-    static void emitLabel(EmitterContext ctx, LabelNode node) {
+    public static void emitLabel(EmitterContext ctx, LabelNode node) {
         // Search for the label definition in the current compilation scope
         GotoLabels targetLabel = ctx.javaClassInfo.findGotoLabelsByName(node.label);
 

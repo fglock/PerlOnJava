@@ -22,6 +22,9 @@
 │   │               ├── astnode/
 │   │               │   ├── Node.java
 │   │               │   └── other AST node classes
+│   │               ├── astvisitor/
+│   │               │   ├── Visitor.java
+│   │               │   └── other AST node visitor classes
 │   │               ├── lexer/
 │   │               │   ├── Lexer.java
 │   │               │   └── other lexer classes

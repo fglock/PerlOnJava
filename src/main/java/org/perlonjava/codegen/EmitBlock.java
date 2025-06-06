@@ -4,6 +4,7 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.perlonjava.astnode.BlockNode;
 import org.perlonjava.astnode.Node;
+import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.RuntimeContextType;
 
 import java.util.List;
@@ -15,7 +16,7 @@ public class EmitBlock {
      * @param emitterVisitor The visitor used for code emission.
      * @param node           The block node representing the block of statements.
      */
-    static void emitBlock(EmitterVisitor emitterVisitor, BlockNode node) {
+    public static void emitBlock(EmitterVisitor emitterVisitor, BlockNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
         emitterVisitor.ctx.logDebug("generateCodeBlock start context:" + emitterVisitor.ctx.contextType);

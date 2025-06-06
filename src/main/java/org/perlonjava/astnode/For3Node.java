@@ -1,7 +1,7 @@
 package org.perlonjava.astnode;
 
-import org.perlonjava.codegen.LValueVisitor;
-import org.perlonjava.codegen.Visitor;
+import org.perlonjava.astvisitor.LValueVisitor;
+import org.perlonjava.astvisitor.Visitor;
 import org.perlonjava.runtime.RuntimeContextType;
 
 /**

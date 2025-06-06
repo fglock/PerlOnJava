@@ -1,6 +1,6 @@
 package org.perlonjava.astnode;
 
-import org.perlonjava.codegen.Visitor;
+import org.perlonjava.astvisitor.Visitor;
 
 import java.util.List;
 

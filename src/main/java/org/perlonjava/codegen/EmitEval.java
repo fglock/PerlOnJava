@@ -6,6 +6,7 @@ import org.objectweb.asm.Type;
 import org.perlonjava.ArgumentParser;
 import org.perlonjava.astnode.EvalOperatorNode;
 import org.perlonjava.astnode.OperatorNode;
+import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeCode;
 import org.perlonjava.runtime.RuntimeContextType;

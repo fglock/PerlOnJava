@@ -2,12 +2,13 @@ package org.perlonjava.codegen;
 
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.BinaryOperatorNode;
+import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.operators.OperatorHandler;
 import org.perlonjava.runtime.PerlCompilerException;
 
 public class EmitBinaryOperatorNode {
 
-    static void emitBinaryOperatorNode(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
+    public static void emitBinaryOperatorNode(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) %s in context %s"
                 .formatted(node.operator, emitterVisitor.ctx.contextType));
 
