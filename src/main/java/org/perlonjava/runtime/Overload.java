@@ -29,79 +29,35 @@ import static org.perlonjava.runtime.RuntimeScalarType.*;
 public class Overload {
 
     /**
+     * Enum defining the different conversion types and their associated overload methods
+     */
+    private enum ConversionType {
+        STRING("(\"\"", "(0+", "(bool"),
+        NUMERIC("(0+", "(\"\"", "(bool"),
+        BOOLEAN("(bool", "(0+", "(\"\"");
+
+        final String primaryMethod;
+        final String fallbackMethod1;
+        final String fallbackMethod2;
+
+        ConversionType(String primary, String fallback1, String fallback2) {
+            this.primaryMethod = primary;
+            this.fallbackMethod1 = fallback1;
+            this.fallbackMethod2 = fallback2;
+        }
+    }
+
+    /**
      * Converts a {@link RuntimeScalar} object to its string representation following
-     * Perl's stringification rules. The method implements the following resolution order:
-     *
-     * <ol>
-     *   <li>Check if object is blessed (has a Perl class association)
-     *   <li>Look for ("" overloaded method
-     *   <li>If fallback is enabled, try (0+ method
-     *   <li>If still no match, try (bool method
-     *   <li>If no overloading applies, use default string conversion
-     * </ol>
+     * Perl's stringification rules.
      *
      * @param runtimeScalar the {@code RuntimeScalar} object to be stringified
      * @return the string representation based on overloading rules
-     * @see RuntimeScalar
-     * @see RuntimeBaseEntity
-     * @see InheritanceResolver
      */
     public static RuntimeScalar stringify(RuntimeScalar runtimeScalar) {
-        // Check if the scalar contains a blessed object
-        if (runtimeScalar.value instanceof RuntimeBaseEntity baseEntity) {
-            int blessId = baseEntity.blessId;
-            // Only proceed if the object is blessed (has a valid blessId)
-            if (blessId != 0) {
-                // Get the Perl class name from the bless ID
-                String perlClassName = NameNormalizer.getBlessStr(blessId);
-
-                // Look for overload markers in the class hierarchy
-                // '((' indicates general overloading capability
-                RuntimeScalar methodOverloaded = InheritanceResolver.findMethodInHierarchy("((", perlClassName, null, 0);
-                // '()' indicates fallback behavior configuration
-                RuntimeScalar methodFallback = InheritanceResolver.findMethodInHierarchy("()", perlClassName, null, 0);
-
-                // Proceed if either overloading or fallback is defined
-                if (methodOverloaded != null || methodFallback != null) {
-                    // Prepare arguments array for method call
-                    RuntimeArray perlMethodArgs = new RuntimeArray(runtimeScalar);
-                    RuntimeScalar perlMethod;
-
-                    // First try: Look for string overload method
-                    perlMethod = InheritanceResolver.findMethodInHierarchy("(\"\"", perlClassName, null, 0);
-
-                    // Handle fallback mechanism if string overload not found
-                    if (perlMethod == null && methodFallback != null) {
-                        RuntimeScalar fallback = RuntimeCode.apply(methodFallback, new RuntimeArray(), SCALAR).getFirst();
-
-                        // If fallback is undefined or true, try alternative methods
-                        if (!fallback.getDefinedBoolean() || fallback.getBoolean()) {
-                            // Try numeric conversion method
-                            perlMethod = InheritanceResolver.findMethodInHierarchy("(0+", perlClassName, null, 0);
-                            // Try boolean conversion method
-                            if (perlMethod == null) {
-                                perlMethod = InheritanceResolver.findMethodInHierarchy("(bool", perlClassName, null, 0);
-                            }
-                        }
-                    }
-
-                    // Last resort: try nomethod handler
-                    if (perlMethod == null) {
-                        perlMethod = InheritanceResolver.findMethodInHierarchy("(nomethod", perlClassName, null, 0);
-                        if (perlMethod != null) {
-                            // Setup arguments for nomethod handler
-                            RuntimeArray.push(perlMethodArgs, scalarUndef);
-                            RuntimeArray.push(perlMethodArgs, scalarUndef);
-                            RuntimeArray.push(perlMethodArgs, new RuntimeScalar("(\"\""));
-                        }
-                    }
-
-                    // Execute the found method if any
-                    if (perlMethod != null) {
-                        return RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR).getFirst();
-                    }
-                }
-            }
+        RuntimeScalar result = convertWithOverload(runtimeScalar, ConversionType.STRING);
+        if (result != null) {
+            return result;
         }
 
         // Default string conversion for non-blessed or non-overloaded objects
@@ -113,62 +69,17 @@ public class Overload {
         });
     }
 
+    /**
+     * Converts a {@link RuntimeScalar} object to its numeric representation following
+     * Perl's numification rules.
+     *
+     * @param runtimeScalar the {@code RuntimeScalar} object to be numified
+     * @return the numeric representation based on overloading rules
+     */
     public static RuntimeScalar numify(RuntimeScalar runtimeScalar) {
-        // Check if the scalar contains a blessed object
-        if (runtimeScalar.value instanceof RuntimeBaseEntity baseEntity) {
-            int blessId = baseEntity.blessId;
-            // Only proceed if the object is blessed (has a valid blessId)
-            if (blessId != 0) {
-                // Get the Perl class name from the bless ID
-                String perlClassName = NameNormalizer.getBlessStr(blessId);
-
-                // Look for overload markers in the class hierarchy
-                // '((' indicates general overloading capability
-                RuntimeScalar methodOverloaded = InheritanceResolver.findMethodInHierarchy("((", perlClassName, null, 0);
-                // '()' indicates fallback behavior configuration
-                RuntimeScalar methodFallback = InheritanceResolver.findMethodInHierarchy("()", perlClassName, null, 0);
-
-                // Proceed if either overloading or fallback is defined
-                if (methodOverloaded != null || methodFallback != null) {
-                    // Prepare arguments array for method call
-                    RuntimeArray perlMethodArgs = new RuntimeArray(runtimeScalar);
-                    RuntimeScalar perlMethod;
-
-                    // First try: Look for number overload method
-                    perlMethod = InheritanceResolver.findMethodInHierarchy("(0+", perlClassName, null, 0);
-
-                    // Handle fallback mechanism if number overload not found
-                    if (perlMethod == null && methodFallback != null) {
-                        RuntimeScalar fallback = RuntimeCode.apply(methodFallback, new RuntimeArray(), SCALAR).getFirst();
-
-                        // If fallback is undefined or true, try alternative methods
-                        if (!fallback.getDefinedBoolean() || fallback.getBoolean()) {
-                            // Try string conversion method
-                            perlMethod = InheritanceResolver.findMethodInHierarchy("(\"\"", perlClassName, null, 0);
-                            // Try boolean conversion method
-                            if (perlMethod == null) {
-                                perlMethod = InheritanceResolver.findMethodInHierarchy("(bool", perlClassName, null, 0);
-                            }
-                        }
-                    }
-
-                    // Last resort: try nomethod handler
-                    if (perlMethod == null) {
-                        perlMethod = InheritanceResolver.findMethodInHierarchy("(nomethod", perlClassName, null, 0);
-                        if (perlMethod != null) {
-                            // Setup arguments for nomethod handler
-                            RuntimeArray.push(perlMethodArgs, scalarUndef);
-                            RuntimeArray.push(perlMethodArgs, scalarUndef);
-                            RuntimeArray.push(perlMethodArgs, new RuntimeScalar("(0+"));
-                        }
-                    }
-
-                    // Execute the found method if any
-                    if (perlMethod != null) {
-                        return RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR).getFirst();
-                    }
-                }
-            }
+        RuntimeScalar result = convertWithOverload(runtimeScalar, ConversionType.NUMERIC);
+        if (result != null) {
+            return result;
         }
 
         // Default number conversion for non-blessed or non-overloaded objects
@@ -180,62 +91,17 @@ public class Overload {
         });
     }
 
+    /**
+     * Converts a {@link RuntimeScalar} object to its boolean representation following
+     * Perl's boolification rules.
+     *
+     * @param runtimeScalar the {@code RuntimeScalar} object to be boolified
+     * @return the boolean representation based on overloading rules
+     */
     public static RuntimeScalar boolify(RuntimeScalar runtimeScalar) {
-        // Check if the scalar contains a blessed object
-        if (runtimeScalar.value instanceof RuntimeBaseEntity baseEntity) {
-            int blessId = baseEntity.blessId;
-            // Only proceed if the object is blessed (has a valid blessId)
-            if (blessId != 0) {
-                // Get the Perl class name from the bless ID
-                String perlClassName = NameNormalizer.getBlessStr(blessId);
-
-                // Look for overload markers in the class hierarchy
-                // '((' indicates general overloading capability
-                RuntimeScalar methodOverloaded = InheritanceResolver.findMethodInHierarchy("((", perlClassName, null, 0);
-                // '()' indicates fallback behavior configuration
-                RuntimeScalar methodFallback = InheritanceResolver.findMethodInHierarchy("()", perlClassName, null, 0);
-
-                // Proceed if either overloading or fallback is defined
-                if (methodOverloaded != null || methodFallback != null) {
-                    // Prepare arguments array for method call
-                    RuntimeArray perlMethodArgs = new RuntimeArray(runtimeScalar);
-                    RuntimeScalar perlMethod;
-
-                    // First try: Look for bool overload method
-                    perlMethod = InheritanceResolver.findMethodInHierarchy("(bool", perlClassName, null, 0);
-
-                    // Handle fallback mechanism if bool overload not found
-                    if (perlMethod == null && methodFallback != null) {
-                        RuntimeScalar fallback = RuntimeCode.apply(methodFallback, new RuntimeArray(), SCALAR).getFirst();
-
-                        // If fallback is undefined or true, try alternative methods
-                        if (!fallback.getDefinedBoolean() || fallback.getBoolean()) {
-                            // Try number conversion method
-                            perlMethod = InheritanceResolver.findMethodInHierarchy("(0+", perlClassName, null, 0);
-                            // Try string conversion method
-                            if (perlMethod == null) {
-                                perlMethod = InheritanceResolver.findMethodInHierarchy("(\"\"", perlClassName, null, 0);
-                            }
-                        }
-                    }
-
-                    // Last resort: try nomethod handler
-                    if (perlMethod == null) {
-                        perlMethod = InheritanceResolver.findMethodInHierarchy("(nomethod", perlClassName, null, 0);
-                        if (perlMethod != null) {
-                            // Setup arguments for nomethod handler
-                            RuntimeArray.push(perlMethodArgs, scalarUndef);
-                            RuntimeArray.push(perlMethodArgs, scalarUndef);
-                            RuntimeArray.push(perlMethodArgs, new RuntimeScalar("(bool"));
-                        }
-                    }
-
-                    // Execute the found method if any
-                    if (perlMethod != null) {
-                        return RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR).getFirst();
-                    }
-                }
-            }
+        RuntimeScalar result = convertWithOverload(runtimeScalar, ConversionType.BOOLEAN);
+        if (result != null) {
+            return result;
         }
 
         // Default bool conversion for non-blessed or non-overloaded objects
@@ -245,5 +111,80 @@ public class Overload {
             case HASHREFERENCE -> ((RuntimeHash) runtimeScalar.value).getBooleanRef();
             default -> runtimeScalar.getBooleanRef();
         });
+    }
+
+    /**
+     * Core method that handles overload resolution for different conversion types.
+     * Returns null if no overload method is found, allowing the caller to apply default conversion.
+     *
+     * @param runtimeScalar the scalar to convert
+     * @param conversionType the type of conversion (STRING, NUMERIC, or BOOLEAN)
+     * @return the result of the overload method, or null if no overload applies
+     */
+    private static RuntimeScalar convertWithOverload(RuntimeScalar runtimeScalar, ConversionType conversionType) {
+        // Check if the scalar contains a blessed object
+        if (!(runtimeScalar.value instanceof RuntimeBaseEntity baseEntity)) {
+            return null;
+        }
+
+        int blessId = baseEntity.blessId;
+        // Only proceed if the object is blessed (has a valid blessId)
+        if (blessId == 0) {
+            return null;
+        }
+
+        // Get the Perl class name from the bless ID
+        String perlClassName = NameNormalizer.getBlessStr(blessId);
+
+        // Look for overload markers in the class hierarchy
+        // '((' indicates general overloading capability
+        RuntimeScalar methodOverloaded = InheritanceResolver.findMethodInHierarchy("((", perlClassName, null, 0);
+        // '()' indicates fallback behavior configuration
+        RuntimeScalar methodFallback = InheritanceResolver.findMethodInHierarchy("()", perlClassName, null, 0);
+
+        // Proceed only if either overloading or fallback is defined
+        if (methodOverloaded == null && methodFallback == null) {
+            return null;
+        }
+
+        // Prepare arguments array for method call
+        RuntimeArray perlMethodArgs = new RuntimeArray(runtimeScalar);
+        RuntimeScalar perlMethod;
+
+        // First try: Look for primary overload method
+        perlMethod = InheritanceResolver.findMethodInHierarchy(conversionType.primaryMethod, perlClassName, null, 0);
+
+        // Handle fallback mechanism if primary overload not found
+        if (perlMethod == null && methodFallback != null) {
+            RuntimeScalar fallback = RuntimeCode.apply(methodFallback, new RuntimeArray(), SCALAR).getFirst();
+
+            // If fallback is undefined or true, try alternative methods
+            if (!fallback.getDefinedBoolean() || fallback.getBoolean()) {
+                // Try first fallback method
+                perlMethod = InheritanceResolver.findMethodInHierarchy(conversionType.fallbackMethod1, perlClassName, null, 0);
+                // Try second fallback method
+                if (perlMethod == null) {
+                    perlMethod = InheritanceResolver.findMethodInHierarchy(conversionType.fallbackMethod2, perlClassName, null, 0);
+                }
+            }
+        }
+
+        // Last resort: try nomethod handler
+        if (perlMethod == null) {
+            perlMethod = InheritanceResolver.findMethodInHierarchy("(nomethod", perlClassName, null, 0);
+            if (perlMethod != null) {
+                // Setup arguments for nomethod handler
+                RuntimeArray.push(perlMethodArgs, scalarUndef);
+                RuntimeArray.push(perlMethodArgs, scalarUndef);
+                RuntimeArray.push(perlMethodArgs, new RuntimeScalar(conversionType.primaryMethod));
+            }
+        }
+
+        // Execute the found method if any
+        if (perlMethod != null) {
+            return RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR).getFirst();
+        }
+
+        return null;
     }
 }
