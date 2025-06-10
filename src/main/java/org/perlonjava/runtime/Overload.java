@@ -34,7 +34,12 @@ public class Overload {
     private enum ConversionType {
         STRING("(\"\"", "(0+", "(bool"),
         NUMERIC("(0+", "(\"\"", "(bool"),
-        BOOLEAN("(bool", "(0+", "(\"\"");
+        BOOLEAN("(bool", "(0+", "(\"\""),
+        DEREF_SCALAR("(${}"),      // Scalar dereferencing
+        DEREF_ARRAY("(@{}"),       // Array dereferencing
+        DEREF_HASH("(%{}"),        // Hash dereferencing
+        DEREF_CODE("(&{}"),        // Code/subroutine dereferencing
+        DEREF_GLOB("(*{}");        // Typeglob dereferencing
 
         final String primaryMethod;
         final String fallbackMethod1;
@@ -44,6 +49,11 @@ public class Overload {
             this.primaryMethod = primary;
             this.fallbackMethod1 = fallback1;
             this.fallbackMethod2 = fallback2;
+        }
+        ConversionType(String primary) {
+            this.primaryMethod = primary;
+            this.fallbackMethod1 = null;
+            this.fallbackMethod2 = null;
         }
     }
 
@@ -160,11 +170,13 @@ public class Overload {
 
             // If fallback is undefined or true, try alternative methods
             if (!fallback.getDefinedBoolean() || fallback.getBoolean()) {
-                // Try first fallback method
-                perlMethod = InheritanceResolver.findMethodInHierarchy(conversionType.fallbackMethod1, perlClassName, null, 0);
-                // Try second fallback method
-                if (perlMethod == null) {
-                    perlMethod = InheritanceResolver.findMethodInHierarchy(conversionType.fallbackMethod2, perlClassName, null, 0);
+                if (conversionType.fallbackMethod1 != null) {
+                    // Try first fallback method
+                    perlMethod = InheritanceResolver.findMethodInHierarchy(conversionType.fallbackMethod1, perlClassName, null, 0);
+                    // Try second fallback method
+                    if (perlMethod == null) {
+                        perlMethod = InheritanceResolver.findMethodInHierarchy(conversionType.fallbackMethod2, perlClassName, null, 0);
+                    }
                 }
             }
         }
