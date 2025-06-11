@@ -29,35 +29,6 @@ import static org.perlonjava.runtime.RuntimeScalarType.*;
 public class Overload {
 
     /**
-     * Enum defining the different conversion types and their associated overload methods
-     */
-    private enum ConversionType {
-        STRING("(\"\"", "(0+", "(bool"),
-        NUMERIC("(0+", "(\"\"", "(bool"),
-        BOOLEAN("(bool", "(0+", "(\"\""),
-        DEREF_SCALAR("(${}"),      // Scalar dereferencing
-        DEREF_ARRAY("(@{}"),       // Array dereferencing
-        DEREF_HASH("(%{}"),        // Hash dereferencing
-        DEREF_CODE("(&{}"),        // Code/subroutine dereferencing
-        DEREF_GLOB("(*{}");        // Typeglob dereferencing
-
-        final String primaryMethod;
-        final String fallbackMethod1;
-        final String fallbackMethod2;
-
-        ConversionType(String primary, String fallback1, String fallback2) {
-            this.primaryMethod = primary;
-            this.fallbackMethod1 = fallback1;
-            this.fallbackMethod2 = fallback2;
-        }
-        ConversionType(String primary) {
-            this.primaryMethod = primary;
-            this.fallbackMethod1 = null;
-            this.fallbackMethod2 = null;
-        }
-    }
-
-    /**
      * Converts a {@link RuntimeScalar} object to its string representation following
      * Perl's stringification rules.
      *
@@ -127,57 +98,37 @@ public class Overload {
      * Core method that handles overload resolution for different conversion types.
      * Returns null if no overload method is found, allowing the caller to apply default conversion.
      *
-     * @param runtimeScalar the scalar to convert
+     * @param runtimeScalar  the scalar to convert
      * @param conversionType the type of conversion (STRING, NUMERIC, or BOOLEAN)
      * @return the result of the overload method, or null if no overload applies
      */
     private static RuntimeScalar convertWithOverload(RuntimeScalar runtimeScalar, ConversionType conversionType) {
-        // Check if the scalar contains a blessed object
-        if (!(runtimeScalar.value instanceof RuntimeBaseEntity baseEntity)) {
-            return null;
-        }
-
-        int blessId = baseEntity.blessId;
-        // Only proceed if the object is blessed (has a valid blessId)
-        if (blessId == 0) {
-            return null;
-        }
-
-        // Get the Perl class name from the bless ID
-        String perlClassName = NameNormalizer.getBlessStr(blessId);
-
-        // Look for overload markers in the class hierarchy
-        // '((' indicates general overloading capability
-        RuntimeScalar methodOverloaded = InheritanceResolver.findMethodInHierarchy("((", perlClassName, null, 0);
-        // '()' indicates fallback behavior configuration
-        RuntimeScalar methodFallback = InheritanceResolver.findMethodInHierarchy("()", perlClassName, null, 0);
-
-        // Proceed only if either overloading or fallback is defined
-        if (methodOverloaded == null && methodFallback == null) {
+        OverloadContext ctx = OverloadContext.prepare(runtimeScalar);
+        if (ctx == null) {
             return null;
         }
 
         // Try primary overload method
-        RuntimeScalar result = tryOverload(conversionType.primaryMethod, perlClassName, new RuntimeArray(runtimeScalar));
+        RuntimeScalar result = tryOverload(conversionType.primaryMethod, ctx.perlClassName, new RuntimeArray(runtimeScalar));
         if (result != null) {
             return result;
         }
 
         // Handle fallback mechanism
-        if (methodFallback != null) {
-            RuntimeScalar fallback = RuntimeCode.apply(methodFallback, new RuntimeArray(), SCALAR).getFirst();
+        if (ctx.methodFallback != null) {
+            RuntimeScalar fallback = RuntimeCode.apply(ctx.methodFallback, new RuntimeArray(), SCALAR).getFirst();
 
             // If fallback is undefined or true, try alternative methods
             if (!fallback.getDefinedBoolean() || fallback.getBoolean()) {
                 if (conversionType.fallbackMethod1 != null) {
                     // Try first fallback method
-                    result = tryOverload(conversionType.fallbackMethod1, perlClassName, new RuntimeArray(runtimeScalar));
+                    result = tryOverload(conversionType.fallbackMethod1, ctx.perlClassName, new RuntimeArray(runtimeScalar));
                     if (result != null) {
                         return result;
                     }
 
                     // Try second fallback method
-                    result = tryOverload(conversionType.fallbackMethod2, perlClassName, new RuntimeArray(runtimeScalar));
+                    result = tryOverload(conversionType.fallbackMethod2, ctx.perlClassName, new RuntimeArray(runtimeScalar));
                     if (result != null) {
                         return result;
                     }
@@ -186,7 +137,7 @@ public class Overload {
         }
 
         // Last resort: try nomethod handler
-        return tryOverload("(nomethod", perlClassName, new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar(conversionType.primaryMethod)));
+        return tryOverload("(nomethod", ctx.perlClassName, new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar(conversionType.primaryMethod)));
     }
 
     private static RuntimeScalar tryOverload(String methodName, String perlClassName, RuntimeArray perlMethodArgs) {
@@ -195,5 +146,74 @@ public class Overload {
             return null;
         }
         return RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR).getFirst();
+    }
+
+    /**
+     * Enum defining the different conversion types and their associated overload methods
+     */
+    private enum ConversionType {
+        STRING("(\"\"", "(0+", "(bool"),
+        NUMERIC("(0+", "(\"\"", "(bool"),
+        BOOLEAN("(bool", "(0+", "(\"\""),
+        DEREF_SCALAR("(${}"),      // Scalar dereferencing
+        DEREF_ARRAY("(@{}"),       // Array dereferencing
+        DEREF_HASH("(%{}"),        // Hash dereferencing
+        DEREF_CODE("(&{}"),        // Code/subroutine dereferencing
+        DEREF_GLOB("(*{}");        // Typeglob dereferencing
+
+        final String primaryMethod;
+        final String fallbackMethod1;
+        final String fallbackMethod2;
+
+        ConversionType(String primary, String fallback1, String fallback2) {
+            this.primaryMethod = primary;
+            this.fallbackMethod1 = fallback1;
+            this.fallbackMethod2 = fallback2;
+        }
+
+        ConversionType(String primary) {
+            this.primaryMethod = primary;
+            this.fallbackMethod1 = null;
+            this.fallbackMethod2 = null;
+        }
+    }
+
+    private static class OverloadContext {
+        final String perlClassName;
+        final RuntimeScalar methodOverloaded;
+        final RuntimeScalar methodFallback;
+
+        private OverloadContext(String perlClassName, RuntimeScalar methodOverloaded, RuntimeScalar methodFallback) {
+            this.perlClassName = perlClassName;
+            this.methodOverloaded = methodOverloaded;
+            this.methodFallback = methodFallback;
+        }
+
+        static OverloadContext prepare(RuntimeScalar runtimeScalar) {
+            // Check if the scalar contains a blessed object
+            if (!(runtimeScalar.value instanceof RuntimeBaseEntity baseEntity)) {
+                return null;
+            }
+
+            int blessId = baseEntity.blessId;
+            // Only proceed if the object is blessed (has a valid blessId)
+            if (blessId == 0) {
+                return null;
+            }
+
+            // Get the Perl class name from the bless ID
+            String perlClassName = NameNormalizer.getBlessStr(blessId);
+
+            // Look for overload markers in the class hierarchy
+            RuntimeScalar methodOverloaded = InheritanceResolver.findMethodInHierarchy("((", perlClassName, null, 0);
+            RuntimeScalar methodFallback = InheritanceResolver.findMethodInHierarchy("()", perlClassName, null, 0);
+
+            // Proceed only if either overloading or fallback is defined
+            if (methodOverloaded == null && methodFallback == null) {
+                return null;
+            }
+
+            return new OverloadContext(perlClassName, methodOverloaded, methodFallback);
+        }
     }
 }
