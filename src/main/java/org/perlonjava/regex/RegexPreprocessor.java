@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static java.lang.Character.isAlphabetic;
 import static org.perlonjava.regex.UnicodeResolver.translateUnicodeProperty;
 
 /**
@@ -126,7 +127,7 @@ public class RegexPreprocessor {
             } else if (c2 == '?' && ((c3 >= 'a' && c3 <= 'z') || c3 == '-' || c3 == '^')) {
                 // Handle (?modifiers: ... ) construct
                 return handleFlagModifiers(s, offset, sb, regexFlags);
-            } else if (c2 == '?' && c3 == '<' && c4 != '=') {
+            } else if (c2 == '?' && c3 == '<' && isAlphabetic(c4)) {
                 // Handle named capture (?<name> ... )
                 offset = handleNamedCapture(c3, s, offset, length, sb, regexFlags);
             } else if (c2 == '?' && c3 == '\'') {
