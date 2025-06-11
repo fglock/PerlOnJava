@@ -64,6 +64,17 @@ my $or_result = $basic || $false_basic;
 print "not " unless $or_result;
 say "ok # logical OR works";
 
+# Test logical NOT operator
+print "not " if !$basic;
+say "ok # logical NOT works with true value";
+
+print "not " unless !$false_basic;
+say "ok # logical NOT works with false value";
+
+# Test double negation
+print "not " unless !!$basic;
+say "ok # double negation works";
+
 # Test inheritance
 print "not " if !$advanced->isa('BoolHolder');
 say "ok # inheritance verified";

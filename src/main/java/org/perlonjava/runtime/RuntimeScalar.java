@@ -204,7 +204,19 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     }
 
     public static RuntimeScalar not(RuntimeScalar runtimeScalar) {
-        return getScalarBoolean(!runtimeScalar.getBoolean());
+        return switch (runtimeScalar.type) {
+            case INTEGER -> getScalarBoolean((int) runtimeScalar.value == 0);
+            case DOUBLE -> getScalarBoolean((double) runtimeScalar.value == 0.0);
+            case STRING -> {
+                String s = (String) runtimeScalar.value;
+                yield getScalarBoolean(s.isEmpty() || s.equals("0"));
+            }
+            case UNDEF -> scalarTrue;
+            case VSTRING -> scalarFalse;
+            case BOOLEAN -> getScalarBoolean(!(boolean) runtimeScalar.value);
+            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE -> Overload.bool_not(runtimeScalar);
+            default -> getScalarBoolean(!((RuntimeScalarReference) runtimeScalar.value).getBooleanRef());
+        };
     }
 
     private void initializeWithLong(Long value) {
