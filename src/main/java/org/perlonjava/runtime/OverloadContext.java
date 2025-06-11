@@ -1,6 +1,8 @@
 package org.perlonjava.runtime;
 
 import static org.perlonjava.runtime.RuntimeContextType.SCALAR;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 
 /**
  * Helper class to manage overloading context for a given scalar in Perl-style object system.
@@ -54,6 +56,42 @@ public class OverloadContext {
         }
 
         return new OverloadContext(perlClassName, methodOverloaded, methodFallback);
+    }
+
+    public static RuntimeScalar tryTwoArgumentOverload(RuntimeScalar arg1, RuntimeScalar arg2, int blessId, String overloadName, int blessId2, String methodName) {
+        if (blessId != 0) {
+            // Try primary overload method
+            OverloadContext ctx = prepare(arg1);
+            if (ctx != null) {
+                RuntimeScalar result = ctx.tryOverload(overloadName, new RuntimeArray(arg1, arg2, scalarFalse));
+                if (result != null) return result;
+            }
+        }
+        if (blessId2 != 0) {
+            // Try swapped overload
+            OverloadContext ctx = prepare(arg2);
+            if (ctx != null) {
+                RuntimeScalar result = ctx.tryOverload(overloadName, new RuntimeArray(arg2, arg1, scalarTrue));
+                if (result != null) return result;
+            }
+        }
+        if (blessId != 0) {
+            // Try first nomethod
+            OverloadContext ctx = prepare(arg1);
+            if (ctx != null) {
+                RuntimeScalar result = ctx.tryOverload("(nomethod", new RuntimeArray(arg1, arg2, scalarFalse, new RuntimeScalar(methodName)));
+                if (result != null) return result;
+            }
+        }
+        if (blessId != 0) {
+            // Try swapped nomethod
+            OverloadContext ctx = prepare(arg1);
+            if (ctx != null) {
+                RuntimeScalar result = ctx.tryOverload("(nomethod", new RuntimeArray(arg2, arg1, scalarTrue, new RuntimeScalar(methodName)));
+                if (result != null) return result;
+            }
+        }
+        return null;
     }
 
     /**

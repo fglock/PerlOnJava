@@ -3,7 +3,7 @@ package org.perlonjava.operators;
 import org.perlonjava.parser.NumberParser;
 import org.perlonjava.runtime.*;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
+import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 /**
  * Provides basic arithmetic operations for RuntimeScalar objects.
@@ -20,6 +20,12 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the sum.
      */
     public static RuntimeScalar add(RuntimeScalar arg1, int arg2) {
+        int blessId = arg1.blessedId();
+        if (blessId != 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, "(+", 0, "+");
+            if (result != null) return result;
+        }
+
         // Convert string type to number if necessary
         if (arg1.type == RuntimeScalarType.STRING) {
             arg1 = NumberParser.parseNumber(arg1);
@@ -40,24 +46,11 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the sum.
      */
     public static RuntimeScalar add(RuntimeScalar arg1, RuntimeScalar arg2) {
-
         int blessId = arg1.blessedId();
-        if (blessId != 0) {
-            // TODO test for overload `+`
-            OverloadContext ctx = OverloadContext.prepare(arg1);
-            if (ctx != null) {
-                RuntimeScalar result = ctx.tryOverload("(+", new RuntimeArray(arg1));
-                if (result != null) return result;
-            }
-        }
         int blessId2 = arg2.blessedId();
-        if (blessId2 != 0) {
-            // TODO test for inverted overload `+`
-            OverloadContext ctx = OverloadContext.prepare(arg2);
-            if (ctx != null) {
-                RuntimeScalar result = ctx.tryOverload("(+", new RuntimeArray(arg2));
-                if (result != null) return result;
-            }
+        if (blessId != 0 || blessId2 != 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, "(+", blessId2, "+");
+            if (result != null) return result;
         }
 
         // Convert string type to number if necessary
@@ -83,6 +76,12 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the difference.
      */
     public static RuntimeScalar subtract(RuntimeScalar arg1, int arg2) {
+        int blessId = arg1.blessedId();
+        if (blessId != 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, "(-", 0, "-");
+            if (result != null) return result;
+        }
+
         // Convert string type to number if necessary
         if (arg1.type == RuntimeScalarType.STRING) {
             arg1 = NumberParser.parseNumber(arg1);
@@ -103,6 +102,13 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the difference.
      */
     public static RuntimeScalar subtract(RuntimeScalar arg1, RuntimeScalar arg2) {
+        int blessId = arg1.blessedId();
+        int blessId2 = arg2.blessedId();
+        if (blessId != 0 || blessId2 != 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, "(-", blessId2, "-");
+            if (result != null) return result;
+        }
+
         // Convert string type to number if necessary
         if (arg1.type == RuntimeScalarType.STRING) {
             arg1 = NumberParser.parseNumber(arg1);

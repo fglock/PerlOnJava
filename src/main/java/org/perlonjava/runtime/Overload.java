@@ -45,7 +45,7 @@ public class Overload {
                 result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(bool");
                 if (result == null) {
                     // Try nomethod
-                    result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("(\"\"")));
+                    result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("\"\"")));
                 }
             }
             if (result != null) return result;
@@ -78,7 +78,7 @@ public class Overload {
                 result = ctx.tryOverloadFallback(runtimeScalar, "(\"\"", "(bool");
                 if (result == null) {
                     // Try nomethod
-                    result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("(0+")));
+                    result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("0+")));
                 }
             }
             if (result != null) return result;
@@ -111,7 +111,7 @@ public class Overload {
                 result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"");
                 if (result == null) {
                     // Try nomethod
-                    result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("(bool")));
+                    result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("bool")));
                 }
             }
             if (result != null) return result;
@@ -141,7 +141,7 @@ public class Overload {
                     return result.getBoolean() ? scalarFalse : scalarTrue;
                 }
                 // Try nomethod
-                result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("(!")));
+                result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("!")));
             }
             if (result != null) return result;
         }
