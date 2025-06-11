@@ -37,7 +37,7 @@ public class Overload {
      */
     public static RuntimeScalar stringify(RuntimeScalar runtimeScalar) {
         // First try overloaded string conversion
-        RuntimeScalar result = convertWithOverload(runtimeScalar, ConversionType.STRING);
+        RuntimeScalar result = convertWithOverload(runtimeScalar, "(\"\"", "(0+", "(bool");
         if (result != null) {
             return result;
         }
@@ -60,7 +60,7 @@ public class Overload {
      */
     public static RuntimeScalar numify(RuntimeScalar runtimeScalar) {
         // First try overloaded numeric conversion
-        RuntimeScalar result = convertWithOverload(runtimeScalar, ConversionType.NUMERIC);
+        RuntimeScalar result = convertWithOverload(runtimeScalar, "(0+", "(\"\"", "(bool");
         if (result != null) {
             return result;
         }
@@ -83,7 +83,7 @@ public class Overload {
      */
     public static RuntimeScalar boolify(RuntimeScalar runtimeScalar) {
         // First try overloaded boolean conversion
-        RuntimeScalar result = convertWithOverload(runtimeScalar, ConversionType.BOOLEAN);
+        RuntimeScalar result = convertWithOverload(runtimeScalar, "(bool", "(0+", "(\"\"");
         if (result != null) {
             return result;
         }
@@ -101,11 +101,13 @@ public class Overload {
      * Core method that handles overload resolution for different conversion types.
      * Returns null if no overload method is found, allowing the caller to apply default conversion.
      *
-     * @param runtimeScalar  the scalar to convert
-     * @param conversionType the type of conversion (STRING, NUMERIC, or BOOLEAN)
+     * @param runtimeScalar   the scalar to convert
+     * @param primaryMethod   the primary overload method to try first (e.g. "("")
+     * @param fallbackMethod1 the first fallback method to try if primary fails
+     * @param fallbackMethod2 the second fallback method to try if first fallback fails
      * @return the result of the overload method, or null if no overload applies
      */
-    private static RuntimeScalar convertWithOverload(RuntimeScalar runtimeScalar, ConversionType conversionType) {
+    private static RuntimeScalar convertWithOverload(RuntimeScalar runtimeScalar, String primaryMethod, String fallbackMethod1, String fallbackMethod2) {
         // Prepare overload context and check if object is eligible for overloading
         OverloadContext ctx = OverloadContext.prepare(runtimeScalar);
         if (ctx == null) {
@@ -113,7 +115,7 @@ public class Overload {
         }
 
         // Try primary overload method first (e.g., ("" for string conversion)
-        RuntimeScalar result = tryOverload(conversionType.primaryMethod, ctx.perlClassName, new RuntimeArray(runtimeScalar));
+        RuntimeScalar result = tryOverload(primaryMethod, ctx.perlClassName, new RuntimeArray(runtimeScalar));
         if (result != null) {
             return result;
         }
@@ -125,24 +127,22 @@ public class Overload {
 
             // If fallback returns undefined or true, try alternative conversion methods
             if (!fallback.getDefinedBoolean() || fallback.getBoolean()) {
-                if (conversionType.fallbackMethod1 != null) {
-                    // Try first alternative method
-                    result = tryOverload(conversionType.fallbackMethod1, ctx.perlClassName, new RuntimeArray(runtimeScalar));
-                    if (result != null) {
-                        return result;
-                    }
+                // Try first alternative method
+                result = tryOverload(fallbackMethod1, ctx.perlClassName, new RuntimeArray(runtimeScalar));
+                if (result != null) {
+                    return result;
+                }
 
-                    // Try second alternative method
-                    result = tryOverload(conversionType.fallbackMethod2, ctx.perlClassName, new RuntimeArray(runtimeScalar));
-                    if (result != null) {
-                        return result;
-                    }
+                // Try second alternative method
+                result = tryOverload(fallbackMethod2, ctx.perlClassName, new RuntimeArray(runtimeScalar));
+                if (result != null) {
+                    return result;
                 }
             }
         }
 
         // Last resort: try nomethod handler with additional context information
-        return tryOverload("(nomethod", ctx.perlClassName, new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar(conversionType.primaryMethod)));
+        return tryOverload("(nomethod", ctx.perlClassName, new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar(primaryMethod)));
     }
 
     // Helper method to attempt overload method execution
@@ -154,41 +154,6 @@ public class Overload {
         }
         // Execute found method with provided arguments
         return RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR).getFirst();
-    }
-
-    /**
-     * Enum defining the different conversion types and their associated overload methods
-     */
-    private enum ConversionType {
-        // Basic type conversions with fallback chains
-        STRING("(\"\"", "(0+", "(bool"),
-        NUMERIC("(0+", "(\"\"", "(bool"),
-        BOOLEAN("(bool", "(0+", "(\"\""),
-
-        // Dereferencing operations (no fallbacks)
-        DEREF_SCALAR("(${}"),      // Scalar dereferencing
-        DEREF_ARRAY("(@{}"),       // Array dereferencing
-        DEREF_HASH("(%{}"),        // Hash dereferencing
-        DEREF_CODE("(&{}"),        // Code/subroutine dereferencing
-        DEREF_GLOB("(*{}");        // Typeglob dereferencing
-
-        final String primaryMethod;
-        final String fallbackMethod1;
-        final String fallbackMethod2;
-
-        // Constructor for conversion types with fallback chain
-        ConversionType(String primary, String fallback1, String fallback2) {
-            this.primaryMethod = primary;
-            this.fallbackMethod1 = fallback1;
-            this.fallbackMethod2 = fallback2;
-        }
-
-        // Constructor for dereferencing operations (no fallbacks)
-        ConversionType(String primary) {
-            this.primaryMethod = primary;
-            this.fallbackMethod1 = null;
-            this.fallbackMethod2 = null;
-        }
     }
 
     // Helper class to manage overloading context for a given scalar
