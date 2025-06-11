@@ -262,7 +262,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return Throws an IllegalStateException as typeglobs do not support keys.
      */
     public RuntimeArray keys() {
-        throw new IllegalStateException("Type of arg 1 to keys must be hash or array");
+        throw new PerlCompilerException("Type of arg 1 to keys must be hash or array");
     }
 
     /**
@@ -271,7 +271,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return Throws an IllegalStateException as typeglobs do not support values.
      */
     public RuntimeArray values() {
-        throw new IllegalStateException("Type of arg 1 to values must be hash or array");
+        throw new PerlCompilerException("Type of arg 1 to values must be hash or array");
     }
 
     /**
@@ -280,7 +280,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return Throws an IllegalStateException as typeglobs do not support each.
      */
     public RuntimeList each() {
-        throw new IllegalStateException("Type of arg 1 to each must be hash or array");
+        throw new PerlCompilerException("Type of arg 1 to each must be hash or array");
     }
 
     /**
@@ -289,7 +289,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return Throws an IllegalStateException as chop is not implemented for typeglobs.
      */
     public RuntimeScalar chop() {
-        throw new IllegalStateException("chop glob is not implemented");
+        throw new PerlCompilerException("chop glob is not implemented");
     }
 
     /**
@@ -298,7 +298,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return Throws an IllegalStateException as chomp is not implemented for typeglobs.
      */
     public RuntimeScalar chomp() {
-        throw new IllegalStateException("chomp glob is not implemented");
+        throw new PerlCompilerException("chomp glob is not implemented");
     }
 
     /**

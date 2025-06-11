@@ -27,7 +27,7 @@ import static org.perlonjava.runtime.SpecialBlock.runUnitcheckBlocks;
  * The RuntimeCode class represents a compiled code object in the runtime environment.
  * It provides functionality to compile, store, and execute Perl subroutines and eval strings.
  */
-public class RuntimeCode implements RuntimeScalarReference {
+public class RuntimeCode extends RuntimeBaseEntity implements RuntimeScalarReference {
 
     // Lookup object for performing method handle operations
     public static final MethodHandles.Lookup lookup = MethodHandles.lookup();
@@ -524,4 +524,87 @@ public class RuntimeCode implements RuntimeScalarReference {
     public boolean getBooleanRef() {
         return true;
     }
+
+    // Get the Scalar alias into an Array
+    public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
+        arr.elements.add(new RuntimeScalar(this));
+        return arr;
+    }
+
+    public int countElements() {
+        return 1;
+    }
+
+    public RuntimeList getList() {
+        return new RuntimeList(this);
+    }
+
+    public RuntimeScalar scalar() {
+        return new RuntimeScalar(this);
+    }
+
+    public boolean getBoolean() {
+        return true;
+    }
+
+    public boolean getDefinedBoolean() {
+        return true;
+    }
+
+    public RuntimeScalar createReference() {
+        RuntimeScalar result = new RuntimeScalar();
+        result.type = RuntimeScalarType.CODE;
+        result.value = this;
+        return result;
+    }
+
+    public void addToArray(RuntimeArray array) {
+        List<RuntimeScalar> elements = array.elements;
+        elements.add(new RuntimeScalar(this));
+    }
+
+    public RuntimeScalar addToScalar(RuntimeScalar scalar) {
+        return scalar.set(this);
+    }
+
+    public Iterator<RuntimeScalar> iterator() {
+        return this.scalar().iterator();
+    }
+
+    public RuntimeArray setFromList(RuntimeList value) {
+        throw new PerlCompilerException("Can't modify constant item in list assignment");
+    }
+
+    public RuntimeArray keys() {
+        throw new PerlCompilerException("Type of arg 1 to keys must be hash or array");
+    }
+
+    public RuntimeArray values() {
+        throw new PerlCompilerException("Type of arg 1 to values must be hash or array");
+    }
+
+    public RuntimeList each() {
+        throw new PerlCompilerException("Type of arg 1 to each must be hash or array");
+    }
+
+    public RuntimeScalar chop() {
+        throw new PerlCompilerException("Can't modify anonymous subroutine");
+    }
+
+    public RuntimeScalar chomp() {
+        throw new PerlCompilerException("Can't modify anonymous subroutine");
+    }
+
+    public RuntimeGlob undefine() {
+        throw new PerlCompilerException("Can't modify anonymous subroutine");
+    }
+
+    public void dynamicSaveState() {
+        throw new PerlCompilerException("Can't modify anonymous subroutine");
+    }
+
+    public void dynamicRestoreState() {
+        throw new PerlCompilerException("Can't modify anonymous subroutine");
+    }
+
 }

@@ -6,7 +6,7 @@ import static org.perlonjava.runtime.RuntimeContextType.SCALAR;
  * Helper class to manage overloading context for a given scalar in Perl-style object system.
  * Handles method overloading and fallback mechanisms for blessed objects.
  */
-class OverloadContext {
+public class OverloadContext {
     /** The Perl class name of the blessed object */
     final String perlClassName;
     /** The overloaded method handler */
@@ -34,7 +34,7 @@ class OverloadContext {
      * @param runtimeScalar The scalar to check for overloading context
      * @return OverloadContext instance if overloading is enabled, null otherwise
      */
-    static OverloadContext prepare(RuntimeScalar runtimeScalar) {
+    public static OverloadContext prepare(RuntimeScalar runtimeScalar) {
         // Get blessing ID and verify object is blessed
         int blessId = runtimeScalar.blessedId();
         if (blessId == 0) {
@@ -87,7 +87,7 @@ class OverloadContext {
      * @param perlMethodArgs Array of arguments to pass to the method
      * @return RuntimeScalar result from method execution, or null if method not found
      */
-    RuntimeScalar tryOverload(String methodName, RuntimeArray perlMethodArgs) {
+    public RuntimeScalar tryOverload(String methodName, RuntimeArray perlMethodArgs) {
         // Look for method in class hierarchy
         RuntimeScalar perlMethod = InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, null, 0);
         if (perlMethod == null) {
