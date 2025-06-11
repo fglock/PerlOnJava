@@ -2,7 +2,6 @@ package org.perlonjava.perlmodule;
 
 import org.perlonjava.runtime.*;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 /**
@@ -55,22 +54,15 @@ public class ScalarUtil extends PerlModuleBase {
      *
      * @param args The arguments passed to the method.
      * @param ctx  The context in which the method is called.
-     * @return A RuntimeList containing the blessing information.
+     * @return If args is a blessed reference, the name of the package that it is blessed into is returned. Otherwise "undef" is returned.
      */
     public static RuntimeList blessed(RuntimeArray args, int ctx) {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for blessed() method");
         }
-        RuntimeScalar scalar = args.get(0);
-        // System.out.println("ScalarUtil.blessed: " + scalar + " : " + scalar.blessId);
-        return (switch (scalar.type) {
-            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE: {
-                int id = ((RuntimeBaseEntity) scalar.value).blessId;
-                yield (id != 0 ? new RuntimeScalar(NameNormalizer.getBlessStr(id)) : scalarUndef);
-            }
-            default:
-                yield scalarUndef;
-        }).getList();
+
+        int blessId = args.get(0).blessedId();
+        return new RuntimeScalar(NameNormalizer.getBlessStr(blessId)).getList();
     }
 
     /**
