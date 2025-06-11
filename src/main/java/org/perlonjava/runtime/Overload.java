@@ -36,10 +36,20 @@ public class Overload {
      * @return the string representation based on overloading rules
      */
     public static RuntimeScalar stringify(RuntimeScalar runtimeScalar) {
-        // First try overloaded string conversion
-        RuntimeScalar result = convertWithOverload(runtimeScalar, "(\"\"", "(0+", "(bool");
-        if (result != null) {
-            return result;
+        // Prepare overload context and check if object is eligible for overloading
+        OverloadContext ctx = OverloadContext.prepare(runtimeScalar);
+        if (ctx != null) {
+            // Try primary overload method
+            RuntimeScalar result = tryOverload("(\"\"", ctx.perlClassName, new RuntimeArray(runtimeScalar));
+            if (result == null) {
+                // Try fallback
+                result = tryOverloadFallback(runtimeScalar, "(0+", "(bool", ctx);
+                if (result == null) {
+                    // Try nomethod
+                    result = tryOverload("(nomethod", ctx.perlClassName, new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("(\"\"")));
+                }
+            }
+            if (result != null) return result;
         }
 
         // Default string conversion for non-blessed or non-overloaded objects
@@ -59,10 +69,20 @@ public class Overload {
      * @return the numeric representation based on overloading rules
      */
     public static RuntimeScalar numify(RuntimeScalar runtimeScalar) {
-        // First try overloaded numeric conversion
-        RuntimeScalar result = convertWithOverload(runtimeScalar, "(0+", "(\"\"", "(bool");
-        if (result != null) {
-            return result;
+        // Prepare overload context and check if object is eligible for overloading
+        OverloadContext ctx = OverloadContext.prepare(runtimeScalar);
+        if (ctx != null) {
+            // Try primary overload method
+            RuntimeScalar result = tryOverload("(0+", ctx.perlClassName, new RuntimeArray(runtimeScalar));
+            if (result == null) {
+                // Try fallback
+                result = tryOverloadFallback(runtimeScalar, "(\"\"", "(bool", ctx);
+                if (result == null) {
+                    // Try nomethod
+                    result = tryOverload("(nomethod", ctx.perlClassName, new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("(0+")));
+                }
+            }
+            if (result != null) return result;
         }
 
         // Default number conversion for non-blessed or non-overloaded objects
@@ -82,10 +102,20 @@ public class Overload {
      * @return the boolean representation based on overloading rules
      */
     public static RuntimeScalar boolify(RuntimeScalar runtimeScalar) {
-        // First try overloaded boolean conversion
-        RuntimeScalar result = convertWithOverload(runtimeScalar, "(bool", "(0+", "(\"\"");
-        if (result != null) {
-            return result;
+        // Prepare overload context and check if object is eligible for overloading
+        OverloadContext ctx = OverloadContext.prepare(runtimeScalar);
+        if (ctx != null) {
+            // Try primary overload method
+            RuntimeScalar result = tryOverload("(bool", ctx.perlClassName, new RuntimeArray(runtimeScalar));
+            if (result == null) {
+                // Try fallback
+                result = tryOverloadFallback(runtimeScalar, "(0+", "(\"\"", ctx);
+                if (result == null) {
+                    // Try nomethod
+                    result = tryOverload("(nomethod", ctx.perlClassName, new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("(bool")));
+                }
+            }
+            if (result != null) return result;
         }
 
         // Default bool conversion for non-blessed or non-overloaded objects
@@ -95,33 +125,6 @@ public class Overload {
             case HASHREFERENCE -> ((RuntimeHash) runtimeScalar.value).getBooleanRef();
             default -> runtimeScalar.getBooleanRef();
         });
-    }
-
-    /**
-     * Core method that handles overload resolution for different conversion types.
-     * Returns null if no overload method is found, allowing the caller to apply default conversion.
-     *
-     * @param runtimeScalar   the scalar to convert
-     * @param primaryMethod   the primary overload method to try first (e.g. "("")
-     * @param fallbackMethod1 the first fallback method to try if primary fails
-     * @param fallbackMethod2 the second fallback method to try if first fallback fails
-     * @return the result of the overload method, or null if no overload applies
-     */
-    private static RuntimeScalar convertWithOverload(RuntimeScalar runtimeScalar, String primaryMethod, String fallbackMethod1, String fallbackMethod2) {
-        // Prepare overload context and check if object is eligible for overloading
-        OverloadContext ctx = OverloadContext.prepare(runtimeScalar);
-        if (ctx == null) return null;
-
-        // Try primary overload method first (e.g., ("" for string conversion)
-        RuntimeScalar result = tryOverload(primaryMethod, ctx.perlClassName, new RuntimeArray(runtimeScalar));
-        if (result != null) return result;
-
-        // Handle fallback mechanism if defined
-        result = tryOverloadFallback(runtimeScalar, fallbackMethod1, fallbackMethod2, ctx);
-        if (result != null) return result;
-
-        // Last resort: try nomethod handler with additional context information
-        return tryOverload("(nomethod", ctx.perlClassName, new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar(primaryMethod)));
     }
 
     private static RuntimeScalar tryOverloadFallback(RuntimeScalar runtimeScalar, String fallbackMethod1, String fallbackMethod2, OverloadContext ctx) {
