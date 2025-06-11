@@ -74,4 +74,9 @@ public class ClosedIOHandle implements IOHandle {
     public RuntimeScalar truncate(long length) {
         return RuntimeIO.handleIOError("Cannot truncate a closed handle.");
     }
+
+    @Override
+    public RuntimeScalar binmode(String arg) {
+        return RuntimeIO.handleIOError("Cannot binmode on a closed handle.");
+    }
 }

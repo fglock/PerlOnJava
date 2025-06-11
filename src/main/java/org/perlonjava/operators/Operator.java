@@ -114,6 +114,36 @@ public class Operator {
         }
     }
 
+    public static RuntimeScalar binmode(RuntimeScalar fileHandle, RuntimeList runtimeList) {
+        String arg = runtimeList.getFirst().toString();
+        if (fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
+            // File handle
+            RuntimeIO runtimeIO = fileHandle.getRuntimeIO();
+            if (runtimeIO.ioHandle != null) {
+                return runtimeIO.ioHandle.binmode(arg);
+            } else {
+                return RuntimeIO.handleIOError("No file handle available for binmode");
+            }
+        } else {
+            return RuntimeIO.handleIOError("Unsupported scalar type for binmode");
+        }
+    }
+
+    public static RuntimeScalar seek(RuntimeScalar fileHandle, RuntimeList runtimeList) {
+        long length = runtimeList.getFirst().getLong();
+        if (fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
+            // File handle
+            RuntimeIO runtimeIO = fileHandle.getRuntimeIO();
+            if (runtimeIO.ioHandle != null) {
+                return runtimeIO.ioHandle.seek(length);  // TODO - "whence" argument
+            } else {
+                return RuntimeIO.handleIOError("No file handle available for seek");
+            }
+        } else {
+            return RuntimeIO.handleIOError("Unsupported scalar type for seek");
+        }
+    }
+
     /**
      * Prints the elements to the specified file handle according to the format string.
      *

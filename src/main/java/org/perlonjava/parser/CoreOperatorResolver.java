@@ -184,6 +184,11 @@ public class CoreOperatorResolver {
                     handle = ((ListNode) operand).elements.removeFirst();
                 }
                 return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
+            case "binmode":
+                // Handle 'binmode' operator with a FileHandle and List operands
+                operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
+                handle = ((ListNode) operand).elements.removeFirst();
+                return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
             case "seek":
                 // Handle 'seek' operator with a FileHandle and List operands
                 operand = ListParser.parseZeroOrMoreList(parser, 3, false, true, false, false);
@@ -281,7 +286,7 @@ public class CoreOperatorResolver {
                     }
                 }
                 return StringParser.parseRawString(parser, token.text);
-            case "binmode", "system", "dump", "read", "exec", "format", "write", "dbmclose", "dbmopen":
+            case "system", "dump", "read", "exec", "format", "write", "dbmclose", "dbmopen":
                 // Not implemented
                 throw new PerlCompilerException(parser.tokenIndex, "Not implemented: operator: " + token.text, parser.ctx.errorUtil);
             case "accept", "bind", "connect", "getpeername", "getsockname", "getsockopt",

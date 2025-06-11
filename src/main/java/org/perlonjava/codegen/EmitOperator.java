@@ -87,6 +87,17 @@ public class EmitOperator {
         handleVoidContext(emitterVisitor);
     }
 
+    static void handleBinmodeOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
+        // Emit the File Handle
+        emitFileHandle(emitterVisitor.with(RuntimeContextType.SCALAR), node.left);
+
+        // Accept the right operand in LIST context
+        node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+        // Emit the operator
+        emitOperator(node.operator, emitterVisitor);
+    }
+
     static void handleTruncateOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         // Emit the File Handle or file name
         if (node.left instanceof StringNode) {
