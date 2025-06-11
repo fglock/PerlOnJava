@@ -110,39 +110,42 @@ public class Overload {
     private static RuntimeScalar convertWithOverload(RuntimeScalar runtimeScalar, String primaryMethod, String fallbackMethod1, String fallbackMethod2) {
         // Prepare overload context and check if object is eligible for overloading
         OverloadContext ctx = OverloadContext.prepare(runtimeScalar);
-        if (ctx == null) {
-            return null;
-        }
+        if (ctx == null) return null;
 
         // Try primary overload method first (e.g., ("" for string conversion)
         RuntimeScalar result = tryOverload(primaryMethod, ctx.perlClassName, new RuntimeArray(runtimeScalar));
-        if (result != null) {
-            return result;
-        }
+        if (result != null) return result;
 
         // Handle fallback mechanism if defined
-        if (ctx.methodFallback != null) {
-            // Execute fallback method to determine if alternative methods should be tried
-            RuntimeScalar fallback = RuntimeCode.apply(ctx.methodFallback, new RuntimeArray(), SCALAR).getFirst();
-
-            // If fallback returns undefined or true, try alternative conversion methods
-            if (!fallback.getDefinedBoolean() || fallback.getBoolean()) {
-                // Try first alternative method
-                result = tryOverload(fallbackMethod1, ctx.perlClassName, new RuntimeArray(runtimeScalar));
-                if (result != null) {
-                    return result;
-                }
-
-                // Try second alternative method
-                result = tryOverload(fallbackMethod2, ctx.perlClassName, new RuntimeArray(runtimeScalar));
-                if (result != null) {
-                    return result;
-                }
-            }
-        }
+        result = tryOverloadFallback(runtimeScalar, fallbackMethod1, fallbackMethod2, ctx);
+        if (result != null) return result;
 
         // Last resort: try nomethod handler with additional context information
         return tryOverload("(nomethod", ctx.perlClassName, new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar(primaryMethod)));
+    }
+
+    private static RuntimeScalar tryOverloadFallback(RuntimeScalar runtimeScalar, String fallbackMethod1, String fallbackMethod2, OverloadContext ctx) {
+        if (ctx.methodFallback == null) {
+            return null;
+        }
+
+        RuntimeScalar result;
+        // Execute fallback method to determine if alternative methods should be tried
+        RuntimeScalar fallback = RuntimeCode.apply(ctx.methodFallback, new RuntimeArray(), SCALAR).getFirst();
+
+        // If fallback returns undefined or true, try alternative conversion methods
+        if (!fallback.getDefinedBoolean() || fallback.getBoolean()) {
+            // Try first alternative method
+            result = tryOverload(fallbackMethod1, ctx.perlClassName, new RuntimeArray(runtimeScalar));
+            if (result != null) {
+                return result;
+            }
+
+            // Try second alternative method
+            result = tryOverload(fallbackMethod2, ctx.perlClassName, new RuntimeArray(runtimeScalar));
+            return result;
+        }
+        return null;
     }
 
     // Helper method to attempt overload method execution
