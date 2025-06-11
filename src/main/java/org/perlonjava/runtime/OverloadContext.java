@@ -65,30 +65,22 @@ class OverloadContext {
      * Attempts to execute fallback overloading methods if primary method fails.
      *
      * @param runtimeScalar The scalar value to process
-     * @param fallbackMethod1 First fallback method name to try
-     * @param fallbackMethod2 Second fallback method name to try
+     * @param fallbackMethods Variable number of fallback method names to try in sequence
      * @return RuntimeScalar result from successful fallback execution, or null if all attempts fail
      */
-    RuntimeScalar tryOverloadFallback(RuntimeScalar runtimeScalar, String fallbackMethod1, String fallbackMethod2) {
-        if (methodFallback == null) {
-            return null;
-        }
+    RuntimeScalar tryOverloadFallback(RuntimeScalar runtimeScalar, String... fallbackMethods) {
+        if (methodFallback == null) return null;
 
-        RuntimeScalar result;
         // Execute fallback method to determine if alternative methods should be tried
         RuntimeScalar fallback = RuntimeCode.apply(methodFallback, new RuntimeArray(), SCALAR).getFirst();
 
         // If fallback returns undefined or true, try alternative conversion methods
         if (!fallback.getDefinedBoolean() || fallback.getBoolean()) {
-            // Try first alternative method
-            result = this.tryOverload(fallbackMethod1, new RuntimeArray(runtimeScalar));
-            if (result != null) {
-                return result;
+            // Try each fallback method in sequence
+            for (String fallbackMethod : fallbackMethods) {
+                RuntimeScalar result = this.tryOverload(fallbackMethod, new RuntimeArray(runtimeScalar));
+                if (result != null) return result;
             }
-
-            // Try second alternative method
-            result = this.tryOverload(fallbackMethod2, new RuntimeArray(runtimeScalar));
-            return result;
         }
         return null;
     }

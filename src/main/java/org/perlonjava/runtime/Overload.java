@@ -1,6 +1,6 @@
 package org.perlonjava.runtime;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 /**
@@ -118,12 +118,35 @@ public class Overload {
         }
 
         // Default bool conversion for non-blessed or non-overloaded objects
-        return new RuntimeScalar(switch (runtimeScalar.type) {
-            case REFERENCE -> ((RuntimeScalarReference) runtimeScalar.value).getBooleanRef();
-            case ARRAYREFERENCE -> ((RuntimeArray) runtimeScalar.value).getBooleanRef();
-            case HASHREFERENCE -> ((RuntimeHash) runtimeScalar.value).getBooleanRef();
-            default -> runtimeScalar.getBooleanRef();
-        });
+        return scalarTrue;
     }
 
+    /**
+     * Performs boolean negation on a {@link RuntimeScalar} object following
+     * Perl's boolean negation rules.
+     *
+     * @param runtimeScalar the {@code RuntimeScalar} object to be negated
+     * @return the negated boolean representation based on overloading rules
+     */
+    public static RuntimeScalar bool_not(RuntimeScalar runtimeScalar) {
+        // Prepare overload context and check if object is eligible for overloading
+        OverloadContext ctx = OverloadContext.prepare(runtimeScalar);
+        if (ctx != null) {
+            // Try primary overload method
+            RuntimeScalar result = ctx.tryOverload("(!", new RuntimeArray(runtimeScalar));
+            if (result == null) {
+                // Try fallback with negation of result
+                result = ctx.tryOverloadFallback(runtimeScalar, "(bool", "(0+", "(\"\"");
+                if (result != null) {
+                    return result.getBoolean() ? scalarFalse : scalarTrue;
+                }
+                // Try nomethod
+                result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("(!")));
+            }
+            if (result != null) return result;
+        }
+
+        // Default bool negation for non-blessed or non-overloaded objects
+        return scalarFalse;
+    }
 }
