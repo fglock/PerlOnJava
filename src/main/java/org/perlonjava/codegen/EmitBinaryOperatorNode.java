@@ -63,6 +63,9 @@ public class EmitBinaryOperatorNode {
             case "truncate" ->
                     EmitOperator.handleTruncateOperator(emitterVisitor, node);
 
+            case "binmode", "seek" ->
+                    EmitOperator.handleBinmodeOperator(emitterVisitor, node);
+
             // String operations
             case "join", "split", "sprintf", "substr" ->
                     EmitOperator.handleSubstr(emitterVisitor, node);

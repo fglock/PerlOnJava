@@ -31,6 +31,10 @@ public interface IOHandle {
         return RuntimeIO.handleIOError("tell operation is not supported.");
     }
 
+    default RuntimeScalar bimmode() {
+        return RuntimeIO.handleIOError("binmode operation is not supported.");
+    }
+
     // Socket-specific methods
     default RuntimeScalar bind(String address, int port) {
         return RuntimeIO.handleIOError("Bind operation is not supported.");
@@ -54,5 +58,9 @@ public interface IOHandle {
 
     default RuntimeScalar truncate(long length) {
         return RuntimeIO.handleIOError("Truncate operation is not supported.");
+    }
+
+    default RuntimeScalar binmode(String arg) {
+        return RuntimeIO.handleIOError("Binmode operation is not supported.");
     }
 }
