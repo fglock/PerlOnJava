@@ -237,10 +237,11 @@ The following areas are currently under active development to enhance the functi
 ## Upcoming Milestones
 
 - **v3.0.1**: Next minor version
-  - Added `# line` preprocessor directive.
   - Added overload operators: `!`, `+`, `-`, `*`, `/`, `%`.
+  - Added `# line` preprocessor directive.
+  - Bugfix: fix a problem with Windows newlines and qw().
   - Added Makefile.
-  - `make deb` creates a Debian package.
+  - Debian package can be created with `make deb`.
   - Planned release date: 2025-12-10
 
 ### v4.0.0 Milestone (Planned Release Date: 2026-05-10)
