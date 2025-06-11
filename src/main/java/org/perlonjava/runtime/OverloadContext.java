@@ -58,7 +58,7 @@ public class OverloadContext {
         return new OverloadContext(perlClassName, methodOverloaded, methodFallback);
     }
 
-    public static RuntimeScalar tryTwoArgumentOverload(RuntimeScalar arg1, RuntimeScalar arg2, int blessId, String overloadName, int blessId2, String methodName) {
+    public static RuntimeScalar tryTwoArgumentOverload(RuntimeScalar arg1, RuntimeScalar arg2, int blessId, int blessId2, String overloadName, String methodName, boolean canSwap) {
         if (blessId != 0) {
             // Try primary overload method
             OverloadContext ctx = prepare(arg1);
@@ -67,7 +67,7 @@ public class OverloadContext {
                 if (result != null) return result;
             }
         }
-        if (blessId2 != 0) {
+        if (canSwap && blessId2 != 0) {
             // Try swapped overload
             OverloadContext ctx = prepare(arg2);
             if (ctx != null) {
@@ -83,7 +83,7 @@ public class OverloadContext {
                 if (result != null) return result;
             }
         }
-        if (blessId != 0) {
+        if (canSwap && blessId != 0) {
             // Try swapped nomethod
             OverloadContext ctx = prepare(arg1);
             if (ctx != null) {
