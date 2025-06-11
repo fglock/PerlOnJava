@@ -35,13 +35,8 @@ class OverloadContext {
      * @return OverloadContext instance if overloading is enabled, null otherwise
      */
     static OverloadContext prepare(RuntimeScalar runtimeScalar) {
-        // Check if the scalar contains a blessed object
-        if (!(runtimeScalar.value instanceof RuntimeBaseEntity baseEntity)) {
-            return null;
-        }
-
         // Get blessing ID and verify object is blessed
-        int blessId = baseEntity.blessId;
+        int blessId = runtimeScalar.blessedId();
         if (blessId == 0) {
             return null;
         }

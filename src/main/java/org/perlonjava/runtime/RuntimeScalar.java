@@ -297,6 +297,11 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         };
     }
 
+    // Get blessing ID as an integer
+    public int blessedId() {
+        return (type & REFERENCE_BIT) != 0 ? ((RuntimeBaseEntity)value).blessId : 0;
+    }
+
     // Get the Scalar alias into an Array
     public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
         arr.elements.add(this);
