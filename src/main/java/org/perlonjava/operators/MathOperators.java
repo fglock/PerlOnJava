@@ -22,7 +22,7 @@ public class MathOperators {
     public static RuntimeScalar add(RuntimeScalar arg1, int arg2) {
         int blessId = arg1.blessedId();
         if (blessId != 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, "(+", 0, "+");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, 0, "(+", "+", false);
             if (result != null) return result;
         }
 
@@ -49,7 +49,7 @@ public class MathOperators {
         int blessId = arg1.blessedId();
         int blessId2 = arg2.blessedId();
         if (blessId != 0 || blessId2 != 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, "(+", blessId2, "+");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(+", "+", true);
             if (result != null) return result;
         }
 
@@ -78,7 +78,7 @@ public class MathOperators {
     public static RuntimeScalar subtract(RuntimeScalar arg1, int arg2) {
         int blessId = arg1.blessedId();
         if (blessId != 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, "(-", 0, "-");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, 0, "(-", "-",false );
             if (result != null) return result;
         }
 
@@ -105,7 +105,7 @@ public class MathOperators {
         int blessId = arg1.blessedId();
         int blessId2 = arg2.blessedId();
         if (blessId != 0 || blessId2 != 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, "(-", blessId2, "-");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(-", "-", true);
             if (result != null) return result;
         }
 
@@ -132,6 +132,13 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the product.
      */
     public static RuntimeScalar multiply(RuntimeScalar arg1, RuntimeScalar arg2) {
+        int blessId = arg1.blessedId();
+        int blessId2 = arg2.blessedId();
+        if (blessId != 0 || blessId2 != 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(*", "*", true);
+            if (result != null) return result;
+        }
+
         // Convert string type to number if necessary
         if (arg1.type == RuntimeScalarType.STRING) {
             arg1 = NumberParser.parseNumber(arg1);
@@ -156,6 +163,13 @@ public class MathOperators {
      * @throws PerlCompilerException if division by zero occurs.
      */
     public static RuntimeScalar divide(RuntimeScalar arg1, RuntimeScalar arg2) {
+        int blessId = arg1.blessedId();
+        int blessId2 = arg2.blessedId();
+        if (blessId != 0 || blessId2 != 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(/", "/", false);
+            if (result != null) return result;
+        }
+
         // Convert string type to number if necessary
         if (arg1.type == RuntimeScalarType.STRING) {
             arg1 = NumberParser.parseNumber(arg1);
@@ -180,6 +194,13 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the modulus.
      */
     public static RuntimeScalar modulus(RuntimeScalar arg1, RuntimeScalar arg2) {
+        int blessId = arg1.blessedId();
+        int blessId2 = arg2.blessedId();
+        if (blessId != 0 || blessId2 != 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(%", "%", false);
+            if (result != null) return result;
+        }
+
         int divisor = arg2.getInt();
         int result = arg1.getInt() % divisor;
         // Adjust result for negative modulus
