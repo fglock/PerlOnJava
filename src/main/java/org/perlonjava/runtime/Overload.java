@@ -157,46 +157,43 @@ public class Overload {
             return null;
         }
 
-        // Prepare arguments array for method call
-        RuntimeArray perlMethodArgs = new RuntimeArray(runtimeScalar);
-        RuntimeScalar perlMethod;
+        // Try primary overload method
+        RuntimeScalar result = tryOverload(conversionType.primaryMethod, perlClassName, new RuntimeArray(runtimeScalar));
+        if (result != null) {
+            return result;
+        }
 
-        // First try: Look for primary overload method
-        perlMethod = InheritanceResolver.findMethodInHierarchy(conversionType.primaryMethod, perlClassName, null, 0);
-
-        // Handle fallback mechanism if primary overload not found
-        if (perlMethod == null && methodFallback != null) {
+        // Handle fallback mechanism
+        if (methodFallback != null) {
             RuntimeScalar fallback = RuntimeCode.apply(methodFallback, new RuntimeArray(), SCALAR).getFirst();
 
             // If fallback is undefined or true, try alternative methods
             if (!fallback.getDefinedBoolean() || fallback.getBoolean()) {
                 if (conversionType.fallbackMethod1 != null) {
                     // Try first fallback method
-                    perlMethod = InheritanceResolver.findMethodInHierarchy(conversionType.fallbackMethod1, perlClassName, null, 0);
+                    result = tryOverload(conversionType.fallbackMethod1, perlClassName, new RuntimeArray(runtimeScalar));
+                    if (result != null) {
+                        return result;
+                    }
+
                     // Try second fallback method
-                    if (perlMethod == null) {
-                        perlMethod = InheritanceResolver.findMethodInHierarchy(conversionType.fallbackMethod2, perlClassName, null, 0);
+                    result = tryOverload(conversionType.fallbackMethod2, perlClassName, new RuntimeArray(runtimeScalar));
+                    if (result != null) {
+                        return result;
                     }
                 }
             }
         }
 
         // Last resort: try nomethod handler
+        return tryOverload("(nomethod", perlClassName, new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar(conversionType.primaryMethod)));
+    }
+
+    private static RuntimeScalar tryOverload(String methodName, String perlClassName, RuntimeArray perlMethodArgs) {
+        RuntimeScalar perlMethod = InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, null, 0);
         if (perlMethod == null) {
-            perlMethod = InheritanceResolver.findMethodInHierarchy("(nomethod", perlClassName, null, 0);
-            if (perlMethod != null) {
-                // Setup arguments for nomethod handler
-                RuntimeArray.push(perlMethodArgs, scalarUndef);
-                RuntimeArray.push(perlMethodArgs, scalarUndef);
-                RuntimeArray.push(perlMethodArgs, new RuntimeScalar(conversionType.primaryMethod));
-            }
+            return null;
         }
-
-        // Execute the found method if any
-        if (perlMethod != null) {
-            return RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR).getFirst();
-        }
-
-        return null;
+        return RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR).getFirst();
     }
 }
