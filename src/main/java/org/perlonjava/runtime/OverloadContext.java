@@ -1,0 +1,112 @@
+package org.perlonjava.runtime;
+
+import static org.perlonjava.runtime.RuntimeContextType.SCALAR;
+
+/**
+ * Helper class to manage overloading context for a given scalar in Perl-style object system.
+ * Handles method overloading and fallback mechanisms for blessed objects.
+ */
+class OverloadContext {
+    /** The Perl class name of the blessed object */
+    final String perlClassName;
+    /** The overloaded method handler */
+    final RuntimeScalar methodOverloaded;
+    /** The fallback method handler */
+    final RuntimeScalar methodFallback;
+
+    /**
+     * Private constructor to create an OverloadContext instance.
+     *
+     * @param perlClassName The Perl class name
+     * @param methodOverloaded The overloaded method handler
+     * @param methodFallback The fallback method handler
+     */
+    private OverloadContext(String perlClassName, RuntimeScalar methodOverloaded, RuntimeScalar methodFallback) {
+        this.perlClassName = perlClassName;
+        this.methodOverloaded = methodOverloaded;
+        this.methodFallback = methodFallback;
+    }
+
+    /**
+     * Factory method to create overload context if applicable for a given RuntimeScalar.
+     * Checks if the scalar is a blessed object and has overloading enabled.
+     *
+     * @param runtimeScalar The scalar to check for overloading context
+     * @return OverloadContext instance if overloading is enabled, null otherwise
+     */
+    static OverloadContext prepare(RuntimeScalar runtimeScalar) {
+        // Check if the scalar contains a blessed object
+        if (!(runtimeScalar.value instanceof RuntimeBaseEntity baseEntity)) {
+            return null;
+        }
+
+        // Get blessing ID and verify object is blessed
+        int blessId = baseEntity.blessId;
+        if (blessId == 0) {
+            return null;
+        }
+
+        // Resolve Perl class name from blessing ID
+        String perlClassName = NameNormalizer.getBlessStr(blessId);
+
+        // Look for overload markers in the class hierarchy
+        RuntimeScalar methodOverloaded = InheritanceResolver.findMethodInHierarchy("((", perlClassName, null, 0);
+        RuntimeScalar methodFallback = InheritanceResolver.findMethodInHierarchy("()", perlClassName, null, 0);
+
+        // Return context only if overloading is enabled
+        if (methodOverloaded == null && methodFallback == null) {
+            return null;
+        }
+
+        return new OverloadContext(perlClassName, methodOverloaded, methodFallback);
+    }
+
+    /**
+     * Attempts to execute fallback overloading methods if primary method fails.
+     *
+     * @param runtimeScalar The scalar value to process
+     * @param fallbackMethod1 First fallback method name to try
+     * @param fallbackMethod2 Second fallback method name to try
+     * @return RuntimeScalar result from successful fallback execution, or null if all attempts fail
+     */
+    RuntimeScalar tryOverloadFallback(RuntimeScalar runtimeScalar, String fallbackMethod1, String fallbackMethod2) {
+        if (methodFallback == null) {
+            return null;
+        }
+
+        RuntimeScalar result;
+        // Execute fallback method to determine if alternative methods should be tried
+        RuntimeScalar fallback = RuntimeCode.apply(methodFallback, new RuntimeArray(), SCALAR).getFirst();
+
+        // If fallback returns undefined or true, try alternative conversion methods
+        if (!fallback.getDefinedBoolean() || fallback.getBoolean()) {
+            // Try first alternative method
+            result = this.tryOverload(fallbackMethod1, new RuntimeArray(runtimeScalar));
+            if (result != null) {
+                return result;
+            }
+
+            // Try second alternative method
+            result = this.tryOverload(fallbackMethod2, new RuntimeArray(runtimeScalar));
+            return result;
+        }
+        return null;
+    }
+
+    /**
+     * Attempts to execute an overloaded method with given arguments.
+     *
+     * @param methodName The name of the method to execute
+     * @param perlMethodArgs Array of arguments to pass to the method
+     * @return RuntimeScalar result from method execution, or null if method not found
+     */
+    RuntimeScalar tryOverload(String methodName, RuntimeArray perlMethodArgs) {
+        // Look for method in class hierarchy
+        RuntimeScalar perlMethod = InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, null, 0);
+        if (perlMethod == null) {
+            return null;
+        }
+        // Execute found method with provided arguments
+        return RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR).getFirst();
+    }
+}
