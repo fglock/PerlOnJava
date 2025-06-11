@@ -36,6 +36,7 @@ public class Overload {
      * @return the string representation based on overloading rules
      */
     public static RuntimeScalar stringify(RuntimeScalar runtimeScalar) {
+        // First try overloaded string conversion
         RuntimeScalar result = convertWithOverload(runtimeScalar, ConversionType.STRING);
         if (result != null) {
             return result;
@@ -58,6 +59,7 @@ public class Overload {
      * @return the numeric representation based on overloading rules
      */
     public static RuntimeScalar numify(RuntimeScalar runtimeScalar) {
+        // First try overloaded numeric conversion
         RuntimeScalar result = convertWithOverload(runtimeScalar, ConversionType.NUMERIC);
         if (result != null) {
             return result;
@@ -80,6 +82,7 @@ public class Overload {
      * @return the boolean representation based on overloading rules
      */
     public static RuntimeScalar boolify(RuntimeScalar runtimeScalar) {
+        // First try overloaded boolean conversion
         RuntimeScalar result = convertWithOverload(runtimeScalar, ConversionType.BOOLEAN);
         if (result != null) {
             return result;
@@ -103,31 +106,33 @@ public class Overload {
      * @return the result of the overload method, or null if no overload applies
      */
     private static RuntimeScalar convertWithOverload(RuntimeScalar runtimeScalar, ConversionType conversionType) {
+        // Prepare overload context and check if object is eligible for overloading
         OverloadContext ctx = OverloadContext.prepare(runtimeScalar);
         if (ctx == null) {
             return null;
         }
 
-        // Try primary overload method
+        // Try primary overload method first (e.g., ("" for string conversion)
         RuntimeScalar result = tryOverload(conversionType.primaryMethod, ctx.perlClassName, new RuntimeArray(runtimeScalar));
         if (result != null) {
             return result;
         }
 
-        // Handle fallback mechanism
+        // Handle fallback mechanism if defined
         if (ctx.methodFallback != null) {
+            // Execute fallback method to determine if alternative methods should be tried
             RuntimeScalar fallback = RuntimeCode.apply(ctx.methodFallback, new RuntimeArray(), SCALAR).getFirst();
 
-            // If fallback is undefined or true, try alternative methods
+            // If fallback returns undefined or true, try alternative conversion methods
             if (!fallback.getDefinedBoolean() || fallback.getBoolean()) {
                 if (conversionType.fallbackMethod1 != null) {
-                    // Try first fallback method
+                    // Try first alternative method
                     result = tryOverload(conversionType.fallbackMethod1, ctx.perlClassName, new RuntimeArray(runtimeScalar));
                     if (result != null) {
                         return result;
                     }
 
-                    // Try second fallback method
+                    // Try second alternative method
                     result = tryOverload(conversionType.fallbackMethod2, ctx.perlClassName, new RuntimeArray(runtimeScalar));
                     if (result != null) {
                         return result;
@@ -136,15 +141,18 @@ public class Overload {
             }
         }
 
-        // Last resort: try nomethod handler
+        // Last resort: try nomethod handler with additional context information
         return tryOverload("(nomethod", ctx.perlClassName, new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar(conversionType.primaryMethod)));
     }
 
+    // Helper method to attempt overload method execution
     private static RuntimeScalar tryOverload(String methodName, String perlClassName, RuntimeArray perlMethodArgs) {
+        // Look for method in class hierarchy
         RuntimeScalar perlMethod = InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, null, 0);
         if (perlMethod == null) {
             return null;
         }
+        // Execute found method with provided arguments
         return RuntimeCode.apply(perlMethod, perlMethodArgs, SCALAR).getFirst();
     }
 
@@ -152,9 +160,12 @@ public class Overload {
      * Enum defining the different conversion types and their associated overload methods
      */
     private enum ConversionType {
+        // Basic type conversions with fallback chains
         STRING("(\"\"", "(0+", "(bool"),
         NUMERIC("(0+", "(\"\"", "(bool"),
         BOOLEAN("(bool", "(0+", "(\"\""),
+
+        // Dereferencing operations (no fallbacks)
         DEREF_SCALAR("(${}"),      // Scalar dereferencing
         DEREF_ARRAY("(@{}"),       // Array dereferencing
         DEREF_HASH("(%{}"),        // Hash dereferencing
@@ -165,12 +176,14 @@ public class Overload {
         final String fallbackMethod1;
         final String fallbackMethod2;
 
+        // Constructor for conversion types with fallback chain
         ConversionType(String primary, String fallback1, String fallback2) {
             this.primaryMethod = primary;
             this.fallbackMethod1 = fallback1;
             this.fallbackMethod2 = fallback2;
         }
 
+        // Constructor for dereferencing operations (no fallbacks)
         ConversionType(String primary) {
             this.primaryMethod = primary;
             this.fallbackMethod1 = null;
@@ -178,6 +191,7 @@ public class Overload {
         }
     }
 
+    // Helper class to manage overloading context for a given scalar
     private static class OverloadContext {
         final String perlClassName;
         final RuntimeScalar methodOverloaded;
@@ -189,26 +203,27 @@ public class Overload {
             this.methodFallback = methodFallback;
         }
 
+        // Factory method to create overload context if applicable
         static OverloadContext prepare(RuntimeScalar runtimeScalar) {
             // Check if the scalar contains a blessed object
             if (!(runtimeScalar.value instanceof RuntimeBaseEntity baseEntity)) {
                 return null;
             }
 
+            // Get blessing ID and verify object is blessed
             int blessId = baseEntity.blessId;
-            // Only proceed if the object is blessed (has a valid blessId)
             if (blessId == 0) {
                 return null;
             }
 
-            // Get the Perl class name from the bless ID
+            // Resolve Perl class name from blessing ID
             String perlClassName = NameNormalizer.getBlessStr(blessId);
 
             // Look for overload markers in the class hierarchy
             RuntimeScalar methodOverloaded = InheritanceResolver.findMethodInHierarchy("((", perlClassName, null, 0);
             RuntimeScalar methodFallback = InheritanceResolver.findMethodInHierarchy("()", perlClassName, null, 0);
 
-            // Proceed only if either overloading or fallback is defined
+            // Return context only if overloading is enabled
             if (methodOverloaded == null && methodFallback == null) {
                 return null;
             }
