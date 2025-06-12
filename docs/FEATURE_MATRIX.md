@@ -382,7 +382,7 @@ This list is under review.
   - ✅ Implemented: `true` `false` `is_bool` `inf` `nan` `weaken` `unweaken` `is_weak` `blessed` `refaddr` `reftype` `created_as_string` `created_as_number` `stringify` `ceil` `floor` `indexed` `trim` `is_tainted`.
 - 🚧  **overload** pragma:
   - ✅ Implemented: `""`, `0+`, `bool`, `fallback`, `nomethod`.
-  - ✅ Implemented: `!`, `+`, `-`, `*`, `/`, `%`.
+  - ✅ Implemented: `!`, `+`, `-`, `*`, `/`, `%`, `int`, `neg`.
 - ❌  **overloading** pragma
 
 
@@ -409,6 +409,7 @@ This list is under review.
 - ✅  **URI::Escape** module.
 - ✅  **Text::Balanced** use the same version as Perl.
 - ✅  **Benchmark** use the same version as Perl.
+- 🚧  **Test::More** some features missing: subtest.
 - 🚧  **HTTP::Tiny** some features untested: proxy settings.
 - 🚧  **DynaLoader** placeholder module.
 - 🚧  **Unicode::Normalize** `normalize`, `NFC`, `NFD`, `NFKC`, `NFKD`.

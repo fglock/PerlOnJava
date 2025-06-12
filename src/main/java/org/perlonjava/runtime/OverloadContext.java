@@ -101,7 +101,7 @@ public class OverloadContext {
      * @param fallbackMethods Variable number of fallback method names to try in sequence
      * @return RuntimeScalar result from successful fallback execution, or null if all attempts fail
      */
-    RuntimeScalar tryOverloadFallback(RuntimeScalar runtimeScalar, String... fallbackMethods) {
+    public RuntimeScalar tryOverloadFallback(RuntimeScalar runtimeScalar, String... fallbackMethods) {
         if (methodFallback == null) return null;
 
         // Execute fallback method to determine if alternative methods should be tried
