@@ -78,4 +78,12 @@ public abstract class RuntimeBaseEntity implements RuntimeDataProvider, DynamicS
         return scalarUndef;
     }
 
+    public String toStringRef() {
+        return this.toString();
+    }
+
+    public double getDoubleRef() {
+        return this.hashCode();
+    }
+
 }
