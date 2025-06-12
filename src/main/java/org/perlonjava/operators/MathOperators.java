@@ -306,6 +306,22 @@ public class MathOperators {
     }
 
     public static RuntimeScalar unaryMinus(RuntimeScalar runtimeScalar) {
+        OverloadContext ctx = OverloadContext.prepare(runtimeScalar);
+        if (ctx != null) {
+            // Try primary overload method
+            RuntimeScalar result = ctx.tryOverload("(neg", new RuntimeArray(runtimeScalar));
+            if (result == null) {
+                // Try fallback
+                result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"", "(bool");
+                if (result != null) {
+                    return unaryMinus(result);
+                }
+                // Try nomethod
+                result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("neg")));
+            }
+            if (result != null) return result;
+        }
+
         if (runtimeScalar.type == RuntimeScalarType.STRING) {
             String input = runtimeScalar.toString();
             if (input.length() < 2) {
@@ -335,6 +351,22 @@ public class MathOperators {
     }
 
     public static RuntimeScalar integer(RuntimeScalar runtimeScalar) {
+        OverloadContext ctx = OverloadContext.prepare(runtimeScalar);
+        if (ctx != null) {
+            // Try primary overload method
+            RuntimeScalar result = ctx.tryOverload("(int", new RuntimeArray(runtimeScalar));
+            if (result == null) {
+                // Try fallback
+                result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"", "(bool");
+                if (result != null) {
+                    return integer(result);
+                }
+                // Try nomethod
+                result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("int")));
+            }
+            if (result != null) return result;
+        }
+
         return getScalarInt(runtimeScalar.getInt());
     }
 }
