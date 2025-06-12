@@ -333,4 +333,8 @@ public class MathOperators {
         }
         return subtract(getScalarInt(0), runtimeScalar);
     }
+
+    public static RuntimeScalar integer(RuntimeScalar runtimeScalar) {
+        return getScalarInt(runtimeScalar.getInt());
+    }
 }
