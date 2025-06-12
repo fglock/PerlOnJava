@@ -52,12 +52,7 @@ public class Overload {
         }
 
         // Default string conversion for non-blessed or non-overloaded objects
-        return new RuntimeScalar(switch (runtimeScalar.type) {
-            case REFERENCE, CODE -> ((RuntimeScalarReference) runtimeScalar.value).toStringRef();
-            case ARRAYREFERENCE -> ((RuntimeArray) runtimeScalar.value).toStringRef();
-            case HASHREFERENCE -> ((RuntimeHash) runtimeScalar.value).toStringRef();
-            default -> runtimeScalar.toStringRef();
-        });
+        return new RuntimeScalar(((RuntimeBaseEntity)runtimeScalar.value).toStringRef());
     }
 
     /**
@@ -85,12 +80,7 @@ public class Overload {
         }
 
         // Default number conversion for non-blessed or non-overloaded objects
-        return new RuntimeScalar(switch (runtimeScalar.type) {
-            case REFERENCE, CODE -> ((RuntimeScalarReference) runtimeScalar.value).getDoubleRef();
-            case ARRAYREFERENCE -> ((RuntimeArray) runtimeScalar.value).getDoubleRef();
-            case HASHREFERENCE -> ((RuntimeHash) runtimeScalar.value).getDoubleRef();
-            default -> runtimeScalar.getDoubleRef();
-        });
+        return new RuntimeScalar(((RuntimeBaseEntity)runtimeScalar.value).getDoubleRef());
     }
 
     /**
