@@ -1,7 +1,6 @@
 package org.perlonjava.runtime;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
-import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 /**
  * The {@code Overload} class implements Perl's operator overloading system in Java.
@@ -40,19 +39,17 @@ public class Overload {
         if (ctx != null) {
             // Try primary overload method
             RuntimeScalar result = ctx.tryOverload("(\"\"", new RuntimeArray(runtimeScalar));
-            if (result == null) {
-                // Try fallback
-                result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(bool");
-                if (result == null) {
-                    // Try nomethod
-                    result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("\"\"")));
-                }
-            }
+            if (result != null) return result;
+            // Try fallback
+            result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(bool");
+            if (result != null) return result;
+            // Try nomethod
+            result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("\"\"")));
             if (result != null) return result;
         }
 
         // Default string conversion for non-blessed or non-overloaded objects
-        return new RuntimeScalar(((RuntimeBaseEntity)runtimeScalar.value).toStringRef());
+        return new RuntimeScalar(((RuntimeBaseEntity) runtimeScalar.value).toStringRef());
     }
 
     /**
@@ -68,19 +65,17 @@ public class Overload {
         if (ctx != null) {
             // Try primary overload method
             RuntimeScalar result = ctx.tryOverload("(0+", new RuntimeArray(runtimeScalar));
-            if (result == null) {
-                // Try fallback
-                result = ctx.tryOverloadFallback(runtimeScalar, "(\"\"", "(bool");
-                if (result == null) {
-                    // Try nomethod
-                    result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("0+")));
-                }
-            }
+            if (result != null) return result;
+            // Try fallback
+            result = ctx.tryOverloadFallback(runtimeScalar, "(\"\"", "(bool");
+            if (result != null) return result;
+            // Try nomethod
+            result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("0+")));
             if (result != null) return result;
         }
 
         // Default number conversion for non-blessed or non-overloaded objects
-        return new RuntimeScalar(((RuntimeBaseEntity)runtimeScalar.value).getDoubleRef());
+        return new RuntimeScalar(((RuntimeBaseEntity) runtimeScalar.value).getDoubleRef());
     }
 
     /**
@@ -96,14 +91,12 @@ public class Overload {
         if (ctx != null) {
             // Try primary overload method
             RuntimeScalar result = ctx.tryOverload("(bool", new RuntimeArray(runtimeScalar));
-            if (result == null) {
-                // Try fallback
-                result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"");
-                if (result == null) {
-                    // Try nomethod
-                    result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("bool")));
-                }
-            }
+            if (result != null) return result;
+            // Try fallback
+            result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"");
+            if (result != null) return result;
+            // Try nomethod
+            result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("bool")));
             if (result != null) return result;
         }
 
@@ -124,15 +117,14 @@ public class Overload {
         if (ctx != null) {
             // Try primary overload method
             RuntimeScalar result = ctx.tryOverload("(!", new RuntimeArray(runtimeScalar));
-            if (result == null) {
-                // Try fallback with negation of result
-                result = ctx.tryOverloadFallback(runtimeScalar, "(bool", "(0+", "(\"\"");
-                if (result != null) {
-                    return result.getBoolean() ? scalarFalse : scalarTrue;
-                }
-                // Try nomethod
-                result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("!")));
+            if (result != null) return result;
+            // Try fallback with negation of result
+            result = ctx.tryOverloadFallback(runtimeScalar, "(bool", "(0+", "(\"\"");
+            if (result != null) {
+                return result.getBoolean() ? scalarFalse : scalarTrue;
             }
+            // Try nomethod
+            result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("!")));
             if (result != null) return result;
         }
 
