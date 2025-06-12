@@ -673,10 +673,6 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         return StringOperators.chompScalar(this);
     }
 
-    public RuntimeScalar integer() {
-        return getScalarInt(getInt());
-    }
-
     public RuntimeScalar pos() {
         return RuntimePosLvalue.pos(this);
     }

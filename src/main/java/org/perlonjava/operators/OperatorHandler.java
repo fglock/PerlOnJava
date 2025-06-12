@@ -25,6 +25,7 @@ public class OperatorHandler {
         put("%", "modulus", "org/perlonjava/operators/MathOperators");
         put("unaryMinus", "unaryMinus", "org/perlonjava/operators/MathOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
+        put("int", "integer", "org/perlonjava/operators/MathOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("log", "log", "org/perlonjava/operators/MathOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("sqrt", "sqrt", "org/perlonjava/operators/MathOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("cos", "cos", "org/perlonjava/operators/MathOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
