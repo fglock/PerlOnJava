@@ -3,7 +3,8 @@ package org.perlonjava.operators;
 import org.perlonjava.parser.NumberParser;
 import org.perlonjava.runtime.*;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
  * Provides basic arithmetic operations for RuntimeScalar objects.
@@ -78,7 +79,7 @@ public class MathOperators {
     public static RuntimeScalar subtract(RuntimeScalar arg1, int arg2) {
         int blessId = arg1.blessedId();
         if (blessId != 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, 0, "(-", "-",false );
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, 0, "(-", "-", false);
             if (result != null) return result;
         }
 
@@ -310,15 +311,14 @@ public class MathOperators {
         if (ctx != null) {
             // Try primary overload method
             RuntimeScalar result = ctx.tryOverload("(neg", new RuntimeArray(runtimeScalar));
-            if (result == null) {
-                // Try fallback
-                result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"", "(bool");
-                if (result != null) {
-                    return unaryMinus(result);
-                }
-                // Try nomethod
-                result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("neg")));
+            if (result != null) return result;
+            // Try fallback
+            result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"", "(bool");
+            if (result != null) {
+                return unaryMinus(result);
             }
+            // Try nomethod
+            result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("neg")));
             if (result != null) return result;
         }
 
@@ -355,15 +355,14 @@ public class MathOperators {
         if (ctx != null) {
             // Try primary overload method
             RuntimeScalar result = ctx.tryOverload("(int", new RuntimeArray(runtimeScalar));
-            if (result == null) {
-                // Try fallback
-                result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"", "(bool");
-                if (result != null) {
-                    return integer(result);
-                }
-                // Try nomethod
-                result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("int")));
+            if (result != null) return result;
+            // Try fallback
+            result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"", "(bool");
+            if (result != null) {
+                return integer(result);
             }
+            // Try nomethod
+            result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("int")));
             if (result != null) return result;
         }
 
