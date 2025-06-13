@@ -1,6 +1,7 @@
 package org.perlonjava.runtime;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 
 /**
  * The {@code Overload} class implements Perl's operator overloading system in Java.
@@ -46,7 +47,7 @@ public class Overload {
                 result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(bool");
                 if (result != null) return result;
                 // Try nomethod
-                result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("\"\"")));
+                result = ctx.tryOverloadNomethod(runtimeScalar, "\"\"");
                 if (result != null) return result;
             }
         }
@@ -75,7 +76,7 @@ public class Overload {
                 result = ctx.tryOverloadFallback(runtimeScalar, "(\"\"", "(bool");
                 if (result != null) return result;
                 // Try nomethod
-                result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("0+")));
+                result = ctx.tryOverloadNomethod(runtimeScalar, "0+");
                 if (result != null) return result;
             }
         }
@@ -104,7 +105,7 @@ public class Overload {
                 result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"");
                 if (result != null) return result;
                 // Try nomethod
-                result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("bool")));
+                result = ctx.tryOverloadNomethod(runtimeScalar, "bool");
                 if (result != null) return result;
             }
         }
@@ -135,7 +136,7 @@ public class Overload {
                     return result.getBoolean() ? scalarFalse : scalarTrue;
                 }
                 // Try nomethod
-                result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("!")));
+                result = ctx.tryOverloadNomethod(runtimeScalar, "!");
                 if (result != null) return result;
             }
         }

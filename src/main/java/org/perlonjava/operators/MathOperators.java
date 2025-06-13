@@ -4,7 +4,6 @@ import org.perlonjava.parser.NumberParser;
 import org.perlonjava.runtime.*;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
  * Provides basic arithmetic operations for RuntimeScalar objects.
@@ -323,12 +322,12 @@ public class MathOperators {
                 RuntimeScalar result = ctx.tryOverload("(neg", new RuntimeArray(runtimeScalar));
                 if (result != null) return result;
                 // Try fallback
-                result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"", "(bool");
+                result = ctx.tryOverloadNumericFallback(runtimeScalar);
                 if (result != null) {
                     return unaryMinus(result);
                 }
                 // Try nomethod
-                result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("neg")));
+                result = ctx.tryOverloadNomethod(runtimeScalar, "neg");
                 if (result != null) return result;
             }
         }
@@ -371,12 +370,12 @@ public class MathOperators {
                 RuntimeScalar result = ctx.tryOverload("(int", new RuntimeArray(runtimeScalar));
                 if (result != null) return result;
                 // Try fallback
-                result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"", "(bool");
+                result = ctx.tryOverloadNumericFallback(runtimeScalar);
                 if (result != null) {
                     return integer(result);
                 }
                 // Try nomethod
-                result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("int")));
+                result = ctx.tryOverloadNomethod(runtimeScalar, "int");
                 if (result != null) return result;
             }
         }
