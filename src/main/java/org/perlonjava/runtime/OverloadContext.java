@@ -33,16 +33,10 @@ public class OverloadContext {
      * Factory method to create overload context if applicable for a given RuntimeScalar.
      * Checks if the scalar is a blessed object and has overloading enabled.
      *
-     * @param runtimeScalar The scalar to check for overloading context
+     * @param blessId Pointer to the class of the blessed object
      * @return OverloadContext instance if overloading is enabled, null otherwise
      */
-    public static OverloadContext prepare(RuntimeScalar runtimeScalar) {
-        // Get blessing ID and verify object is blessed
-        int blessId = runtimeScalar.blessedId();
-        if (blessId == 0) {
-            return null;
-        }
-
+    public static OverloadContext prepare(int blessId) {
         // Resolve Perl class name from blessing ID
         String perlClassName = NameNormalizer.getBlessStr(blessId);
 
@@ -61,7 +55,7 @@ public class OverloadContext {
     public static RuntimeScalar tryTwoArgumentOverload(RuntimeScalar arg1, RuntimeScalar arg2, int blessId, int blessId2, String overloadName, String methodName, boolean canSwap) {
         if (blessId != 0) {
             // Try primary overload method
-            OverloadContext ctx = prepare(arg1);
+            OverloadContext ctx = prepare(blessId);
             if (ctx != null) {
                 RuntimeScalar result = ctx.tryOverload(overloadName, new RuntimeArray(arg1, arg2, scalarFalse));
                 if (result != null) return result;
@@ -69,7 +63,7 @@ public class OverloadContext {
         }
         if (canSwap && blessId2 != 0) {
             // Try swapped overload
-            OverloadContext ctx = prepare(arg2);
+            OverloadContext ctx = prepare(blessId2);
             if (ctx != null) {
                 RuntimeScalar result = ctx.tryOverload(overloadName, new RuntimeArray(arg2, arg1, scalarTrue));
                 if (result != null) return result;
@@ -77,7 +71,7 @@ public class OverloadContext {
         }
         if (blessId != 0) {
             // Try first nomethod
-            OverloadContext ctx = prepare(arg1);
+            OverloadContext ctx = prepare(blessId);
             if (ctx != null) {
                 RuntimeScalar result = ctx.tryOverload("(nomethod", new RuntimeArray(arg1, arg2, scalarFalse, new RuntimeScalar(methodName)));
                 if (result != null) return result;
@@ -85,7 +79,7 @@ public class OverloadContext {
         }
         if (canSwap && blessId != 0) {
             // Try swapped nomethod
-            OverloadContext ctx = prepare(arg1);
+            OverloadContext ctx = prepare(blessId2);
             if (ctx != null) {
                 RuntimeScalar result = ctx.tryOverload("(nomethod", new RuntimeArray(arg2, arg1, scalarTrue, new RuntimeScalar(methodName)));
                 if (result != null) return result;

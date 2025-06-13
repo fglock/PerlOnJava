@@ -35,17 +35,20 @@ public class Overload {
      */
     public static RuntimeScalar stringify(RuntimeScalar runtimeScalar) {
         // Prepare overload context and check if object is eligible for overloading
-        OverloadContext ctx = OverloadContext.prepare(runtimeScalar);
-        if (ctx != null) {
-            // Try primary overload method
-            RuntimeScalar result = ctx.tryOverload("(\"\"", new RuntimeArray(runtimeScalar));
-            if (result != null) return result;
-            // Try fallback
-            result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(bool");
-            if (result != null) return result;
-            // Try nomethod
-            result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("\"\"")));
-            if (result != null) return result;
+        int blessId = runtimeScalar.blessedId();
+        if (blessId != 0) {
+            OverloadContext ctx = OverloadContext.prepare(blessId);
+            if (ctx != null) {
+                // Try primary overload method
+                RuntimeScalar result = ctx.tryOverload("(\"\"", new RuntimeArray(runtimeScalar));
+                if (result != null) return result;
+                // Try fallback
+                result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(bool");
+                if (result != null) return result;
+                // Try nomethod
+                result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("\"\"")));
+                if (result != null) return result;
+            }
         }
 
         // Default string conversion for non-blessed or non-overloaded objects
@@ -61,17 +64,20 @@ public class Overload {
      */
     public static RuntimeScalar numify(RuntimeScalar runtimeScalar) {
         // Prepare overload context and check if object is eligible for overloading
-        OverloadContext ctx = OverloadContext.prepare(runtimeScalar);
-        if (ctx != null) {
-            // Try primary overload method
-            RuntimeScalar result = ctx.tryOverload("(0+", new RuntimeArray(runtimeScalar));
-            if (result != null) return result;
-            // Try fallback
-            result = ctx.tryOverloadFallback(runtimeScalar, "(\"\"", "(bool");
-            if (result != null) return result;
-            // Try nomethod
-            result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("0+")));
-            if (result != null) return result;
+        int blessId = runtimeScalar.blessedId();
+        if (blessId != 0) {
+            OverloadContext ctx = OverloadContext.prepare(blessId);
+            if (ctx != null) {
+                // Try primary overload method
+                RuntimeScalar result = ctx.tryOverload("(0+", new RuntimeArray(runtimeScalar));
+                if (result != null) return result;
+                // Try fallback
+                result = ctx.tryOverloadFallback(runtimeScalar, "(\"\"", "(bool");
+                if (result != null) return result;
+                // Try nomethod
+                result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("0+")));
+                if (result != null) return result;
+            }
         }
 
         // Default number conversion for non-blessed or non-overloaded objects
@@ -87,17 +93,20 @@ public class Overload {
      */
     public static RuntimeScalar boolify(RuntimeScalar runtimeScalar) {
         // Prepare overload context and check if object is eligible for overloading
-        OverloadContext ctx = OverloadContext.prepare(runtimeScalar);
-        if (ctx != null) {
-            // Try primary overload method
-            RuntimeScalar result = ctx.tryOverload("(bool", new RuntimeArray(runtimeScalar));
-            if (result != null) return result;
-            // Try fallback
-            result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"");
-            if (result != null) return result;
-            // Try nomethod
-            result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("bool")));
-            if (result != null) return result;
+        int blessId = runtimeScalar.blessedId();
+        if (blessId != 0) {
+            OverloadContext ctx = OverloadContext.prepare(blessId);
+            if (ctx != null) {
+                // Try primary overload method
+                RuntimeScalar result = ctx.tryOverload("(bool", new RuntimeArray(runtimeScalar));
+                if (result != null) return result;
+                // Try fallback
+                result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"");
+                if (result != null) return result;
+                // Try nomethod
+                result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("bool")));
+                if (result != null) return result;
+            }
         }
 
         // Default bool conversion for non-blessed or non-overloaded objects
@@ -113,19 +122,22 @@ public class Overload {
      */
     public static RuntimeScalar bool_not(RuntimeScalar runtimeScalar) {
         // Prepare overload context and check if object is eligible for overloading
-        OverloadContext ctx = OverloadContext.prepare(runtimeScalar);
-        if (ctx != null) {
-            // Try primary overload method
-            RuntimeScalar result = ctx.tryOverload("(!", new RuntimeArray(runtimeScalar));
-            if (result != null) return result;
-            // Try fallback with negation of result
-            result = ctx.tryOverloadFallback(runtimeScalar, "(bool", "(0+", "(\"\"");
-            if (result != null) {
-                return result.getBoolean() ? scalarFalse : scalarTrue;
+        int blessId = runtimeScalar.blessedId();
+        if (blessId != 0) {
+            OverloadContext ctx = OverloadContext.prepare(blessId);
+            if (ctx != null) {
+                // Try primary overload method
+                RuntimeScalar result = ctx.tryOverload("(!", new RuntimeArray(runtimeScalar));
+                if (result != null) return result;
+                // Try fallback with negation of result
+                result = ctx.tryOverloadFallback(runtimeScalar, "(bool", "(0+", "(\"\"");
+                if (result != null) {
+                    return result.getBoolean() ? scalarFalse : scalarTrue;
+                }
+                // Try nomethod
+                result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("!")));
+                if (result != null) return result;
             }
-            // Try nomethod
-            result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("!")));
-            if (result != null) return result;
         }
 
         // Default bool negation for non-blessed or non-overloaded objects
