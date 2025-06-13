@@ -224,6 +224,25 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the natural logarithm.
      */
     public static RuntimeScalar log(RuntimeScalar runtimeScalar) {
+        // Prepare overload context and check if object is eligible for overloading
+        int blessId = runtimeScalar.blessedId();
+        if (blessId != 0) {
+            OverloadContext ctx = OverloadContext.prepare(blessId);
+            if (ctx != null) {
+                // Try primary overload method
+                RuntimeScalar result = ctx.tryOverload("(log", new RuntimeArray(runtimeScalar));
+                if (result != null) return result;
+                // Try fallback
+                result = ctx.tryOverloadNumericFallback(runtimeScalar);
+                if (result != null) {
+                    return log(result);
+                }
+                // Try nomethod
+                result = ctx.tryOverloadNomethod(runtimeScalar, "log");
+                if (result != null) return result;
+            }
+        }
+
         return new RuntimeScalar(Math.log(runtimeScalar.getDouble()));
     }
 
@@ -234,6 +253,25 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the square root.
      */
     public static RuntimeScalar sqrt(RuntimeScalar runtimeScalar) {
+        // Prepare overload context and check if object is eligible for overloading
+        int blessId = runtimeScalar.blessedId();
+        if (blessId != 0) {
+            OverloadContext ctx = OverloadContext.prepare(blessId);
+            if (ctx != null) {
+                // Try primary overload method
+                RuntimeScalar result = ctx.tryOverload("(sqrt", new RuntimeArray(runtimeScalar));
+                if (result != null) return result;
+                // Try fallback
+                result = ctx.tryOverloadNumericFallback(runtimeScalar);
+                if (result != null) {
+                    return sqrt(result);
+                }
+                // Try nomethod
+                result = ctx.tryOverloadNomethod(runtimeScalar, "sqrt");
+                if (result != null) return result;
+            }
+        }
+
         return new RuntimeScalar(Math.sqrt(runtimeScalar.getDouble()));
     }
 
@@ -244,6 +282,25 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the cosine.
      */
     public static RuntimeScalar cos(RuntimeScalar runtimeScalar) {
+        // Prepare overload context and check if object is eligible for overloading
+        int blessId = runtimeScalar.blessedId();
+        if (blessId != 0) {
+            OverloadContext ctx = OverloadContext.prepare(blessId);
+            if (ctx != null) {
+                // Try primary overload method
+                RuntimeScalar result = ctx.tryOverload("(cos", new RuntimeArray(runtimeScalar));
+                if (result != null) return result;
+                // Try fallback
+                result = ctx.tryOverloadNumericFallback(runtimeScalar);
+                if (result != null) {
+                    return cos(result);
+                }
+                // Try nomethod
+                result = ctx.tryOverloadNomethod(runtimeScalar, "cos");
+                if (result != null) return result;
+            }
+        }
+
         return new RuntimeScalar(Math.cos(runtimeScalar.getDouble()));
     }
 
@@ -254,6 +311,25 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the sine.
      */
     public static RuntimeScalar sin(RuntimeScalar runtimeScalar) {
+        // Prepare overload context and check if object is eligible for overloading
+        int blessId = runtimeScalar.blessedId();
+        if (blessId != 0) {
+            OverloadContext ctx = OverloadContext.prepare(blessId);
+            if (ctx != null) {
+                // Try primary overload method
+                RuntimeScalar result = ctx.tryOverload("(sin", new RuntimeArray(runtimeScalar));
+                if (result != null) return result;
+                // Try fallback
+                result = ctx.tryOverloadNumericFallback(runtimeScalar);
+                if (result != null) {
+                    return sin(result);
+                }
+                // Try nomethod
+                result = ctx.tryOverloadNomethod(runtimeScalar, "sin");
+                if (result != null) return result;
+            }
+        }
+
         return new RuntimeScalar(Math.sin(runtimeScalar.getDouble()));
     }
 
