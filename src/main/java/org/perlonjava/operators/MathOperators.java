@@ -21,6 +21,7 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the sum.
      */
     public static RuntimeScalar add(RuntimeScalar arg1, int arg2) {
+        // Prepare overload context and check if object is eligible for overloading
         int blessId = arg1.blessedId();
         if (blessId != 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, 0, "(+", "+", false);
@@ -47,6 +48,7 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the sum.
      */
     public static RuntimeScalar add(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Prepare overload context and check if object is eligible for overloading
         int blessId = arg1.blessedId();
         int blessId2 = arg2.blessedId();
         if (blessId != 0 || blessId2 != 0) {
@@ -77,6 +79,7 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the difference.
      */
     public static RuntimeScalar subtract(RuntimeScalar arg1, int arg2) {
+        // Prepare overload context and check if object is eligible for overloading
         int blessId = arg1.blessedId();
         if (blessId != 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, 0, "(-", "-", false);
@@ -103,6 +106,7 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the difference.
      */
     public static RuntimeScalar subtract(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Prepare overload context and check if object is eligible for overloading
         int blessId = arg1.blessedId();
         int blessId2 = arg2.blessedId();
         if (blessId != 0 || blessId2 != 0) {
@@ -133,6 +137,7 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the product.
      */
     public static RuntimeScalar multiply(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Prepare overload context and check if object is eligible for overloading
         int blessId = arg1.blessedId();
         int blessId2 = arg2.blessedId();
         if (blessId != 0 || blessId2 != 0) {
@@ -164,6 +169,7 @@ public class MathOperators {
      * @throws PerlCompilerException if division by zero occurs.
      */
     public static RuntimeScalar divide(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Prepare overload context and check if object is eligible for overloading
         int blessId = arg1.blessedId();
         int blessId2 = arg2.blessedId();
         if (blessId != 0 || blessId2 != 0) {
@@ -195,6 +201,7 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the modulus.
      */
     public static RuntimeScalar modulus(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Prepare overload context and check if object is eligible for overloading
         int blessId = arg1.blessedId();
         int blessId2 = arg2.blessedId();
         if (blessId != 0 || blessId2 != 0) {
@@ -307,19 +314,23 @@ public class MathOperators {
     }
 
     public static RuntimeScalar unaryMinus(RuntimeScalar runtimeScalar) {
-        OverloadContext ctx = OverloadContext.prepare(runtimeScalar);
-        if (ctx != null) {
-            // Try primary overload method
-            RuntimeScalar result = ctx.tryOverload("(neg", new RuntimeArray(runtimeScalar));
-            if (result != null) return result;
-            // Try fallback
-            result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"", "(bool");
-            if (result != null) {
-                return unaryMinus(result);
+        // Prepare overload context and check if object is eligible for overloading
+        int blessId = runtimeScalar.blessedId();
+        if (blessId != 0) {
+            OverloadContext ctx = OverloadContext.prepare(blessId);
+            if (ctx != null) {
+                // Try primary overload method
+                RuntimeScalar result = ctx.tryOverload("(neg", new RuntimeArray(runtimeScalar));
+                if (result != null) return result;
+                // Try fallback
+                result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"", "(bool");
+                if (result != null) {
+                    return unaryMinus(result);
+                }
+                // Try nomethod
+                result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("neg")));
+                if (result != null) return result;
             }
-            // Try nomethod
-            result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("neg")));
-            if (result != null) return result;
         }
 
         if (runtimeScalar.type == RuntimeScalarType.STRING) {
@@ -351,19 +362,23 @@ public class MathOperators {
     }
 
     public static RuntimeScalar integer(RuntimeScalar runtimeScalar) {
-        OverloadContext ctx = OverloadContext.prepare(runtimeScalar);
-        if (ctx != null) {
-            // Try primary overload method
-            RuntimeScalar result = ctx.tryOverload("(int", new RuntimeArray(runtimeScalar));
-            if (result != null) return result;
-            // Try fallback
-            result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"", "(bool");
-            if (result != null) {
-                return integer(result);
+        // Prepare overload context and check if object is eligible for overloading
+        int blessId = runtimeScalar.blessedId();
+        if (blessId != 0) {
+            OverloadContext ctx = OverloadContext.prepare(blessId);
+            if (ctx != null) {
+                // Try primary overload method
+                RuntimeScalar result = ctx.tryOverload("(int", new RuntimeArray(runtimeScalar));
+                if (result != null) return result;
+                // Try fallback
+                result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"", "(bool");
+                if (result != null) {
+                    return integer(result);
+                }
+                // Try nomethod
+                result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("int")));
+                if (result != null) return result;
             }
-            // Try nomethod
-            result = ctx.tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar("int")));
-            if (result != null) return result;
         }
 
         return getScalarInt(runtimeScalar.getInt());
