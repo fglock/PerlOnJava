@@ -1,27 +1,32 @@
 package org.perlonjava.runtime;
 
 import static org.perlonjava.runtime.RuntimeContextType.SCALAR;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
+import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 /**
  * Helper class to manage overloading context for a given scalar in Perl-style object system.
  * Handles method overloading and fallback mechanisms for blessed objects.
  */
 public class OverloadContext {
-    /** The Perl class name of the blessed object */
+    /**
+     * The Perl class name of the blessed object
+     */
     final String perlClassName;
-    /** The overloaded method handler */
+    /**
+     * The overloaded method handler
+     */
     final RuntimeScalar methodOverloaded;
-    /** The fallback method handler */
+    /**
+     * The fallback method handler
+     */
     final RuntimeScalar methodFallback;
 
     /**
      * Private constructor to create an OverloadContext instance.
      *
-     * @param perlClassName The Perl class name
+     * @param perlClassName    The Perl class name
      * @param methodOverloaded The overloaded method handler
-     * @param methodFallback The fallback method handler
+     * @param methodFallback   The fallback method handler
      */
     private OverloadContext(String perlClassName, RuntimeScalar methodOverloaded, RuntimeScalar methodFallback) {
         this.perlClassName = perlClassName;
@@ -82,16 +87,24 @@ public class OverloadContext {
             OverloadContext ctx = prepare(blessId2);
             if (ctx != null) {
                 RuntimeScalar result = ctx.tryOverload("(nomethod", new RuntimeArray(arg2, arg1, scalarTrue, new RuntimeScalar(methodName)));
-                if (result != null) return result;
+                return result;
             }
         }
         return null;
     }
 
+    public RuntimeScalar tryOverloadNomethod(RuntimeScalar runtimeScalar, String methodName) {
+        return tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar(methodName)));
+    }
+
+    public RuntimeScalar tryOverloadNumericFallback(RuntimeScalar runtimeScalar) {
+        return tryOverloadFallback(runtimeScalar, "(0+", "(\"\"", "(bool");
+    }
+
     /**
      * Attempts to execute fallback overloading methods if primary method fails.
      *
-     * @param runtimeScalar The scalar value to process
+     * @param runtimeScalar   The scalar value to process
      * @param fallbackMethods Variable number of fallback method names to try in sequence
      * @return RuntimeScalar result from successful fallback execution, or null if all attempts fail
      */
@@ -115,7 +128,7 @@ public class OverloadContext {
     /**
      * Attempts to execute an overloaded method with given arguments.
      *
-     * @param methodName The name of the method to execute
+     * @param methodName     The name of the method to execute
      * @param perlMethodArgs Array of arguments to pass to the method
      * @return RuntimeScalar result from method execution, or null if method not found
      */
