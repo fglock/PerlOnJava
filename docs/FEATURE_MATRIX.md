@@ -382,7 +382,7 @@ This list is under review.
   - ✅ Implemented: `true` `false` `is_bool` `inf` `nan` `weaken` `unweaken` `is_weak` `blessed` `refaddr` `reftype` `created_as_string` `created_as_number` `stringify` `ceil` `floor` `indexed` `trim` `is_tainted`.
 - 🚧  **overload** pragma:
   - ✅ Implemented: `""`, `0+`, `bool`, `fallback`, `nomethod`.
-  - ✅ Implemented: `!`, `+`, `-`, `*`, `/`, `%`, `int`, `neg`, `log`, `sqrt`, `cos`, `sin`.
+  - ✅ Implemented: `!`, `+`, `-`, `*`, `/`, `%`, `int`, `neg`, `log`, `sqrt`, `cos`, `sin`, `exp`, `abs`.
 - ❌  **overloading** pragma
 
 
