@@ -76,7 +76,7 @@ public class OverloadContext {
         return result;
     }
 
-    public static RuntimeScalar tryTwoArgumentOverload(RuntimeScalar arg1, RuntimeScalar arg2, int blessId, int blessId2, String overloadName, String methodName, boolean canSwap) {
+    public static RuntimeScalar tryTwoArgumentOverload(RuntimeScalar arg1, RuntimeScalar arg2, int blessId, int blessId2, String overloadName, String methodName) {
         if (blessId != 0) {
             // Try primary overload method
             OverloadContext ctx = prepare(blessId);
@@ -85,7 +85,7 @@ public class OverloadContext {
                 if (result != null) return result;
             }
         }
-        if (canSwap && blessId2 != 0) {
+        if (blessId2 != 0) {
             // Try swapped overload
             OverloadContext ctx = prepare(blessId2);
             if (ctx != null) {
@@ -101,7 +101,7 @@ public class OverloadContext {
                 if (result != null) return result;
             }
         }
-        if (canSwap && blessId != 0) {
+        if (blessId2 != 0) {
             // Try swapped nomethod
             OverloadContext ctx = prepare(blessId2);
             if (ctx != null) {
