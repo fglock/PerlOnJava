@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import java.util.function.Function;
+
 import static org.perlonjava.runtime.RuntimeContextType.SCALAR;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
@@ -55,6 +57,23 @@ public class OverloadContext {
         }
 
         return new OverloadContext(perlClassName, methodOverloaded, methodFallback);
+    }
+
+    public static RuntimeScalar tryOneArgumentOverload(RuntimeScalar runtimeScalar, int blessId, String operator, String methodName, Function<RuntimeScalar, RuntimeScalar> fallbackFunction) {
+        // Prepare overload context and check if object is eligible for overloading
+        OverloadContext ctx = OverloadContext.prepare(blessId);
+        if (ctx == null) return null;
+        // Try primary overload method
+        RuntimeScalar result = ctx.tryOverload(operator, new RuntimeArray(runtimeScalar));
+        if (result != null) return result;
+        // Try fallback
+        result = ctx.tryOverloadNumericFallback(runtimeScalar);
+        if (result != null) {
+            return fallbackFunction.apply(result);
+        }
+        // Try nomethod
+        result = ctx.tryOverloadNomethod(runtimeScalar, methodName);
+        return result;
     }
 
     public static RuntimeScalar tryTwoArgumentOverload(RuntimeScalar arg1, RuntimeScalar arg2, int blessId, int blessId2, String overloadName, String methodName, boolean canSwap) {
