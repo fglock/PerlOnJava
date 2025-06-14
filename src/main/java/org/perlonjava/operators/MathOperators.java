@@ -306,12 +306,19 @@ public class MathOperators {
     /**
      * Raises a RuntimeScalar to the power of another RuntimeScalar.
      *
-     * @param runtimeScalar The base RuntimeScalar.
-     * @param arg           The exponent RuntimeScalar.
+     * @param arg1 The base RuntimeScalar.
+     * @param arg2 The exponent RuntimeScalar.
      * @return A new RuntimeScalar representing the power.
      */
-    public static RuntimeScalar pow(RuntimeScalar runtimeScalar, RuntimeScalar arg) {
-        return new RuntimeScalar(Math.pow(runtimeScalar.getDouble(), arg.getDouble()));
+    public static RuntimeScalar pow(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Prepare overload context and check if object is eligible for overloading
+        int blessId = arg1.blessedId();
+        if (blessId != 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, 0, "(**", "**");
+            if (result != null) return result;
+        }
+
+        return new RuntimeScalar(Math.pow(arg1.getDouble(), arg2.getDouble()));
     }
 
     /**
@@ -320,12 +327,19 @@ public class MathOperators {
      * the angle whose tangent is the quotient of two specified numbers,
      * effectively calculating the arc-tangent of y/x.
      *
-     * @param runtimeScalar The y-coordinate as a RuntimeScalar.
-     * @param arg           The x-coordinate as a RuntimeScalar.
+     * @param arg1 The y-coordinate as a RuntimeScalar.
+     * @param arg2 The x-coordinate as a RuntimeScalar.
      * @return A new RuntimeScalar representing the angle theta in radians.
      */
-    public static RuntimeScalar atan2(RuntimeScalar runtimeScalar, RuntimeScalar arg) {
-        return new RuntimeScalar(Math.atan2(runtimeScalar.getDouble(), arg.getDouble()));
+    public static RuntimeScalar atan2(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Prepare overload context and check if object is eligible for overloading
+        int blessId = arg1.blessedId();
+        if (blessId != 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, 0, "(atan2", "atan2");
+            if (result != null) return result;
+        }
+
+        return new RuntimeScalar(Math.atan2(arg1.getDouble(), arg2.getDouble()));
     }
 
     /**
