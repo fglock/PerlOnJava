@@ -67,7 +67,7 @@ public class OverloadContext {
         RuntimeScalar result = ctx.tryOverload(operator, new RuntimeArray(runtimeScalar));
         if (result != null) return result;
         // Try fallback
-        result = ctx.tryOverloadNumericFallback(runtimeScalar);
+        result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"", "(bool");
         if (result != null) {
             return fallbackFunction.apply(result);
         }
@@ -114,10 +114,6 @@ public class OverloadContext {
 
     public RuntimeScalar tryOverloadNomethod(RuntimeScalar runtimeScalar, String methodName) {
         return tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar(methodName)));
-    }
-
-    public RuntimeScalar tryOverloadNumericFallback(RuntimeScalar runtimeScalar) {
-        return tryOverloadFallback(runtimeScalar, "(0+", "(\"\"", "(bool");
     }
 
     /**
