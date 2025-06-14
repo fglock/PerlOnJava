@@ -237,7 +237,7 @@ The following areas are currently under active development to enhance the functi
 ## Upcoming Milestones
 
 - **v3.0.1**: Next minor version
-  - Added overload operators: `!`, `+`, `-`, `*`, `/`, `%`, `int`, `neg`, `log`, `sqrt`, `cos`, `sin`.
+  - Added overload operators: `!`, `+`, `-`, `*`, `/`, `%`, `int`, `neg`, `log`, `sqrt`, `cos`, `sin`, `exp`, `abs`.
   - Added `# line` preprocessor directive.
   - Bugfix: fix a problem with Windows newlines and qw().
   - Added Makefile.

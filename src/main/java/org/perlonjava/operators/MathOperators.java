@@ -295,6 +295,13 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the exponential.
      */
     public static RuntimeScalar exp(RuntimeScalar runtimeScalar) {
+        // Check if object is eligible for overloading
+        int blessId = runtimeScalar.blessedId();
+        if (blessId != 0) {
+            RuntimeScalar result = OverloadContext.tryOneArgumentOverload(runtimeScalar, blessId, "(exp", "exp", MathOperators::exp);
+            if (result != null) return result;
+        }
+
         return new RuntimeScalar(Math.exp(runtimeScalar.getDouble()));
     }
 
@@ -330,6 +337,13 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the absolute value.
      */
     public static RuntimeScalar abs(RuntimeScalar runtimeScalar) {
+        // Check if object is eligible for overloading
+        int blessId = runtimeScalar.blessedId();
+        if (blessId != 0) {
+            RuntimeScalar result = OverloadContext.tryOneArgumentOverload(runtimeScalar, blessId, "(abs", "abs", MathOperators::abs);
+            if (result != null) return result;
+        }
+
         RuntimeScalar arg1 = runtimeScalar;
         // Convert string type to number if necessary
         if (arg1.type == RuntimeScalarType.STRING) {
