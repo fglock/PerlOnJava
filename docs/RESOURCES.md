@@ -14,6 +14,7 @@
 ### Interviews and Articles
 - Nikos Vaggalis, 2013 [All about Perl 6 – interview of Flávio Glock](http://www.josetteorama.com/all-about-perl-6-interview-of-flavio-glock/)
 - Andrew Shitov, 2015 [Interview with Flávio Glock](https://andrewshitov.com/2015/05/15/interview-with-flavio-glock/)
+- Flavio Glock, 2017 [Porting the Perl Programming Language to the JVM](https://www.youtube.com/watch?v=n9htVGitBIE). The Perl Conference in Amsterdam
 - Nikos Vaggalis, 2024 [Flavio Glock On Perl, Java, Compilers And Virtual Machines](https://www.i-programmer.info/professional-programmer/103-i-programmer/17491-flavio-glock-on-perl-java-compilers-and-virtual-machines.html)
 
 ## Technical Resources
