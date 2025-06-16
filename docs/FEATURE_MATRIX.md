@@ -383,6 +383,7 @@ This list is under review.
 - 🚧  **overload** pragma:
   - ✅ Implemented: `""`, `0+`, `bool`, `fallback`, `nomethod`.
   - ✅ Implemented: `!`, `+`, `-`, `*`, `/`, `%`, `int`, `neg`, `log`, `sqrt`, `cos`, `sin`, `exp`, `abs`, `atan2`, `**`.
+  - ✅ Implemented: `@{}`.
 - ❌  **overloading** pragma
 
 

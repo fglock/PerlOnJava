@@ -480,6 +480,12 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Method to implement `$v->[10]`
     public RuntimeScalar arrayDerefGet(RuntimeScalar index) {
+        // Check if object is eligible for overloading
+        int blessId = this.blessedId();
+        if (blessId != 0) {
+            return this.arrayDeref().get(index);
+        }
+
         switch (type) {
             case UNDEF:
                 // array autovivification
@@ -502,7 +508,10 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             if (ctx != null) {
                 // Try overload method
                 RuntimeScalar result = ctx.tryOverload("(@{}", new RuntimeArray(this));
-                if (result != null) return result.arrayDeref();
+                // If the subroutine returns the object itself then it will not be called again
+                if (result != null && result.value.hashCode() != this.hashCode()) {
+                    return result.arrayDeref();
+                }
             }
         }
 
