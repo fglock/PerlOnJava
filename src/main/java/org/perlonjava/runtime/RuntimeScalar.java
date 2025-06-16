@@ -442,6 +442,12 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Method to implement `$v->{key}`
     public RuntimeScalar hashDerefGet(RuntimeScalar index) {
+        // Check if object is eligible for overloading
+        int blessId = this.blessedId();
+        if (blessId != 0) {
+            return this.hashDeref().get(index);
+        }
+
         switch (type) {
             case UNDEF:
                 // hash autovivification
@@ -460,6 +466,12 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Method to implement `delete $v->{key}`
     public RuntimeScalar hashDerefDelete(RuntimeScalar index) {
+        // Check if object is eligible for overloading
+        int blessId = this.blessedId();
+        if (blessId != 0) {
+            return this.hashDeref().delete(index);
+        }
+
         return switch (type) {
             case UNDEF -> new RuntimeScalar();
             case HASHREFERENCE -> ((RuntimeHash) value).delete(index);
@@ -470,6 +482,12 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Method to implement `exists $v->{key}`
     public RuntimeScalar hashDerefExists(RuntimeScalar index) {
+        // Check if object is eligible for overloading
+        int blessId = this.blessedId();
+        if (blessId != 0) {
+            return this.hashDeref().exists(index);
+        }
+
         return switch (type) {
             case UNDEF -> new RuntimeScalar();
             case HASHREFERENCE -> ((RuntimeHash) value).exists(index);
@@ -509,7 +527,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
                 // Try overload method
                 RuntimeScalar result = ctx.tryOverload("(@{}", new RuntimeArray(this));
                 // If the subroutine returns the object itself then it will not be called again
-                if (result != null && result.value.hashCode() != this.hashCode()) {
+                if (result != null && result.value.hashCode() != this.value.hashCode()) {
                     return result.arrayDeref();
                 }
             }
@@ -526,6 +544,21 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Method to implement `%$v`
     public RuntimeHash hashDeref() {
+        // Check if object is eligible for overloading
+        int blessId = this.blessedId();
+        if (blessId != 0) {
+            // Prepare overload context and check if object is eligible for overloading
+            OverloadContext ctx = OverloadContext.prepare(blessId);
+            if (ctx != null) {
+                // Try overload method
+                RuntimeScalar result = ctx.tryOverload("(%{}", new RuntimeArray(this));
+                // If the subroutine returns the object itself then it will not be called again
+                if (result != null && result.value.hashCode() != this.value.hashCode()) {
+                    return result.hashDeref();
+                }
+            }
+        }
+
         return switch (type) {
             case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as an HASH reference");
             case HASHREFERENCE -> (RuntimeHash) value;
