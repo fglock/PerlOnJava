@@ -299,7 +299,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Get blessing ID as an integer
     public int blessedId() {
-        return (type & REFERENCE_BIT) != 0 ? ((RuntimeBaseEntity)value).blessId : 0;
+        return (type & REFERENCE_BIT) != 0 ? ((RuntimeBaseEntity) value).blessId : 0;
     }
 
     // Get the Scalar alias into an Array
@@ -494,6 +494,18 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Method to implement `@$v`
     public RuntimeArray arrayDeref() {
+        // Check if object is eligible for overloading
+        int blessId = this.blessedId();
+        if (blessId != 0) {
+            // Prepare overload context and check if object is eligible for overloading
+            OverloadContext ctx = OverloadContext.prepare(blessId);
+            if (ctx != null) {
+                // Try overload method
+                RuntimeScalar result = ctx.tryOverload("(@{}", new RuntimeArray(this));
+                if (result != null) return result.arrayDeref();
+            }
+        }
+
         return switch (type) {
             case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
             case ARRAYREFERENCE -> (RuntimeArray) value;
