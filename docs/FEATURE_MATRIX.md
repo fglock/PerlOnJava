@@ -483,4 +483,5 @@ This section is being worked on.
 
 - ✅  **Cached string/numeric conversions; dualvars**: Caching is implemented, but it doesn't use the Perl "dual variable" implementation.
 - ❌  **Inline "constant" subroutines optimization**: Optimization for inline constants is not yet implemented.
+- ❌  **Overload optimization**: Preprocessing in overload should be cached.
 
