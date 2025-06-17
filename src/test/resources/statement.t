@@ -1,63 +1,65 @@
 use 5.32.0;
 use strict;
-use feature 'say';
-use feature 'isa';
+use warnings;
+use Test::More;
 
-# Test variable assignment and modification
+# Variable assignment and modification
 my $a = 15;
 my $x = $a;
-print "not " if $x != 15; say "ok # \$x is 15";
+is($x, 15, 'variable assignment works');
 
 $a = 12;
-print "not " if $a != 12; say "ok # \$a is 12";
+is($a, 12, 'variable modification works');
 
-# Test if/else
+# if/else
 my $if_test = 10;
 if ($if_test > 5) {
-    print "not " if $if_test <= 5; say "ok # if statement works";
+    ok($if_test > 5, 'if branch executed correctly');
 } else {
-    print "not "; say "ok # if statement works";
+    fail('else branch should not execute');
 }
 
-# Test if/elsif/else
+# if/elsif/else
 my $elsif_test = 15;
+my $branch_taken;
 if ($elsif_test < 10) {
-    print "not "; say "ok # elsif statement works";
+    $branch_taken = 'if';
 } elsif ($elsif_test > 20) {
-    print "not "; say "ok # elsif statement works";
+    $branch_taken = 'elsif';
 } else {
-    print "not " if $elsif_test < 10 || $elsif_test > 20; say "ok # elsif statement works";
+    $branch_taken = 'else';
 }
+is($branch_taken, 'else', 'correct elsif branch taken');
 
-# Test unless
+# unless
 my $unless_test = 5;
 unless ($unless_test > 10) {
-    print "not " if $unless_test > 10; say "ok # unless statement works";
+    ok($unless_test <= 10, 'unless condition works');
 }
 
-# Test while loop
+# while loop
 my $while_counter = 0;
 while ($while_counter < 5) {
     $while_counter++;
 }
-print "not " if $while_counter != 5; say "ok # while loop works";
+is($while_counter, 5, 'while loop iteration count');
 
-# Test until loop
+# until loop
 my $until_counter = 0;
 until ($until_counter == 5) {
     $until_counter++;
 }
-print "not " if $until_counter != 5; say "ok # until loop works";
+is($until_counter, 5, 'until loop iteration count');
 
-# Test for loop (C-style, 3-argument)
+# C-style for loop
 my $for_sum = 0;
 for (my $i = 0; $i < 5; $i++) {
     $for_sum += $i;
 }
-print "not " if $for_sum != 10; say "ok # C-style for loop works";
+is($for_sum, 10, 'C-style for loop sum');
 
-# Test for loop (list iteration) with continue block
-my @list = (1, 2, 3, 4, 5);
+# for loop with continue block
+my @list = (1..5);
 my $list_sum = 0;
 my $continue_count = 0;
 for my $item (@list) {
@@ -65,10 +67,10 @@ for my $item (@list) {
 } continue {
     $continue_count++;
 }
-print "not " if $list_sum != 15; say "ok # list iteration for loop works";
-print "not " if $continue_count != 5; say "ok # continue block in list iteration for loop works";
+is($list_sum, 15, 'list iteration sum');
+is($continue_count, 5, 'continue block execution count');
 
-# Test while loop with continue block
+# while with continue block
 my $while_sum = 0;
 my $while_continue_count = 0;
 while ($while_continue_count < 5) {
@@ -77,52 +79,47 @@ while ($while_continue_count < 5) {
 } continue {
     $while_sum++;
 }
-print "not " if $while_sum != 15; say "ok # while loop with continue block works";
+is($while_sum, 15, 'while loop with continue block sum');
 
-# Test return statement
+# return statement
 sub test_return {
     return 42;
 }
-my $return_value = test_return();
-print "not " if $return_value != 42; say "ok # return statement works";
+is(test_return(), 42, 'return statement value');
 
-# Test nested loops
+# nested loops
 my $nested_sum = 0;
 for my $i (1..3) {
     for my $j (1..3) {
         $nested_sum += $i * $j;
     }
 }
-print "not " if $nested_sum != 36; say "ok # nested loops work";
+is($nested_sum, 36, 'nested loops calculation');
 
-# Test do-while loop
+# do-while loop
 my $do_while_counter = 0;
 do {
     $do_while_counter++;
 } while ($do_while_counter < 5);
-print "not " if $do_while_counter != 5; say "ok # do-while loop works";
+is($do_while_counter, 5, 'do-while loop count');
 
-# Test loop with empty body
+# empty body loop
 my $empty_loop_counter = 0;
 while ($empty_loop_counter < 5) {
     $empty_loop_counter++;
-    # Empty body
 }
-print "not " if $empty_loop_counter != 5; say "ok # loop with empty body works";
+is($empty_loop_counter, 5, 'empty body loop count');
 
-# Test conditional with complex expression
+# complex conditional
 my $complex_condition = (5 > 3 && 10 < 20) || (15 == 15 && 7 != 8);
-if ($complex_condition) {
-    print "not " if !$complex_condition; say "ok # conditional with complex expression works";
-} else {
-    print "not "; say "ok # conditional with complex expression works";
-}
+ok($complex_condition, 'complex conditional evaluation');
 
-# Test scope in loops
+# scope in loops
 my $scope_test = 0;
 for my $i (1..3) {
     my $local_var = $i * 2;
     $scope_test += $local_var;
 }
-print "not " if $scope_test != 12; say "ok # scope in loops works";
+is($scope_test, 12, 'scope in loops calculation');
 
+done_testing();

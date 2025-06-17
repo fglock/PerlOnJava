@@ -1,88 +1,57 @@
-use feature 'say';
 use strict;
 use warnings;
+use Test::More;
 
-###################
-# Perl split() Function Tests
-
-# Test case 1: Pattern is omitted or a single space character
+# Pattern is omitted or a single space character
 my $string = "  This  is   a test  string  ";
-my $pattern = ' ';
-my @result = split($pattern, $string);
-my @expected = ('This', 'is', 'a', 'test', 'string');
-my $match = "@result" eq "@expected";
-print "not " if @result != 5; say "ok # Pattern is a single space character: " . scalar(@result);
-print "not " if !$match; say "ok # Pattern is a single space character: <", join(",", @result), ">";
+my @result = split(' ', $string);
+is_deeply(\@result, ['This', 'is', 'a', 'test', 'string'], 'split with space pattern');
+is(scalar(@result), 5, 'split with space pattern count');
 
-# Test case 2: Pattern is /^/ with multiline modifier
+# Pattern is /^/ with multiline modifier
 $string = "This\nis\na\ntest\nstring";
-$pattern = '^';
-@result = split(/$pattern/m, $string);
-@expected = ("This\n", "is\n", "a\n", "test\n", "string");
-$match = "@result" eq "@expected";
-print "not " if scalar(@result) != 5; say "ok # Pattern /^/ with multiline modifier: " . scalar(@result);
-print "not " if !$match; say "ok # Pattern /^/ with multiline modifier"; #  : <", join(",", @result), ">";
+@result = split(/^/m, $string);
+is_deeply(\@result, ["This\n", "is\n", "a\n", "test\n", "string"], 'split with multiline pattern');
+is(scalar(@result), 5, 'split with multiline pattern count');
 
-# Test case 3: Pattern with capturing groups
+# Pattern with capturing groups
 $string = 'a1b2c3';
-$pattern = '(\d+)';
-@result = split(/$pattern/, $string);
-@expected = ('a', '1', 'b', '2', 'c', '3');
-$match = "@result" eq "@expected";
-print "not " if !$match; say "ok # Pattern with capturing groups <", join(",", @result), ">";
+@result = split(/(\d+)/, $string);
+is_deeply(\@result, ['a', '1', 'b', '2', 'c', '3'], 'split with capturing groups');
 
-# Test case 4: Negative limit
+# Negative limit
 $string = 'This is a test string';
-$pattern = ' ';
-@result = split($pattern, $string, -1);
-@expected = ('This', 'is', 'a', 'test', 'string');
-$match = "@result" eq "@expected";
-print "not " if !$match; say "ok # Negative limit";
+@result = split(' ', $string, -1);
+is_deeply(\@result, ['This', 'is', 'a', 'test', 'string'], 'split with negative limit');
 
-# Test case 5: Omitted or zero limit with trailing empty fields
+# Omitted or zero limit with trailing empty fields
 $string = 'This is a test string ';
-$pattern = ' ';
-@result = split($pattern, $string);
-@expected = ('This', 'is', 'a', 'test', 'string');
-$match = "@result" eq "@expected";
-print "not " if !$match; say "ok # Omitted or zero limit with trailing empty fields";
+@result = split(' ', $string);
+is_deeply(\@result, ['This', 'is', 'a', 'test', 'string'], 'split with trailing spaces');
 
-# Test case 6: Empty pattern (split between characters)
+# Empty pattern (split between characters)
 $string = 'abc';
-$pattern = '';
-@result = split(/$pattern/, $string);
-@expected = ('a', 'b', 'c');
-$match = "@result" eq "@expected";
-print "not " if !$match; say "ok # Empty pattern (split between characters)";
+@result = split(//, $string);
+is_deeply(\@result, ['a', 'b', 'c'], 'split with empty pattern');
 
-# Test case 7: Literal string pattern
+# Literal string pattern
 $string = 'a,b,c';
-$pattern = ',';
-@result = split($pattern, $string);
-@expected = ('a', 'b', 'c');
-$match = "@result" eq "@expected";
-print "not " if !$match; say "ok # Literal string pattern";
+@result = split(',', $string);
+is_deeply(\@result, ['a', 'b', 'c'], 'split with literal pattern');
 
-# Test case 8: Pattern with no capturing groups and limit zero
+# Pattern with no capturing groups and limit zero
 $string = 'a b c ';
-$pattern = ' ';
-@result = split($pattern, $string, 0);
-@expected = ('a', 'b', 'c');
-$match = "@result" eq "@expected";
-print "not " if !$match; say "ok # Pattern with no capturing groups and limit zero";
+@result = split(' ', $string, 0);
+is_deeply(\@result, ['a', 'b', 'c'], 'split with zero limit');
 
-# Test case 9: Pattern with capturing groups and limit zero
+# Pattern with capturing groups and limit zero
 $string = 'a1b2c3';
-$pattern = '(\d+)';
-@result = split(/$pattern/, $string, 0);
-@expected = ('a', '1', 'b', '2', 'c', '3');
-$match = "@result" eq "@expected";
-print "not " if !$match; say "ok # Pattern with capturing groups and limit zero";
+@result = split(/(\d+)/, $string, 0);
+is_deeply(\@result, ['a', '1', 'b', '2', 'c', '3'], 'split with capturing groups and zero limit');
 
-# Test case 10: Pattern with capturing groups and positive limit
+# Pattern with capturing groups and positive limit
 $string = 'a1b2c3';
-$pattern = '(\d+)';
-@result = split(/$pattern/, $string, 3);
-@expected = ('a', '1', 'b', '2', 'c3');
-$match = "@result" eq "@expected";
-print "not " if !$match; say "ok # Pattern with capturing groups and positive limit: <", join(",", @result), ">";
+@result = split(/(\d+)/, $string, 3);
+is_deeply(\@result, ['a', '1', 'b', '2', 'c3'], 'split with capturing groups and positive limit');
+
+done_testing();
