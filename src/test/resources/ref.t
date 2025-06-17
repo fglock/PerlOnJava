@@ -1,103 +1,84 @@
 use strict;
 use warnings;
-use feature 'say';
+use Test::More;
 
 # Test ref operator for different types
 my $scalar = 42;
-print "not " if ref($scalar) ne ""; say "ok # Scalar ref <" . ref($scalar) . ">";
+is(ref($scalar), "", 'Scalar ref type');
 
 my $array_ref = [1, 2, 3];
-print "not " if ref($array_ref) ne "ARRAY"; say "ok # Array ref <" . ref($array_ref) . ">";
+is(ref($array_ref), "ARRAY", 'Array ref type');
 
 my $hash_ref = { key => 'value' };
-print "not " if ref($hash_ref) ne "HASH"; say "ok # Hash ref <" . ref($hash_ref) . ">";
+is(ref($hash_ref), "HASH", 'Hash ref type');
 
 my $code_ref = sub { return 1; };
-print "not " if ref($code_ref) ne "CODE"; say "ok # Code ref <" . ref($code_ref) . ">";
+is(ref($code_ref), "CODE", 'Code ref type');
 
 my $glob_ref = *STDOUT;
-print "not " if ref($glob_ref) ne ""; say "ok # Glob ref <" . ref($glob_ref) . ">";
+is(ref($glob_ref), "", 'Glob ref type');
 
 my $regex_ref = qr/abc/;
-print "not " if ref($regex_ref) ne "Regexp"; say "ok # Regex ref <" . ref($regex_ref) . ">";
+is(ref($regex_ref), "Regexp", 'Regex ref type');
 
 my $vstring = v97;
-print "not " if ref(\$vstring) ne "VSTRING"; say "ok # VSTRING ref <" . ref(\$vstring) . ">";
+is(ref(\$vstring), "VSTRING", 'VSTRING ref type');
 
-# Test stringification of different types
-print "not " if "$scalar" ne "42"; say "ok # Scalar stringification <" . "$scalar" . ">";
-print "not " if "$array_ref" ne "ARRAY(0x" . sprintf("%x", 0 + $array_ref) . ")"; say "ok # Array stringification <" . "$array_ref" . ">";
-print "not " if "$hash_ref" ne "HASH(0x" . sprintf("%x", 0 + $hash_ref) . ")"; say "ok # Hash stringification <" . "$hash_ref" . ">";
-print "not " if "$code_ref" ne "CODE(0x" . sprintf("%x", 0 + $code_ref) . ")"; say "ok # Code stringification <" . "$code_ref" . ">";
-print "not " if "$glob_ref" ne "*main::STDOUT"; say "ok # Glob stringification <" . "$glob_ref" . ">";
-
-## XXX TODO - Java doesn't have "(?^: ... )"
-## print "not " if "$regex_ref" ne "(?^:abc)"; say "ok # Regex stringification <" . "$regex_ref" . ">";
-
-print "not " if "$vstring" ne "a"; say "ok # VSTRING stringification <" . "$vstring" . ">";
+# Test stringification
+is("$scalar", "42", 'Scalar stringification');
+like("$array_ref", qr/^ARRAY\(0x[0-9a-f]+\)$/, 'Array stringification');
+like("$hash_ref", qr/^HASH\(0x[0-9a-f]+\)$/, 'Hash stringification');
+like("$code_ref", qr/^CODE\(0x[0-9a-f]+\)$/, 'Code stringification');
+is("$glob_ref", "*main::STDOUT", 'Glob stringification');
+is("$vstring", "a", 'VSTRING stringification');
 
 # Test reference types
 my $scalar_ref = \$scalar;
-print "not " if ref($scalar_ref) ne "SCALAR"; say "ok # Scalar reference type <" . ref($scalar_ref) . ">";
+is(ref($scalar_ref), "SCALAR", 'Scalar reference type');
 
 my $array_ref_ref = \$array_ref;
-print "not " if ref($array_ref_ref) ne "REF"; say "ok # Array reference type <" . ref($array_ref_ref) . ">";
+is(ref($array_ref_ref), "REF", 'Array reference reference type');
 
 my $hash_ref_ref = \$hash_ref;
-print "not " if ref($hash_ref_ref) ne "REF"; say "ok # Hash reference type <" . ref($hash_ref_ref) . ">";
+is(ref($hash_ref_ref), "REF", 'Hash reference reference type');
 
 my $code_ref_ref = \$code_ref;
-print "not " if ref($code_ref_ref) ne "REF"; say "ok # Code reference type <" . ref($code_ref_ref) . ">";
+is(ref($code_ref_ref), "REF", 'Code reference reference type');
 
 my $glob_ref_ref = \$glob_ref;
-print "not " if ref($glob_ref_ref) ne "GLOB"; say "ok # Glob reference type <" . ref($glob_ref_ref) . ">";
+is(ref($glob_ref_ref), "GLOB", 'Glob reference reference type');
 
 $glob_ref_ref = \*STDOUT;
-print "not " if ref($glob_ref_ref) ne "GLOB"; say "ok # Glob reference type <" . ref($glob_ref_ref) . ">";
+is(ref($glob_ref_ref), "GLOB", 'Direct glob reference type');
 
 my $regex_ref_ref = \$regex_ref;
-print "not " if ref($regex_ref_ref) ne "REF"; say "ok # Regex reference type <" . ref($regex_ref_ref) . ">";
+is(ref($regex_ref_ref), "REF", 'Regex reference reference type');
 
 my $vstring_ref = \$vstring;
-print "not " if ref($vstring_ref) ne "VSTRING"; say "ok # VSTRING reference type <" . ref($vstring_ref) . ">";
+is(ref($vstring_ref), "VSTRING", 'VSTRING reference type');
 
+# Test stash entries
 {
-# Test stash entries (symbol table entries)
-my $stash_entry = *main::;
-print "not " if ref($stash_entry) ne ""; say "ok # Stash entry ref <" . ref($stash_entry) . ">";
+    my $stash_entry = *main::;
+    is(ref($stash_entry), "", 'Stash entry ref type');
 
-my $stash_entry_ref = \*main::;
-print "not " if ref($stash_entry_ref) ne "GLOB"; say "ok # Stash entry ref <" . ref($stash_entry_ref) . ">";
-
-## Test stringification of stash entries
-## XXX TODO
-## print "not " if "$stash_entry" ne "*main::main::"; say "ok # Stash entry stringification <" . "$stash_entry" . ">";
+    my $stash_entry_ref = \*main::;
+    is(ref($stash_entry_ref), "GLOB", 'Stash entry reference type');
 }
 
 {
-# Test stash entries (symbol table entries)
-# Note: $Testing::a was never used
-my $stash_entry = $Testing::{a};
-print "not " if defined($stash_entry); say "ok # Stash entry ref <" . ref($stash_entry) . ">";
-
-## XXX TODO
-## my $stash_entry_ref = \$Testing::{a};
-## print "not " if ref($stash_entry_ref) ne "SCALAR"; say "ok # Stash entry ref <" . ref($stash_entry_ref) . ">";
-
-## Test stringification of stash entries
-print "not " if defined($stash_entry); say "ok # Stash entry stringification";
+    my $stash_entry = $Testing::{a};
+    ok(!defined($stash_entry), 'Undefined stash entry');
 }
 
 {
-# Test stash entries (symbol table entries)
-# Note: now $Testing2::a is being initialized
-$Testing2::a = 123;
-my $stash_entry = $Testing2::{a};
-print "not " if ref($stash_entry) ne ""; say "ok # Stash entry ref <" . ref($stash_entry) . ">";
+    $Testing2::a = 123;
+    my $stash_entry = $Testing2::{a};
+    is(ref($stash_entry), "", 'Initialized stash entry ref type');
 
-my $stash_entry_ref = \$Testing2::{a};
-print "not " if ref($stash_entry_ref) ne "GLOB"; say "ok # Stash entry ref <" . ref($stash_entry_ref) . ">";
-
-## Test stringification of stash entries
-print "not " if "$stash_entry" ne "*Testing2::a"; say "ok # Stash entry stringification <" . "$stash_entry" . ">";
+    my $stash_entry_ref = \$Testing2::{a};
+    is(ref($stash_entry_ref), "GLOB", 'Initialized stash entry reference type');
+    is("$stash_entry", "*Testing2::a", 'Stash entry stringification');
 }
+
+done_testing();
