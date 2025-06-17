@@ -17,6 +17,8 @@
 use strict;
 use feature "say";
 
+print "1..113\n";
+
 ###################
 # Arithmetic Operators
 
