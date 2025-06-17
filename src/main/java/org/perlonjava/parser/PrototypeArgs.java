@@ -7,6 +7,8 @@ import org.perlonjava.astnode.SubroutineNode;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
+import java.util.List;
+
 import static org.perlonjava.parser.ListParser.consumeCommas;
 import static org.perlonjava.parser.ListParser.isComma;
 import static org.perlonjava.parser.OperatorParser.scalarUnderscore;
@@ -117,7 +119,12 @@ public class PrototypeArgs {
                             }
                             consumeCommas(parser);
                         }
-                        ListNode argList0 = ListParser.parseZeroOrOneList(parser, 0);
+
+                        //ListNode argList0 = ListParser.parseZeroOrOneList(parser, 0);
+                        ListNode argList0 = new ListNode(
+                                List.of(parser.parseExpression(parser.getPrecedence(","))),
+                                parser.tokenIndex);
+
                         if (argList0.elements.isEmpty()) {
                             if (isOptional) {
                                 break;
