@@ -6,7 +6,7 @@ build:
 	./gradlew build
 
 test:
-	./gradlew test
+	./gradlew test --rerun-tasks
 
 clean:
 	./gradlew clean
