@@ -49,7 +49,7 @@ sub ok {
     return $test;
 }
 
-sub is {
+sub is ($$;$) {
     my ($got, $expected, $name) = @_;
     my $test = (!defined $got && !defined $expected) ||
         (defined $got && defined $expected && $got eq $expected);
@@ -61,7 +61,7 @@ sub is {
     return $test;
 }
 
-sub isnt {
+sub isnt ($$;$) {
     my ($got, $expected, $name) = @_;
     my $test = (!defined $got && !defined $expected) ||
         (defined $got && defined $expected && $got eq $expected);
