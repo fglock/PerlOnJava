@@ -40,7 +40,7 @@ public class PrototypeArgs {
 
         if (prototype == null) {
             // Null prototype: parse a list of zero or more elements
-            args = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
+            args = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
         } else {
             // Parse arguments according to the prototype
             while (!prototype.isEmpty()) {
