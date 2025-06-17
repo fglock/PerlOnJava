@@ -7,12 +7,13 @@ use Data::Dumper;
 
 our @EXPORT = qw(
     plan ok is isnt like unlike cmp_ok can_ok isa_ok
-    pass fail diag skip todo done_testing is_deeply
+    pass fail diag done_testing is_deeply subtest
 );
 
-my $Test_Count = 0;
-my $Plan_Count;
-my $Failed_Count = 0;
+our $Test_Count = 0;
+our $Plan_Count;
+our $Failed_Count = 0;
+our $Test_Indent = "";
 
 sub import {
     my $package = shift;
@@ -31,10 +32,10 @@ sub plan {
     my ($directive, $arg) = @_;
     if ($directive eq 'tests') {
         $Plan_Count = $arg;
-        print "1..$Plan_Count\n";
+        print "${Test_Indent}1..$Plan_Count\n";
     }
     elsif ($directive eq 'skip_all') {
-        print "1..0 # Skipped: $arg\n";
+        print "${Test_Indent}1..0 # Skipped: $arg\n";
         exit 0;
     }
 }
@@ -44,7 +45,7 @@ sub ok {
     $Test_Count++;
     my $result = $test ? "ok" : "not ok";
     $Failed_Count++ unless $test;
-    print "$result $Test_Count - $name\n";
+    print "$Test_Indent$result $Test_Count - $name\n";
     return $test;
 }
 
@@ -129,27 +130,22 @@ sub fail {ok(0, $_[0])}
 
 sub diag {
     my ($message) = @_;
-    print STDERR "# $message\n";
-}
-
-sub skip {
-    my ($reason, $count) = @_;
-    for (1 .. $count) {
-        $Test_Count++;
-        print "ok $Test_Count # skip $reason\n";
-    }
-}
-
-sub todo {
-    my ($reason, $sub) = @_;
-    our $TODO = $reason;
-    $sub->();
+    print STDERR "$Test_Indent# $message\n";
 }
 
 sub done_testing {
     my ($count) = @_;
     $count ||= $Test_Count;
-    print "1..$count\n" unless $Plan_Count;
+
+    if ($Plan_Count && $Plan_Count != $Test_Count) {
+        ok(0, "planned to run $Plan_Count but done_testing() expects $Test_Count");
+        diag("   Failed test 'planned to run $Plan_Count but done_testing() expects $Test_Count'");
+        diag("   at $0 line " . (caller)[2] . ".");
+        diag("Looks like you failed 1 test of $Plan_Count.");
+        return 0;
+    }
+
+    print "${Test_Indent}1..$count\n" unless $Plan_Count;
     return $Failed_Count == 0;
 }
 
@@ -167,5 +163,28 @@ sub is_deeply {
     return $test;
 }
 
-1;
+sub subtest {
+    my ($name, $code) = @_;
+    print "# Subtest: $name\n";
+    my $result;
 
+    {
+        # Reset counters for subtest and set indent
+        local $Failed_Count = 0;
+        local $Test_Count = 0;
+        local $Test_Indent = $Test_Indent . "    ";
+
+        # Run the subtest code
+        $code->();
+
+        # Print subtest plan
+        print "${Test_Indent}1..$Test_Count\n";
+        $result = $Failed_Count == 0;
+    }
+
+    # Report subtest result
+    ok($result, $name);
+    return $result;
+}
+
+1;
