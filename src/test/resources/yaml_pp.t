@@ -1,61 +1,58 @@
 use feature 'say';
 use strict;
+use Test::More;
 use YAML::PP;
 use JSON;
 
 # Basic OO interface tests
 my $ypp = YAML::PP->new(cyclic_refs => "allow");
-print "not " unless defined $ypp;
-say "ok # YAML::PP constructor";
+ok(defined $ypp, 'YAML::PP constructor');
 
 # Simple scalar mapping
 my $yaml = "name: Alice\nage: 25\n";
 my @docs = $ypp->load_string($yaml);
-print "not " unless $docs[0]->{name} eq 'Alice' && $docs[0]->{age} == 25;
-say "ok # Basic mapping load";
+is($docs[0]->{name}, 'Alice', 'Name matches in basic mapping');
+is($docs[0]->{age}, 25, 'Age matches in basic mapping');
 
 # Array/sequence test
 $yaml = "- apple\n- banana\n- cherry\n";
 @docs = $ypp->load_string($yaml);
-print "not " unless $docs[0]->[0] eq 'apple' && $docs[0]->[2] eq 'cherry';
-say "ok # Sequence load";
+is($docs[0]->[0], 'apple', 'First sequence element');
+is($docs[0]->[2], 'cherry', 'Last sequence element');
 
 # Nested structures
 $yaml = "outer:\n  inner:\n    value: 42\n";
 @docs = $ypp->load_string($yaml);
-print "not " unless $docs[0]->{outer}{inner}{value} == 42;
-say "ok # Nested structure load";
+is($docs[0]->{outer}{inner}{value}, 42, 'Nested structure value');
 
 # Multiple documents
 $yaml = "---\nfirst: 1\n---\nsecond: 2\n";
 @docs = $ypp->load_string($yaml);
-print "not " unless @docs == 2 && $docs[0]->{first} == 1 && $docs[1]->{second} == 2;
-say "ok # Multiple documents load";
+is(scalar @docs, 2, 'Correct number of documents');
+is($docs[0]->{first}, 1, 'First document value');
+is($docs[1]->{second}, 2, 'Second document value');
 
 # Dump simple hash
 my $data = { name => 'Bob', numbers => [1, 2, 3] };
 $yaml = $ypp->dump_string($data);
 my @parsed = $ypp->load_string($yaml);
-print "not " unless $parsed[0]->{name} eq 'Bob' && $parsed[0]->{numbers}[1] == 2;
-say "ok # Dump and reload hash";
+is($parsed[0]->{name}, 'Bob', 'Name preserved in dump/load');
+is($parsed[0]->{numbers}[1], 2, 'Array element preserved in dump/load');
 
 # Test file operations
-my $tempfile = "test_yaml_$$.yml";
+my $tempfile = "test_yaml_$.yml";
 $ypp->dump_file($tempfile, $data);
 @docs = $ypp->load_file($tempfile);
-print "not " unless $docs[0]->{name} eq 'Bob';
-say "ok # File operations";
+is($docs[0]->{name}, 'Bob', 'File operations preserve data');
 unlink $tempfile;
 
 # Static interface tests
 use YAML::PP qw(Load Dump LoadFile DumpFile);
 @docs = Load("key: value\n");
-print "not " unless $docs[0]->{key} eq 'value';
-say "ok # Static Load";
+is($docs[0]->{key}, 'value', 'Static Load works');
 
 $yaml = Dump({ test => 'static' });
-print "not " unless $yaml =~ /test:/;
-say "ok # Static Dump";
+like($yaml, qr/test:/, 'Static Dump produces YAML');
 
 # Complex nested structures
 my $complex = {
@@ -71,10 +68,8 @@ my $complex = {
 
 $yaml = $ypp->dump_string($complex);
 my $reloaded = ($ypp->load_string($yaml))[0];
-print "not " unless 
-    $reloaded->{array_of_hashes}[1]{data} eq 'second' &&
-    $reloaded->{hash_of_arrays}{letters}[2] eq 'c';
-say "ok # Complex structure roundtrip";
+is($reloaded->{array_of_hashes}[1]{data}, 'second', 'Complex structure array access');
+is($reloaded->{hash_of_arrays}{letters}[2], 'c', 'Complex structure hash access');
 
 # Data types
 my $types = {
@@ -87,19 +82,16 @@ my $types = {
 
 $yaml = $ypp->dump_string($types);
 my $loaded_types = ($ypp->load_string($yaml))[0];
-print "not " unless 
-    $loaded_types->{integer} == 42 &&
-    $loaded_types->{float} > 3.13 &&
-    $loaded_types->{float} < 3.15;
-say "ok # Data types preservation";
+is($loaded_types->{integer}, 42, 'Integer preservation');
+cmp_ok($loaded_types->{float}, '>', 3.13, 'Float greater than check');
+cmp_ok($loaded_types->{float}, '<', 3.15, 'Float less than check');
 
 # Circular reference test
 my $circular = {};
 $circular->{self} = $circular;
 $yaml = $ypp->dump_string($circular);
 my $loaded_circular = ($ypp->load_string($yaml))[0];
-print "not " unless $loaded_circular->{self} == $loaded_circular;
-say "ok # Circular reference handling";
+is($loaded_circular->{self}, $loaded_circular, 'Simple circular reference');
 
 # More complex circular structure
 my $a = {};
@@ -107,5 +99,6 @@ my $b = { a => $a };
 $a->{b} = $b;
 $yaml = $ypp->dump_string($a);
 my $loaded_a = ($ypp->load_string($yaml))[0];
-print "not " unless $loaded_a->{b}{a} == $loaded_a;
-say "ok # Complex circular reference handling";
+is($loaded_a->{b}{a}, $loaded_a, 'Complex circular reference');
+
+done_testing();
