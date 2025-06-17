@@ -410,7 +410,7 @@ This list is under review.
 - ✅  **URI::Escape** module.
 - ✅  **Text::Balanced** use the same version as Perl.
 - ✅  **Benchmark** use the same version as Perl.
-- 🚧  **Test::More** some features missing: subtest.
+- 🚧  **Test::More** some features missing: `skip`, `BAIL_OUT`.
 - 🚧  **HTTP::Tiny** some features untested: proxy settings.
 - 🚧  **DynaLoader** placeholder module.
 - 🚧  **Unicode::Normalize** `normalize`, `NFC`, `NFD`, `NFKC`, `NFKD`.
