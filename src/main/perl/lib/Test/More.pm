@@ -51,7 +51,8 @@ sub ok {
 
 sub is {
     my ($got, $expected, $name) = @_;
-    my $test = defined $got && defined $expected && $got eq $expected;
+    my $test = (!defined $got && !defined $expected) ||
+        (defined $got && defined $expected && $got eq $expected);
     ok($test, $name);
     unless ($test) {
         diag("         got: " . (defined $got ? "'$got'" : "undef"));
@@ -62,7 +63,9 @@ sub is {
 
 sub isnt {
     my ($got, $expected, $name) = @_;
-    my $test = !defined $got || !defined $expected || $got ne $expected;
+    my $test = (!defined $got && !defined $expected) ||
+        (defined $got && defined $expected && $got eq $expected);
+    $test = !$test;
     ok($test, $name);
     unless ($test) {
         diag("         got: '$got'");
