@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use feature 'say';
+use Test::More tests => 6;
 
 # Define a base class
 {
@@ -24,19 +24,19 @@ use feature 'say';
 my $derived = DerivedClass->new();
 
 # Test if the derived class can call the base class method
-print "not " unless $derived->base_method() eq "Base method called"; say "ok # Derived class can call base class method";
+is($derived->base_method(), "Base method called", 'Derived class can call base class method');
 
 # Test if the derived class is an instance of the base class
-print "not " unless $derived->isa('BaseClass'); say "ok # Derived class is an instance of BaseClass";
+isa_ok($derived, 'BaseClass', 'Derived class');
 
 # Test if the derived class is an instance of itself
-print "not " unless $derived->isa('DerivedClass'); say "ok # Derived class is an instance of DerivedClass";
+isa_ok($derived, 'DerivedClass', 'Derived class');
 
 # Test if the derived class cannot call a non-existent method
 eval {
     $derived->non_existent_method();
 };
-print "not " unless $@; say "ok # Calling non-existent method throws error";
+ok($@, 'Calling non-existent method throws error');
 
 # Test multiple inheritance
 {
@@ -54,6 +54,5 @@ print "not " unless $@; say "ok # Calling non-existent method throws error";
 my $multi_derived = MultiDerivedClass->new();
 
 # Test if the multi-derived class can call methods from both base classes
-print "not " unless $multi_derived->base_method() eq "Base method called"; say "ok # Multi-derived class can call BaseClass method";
-print "not " unless $multi_derived->another_method() eq "Another method called"; say "ok # Multi-derived class can call AnotherBaseClass method";
-
+is($multi_derived->base_method(), "Base method called", 'Multi-derived class can call BaseClass method');
+is($multi_derived->another_method(), "Another method called", 'Multi-derived class can call AnotherBaseClass method');
