@@ -570,6 +570,21 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Method to implement `$$v`
     public RuntimeScalar scalarDeref() {
+        // Check if object is eligible for overloading
+        int blessId = this.blessedId();
+        if (blessId != 0) {
+            // Prepare overload context and check if object is eligible for overloading
+            OverloadContext ctx = OverloadContext.prepare(blessId);
+            if (ctx != null) {
+                // Try overload method
+                RuntimeScalar result = ctx.tryOverload("(${}", new RuntimeArray(this));
+                // If the subroutine returns the object itself then it will not be called again
+                if (result != null && result.value.hashCode() != this.value.hashCode()) {
+                    return result.scalarDeref();
+                }
+            }
+        }
+
         return switch (type) {
             case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as a SCALAR reference");
             case REFERENCE -> (RuntimeScalar) value;
@@ -581,6 +596,21 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Method to implement `$$v`, when "no strict refs" is in effect
     public RuntimeScalar scalarDerefNonStrict(String packageName) {
+        // Check if object is eligible for overloading
+        int blessId = this.blessedId();
+        if (blessId != 0) {
+            // Prepare overload context and check if object is eligible for overloading
+            OverloadContext ctx = OverloadContext.prepare(blessId);
+            if (ctx != null) {
+                // Try overload method
+                RuntimeScalar result = ctx.tryOverload("(${}", new RuntimeArray(this));
+                // If the subroutine returns the object itself then it will not be called again
+                if (result != null && result.value.hashCode() != this.value.hashCode()) {
+                    return result.scalarDerefNonStrict(packageName);
+                }
+            }
+        }
+
         return switch (type) {
             case REFERENCE -> (RuntimeScalar) value;
             default -> {
