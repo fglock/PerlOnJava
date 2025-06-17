@@ -1,100 +1,85 @@
-use feature 'say';
 use strict;
-
-###################
-# Perl Hash Operations Tests
+use Test::More;
+use feature 'say';
 
 # Hash creation and assignment
 my %hash = (key1 => 'value1', key2 => 'value2');
-print "not " if $hash{key1} ne 'value1' or $hash{key2} ne 'value2';
-say "ok # Hash creation and assignment";
+is($hash{key1}, 'value1', 'Hash key1 has correct value');
+is($hash{key2}, 'value2', 'Hash key2 has correct value');
 
 # Hashref
 my $hashref = \%hash;
-print "not " if $hashref->{key1} ne 'value1' or $hashref->{key2} ne 'value2';
-say "ok # Hashref dereference";
+is($hashref->{key1}, 'value1', 'Hashref key1 dereference');
+is($hashref->{key2}, 'value2', 'Hashref key2 dereference');
 
 # Exists
-print "not " if !exists $hash{key1} or exists $hash{nonexistent};
-say "ok # Exists operation";
+ok(exists $hash{key1}, 'key1 exists');
+ok(!exists $hash{nonexistent}, 'nonexistent key does not exist');
 
 # Delete
 delete $hash{key1};
-print "not " if exists $hash{key1} or !exists $hash{key2};
-say "ok # Delete operation";
+ok(!exists $hash{key1}, 'key1 deleted');
+ok(exists $hash{key2}, 'key2 still exists');
 
 # Assign
 $hash{key3} = 'value3';
-print "not " if $hash{key3} ne 'value3';
-say "ok # Assign operation";
+is($hash{key3}, 'value3', 'New key assignment');
 
 # Count
-my $count = keys %hash;
-print "not " if $count != 2;
-say "ok # Count operation";
+is(scalar(keys %hash), 2, 'Hash has correct number of keys');
 
 # Iterate
 my $iterated_count = 0;
-for my $key (keys %hash) {
-    $iterated_count++;
-}
-print "not " if $iterated_count != $count;
-say "ok # Iterate operation";
+$iterated_count++ for keys %hash;
+is($iterated_count, scalar(keys %hash), 'Iteration count matches key count');
 
-# Slice
+# Slice operations
 {
-my @slice = @hash{'key2', 'key3'};
-print "not " if @slice != 2 or $slice[0] ne 'value2' or $slice[1] ne 'value3';
-say "ok # Slice operation";
+    my @slice = @hash{'key2', 'key3'};
+    is_deeply(\@slice, ['value2', 'value3'], 'Hash slice retrieval');
 }
 
 {
-my $hash = \%hash;
-my @slice = @$hash{'key2', 'key3'};
-print "not " if @slice != 2 or $slice[0] ne 'value2' or $slice[1] ne 'value3';
-say "ok # Slice operation";
+    my $hash = \%hash;
+    my @slice = @$hash{'key2', 'key3'};
+    is_deeply(\@slice, ['value2', 'value3'], 'Hashref slice retrieval');
 }
 
 # Slice delete
 delete @hash{'key2', 'key3'};
-print "not " if exists $hash{key2} or exists $hash{key3};
-say "ok # Slice delete operation";
+ok(!exists $hash{key2} && !exists $hash{key3}, 'Slice delete successful');
 
 # Autovivification
 $hash{outer}{inner} = 'nested';
-print "not " if $hash{outer}{inner} ne 'nested';
-say "ok # Autovivification";
+is($hash{outer}{inner}, 'nested', 'Autovivification works');
 
 # Complex nested structure
 my %nested = (
     a => { b => { c => 1 } },
     x => [ { y => 2 }, { z => 3 } ]
 );
-print "not " if $nested{a}{b}{c} != 1 or $nested{x}[0]{y} != 2 or $nested{x}[1]{z} != 3;
-say "ok # Complex nested structure";
+is($nested{a}{b}{c}, 1, 'Nested hash access');
+is($nested{x}[0]{y}, 2, 'Array in hash access');
+is($nested{x}[1]{z}, 3, 'Complex nested structure access');
 
 # Hash of arrays
 my %hash_of_arrays = (
     fruits => ['apple', 'banana', 'cherry'],
     colors => ['red', 'green', 'blue']
 );
-print "not " if $hash_of_arrays{fruits}[1] ne 'banana' or $hash_of_arrays{colors}[2] ne 'blue';
-say "ok # Hash of arrays";
+is($hash_of_arrays{fruits}[1], 'banana', 'Hash of arrays - fruits');
+is($hash_of_arrays{colors}[2], 'blue', 'Hash of arrays - colors');
 
 # Array of hashes
 my @array_of_hashes = (
     { name => 'Alice', age => 30 },
     { name => 'Bob', age => 25 }
 );
-print "not " if $array_of_hashes[0]{name} ne 'Alice' or $array_of_hashes[1]{age} != 25;
-say "ok # Array of hashes";
+is($array_of_hashes[0]{name}, 'Alice', 'Array of hashes - name check');
+is($array_of_hashes[1]{age}, 25, 'Array of hashes - age check');
 
 # Slice assignment
 @hash{'key4', 'key5'} = ('value4', 'value5');
-print "not " if $hash{key4} ne 'value4' or $hash{key5} ne 'value5';
-say "ok # Slice assignment";
+is_deeply([@hash{'key4', 'key5'}], ['value4', 'value5'], 'Slice assignment and retrieval');
 
-# Verify slice assignment
-my @new_slice = @hash{'key4', 'key5'};
-print "not " if @new_slice != 2 or $new_slice[0] ne 'value4' or $new_slice[1] ne 'value5';
-say "ok # Verify slice assignment";
+done_testing();

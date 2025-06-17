@@ -1,100 +1,86 @@
-use feature 'say';
 use strict;
 use warnings;
+use Test::More;
+use feature 'say';
 
-###################
-# Perl chomp Function Tests
-
-# Test 1: Basic newline removal
+# Basic newline removal
 my $str1 = "Hello\n";
 my $chomped1 = chomp($str1);
-print "not " if $str1 ne "Hello" || $chomped1 != 1;
-say "ok # Basic newline removal";
+is($str1, "Hello", 'Basic newline removal - string');
+is($chomped1, 1, 'Basic newline removal - return value');
 
-# Test 2: No newline to remove
+# No newline to remove
 my $str2 = "Hello";
 my $chomped2 = chomp($str2);
-print "not " if $str2 ne "Hello" || $chomped2 != 0;
-say "ok # No newline to remove";
+is($str2, "Hello", 'No newline to remove - string');
+is($chomped2, 0, 'No newline to remove - return value');
 
-# Test 3: Multiple newlines (should only remove one)
+# Multiple newlines (should only remove one)
 my $str3 = "Hello\n\n";
 my $chomped3 = chomp($str3);
-print "not " if $str3 ne "Hello\n" || $chomped3 != 1;
-say "ok # Multiple newlines";
+is($str3, "Hello\n", 'Multiple newlines - string');
+is($chomped3, 1, 'Multiple newlines - return value');
 
-# Test 4: Empty string
+# Empty string
 my $str4 = "";
 my $chomped4 = chomp($str4);
-print "not " if $str4 ne "" || $chomped4 != 0;
-say "ok # Empty string";
+is($str4, "", 'Empty string - string');
+is($chomped4, 0, 'Empty string - return value');
 
-# Test 5: Chomp with custom record separator
+# Custom record separator
 my $old_sep = $/;
 {
-    $/ = "END";
+    local $/ = "END";
     my $str5 = "HelloEND";
     my $chomped5 = chomp($str5);
-    print "not " if $str5 ne "Hello" || $chomped5 != 3;
-    say "ok # Custom record separator";
+    is($str5, "Hello", 'Custom separator - string');
+    is($chomped5, 3, 'Custom separator - return value');
 }
 
-# Test 6: Chomp in paragraph mode
+# Paragraph mode
 {
-    $/ = "";
+    local $/ = "";
     my $str6 = "Hello\n\n\n";
     my $chomped6 = chomp($str6);
-    print "not " if $str6 ne "Hello" || $chomped6 != 3;
-    say "ok # Paragraph mode";
+    is($str6, "Hello", 'Paragraph mode - string');
+    is($chomped6, 3, 'Paragraph mode - return value');
 }
 
-# Test 7: Chomp in slurp mode (should not remove anything)
+# Slurp mode
 {
-    $/ = undef;
+    local $/ = undef;
     my $str7 = "Hello\n";
     my $chomped7 = chomp($str7);
-    print "not " if $str7 ne "Hello\n" || $chomped7 != 0;
-    say "ok # Slurp mode";
+    is($str7, "Hello\n", 'Slurp mode - string');
+    is($chomped7, 0, 'Slurp mode - return value');
 }
 
-# Test 8: Chomp with multi-character separator
+# Multi-character separator
 {
-    $/ = "\r\n";
+    local $/ = "\r\n";
     my $str8 = "Hello\r\n";
     my $chomped8 = chomp($str8);
-    print "not " if $str8 ne "Hello" || $chomped8 != 2;
-    say "ok # Multi-character separator";
+    is($str8, "Hello", 'Multi-character separator - string');
+    is($chomped8, 2, 'Multi-character separator - return value');
 }
-$/ = $old_sep;
 
-# Test 9: Chomp on an array
+# Chomp on array
 my @arr = ("Hello\n", "World\n", "Test");
 my $chomped9 = chomp(@arr);
-print "not " if $arr[0] ne "Hello" || $arr[1] ne "World" || $arr[2] ne "Test" || $chomped9 != 2;
-say "ok # Chomp on array";
+is_deeply(\@arr, ["Hello", "World", "Test"], 'Array chomp - values');
+is($chomped9, 2, 'Array chomp - return value');
 
-## # Test 10: Chomp on hash values
-## my %hash = (key1 => "Value1\n", key2 => "Value2\n", key3 => "Value3");
-## my $chomped10 = 0;
-## for my $value (values %hash) {
-##     $chomped10 += chomp($value);
-## }
-## print "not " if $hash{key1} ne "Value1" || $hash{key2} ne "Value2" || $hash{key3} ne "Value3" || $chomped10 != 2;
-## say "ok # Chomp on hash values";
-
-# Test 11: Chomp on an assignment
+# Chomp on assignment
 my $chomped11 = chomp(my $assigned = "Assigned\n");
-print "not " if $assigned ne "Assigned" || $chomped11 != 1;
-say "ok # Chomp on assignment";
+is($assigned, "Assigned", 'Assignment chomp - string');
+is($chomped11, 1, 'Assignment chomp - return value');
 
-# Test 12: Chomp with no argument (should use $_)
-$old_sep = $/;
+# Chomp with no argument
 {
     $_ = "Default\n";
     my $chomped12 = chomp;
-    print "not " if $_ ne "Default" || $chomped12 != 1;
-    say "ok # Chomp with no argument";
+    is($_, "Default", 'Default variable chomp - string');
+    is($chomped12, 1, 'Default variable chomp - return value');
 }
-$/ = $old_sep;
 
-
+done_testing();
