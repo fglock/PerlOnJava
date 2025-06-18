@@ -120,18 +120,16 @@ public class PrototypeArgs {
                             consumeCommas(parser);
                         }
 
-                        //ListNode argList0 = ListParser.parseZeroOrOneList(parser, 0);
-                        ListNode argList0 = new ListNode(
-                                List.of(parser.parseExpression(parser.getPrecedence(","))),
-                                parser.tokenIndex);
-
-                        if (argList0.elements.isEmpty()) {
+                        // Check if we have reached the end of the input (EOF) or a terminator (like `;`).
+                        if (Parser.isExpressionTerminator(TokenUtils.peek(parser))) {
                             if (isOptional) {
                                 break;
                             }
                             throw new PerlCompilerException("syntax error, expected scalar");
                         }
-                        args.elements.add(new OperatorNode("scalar", argList0.elements.getFirst(), argList0.elements.getFirst().getIndex()));
+
+                        Node arg = parser.parseExpression(parser.getPrecedence(","));
+                        args.elements.add(new OperatorNode("scalar", arg, arg.getIndex()));
                         needComma = true;
                         break;
                     case "@", "%":

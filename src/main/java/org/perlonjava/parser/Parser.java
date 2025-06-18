@@ -163,7 +163,7 @@ public class Parser {
             LexerToken token = peek(this);
 
             // Check if we have reached the end of the input (EOF) or a terminator (like `;`).
-            if (token.type == LexerTokenType.EOF || TERMINATORS.contains(token.text)) {
+            if (isExpressionTerminator(token)) {
                 break; // Exit the loop if we're done parsing.
             }
 
@@ -200,6 +200,10 @@ public class Parser {
 
         // Return the root node of the constructed expression tree.
         return left;
+    }
+
+    public static boolean isExpressionTerminator(LexerToken token) {
+        return token.type == LexerTokenType.EOF || TERMINATORS.contains(token.text);
     }
 
 }
