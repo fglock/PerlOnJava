@@ -83,26 +83,11 @@ public class PrototypeArgs {
     private static void parsePrototypeArguments(Parser parser, ListNode args, String prototype) {
         boolean isOptional = false;
         boolean needComma = false;
-        boolean inBackslashGroup = false;
-        StringBuilder backslashGroup = new StringBuilder();
 
         int prototypeIndex = 0;
         while (prototypeIndex < prototype.length()) {
             char prototypeChar = prototype.charAt(prototypeIndex);
             prototypeIndex++;
-
-            if (inBackslashGroup) {
-                if (prototypeChar == ']') {
-                    inBackslashGroup = false;
-                    // Handle backslash group
-                    handleBackslashGroup(parser, args, backslashGroup.toString(), isOptional, needComma);
-                    backslashGroup.setLength(0); // Reset the group
-                    needComma = true;
-                } else {
-                    backslashGroup.append(prototypeChar);
-                }
-                continue;
-            }
 
             switch (prototypeChar) {
                 case ' ', '\t', '\n':
@@ -144,11 +129,8 @@ public class PrototypeArgs {
                     break;
                 case '\\':
                     // Backslash indicates reference or start of backslash group
-                    prototypeIndex = handleBackslashArgument(parser, args, prototype, prototypeIndex,
-                            isOptional, needComma, inBackslashGroup, backslashGroup);
-                    if (!inBackslashGroup) {
-                        needComma = true;
-                    }
+                    prototypeIndex = handleBackslashArgument(parser, args, prototype, prototypeIndex, isOptional, needComma);
+                    needComma = true;
                     break;
                 default:
                     throw new PerlCompilerException("syntax error, unexpected prototype character '" + prototypeChar + "'");
@@ -294,8 +276,7 @@ public class PrototypeArgs {
      * @return the updated prototype index
      */
     private static int handleBackslashArgument(Parser parser, ListNode args, String prototype, int prototypeIndex,
-                                               boolean isOptional, boolean needComma, boolean inBackslashGroup,
-                                               StringBuilder backslashGroup) {
+                                               boolean isOptional, boolean needComma) {
         if (prototypeIndex < prototype.length() && prototype.charAt(prototypeIndex) == '[') {
             // Start of backslash group \[...]
             return prototypeIndex + 1; // Skip the '['
