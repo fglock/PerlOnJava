@@ -7,8 +7,6 @@ import org.perlonjava.astnode.SubroutineNode;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
-import java.util.List;
-
 import static org.perlonjava.parser.ListParser.consumeCommas;
 import static org.perlonjava.parser.ListParser.isComma;
 import static org.perlonjava.parser.OperatorParser.scalarUnderscore;
@@ -232,6 +230,8 @@ public class PrototypeArgs {
                             }
 
                             Node arg4 = parser.parseExpression(parser.getPrecedence(","));
+
+                            // TODO - type check "Type of arg 1 to main::xxx must be array"
 
                             args.elements.add(new OperatorNode("\\", arg4, arg4.getIndex()));
                             needComma = true;
