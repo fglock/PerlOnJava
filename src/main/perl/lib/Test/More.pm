@@ -171,6 +171,7 @@ sub subtest {
     print "# Subtest: $name\n";
     my $result;
 
+    local $Plan_Count;
     {
         # Reset counters for subtest and set indent
         local $Failed_Count = 0;
