@@ -238,6 +238,7 @@ The following areas are currently under active development to enhance the functi
 
 - **v3.0.1**: Next minor version
   - Added overload operators: `!`, `+`, `-`, `*`, `/`, `%`, `int`, `neg`, `log`, `sqrt`, `cos`, `sin`, `exp`, `abs`, `atan2`, `**`, `@{}`, `%{}`. `${}`.
+  - Added or fixed prototypes: `;`, `\@`, `\%`, `\$`.
   - Added `# line` preprocessor directive.
   - `Test::More` module: added `subtest`.
   - Bugfix: fix a problem with Windows newlines and qw().
