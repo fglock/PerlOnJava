@@ -188,7 +188,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **CORE namespace**: `CORE` is implemented.
 - ✅  **CORE::GLOBAL namespace**: `CORE::GLOBAL` and core function overrides are implemented.
 - ✅  **alternate subroutine call syntax**: `&$sub`, `&$sub(args)` syntax is implemented.
-- 🚧  **Subroutine prototypes**: Prototypes `$`, `@`, `%`, `&`, `;`, `_`, empty string and undef are supported.
+- 🚧  **Subroutine prototypes**: Prototypes `$`, `@`, `%`, `&`, `;`, `_`, `\@`, `\%`, `\$`, empty string and undef are supported.
 - ✅  **Subroutine signatures**: Formal parameters are implemented.
 - 🚧  **Subroutine attributes**: `prototype` is implemented. Other subroutine attributes are not yet supported.
 - ✅  **`lvalue` subroutines**: Subroutines with attribute `:lvalue` are supported.

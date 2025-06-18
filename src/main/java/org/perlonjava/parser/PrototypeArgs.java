@@ -222,18 +222,18 @@ public class PrototypeArgs {
                                 }
                                 consumeCommas(parser);
                             }
-                            ListNode argList4 = ListParser.parseZeroOrOneList(parser, 0);
-                            if (argList4.elements.isEmpty()) {
+
+                            // Check if we have reached the end of the input (EOF) or a terminator (like `;`).
+                            if (Parser.isExpressionTerminator(TokenUtils.peek(parser))) {
                                 if (isOptional) {
                                     break;
                                 }
                                 throw new PerlCompilerException("syntax error, expected reference");
                             }
 
-                            // TODO WIP
-                            // args.elements.add(new OperatorNode("ref", argList4.elements.getFirst(), argList4.elements.getFirst().getIndex(), refType));
-                            args.elements.addAll(argList4.elements);
+                            Node arg4 = parser.parseExpression(parser.getPrecedence(","));
 
+                            args.elements.add(new OperatorNode("\\", arg4, arg4.getIndex()));
                             needComma = true;
                         }
                         break;
