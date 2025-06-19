@@ -1,6 +1,9 @@
 package org.perlonjava.parser;
 
-import org.perlonjava.astnode.*;
+import org.perlonjava.astnode.ListNode;
+import org.perlonjava.astnode.Node;
+import org.perlonjava.astnode.OperatorNode;
+import org.perlonjava.astnode.SubroutineNode;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
@@ -15,6 +18,7 @@ import static org.perlonjava.parser.OperatorParser.scalarUnderscore;
  * <p>
  * Perl prototype characters:
  * $ - scalar argument
+ *
  * @ - array argument (consumes remaining args)
  * % - hash argument (consumes remaining args)
  * & - code reference or block
@@ -84,7 +88,8 @@ public class PrototypeArgs {
             char prototypeChar = prototype.charAt(i);
 
             switch (prototypeChar) {
-                case ' ', '\t', '\n' -> { } // Ignore whitespace
+                case ' ', '\t', '\n' -> {
+                } // Ignore whitespace
                 case ';' -> isOptional = true;
                 case '_' -> {
                     handleUnderscoreArgument(parser, args, isOptional, needComma);
@@ -111,7 +116,8 @@ public class PrototypeArgs {
                     i = handleBackslashArgument(parser, args, prototype, i + 1, isOptional, needComma);
                     needComma = true;
                 }
-                default -> throw new PerlCompilerException("syntax error, unexpected prototype character '" + prototypeChar + "'");
+                default ->
+                        throw new PerlCompilerException("syntax error, unexpected prototype character '" + prototypeChar + "'");
             }
         }
     }
@@ -119,9 +125,9 @@ public class PrototypeArgs {
     /**
      * Parses an argument with optional comma handling.
      *
-     * @param parser     The parser instance
-     * @param isOptional Whether the argument is optional
-     * @param needComma  Whether a comma is required before the argument
+     * @param parser       The parser instance
+     * @param isOptional   Whether the argument is optional
+     * @param needComma    Whether a comma is required before the argument
      * @param expectedType Description of the expected argument type for error messages
      * @return The parsed argument node, or null if parsing failed and the argument was optional
      */
@@ -153,28 +159,22 @@ public class PrototypeArgs {
             return;
         }
 
-        // First try parsing as a FileHandle
-        Node fileHandle = FileHandle.parseFileHandle(parser);
-        if (fileHandle != null) {
-            args.elements.add(fileHandle);
-            return;
-        }
-
-        // Try parsing as a scalar expression
-        Node scalarExpr = parser.parseExpression(parser.getPrecedence(","));
-        if (scalarExpr != null) {
-            // For typeglob references, wrap in a reference operator
-            if (scalarExpr instanceof OperatorNode && ((OperatorNode)scalarExpr).operator.equals("*")) {
-                args.elements.add(new OperatorNode("\\", scalarExpr, scalarExpr.getIndex()));
-            } else {
-                // For barewords, constants, and other scalar expressions
-                args.elements.add(new OperatorNode("scalar", scalarExpr, scalarExpr.getIndex()));
+        // Parse the expression
+        Node expr = parser.parseExpression(parser.getPrecedence(","));
+        if (expr == null) {
+            if (!isOptional) {
+                throw new PerlCompilerException("syntax error, expected argument");
             }
             return;
         }
 
-        if (!isOptional) {
-            throw new PerlCompilerException("syntax error, expected typeglob, scalar, or reference");
+        // Handle different types
+        if (expr instanceof OperatorNode opNode && opNode.operator.equals("*")) {
+            // Typeglob - create a typeglob reference
+            args.elements.add(new OperatorNode("\\", expr, expr.getIndex()));
+        } else {
+            // Bare scalars
+            args.elements.add(new OperatorNode("scalar", expr, expr.getIndex()));
         }
     }
 

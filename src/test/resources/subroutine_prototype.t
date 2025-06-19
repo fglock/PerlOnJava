@@ -101,13 +101,13 @@ subtest "Star (*) prototype behavior" => sub {
     local *HANDLE;
 
     is(star_proto(@star_arr), 'SCALAR', "accepts array in scalar context");
-    #is(star_proto(%star_hash), 'SCALAR', "accepts hash in scalar context");
-    #is(star_proto($scalar), 'SCALAR', "accepts scalar");
-    #is(star_proto(*HANDLE), 'GLOB', "accepts typeglob");
-    #is(star_proto(\@star_arr), 'ARRAY', "accepts array reference");
-    #is(star_proto(\%star_hash), 'HASH', "accepts hash reference");
-    #is(star_proto(\$scalar), 'SCALAR', "accepts scalar reference");
-    #is(star_proto(sub {}), 'CODE', "accepts code reference");
+    is(star_proto(%star_hash), 'SCALAR', "accepts hash in scalar context");
+    is(star_proto($scalar), 'SCALAR', "accepts scalar");
+    is(star_proto(*HANDLE), 'GLOB', "accepts typeglob");
+    is(star_proto(\@star_arr), 'ARRAY', "accepts array reference");
+    is(star_proto(\%star_hash), 'HASH', "accepts hash reference");
+    is(star_proto(\$scalar), 'SCALAR', "accepts scalar reference");
+    is(star_proto(sub {}), 'CODE', "accepts code reference");
 };
 
 done_testing();
