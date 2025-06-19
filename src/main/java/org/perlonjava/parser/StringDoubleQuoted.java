@@ -254,18 +254,13 @@ public class StringDoubleQuoted {
      */
     private static void addStringSegmentWithCaseModification(EmitterContext ctx, List<Node> parts, Node node, Stack<CaseModifierState> caseModifierStack) {
         Node finalNode = node;
+        List<CaseModifierState> tempModifiers = new ArrayList<>();
 
-        // Apply case modifications if any are active
-        // We need to apply them in reverse order (bottom to top of stack)
-        // and handle temporary modifiers specially
         if (!caseModifierStack.isEmpty()) {
-            // Find all active modifiers
-            List<CaseModifierState> activeModifiers = new ArrayList<>();
-            for (CaseModifierState state : caseModifierStack) {
-                activeModifiers.add(state);
-            }
+            // Collect active modifiers
+            List<CaseModifierState> activeModifiers = new ArrayList<>(caseModifierStack);
 
-            // Apply persistent modifiers first (from bottom of stack)
+            // Apply persistent modifiers first
             for (CaseModifierState state : activeModifiers) {
                 if (!state.isTemporary) {
                     String caseOperator = getCaseOperator(state.modifier);
@@ -275,7 +270,7 @@ public class StringDoubleQuoted {
                 }
             }
 
-            // Then apply temporary modifiers (from top of stack, most recent first)
+            // Collect and apply temporary modifiers (in reverse order)
             for (int i = activeModifiers.size() - 1; i >= 0; i--) {
                 CaseModifierState state = activeModifiers.get(i);
                 if (state.isTemporary) {
@@ -283,12 +278,9 @@ public class StringDoubleQuoted {
                     if (caseOperator != null) {
                         finalNode = new OperatorNode(caseOperator, finalNode, finalNode.getIndex());
                     }
+                    // Collect temporary modifiers to remove
+                    tempModifiers.add(state);
                 }
-            }
-
-            // Remove temporary modifiers after applying (from top to bottom)
-            while (!caseModifierStack.isEmpty() && caseModifierStack.peek().isTemporary) {
-                caseModifierStack.pop();
             }
         }
 
@@ -298,6 +290,11 @@ public class StringDoubleQuoted {
         }
 
         parts.add(finalNode);
+
+        // Remove temporary modifiers from stack
+        for (CaseModifierState modifier : tempModifiers) {
+            caseModifierStack.remove(modifier);
+        }
     }
 
     /**
