@@ -15,7 +15,6 @@ import static org.perlonjava.parser.OperatorParser.scalarUnderscore;
  * <p>
  * Perl prototype characters:
  * $ - scalar argument
- *
  * @ - array argument (consumes remaining args)
  * % - hash argument (consumes remaining args)
  * & - code reference or block
@@ -30,20 +29,19 @@ public class PrototypeArgs {
 
     /**
      * Consumes arguments from the parser according to a specified prototype.
+     * If the prototype is null, parses a list of zero or more elements.
+     * Handles optional parentheses around arguments.
      *
-     * @param parser    The parser instance used for parsing.
-     * @param prototype The prototype string defining the expected argument types and structure.
-     * @return A ListNode containing the parsed arguments.
+     * @param parser    The parser instance used for parsing
+     * @param prototype The prototype string defining the expected argument types and structure
+     * @return A ListNode containing the parsed arguments
      * @throws PerlCompilerException if the arguments don't match the prototype
      */
     static ListNode consumeArgsWithPrototype(Parser parser, String prototype) {
         ListNode args = new ListNode(parser.tokenIndex);
-
-        // Handle parentheses around arguments
         boolean hasParentheses = handleOpeningParenthesis(parser);
 
         if (prototype == null) {
-            // Null prototype: parse a list of zero or more elements
             args = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
         } else {
             parsePrototypeArguments(parser, args, prototype);
@@ -72,6 +70,7 @@ public class PrototypeArgs {
 
     /**
      * Parse arguments according to the given prototype string.
+     * Handles all prototype characters and their corresponding argument types.
      *
      * @param parser    The parser instance
      * @param args      The argument list to populate
@@ -81,118 +80,88 @@ public class PrototypeArgs {
         boolean isOptional = false;
         boolean needComma = false;
 
-        int prototypeIndex = 0;
-        while (prototypeIndex < prototype.length()) {
-            char prototypeChar = prototype.charAt(prototypeIndex);
-            prototypeIndex++;
+        for (int i = 0; i < prototype.length(); i++) {
+            char prototypeChar = prototype.charAt(i);
 
             switch (prototypeChar) {
-                case ' ', '\t', '\n':
-                    // Ignore whitespace characters in the prototype
-                    break;
-                case ';':
-                    // Semicolon indicates the start of optional arguments
-                    isOptional = true;
-                    break;
-                case '_':
-                    // Underscore indicates a scalar argument (defaults to $_ if not provided)
+                case ' ', '\t', '\n' -> { } // Ignore whitespace
+                case ';' -> isOptional = true;
+                case '_' -> {
                     handleUnderscoreArgument(parser, args, isOptional, needComma);
                     needComma = true;
-                    break;
-                case '*':
-                    // Asterisk indicates a file handle or typeglob argument
+                }
+                case '*' -> {
                     handleTypeGlobArgument(parser, args, isOptional, needComma);
                     needComma = true;
-                    break;
-                case '$':
-                    // Dollar sign indicates a scalar argument
+                }
+                case '$' -> {
                     handleScalarArgument(parser, args, isOptional, needComma);
                     needComma = true;
-                    break;
-                case '@', '%':
-                    // At sign or percent sign indicates a list or hash argument
+                }
+                case '@', '%' -> {
                     handleListOrHashArgument(parser, args, needComma);
                     needComma = true;
-                    break;
-                case '&':
-                    // Ampersand indicates a code reference argument
-                    boolean commaNeeded = handleCodeReferenceArgument(parser, args, isOptional, needComma);
-                    needComma = commaNeeded;
-                    break;
-                case '+':
-                    // Plus sign indicates a hash or array reference argument
+                }
+                case '&' -> needComma = handleCodeReferenceArgument(parser, args, isOptional, needComma);
+                case '+' -> {
                     handlePlusArgument(parser, args, isOptional, needComma);
                     needComma = true;
-                    break;
-                case '\\':
-                    // Backslash indicates reference or start of backslash group
-                    prototypeIndex = handleBackslashArgument(parser, args, prototype, prototypeIndex, isOptional, needComma);
+                }
+                case '\\' -> {
+                    i = handleBackslashArgument(parser, args, prototype, i + 1, isOptional, needComma);
                     needComma = true;
-                    break;
-                default:
-                    throw new PerlCompilerException("syntax error, unexpected prototype character '" + prototypeChar + "'");
+                }
+                default -> throw new PerlCompilerException("syntax error, unexpected prototype character '" + prototypeChar + "'");
             }
         }
     }
 
     /**
-     * Handle underscore argument parsing.
+     * Parses an argument with optional comma handling.
+     *
+     * @param parser     The parser instance
+     * @param isOptional Whether the argument is optional
+     * @param needComma  Whether a comma is required before the argument
+     * @param expectedType Description of the expected argument type for error messages
+     * @return The parsed argument node, or null if parsing failed and the argument was optional
      */
-    private static void handleUnderscoreArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
+    private static Node parseArgumentWithComma(Parser parser, boolean isOptional, boolean needComma, String expectedType) {
         if (needComma && !consumeCommaIfPresent(parser, isOptional)) {
-            args.elements.add(scalarUnderscore(parser));
-            return;
+            return null;
         }
+        return parseRequiredArgument(parser, isOptional, expectedType);
+    }
 
-        ListNode argList = ListParser.parseZeroOrOneList(parser, 0);
-        if (argList.elements.isEmpty()) {
-            args.elements.add(scalarUnderscore(parser));
-        } else {
-            args.elements.add(new OperatorNode("scalar", argList.elements.getFirst(), argList.elements.getFirst().getIndex()));
+    private static void handleScalarArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
+        Node arg = parseArgumentWithComma(parser, isOptional, needComma, "scalar argument");
+        if (arg != null) {
+            args.elements.add(new OperatorNode("scalar", arg, arg.getIndex()));
         }
     }
 
-    /**
-     * Handle typeglob/filehandle argument parsing.
-     */
+    private static void handleUnderscoreArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
+        Node arg = parseArgumentWithComma(parser, isOptional, needComma, "scalar argument");
+        if (arg == null) {
+            args.elements.add(scalarUnderscore(parser));
+            return;
+        }
+        args.elements.add(new OperatorNode("scalar", arg, arg.getIndex()));
+    }
+
     private static void handleTypeGlobArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
         if (needComma && !consumeCommaIfPresent(parser, isOptional)) {
             return;
         }
 
         Node fileHandle = FileHandle.parseFileHandle(parser);
-        if (fileHandle == null) {
-            if (isOptional) {
-                return;
-            }
+        if (fileHandle == null && !isOptional) {
             throw new PerlCompilerException("syntax error, expected file handle or typeglob");
         }
-        args.elements.add(fileHandle);
+        if (fileHandle != null) {
+            args.elements.add(fileHandle);
+        }
     }
 
-    /**
-     * Handle scalar argument parsing.
-     */
-    private static void handleScalarArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
-        if (needComma && !consumeCommaIfPresent(parser, isOptional)) {
-            return;
-        }
-
-        // Check if we have reached the end of the input (EOF) or a terminator (like `;`).
-        if (Parser.isExpressionTerminator(TokenUtils.peek(parser))) {
-            if (isOptional) {
-                return;
-            }
-            throw new PerlCompilerException("syntax error, expected scalar argument");
-        }
-
-        Node arg = parser.parseExpression(parser.getPrecedence(","));
-        args.elements.add(new OperatorNode("scalar", arg, arg.getIndex()));
-    }
-
-    /**
-     * Handle list or hash argument parsing.
-     */
     private static void handleListOrHashArgument(Parser parser, ListNode args, boolean needComma) {
         if (needComma && !isComma(TokenUtils.peek(parser))) {
             return;
@@ -200,76 +169,44 @@ public class PrototypeArgs {
         if (needComma) {
             consumeCommas(parser);
         }
-
         ListNode argList = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
         args.elements.addAll(argList.elements);
     }
 
-    /**
-     * Handle code reference argument parsing.
-     *
-     * @return true if a comma is needed after this argument, false otherwise
-     */
     private static boolean handleCodeReferenceArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
         if (needComma && !consumeCommaIfPresent(parser, isOptional)) {
             return true;
         }
 
         if (TokenUtils.peek(parser).text.equals("{")) {
-            // Parse a block
             TokenUtils.consume(parser);
             Node block = new SubroutineNode(null, null, null, ParseBlock.parseBlock(parser), false, parser.tokenIndex);
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             args.elements.add(block);
-            return false; // Blocks don't need commas after them
-        } else if (TokenUtils.peek(parser).text.equals("\\")) {
-            // Parse a code reference
-            ListNode argList = ListParser.parseZeroOrOneList(parser, 0);
-            if (argList.elements.isEmpty()) {
-                if (isOptional) {
-                    return true;
-                }
-                throw new PerlCompilerException("syntax error, expected code reference");
-            }
-            args.elements.add(argList.elements.getFirst());
-            return true;
-        } else {
-            if (isOptional) {
-                return true;
-            }
-            throw new PerlCompilerException("syntax error, expected block or code reference");
+            return false;
         }
+
+        Node codeRef = parseRequiredArgument(parser, isOptional, "code reference or block");
+        if (codeRef != null) {
+            args.elements.add(codeRef);
+            return true;
+        }
+        return true;
     }
 
-    /**
-     * Handle plus argument parsing (array/hash reference or scalar).
-     */
     private static void handlePlusArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
-        if (needComma && !consumeCommaIfPresent(parser, isOptional)) {
-            return;
-        }
-
-        Node arg = parseRequiredArgument(parser, isOptional, "array or hash reference");
+        Node arg = parseArgumentWithComma(parser, isOptional, needComma, "array or hash reference");
         if (arg == null) {
             return;
         }
 
-        // Check if the argument is a literal array or hash variable
-        if (arg instanceof OperatorNode opNode &&
-                (opNode.operator.equals("@") || opNode.operator.equals("%"))) {
-            // Treat it like \[@%]
+        if (arg instanceof OperatorNode opNode && (opNode.operator.equals("@") || opNode.operator.equals("%"))) {
             args.elements.add(new OperatorNode("\\", arg, arg.getIndex()));
         } else {
-            // Force scalar context
             args.elements.add(new OperatorNode("scalar", arg, arg.getIndex()));
         }
     }
 
-    /**
-     * Handle backslash argument parsing (references).
-     *
-     * @return the updated prototype index
-     */
     private static int handleBackslashArgument(Parser parser, ListNode args, String prototype, int prototypeIndex,
                                                boolean isOptional, boolean needComma) {
         if (prototypeIndex >= prototype.length()) {
@@ -277,13 +214,11 @@ public class PrototypeArgs {
         }
 
         boolean isGroup = prototype.charAt(prototypeIndex) == '[';
+        String expectedType = isGroup ? "reference" : "reference to " + prototype.charAt(prototypeIndex);
 
-        if (!(needComma && !consumeCommaIfPresent(parser, isOptional)) && !Parser.isExpressionTerminator(TokenUtils.peek(parser))) {
-            Node referenceArg = parser.parseExpression(parser.getPrecedence(","));
+        Node referenceArg = parseArgumentWithComma(parser, isOptional, needComma, expectedType);
+        if (referenceArg != null) {
             args.elements.add(new OperatorNode("\\", referenceArg, referenceArg.getIndex()));
-        } else if (!isOptional) {
-            String expectedType = isGroup ? "reference" : "reference to " + prototype.charAt(prototypeIndex);
-            throw new PerlCompilerException("syntax error, expected " + expectedType);
         }
 
         if (!isGroup) {
@@ -296,14 +231,6 @@ public class PrototypeArgs {
         return prototypeIndex + 1;
     }
 
-
-    /**
-     * Consume comma if present and needed, handling optional arguments.
-     *
-     * @param parser     The parser instance
-     * @param isOptional Whether the current argument is optional
-     * @return true if comma was consumed or not needed, false if comma was required but missing
-     */
     private static boolean consumeCommaIfPresent(Parser parser, boolean isOptional) {
         if (!isComma(TokenUtils.peek(parser))) {
             if (isOptional) {
@@ -315,7 +242,6 @@ public class PrototypeArgs {
         return true;
     }
 
-    // Helper method to handle common argument parsing logic
     private static Node parseRequiredArgument(Parser parser, boolean isOptional, String expectedType) {
         if (Parser.isExpressionTerminator(TokenUtils.peek(parser))) {
             if (isOptional) {
@@ -323,7 +249,6 @@ public class PrototypeArgs {
             }
             throw new PerlCompilerException("syntax error, expected " + expectedType);
         }
-
         return parser.parseExpression(parser.getPrecedence(","));
     }
 }
