@@ -10,13 +10,27 @@ import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Stack;
 
 /**
  * The StringDoubleQuoted class is responsible for parsing double-quoted strings.
  * It handles escape sequences, variable interpolation, and other Perl-specific
- * string parsing features.
+ * string parsing features including case modification sequences.
  */
 public class StringDoubleQuoted {
+
+    /**
+     * Represents the current case modification state
+     */
+    private static class CaseModifierState {
+        String modifier;        // "U", "L", "u", "l", or null
+        boolean isTemporary;    // true for \-u and \-l (applies to next char only)
+
+        CaseModifierState(String modifier, boolean isTemporary) {
+            this.modifier = modifier;
+            this.isTemporary = isTemporary;
+        }
+    }
 
     /**
      * Parses a double-quoted string, handling escape sequences and variable interpolation.
@@ -34,6 +48,7 @@ public class StringDoubleQuoted {
 
         StringBuilder str = new StringBuilder();  // Buffer to hold the parsed string
         List<Node> parts = new ArrayList<>();  // List to hold parts of the parsed string
+        Stack<CaseModifierState> caseModifierStack = new Stack<>();  // Stack for nested case modifiers
 
         Lexer lexer = new Lexer(input);
         List<LexerToken> tokens = lexer.tokenize();
@@ -50,7 +65,7 @@ public class StringDoubleQuoted {
             switch (text) {
                 case "\\":
                     if (parseEscapes) {
-                        parseDoubleQuotedEscapes(ctx, tokens, parser, str, tokenIndex, parts);
+                        parseDoubleQuotedEscapes(ctx, tokens, parser, str, tokenIndex, parts, caseModifierStack);
                     } else {
                         // Consume the escaped character without processing
                         str.append(text);
@@ -69,7 +84,7 @@ public class StringDoubleQuoted {
                     LexerToken token1 = tokens.get(parser.tokenIndex);
                     if (token1.type == LexerTokenType.EOF) {
                         // Final $ or @
-                        str.append(text);
+                        appendWithCaseModification(str, text, caseModifierStack);
                         break;
                     }
                     if (token1.type == LexerTokenType.WHITESPACE
@@ -82,11 +97,11 @@ public class StringDoubleQuoted {
                             || token1.text.equals("\"")
                             || token1.text.equals("\\")) {
                         // Space, `)`, `%`, `|`, `\` after $ or @
-                        str.append(text);
+                        appendWithCaseModification(str, text, caseModifierStack);
                         break;
                     }
                     if (!str.isEmpty()) {
-                        addStringSegment(ctx, parts, new StringNode(str.toString(), tokenIndex));  // Add the string so far to parts
+                        addStringSegmentWithCaseModification(ctx, parts, new StringNode(str.toString(), tokenIndex), caseModifierStack);
                         str.setLength(0);  // Reset the buffer
                     }
                     String sigil = text;
@@ -174,15 +189,15 @@ public class StringDoubleQuoted {
                     if (isArray) {
                         operand = new BinaryOperatorNode("join", new OperatorNode("$", new IdentifierNode("\"", tokenIndex), tokenIndex), operand, tokenIndex);
                     }
-                    addStringSegment(ctx, parts, operand);
+                    addStringSegmentWithCaseModification(ctx, parts, operand, caseModifierStack);
                     break;
                 default:
-                    str.append(text);
+                    appendWithCaseModification(str, text, caseModifierStack);
             }
         }
 
         if (!str.isEmpty()) {
-            addStringSegment(ctx, parts, new StringNode(str.toString(), tokenIndex));  // Add the remaining string to parts
+            addStringSegmentWithCaseModification(ctx, parts, new StringNode(str.toString(), tokenIndex), caseModifierStack);
         }
 
         // Join the parts
@@ -200,11 +215,78 @@ public class StringDoubleQuoted {
                 tokenIndex);
     }
 
-    private static void addStringSegment(EmitterContext ctx, List<Node> parts, Node node) {
+    /**
+     * Appends text to the string buffer, applying case modifications as needed
+     */
+    private static void appendWithCaseModification(StringBuilder str, String text, Stack<CaseModifierState> caseModifierStack) {
+        if (caseModifierStack.isEmpty()) {
+            str.append(text);
+            return;
+        }
+
+        CaseModifierState currentState = caseModifierStack.peek();
+        String modifiedText = applyCaseModification(text, currentState.modifier);
+        str.append(modifiedText);
+
+        // Remove temporary modifiers after applying to one character
+        if (currentState.isTemporary) {
+            caseModifierStack.pop();
+        }
+    }
+
+    /**
+     * Adds a string segment with case modification applied
+     */
+    private static void addStringSegmentWithCaseModification(EmitterContext ctx, List<Node> parts, Node node, Stack<CaseModifierState> caseModifierStack) {
+        Node finalNode = node;
+
+        // Apply case modifications if any are active
+        if (!caseModifierStack.isEmpty()) {
+            CaseModifierState currentState = caseModifierStack.peek();
+            String caseOperator = getCaseOperator(currentState.modifier);
+            if (caseOperator != null) {
+                finalNode = new OperatorNode(caseOperator, node, node.getIndex());
+            }
+
+            // Remove temporary modifiers after applying
+            if (currentState.isTemporary) {
+                caseModifierStack.pop();
+            }
+        }
+
+        // Apply quotemeta if enabled
         if (ctx.quoteMetaEnabled) {
-            parts.add(new OperatorNode("quotemeta", node, node.getIndex()));
-        } else {
-            parts.add(node);
+            finalNode = new OperatorNode("quotemeta", finalNode, finalNode.getIndex());
+        }
+
+        parts.add(finalNode);
+    }
+
+    /**
+     * Applies case modification to a string
+     */
+    private static String applyCaseModification(String text, String modifier) {
+        if (modifier == null) return text;
+
+        switch (modifier) {
+            case "U": return text.toUpperCase();
+            case "L": return text.toLowerCase();
+            case "u": return text.isEmpty() ? "" : Character.toUpperCase(text.charAt(0)) + text.substring(1);
+            case "l": return text.isEmpty() ? "" : Character.toLowerCase(text.charAt(0)) + text.substring(1);
+            default: return text;
+        }
+    }
+
+    /**
+     * Gets the corresponding case operator for code generation
+     */
+    private static String getCaseOperator(String modifier) {
+        switch (modifier) {
+            case "U": return "uc";
+            case "L": return "lc";
+            case "u": return "ucfirst";
+            case "l": return "lcfirst";
+            default: return null;
         }
     }
 
@@ -216,8 +298,10 @@ public class StringDoubleQuoted {
      * @param parser     The parser instance used for parsing.
      * @param str        The StringBuilder to append parsed characters to.
      * @param tokenIndex The current index of the token being parsed.
+     * @param parts      The list of string parts being built.
+     * @param caseModifierStack The stack of active case modifiers.
      */
-    private static void parseDoubleQuotedEscapes(EmitterContext ctx, List<LexerToken> tokens, Parser parser, StringBuilder str, int tokenIndex, List<Node> parts) {
+    private static void parseDoubleQuotedEscapes(EmitterContext ctx, List<LexerToken> tokens, Parser parser, StringBuilder str, int tokenIndex, List<Node> parts, Stack<CaseModifierState> caseModifierStack) {
         LexerToken token;
         String text;
         String escape;
@@ -231,35 +315,36 @@ public class StringDoubleQuoted {
                 chr = TokenUtils.peekChar(parser);
             }
             ctx.logDebug("octalStr: " + octalStr);
-            str.append((char) Integer.parseInt(octalStr.toString(), 8));
+            char octalChar = (char) Integer.parseInt(octalStr.toString(), 8);
+            appendWithCaseModification(str, String.valueOf(octalChar), caseModifierStack);
             return;
         }
         escape = TokenUtils.consumeChar(parser);
         switch (escape) {
             case "\\":
             case "\"":
-                str.append(escape);  // Append the escaped character
+                appendWithCaseModification(str, escape, caseModifierStack);
                 break;
             case "n":
-                str.append('\n');  // Append newline
+                appendWithCaseModification(str, "\n", caseModifierStack);
                 break;
             case "t":
-                str.append('\t');  // Append tab
+                appendWithCaseModification(str, "\t", caseModifierStack);
                 break;
             case "r":
-                str.append('\r');  // Append carriage return
+                appendWithCaseModification(str, "\r", caseModifierStack);
                 break;
             case "f":
-                str.append('\f');  // Append form feed
+                appendWithCaseModification(str, "\f", caseModifierStack);
                 break;
             case "b":
-                str.append('\b');  // Append backspace
+                appendWithCaseModification(str, "\b", caseModifierStack);
                 break;
             case "a":
-                str.append((char) 7);  // Append alarm
+                appendWithCaseModification(str, String.valueOf((char) 7), caseModifierStack);
                 break;
             case "e":
-                str.append((char) 27);  // Append escape
+                appendWithCaseModification(str, String.valueOf((char) 27), caseModifierStack);
                 break;
             case "c":
                 String ctl = TokenUtils.consumeChar(parser);
@@ -267,25 +352,58 @@ public class StringDoubleQuoted {
                     // \cA is control-A char(1)
                     char chr = ctl.charAt(0);
                     if (chr >= 'a' && chr <= 'z') {
-                        str.append((char) (chr - 'a' + 1));
+                        appendWithCaseModification(str, String.valueOf((char) (chr - 'a' + 1)), caseModifierStack);
                     } else {
-                        str.append((char) (chr - 'A' + 1));
+                        appendWithCaseModification(str, String.valueOf((char) (chr - 'A' + 1)), caseModifierStack);
                     }
                 }
                 break;
-            case "E":  // Marks the end of quotemeta sequence
+            case "E":  // Marks the end of case modification or quotemeta sequence
                 if (!str.isEmpty()) {
-                    addStringSegment(ctx, parts, new StringNode(str.toString(), tokenIndex));  // Add the string so far to parts
+                    addStringSegmentWithCaseModification(ctx, parts, new StringNode(str.toString(), tokenIndex), caseModifierStack);
                     str.setLength(0);  // Reset the buffer
                 }
-                ctx.quoteMetaEnabled = false;
+                // Pop the most recent modifier (could be case or quotemeta)
+                if (!caseModifierStack.isEmpty()) {
+                    caseModifierStack.pop();
+                } else {
+                    ctx.quoteMetaEnabled = false;
+                }
                 break;
             case "Q":   // Marks the start of quotemeta sequence
                 if (!str.isEmpty()) {
-                    addStringSegment(ctx, parts, new StringNode(str.toString(), tokenIndex));  // Add the string so far to parts
+                    addStringSegmentWithCaseModification(ctx, parts, new StringNode(str.toString(), tokenIndex), caseModifierStack);
                     str.setLength(0);  // Reset the buffer
                 }
                 ctx.quoteMetaEnabled = true;
+                break;
+            case "U":   // Start uppercase conversion
+                if (!str.isEmpty()) {
+                    addStringSegmentWithCaseModification(ctx, parts, new StringNode(str.toString(), tokenIndex), caseModifierStack);
+                    str.setLength(0);  // Reset the buffer
+                }
+                caseModifierStack.push(new CaseModifierState("U", false));
+                break;
+            case "L":   // Start lowercase conversion
+                if (!str.isEmpty()) {
+                    addStringSegmentWithCaseModification(ctx, parts, new StringNode(str.toString(), tokenIndex), caseModifierStack);
+                    str.setLength(0);  // Reset the buffer
+                }
+                caseModifierStack.push(new CaseModifierState("L", false));
+                break;
+            case "u":   // Uppercase next character only
+                if (!str.isEmpty()) {
+                    addStringSegmentWithCaseModification(ctx, parts, new StringNode(str.toString(), tokenIndex), caseModifierStack);
+                    str.setLength(0);  // Reset the buffer
+                }
+                caseModifierStack.push(new CaseModifierState("u", true));
+                break;
+            case "l":   // Lowercase next character only
+                if (!str.isEmpty()) {
+                    addStringSegmentWithCaseModification(ctx, parts, new StringNode(str.toString(), tokenIndex), caseModifierStack);
+                    str.setLength(0);  // Reset the buffer
+                }
+                caseModifierStack.push(new CaseModifierState("l", true));
                 break;
             case "x":
                 StringBuilder unicodeSeq = new StringBuilder();
@@ -300,7 +418,7 @@ public class StringDoubleQuoted {
                         escape = text.substring(0, 2);
                         token.text = text.substring(2);
                     }
-                    str.append(Character.toChars(Integer.parseInt(escape, 16)));
+                    appendWithCaseModification(str, new String(Character.toChars(Integer.parseInt(escape, 16))), caseModifierStack);
                 } else if (text.equals("{")) {
                     // Handle \x{...} for Unicode
                     parser.tokenIndex++;
@@ -314,7 +432,7 @@ public class StringDoubleQuoted {
                         }
                         unicodeSeq.append(token.text);
                     }
-                    str.append(Character.toChars(Integer.parseInt(unicodeSeq.toString().trim(), 16)));
+                    appendWithCaseModification(str, new String(Character.toChars(Integer.parseInt(unicodeSeq.toString().trim(), 16))), caseModifierStack);
                 } else {
                     throw new PerlCompilerException(tokenIndex, "Expected '{' after \\x", ctx.errorUtil);
                 }
@@ -352,13 +470,13 @@ public class StringDoubleQuoted {
                         }
                     }
 
-                    str.append((char) charCode);
+                    appendWithCaseModification(str, String.valueOf((char) charCode), caseModifierStack);
                 } else {
                     throw new PerlCompilerException(tokenIndex, "Expected '{' after \\N", ctx.errorUtil);
                 }
                 break;
             default:
-                str.append(escape);  // Append the backslash and the next character
+                appendWithCaseModification(str, escape, caseModifierStack);
                 break;
         }
     }
