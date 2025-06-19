@@ -1,9 +1,6 @@
 package org.perlonjava.parser;
 
-import org.perlonjava.astnode.ListNode;
-import org.perlonjava.astnode.Node;
-import org.perlonjava.astnode.OperatorNode;
-import org.perlonjava.astnode.SubroutineNode;
+import org.perlonjava.astnode.*;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
@@ -252,22 +249,20 @@ public class PrototypeArgs {
             return;
         }
 
-        ListNode argList = ListParser.parseZeroOrOneList(parser, 0);
-        if (argList.elements.isEmpty()) {
-            if (isOptional) {
-                return;
-            }
-            throw new PerlCompilerException("syntax error, expected hash or array reference");
+        Node arg = parseRequiredArgument(parser, isOptional, "array or hash reference");
+        if (arg == null) {
+            return;
         }
 
-        // The + prototype is a special alternative to $ that will act like \[@%] when given a literal
-        // array or hash variable, but will otherwise force scalar context on the argument.
-        // This is useful for functions which should accept either a literal array or an array
-        // reference as the argument
-
-        // TODO: Implement proper + prototype handling
-        // For now, just add the arguments as-is
-        args.elements.addAll(argList.elements);
+        // Check if the argument is a literal array or hash variable
+        if (arg instanceof OperatorNode opNode &&
+                (opNode.operator.equals("@") || opNode.operator.equals("%"))) {
+            // Treat it like \[@%]
+            args.elements.add(new OperatorNode("\\", arg, arg.getIndex()));
+        } else {
+            // Force scalar context
+            args.elements.add(new OperatorNode("scalar", arg, arg.getIndex()));
+        }
     }
 
     /**
@@ -318,5 +313,17 @@ public class PrototypeArgs {
         }
         consumeCommas(parser);
         return true;
+    }
+
+    // Helper method to handle common argument parsing logic
+    private static Node parseRequiredArgument(Parser parser, boolean isOptional, String expectedType) {
+        if (Parser.isExpressionTerminator(TokenUtils.peek(parser))) {
+            if (isOptional) {
+                return null;
+            }
+            throw new PerlCompilerException("syntax error, expected " + expectedType);
+        }
+
+        return parser.parseExpression(parser.getPrecedence(","));
     }
 }
