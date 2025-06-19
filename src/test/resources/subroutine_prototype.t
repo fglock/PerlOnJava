@@ -58,5 +58,23 @@ my @list = context_proto(1);
 is_deeply(\@list, [1,2,3], "Context prototype works in list context");
 is(scalar context_proto(1), "scalar", "Context prototype works in scalar context");
 
+# Bracketed reference prototype - accepts array or hash
+sub bracketed_proto (\[@%]) { ref $_[0] }
+@arr = (1,2,3);
+%hash = (a => 1);
+is(bracketed_proto(@arr), "ARRAY", "Bracketed prototype accepts array reference");
+is(bracketed_proto(%hash), "HASH", "Bracketed prototype accepts hash reference");
+
+# Multiple bracketed references
+sub multi_bracketed_proto (\[@%] \[@%]) { ref($_[0]) . "," . ref($_[1]) }
+is(multi_bracketed_proto(@arr, %hash), "ARRAY,HASH", "Multiple bracketed prototypes work");
+is(multi_bracketed_proto(%hash, @arr), "HASH,ARRAY", "Bracketed prototypes work in any order");
+
+# Optional bracketed reference
+sub optional_bracketed_proto (;\[@%]) { defined $_[0] ? ref($_[0]) : "none" }
+is(optional_bracketed_proto(), "none", "Optional bracketed prototype works without arg");
+is(optional_bracketed_proto(@arr), "ARRAY", "Optional bracketed prototype works with array");
+is(optional_bracketed_proto(%hash), "HASH", "Optional bracketed prototype works with hash");
+
 done_testing();
 

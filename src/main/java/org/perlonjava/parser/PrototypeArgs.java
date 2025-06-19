@@ -277,33 +277,30 @@ public class PrototypeArgs {
      */
     private static int handleBackslashArgument(Parser parser, ListNode args, String prototype, int prototypeIndex,
                                                boolean isOptional, boolean needComma) {
-        if (prototypeIndex < prototype.length() && prototype.charAt(prototypeIndex) == '[') {
-            // Start of backslash group \[...]
-            return prototypeIndex + 1; // Skip the '['
-        } else if (prototypeIndex < prototype.length()) {
-            // Single backslashed character
-            char refType = prototype.charAt(prototypeIndex);
-            if (needComma && !consumeCommaIfPresent(parser, isOptional)) {
-                return prototypeIndex + 1;
-            }
-
-            // Check if we have reached the end of the input (EOF) or a terminator (like `;`).
-            if (Parser.isExpressionTerminator(TokenUtils.peek(parser))) {
-                if (isOptional) {
-                    return prototypeIndex + 1;
-                }
-                throw new PerlCompilerException("syntax error, expected reference to " + refType);
-            }
-
-            Node arg = parser.parseExpression(parser.getPrecedence(","));
-
-            // TODO: Add type checking - "Type of arg 1 to main::xxx must be array"
-            args.elements.add(new OperatorNode("\\", arg, arg.getIndex()));
-            return prototypeIndex + 1;
-        } else {
+        if (prototypeIndex >= prototype.length()) {
             throw new PerlCompilerException("syntax error, incomplete backslash reference in prototype");
         }
+
+        boolean isGroup = prototype.charAt(prototypeIndex) == '[';
+
+        if (!(needComma && !consumeCommaIfPresent(parser, isOptional)) && !Parser.isExpressionTerminator(TokenUtils.peek(parser))) {
+            Node referenceArg = parser.parseExpression(parser.getPrecedence(","));
+            args.elements.add(new OperatorNode("\\", referenceArg, referenceArg.getIndex()));
+        } else if (!isOptional) {
+            String expectedType = isGroup ? "reference" : "reference to " + prototype.charAt(prototypeIndex);
+            throw new PerlCompilerException("syntax error, expected " + expectedType);
+        }
+
+        if (!isGroup) {
+            return prototypeIndex + 1;
+        }
+
+        while (prototypeIndex < prototype.length() && prototype.charAt(prototypeIndex) != ']') {
+            prototypeIndex++;
+        }
+        return prototypeIndex + 1;
     }
+
 
     /**
      * Consume comma if present and needed, handling optional arguments.
@@ -321,34 +318,5 @@ public class PrototypeArgs {
         }
         consumeCommas(parser);
         return true;
-    }
-
-    /**
-     * Handles a backslash group in the prototype (e.g., \[$@%&*]).
-     * This allows any of the specified reference types.
-     *
-     * @param parser     The parser instance used for parsing.
-     * @param args       The list of arguments to add to.
-     * @param group      The backslash group string (e.g., "$@%&*").
-     * @param isOptional Whether the argument is optional.
-     * @param needComma  Whether a comma is needed before parsing the argument.
-     */
-    private static void handleBackslashGroup(Parser parser, ListNode args, String group, boolean isOptional, boolean needComma) {
-        if (needComma && !consumeCommaIfPresent(parser, isOptional)) {
-            return;
-        }
-
-        ListNode argList = ListParser.parseZeroOrOneList(parser, 0);
-        if (argList.elements.isEmpty()) {
-            if (isOptional) {
-                return;
-            }
-            throw new PerlCompilerException("syntax error, expected reference matching [" + group + "]");
-        }
-
-        // TODO: Implement proper backslash group handling with type validation
-        // The group string contains the allowed reference types (e.g., "$@%" means scalar, array, or hash ref)
-        // For now, just add the arguments as-is
-        args.elements.addAll(argList.elements);
     }
 }
