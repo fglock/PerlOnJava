@@ -1,4 +1,5 @@
 use strict;
+use Test::More tests => 3;
 use feature 'say';
 
 # Define package A
@@ -16,6 +17,7 @@ sub speak {
 # Define package B, inheriting from A
 package B;
 
+use Test::More;
 use parent -norequire, 'A';
 
 sub speak {
@@ -26,6 +28,7 @@ sub speak {
 # Define package C, inheriting from B
 package C;
 
+use Test::More;
 use parent -norequire, 'B';
 
 sub speak {
@@ -36,14 +39,14 @@ sub speak {
 # Test the inheritance and SUPER::method functionality
 package main;
 
-# Plan the number of tests
-say "1..3";
+use Test::More;
 
 my $c = C->new();
 my $output = $c->speak();
 
-# Check each part of the output
-say $output =~ /A/ ? "ok 1 - A's speak method called" : "not ok 1 - A's speak method not called";
-say $output =~ /B/ ? "ok 2 - B's speak method called" : "not ok 2 - B's speak method not called";
-say $output =~ /C/ ? "ok 3 - C's speak method called" : "not ok 3 - C's speak method not called";
+# Check each part of the output using Test::More
+like($output, qr/A/, "A's speak method called");
+like($output, qr/B/, "B's speak method called");
+like($output, qr/C/, "C's speak method called");
 
+done_testing();
