@@ -224,12 +224,27 @@ public class StringDoubleQuoted {
             return;
         }
 
-        CaseModifierState currentState = caseModifierStack.peek();
-        String modifiedText = applyCaseModification(text, currentState.modifier);
+        String modifiedText = text;
+
+        // Apply persistent modifiers first (from bottom of stack)
+        for (CaseModifierState state : caseModifierStack) {
+            if (!state.isTemporary) {
+                modifiedText = applyCaseModification(modifiedText, state.modifier);
+            }
+        }
+
+        // Then apply temporary modifiers (from top of stack, most recent first)
+        for (int i = caseModifierStack.size() - 1; i >= 0; i--) {
+            CaseModifierState state = caseModifierStack.get(i);
+            if (state.isTemporary) {
+                modifiedText = applyCaseModification(modifiedText, state.modifier);
+            }
+        }
+
         str.append(modifiedText);
 
-        // Remove temporary modifiers after applying to one character
-        if (currentState.isTemporary) {
+        // Remove temporary modifiers after applying (from top to bottom)
+        while (!caseModifierStack.isEmpty() && caseModifierStack.peek().isTemporary) {
             caseModifierStack.pop();
         }
     }
@@ -241,15 +256,38 @@ public class StringDoubleQuoted {
         Node finalNode = node;
 
         // Apply case modifications if any are active
+        // We need to apply them in reverse order (bottom to top of stack)
+        // and handle temporary modifiers specially
         if (!caseModifierStack.isEmpty()) {
-            CaseModifierState currentState = caseModifierStack.peek();
-            String caseOperator = getCaseOperator(currentState.modifier);
-            if (caseOperator != null) {
-                finalNode = new OperatorNode(caseOperator, node, node.getIndex());
+            // Find all active modifiers
+            List<CaseModifierState> activeModifiers = new ArrayList<>();
+            for (CaseModifierState state : caseModifierStack) {
+                activeModifiers.add(state);
             }
 
-            // Remove temporary modifiers after applying
-            if (currentState.isTemporary) {
+            // Apply persistent modifiers first (from bottom of stack)
+            for (CaseModifierState state : activeModifiers) {
+                if (!state.isTemporary) {
+                    String caseOperator = getCaseOperator(state.modifier);
+                    if (caseOperator != null) {
+                        finalNode = new OperatorNode(caseOperator, finalNode, finalNode.getIndex());
+                    }
+                }
+            }
+
+            // Then apply temporary modifiers (from top of stack, most recent first)
+            for (int i = activeModifiers.size() - 1; i >= 0; i--) {
+                CaseModifierState state = activeModifiers.get(i);
+                if (state.isTemporary) {
+                    String caseOperator = getCaseOperator(state.modifier);
+                    if (caseOperator != null) {
+                        finalNode = new OperatorNode(caseOperator, finalNode, finalNode.getIndex());
+                    }
+                }
+            }
+
+            // Remove temporary modifiers after applying (from top to bottom)
+            while (!caseModifierStack.isEmpty() && caseModifierStack.peek().isTemporary) {
                 caseModifierStack.pop();
             }
         }
@@ -360,13 +398,54 @@ public class StringDoubleQuoted {
                 break;
             case "E":  // Marks the end of case modification or quotemeta sequence
                 if (!str.isEmpty()) {
-                    addStringSegmentWithCaseModification(ctx, parts, new StringNode(str.toString(), tokenIndex), caseModifierStack);
-                    str.setLength(0);  // Reset the buffer
+                    // Apply current case modifications to the accumulated string before ending them
+                    String currentStr = str.toString();
+                    str.setLength(0);
+
+                    // Apply case modifications to the current string segment
+                    if (!caseModifierStack.isEmpty()) {
+                        // Apply persistent modifiers first (from bottom of stack)
+                        for (CaseModifierState state : caseModifierStack) {
+                            if (!state.isTemporary) {
+                                currentStr = applyCaseModification(currentStr, state.modifier);
+                            }
+                        }
+
+                        // Then apply temporary modifiers (from top of stack, most recent first)
+                        for (int i = caseModifierStack.size() - 1; i >= 0; i--) {
+                            CaseModifierState state = caseModifierStack.get(i);
+                            if (state.isTemporary) {
+                                currentStr = applyCaseModification(currentStr, state.modifier);
+                            }
+                        }
+
+                        // Remove temporary modifiers after applying
+                        while (!caseModifierStack.isEmpty() && caseModifierStack.peek().isTemporary) {
+                            caseModifierStack.pop();
+                        }
+                    }
+
+                    // Add the processed string segment
+                    if (ctx.quoteMetaEnabled) {
+                        parts.add(new OperatorNode("quotemeta", new StringNode(currentStr, tokenIndex), tokenIndex));
+                    } else {
+                        parts.add(new StringNode(currentStr, tokenIndex));
+                    }
                 }
-                // Pop the most recent modifier (could be case or quotemeta)
-                if (!caseModifierStack.isEmpty()) {
-                    caseModifierStack.pop();
-                } else {
+
+                // \E ends the most recent persistent modifier (U or L), or quotemeta
+                // It does NOT end temporary modifiers (u or l)
+                boolean foundPersistent = false;
+                for (int i = caseModifierStack.size() - 1; i >= 0; i--) {
+                    CaseModifierState state = caseModifierStack.get(i);
+                    if (!state.isTemporary) {
+                        caseModifierStack.remove(i);
+                        foundPersistent = true;
+                        break;
+                    }
+                }
+                if (!foundPersistent) {
+                    // No persistent case modifier found, try quotemeta
                     ctx.quoteMetaEnabled = false;
                 }
                 break;
