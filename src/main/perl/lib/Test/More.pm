@@ -40,7 +40,7 @@ sub plan {
     }
 }
 
-sub ok {
+sub ok ($;$) {
     my ($test, $name) = @_;
     $Test_Count++;
     my $result = $test ? "ok" : "not ok";
@@ -74,7 +74,7 @@ sub isnt ($$;$) {
     return $test;
 }
 
-sub like {
+sub like ($$;$) {
     my ($got, $regex, $name) = @_;
     my $test = defined $got && $got =~ /$regex/;
     ok($test, $name);
@@ -85,7 +85,7 @@ sub like {
     return $test;
 }
 
-sub unlike {
+sub unlike ($$;$) {
     my ($got, $regex, $name) = @_;
     my $test = !defined $got || $got !~ /$regex/;
     ok($test, $name);
@@ -96,7 +96,7 @@ sub unlike {
     return $test;
 }
 
-sub cmp_ok {
+sub cmp_ok ($$$;$){
     my ($got, $op, $expected, $name) = @_;
     my $test = eval "$got $op $expected";
     ok($test, $name);
@@ -107,7 +107,7 @@ sub cmp_ok {
     return $test;
 }
 
-sub can_ok {
+sub can_ok ($@) {
     my ($module, @methods) = @_;
     my $test = 1;
     for my $method (@methods) {
@@ -120,7 +120,7 @@ sub can_ok {
     return $test;
 }
 
-sub isa_ok {
+sub isa_ok ($$;$) {
     my ($object, $class, $name) = @_;
     $name ||= "The object";
     my $test = defined $object && $object->isa($class);
@@ -128,8 +128,8 @@ sub isa_ok {
     return $test;
 }
 
-sub pass {ok(1, $_[0])}
-sub fail {ok(0, $_[0])}
+sub pass (;$) {ok(1, $_[0])}
+sub fail (;$) {ok(0, $_[0])}
 
 sub diag {
     my ($message) = @_;
