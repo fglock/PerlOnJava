@@ -1,333 +1,219 @@
-# A sample Perl script with a bit of everything
+# A comprehensive demonstration of Perl language features
+# and their implementation in PerlOnJava
 #
-# Note:
+# This file exists solely for demonstration and educational purposes.
+# It is NOT part of the automated test suite.
 #
-#   - This Perl scripts is not part of the automated test suite.
-#     It is provided for educational and illustrative purposes.
+# Running this demo:
+#   ./jperl examples/demo.pl
 #
-#   - Automated tests for Perl scripts are located in the src/test/resources directory.
-#     These test files are executed during the build process by Maven/Gradle to ensure the correctness of the Perl code.
+# Note: The actual test suite is located in src/test/resources
+# and is executed during the build process via:
+#   - Maven: mvn test
+#   - Gradle: gradle test
 #
-#   - To run the automated tests manually, you can use the following commands:
-#     - For Maven: `mvn test`
-#     - For Gradle: `gradle test`
-#
-#   These commands will compile the Java code, run the Java and Perl tests, and generate test reports.
+# Features demonstrated:
+#   - Variable and list assignments
+#   - Subroutines and references
+#   - Array and hash operations
+#   - Object-oriented programming
+#   - Built-in functions
+#   - Context sensitivity
+#   - Perl idioms and best practices
 #
 
 use 5.40.0;
-# use feature 'say';
-# use feature 'isa';
+use Test::More;
+use strict;
+use warnings;
 
-# Test variable assignment and modification
-my $a = 15;
-my $x = $a;
-print "not " if $x != 15; say "ok # \$x is 15";
+subtest 'Variable Assignment' => sub {
+    my $a = 15;
+    my $x = $a;
+    is($x, 15, '$x assigned correctly');
 
-$a = 12;
-print "not " if $a != 12; say "ok # \$a is 12";
-
-
-############################
-#  List assignment in scalar context
-
-{
-# List assignment in scalar context returns the number of elements produced by the expression on the right side of the assignment
-
-# Test with a static list
-my @array = (10, 20, 30, 40, 50);
-my $count = () = @array;
-print "not " if $count != 5; say "ok # List assignment in scalar context returned '$count'";
-
-@array = ();
-$count = () = @array;
-print "not " if $count != 0; say "ok # List assignment in scalar context returned '$count'";
-
-# Test with a list containing variables
-my $var1 = 10;
-my $var2 = 20;
-my $var3 = 30;
-$count = () = ($var1, $var2, $var3);
-print "not " if $count != 3; say "ok # List assignment with variables in scalar context returned '$count'";
-
-# Test with a mixed list of variables and literals
-my $var4 = 40;
-@array = ($var1, $var2, $var3, $var4, 50, 60);
-$count = () = @array;
-print "not " if $count != 6; say "ok # List assignment with mixed variables and literals in scalar context returned '$count'";
-
-# Test with non-empty left-hand side
-my ($first, $second);
-@array = (1, 2, 3, 4, 5);
-$count = ($first, $second) = @array;
-print "not " if $count != 5; say "ok # List assignment with non-empty left-hand side returned '$count'";
-print "not " if $first != 1; say "ok # First variable assigned correctly with value '$first'";
-print "not " if $second != 2; say "ok # Second variable assigned correctly with value '$second'";
-
-@array = (10, 20);
-$count = ($first, $second) = @array;
-print "not " if $count != 2; say "ok # List assignment with non-empty left-hand side returned '$count'";
-print "not " if $first != 10; say "ok # First variable assigned correctly with value '$first'";
-print "not " if $second != 20; say "ok # Second variable assigned correctly with value '$second'";
-
-@array = (100);
-$second = 20;
-$count = ($first, $second) = @array;
-print "not " if $count != 1; say "ok # List assignment with non-empty left-hand side returned '$count'";
-print "not " if $first != 100; say "ok # First variable assigned correctly with value '$first'";
-print "not " if defined $second; say "ok # Second variable is undefined as expected";
-}
-
-############################
-#  List assignment in scalar context with lvalue array and hash
-
-{
-
-# Test with non-empty left-hand side including an array
-my ($first, $second, @lvalue_array);
-my @array = (1, 2, 3, 4, 5);
-my $count = ($first, $second, @lvalue_array) = @array;
-print "not " if $count != 5; say "ok # List assignment with lvalue array returned '$count'";
-print "not " if $first != 1; say "ok # First variable assigned correctly with value '$first'";
-print "not " if $second != 2; say "ok # Second variable assigned correctly with value '$second'";
-print "not " if "@lvalue_array" ne "3 4 5"; say "ok # Lvalue array assigned correctly with values '@lvalue_array'";
-
-@array = (10, 20);
-$count = ($first, $second, @lvalue_array) = @array;
-print "not " if $count != 2; say "ok # List assignment with lvalue array returned '$count'";
-print "not " if $first != 10; say "ok # First variable assigned correctly with value '$first'";
-print "not " if $second != 20; say "ok # Second variable assigned correctly with value '$second'";
-print "not " if "@lvalue_array" ne ""; say "ok # Lvalue array assigned correctly with values '@lvalue_array'";
-
-# Test with non-empty left-hand side including a hash
-my %lvalue_hash;
-@array = (10, 20, 30, 40, 50);
-$count = ($first, $second, %lvalue_hash) = @array;
-print "not " if $count != 5; say "ok # List assignment with lvalue hash returned '$count'";
-print "not " if $first != 10; say "ok # First variable assigned correctly with value '$first'";
-print "not " if $second != 20; say "ok # Second variable assigned correctly with value '$second'";
-print "not " if keys %lvalue_hash != 2 || $lvalue_hash{30} != 40; say "ok # Lvalue hash assigned correctly with keys and values: @{[ %lvalue_hash ]} keys: @{[ scalar keys %lvalue_hash ]}";
-
-@array = (10, 20);
-$count = ($first, $second, %lvalue_hash) = @array;
-print "not " if $count != 2; say "ok # List assignment with lvalue hash returned '$count'";
-print "not " if $first != 10; say "ok # First variable assigned correctly with value '$first'";
-print "not " if $second != 20; say "ok # Second variable assigned correctly with value '$second'";
-print "not " if keys %lvalue_hash != 0; say "ok # Lvalue hash assigned correctly with keys and values";
-
-}
-
-###################
-# Basic Syntax
-
-# Test anonymous subroutine
-my @result = sub { return @_ }->(1, 2, 3);
-print "not " if "@result" ne "1 2 3"; say "ok # anonymous subroutine returned '@result'";
-
-my $anon_sub = sub { return @_ };
-@result = $anon_sub->(1, 2, 3);
-print "not " if "@result" ne "1 2 3"; say "ok # anonymous subroutine returned '@result'";
-
-# Test eval string
-eval '$a = $a + 1';
-print "not " if $a != 13; say "ok # eval string modified \$a to 13";
-
-# Test do block with conditional statements
-do {
-    if (1) { $a = 123 }
-    elsif (3) { $a = 345 }
-    else { $a = 456 }
+    $a = 12;
+    is($a, 12, '$a modified correctly');
 };
-print "not " if $a != 123; say "ok # do block executed if block, \$a is 123";
 
-# Test hash and array references
-$a = { a => 'hash-value' };
-print "not " if $a->{a} ne 'hash-value'; say "ok # hash value is '$a->{a}'";
+subtest 'List Assignment in Scalar Context' => sub {
+    my @array = (10, 20, 30, 40, 50);
+    my $count = () = @array;
+    is($count, 5, 'List assignment returns correct count');
 
-my $b = [ 4, 5 ];
-print "not " if $b->[1] != 5; say "ok # array value is $b->[1]";
+    @array = ();
+    $count = () = @array;
+    is($count, 0, 'Empty list assignment returns 0');
 
-push @$b, 6;
-print "not " if $#$b != 2; say "ok # push increased array count";
+    my $var1 = 10;
+    my $var2 = 20;
+    my $var3 = 30;
+    $count = () = ($var1, $var2, $var3);
+    is($count, 3, 'List assignment with variables returns correct count');
 
-unshift @$b, 3;
-print "not " if "@$b" ne "3 4 5 6"; say "ok # unshift";
+    my ($first, $second);
+    @array = (1, 2, 3, 4, 5);
+    $count = ($first, $second) = @array;
+    is($count, 5, 'List assignment with non-empty left-hand side count');
+    is($first, 1, 'First variable assigned correctly');
+    is($second, 2, 'Second variable assigned correctly');
+};
 
-$a = pop @$b;
-print "not " if "@$b" ne "3 4 5"; say "ok # pop";
-print "not " if $a != 6; say "ok # pop";
+subtest 'List Assignment with Arrays and Hashes' => sub {
+    my ($first, $second, @lvalue_array);
+    my @array = (1, 2, 3, 4, 5);
+    my $count = ($first, $second, @lvalue_array) = @array;
+    is($count, 5, 'List assignment with lvalue array count');
+    is($first, 1, 'First scalar assigned correctly');
+    is($second, 2, 'Second scalar assigned correctly');
+    is("@lvalue_array", "3 4 5", 'Array assigned correctly');
 
-$a = shift @$b;
-print "not " if "@$b" ne "4 5"; say "ok # shift";
-print "not " if $a != 3; say "ok # pop";
+    my %lvalue_hash;
+    @array = (10, 20, 30, 40, 50);
+    $count = ($first, $second, %lvalue_hash) = @array;
+    is($count, 5, 'List assignment with lvalue hash count');
+    is($first, 10, 'First scalar with hash assigned correctly');
+    is($second, 20, 'Second scalar with hash assigned correctly');
+    is($lvalue_hash{30}, 40, 'Hash assigned correctly');
+};
 
+subtest 'Anonymous Subroutines' => sub {
+    my @result = sub { return @_ }->(1, 2, 3);
+    is("@result", "1 2 3", 'Anonymous sub direct call');
 
-############################
-# Splice tests
+    my $anon_sub = sub { return @_ };
+    @result = $anon_sub->(1, 2, 3);
+    is("@result", "1 2 3", 'Anonymous sub stored in variable');
+};
 
-splice @$b, 1, 1, 7;
-print "not " if "@$b" ne "4 7"; say "ok # splice replace one element";
+subtest 'Eval and Do Blocks' => sub {
+    my $a = 12;
+    eval '$a = $a + 1';
+    is($a, 13, 'eval string modifies variable');
 
-splice @$b, 1, 0, 8, 9;
-print "not " if "@$b" ne "4 8 9 7"; say "ok # splice insert elements";
+    do {
+        if (1) { $a = 123 }
+        elsif (3) { $a = 345 }
+        else { $a = 456 }
+    };
+    is($a, 123, 'do block with conditionals');
+};
 
-$a = splice @$b, 2, 2;
-print "not " if "@$b" ne "4 8"; say "ok # splice remove elements";
-print "not " if "$a" ne "7"; say "ok # splice removed elements";
+subtest 'References and Data Structures' => sub {
+    my $href = { a => 'hash-value' };
+    is($href->{a}, 'hash-value', 'Hash reference access');
 
-splice @$b, 1;
-print "not " if "@$b" ne "4"; say "ok # splice remove from offset";
+    my $aref = [4, 5];
+    is($aref->[1], 5, 'Array reference access');
+};
 
-splice @$b, 0, 0, 1, 2, 3;
-print "not " if "@$b" ne "1 2 3 4"; say "ok # splice insert at beginning";
+subtest 'Array Operations' => sub {
+    my $aref = [4, 5];
+    push @$aref, 6;
+    is("@$aref", "4 5 6", 'Push operation');
 
-splice @$b;
-print "not " if "@$b" ne ""; say "ok # splice remove all elements";
+    unshift @$aref, 3;
+    is("@$aref", "3 4 5 6", 'Unshift operation');
 
-# Negative offset and length
-$b = [1, 2, 3, 4, 5];
-splice @$b, -2, 1, 6;
-print "not " if "@$b" ne "1 2 3 6 5"; say "ok # splice with negative offset";
+    my $popped = pop @$aref;
+    is($popped, 6, 'Pop operation return value');
+    is("@$aref", "3 4 5", 'Array after pop');
 
-splice @$b, -3, -1;
-print "not " if "@$b" ne "1 2 5"; say "ok # splice with negative length";
+    my $shifted = shift @$aref;
+    is($shifted, 3, 'Shift operation return value');
+    is("@$aref", "4 5", 'Array after shift');
+};
 
-############################
-# Map tests
+subtest 'Splice Operations' => sub {
+    my $b = [1, 2, 3, 4, 5];
+    splice @$b, 1, 1, 7;
+    is("@$b", "1 7 3 4 5", 'splice replace one element');
 
-my @array = (1, 2, 3, 4, 5);
-my @mapped = map { $_ * 2 } @array;
-print "not " if "@mapped" ne "2 4 6 8 10"; say "ok # map doubled each element";
+    splice @$b, 1, 0, 8, 9;
+    is("@$b", "1 8 9 7 3 4 5", 'splice insert elements');
 
-@mapped = map { $_ % 2 == 0 ? $_ * 2 : $_ } @array;
-print "not " if "@mapped" ne "1 4 3 8 5"; say "ok # map conditionally doubled even elements";
+    my $removed = splice @$b, 2, 2;
+    is("@$b", "1 8 3 4 5", 'splice remove elements');
+    is($removed, "7", 'splice returned removed elements');
 
-############################
-# Grep tests
+    splice @$b, -2, 1, 6;
+    is("@$b", "1 8 3 6 5", 'splice with negative offset');
 
-my @filtered = grep { $_ % 2 == 0 } @array;
-print "not " if "@filtered" ne "2 4"; say "ok # grep filtered even elements";
+    splice @$b, -3, -1;
+    is("@$b", "1 8 5", 'splice with negative length');
+};
 
-@filtered = grep { $_ > 3 } @array;
-print "not " if "@filtered" ne "4 5"; say "ok # grep filtered elements greater than 3";
+subtest 'List Processing Functions' => sub {
+    my @array = (1, 2, 3, 4, 5);
+    my @mapped = map { $_ * 2 } @array;
+    is("@mapped", "2 4 6 8 10", 'Map doubles elements');
 
-############################
-# Sort tests
+    @mapped = map { $_ % 2 == 0 ? $_ * 2 : $_ } @array;
+    is("@mapped", "1 4 3 8 5", 'Map with conditional');
 
-{
-    # Note: `sort` uses the global $a, $b variables.
-    # In order for sort to work, we have to mask the lexical $a, $b that we have declared before.
-    our ($a, $b);   # Hide the existing `my` variables
+    my @filtered = grep { $_ % 2 == 0 } @array;
+    is("@filtered", "2 4", 'Grep even numbers');
 
+    @filtered = grep { $_ > 3 } @array;
+    is("@filtered", "4 5", 'Grep numbers greater than 3');
+};
+
+subtest 'Sorting' => sub {
+    our ($a, $b);
     my @unsorted = (5, 3, 1, 4, 2);
     my @sorted = sort { $a <=> $b } @unsorted;
-    print "not " if "@sorted" ne "1 2 3 4 5"; say "ok # sort in numerical ascending order";
-    
+    is("@sorted", "1 2 3 4 5", 'Numerical ascending sort');
+
     @sorted = sort { $b <=> $a } @unsorted;
-    print "not " if "@sorted" ne "5 4 3 2 1"; say "ok # sort in numerical descending order";
-    
+    is("@sorted", "5 4 3 2 1", 'Numerical descending sort');
+
     @sorted = sort { length($a) <=> length($b) } qw(foo foobar bar);
-    print "not " if "@sorted" ne "foo bar foobar"; say "ok # sort by string length";
-    
+    is("@sorted", "foo bar foobar", 'Sort by string length');
+
     @sorted = sort { $a cmp $b } qw(zebra apple monkey);
-    print "not " if "@sorted" ne "apple monkey zebra"; say "ok # sort in alphabetical order";
+    is("@sorted", "apple monkey zebra", 'Alphabetical sort');
+};
+
+subtest 'Named Subroutines and Typeglobs' => sub {
+    *x = sub { return "<@_>" };
+    my $result = &x(123);
+    is($result, "<123>", 'Named subroutine with typeglob');
+
+    @_ = (345);
+    $result = &x;
+    is($result, "<345>", 'Subroutine using existing @_');
+
+    sub modify_argument { $_[0]++ }
+    my $v = 13;
+    modify_argument($v);
+    is($v, 14, 'Subroutine argument aliasing');
+
+    sub CONST () { "VALUE" }
+    is(CONST . "2", "VALUE2", 'Constant subroutine concatenation');
+    is((CONST => "2")[0], "CONST", 'Constant in fat arrow context');
+};
+
+package Obj {
+    sub meth { 123 }
 }
 
-############################
-#  Subroutines
-
-# named subroutine with typeglob assignment
-
-*x = sub { return "<@_>" };
-my $result = &x(123);
-print "not " if $result ne "<123>"; say "ok # named subroutine with typeglob returned '$result'";
-
-@_ = (345);
-$result = &x;
-print "not " if $result ne "<345>"; say "ok # named subroutine with typeglob, no parameters, returned '$result'";
-
-# &name calls the subroutine reusing existing @_
-
-@_ = (456, "ABC");
-&x;
-
-# named subroutine
-
-sub modify_argument { $_[0]++ }
-my $v = 13;
-modify_argument($v);
-print "not " if $v != 14; say "ok # subroutine list argument is an alias to the argument; returned $v";
-$v = 13;
-modify_argument $v;
-print "not " if $v != 14; say "ok # subroutine scalar argument is an alias to the argument; returned  $v";
-
-# constant subroutine
-
-sub CONST () { "VALUE" }
-$v = CONST . "2";
-print "not " if $v ne "VALUE2"; say "ok # constant subroutine returned $v";
-
-$v = CONST => "2";
-print "not " if $v ne "CONST"; say "ok # constant subroutine returned $v";
-
-package Other {
-    sub CONST () { "OTHER" }
-    print "not " if CONST ne "OTHER"; say "ok # constant subroutine defined in other package";
+package Obj2 {
+    sub meth2 { 456 }
+    our @ISA = ("Obj");
 }
-print "not " if CONST ne "VALUE"; say "ok # constant subroutine was not overwritten";
 
-# subroutine call operator precedence
+subtest 'Object-Oriented Features' => sub {
 
-sub no_proto { "VALUE" }
-$v = no_proto . "2";
-print "not" if $v ne "VALUE2"; say "ok # subroutine without prototype returned $v";
+    my $obj = bless {}, "Obj";
+    is($obj->meth, 123, 'Method call on object');
+    is(Obj->meth, 123, 'Class method call');
+    is(Obj::->meth, 123, 'Alternative class method syntax');
 
-$v = no_proto or "2";
-print "not" if $v ne "VALUE"; say "ok # subroutine without prototype returned $v";
+    my $obj2 = bless {}, "Obj2";
+    is($obj2->meth, 123, 'Inherited method call');
+    ok($obj2->isa("Obj"), 'isa() check');
+    ok($obj2 isa "Obj", 'isa operator');
+    is($obj2->can("meth")->($obj2), 123, 'can() with inherited method');
+};
 
-
-############################
-#  Objects
-
-# bless() and ref()
-
-$v = {};
-print "not" if ref($v) ne "HASH"; say "ok # unblessed reference returns data type";
-
-bless $v, "Pkg";
-print "not" if ref($v) ne "Pkg"; say "ok # blessed reference returns package name";
-
-# method is a CODE
-
-my $obj = "123";
-my $method = sub { "called" };
-print "not" if $obj->$method ne "called"; say "ok # CODE method is called";
-
-# method is in a class
-
-$obj = bless {}, "Obj";
-
-package Obj { sub meth { 123 } }
-
-print "not" if $obj->meth ne "123"; say "ok # method is resolved and called";
-
-print "not" if Obj->meth ne "123"; say "ok # class method is resolved and called";
-
-print "not" if Obj::->meth ne "123"; say "ok # class method is resolved and called, alternate syntax";
-
-# inheritance
-
-package Obj2 { sub meth2 { 456 } our @ISA = ("Obj"); }
-
-$obj = bless {}, "Obj2";
-
-print "not" if $obj->meth ne "123"; say "ok # method is resolved and called in the parent class";
-
-print "not" if !$obj->isa("Obj"); say "ok # object isa() superclass";
-
-print "not" if !($obj isa "Obj"); say "ok # object isa() superclass";
-
-print "not" if $obj->can("meth")->($obj) ne "123"; say "ok # object can() returns method from superclass";
-
-5;    # return value
-
+done_testing();
