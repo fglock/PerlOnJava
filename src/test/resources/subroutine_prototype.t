@@ -76,5 +76,21 @@ is(optional_bracketed_proto(), "none", "Optional bracketed prototype works witho
 is(optional_bracketed_proto(@arr), "ARRAY", "Optional bracketed prototype works with array");
 is(optional_bracketed_proto(%hash), "HASH", "Optional bracketed prototype works with hash");
 
+subtest "Plus (+) prototype behavior" => sub {
+    sub plus_proto (+) { ref($_[0]) || "SCALAR" }
+
+    my @plus_arr = (1,2,3);
+    my %plus_hash = (a => 1);
+    my $aref = [1,2,3];
+    my $href = {x => 1};
+
+    is(plus_proto(@plus_arr), "ARRAY", "accepts literal array as reference");
+    is(plus_proto(%plus_hash), "HASH", "accepts literal hash as reference");
+    is(plus_proto(42), "SCALAR", "forces scalar context on numbers");
+    is(plus_proto("xyz"), "SCALAR", "forces scalar context on strings");
+    is(plus_proto($aref), "ARRAY", "preserves array reference");
+    is(plus_proto($href), "HASH", "preserves hash reference");
+};
+
 done_testing();
 
