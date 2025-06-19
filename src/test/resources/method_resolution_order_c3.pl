@@ -1,6 +1,7 @@
 use strict;
 use feature 'say';
 use mro 'c3';
+use Test::More;
 
 # ASCII Art for Class Hierarchy
 # 
@@ -116,25 +117,19 @@ sub speak {
 # Test the C3 method resolution and SUPER::method functionality
 package main;
 
-# Plan the number of tests
-say "1..7";
+# Declare the test plan
+plan tests => 7;
 
 my $d = D->new();
 my $output = $d->speak();
 
-# Check each part of the output
+# Convert the tests to use Test::More functions
+ok($output =~ /X/, "X's speak method called");
+ok($output =~ /Y/, "Y's speak method called");
+ok($output !~ /Z/, "Z's speak method not called");
+ok($output =~ /A/, "A's speak method called");
+ok($output =~ /B/, "B's speak method called");
+ok($output !~ /C/, "C's speak method not called");
+ok($output =~ /D/, "D's speak method called");
 
-say $output =~ /X/ ? "ok 1 - X's speak method called" : "not ok 1 - X's speak method not called";
-
-say $output =~ /Y/ ? "ok 2 - Y's speak method called" : "not ok 2 - Y's speak method not called";
-
-say $output !~ /Z/ ? "ok 3 - Z's speak method not called" : "not ok 3 - Z's speak method called";
-
-say $output =~ /A/ ? "ok 4 - A's speak method called" : "not ok 4 - A's speak method not called";
-
-say $output =~ /B/ ? "ok 5 - B's speak method called" : "not ok 5 - B's speak method not called";
-
-say $output !~ /C/ ? "ok 6 - C's speak method not called" : "not ok 6 - C's speak method called";
-
-say $output =~ /D/ ? "ok 7 - D's speak method called" : "not ok 7 - D's speak method not called";
-
+done_testing();
