@@ -87,7 +87,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **Variable assignment**: Basic variable assignment is implemented.
 - ✅  **Basic types**: Support for integers, doubles, strings, v-strings, regex, CODE, undef, references is present.
 - ✅  **String Interpolation**: Both array and scalar string interpolation are supported.
-- ✅  **String Interpolation escapes**: Handles escape sequences like `\n`, `\N{name}` within interpolated strings.
+- ✅  **String Interpolation escapes**: Handles escape sequences like `\n`, `\N{name}`, `\Q`, `\E`, `\U`, `\L`, `\u`, `\l` within interpolated strings.
 - ✅  **String numification**: Strings can be converted to numbers automatically.
 - ✅  **Numbers with underscores**: Numbers with underscores (e.g., `1_000`) are supported.
 - ✅  **Numbers in different bases**: Numbers in binary, hex, octal: `0b1010`, `0xAA`, `078`.
