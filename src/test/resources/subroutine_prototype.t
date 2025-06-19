@@ -92,5 +92,23 @@ subtest "Plus (+) prototype behavior" => sub {
     is(plus_proto($href), "HASH", "preserves hash reference");
 };
 
+subtest "Star (*) prototype behavior" => sub {
+    sub star_proto (*) { ref($_[0]) || 'SCALAR' }
+
+    my @star_arr = (1,2,3);
+    my %star_hash = (a => 1);
+    my $scalar = 42;
+    local *HANDLE;
+
+    is(star_proto(@star_arr), 'SCALAR', "accepts array in scalar context");
+    #is(star_proto(%star_hash), 'SCALAR', "accepts hash in scalar context");
+    #is(star_proto($scalar), 'SCALAR', "accepts scalar");
+    #is(star_proto(*HANDLE), 'GLOB', "accepts typeglob");
+    #is(star_proto(\@star_arr), 'ARRAY', "accepts array reference");
+    #is(star_proto(\%star_hash), 'HASH', "accepts hash reference");
+    #is(star_proto(\$scalar), 'SCALAR', "accepts scalar reference");
+    #is(star_proto(sub {}), 'CODE', "accepts code reference");
+};
+
 done_testing();
 
