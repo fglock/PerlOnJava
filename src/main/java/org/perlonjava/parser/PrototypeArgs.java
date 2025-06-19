@@ -153,12 +153,28 @@ public class PrototypeArgs {
             return;
         }
 
+        // First try parsing as a FileHandle
         Node fileHandle = FileHandle.parseFileHandle(parser);
-        if (fileHandle == null && !isOptional) {
-            throw new PerlCompilerException("syntax error, expected file handle or typeglob");
-        }
         if (fileHandle != null) {
             args.elements.add(fileHandle);
+            return;
+        }
+
+        // Try parsing as a scalar expression
+        Node scalarExpr = parser.parseExpression(parser.getPrecedence(","));
+        if (scalarExpr != null) {
+            // For typeglob references, wrap in a reference operator
+            if (scalarExpr instanceof OperatorNode && ((OperatorNode)scalarExpr).operator.equals("*")) {
+                args.elements.add(new OperatorNode("\\", scalarExpr, scalarExpr.getIndex()));
+            } else {
+                // For barewords, constants, and other scalar expressions
+                args.elements.add(new OperatorNode("scalar", scalarExpr, scalarExpr.getIndex()));
+            }
+            return;
+        }
+
+        if (!isOptional) {
+            throw new PerlCompilerException("syntax error, expected typeglob, scalar, or reference");
         }
     }
 
