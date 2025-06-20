@@ -70,20 +70,20 @@ public abstract class StringSegmentParser {
 
         ctx.logDebug("str sigil");
         Node operand;
-        boolean isArray = sigil.equals("@");
+        var isArray = "@".equals(sigil);
 
         if (TokenUtils.peek(parser).text.equals("{")) {
             // Block-like interpolation
-            StringParser.ParsedString rawStr2 = StringParser.parseRawStrings(parser, ctx, parser.tokens, parser.tokenIndex, 1);
-            String blockStr = rawStr2.buffers.getFirst();
+            var rawStr2 = StringParser.parseRawStrings(parser, ctx, parser.tokens, parser.tokenIndex, 1);
+            var blockStr = rawStr2.buffers.getFirst();
             ctx.logDebug("str block-like: " + blockStr);
             blockStr = sigil + "{" + blockStr + "}";
-            Parser blockParser = new Parser(ctx, new Lexer(blockStr).tokenize());
+            var blockParser = new Parser(ctx, new Lexer(blockStr).tokenize());
             operand = ParseBlock.parseBlock(blockParser);
             parser.tokenIndex = rawStr2.next;
             ctx.logDebug("str operand " + operand);
         } else {
-            String identifier = IdentifierParser.parseComplexIdentifier(parser);
+            var identifier = IdentifierParser.parseComplexIdentifier(parser);
             if (identifier == null) {
                 // Parse $a  @$a
                 int dollarCount = 0;
@@ -114,7 +114,10 @@ public abstract class StringSegmentParser {
         }
 
         if (isArray) {
-            operand = new BinaryOperatorNode("join", new OperatorNode("$", new IdentifierNode("\"", tokenIndex), tokenIndex), operand, tokenIndex);
+            operand = new BinaryOperatorNode("join",
+                    new OperatorNode("$", new IdentifierNode("\"", tokenIndex), tokenIndex),
+                    operand,
+                    tokenIndex);
         }
 
         addStringSegment(operand);
@@ -126,41 +129,43 @@ public abstract class StringSegmentParser {
     private Node parseArrayHashAccess(Node operand) {
         outerLoop:
         while (true) {
-            String text = tokens.get(parser.tokenIndex).text;
+            var text = tokens.get(parser.tokenIndex).text;
             switch (text) {
-                case "[":
+                case "[" -> {
                     if (isRegex) {
                         // maybe character class
-                        LexerToken tokenNext = tokens.get(parser.tokenIndex + 1);
+                        var tokenNext = tokens.get(parser.tokenIndex + 1);
                         ctx.logDebug("str [ " + tokenNext);
-                        if (!tokenNext.text.equals("$") && !(tokenNext.type == org.perlonjava.lexer.LexerTokenType.NUMBER)) {
+                        if (!tokenNext.text.equals("$") && !(tokenNext.type == LexerTokenType.NUMBER)) {
                             break outerLoop;
                         }
                     }
                     operand = ParseInfix.parseInfixOperation(parser, operand, 0);
                     ctx.logDebug("str operand " + operand);
-                    break;
-                case "{":
+                }
+                case "{" -> {
                     operand = ParseInfix.parseInfixOperation(parser, operand, 0);
                     ctx.logDebug("str operand " + operand);
-                    break;
-                case "->":
-                    int previousIndex = parser.tokenIndex;
+                }
+                case "->" -> {
+                    var previousIndex = parser.tokenIndex;
                     parser.tokenIndex++;
                     text = tokens.get(parser.tokenIndex).text;
                     switch (text) {
-                        case "[":
-                        case "{":
+                        case "[", "{" -> {
                             parser.tokenIndex = previousIndex;  // Re-parse "->"
                             operand = ParseInfix.parseInfixOperation(parser, operand, 0);
                             ctx.logDebug("str operand " + operand);
-                            break;
-                        default:
+                        }
+                        default -> {
                             parser.tokenIndex = previousIndex;
                             break outerLoop;
+                        }
                     }
-                default:
+                }
+                default -> {
                     break outerLoop;
+                }
             }
         }
         return operand;
@@ -173,19 +178,23 @@ public abstract class StringSegmentParser {
     protected Node buildResult() {
         flushCurrentSegment();
 
-        if (segments.isEmpty()) {
-            return new StringNode("", tokenIndex);
-        } else if (segments.size() == 1) {
-            Node result = segments.get(0);
-            if (result instanceof StringNode) {
-                return result;
+        return switch (segments.size()) {
+            case 0 -> new StringNode("", tokenIndex);
+            case 1 -> {
+                var result = segments.get(0);
+                if (result instanceof StringNode) {
+                    yield result;
+                }
+                yield new BinaryOperatorNode("join",
+                        new StringNode("", tokenIndex),
+                        new ListNode(segments, tokenIndex),
+                        tokenIndex);
             }
-        }
-
-        return new BinaryOperatorNode("join",
-                new StringNode("", tokenIndex),
-                new ListNode(segments, tokenIndex),
-                tokenIndex);
+            default -> new BinaryOperatorNode("join",
+                    new StringNode("", tokenIndex),
+                    new ListNode(segments, tokenIndex),
+                    tokenIndex);
+        };
     }
 
     /**
@@ -200,12 +209,12 @@ public abstract class StringSegmentParser {
      */
     public Node parse() {
         while (true) {
-            LexerToken token = tokens.get(parser.tokenIndex++);
-            if (token.type == org.perlonjava.lexer.LexerTokenType.EOF) {
+            var token = tokens.get(parser.tokenIndex++);
+            if (token.type == LexerTokenType.EOF) {
                 break;
             }
 
-            String text = token.text;
+            var text = token.text;
             if (handleSpecialToken(text)) {
                 continue;
             }
@@ -222,124 +231,129 @@ public abstract class StringSegmentParser {
      * Returns true if the token was handled, false if it should be appended normally.
      */
     protected boolean handleSpecialToken(String text) {
-        switch (text) {
-            case "\\":
+        return switch (text) {
+            case "\\" -> {
                 parseEscapeSequence();
-                return true;
-            case "$":
-            case "@":
+                yield true;
+            }
+            case "$", "@" -> {
                 if (shouldInterpolateVariable(text)) {
                     parseVariableInterpolation(text);
-                    return true;
+                    yield true;
                 }
-                return false;
-            default:
-                return false;
-        }
+                yield false;
+            }
+            default -> false;
+        };
     }
 
     /**
      * Determines if a variable should be interpolated based on the following token.
      */
     private boolean shouldInterpolateVariable(String sigil) {
-        LexerToken token1 = tokens.get(parser.tokenIndex);
-        if (token1.type == org.perlonjava.lexer.LexerTokenType.EOF) {
+        var token1 = tokens.get(parser.tokenIndex);
+        if (token1.type == LexerTokenType.EOF) {
             return false;
         }
 
         // Don't interpolate if followed by whitespace or certain characters
-        return !(token1.type == org.perlonjava.lexer.LexerTokenType.WHITESPACE
-                || token1.type == org.perlonjava.lexer.LexerTokenType.NEWLINE
-                || token1.text.equals(")")
-                || token1.text.equals("%")
-                || token1.text.equals("|")
-                || token1.text.equals("]")
-                || token1.text.equals("#")
-                || token1.text.equals("\"")
-                || token1.text.equals("\\"));
+        return !(token1.type == LexerTokenType.WHITESPACE
+                || token1.type == LexerTokenType.NEWLINE
+                || isNonInterpolatingCharacter(token1.text));
+    }
+
+    private boolean isNonInterpolatingCharacter(String text) {
+        return switch (text) {
+            case ")", "%", "|", "]", "#", "\"", "\\" -> true;
+            default -> false;
+        };
     }
 
     void handleControlCharacter() {
-        String ctl = TokenUtils.consumeChar(parser);
-        if (!ctl.isEmpty()) {
-            char chr = ctl.charAt(0);
-            if (chr >= 'a' && chr <= 'z') {
-                appendToCurrentSegment(String.valueOf((char) (chr - 'a' + 1)));
-            } else {
-                appendToCurrentSegment(String.valueOf((char) (chr - 'A' + 1)));
-            }
+        var controlChar = TokenUtils.consumeChar(parser);
+        if (!controlChar.isEmpty()) {
+            var c = controlChar.charAt(0);
+            var result = (c >= 'A' && c <= 'Z') ? String.valueOf((char) (c - 'A' + 1))
+                    : (c >= 'a' && c <= 'z') ? String.valueOf((char) (c - 'a' + 1))
+                    : String.valueOf(c);
+            appendToCurrentSegment(result);
         }
     }
 
     void handleHexEscape() {
-        LexerToken token = tokens.get(parser.tokenIndex);
-        String text = token.text;
+        var hexStr = new StringBuilder();
+        var chr = TokenUtils.peekChar(parser);
 
-        if (token.type == LexerTokenType.IDENTIFIER) {
-            // Handle \x9 \x20
-            String escape;
-            if (text.length() <= 2) {
-                escape = text;
-                parser.tokenIndex++;
-            } else {
-                escape = text.substring(0, 2);
-                token.text = text.substring(2);
-            }
-            appendToCurrentSegment(new String(Character.toChars(Integer.parseInt(escape, 16))));
-        } else if (text.equals("{")) {
-            // Handle \x{...} for Unicode
-            parser.tokenIndex++;
-            StringBuilder unicodeSeq = new StringBuilder();
-            while (true) {
-                token = tokens.get(parser.tokenIndex++);
-                if (token.type == LexerTokenType.EOF) {
-                    throw new PerlCompilerException(tokenIndex, "Expected '}' after \\x{", ctx.errorUtil);
-                }
-                if (token.text.equals("}")) {
+        if ("{".equals(chr)) {
+            TokenUtils.consumeChar(parser);
+            chr = TokenUtils.peekChar(parser);
+            while (!"}".equals(chr) && !chr.isEmpty()) {
+                if (isHexDigit(chr)) {
+                    hexStr.append(TokenUtils.consumeChar(parser));
+                    chr = TokenUtils.peekChar(parser);
+                } else {
                     break;
                 }
-                unicodeSeq.append(token.text);
             }
-            appendToCurrentSegment(new String(Character.toChars(Integer.parseInt(unicodeSeq.toString().trim(), 16))));
+            if ("}".equals(chr)) {
+                TokenUtils.consumeChar(parser);
+            }
         } else {
-            throw new PerlCompilerException(tokenIndex, "Expected '{' after \\x", ctx.errorUtil);
+            while (hexStr.length() < 2 && isHexDigit(chr)) {
+                hexStr.append(TokenUtils.consumeChar(parser));
+                chr = TokenUtils.peekChar(parser);
+            }
+        }
+
+        if (!hexStr.isEmpty()) {
+            try {
+                var hexValue = Integer.parseInt(hexStr.toString(), 16);
+                var result = hexValue <= 0xFFFF
+                        ? String.valueOf((char) hexValue)
+                        : new String(Character.toChars(hexValue));
+                appendToCurrentSegment(result);
+            } catch (NumberFormatException e) {
+                appendToCurrentSegment("x");
+            }
+        } else {
+            appendToCurrentSegment("x");
         }
     }
 
+    private boolean isHexDigit(String chr) {
+        return (chr.compareTo("0") >= 0 && chr.compareTo("9") <= 0) ||
+                (chr.compareToIgnoreCase("a") >= 0 && chr.compareToIgnoreCase("f") <= 0);
+    }
+
     void handleUnicodeNameEscape() {
-        LexerToken token = tokens.get(parser.tokenIndex);
-        if (token.text.equals("{")) {
-            parser.tokenIndex++;
-            StringBuilder nameBuilder = new StringBuilder();
-            while (true) {
-                token = tokens.get(parser.tokenIndex++);
-                if (token.type == LexerTokenType.EOF) {
-                    throw new PerlCompilerException(tokenIndex, "Expected '}' after \\N{", ctx.errorUtil);
-                }
-                if (token.text.equals("}")) {
-                    break;
-                }
-                nameBuilder.append(token.text);
-            }
-            String name = nameBuilder.toString().trim();
+        if (!"{".equals(TokenUtils.peekChar(parser))) {
+            appendToCurrentSegment("N");
+            return;
+        }
 
-            int charCode;
-            if (name.startsWith("U+")) {
-                try {
-                    charCode = Integer.parseInt(name.substring(2), 16);
-                } catch (NumberFormatException e) {
-                    throw new PerlCompilerException(tokenIndex, "Invalid Unicode code point: " + name, ctx.errorUtil);
-                }
-            } else {
-                charCode = UCharacter.getCharFromName(name);
-                if (charCode == -1) {
-                    throw new PerlCompilerException(tokenIndex, "Invalid Unicode character name: " + name, ctx.errorUtil);
-                }
-            }
+        TokenUtils.consumeChar(parser);
+        var nameBuilder = new StringBuilder();
+        var chr = TokenUtils.peekChar(parser);
 
-            appendToCurrentSegment(String.valueOf((char) charCode));
+        while (!"}".equals(chr) && !chr.isEmpty()) {
+            nameBuilder.append(TokenUtils.consumeChar(parser));
+            chr = TokenUtils.peekChar(parser);
+        }
+
+        if ("}".equals(chr)) {
+            TokenUtils.consumeChar(parser);
+            var name = nameBuilder.toString();
+            try {
+                var codePoint = UCharacter.getCharFromName(name);
+                var result = codePoint != -1
+                        ? new String(Character.toChars(codePoint))
+                        : "N{" + name + "}";
+                appendToCurrentSegment(result);
+            } catch (Exception e) {
+                appendToCurrentSegment("N{" + name + "}");
+            }
         } else {
-            throw new PerlCompilerException(tokenIndex, "Expected '{' after \\N", ctx.errorUtil);
+            appendToCurrentSegment("N{" + nameBuilder);
         }
     }
 }
