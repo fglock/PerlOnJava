@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 2;
+use Test::More tests => 3;
 
 # Direct string test
 my $result1 = "abc\l\Udefgh\Ei";
@@ -10,4 +10,8 @@ is($result1, 'abcdEFGHi', 'Literal: abc\\l\\Udefgh\\Ei should become abcdEFGHi')
 my $v = "defg";
 my $result2 = "abc\l\U${v}h\Ei";
 is($result2, 'abcdEFGHi', 'Interpolated: abc\\l\\U\${v}h\\Ei should become abcdEFGHi');
+
+$v = "";
+$result2 = "abc\l\U${v}h\Ei";
+is($result2, 'abchi', 'Interpolated: abc\\l\\U\${v}h\\Ei should become abchi');
 
