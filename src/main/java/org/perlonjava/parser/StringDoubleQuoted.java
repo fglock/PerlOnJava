@@ -63,6 +63,14 @@ public class StringDoubleQuoted extends StringSegmentParser {
     private final boolean parseEscapes;
 
     /**
+     * Flag indicating whether we're inside a \Q...\E quotemeta region.
+     *
+     * <p>When true, all special characters (including $ and @) are treated as literals,
+     * and escape sequences are not processed (except \E to end the region).
+     */
+    private boolean inQuotemeta = false;
+
+    /**
      * Private constructor for StringDoubleQuoted parser.
      *
      * <p>Use {@link #parseDoubleQuotedString} factory method to create instances.
@@ -208,7 +216,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
      * <ol>
      *   <li>Determines the appropriate Perl function for the modifier</li>
      *   <li>Creates a joined node from all segments affected by the modifier</li>
-     *   <li>Wraps the content in the case function (uc, lc, ucfirst, lcfirst)</li>
+     *   <li>Wraps the content in the case function (uc, lc, ucfirst, lcfirst, quotemeta)</li>
      *   <li>Replaces the original segments with the case-modified node</li>
      *   <li>Updates parent modifiers to reference the new node</li>
      * </ol>
@@ -226,6 +234,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
             case "L" -> "lc";       // \L - lowercase
             case "u" -> "ucfirst";  // \\u - uppercase first
             case "l" -> "lcfirst";  // \l - lowercase first
+            case "Q" -> "quotemeta"; // \Q - quote metacharacters
             default -> null;
         };
 
@@ -284,14 +293,33 @@ public class StringDoubleQuoted extends StringSegmentParser {
      * Parses escape sequences based on context.
      *
      * <p>This method delegates to different escape handling based on the
-     * parseEscapes flag:
+     * parseEscapes flag and quotemeta mode:
      * <ul>
+     *   <li>inQuotemeta=true: Only \E is special, everything else is literal</li>
      *   <li>parseEscapes=true: Process escapes like \n to actual newline</li>
      *   <li>parseEscapes=false: Preserve escapes for regex engine</li>
      * </ul>
      */
     @Override
     protected void parseEscapeSequence() {
+        if (inQuotemeta) {
+            // In quotemeta mode, everything is literal except \E
+            var token = tokens.get(parser.tokenIndex);
+            if (token.text.startsWith("E")) {
+                // End quotemeta mode
+                TokenUtils.consumeChar(parser);
+                flushCurrentSegment();
+                if (!caseModifiers.isEmpty() && caseModifiers.peek().type.equals("Q")) {
+                    applyCaseModifier(caseModifiers.pop());
+                }
+                inQuotemeta = false;
+            } else {
+                // Everything else is literal, including the backslash
+                currentSegment.append("\\");
+            }
+            return;
+        }
+
         if (parseEscapes) {
             parseDoubleQuotedEscapes();
         } else {
@@ -375,10 +403,16 @@ public class StringDoubleQuoted extends StringSegmentParser {
             case "u" -> startCaseModifier("u", true);   // Uppercase next char
             case "l" -> startCaseModifier("l", true);   // Lowercase next char
 
+            // Quotemeta modifier
+            case "Q" -> {
+                flushCurrentSegment();
+                inQuotemeta = true;
+                caseModifiers.push(new CaseModifier("Q", false));
+            }
+
             // Other escape sequences
             case "x" -> handleHexEscape();           // \x41 or \x{263A}
             case "N" -> handleUnicodeNameEscape();   // \N{UNICODE NAME}
-            case "Q" -> {} // TODO: Implement quotemeta (\Q...\E)
 
             // Unknown escape - treat as literal character
             default -> appendToCurrentSegment(escape);
@@ -428,17 +462,17 @@ public class StringDoubleQuoted extends StringSegmentParser {
      *
      * <p>This class tracks:
      * <ul>
-     *   <li>The type of modifier (U, L, u, l)</li>
-     *   <li>Whether it's single-character (u, l) or range-based (U, L)</li>
+     *   <li>The type of modifier (U, L, u, l, Q)</li>
+     *   <li>Whether it's single-character (u, l) or range-based (U, L, Q)</li>
      *   <li>All segments affected by this modifier</li>
      *   <li>Whether single-char modifiers have affected any content</li>
      * </ul>
      */
     private static class CaseModifier {
-        /** The modifier type: "U", "L", "u", or "l" */
+        /** The modifier type: "U", "L", "u", "l", or "Q" */
         final String type;
 
-        /** True for \\u and \l (single character), false for \U and \L (ranges) */
+        /** True for \\u and \l (single character), false for \U, \L, and \Q (ranges) */
         final boolean isSingleChar;
 
         /** List of segments affected by this modifier */
