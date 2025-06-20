@@ -82,7 +82,7 @@ public class Directory {
         if (dirIO.directoryIO == null) {
             return RuntimeIO.handleIOError("seekdir is not supported for non-directory streams");
         } else {
-            return dirIO.directoryIO.seekdir(1);
+            return dirIO.directoryIO.seekdir(0);
         }
     }
 

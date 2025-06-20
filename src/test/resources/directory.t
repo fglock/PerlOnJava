@@ -1,3 +1,4 @@
+use 5.38.0;
 use strict;
 use warnings;
 use Test::More tests => 10;
@@ -22,7 +23,7 @@ is(telldir($dh), $pos, 'seekdir sets the directory position');
 
 # Test rewinddir function
 rewinddir $dh;
-is(telldir($dh), 1, 'rewinddir resets the directory position');
+is(telldir($dh), 0, 'rewinddir resets the directory position');
 
 # Test closedir function
 closedir $dh;
