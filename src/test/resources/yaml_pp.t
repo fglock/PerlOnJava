@@ -5,7 +5,10 @@ use YAML::PP;
 use JSON;
 
 # Basic OO interface tests
-my $ypp = YAML::PP->new(cyclic_refs => "allow");
+my $ypp = YAML::PP->new(
+    cyclic_refs => "allow",
+    schema => ['JSON', 'Perl']  # Enable Perl schema to handle references
+);
 ok(defined $ypp, 'YAML::PP constructor');
 
 # Simple scalar mapping
