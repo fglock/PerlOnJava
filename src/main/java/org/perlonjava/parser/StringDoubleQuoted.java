@@ -40,6 +40,9 @@ public class StringDoubleQuoted extends StringSegmentParser {
     /** Flag indicating whether escape sequences should be processed */
     private final boolean parseEscapes;
 
+    /** Track if we need to check for single-char modifier completion */
+    private boolean needToCheckSingleCharModifier = false;
+
     /**
      * Private constructor for StringDoubleQuoted parser.
      *
@@ -96,11 +99,68 @@ public class StringDoubleQuoted extends StringSegmentParser {
      */
     @Override
     protected void addStringSegment(Node node) {
+        // First check if we need to deactivate any single-char modifiers
+        if (needToCheckSingleCharModifier) {
+            checkAndDeactivateSingleCharModifiers();
+            needToCheckSingleCharModifier = false;
+        }
+
         segments.add(node);
 
         // Register this segment with all currently active case modifiers
-        // This allows nested case modifications to work correctly
         activeCaseModifiers.forEach(modifier -> modifier.segmentsUnderModifier().add(node));
+
+        // Mark that we should check for single-char modifier completion
+        // after this segment has been added
+        if (!activeCaseModifiers.isEmpty() && activeCaseModifiers.peek().isSingleChar()) {
+            needToCheckSingleCharModifier = true;
+        }
+    }
+
+    /**
+     * Override to handle literal text appending.
+     * This ensures single-char modifiers are checked even for literal text.
+     */
+    @Override
+    protected void appendToCurrentSegment(String text) {
+        super.appendToCurrentSegment(text);
+
+        // If we just added text and have an active single-char modifier,
+        // we need to check if we should deactivate it
+        if (!text.isEmpty() && !activeCaseModifiers.isEmpty() && activeCaseModifiers.peek().isSingleChar()) {
+            // Mark that the single-char modifier has affected content
+            activeCaseModifiers.peek().setHasAffectedContent(true);
+        }
+    }
+
+    /**
+     * Override to flush segments properly.
+     */
+    @Override
+    protected void flushCurrentSegment() {
+        super.flushCurrentSegment();
+
+        // After flushing, check if we need to deactivate single-char modifiers
+        if (needToCheckSingleCharModifier) {
+            checkAndDeactivateSingleCharModifiers();
+            needToCheckSingleCharModifier = false;
+        }
+    }
+
+    /**
+     * Checks for single-character modifiers and deactivates them after affecting one segment.
+     * Single-character modifiers (\l, \\u) should only affect the next character/segment.
+     */
+    private void checkAndDeactivateSingleCharModifiers() {
+        while (!activeCaseModifiers.isEmpty()) {
+            var topModifier = activeCaseModifiers.peek();
+            if (topModifier.isSingleChar() && topModifier.hasAffectedContent()) {
+                // Apply and remove the single-character modifier
+                applyCaseModifier(activeCaseModifiers.pop());
+            } else {
+                break;
+            }
+        }
     }
 
     /**
@@ -152,34 +212,59 @@ public class StringDoubleQuoted extends StringSegmentParser {
         // Create the case modification operator node
         var caseModifiedNode = new OperatorNode(operator, contentNode, parser.tokenIndex);
 
-        // Replace the segments in the main segments list
-        // Find the range of segments that were affected by this modifier
-        var firstAffectedIndex = -1;
-        var lastAffectedIndex = -1;
+        // Find and replace the affected segments in the main segments list
+        replaceSegmentsWithCaseModified(modifier, caseModifiedNode);
+    }
 
+    /**
+     * Replaces segments affected by a case modifier with the case-modified node.
+     * This method properly handles the segment replacement logic.
+     */
+    private void replaceSegmentsWithCaseModified(CaseModifier modifier, Node caseModifiedNode) {
+        var affectedSegments = modifier.segmentsUnderModifier();
+        if (affectedSegments.isEmpty()) {
+            return;
+        }
+
+        // Find all indices of affected segments
+        List<Integer> indicesToRemove = new ArrayList<>();
         for (int i = 0; i < segments.size(); i++) {
-            if (modifier.segmentsUnderModifier().contains(segments.get(i))) {
-                if (firstAffectedIndex == -1) {
-                    firstAffectedIndex = i;
-                }
-                lastAffectedIndex = i;
+            if (affectedSegments.contains(segments.get(i))) {
+                indicesToRemove.add(i);
             }
         }
 
-        if (firstAffectedIndex != -1) {
-            // Remove the affected segments and replace with the case-modified node
-            if (lastAffectedIndex >= firstAffectedIndex) {
-                segments.subList(firstAffectedIndex, lastAffectedIndex + 1).clear();
+        if (!indicesToRemove.isEmpty()) {
+            // Remove segments in reverse order to maintain indices
+            int insertIndex = indicesToRemove.get(0);
+            for (int i = indicesToRemove.size() - 1; i >= 0; i--) {
+                segments.remove((int) indicesToRemove.get(i));
             }
-            segments.add(firstAffectedIndex, caseModifiedNode);
 
-            // Update segments in parent case modifiers to reference the new transformed node
-            activeCaseModifiers.forEach(parentModifier -> {
-                // Remove old segments from parent modifiers
-                parentModifier.segmentsUnderModifier().removeAll(modifier.segmentsUnderModifier());
-                // Add the new case-modified node
-                parentModifier.segmentsUnderModifier().add(caseModifiedNode);
-            });
+            // Insert the case-modified node at the first position
+            segments.add(insertIndex, caseModifiedNode);
+
+            // Update parent case modifiers
+            updateParentModifiers(affectedSegments, caseModifiedNode);
+        }
+    }
+
+    /**
+     * Updates parent case modifiers to reference the new case-modified node
+     * instead of the individual segments that were replaced.
+     */
+    private void updateParentModifiers(List<Node> oldSegments, Node newNode) {
+        for (var parentModifier : activeCaseModifiers) {
+            boolean hadAnyOldSegment = false;
+            for (var oldSegment : oldSegments) {
+                if (parentModifier.segmentsUnderModifier().remove(oldSegment)) {
+                    hadAnyOldSegment = true;
+                }
+            }
+            // Add the new node only once if we removed any old segments
+            if (hadAnyOldSegment) {
+                parentModifier.segmentsUnderModifier().add(newNode);
+            }
         }
     }
 
@@ -347,27 +432,59 @@ public class StringDoubleQuoted extends StringSegmentParser {
     }
 
     /**
+     * Validates that a new case modifier can be started.
+     * Perl doesn't allow \L immediately followed by \U (and vice versa).
+     */
+    private void validateCaseModifierSequence(String newModifier) {
+        if (!activeCaseModifiers.isEmpty()) {
+            var topModifier = activeCaseModifiers.peek();
+            // Check for invalid sequences: \L\U or \U\L
+            if ((topModifier.type().equals("L") && newModifier.equals("U")) ||
+                    (topModifier.type().equals("U") && newModifier.equals("L"))) {
+                // Check if the top modifier has no content yet (immediate sequence)
+                if (topModifier.segmentsUnderModifier().isEmpty() && currentSegment.length() == 0) {
+                    throw new RuntimeException("syntax error: \\" + topModifier.type() + "\\" + newModifier + " is not allowed");
+                }
+            }
+        }
+    }
+
+    /**
      * Handles the \U escape sequence to start uppercase modification.
      *
      * <p>The \U sequence starts converting all following characters to uppercase
-     * until a corresponding \E is encountered. This can be nested with other
-     * case modifications.</p>
+     * until a corresponding \E is encountered. If \L is currently active,
+     * \U first closes it (like \E would) before starting uppercase.</p>
      */
     private void handleStartUppercase() {
+        validateCaseModifierSequence("U");
         flushCurrentSegment();
-        activeCaseModifiers.push(new CaseModifier("U", segments.size()));
+
+        // If \L is currently active, close it first (like \E would)
+        if (!activeCaseModifiers.isEmpty() && activeCaseModifiers.peek().type().equals("L")) {
+            applyCaseModifier(activeCaseModifiers.pop());
+        }
+
+        activeCaseModifiers.push(new CaseModifier("U", segments.size(), false));
     }
 
     /**
      * Handles the \L escape sequence to start lowercase modification.
      *
      * <p>The \L sequence starts converting all following characters to lowercase
-     * until a corresponding \E is encountered. This can be nested with other
-     * case modifications.</p>
+     * until a corresponding \E is encountered. If \U is currently active,
+     * \L first closes it (like \E would) before starting lowercase.</p>
      */
     private void handleStartLowercase() {
+        validateCaseModifierSequence("L");
         flushCurrentSegment();
-        activeCaseModifiers.push(new CaseModifier("L", segments.size()));
+
+        // If \U is currently active, close it first (like \E would)
+        if (!activeCaseModifiers.isEmpty() && activeCaseModifiers.peek().type().equals("U")) {
+            applyCaseModifier(activeCaseModifiers.pop());
+        }
+
+        activeCaseModifiers.push(new CaseModifier("L", segments.size(), false));
     }
 
     /**
@@ -378,7 +495,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
      */
     private void handleUppercaseNext() {
         flushCurrentSegment();
-        activeCaseModifiers.push(new CaseModifier("u", segments.size()));
+        activeCaseModifiers.push(new CaseModifier("u", segments.size(), true));
     }
 
     /**
@@ -389,34 +506,61 @@ public class StringDoubleQuoted extends StringSegmentParser {
      */
     private void handleLowercaseNext() {
         flushCurrentSegment();
-        activeCaseModifiers.push(new CaseModifier("l", segments.size()));
+        activeCaseModifiers.push(new CaseModifier("l", segments.size(), true));
     }
 
     /**
-     * Record representing a case modification state.
+     * Class representing a case modification state.
      *
-     * <p>This record tracks the state of an active case modification, including
+     * <p>This class tracks the state of an active case modification, including
      * what type of modification it is and which segments should be affected by it.
      * The segments list is populated as new segments are added while this modifier
      * is active.</p>
-     *
-     * @param type the type of case modification ("U", "L", "u", "l")
-     * @param startSegment the segment index where this modifier starts (for debugging)
-     * @param segmentsUnderModifier the segments that should be affected by this modifier
      */
-    private record CaseModifier(
-            String type,
-            int startSegment,
-            List<Node> segmentsUnderModifier
-    ) {
+    private static class CaseModifier {
+        private final String type;
+        private final int startSegment;
+        private final boolean isSingleChar;
+        private final List<Node> segmentsUnderModifier;
+        private boolean hasAffectedContent;
+
         /**
-         * Convenience constructor that creates an empty segments list.
+         * Constructor for CaseModifier.
          *
-         * @param type the type of case modification
+         * @param type the type of case modification ("U", "L", "u", "l")
          * @param startSegment the segment index where this modifier starts
+         * @param isSingleChar whether this modifier affects only one character/segment
          */
-        CaseModifier(String type, int startSegment) {
-            this(type, startSegment, new ArrayList<>());
+        CaseModifier(String type, int startSegment, boolean isSingleChar) {
+            this.type = type;
+            this.startSegment = startSegment;
+            this.isSingleChar = isSingleChar;
+            this.segmentsUnderModifier = new ArrayList<>();
+            this.hasAffectedContent = false;
+        }
+
+        public String type() {
+            return type;
+        }
+
+        public int startSegment() {
+            return startSegment;
+        }
+
+        public boolean isSingleChar() {
+            return isSingleChar;
+        }
+
+        public List<Node> segmentsUnderModifier() {
+            return segmentsUnderModifier;
+        }
+
+        public boolean hasAffectedContent() {
+            return hasAffectedContent || !segmentsUnderModifier.isEmpty();
+        }
+
+        public void setHasAffectedContent(boolean hasAffectedContent) {
+            this.hasAffectedContent = hasAffectedContent;
         }
     }
 }
