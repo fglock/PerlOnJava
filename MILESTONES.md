@@ -242,7 +242,7 @@ The following areas are currently under active development to enhance the functi
   - Added double quoted string escapes: `\U`, `\L`, `\u`, `\l`.
   - Added `# line` preprocessor directive.
   - `Test::More` module: added `subtest`.
-  - Bugfix: fix a problem with Windows newlines and qw().
+  - Bugfix: fix a problem with Windows newlines and qw(). Also fixed `mkdir` in Windows.
   - Added Makefile.
   - Debian package can be created with `make deb`.
   - Planned release date: 2025-12-10

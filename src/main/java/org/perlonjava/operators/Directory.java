@@ -5,6 +5,7 @@ import org.perlonjava.runtime.*;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -168,9 +169,12 @@ public class Directory {
             Path path = Paths.get(fileName);
             Files.createDirectories(path);
 
-            // Set permissions
-            Set<PosixFilePermission> permissions = getPosixFilePermissions(mode);
-            Files.setPosixFilePermissions(path, permissions);
+            // Set permissions only if the file system supports POSIX permissions
+            if (FileSystems.getDefault().supportedFileAttributeViews().contains("posix")) {
+                Set<PosixFilePermission> permissions = getPosixFilePermissions(mode);
+                Files.setPosixFilePermissions(path, permissions);
+            }
+            // On Windows and other non-POSIX systems, permissions are handled by the OS
 
             return scalarTrue;
         } catch (IOException e) {
