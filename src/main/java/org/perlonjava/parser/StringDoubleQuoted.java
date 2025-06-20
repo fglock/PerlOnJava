@@ -89,31 +89,9 @@ public class StringDoubleQuoted extends StringSegmentParser {
      * Appends text to the string buffer, applying case modifications as needed
      */
     private static void appendWithCaseModification(StringBuilder str, String text, Stack<CaseModifierState> caseModifierStack) {
-        if (caseModifierStack.isEmpty()) {
-            str.append(text);
-            return;
-        }
+        str.append(text);
 
-        String modifiedText = text;
-
-        // Apply persistent modifiers first (from bottom of stack)
-        for (CaseModifierState state : caseModifierStack) {
-            if (!state.isTemporary) {
-                modifiedText = applyCaseModification(modifiedText, state.modifier);
-            }
-        }
-
-        // Then apply temporary modifiers (from top of stack, most recent first)
-        for (int i = caseModifierStack.size() - 1; i >= 0; i--) {
-            CaseModifierState state = caseModifierStack.get(i);
-            if (state.isTemporary) {
-                modifiedText = applyCaseModification(modifiedText, state.modifier);
-            }
-        }
-
-        str.append(modifiedText);
-
-        // Remove temporary modifiers after applying (from top to bottom)
+        // Remove temporary modifiers after processing
         while (!caseModifierStack.isEmpty() && caseModifierStack.peek().isTemporary) {
             caseModifierStack.pop();
         }
@@ -164,21 +142,6 @@ public class StringDoubleQuoted extends StringSegmentParser {
         // Remove temporary modifiers from stack
         for (CaseModifierState modifier : tempModifiers) {
             caseModifierStack.remove(modifier);
-        }
-    }
-
-    /**
-     * Applies case modification to a string
-     */
-    private static String applyCaseModification(String text, String modifier) {
-        if (modifier == null) return text;
-
-        switch (modifier) {
-            case "U": return text.toUpperCase();
-            case "L": return text.toLowerCase();
-            case "u": return text.isEmpty() ? "" : Character.toUpperCase(text.charAt(0)) + text.substring(1);
-            case "l": return text.isEmpty() ? "" : Character.toLowerCase(text.charAt(0)) + text.substring(1);
-            default: return text;
         }
     }
 
