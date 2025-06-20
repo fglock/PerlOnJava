@@ -8,23 +8,21 @@ import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Stack;
 
 /**
- * The StringDoubleQuoted class is responsible for parsing double-quoted strings.
- * It handles escape sequences, variable interpolation, and other Perl-specific
- * string parsing features including case modification sequences.
+ * Parser for double-quoted strings with case modification and quotemeta support.
+ * Extends StringSegmentParser to handle the base string parsing functionality.
  */
-public class StringDoubleQuoted {
+public class StringDoubleQuoted extends StringSegmentParser {
 
     /**
      * Represents the current case modification state
      */
     private static class CaseModifierState {
         String modifier;        // "U", "L", "u", "l", or null
-        boolean isTemporary;    // true for \-u and \-l (applies to next char only)
+        boolean isTemporary;    // true for \-u and \l (applies to next char only)
 
         CaseModifierState(String modifier, boolean isTemporary) {
             this.modifier = modifier;
@@ -32,13 +30,17 @@ public class StringDoubleQuoted {
         }
     }
 
+    private final Stack<CaseModifierState> caseModifierStack;
+    private final boolean parseEscapes;
+
+    private StringDoubleQuoted(EmitterContext ctx, List<LexerToken> tokens, Parser parser, int tokenIndex, boolean isRegex, boolean parseEscapes) {
+        super(ctx, tokens, parser, tokenIndex, isRegex);
+        this.parseEscapes = parseEscapes;
+        this.caseModifierStack = new Stack<>();
+    }
+
     /**
      * Parses a double-quoted string, handling escape sequences and variable interpolation.
-     *
-     * @param ctx          The EmitterContext used for logging and error handling.
-     * @param rawStr       The raw string input to be parsed.
-     * @param parseEscapes A boolean indicating whether escape sequences should be parsed.
-     * @return A Node representing the parsed string.
      */
     static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes) {
         String input = rawStr.buffers.getFirst();
@@ -46,173 +48,41 @@ public class StringDoubleQuoted {
         boolean isRegex = !parseEscapes;
         ctx.logDebug("parseDoubleQuotedString isRegex:" + isRegex);
 
-        StringBuilder str = new StringBuilder();  // Buffer to hold the parsed string
-        List<Node> parts = new ArrayList<>();  // List to hold parts of the parsed string
-        Stack<CaseModifierState> caseModifierStack = new Stack<>();  // Stack for nested case modifiers
-
         Lexer lexer = new Lexer(input);
         List<LexerToken> tokens = lexer.tokenize();
         Parser parser = new Parser(ctx, tokens);
         ctx.quoteMetaEnabled = false;
 
-        // Loop through the token array until the end
-        while (true) {
-            LexerToken token = tokens.get(parser.tokenIndex++);  // Get the current token
-            if (token.type == LexerTokenType.EOF) {
-                break;
-            }
-            String text = token.text;
-            switch (text) {
-                case "\\":
-                    if (parseEscapes) {
-                        parseDoubleQuotedEscapes(ctx, tokens, parser, str, tokenIndex, parts, caseModifierStack);
-                    } else {
-                        // Consume the escaped character without processing
-                        str.append(text);
-                        token = tokens.get(parser.tokenIndex);
-                        if (token.text.length() == 1) {
-                            str.append(token.text);
-                            parser.tokenIndex++;
-                        } else {
-                            str.append(token.text.charAt(0));
-                            token.text = token.text.substring(1);
-                        }
-                    }
-                    break;
-                case "$":
-                case "@":
-                    LexerToken token1 = tokens.get(parser.tokenIndex);
-                    if (token1.type == LexerTokenType.EOF) {
-                        // Final $ or @
-                        appendWithCaseModification(str, text, caseModifierStack);
-                        break;
-                    }
-                    if (token1.type == LexerTokenType.WHITESPACE
-                            || token1.type == LexerTokenType.NEWLINE
-                            || token1.text.equals(")")
-                            || token1.text.equals("%")
-                            || token1.text.equals("|")
-                            || token1.text.equals("]")
-                            || token1.text.equals("#")
-                            || token1.text.equals("\"")
-                            || token1.text.equals("\\")) {
-                        // Space, `)`, `%`, `|`, `\` after $ or @
-                        appendWithCaseModification(str, text, caseModifierStack);
-                        break;
-                    }
-                    if (!str.isEmpty()) {
-                        addStringSegmentWithCaseModification(ctx, parts, new StringNode(str.toString(), tokenIndex), caseModifierStack);
-                        str.setLength(0);  // Reset the buffer
-                    }
-                    String sigil = text;
-                    ctx.logDebug("str sigil");
-                    Node operand;
-                    boolean isArray = sigil.equals("@");
-                    if (TokenUtils.peek(parser).text.equals("{")) {
-                        // Block-like
-                        // Extract the string between brackets
-                        StringParser.ParsedString rawStr2 = StringParser.parseRawStrings(parser, ctx, parser.tokens, parser.tokenIndex, 1);
-                        String blockStr = rawStr2.buffers.getFirst();
-                        ctx.logDebug("str block-like: " + blockStr);
-                        blockStr = sigil + "{" + blockStr + "}";
-                        Parser blockParser = new Parser(ctx, new Lexer(blockStr).tokenize());
-                        operand = ParseBlock.parseBlock(blockParser);
-                        parser.tokenIndex = rawStr2.next;
-                        ctx.logDebug("str operand " + operand);
-                    } else {
-                        String identifier = IdentifierParser.parseComplexIdentifier(parser);
-                        if (identifier == null) {
-                            // Parse $$a  @$a
-                            int dollarCount = 0;
-                            while (TokenUtils.peek(parser).text.equals("$")) {
-                                dollarCount++;
-                                parser.tokenIndex++;
-                            }
-                            if (dollarCount > 0) {
-                                identifier = IdentifierParser.parseComplexIdentifier(parser);
-                                if (identifier == null) {
-                                    throw new PerlCompilerException(tokenIndex, "Unexpected value after $ in string", ctx.errorUtil);
-                                }
-                                operand = new IdentifierNode(identifier, tokenIndex);
-                                for (int i = 0; i < dollarCount; i++) {
-                                    operand = new OperatorNode("$", operand, tokenIndex);
-                                }
-                            } else {
-                                throw new PerlCompilerException(tokenIndex, "Unexpected value after " + text + " in string", ctx.errorUtil);
-                            }
-                        } else {
-                            operand = new IdentifierNode(identifier, tokenIndex);
-                        }
-                        ctx.logDebug("str Identifier: " + identifier);
-                        operand = new OperatorNode(
-                                text, operand, tokenIndex);
-                        outerLoop:
-                        while (true) {
-                            text = tokens.get(parser.tokenIndex).text;
-                            switch (text) {
-                                case "[":
-                                    if (isRegex) {
-                                        // maybe character class
-                                        LexerToken tokenNext = tokens.get(parser.tokenIndex + 1);
-                                        ctx.logDebug("str [ " + tokenNext);
-                                        if (!tokenNext.text.equals("$") && !(tokenNext.type == LexerTokenType.NUMBER)) {
-                                            break outerLoop;
-                                        }
-                                    }
-                                    operand = ParseInfix.parseInfixOperation(parser, operand, 0);
-                                    ctx.logDebug("str operand " + operand);
-                                    break;
-                                case "{":
-                                    operand = ParseInfix.parseInfixOperation(parser, operand, 0);
-                                    ctx.logDebug("str operand " + operand);
-                                    break;
-                                case "->":
-                                    int previousIndex = parser.tokenIndex;
-                                    parser.tokenIndex++;
-                                    text = tokens.get(parser.tokenIndex).text;
-                                    switch (text) {
-                                        case "[":
-                                        case "{":
-                                            parser.tokenIndex = previousIndex;  // Re-parse "->"
-                                            operand = ParseInfix.parseInfixOperation(parser, operand, 0);
-                                            ctx.logDebug("str operand " + operand);
-                                            break;
-                                        default:
-                                            parser.tokenIndex = previousIndex;
-                                            break outerLoop;
-                                    }
-                                default:
-                                    break outerLoop;
-                            }
-                        }
-                    }
-                    if (isArray) {
-                        operand = new BinaryOperatorNode("join", new OperatorNode("$", new IdentifierNode("\"", tokenIndex), tokenIndex), operand, tokenIndex);
-                    }
-                    addStringSegmentWithCaseModification(ctx, parts, operand, caseModifierStack);
-                    break;
-                default:
-                    appendWithCaseModification(str, text, caseModifierStack);
-            }
-        }
+        StringDoubleQuoted doubleQuotedParser = new StringDoubleQuoted(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes);
+        return doubleQuotedParser.parse();
+    }
 
-        if (!str.isEmpty()) {
-            addStringSegmentWithCaseModification(ctx, parts, new StringNode(str.toString(), tokenIndex), caseModifierStack);
-        }
+    @Override
+    protected void appendToCurrentSegment(String text) {
+        appendWithCaseModification(currentSegment, text, caseModifierStack);
+    }
 
-        // Join the parts
-        if (parts.isEmpty()) {
-            return new StringNode("", tokenIndex);
-        } else if (parts.size() == 1) {
-            Node result = parts.getFirst();
-            if (result instanceof StringNode) {
-                return parts.getFirst();
+    @Override
+    protected void addStringSegment(Node node) {
+        addStringSegmentWithCaseModification(ctx, segments, node, caseModifierStack);
+    }
+
+    @Override
+    protected void parseEscapeSequence() {
+        if (parseEscapes) {
+            parseDoubleQuotedEscapes();
+        } else {
+            // Consume the escaped character without processing
+            currentSegment.append("\\");
+            LexerToken token = tokens.get(parser.tokenIndex);
+            if (token.text.length() == 1) {
+                currentSegment.append(token.text);
+                parser.tokenIndex++;
+            } else {
+                currentSegment.append(token.text.charAt(0));
+                token.text = token.text.substring(1);
             }
         }
-        return new BinaryOperatorNode("join",
-                new StringNode("", tokenIndex),
-                new ListNode(parts, tokenIndex),
-                tokenIndex);
     }
 
     /**
@@ -254,11 +124,11 @@ public class StringDoubleQuoted {
      */
     private static void addStringSegmentWithCaseModification(EmitterContext ctx, List<Node> parts, Node node, Stack<CaseModifierState> caseModifierStack) {
         Node finalNode = node;
-        List<CaseModifierState> tempModifiers = new ArrayList<>();
+        java.util.List<CaseModifierState> tempModifiers = new java.util.ArrayList<>();
 
         if (!caseModifierStack.isEmpty()) {
             // Collect active modifiers
-            List<CaseModifierState> activeModifiers = new ArrayList<>(caseModifierStack);
+            java.util.List<CaseModifierState> activeModifiers = new java.util.ArrayList<>(caseModifierStack);
 
             // Apply persistent modifiers first
             for (CaseModifierState state : activeModifiers) {
@@ -327,20 +197,10 @@ public class StringDoubleQuoted {
 
     /**
      * Parses escape sequences within a double-quoted string.
-     *
-     * @param ctx        The EmitterContext used for logging and error handling.
-     * @param tokens     The list of tokens to be parsed.
-     * @param parser     The parser instance used for parsing.
-     * @param str        The StringBuilder to append parsed characters to.
-     * @param tokenIndex The current index of the token being parsed.
-     * @param parts      The list of string parts being built.
-     * @param caseModifierStack The stack of active case modifiers.
      */
-    private static void parseDoubleQuotedEscapes(EmitterContext ctx, List<LexerToken> tokens, Parser parser, StringBuilder str, int tokenIndex, List<Node> parts, Stack<CaseModifierState> caseModifierStack) {
-        LexerToken token;
-        String text;
-        String escape;
-        token = tokens.get(parser.tokenIndex);
+    private void parseDoubleQuotedEscapes() {
+        LexerToken token = tokens.get(parser.tokenIndex);
+
         if (token.type == LexerTokenType.NUMBER) {
             // Octal like `\200`
             StringBuilder octalStr = new StringBuilder(TokenUtils.consumeChar(parser));
@@ -351,209 +211,110 @@ public class StringDoubleQuoted {
             }
             ctx.logDebug("octalStr: " + octalStr);
             char octalChar = (char) Integer.parseInt(octalStr.toString(), 8);
-            appendWithCaseModification(str, String.valueOf(octalChar), caseModifierStack);
+            appendToCurrentSegment(String.valueOf(octalChar));
             return;
         }
-        escape = TokenUtils.consumeChar(parser);
+
+        String escape = TokenUtils.consumeChar(parser);
         switch (escape) {
             case "\\":
             case "\"":
-                appendWithCaseModification(str, escape, caseModifierStack);
+                appendToCurrentSegment(escape);
                 break;
             case "n":
-                appendWithCaseModification(str, "\n", caseModifierStack);
+                appendToCurrentSegment("\n");
                 break;
             case "t":
-                appendWithCaseModification(str, "\t", caseModifierStack);
+                appendToCurrentSegment("\t");
                 break;
             case "r":
-                appendWithCaseModification(str, "\r", caseModifierStack);
+                appendToCurrentSegment("\r");
                 break;
             case "f":
-                appendWithCaseModification(str, "\f", caseModifierStack);
+                appendToCurrentSegment("\f");
                 break;
             case "b":
-                appendWithCaseModification(str, "\b", caseModifierStack);
+                appendToCurrentSegment("\b");
                 break;
             case "a":
-                appendWithCaseModification(str, String.valueOf((char) 7), caseModifierStack);
+                appendToCurrentSegment(String.valueOf((char) 7));
                 break;
             case "e":
-                appendWithCaseModification(str, String.valueOf((char) 27), caseModifierStack);
+                appendToCurrentSegment(String.valueOf((char) 27));
                 break;
             case "c":
-                String ctl = TokenUtils.consumeChar(parser);
-                if (!ctl.isEmpty()) {
-                    // \cA is control-A char(1)
-                    char chr = ctl.charAt(0);
-                    if (chr >= 'a' && chr <= 'z') {
-                        appendWithCaseModification(str, String.valueOf((char) (chr - 'a' + 1)), caseModifierStack);
-                    } else {
-                        appendWithCaseModification(str, String.valueOf((char) (chr - 'A' + 1)), caseModifierStack);
-                    }
-                }
+                handleControlCharacter();
                 break;
-            case "E":  // Marks the end of case modification or quotemeta sequence
-                if (!str.isEmpty()) {
-                    // Apply current case modifications to the accumulated string before ending them
-                    String currentStr = str.toString();
-                    str.setLength(0);
-
-                    // Apply case modifications to the current string segment
-                    if (!caseModifierStack.isEmpty()) {
-                        // Apply persistent modifiers first (from bottom of stack)
-                        for (CaseModifierState state : caseModifierStack) {
-                            if (!state.isTemporary) {
-                                currentStr = applyCaseModification(currentStr, state.modifier);
-                            }
-                        }
-
-                        // Then apply temporary modifiers (from top of stack, most recent first)
-                        for (int i = caseModifierStack.size() - 1; i >= 0; i--) {
-                            CaseModifierState state = caseModifierStack.get(i);
-                            if (state.isTemporary) {
-                                currentStr = applyCaseModification(currentStr, state.modifier);
-                            }
-                        }
-
-                        // Remove temporary modifiers after applying
-                        while (!caseModifierStack.isEmpty() && caseModifierStack.peek().isTemporary) {
-                            caseModifierStack.pop();
-                        }
-                    }
-
-                    // Add the processed string segment
-                    if (ctx.quoteMetaEnabled) {
-                        parts.add(new OperatorNode("quotemeta", new StringNode(currentStr, tokenIndex), tokenIndex));
-                    } else {
-                        parts.add(new StringNode(currentStr, tokenIndex));
-                    }
-                }
-
-                // \E ends the most recent persistent modifier (U or L), or quotemeta
-                // It does NOT end temporary modifiers (u or l)
-                boolean foundPersistent = false;
-                for (int i = caseModifierStack.size() - 1; i >= 0; i--) {
-                    CaseModifierState state = caseModifierStack.get(i);
-                    if (!state.isTemporary) {
-                        caseModifierStack.remove(i);
-                        foundPersistent = true;
-                        break;
-                    }
-                }
-                if (!foundPersistent) {
-                    // No persistent case modifier found, try quotemeta
-                    ctx.quoteMetaEnabled = false;
-                }
+            case "E":
+                handleEndCaseModification();
                 break;
-            case "Q":   // Marks the start of quotemeta sequence
-                if (!str.isEmpty()) {
-                    addStringSegmentWithCaseModification(ctx, parts, new StringNode(str.toString(), tokenIndex), caseModifierStack);
-                    str.setLength(0);  // Reset the buffer
-                }
-                ctx.quoteMetaEnabled = true;
+            case "Q":
+                handleStartQuoteMeta();
                 break;
-            case "U":   // Start uppercase conversion
-                if (!str.isEmpty()) {
-                    addStringSegmentWithCaseModification(ctx, parts, new StringNode(str.toString(), tokenIndex), caseModifierStack);
-                    str.setLength(0);  // Reset the buffer
-                }
-                caseModifierStack.push(new CaseModifierState("U", false));
+            case "U":
+                handleStartUppercase();
                 break;
-            case "L":   // Start lowercase conversion
-                if (!str.isEmpty()) {
-                    addStringSegmentWithCaseModification(ctx, parts, new StringNode(str.toString(), tokenIndex), caseModifierStack);
-                    str.setLength(0);  // Reset the buffer
-                }
-                caseModifierStack.push(new CaseModifierState("L", false));
+            case "L":
+                handleStartLowercase();
                 break;
-            case "u":   // Uppercase next character only
-                if (!str.isEmpty()) {
-                    addStringSegmentWithCaseModification(ctx, parts, new StringNode(str.toString(), tokenIndex), caseModifierStack);
-                    str.setLength(0);  // Reset the buffer
-                }
-                caseModifierStack.push(new CaseModifierState("u", true));
+            case "u":
+                handleUppercaseNext();
                 break;
-            case "l":   // Lowercase next character only
-                if (!str.isEmpty()) {
-                    addStringSegmentWithCaseModification(ctx, parts, new StringNode(str.toString(), tokenIndex), caseModifierStack);
-                    str.setLength(0);  // Reset the buffer
-                }
-                caseModifierStack.push(new CaseModifierState("l", true));
+            case "l":
+                handleLowercaseNext();
                 break;
             case "x":
-                StringBuilder unicodeSeq = new StringBuilder();
-                token = tokens.get(parser.tokenIndex);
-                text = token.text;
-                if (token.type == LexerTokenType.IDENTIFIER) {
-                    // Handle \x9 \x20
-                    if (text.length() <= 2) {
-                        escape = text;
-                        parser.tokenIndex++;
-                    } else {
-                        escape = text.substring(0, 2);
-                        token.text = text.substring(2);
-                    }
-                    appendWithCaseModification(str, new String(Character.toChars(Integer.parseInt(escape, 16))), caseModifierStack);
-                } else if (text.equals("{")) {
-                    // Handle \x{...} for Unicode
-                    parser.tokenIndex++;
-                    while (true) {
-                        token = tokens.get(parser.tokenIndex++);  // Get the current token
-                        if (token.type == LexerTokenType.EOF) {
-                            throw new PerlCompilerException(tokenIndex, "Expected '}' after \\x{", ctx.errorUtil);
-                        }
-                        if (token.text.equals("}")) {
-                            break;
-                        }
-                        unicodeSeq.append(token.text);
-                    }
-                    appendWithCaseModification(str, new String(Character.toChars(Integer.parseInt(unicodeSeq.toString().trim(), 16))), caseModifierStack);
-                } else {
-                    throw new PerlCompilerException(tokenIndex, "Expected '{' after \\x", ctx.errorUtil);
-                }
+                handleHexEscape();
                 break;
             case "N":
-                // Handle \N{name} for Unicode character names
-                token = tokens.get(parser.tokenIndex);
-                if (token.text.equals("{")) {
-                    parser.tokenIndex++;
-                    StringBuilder nameBuilder = new StringBuilder();
-                    while (true) {
-                        token = tokens.get(parser.tokenIndex++);
-                        if (token.type == LexerTokenType.EOF) {
-                            throw new PerlCompilerException(tokenIndex, "Expected '}' after \\N{", ctx.errorUtil);
-                        }
-                        if (token.text.equals("}")) {
-                            break;
-                        }
-                        nameBuilder.append(token.text);
-                    }
-                    String name = nameBuilder.toString().trim();
-
-                    int charCode;
-                    if (name.startsWith("U+")) {
-                        // Handle \N{U+263D} format
-                        try {
-                            charCode = Integer.parseInt(name.substring(2), 16);
-                        } catch (NumberFormatException e) {
-                            throw new PerlCompilerException(tokenIndex, "Invalid Unicode code point: " + name, ctx.errorUtil);
-                        }
-                    } else {
-                        charCode = UCharacter.getCharFromName(name);
-                        if (charCode == -1) {
-                            throw new PerlCompilerException(tokenIndex, "Invalid Unicode character name: " + name, ctx.errorUtil);
-                        }
-                    }
-
-                    appendWithCaseModification(str, String.valueOf((char) charCode), caseModifierStack);
-                } else {
-                    throw new PerlCompilerException(tokenIndex, "Expected '{' after \\N", ctx.errorUtil);
-                }
+                handleUnicodeNameEscape();
                 break;
             default:
-                appendWithCaseModification(str, escape, caseModifierStack);
+                appendToCurrentSegment(escape);
                 break;
         }
+    }
+
+    private void handleEndCaseModification() {
+        flushCurrentSegment();
+
+        // \E ends the most recent persistent modifier (U or L), or quotemeta
+        boolean foundPersistent = false;
+        for (int i = caseModifierStack.size() - 1; i >= 0; i--) {
+            CaseModifierState state = caseModifierStack.get(i);
+            if (!state.isTemporary) {
+                caseModifierStack.remove(i);
+                foundPersistent = true;
+                break;
+            }
+        }
+        if (!foundPersistent) {
+            ctx.quoteMetaEnabled = false;
+        }
+    }
+
+    private void handleStartQuoteMeta() {
+        flushCurrentSegment();
+        ctx.quoteMetaEnabled = true;
+    }
+
+    private void handleStartUppercase() {
+        flushCurrentSegment();
+        caseModifierStack.push(new CaseModifierState("U", false));
+    }
+
+    private void handleStartLowercase() {
+        flushCurrentSegment();
+        caseModifierStack.push(new CaseModifierState("L", false));
+    }
+
+    private void handleUppercaseNext() {
+        flushCurrentSegment();
+        caseModifierStack.push(new CaseModifierState("u", true));
+    }
+
+    private void handleLowercaseNext() {
+        flushCurrentSegment();
+        caseModifierStack.push(new CaseModifierState("l", true));
     }
 }
