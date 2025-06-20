@@ -1,12 +1,10 @@
 package org.perlonjava.parser;
 
-import com.ibm.icu.lang.UCharacter;
 import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,18 +15,6 @@ import java.util.Stack;
  * Extends StringSegmentParser to handle the base string parsing functionality.
  */
 public class StringDoubleQuoted extends StringSegmentParser {
-
-    private static class CaseModifier {
-        String type; // "U", "L", "u", "l"
-        int startSegment; // segment index where this modifier starts
-        List<Node> segmentsUnderModifier; // segments that should be affected by this modifier
-
-        CaseModifier(String type, int startSegment) {
-            this.type = type;
-            this.startSegment = startSegment;
-            this.segmentsUnderModifier = new ArrayList<>();
-        }
-    }
 
     private final Stack<CaseModifier> activeCaseModifiers = new Stack<>();
     private final boolean parseEscapes;
@@ -42,22 +28,17 @@ public class StringDoubleQuoted extends StringSegmentParser {
      * Parses a double-quoted string, handling escape sequences and variable interpolation.
      */
     static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes) {
-        String input = rawStr.buffers.getFirst();
-        int tokenIndex = rawStr.next;
-        boolean isRegex = !parseEscapes;
+        var input = rawStr.buffers.getFirst();
+        var tokenIndex = rawStr.next;
+        var isRegex = !parseEscapes;
         ctx.logDebug("parseDoubleQuotedString isRegex:" + isRegex);
 
-        Lexer lexer = new Lexer(input);
-        List<LexerToken> tokens = lexer.tokenize();
-        Parser parser = new Parser(ctx, tokens);
+        var lexer = new Lexer(input);
+        var tokens = lexer.tokenize();
+        var parser = new Parser(ctx, tokens);
 
-        StringDoubleQuoted doubleQuotedParser = new StringDoubleQuoted(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes);
+        var doubleQuotedParser = new StringDoubleQuoted(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes);
         return doubleQuotedParser.parse();
-    }
-
-    @Override
-    protected void appendToCurrentSegment(String text) {
-        currentSegment.append(text);
     }
 
     @Override
@@ -65,14 +46,12 @@ public class StringDoubleQuoted extends StringSegmentParser {
         segments.add(node);
 
         // Add this segment to all active case modifiers
-        for (CaseModifier modifier : activeCaseModifiers) {
-            modifier.segmentsUnderModifier.add(node);
-        }
+        activeCaseModifiers.forEach(modifier -> modifier.segmentsUnderModifier().add(node));
     }
 
     @Override
     public Node parse() {
-        Node result = super.parse();
+        var result = super.parse();
 
         // Close any remaining case modifications at end of string
         while (!activeCaseModifiers.isEmpty()) {
@@ -83,28 +62,28 @@ public class StringDoubleQuoted extends StringSegmentParser {
     }
 
     private void applyCaseModifier(CaseModifier modifier) {
-        if (modifier.segmentsUnderModifier.isEmpty()) {
+        if (modifier.segmentsUnderModifier().isEmpty()) {
             return;
         }
 
-        String operator = getCaseOperator(modifier.type);
+        var operator = getCaseOperator(modifier.type());
         if (operator == null) {
             return;
         }
 
         // Create a join node for the segments under this modifier
-        Node contentNode = createJoinIfNeeded(modifier.segmentsUnderModifier);
+        var contentNode = createJoinIfNeeded(modifier.segmentsUnderModifier());
 
         // Create the case modification operator node
-        Node caseModifiedNode = new OperatorNode(operator, contentNode, parser.tokenIndex);
+        var caseModifiedNode = new OperatorNode(operator, contentNode, parser.tokenIndex);
 
         // Replace the segments in the main segments list
         // Find the range of segments that were affected
-        int firstAffectedIndex = -1;
-        int lastAffectedIndex = -1;
+        var firstAffectedIndex = -1;
+        var lastAffectedIndex = -1;
 
         for (int i = 0; i < segments.size(); i++) {
-            if (modifier.segmentsUnderModifier.contains(segments.get(i))) {
+            if (modifier.segmentsUnderModifier().contains(segments.get(i))) {
                 if (firstAffectedIndex == -1) {
                     firstAffectedIndex = i;
                 }
@@ -114,43 +93,41 @@ public class StringDoubleQuoted extends StringSegmentParser {
 
         if (firstAffectedIndex != -1) {
             // Remove the affected segments and replace with the case-modified node
-            for (int i = lastAffectedIndex; i >= firstAffectedIndex; i--) {
-                segments.remove(i);
+            if (lastAffectedIndex >= firstAffectedIndex) {
+                segments.subList(firstAffectedIndex, lastAffectedIndex + 1).clear();
             }
             segments.add(firstAffectedIndex, caseModifiedNode);
 
             // Update segments in parent case modifiers
-            for (CaseModifier parentModifier : activeCaseModifiers) {
+            activeCaseModifiers.forEach(parentModifier -> {
                 // Remove old segments from parent modifiers
-                parentModifier.segmentsUnderModifier.removeAll(modifier.segmentsUnderModifier);
+                parentModifier.segmentsUnderModifier().removeAll(modifier.segmentsUnderModifier());
                 // Add the new case-modified node
-                parentModifier.segmentsUnderModifier.add(caseModifiedNode);
-            }
+                parentModifier.segmentsUnderModifier().add(caseModifiedNode);
+            });
         }
     }
 
     private Node createJoinIfNeeded(List<Node> nodeList) {
-        if (nodeList.isEmpty()) {
-            return new StringNode("", parser.tokenIndex);
-        } else if (nodeList.size() == 1) {
-            return nodeList.get(0);
-        } else {
-            ListNode listNode = new ListNode(parser.tokenIndex);
-            for (Node node : nodeList) {
-                listNode.elements.add(node);
+        return switch (nodeList.size()) {
+            case 0 -> new StringNode("", parser.tokenIndex);
+            case 1 -> nodeList.get(0);
+            default -> {
+                var listNode = new ListNode(parser.tokenIndex);
+                listNode.elements.addAll(nodeList);
+                yield new BinaryOperatorNode("join", new StringNode("", parser.tokenIndex), listNode, parser.tokenIndex);
             }
-            return new BinaryOperatorNode("join", new StringNode("", parser.tokenIndex), listNode, parser.tokenIndex);
-        }
+        };
     }
 
     private String getCaseOperator(String modifier) {
-        switch (modifier) {
-            case "U": return "uc";
-            case "L": return "lc";
-            case "u": return "ucfirst";
-            case "l": return "lcfirst";
-            default: return null;
-        }
+        return switch (modifier) {
+            case "U" -> "uc";
+            case "L" -> "lc";
+            case "u" -> "ucfirst";
+            case "l" -> "lcfirst";
+            default -> null;
+        };
     }
 
     @Override
@@ -160,7 +137,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
         } else {
             // Consume the escaped character without processing
             currentSegment.append("\\");
-            LexerToken token = tokens.get(parser.tokenIndex);
+            var token = tokens.get(parser.tokenIndex);
             if (token.text.length() == 1) {
                 currentSegment.append(token.text);
                 parser.tokenIndex++;
@@ -172,80 +149,45 @@ public class StringDoubleQuoted extends StringSegmentParser {
     }
 
     private void parseDoubleQuotedEscapes() {
-        LexerToken token = tokens.get(parser.tokenIndex);
+        var token = tokens.get(parser.tokenIndex);
 
         if (token.type == LexerTokenType.NUMBER) {
             // Octal like `\200`
-            StringBuilder octalStr = new StringBuilder(TokenUtils.consumeChar(parser));
-            String chr = TokenUtils.peekChar(parser);
+            var octalStr = new StringBuilder(TokenUtils.consumeChar(parser));
+            var chr = TokenUtils.peekChar(parser);
             while (octalStr.length() < 3 && chr.compareTo("0") >= 0 && chr.compareTo("7") <= 0) {
                 octalStr.append(TokenUtils.consumeChar(parser));
                 chr = TokenUtils.peekChar(parser);
             }
             ctx.logDebug("octalStr: " + octalStr);
-            char octalChar = (char) Integer.parseInt(octalStr.toString(), 8);
+            var octalChar = (char) Integer.parseInt(octalStr.toString(), 8);
             appendToCurrentSegment(String.valueOf(octalChar));
             return;
         }
 
-        String escape = TokenUtils.consumeChar(parser);
+        var escape = TokenUtils.consumeChar(parser);
 
         switch (escape) {
-            case "\\":
-            case "\"":
-                appendToCurrentSegment(escape);
-                break;
-            case "n":
-                appendToCurrentSegment("\n");
-                break;
-            case "t":
-                appendToCurrentSegment("\t");
-                break;
-            case "r":
-                appendToCurrentSegment("\r");
-                break;
-            case "f":
-                appendToCurrentSegment("\f");
-                break;
-            case "b":
-                appendToCurrentSegment("\b");
-                break;
-            case "a":
-                appendToCurrentSegment(String.valueOf((char) 7));
-                break;
-            case "e":
-                appendToCurrentSegment(String.valueOf((char) 27));
-                break;
-            case "c":
-                handleControlCharacter();
-                break;
-            case "E":
-                handleEndCaseModification();
-                break;
-            case "Q":
+            case "\\", "\"" -> appendToCurrentSegment(escape);
+            case "n" -> appendToCurrentSegment("\n");
+            case "t" -> appendToCurrentSegment("\t");
+            case "r" -> appendToCurrentSegment("\r");
+            case "f" -> appendToCurrentSegment("\f");
+            case "b" -> appendToCurrentSegment("\b");
+            case "a" -> appendToCurrentSegment(String.valueOf((char) 7));
+            case "e" -> appendToCurrentSegment(String.valueOf((char) 27));
+            case "c" -> handleControlCharacter();
+            case "E" -> handleEndCaseModification();
+            case "Q" -> {
                 // Handle quotemeta if needed
-                break;
-            case "U":
-                handleStartUppercase();
-                break;
-            case "L":
-                handleStartLowercase();
-                break;
-            case "u":
-                handleUppercaseNext();
-                break;
-            case "l":
-                handleLowercaseNext();
-                break;
-            case "x":
-                handleHexEscape();
-                break;
-            case "N":
-                handleUnicodeNameEscape();
-                break;
-            default:
-                appendToCurrentSegment(escape);
-                break;
+            }
+            case "U" -> handleStartUppercase();
+            case "L" -> handleStartLowercase();
+            case "u" -> handleUppercaseNext();
+            case "l" -> handleLowercaseNext();
+            case "x" -> handleHexEscape();
+            case "N" -> handleUnicodeNameEscape();
+            default -> appendToCurrentSegment(escape);
         }
     }
 
@@ -278,96 +220,20 @@ public class StringDoubleQuoted extends StringSegmentParser {
         activeCaseModifiers.push(new CaseModifier("l", segments.size()));
     }
 
-    @Override
-    void handleControlCharacter() {
-        String controlChar = TokenUtils.consumeChar(parser);
-        if (!controlChar.isEmpty()) {
-            char c = controlChar.charAt(0);
-            if (c >= 'A' && c <= 'Z') {
-                appendToCurrentSegment(String.valueOf((char)(c - 'A' + 1)));
-            } else if (c >= 'a' && c <= 'z') {
-                appendToCurrentSegment(String.valueOf((char)(c - 'a' + 1)));
-            } else {
-                appendToCurrentSegment(String.valueOf(c));
-            }
-        }
-    }
-
-    @Override
-    void handleHexEscape() {
-        StringBuilder hexStr = new StringBuilder();
-        String chr = TokenUtils.peekChar(parser);
-
-        if (chr.equals("{")) {
-            TokenUtils.consumeChar(parser);
-            chr = TokenUtils.peekChar(parser);
-            while (!chr.equals("}") && !chr.isEmpty()) {
-                if ((chr.compareTo("0") >= 0 && chr.compareTo("9") <= 0) ||
-                        (chr.compareToIgnoreCase("a") >= 0 && chr.compareToIgnoreCase("f") <= 0)) {
-                    hexStr.append(TokenUtils.consumeChar(parser));
-                    chr = TokenUtils.peekChar(parser);
-                } else {
-                    break;
-                }
-            }
-            if (chr.equals("}")) {
-                TokenUtils.consumeChar(parser);
-            }
-        } else {
-            while (hexStr.length() < 2 &&
-                    ((chr.compareTo("0") >= 0 && chr.compareTo("9") <= 0) ||
-                            (chr.compareToIgnoreCase("a") >= 0 && chr.compareToIgnoreCase("f") <= 0))) {
-                hexStr.append(TokenUtils.consumeChar(parser));
-                chr = TokenUtils.peekChar(parser);
-            }
-        }
-
-        if (hexStr.length() > 0) {
-            try {
-                int hexValue = Integer.parseInt(hexStr.toString(), 16);
-                if (hexValue <= 0xFFFF) {
-                    appendToCurrentSegment(String.valueOf((char)hexValue));
-                } else {
-                    appendToCurrentSegment(new String(Character.toChars(hexValue)));
-                }
-            } catch (NumberFormatException e) {
-                appendToCurrentSegment("x");
-            }
-        } else {
-            appendToCurrentSegment("x");
-        }
-    }
-
-    @Override
-    void handleUnicodeNameEscape() {
-        if (TokenUtils.peekChar(parser).equals("{")) {
-            TokenUtils.consumeChar(parser);
-            StringBuilder nameBuilder = new StringBuilder();
-            String chr = TokenUtils.peekChar(parser);
-
-            while (!chr.equals("}") && !chr.isEmpty()) {
-                nameBuilder.append(TokenUtils.consumeChar(parser));
-                chr = TokenUtils.peekChar(parser);
-            }
-
-            if (chr.equals("}")) {
-                TokenUtils.consumeChar(parser);
-                String name = nameBuilder.toString();
-                try {
-                    int codePoint = UCharacter.getCharFromName(name);
-                    if (codePoint != -1) {
-                        appendToCurrentSegment(new String(Character.toChars(codePoint)));
-                    } else {
-                        appendToCurrentSegment("N{" + name + "}");
-                    }
-                } catch (Exception e) {
-                    appendToCurrentSegment("N{" + name + "}");
-                }
-            } else {
-                appendToCurrentSegment("N{" + nameBuilder.toString());
-            }
-        } else {
-            appendToCurrentSegment("N");
+    /**
+     * Record representing a case modification state.
+     *
+     * @param type the type of case modification ("U", "L", "u", "l")
+     * @param startSegment the segment index where this modifier starts
+     * @param segmentsUnderModifier the segments that should be affected by this modifier
+     */
+    private record CaseModifier(
+            String type,
+            int startSegment,
+            List<Node> segmentsUnderModifier
+    ) {
+        CaseModifier(String type, int startSegment) {
+            this(type, startSegment, new ArrayList<>());
         }
     }
 }
