@@ -15,3 +15,6 @@ $v = "";
 $result2 = "abc\l\U${v}h\Ei";
 is($result2, 'abchi', 'Interpolated: abc\\l\\U\${v}h\\Ei should become abchi');
 
+$v = "";
+$result2 = "abc\L lower \U${v} upper \Ei";
+is($result2, 'abc lower  UPPER i', 'Interpolated \\L + \\U');
