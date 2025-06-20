@@ -18,40 +18,61 @@ import java.util.Stack;
  * Double-quoted strings in Perl support several advanced features:</p>
  *
  * <ul>
- *   <li><strong>Variable interpolation:</strong> $var, @array, ${expr}</li>
+ *   <li><strong>Variable interpolation:</strong> $var, @array, ${expr}, @{expr}</li>
  *   <li><strong>Escape sequences:</strong> \n, \t, \x{hex}, \N{unicode_name}</li>
  *   <li><strong>Case modification:</strong> \U...\E (uppercase), \L...\E (lowercase)</li>
  *   <li><strong>Single character case:</strong> \\u (next char upper), \l (next char lower)</li>
  *   <li><strong>Quote metacharacters:</strong> \Q...\E (escape regex metacharacters)</li>
  * </ul>
  *
- * <p>Case modifications can be nested and are applied in the order they appear.
- * For example: "\L\\u$name\E" will lowercase the entire interpolated name except
- * for the first character which will be uppercase.</p>
+ * <h3>Case Modification System</h3>
+ * <p>The parser maintains a stack of active case modifiers. When a case modifier like \U
+ * is encountered, all subsequent text and interpolated variables are wrapped in the
+ * appropriate case conversion function. Modifiers can be nested, but conflicting
+ * modifiers (like \L inside \U) will terminate the previous modifier.</p>
+ *
+ * <h3>Examples</h3>
+ * <pre>
+ * "Hello \U$name\E"        # uc($name)
+ * "Hello \\u$name"          # ucfirst($name)
+ * "\L\U$text\E\E"          # lc(uc($text))
+ * "Value: \Q$special\E"    # quotemeta($special)
+ * </pre>
  *
  * @see StringSegmentParser
  * @see StringParser
  */
 public class StringDoubleQuoted extends StringSegmentParser {
 
-    /** Stack of active case modifiers, supporting nested case modifications */
-    private final Stack<CaseModifier> activeCaseModifiers = new Stack<>();
+    /**
+     * Stack of active case modifiers.
+     *
+     * <p>Case modifiers can be nested, so we use a stack to track them.
+     * When \E is encountered, we pop and apply the most recent modifier.
+     * The stack allows complex nesting like \L outer \U inner \E \E.
+     */
+    private final Stack<CaseModifier> caseModifiers = new Stack<>();
 
-    /** Flag indicating whether escape sequences should be processed */
+    /**
+     * Flag indicating whether escape sequences should be processed.
+     *
+     * <p>When true, escape sequences like \n are converted to their actual values.
+     * When false (for regex contexts), escape sequences are preserved literally
+     * to be processed by the regex engine.
+     */
     private final boolean parseEscapes;
-
-    /** Track if we need to check for single-char modifier completion */
-    private boolean needToCheckSingleCharModifier = false;
 
     /**
      * Private constructor for StringDoubleQuoted parser.
      *
-     * @param ctx the emitter context for logging and error handling
-     * @param tokens the list of tokens representing the string content
-     * @param parser the parser instance for parsing embedded expressions
-     * @param tokenIndex the token index in the original source for error reporting
-     * @param isRegex flag indicating if this is parsing a regex pattern
-     * @param parseEscapes flag indicating whether to process escape sequences
+     * <p>Use {@link #parseDoubleQuotedString} factory method to create instances.
+     *
+     * @param ctx The emitter context for error reporting
+     * @param tokens The tokenized string content
+     * @param parser The parser instance for complex expressions
+     * @param tokenIndex The starting token position
+     * @param isRegex True if parsing regex pattern (affects interpolation)
+     * @param parseEscapes True to process escape sequences, false to preserve them
      */
     private StringDoubleQuoted(EmitterContext ctx, List<LexerToken> tokens, Parser parser, int tokenIndex, boolean isRegex, boolean parseEscapes) {
         super(ctx, tokens, parser, tokenIndex, isRegex);
@@ -61,270 +82,213 @@ public class StringDoubleQuoted extends StringSegmentParser {
     /**
      * Parses a double-quoted string, handling escape sequences and variable interpolation.
      *
-     * <p>This is the main entry point for parsing double-quoted strings. It creates
-     * a lexer for the string content and delegates to a StringDoubleQuoted instance
-     * to handle the parsing.</p>
+     * <p>This is the main entry point for parsing double-quoted strings. It handles:
+     * <ul>
+     *   <li>Creating a lexer for the string content</li>
+     *   <li>Tokenizing the content</li>
+     *   <li>Creating a parser instance</li>
+     *   <li>Delegating to the StringDoubleQuoted parser</li>
+     * </ul>
      *
-     * <p>The parseEscapes parameter determines whether escape sequences like \n, \t
-     * should be processed. When false (typically for regex contexts), escape sequences
-     * are preserved literally.</p>
-     *
-     * @param ctx the emitter context for logging and error handling
-     * @param rawStr the parsed string data containing the string content and position info
-     * @param parseEscapes whether to process escape sequences or preserve them literally
-     * @return an AST node representing the parsed string
+     * @param ctx The emitter context for logging and error handling
+     * @param rawStr The parsed string data containing the string content and position info
+     * @param parseEscapes Whether to process escape sequences or preserve them literally
+     * @return An AST node representing the parsed string (StringNode, BinaryOperatorNode for join, etc.)
      */
     static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes) {
+        // Extract the first buffer (double-quoted strings don't have multiple parts like here-docs)
         var input = rawStr.buffers.getFirst();
         var tokenIndex = rawStr.next;
+
+        // In regex context, we preserve escapes for the regex engine
         var isRegex = !parseEscapes;
         ctx.logDebug("parseDoubleQuotedString isRegex:" + isRegex);
 
+        // Tokenize the string content
         var lexer = new Lexer(input);
         var tokens = lexer.tokenize();
         var parser = new Parser(ctx, tokens);
 
+        // Create and run the double-quoted string parser
         var doubleQuotedParser = new StringDoubleQuoted(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes);
         return doubleQuotedParser.parse();
     }
 
     /**
-     * Adds a string segment to the segments list and registers it with active case modifiers.
+     * Adds a string segment and tracks it for active case modifiers.
      *
-     * <p>This override ensures that any segments added while case modifiers are active
-     * are tracked so they can be transformed when the case modifier is closed.
-     * This enables proper handling of nested case modifications.</p>
+     * <p>This override ensures that all segments (both literal text and interpolated
+     * variables) are tracked by active case modifiers. This allows modifiers like
+     * \U to affect both literal text and variable values.
      *
-     * @param node the AST node representing a string segment
+     * <p>After adding a segment, we check if any single-character modifiers (\\u, \l)
+     * should be deactivated, as they only affect one character.
+     *
+     * @param node The AST node to add as a segment
      */
     @Override
     protected void addStringSegment(Node node) {
-        // First check if we need to deactivate any single-char modifiers
-        if (needToCheckSingleCharModifier) {
-            checkAndDeactivateSingleCharModifiers();
-            needToCheckSingleCharModifier = false;
-        }
-
+        // Add to main segments list
         segments.add(node);
 
-        // Register this segment with all currently active case modifiers
-        activeCaseModifiers.forEach(modifier -> modifier.segmentsUnderModifier().add(node));
-
-        // Mark that we should check for single-char modifier completion
-        // after this segment has been added
-        if (!activeCaseModifiers.isEmpty() && activeCaseModifiers.peek().isSingleChar()) {
-            needToCheckSingleCharModifier = true;
+        // Track this segment in all active case modifiers
+        // This allows nested modifiers to all track the same content
+        for (CaseModifier modifier : caseModifiers) {
+            modifier.addSegment(node);
         }
+
+        // Check if any single-char modifiers should be deactivated
+        // This happens after they've affected at least one character
+        checkSingleCharModifiers();
     }
 
     /**
-     * Override to handle literal text appending.
-     * This ensures single-char modifiers are checked even for literal text.
+     * Override to handle literal text appending with case modifier tracking.
+     *
+     * <p>When literal text is appended, we need to track whether single-character
+     * modifiers (\\u, \l) have affected any content. Once they have, they should
+     * be deactivated after the current segment is complete.
+     *
+     * @param text The literal text to append
      */
     @Override
     protected void appendToCurrentSegment(String text) {
         super.appendToCurrentSegment(text);
 
-        // If we just added text and have an active single-char modifier,
-        // we need to check if we should deactivate it
-        if (!text.isEmpty() && !activeCaseModifiers.isEmpty() && activeCaseModifiers.peek().isSingleChar()) {
-            // Mark that the single-char modifier has affected content
-            activeCaseModifiers.peek().setHasAffectedContent(true);
-        }
-    }
-
-    /**
-     * Override to flush segments properly.
-     */
-    @Override
-    protected void flushCurrentSegment() {
-        super.flushCurrentSegment();
-
-        // After flushing, check if we need to deactivate single-char modifiers
-        if (needToCheckSingleCharModifier) {
-            checkAndDeactivateSingleCharModifiers();
-            needToCheckSingleCharModifier = false;
-        }
-    }
-
-    /**
-     * Checks for single-character modifiers and deactivates them after affecting one segment.
-     * Single-character modifiers (\l, \\u) should only affect the next character/segment.
-     */
-    private void checkAndDeactivateSingleCharModifiers() {
-        while (!activeCaseModifiers.isEmpty()) {
-            var topModifier = activeCaseModifiers.peek();
-            if (topModifier.isSingleChar() && topModifier.hasAffectedContent()) {
-                // Apply and remove the single-character modifier
-                applyCaseModifier(activeCaseModifiers.pop());
-            } else {
-                break;
-            }
+        // Mark single-char modifiers as having affected content
+        // This is important because \\u and \l only affect the next character
+        if (!text.isEmpty() && !caseModifiers.isEmpty() && caseModifiers.peek().isSingleChar) {
+            caseModifiers.peek().hasAffectedContent = true;
         }
     }
 
     /**
      * Parses the string and applies any remaining case modifications.
      *
-     * <p>This override of the template method ensures that any case modifications
-     * that are still active at the end of the string are properly applied.
-     * This handles cases where \U or \L is used without a corresponding \E.</p>
+     * <p>This override ensures that any unclosed case modifiers (missing \E)
+     * are still applied to their content. This matches Perl's behavior where
+     * a missing \E is implicitly added at the end of the string.
      *
-     * @return the final AST node representing the complete parsed string
+     * @return The final AST node representing the parsed string
      */
     @Override
     public Node parse() {
+        // Parse the string content using the base class
         var result = super.parse();
 
-        // Apply any case modifications that weren't explicitly closed with \E
-        while (!activeCaseModifiers.isEmpty()) {
-            applyCaseModifier(activeCaseModifiers.pop());
+        // Apply any unclosed case modifications
+        // This handles cases like "text \U more text" without \E
+        while (!caseModifiers.isEmpty()) {
+            applyCaseModifier(caseModifiers.pop());
         }
 
-        return createJoinIfNeeded(segments);
+        return createJoinNode(segments);
+    }
+
+    /**
+     * Checks and deactivates single-character modifiers after they've affected content.
+     *
+     * <p>Single-character modifiers (\\u and \l) only affect the next character.
+     * Once they've modified something, they should be removed from the stack
+     * and their accumulated content should be wrapped in the appropriate function.
+     */
+    private void checkSingleCharModifiers() {
+        // Process all single-char modifiers that have affected content
+        while (!caseModifiers.isEmpty() &&
+                caseModifiers.peek().isSingleChar &&
+                caseModifiers.peek().hasAffectedContent) {
+            applyCaseModifier(caseModifiers.pop());
+        }
     }
 
     /**
      * Applies a case modification to its associated segments.
      *
-     * <p>This method transforms the segments that were collected under a case modifier
-     * by wrapping them in the appropriate case transformation operator (uc, lc, ucfirst, lcfirst).
-     * The transformed segments replace the original segments in the main segments list.</p>
+     * <p>This method:
+     * <ol>
+     *   <li>Determines the appropriate Perl function for the modifier</li>
+     *   <li>Creates a joined node from all segments affected by the modifier</li>
+     *   <li>Wraps the content in the case function (uc, lc, ucfirst, lcfirst)</li>
+     *   <li>Replaces the original segments with the case-modified node</li>
+     *   <li>Updates parent modifiers to reference the new node</li>
+     * </ol>
      *
-     * <p>For nested case modifiers, the method also updates parent modifiers to reference
-     * the new transformed node instead of the individual segments.</p>
-     *
-     * @param modifier the case modifier to apply
+     * @param modifier The case modifier to apply
      */
     private void applyCaseModifier(CaseModifier modifier) {
-        if (modifier.segmentsUnderModifier().isEmpty()) {
+        if (modifier.segments.isEmpty()) {
             return;
         }
 
-        var operator = getCaseOperator(modifier.type());
+        // Map modifier type to Perl function name
+        String operator = switch (modifier.type) {
+            case "U" -> "uc";       // \U - uppercase
+            case "L" -> "lc";       // \L - lowercase
+            case "u" -> "ucfirst";  // \\u - uppercase first
+            case "l" -> "lcfirst";  // \l - lowercase first
+            default -> null;
+        };
+
         if (operator == null) {
             return;
         }
 
-        // Create a join node for the segments under this modifier
-        var contentNode = createJoinIfNeeded(modifier.segmentsUnderModifier());
-
-        // Create the case modification operator node
+        // Create case-modified node
+        var contentNode = createJoinNode(modifier.segments);
         var caseModifiedNode = new OperatorNode(operator, contentNode, parser.tokenIndex);
 
-        // Find and replace the affected segments in the main segments list
-        replaceSegmentsWithCaseModified(modifier, caseModifiedNode);
-    }
+        // Replace segments with case-modified node
+        int firstIndex = segments.indexOf(modifier.segments.getFirst());
+        if (firstIndex >= 0) {
+            // Remove all segments of this modifier
+            segments.removeAll(modifier.segments);
+            // Insert the case-modified node at the original position
+            segments.add(firstIndex, caseModifiedNode);
 
-    /**
-     * Replaces segments affected by a case modifier with the case-modified node.
-     * This method properly handles the segment replacement logic.
-     */
-    private void replaceSegmentsWithCaseModified(CaseModifier modifier, Node caseModifiedNode) {
-        var affectedSegments = modifier.segmentsUnderModifier();
-        if (affectedSegments.isEmpty()) {
-            return;
-        }
-
-        // Find all indices of affected segments
-        List<Integer> indicesToRemove = new ArrayList<>();
-        for (int i = 0; i < segments.size(); i++) {
-            if (affectedSegments.contains(segments.get(i))) {
-                indicesToRemove.add(i);
-            }
-        }
-
-        if (!indicesToRemove.isEmpty()) {
-            // Remove segments in reverse order to maintain indices
-            int insertIndex = indicesToRemove.get(0);
-            for (int i = indicesToRemove.size() - 1; i >= 0; i--) {
-                segments.remove((int) indicesToRemove.get(i));
-            }
-
-            // Insert the case-modified node at the first position
-            segments.add(insertIndex, caseModifiedNode);
-
-            // Update parent case modifiers
-            updateParentModifiers(affectedSegments, caseModifiedNode);
-        }
-    }
-
-    /**
-     * Updates parent case modifiers to reference the new case-modified node
-     * instead of the individual segments that were replaced.
-     */
-    private void updateParentModifiers(List<Node> oldSegments, Node newNode) {
-        for (var parentModifier : activeCaseModifiers) {
-            boolean hadAnyOldSegment = false;
-            for (var oldSegment : oldSegments) {
-                if (parentModifier.segmentsUnderModifier().remove(oldSegment)) {
-                    hadAnyOldSegment = true;
+            // Update parent modifiers to reference the new node instead of the old segments
+            // This maintains proper nesting when modifiers are nested
+            for (CaseModifier parent : caseModifiers) {
+                if (parent.segments.removeAll(modifier.segments)) {
+                    parent.segments.add(caseModifiedNode);
                 }
             }
-            // Add the new node only once if we removed any old segments
-            if (hadAnyOldSegment) {
-                parentModifier.segmentsUnderModifier().add(newNode);
-            }
         }
     }
 
     /**
-     * Creates a join operation if multiple nodes are present, otherwise returns the single node.
+     * Creates a join node for multiple segments or returns single segment.
      *
-     * <p>This utility method handles the common pattern of needing to join multiple string
-     * segments together. It optimizes for the common cases:</p>
+     * <p>This utility method handles the common pattern of joining string segments:
      * <ul>
-     *   <li>0 nodes: returns empty string</li>
-     *   <li>1 node: returns the node directly</li>
-     *   <li>Multiple nodes: creates a join operation with empty separator</li>
+     *   <li>Empty list: returns empty string node</li>
+     *   <li>Single segment: returns it directly (no join needed)</li>
+     *   <li>Multiple segments: creates join("", segment1, segment2, ...)</li>
      * </ul>
      *
-     * @param nodeList the list of nodes to potentially join
-     * @return a single node representing the joined content
+     * @param nodes The list of nodes to join
+     * @return A single node representing the joined content
      */
-    private Node createJoinIfNeeded(List<Node> nodeList) {
-        return switch (nodeList.size()) {
+    private Node createJoinNode(List<Node> nodes) {
+        return switch (nodes.size()) {
             case 0 -> new StringNode("", parser.tokenIndex);
-            case 1 -> nodeList.get(0);
+            case 1 -> nodes.getFirst();
             default -> {
                 var listNode = new ListNode(parser.tokenIndex);
-                listNode.elements.addAll(nodeList);
+                listNode.elements.addAll(nodes);
                 yield new BinaryOperatorNode("join", new StringNode("", parser.tokenIndex), listNode, parser.tokenIndex);
             }
         };
     }
 
     /**
-     * Maps case modification escape sequences to their corresponding operators.
+     * Parses escape sequences based on context.
      *
-     * <p>Perl supports several case modification operators:</p>
+     * <p>This method delegates to different escape handling based on the
+     * parseEscapes flag:
      * <ul>
-     *   <li>\U - uppercase all following characters until \E</li>
-     *   <li>\L - lowercase all following characters until \E</li>
-     *   <li>\\u - uppercase only the next character</li>
-     *   <li>\l - lowercase only the next character</li>
+     *   <li>parseEscapes=true: Process escapes like \n to actual newline</li>
+     *   <li>parseEscapes=false: Preserve escapes for regex engine</li>
      * </ul>
-     *
-     * @param modifier the case modification type ("U", "L", "u", "l")
-     * @return the corresponding operator name, or null if not recognized
-     */
-    private String getCaseOperator(String modifier) {
-        return switch (modifier) {
-            case "U" -> "uc";        // uppercase
-            case "L" -> "lc";        // lowercase
-            case "u" -> "ucfirst";   // uppercase first character
-            case "l" -> "lcfirst";   // lowercase first character
-            default -> null;
-        };
-    }
-
-    /**
-     * Parses escape sequences in double-quoted strings.
-     *
-     * <p>This method handles the escape sequence processing based on the parseEscapes flag.
-     * When parseEscapes is true, escape sequences are processed and converted to their
-     * corresponding characters. When false (typically in regex contexts), the escape
-     * sequences are preserved literally.</p>
      */
     @Override
     protected void parseEscapeSequence() {
@@ -332,235 +296,179 @@ public class StringDoubleQuoted extends StringSegmentParser {
             parseDoubleQuotedEscapes();
         } else {
             // In regex context, preserve escape sequences literally
-            // Consume the escaped character without processing
+            // The regex engine will process them
             currentSegment.append("\\");
             var token = tokens.get(parser.tokenIndex);
+            currentSegment.append(token.text.charAt(0));
             if (token.text.length() == 1) {
-                currentSegment.append(token.text);
                 parser.tokenIndex++;
             } else {
-                // Handle multi-character tokens by consuming only the first character
-                currentSegment.append(token.text.charAt(0));
                 token.text = token.text.substring(1);
             }
         }
     }
 
     /**
-     * Processes escape sequences specific to double-quoted strings.
+     * Processes escape sequences for double-quoted strings.
      *
-     * <p>This method handles all the escape sequences supported in Perl double-quoted strings:</p>
+     * <p>This method handles all escape sequences valid in double-quoted strings:
      * <ul>
-     *   <li><strong>Standard escapes:</strong> \\, \", \n, \t, \r, \f, \b, \a, \e</li>
-     *   <li><strong>Octal escapes:</strong> \123 (up to 3 octal digits)</li>
-     *   <li><strong>Hex escapes:</strong> \x41, \x{41}</li>
-     *   <li><strong>Unicode names:</strong> \N{LATIN CAPITAL LETTER A}</li>
-     *   <li><strong>Control characters:</strong> \cA, \cZ</li>
-     *   <li><strong>Case modifications:</strong> \U, \L, \\u, \l, \E</li>
-     *   <li><strong>Quote meta:</strong> \Q (not fully implemented)</li>
+     *   <li>Standard escapes: \n, \t, \r, etc.</li>
+     *   <li>Literal escapes: \\, \"</li>
+     *   <li>Octal escapes: \123</li>
+     *   <li>Hex escapes: \x41, \x{263A}</li>
+     *   <li>Control chars: \cA</li>
+     *   <li>Unicode names: \N{LATIN SMALL LETTER A}</li>
+     *   <li>Case modifiers: \U, \L, \\u, \l, \E</li>
+     *   <li>Quotemeta: \Q...\E</li>
      * </ul>
      */
     private void parseDoubleQuotedEscapes() {
         var token = tokens.get(parser.tokenIndex);
 
+        // Handle octal escapes (\123)
+        // Octal escapes start with a digit 0-7
         if (token.type == LexerTokenType.NUMBER) {
-            // Handle octal escape sequences like \200
             var octalStr = new StringBuilder(TokenUtils.consumeChar(parser));
             var chr = TokenUtils.peekChar(parser);
-            // Consume up to 3 octal digits
+            // Collect up to 3 octal digits
             while (octalStr.length() < 3 && chr.compareTo("0") >= 0 && chr.compareTo("7") <= 0) {
                 octalStr.append(TokenUtils.consumeChar(parser));
                 chr = TokenUtils.peekChar(parser);
             }
-            ctx.logDebug("octalStr: " + octalStr);
-            var octalChar = (char) Integer.parseInt(octalStr.toString(), 8);
-            appendToCurrentSegment(String.valueOf(octalChar));
+            // Convert octal to character
+            appendToCurrentSegment(String.valueOf((char) Integer.parseInt(octalStr.toString(), 8)));
             return;
         }
 
+        // Consume the character after the backslash
         var escape = TokenUtils.consumeChar(parser);
 
         switch (escape) {
-            // Standard character escapes
+            // Standard escapes - convert to actual characters
             case "\\" -> appendToCurrentSegment("\\");
             case "\"" -> appendToCurrentSegment("\"");
-            case "n" -> appendToCurrentSegment("\n");    // newline
-            case "t" -> appendToCurrentSegment("\t");    // tab
-            case "r" -> appendToCurrentSegment("\r");    // carriage return
-            case "f" -> appendToCurrentSegment("\f");    // form feed
-            case "b" -> appendToCurrentSegment("\b");    // backspace
-            case "a" -> appendToCurrentSegment(String.valueOf((char) 7));  // bell
-            case "e" -> appendToCurrentSegment(String.valueOf((char) 27)); // escape
+            case "n" -> appendToCurrentSegment("\n");
+            case "t" -> appendToCurrentSegment("\t");
+            case "r" -> appendToCurrentSegment("\r");
+            case "f" -> appendToCurrentSegment("\f");
+            case "b" -> appendToCurrentSegment("\b");
+            case "a" -> appendToCurrentSegment(String.valueOf((char) 7));  // ASCII bell
+            case "e" -> appendToCurrentSegment(String.valueOf((char) 27)); // ASCII escape
 
-            // Control character escape
+            // Control character: \cX
             case "c" -> handleControlCharacter();
 
-            // Case modification controls
-            case "E" -> handleEndCaseModification();     // End case modification
-            case "Q" -> {
-                // Handle quotemeta - escape regex metacharacters
-                // TODO: Implement quotemeta functionality
+            // Case modification end marker
+            case "E" -> {
+                // Flush any pending literal text
+                flushCurrentSegment();
+                // Pop and apply the most recent case modifier
+                if (!caseModifiers.isEmpty()) {
+                    applyCaseModifier(caseModifiers.pop());
+                }
             }
-            case "U" -> handleStartUppercase();          // Start uppercase
-            case "L" -> handleStartLowercase();          // Start lowercase
-            case "u" -> handleUppercaseNext();           // Uppercase next character
-            case "l" -> handleLowercaseNext();           // Lowercase next character
 
-            // Numeric escapes
-            case "x" -> handleHexEscape();               // Hex escape
-            case "N" -> handleUnicodeNameEscape();       // Unicode name escape
+            // Case modifiers
+            case "U" -> startCaseModifier("U", false);  // Uppercase until \E
+            case "L" -> startCaseModifier("L", false);  // Lowercase until \E
+            case "u" -> startCaseModifier("u", true);   // Uppercase next char
+            case "l" -> startCaseModifier("l", true);   // Lowercase next char
 
-            // Unknown escape - treat literally
+            // Other escape sequences
+            case "x" -> handleHexEscape();           // \x41 or \x{263A}
+            case "N" -> handleUnicodeNameEscape();   // \N{UNICODE NAME}
+            case "Q" -> {} // TODO: Implement quotemeta (\Q...\E)
+
+            // Unknown escape - treat as literal character
             default -> appendToCurrentSegment(escape);
         }
     }
 
     /**
-     * Handles the \E escape sequence to end case modification.
+     * Starts a new case modifier.
      *
-     * <p>The \E sequence closes the most recently opened case modification (\U, \L, \\u, or \l).
-     * This method flushes any pending literal text and immediately applies the case
-     * modification to all segments that were collected since the case modifier was started.</p>
+     * <p>This method handles the complex interaction between case modifiers:
+     * <ul>
+     *   <li>Flushes pending literal text before starting modifier</li>
+     *   <li>Handles conflicts between \L and \U (they cancel each other)</li>
+     *   <li>Pushes new modifier onto the stack</li>
+     *   <li>Validates that conflicting modifiers have content between them</li>
+     * </ul>
+     *
+     * @param type The modifier type ("U", "L", "u", or "l")
+     * @param isSingleChar True for \\u and \l (affect only next character)
      */
-    private void handleEndCaseModification() {
+    private void startCaseModifier(String type, boolean isSingleChar) {
+        // Flush any pending literal text
         flushCurrentSegment();
 
-        if (!activeCaseModifiers.isEmpty()) {
-            // Apply the most recent case modifier and remove it from the stack
-            applyCaseModifier(activeCaseModifiers.pop());
-        }
-    }
-
-    /**
-     * Validates that a new case modifier can be started.
-     * Perl doesn't allow \L immediately followed by \U (and vice versa).
-     */
-    private void validateCaseModifierSequence(String newModifier) {
-        if (!activeCaseModifiers.isEmpty()) {
-            var topModifier = activeCaseModifiers.peek();
-            // Check for invalid sequences: \L\U or \U\L
-            if ((topModifier.type().equals("L") && newModifier.equals("U")) ||
-                    (topModifier.type().equals("U") && newModifier.equals("L"))) {
-                // Check if the top modifier has no content yet (immediate sequence)
-                if (topModifier.segmentsUnderModifier().isEmpty() && currentSegment.length() == 0) {
-                    throw new RuntimeException("syntax error: \\" + topModifier.type() + "\\" + newModifier + " is not allowed");
+        // Handle conflicting modifiers
+        // \L and \U cancel each other out when they meet
+        if (!caseModifiers.isEmpty()) {
+            var top = caseModifiers.peek();
+            if ((top.type.equals("L") && type.equals("U")) ||
+                    (top.type.equals("U") && type.equals("L"))) {
+                // Check if there's no content between the modifiers
+                if (top.segments.isEmpty() && currentSegment.isEmpty()) {
+                    // Perl doesn't allow \L\U or \U\L with no content between
+                    throw new RuntimeException("syntax error: \\" + top.type + "\\" + type + " is not allowed");
                 }
+                // Apply the previous modifier before starting the new one
+                applyCaseModifier(caseModifiers.pop());
             }
         }
+
+        // Push the new modifier onto the stack
+        caseModifiers.push(new CaseModifier(type, isSingleChar));
     }
 
     /**
-     * Handles the \U escape sequence to start uppercase modification.
+     * Simple case modifier tracking class.
      *
-     * <p>The \U sequence starts converting all following characters to uppercase
-     * until a corresponding \E is encountered. If \L is currently active,
-     * \U first closes it (like \E would) before starting uppercase.</p>
-     */
-    private void handleStartUppercase() {
-        validateCaseModifierSequence("U");
-        flushCurrentSegment();
-
-        // If \L is currently active, close it first (like \E would)
-        if (!activeCaseModifiers.isEmpty() && activeCaseModifiers.peek().type().equals("L")) {
-            applyCaseModifier(activeCaseModifiers.pop());
-        }
-
-        activeCaseModifiers.push(new CaseModifier("U", segments.size(), false));
-    }
-
-    /**
-     * Handles the \L escape sequence to start lowercase modification.
-     *
-     * <p>The \L sequence starts converting all following characters to lowercase
-     * until a corresponding \E is encountered. If \U is currently active,
-     * \L first closes it (like \E would) before starting lowercase.</p>
-     */
-    private void handleStartLowercase() {
-        validateCaseModifierSequence("L");
-        flushCurrentSegment();
-
-        // If \U is currently active, close it first (like \E would)
-        if (!activeCaseModifiers.isEmpty() && activeCaseModifiers.peek().type().equals("U")) {
-            applyCaseModifier(activeCaseModifiers.pop());
-        }
-
-        activeCaseModifiers.push(new CaseModifier("L", segments.size(), false));
-    }
-
-    /**
-     * Handles the \\u escape sequence to uppercase the next character.
-     *
-     * <p>The \\u sequence converts only the next character to uppercase.
-     * Unlike \U, this doesn't require a closing \E and affects only one character.</p>
-     */
-    private void handleUppercaseNext() {
-        flushCurrentSegment();
-        activeCaseModifiers.push(new CaseModifier("u", segments.size(), true));
-    }
-
-    /**
-     * Handles the \l escape sequence to lowercase the next character.
-     *
-     * <p>The \l sequence converts only the next character to lowercase.
-     * Unlike \L, this doesn't require a closing \E and affects only one character.</p>
-     */
-    private void handleLowercaseNext() {
-        flushCurrentSegment();
-        activeCaseModifiers.push(new CaseModifier("l", segments.size(), true));
-    }
-
-    /**
-     * Class representing a case modification state.
-     *
-     * <p>This class tracks the state of an active case modification, including
-     * what type of modification it is and which segments should be affected by it.
-     * The segments list is populated as new segments are added while this modifier
-     * is active.</p>
+     * <p>This class tracks:
+     * <ul>
+     *   <li>The type of modifier (U, L, u, l)</li>
+     *   <li>Whether it's single-character (u, l) or range-based (U, L)</li>
+     *   <li>All segments affected by this modifier</li>
+     *   <li>Whether single-char modifiers have affected any content</li>
+     * </ul>
      */
     private static class CaseModifier {
-        private final String type;
-        private final int startSegment;
-        private final boolean isSingleChar;
-        private final List<Node> segmentsUnderModifier;
-        private boolean hasAffectedContent;
+        /** The modifier type: "U", "L", "u", or "l" */
+        final String type;
+
+        /** True for \\u and \l (single character), false for \U and \L (ranges) */
+        final boolean isSingleChar;
+
+        /** List of segments affected by this modifier */
+        final List<Node> segments = new ArrayList<>();
+
+        /** For single-char modifiers, tracks if they've modified anything yet */
+        boolean hasAffectedContent = false;
 
         /**
-         * Constructor for CaseModifier.
+         * Creates a new case modifier.
          *
-         * @param type the type of case modification ("U", "L", "u", "l")
-         * @param startSegment the segment index where this modifier starts
-         * @param isSingleChar whether this modifier affects only one character/segment
+         * @param type The modifier type
+         * @param isSingleChar Whether this is a single-character modifier
          */
-        CaseModifier(String type, int startSegment, boolean isSingleChar) {
+        CaseModifier(String type, boolean isSingleChar) {
             this.type = type;
-            this.startSegment = startSegment;
             this.isSingleChar = isSingleChar;
-            this.segmentsUnderModifier = new ArrayList<>();
-            this.hasAffectedContent = false;
         }
 
-        public String type() {
-            return type;
-        }
-
-        public int startSegment() {
-            return startSegment;
-        }
-
-        public boolean isSingleChar() {
-            return isSingleChar;
-        }
-
-        public List<Node> segmentsUnderModifier() {
-            return segmentsUnderModifier;
-        }
-
-        public boolean hasAffectedContent() {
-            return hasAffectedContent || !segmentsUnderModifier.isEmpty();
-        }
-
-        public void setHasAffectedContent(boolean hasAffectedContent) {
-            this.hasAffectedContent = hasAffectedContent;
+        /**
+         * Adds a segment to this modifier's scope.
+         *
+         * @param node The segment to track
+         */
+        void addSegment(Node node) {
+            segments.add(node);
+            // Single-char modifiers are immediately marked as having affected content
+            if (isSingleChar) {
+                hasAffectedContent = true;
+            }
         }
     }
 }
