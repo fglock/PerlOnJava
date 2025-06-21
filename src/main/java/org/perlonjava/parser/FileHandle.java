@@ -40,7 +40,7 @@ public class FileHandle {
             if (!hasBracket) {
                 // assert that is not followed by infix
                 String nextText = peek(parser).text;
-                if (Parser.INFIX_OP.contains(nextText) || "{[".contains(nextText) || "->".equals(nextText)) {
+                if (ParserTables.INFIX_OP.contains(nextText) || "{[".contains(nextText) || "->".equals(nextText)) {
                     // print $fh + 2;  # not a file handle
                     fileHandle = null;
                 }
