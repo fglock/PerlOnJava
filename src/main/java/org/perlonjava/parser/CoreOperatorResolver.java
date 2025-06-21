@@ -7,6 +7,8 @@ import org.perlonjava.runtime.PerlCompilerException;
 
 import static org.perlonjava.lexer.LexerTokenType.NEWLINE;
 import static org.perlonjava.lexer.LexerTokenType.WHITESPACE;
+import static org.perlonjava.parser.ParserTables.CORE_PROTOTYPES;
+import static org.perlonjava.parser.PrototypeArgs.consumeArgsWithPrototype;
 import static org.perlonjava.parser.TokenUtils.consume;
 import static org.perlonjava.parser.TokenUtils.peek;
 
@@ -286,7 +288,7 @@ public class CoreOperatorResolver {
                     }
                 }
                 return StringParser.parseRawString(parser, token.text);
-            case "system", "dump", "read", "exec", "format", "write", "dbmclose", "dbmopen":
+            case "system", "dump", "exec", "format", "write", "dbmclose", "dbmopen":
                 // Not implemented
                 throw new PerlCompilerException(parser.tokenIndex, "Not implemented: operator: " + token.text, parser.ctx.errorUtil);
             case "accept", "bind", "connect", "getpeername", "getsockname", "getsockopt",
@@ -307,6 +309,21 @@ public class CoreOperatorResolver {
                  "setnetent", "setprotoent", "setservent":
                 // Network info functions
                 throw new PerlCompilerException(parser.tokenIndex, "Not implemented: Network info operator: " + token.text, parser.ctx.errorUtil);
+            default:
+                String operator2 = token.text;
+                String prototype = CORE_PROTOTYPES.get(operator2);
+
+                // Parse using the operator prototype string
+                // Example: "read",
+                if (prototype != null) {
+                    parser.ctx.logDebug("CORE operator " + operator2 + " with prototype " + prototype);
+                    // TODO - error message: "Too many arguments for read"
+                    ListNode arguments = consumeArgsWithPrototype(parser, prototype);
+                    return new OperatorNode(
+                            operator2,
+                            arguments,
+                            currentIndex);
+                }
         }
         return null;
     }
