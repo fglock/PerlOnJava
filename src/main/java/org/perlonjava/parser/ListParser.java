@@ -50,7 +50,7 @@ public class ListParser {
             if (expr.elements.size() > 1) {
                 throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
             }
-        } else if (token.type == LexerTokenType.EOF || Parser.LIST_TERMINATORS.contains(token.text) || token.text.equals(",")) {
+        } else if (token.type == LexerTokenType.EOF || ParserTables.LIST_TERMINATORS.contains(token.text) || token.text.equals(",")) {
             // No argument
             expr = new ListNode(parser.tokenIndex);
         } else {
@@ -98,7 +98,7 @@ public class ListParser {
                     matched = true;
                     expr.elements.add(regex);
                     token = TokenUtils.peek(parser);
-                    if (token.type != LexerTokenType.EOF && !Parser.LIST_TERMINATORS.contains(token.text)) {
+                    if (token.type != LexerTokenType.EOF && !ParserTables.LIST_TERMINATORS.contains(token.text)) {
                         // Consume comma
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ",");
                     }
@@ -148,7 +148,7 @@ public class ListParser {
                 TokenUtils.consume(parser);
                 expr.elements.addAll(parseList(parser, ")", 0));
             } else {
-                while (token.type != LexerTokenType.EOF && !Parser.LIST_TERMINATORS.contains(token.text)) {
+                while (token.type != LexerTokenType.EOF && !ParserTables.LIST_TERMINATORS.contains(token.text)) {
                     // Argument without parentheses
                     expr.elements.add(parser.parseExpression(parser.getPrecedence(",")));
                     token = TokenUtils.peek(parser);
@@ -238,14 +238,14 @@ public class ListParser {
         LexerToken token1 = parser.tokens.get(parser.tokenIndex); // Next token including spaces
         LexerToken nextToken = TokenUtils.peek(parser);  // After spaces
 
-        if (token.type == LexerTokenType.EOF || Parser.LIST_TERMINATORS.contains(token.text)
+        if (token.type == LexerTokenType.EOF || ParserTables.LIST_TERMINATORS.contains(token.text)
                 || token.text.equals("->")) {
             isEmptyList = true;
         } else if (token.text.equals("-")) {
             // -d, -e, -f, -l, -p, -x
             // -$v
             parser.ctx.logDebug("parseZeroOrMoreList looks like file test operator or unary minus");
-        } else if (Parser.INFIX_OP.contains(token.text) || token.text.equals(",")) {
+        } else if (ParserTables.INFIX_OP.contains(token.text) || token.text.equals(",")) {
             parser.ctx.logDebug("parseZeroOrMoreList infix `" + token.text + "` followed by `" + nextToken.text + "`");
             if (token.text.equals("<") || token.text.equals("<<")) {
                 // Looks like diamond operator

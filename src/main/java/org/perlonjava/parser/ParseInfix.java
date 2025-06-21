@@ -31,7 +31,7 @@ public class ParseInfix {
 
         Node right;
 
-        if (Parser.INFIX_OP.contains(token.text)) {
+        if (ParserTables.INFIX_OP.contains(token.text)) {
             String operator = token.text;
             boolean operatorEnabled = switch (operator) {
                 case "isa" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("isa");
@@ -64,7 +64,7 @@ public class ParseInfix {
                     left = new StringNode(((IdentifierNode) left).name, ((IdentifierNode) left).tokenIndex);
                 }
                 token = peek(parser);
-                if (token.type == LexerTokenType.EOF || Parser.LIST_TERMINATORS.contains(token.text) || token.text.equals(",") || token.text.equals("=>")) {
+                if (token.type == LexerTokenType.EOF || ParserTables.LIST_TERMINATORS.contains(token.text) || token.text.equals(",") || token.text.equals("=>")) {
                     // "postfix" comma
                     return ListNode.makeList(left);
                 }

@@ -15,60 +15,6 @@ import static org.perlonjava.parser.TokenUtils.peek;
  * It handles operator precedence, associativity, and special token combinations.
  */
 public class Parser {
-    // Set of tokens that signify the end of an expression or statement.
-    public static final Set<String> TERMINATORS =
-            Set.of(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when");
-
-    // Set of tokens that can terminate a list of expressions.
-    public static final Set<String> LIST_TERMINATORS =
-            Set.of(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when", "not", "and", "or");
-
-    // Set of infix operators recognized by the parser.
-    public static final Set<String> INFIX_OP = Set.of(
-            "or", "xor", "and", "||", "//", "&&", "|", "^", "^^", "&", "|.", "^.", "&.",
-            "==", "!=", "<=>", "eq", "ne", "cmp", "<", ">", "<=", ">=",
-            "lt", "gt", "le", "ge", "<<", ">>", "+", "-", "*",
-            "**", "/", "%", ".", "=", "**=", "+=", "*=", "&=", "&.=",
-            "<<=", "&&=", "-=", "/=", "|=", "|.=", ">>=", "||=", ".=",
-            "%=", "^=", "^.=", "//=", "x=", "=~", "!~", "x", "..", "...", "isa"
-    );
-
-    // Set of operators that are right associative.
-    private static final Set<String> RIGHT_ASSOC_OP = Set.of(
-            "=", "**=", "+=", "*=", "&=", "&.=", "<<=", "&&=", "-=", "/=", "|=", "|.=",
-            ">>=", "||=", ".=", "%=", "^=", "^.=", "//=", "x=", "**", "?"
-    );
-
-    // Map to store operator precedence values.
-    private static final Map<String, Integer> precedenceMap = new HashMap<>();
-
-    // Static block to initialize the precedence map with operators and their precedence levels.
-    static {
-        addOperatorsToMap(1, "or", "xor");
-        addOperatorsToMap(2, "and");
-        addOperatorsToMap(3, "not");
-        addOperatorsToMap(4, "print");
-        addOperatorsToMap(5, ",", "=>");
-        addOperatorsToMap(6, "=", "**=", "+=", "*=", "&=", "&.=", "<<=", "&&=", "-=", "/=", "|=", "|.=", ">>=", "||=", ".=", "%=", "^=", "^.=", "//=", "x=");
-        addOperatorsToMap(7, "?");
-        addOperatorsToMap(8, "..", "...");
-        addOperatorsToMap(9, "||", "^^", "//");
-        addOperatorsToMap(10, "&&");
-        addOperatorsToMap(11, "|", "^", "|.", "^.");
-        addOperatorsToMap(12, "&", "&.");
-        addOperatorsToMap(13, "==", "!=", "<=>", "eq", "ne", "cmp");
-        addOperatorsToMap(14, "<", ">", "<=", ">=", "lt", "gt", "le", "ge");
-        addOperatorsToMap(15, "isa");
-        addOperatorsToMap(16, "-d");
-        addOperatorsToMap(17, ">>", "<<");
-        addOperatorsToMap(18, "+", "-", ".");
-        addOperatorsToMap(19, "*", "/", "%", "x");
-        addOperatorsToMap(20, "=~", "!~");
-        addOperatorsToMap(21, "!", "~", "~.", "\\");
-        addOperatorsToMap(22, "**");
-        addOperatorsToMap(23, "++", "--");
-        addOperatorsToMap(24, "->");
-    }
 
     // Context for code emission.
     public final EmitterContext ctx;
@@ -94,18 +40,6 @@ public class Parser {
     }
 
     /**
-     * Adds operators to the precedence map with the specified precedence level.
-     *
-     * @param precedence The precedence level.
-     * @param operators  The operators to add.
-     */
-    private static void addOperatorsToMap(int precedence, String... operators) {
-        for (String operator : operators) {
-            precedenceMap.put(operator, precedence);
-        }
-    }
-
-    /**
      * Returns the list of heredoc nodes encountered during parsing.
      *
      * @return The list of heredoc nodes.
@@ -121,7 +55,7 @@ public class Parser {
      * @return The precedence level of the operator.
      */
     public int getPrecedence(String operator) {
-        return precedenceMap.getOrDefault(operator, 24);
+        return ParserTables.precedenceMap.getOrDefault(operator, 24);
     }
 
     /**
@@ -188,7 +122,7 @@ public class Parser {
             }
 
             // If the operator is right associative (like exponentiation), parse it with lower precedence.
-            if (RIGHT_ASSOC_OP.contains(token.text)) {
+            if (ParserTables.RIGHT_ASSOC_OP.contains(token.text)) {
                 ctx.logDebug("parseExpression `" + token.text + "` precedence: " + tokenPrecedence + " right assoc");
                 left = ParseInfix.parseInfixOperation(this, left, tokenPrecedence - 1); // Parse the right side with lower precedence.
             } else {
@@ -203,7 +137,7 @@ public class Parser {
     }
 
     public static boolean isExpressionTerminator(LexerToken token) {
-        return token.type == LexerTokenType.EOF || TERMINATORS.contains(token.text);
+        return token.type == LexerTokenType.EOF || ParserTables.TERMINATORS.contains(token.text);
     }
 
 }
