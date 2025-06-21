@@ -18,6 +18,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 import java.util.function.Supplier;
 
+import static org.perlonjava.parser.ParserTables.CORE_PROTOTYPES;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 import static org.perlonjava.runtime.RuntimeScalarType.*;
@@ -401,6 +402,15 @@ public class RuntimeCode extends RuntimeBaseEntity implements RuntimeScalarRefer
         if (code.type != RuntimeScalarType.CODE) {
             String name = NameNormalizer.normalizeVariableName(code.toString(), packageName);
             // System.out.println("Looking for prototype: " + name);
+
+            if (name.startsWith("CORE::")) {
+                String key = name.substring(6);
+                if (!CORE_PROTOTYPES.containsKey(key)) {
+                    throw new PerlCompilerException("Can't find an opnumber for \"" + key + "\"");
+                }
+                return new RuntimeScalar(CORE_PROTOTYPES.get(key));
+            }
+
             code = GlobalVariable.getGlobalCodeRef(name);
         }
         // System.out.println("type: " + code.type);
