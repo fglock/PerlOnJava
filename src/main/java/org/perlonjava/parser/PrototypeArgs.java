@@ -52,6 +52,9 @@ public class PrototypeArgs {
         }
 
         if (hasParentheses) {
+            if (!TokenUtils.peek(parser).text.equals(")")) {
+                parser.throwError("Too many arguments");
+            }
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
         }
 
@@ -116,8 +119,7 @@ public class PrototypeArgs {
                     i = handleBackslashArgument(parser, args, prototype, i + 1, isOptional, needComma);
                     needComma = true;
                 }
-                default ->
-                        throw new PerlCompilerException("syntax error, unexpected prototype character '" + prototypeChar + "'");
+                default -> parser.throwError("syntax error, unexpected prototype character '" + prototypeChar + "'");
             }
         }
     }
@@ -146,7 +148,7 @@ public class PrototypeArgs {
     }
 
     private static void handleUnderscoreArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
-        Node arg = parseArgumentWithComma(parser, isOptional, needComma, "scalar argument");
+        Node arg = parseArgumentWithComma(parser, true, needComma, "scalar argument");
         if (arg == null) {
             args.elements.add(scalarUnderscore(parser));
             return;
@@ -163,7 +165,7 @@ public class PrototypeArgs {
         Node expr = parser.parseExpression(parser.getPrecedence(","));
         if (expr == null) {
             if (!isOptional) {
-                throw new PerlCompilerException("syntax error, expected argument");
+                parser.throwError("syntax error, expected argument");
             }
             return;
         }
@@ -226,7 +228,7 @@ public class PrototypeArgs {
     private static int handleBackslashArgument(Parser parser, ListNode args, String prototype, int prototypeIndex,
                                                boolean isOptional, boolean needComma) {
         if (prototypeIndex >= prototype.length()) {
-            throw new PerlCompilerException("syntax error, incomplete backslash reference in prototype");
+            parser.throwError("syntax error, incomplete backslash reference in prototype");
         }
 
         boolean isGroup = prototype.charAt(prototypeIndex) == '[';
@@ -252,7 +254,7 @@ public class PrototypeArgs {
             if (isOptional) {
                 return false;
             }
-            throw new PerlCompilerException("syntax error, expected comma");
+            parser.throwError("syntax error, expected comma");
         }
         consumeCommas(parser);
         return true;
@@ -263,7 +265,7 @@ public class PrototypeArgs {
             if (isOptional) {
                 return null;
             }
-            throw new PerlCompilerException("syntax error, expected " + expectedType);
+            parser.throwError("syntax error, expected " + expectedType);
         }
         return parser.parseExpression(parser.getPrecedence(","));
     }

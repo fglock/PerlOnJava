@@ -5,6 +5,7 @@ import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.*;
 
@@ -138,6 +139,10 @@ public class Parser {
 
     public static boolean isExpressionTerminator(LexerToken token) {
         return token.type == LexerTokenType.EOF || ParserTables.TERMINATORS.contains(token.text);
+    }
+
+    public void throwError(String message) {
+        throw new PerlCompilerException(this.tokenIndex, message, this.ctx.errorUtil);
     }
 
 }
