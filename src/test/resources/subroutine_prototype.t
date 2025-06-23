@@ -118,7 +118,7 @@ subtest "Empty prototype () edge cases" => sub {
     }
 };
 
-subtest "Underscore (_) prototype comprehensive tests" => sub {
+subtest "Underscore (_) prototype" => sub {
     sub underscore_test (_) { $_[0] // "undef" }
 
     # Test default behavior
@@ -135,6 +135,27 @@ subtest "Underscore (_) prototype comprehensive tests" => sub {
     # Test too many arguments
     eval q{ underscore_test(1, 2) };
     like( $@, qr/Too many arguments/, "Underscore prototype rejects multiple arguments" );
+};
+
+subtest "Underscore (_) with optional parameters" => sub {
+    sub underscore_optional ($;_) {
+        my $first = shift;
+        my $second = @_ ? $_[0] : $_;
+        return "$first:$second";
+    }
+
+    local $_ = "default";
+    is(underscore_optional("test"), "test:default", "Optional underscore uses \$_ when not provided");
+    is(underscore_optional("test", "explicit"), "test:explicit", "Optional underscore accepts explicit value");
+
+    # Multiple optional underscores
+    sub double_optional ($$;_) {
+        return join(":", @_[0,1], (@_ > 2 ? $_[2] : $_));
+    }
+
+    local $_ = "def";
+    is(double_optional("a", "b"), "a:b:def", "Double required + optional underscore");
+    is(double_optional("a", "b", "c"), "a:b:c", "Double required + explicit underscore");
 };
 
 done_testing();

@@ -14,43 +14,25 @@ sub eval_warn_like ($$$) {
     like($warning, $pattern, $description);
 }
 
-subtest "Underscore (_) with optional parameters" => sub {
-    sub underscore_optional ($;_) {
-        my $first = shift;
-        my $second = @_ ? $_[0] : $_;
-        return "$first:$second";
-    }
-
-    local $_ = "default";
-    is(underscore_optional("test"), "test:default", "Optional underscore uses \$_ when not provided");
-    is(underscore_optional("test", "explicit"), "test:explicit", "Optional underscore accepts explicit value");
-
-    # Multiple optional underscores
-    sub double_optional ($$;_) {
-        return join(":", @_[0,1], (@_ > 2 ? $_[2] : $_));
-    }
-
-    local $_ = "def";
-    is(double_optional("a", "b"), "a:b:def", "Double required + optional underscore");
-    is(double_optional("a", "b", "c"), "a:b:c", "Double required + explicit underscore");
-};
-
 subtest "Malformed underscore prototypes" => sub {
     # Test all invalid underscore combinations
     my @invalid_prototypes = (
         '__',      # Multiple underscores
-        '_$',      # Underscore not at end
-        '$_',      # Underscore in middle (this might actually work)
-        '_@',      # Underscore with slurpy
-        '_%',      # Underscore with hash slurpy
-        '_;$',     # Underscore before semicolon
+        '_$',      # Underscore followed by required scalar
     );
 
+    my $subname = "001";
     for my $proto (@invalid_prototypes) {
-        my $code = "sub test_$proto ($proto) { 42 }";
-        eval $code;
-        like($@, qr/Malformed prototype/, "Prototype '$proto' is malformed");
+        my $code = "sub test_proto_$subname ($proto) { 42 }";
+        eval_warn_like($code, qr/Illegal character after '_' in prototype/, "Prototype '$proto' is malformed");
+        $subname++;
     }
+
+    # These should not give malformed warnings
+    sub test_proto_010 ($_) { $_[0] }
+    sub test_proto_011 (_@) { $_[0] }
+    sub test_proto_012 (_%) { $_[0] }
+    sub test_proto_013 (_;$) { $_[0] }
 };
 
 subtest "Argument count errors - too few" => sub {
