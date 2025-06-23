@@ -52,6 +52,11 @@ public class PrototypeArgs {
         }
 
         if (hasParentheses) {
+            // Consume any trailing commas before checking for closing parenthesis
+            while (isComma(TokenUtils.peek(parser))) {
+                consumeCommas(parser);
+            }
+
             if (!TokenUtils.peek(parser).text.equals(")")) {
                 parser.throwError("Too many arguments");
             }
