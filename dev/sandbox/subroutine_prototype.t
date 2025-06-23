@@ -107,14 +107,14 @@ subtest "Empty prototype () edge cases" => sub {
     is(empty_test, "empty", "Empty prototype without parentheses");
     
     # Test comma operator behavior
-    my $result = eval { empty_test,1,2,3; 1 };
+    my $result = eval q{ empty_test,1,2,3; 1 };
     ok($result, "Empty prototype allows comma operator (parsed as empty_test(), 1, 2, 3)");
     
     # Test with parentheses - should fail
     my $error = "";
     {
         local $SIG{__WARN__} = sub { $error = $_[0] };
-        eval { empty_test(1,2,3) };
+        eval q{ empty_test(1,2,3) };
         like($@, qr/Too many arguments/, "Empty prototype with parentheses rejects arguments");
     }
 };
@@ -134,7 +134,7 @@ subtest "Underscore (_) prototype comprehensive tests" => sub {
     is(underscore_test(undef), "undef", "Underscore prototype accepts undef");
     
     # Test too many arguments
-    eval { underscore_test(1, 2) };
+    eval q{ underscore_test(1, 2) };
     like($@, qr/Too many arguments/, "Underscore prototype rejects multiple arguments");
 };
 
@@ -182,13 +182,13 @@ subtest "Argument count errors - too few" => sub {
     sub needs_three ($$$) { $_[0] + $_[1] + $_[2] }
     sub needs_one_opt_one ($;$) { $_[0] + ($_[1] // 0) }
     
-    eval { needs_two(1) };
+    eval q{ needs_two(1) };
     like($@, qr/Not enough arguments/, "Two-arg prototype rejects single argument");
     
-    eval { needs_three(1, 2) };
+    eval q{ needs_three(1, 2) };
     like($@, qr/Not enough arguments/, "Three-arg prototype rejects two arguments");
     
-    eval { needs_two() };
+    eval q{ needs_two() };
     like($@, qr/Not enough arguments/, "Two-arg prototype rejects no arguments");
     
     # Optional parameters should not cause "not enough" errors
@@ -202,13 +202,13 @@ subtest "Argument count errors - too many" => sub {
     sub exact_three ($$$) { $_[0] + $_[1] + $_[2] }
     
     # Test with parentheses (strict checking)
-    eval { exact_one(1, 2) };
+    eval q{ exact_one(1, 2) };
     like($@, qr/Too many arguments/, "Single-arg prototype rejects two arguments with parens");
     
-    eval { exact_two(1, 2, 3) };
+    eval q{ exact_two(1, 2, 3) };
     like($@, qr/Too many arguments/, "Two-arg prototype rejects three arguments with parens");
     
-    eval { exact_three(1, 2, 3, 4) };
+    eval q{ exact_three(1, 2, 3, 4) };
     like($@, qr/Too many arguments/, "Three-arg prototype rejects four arguments with parens");
 };
 
@@ -217,16 +217,16 @@ subtest "Comma operator parsing behavior" => sub {
     sub double_arg ($$) { "$_[0]:$_[1]" }
     
     # Single argument - comma operator should work
-    my $result1 = eval { single_arg 1,2,3; "ok" };
+    my $result1 = eval q{ single_arg 1,2,3; "ok" };
     is($result1, "ok", "Single arg prototype allows comma operator");
     
     # Double argument - depends on parsing
-    eval { double_arg 1,2,3 };
+    eval q{ double_arg 1,2,3 };
     like($@, qr/Too many arguments/, "Double arg prototype rejects three args via comma operator");
     
     # Test exact matches
     is(double_arg(1, 2), "1:2", "Double arg prototype works with exact args");
-    my $result2 = eval { double_arg 1,2; "ok" };
+    my $result2 = eval q{ double_arg 1,2; "ok" };
     is($result2, "ok", "Double arg prototype works with comma operator when exact");
 };
 
@@ -255,10 +255,10 @@ subtest "Slurpy prototype comprehensive tests" => sub {
     is(double_mixed("a", "b", 1,2,3,4), "a:b:4", "Double mixed with extra args");
     
     # Test minimum argument requirements
-    eval { mixed_slurp() };
+    eval q{ mixed_slurp() };
     like($@, qr/Not enough arguments/, "Mixed slurp requires minimum arguments");
     
-    eval { double_mixed("a") };
+    eval q{ double_mixed("a") };
     like($@, qr/Not enough arguments/, "Double mixed requires minimum arguments");
 };
 
@@ -278,10 +278,10 @@ subtest "Reference prototype comprehensive tests" => sub {
     is(code_ref { 99 }, 99, "Code reference works");
     
     # Test that non-references fail appropriately
-    eval { scalar_ref(42) };  # literal scalar, not reference
+    eval q{ scalar_ref(42) };  # literal scalar, not reference
     like($@, qr/Type of arg 1 to main::scalar_ref must be scalar reference/, "Scalar ref rejects literal");
     
-    eval { array_ref(1,2,3) };  # literal list, not array
+    eval q{ array_ref(1,2,3) };  # literal list, not array
     like($@, qr/Type of arg 1 to main::array_ref must be array/, "Array ref rejects literal list");
 };
 
@@ -305,10 +305,10 @@ subtest "Bracketed reference prototypes" => sub {
     is(triple_flexible($s, @a, %h), "SCALAR+ARRAY+HASH", "Triple bracketed ref works");
     
     # Test argument count validation
-    eval { double_flexible($s) };
+    eval q{ double_flexible($s) };
     like($@, qr/Not enough arguments/, "Double bracketed ref requires two args");
     
-    eval { double_flexible($s, @a, %h) };
+    eval q{ double_flexible($s, @a, %h) };
     like($@, qr/Too many arguments/, "Double bracketed ref rejects three args");
 };
 
@@ -345,10 +345,10 @@ subtest "Code block (&) comprehensive tests" => sub {
     is(block_optional { $_[0] . "!" } "test", "test!", "Code block with optional arg uses provided");
     
     # Test argument validation
-    eval { simple_block };
+    eval q{ simple_block };
     like($@, qr/Not enough arguments/, "Code block prototype requires block");
     
-    eval { simple_block { 1 } "extra" };
+    eval q{ simple_block { 1 } "extra" };
     like($@, qr/Too many arguments/, "Simple code block rejects extra args");
 };
 
@@ -387,16 +387,16 @@ subtest "Multiple required parameters" => sub {
     is(five_params(1, 2, 3, 4, 5), "1+2+3+4+5", "Five params work");
     
     # Test wrong argument counts
-    eval { two_params(1) };
+    eval q{ two_params(1) };
     like($@, qr/Not enough arguments/, "Two params rejects one arg");
     
-    eval { three_params(1, 2) };
+    eval q{ three_params(1, 2) };
     like($@, qr/Not enough arguments/, "Three params rejects two args");
     
-    eval { two_params(1, 2, 3) };
+    eval q{ two_params(1, 2, 3) };
     like($@, qr/Too many arguments/, "Two params rejects three args");
     
-    eval { three_params(1, 2, 3, 4) };
+    eval q{ three_params(1, 2, 3, 4) };
     like($@, qr/Too many arguments/, "Three params rejects four args");
 };
 
@@ -430,10 +430,10 @@ subtest "Complex optional parameter combinations" => sub {
     is(req_one_two_opt("a", "b", "c"), "a:b:c", "One req + two opt with all args");
     
     # Test too many arguments
-    eval { one_opt("a", "b") };
+    eval q{ one_opt("a", "b") };
     like($@, qr/Too many arguments/, "One optional rejects too many args");
     
-    eval { req_one_opt("a", "b", "c") };
+    eval q{ req_one_opt("a", "b", "c") };
     like($@, qr/Too many arguments/, "Req + opt rejects too many args");
 };
 
@@ -553,7 +553,7 @@ subtest "Argument parsing with different call styles" => sub {
     is(parse_test 42, 42, "No parentheses call works");
     
     # Test comma operator behavior more extensively
-    my $x = eval { parse_test 1,2,3; "success" };
+    my $x = eval q{ parse_test 1,2,3; "success" };
     is($x, "success", "Comma operator parsing works");
     
     # Test that the function actually only gets the first argument
@@ -561,11 +561,11 @@ subtest "Argument parsing with different call styles" => sub {
     is(capture_args(1), 1, "Single arg captured correctly");
     
     # This should parse as capture_args(1), 2, 3 - so function gets 1 arg
-    my $y = eval { capture_args 1,2,3; capture_args(999) };
+    my $y = eval q{ capture_args 1,2,3; capture_args(999) };
     is($y, 1, "Comma operator only passes first arg to function");
     
     # But with parentheses, it should fail
-    eval { capture_args(1,2,3) };
+    eval q{ capture_args(1,2,3) };
     like($@, qr/Too many arguments/, "Parentheses force all args to function");
 };
 
@@ -607,7 +607,7 @@ subtest "Prototype inheritance and method calls" => sub {
     is($obj->method_test(14), 42, "Method call ignores prototype");
     
     # But function-style call should respect it
-    eval { TestClass::method_test(1, 2, 3) };
+    eval q{ TestClass::method_test(1, 2, 3) };
     like($@, qr/Too many arguments/, "Function call respects prototype");
 };
 
@@ -650,7 +650,7 @@ subtest "Recursive and nested calls with prototypes" => sub {
     
     # Test with comma operator in nested calls
     sub nested_comma ($) { $_[0] }
-    my $result = eval { nested_comma(outer(inner 3,4,5)); "ok" };
+    my $result = eval q{ nested_comma(outer(inner 3,4,5)); "ok" };
     is($result, "ok", "Nested calls with comma operator work");
 };
 
@@ -667,7 +667,7 @@ subtest "Prototype with eval and string eval" => sub {
     if (!$@) {
         is(dynamic_proto(21), 42, "Dynamically defined prototype works");
         
-        eval { dynamic_proto(1, 2) };
+        eval q{ dynamic_proto(1, 2) };
         like($@, qr/Too many arguments/, "Dynamically defined prototype enforces args");
     }
 };
@@ -760,7 +760,7 @@ subtest "Prototype with closures and lexical variables" => sub {
         # Note: This test might not work as expected due to how lexical
         # variables work with subroutine definitions inside loops
         # But it tests the prototype behavior
-        my $result = eval { lexical_test($i); 1 };
+        my $result = eval q{ lexical_test($i); 1 };
         ok($result, "Prototype works with lexical variables in loop");
     }
 };
@@ -862,7 +862,7 @@ subtest "Final edge cases and regression tests" => sub {
     is($result, 13, "Complex prototype still works (5*2 + 3 args = 13)");
     
     # Final test: make sure we can still define and use prototypes normally
-    eval {
+    eval q{
         sub final_test ($;$) {
             my ($a, $b, $c) = @_;
             return $a + $b + ($c // 0);
@@ -875,7 +875,7 @@ subtest "Final edge cases and regression tests" => sub {
         is(final_test(1, 2), 3, "Final test with minimum args works");
         is(final_test(1, 2, 3), 6, "Final test with all args works");
         
-        eval { final_test(1) };
+        eval q{ final_test(1) };
         like($@, qr/Not enough arguments/, "Final test still validates argument count");
     }
 };
