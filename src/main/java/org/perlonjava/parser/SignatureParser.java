@@ -35,8 +35,36 @@ public class SignatureParser {
             }
 
             String sigil = token.text;
+
+            // Special case: $# is tokenized as a single token
+            if (sigil.equals("$#")) {
+                parser.throwError("'#' not allowed immediately following a sigil in a subroutine signature");
+            }
+
+            // Check for valid sigil
+            if (!sigil.equals("$") && !sigil.equals("@") && !sigil.equals("%")) {
+                parser.throwError("A signature parameter must start with '$', '@' or '%'");
+            }
+
+            // Check if we already have a slurpy parameter
+            if (hasSlurpy) {
+                parser.throwError("Slurpy parameter not last");
+            }
+
             String name = null;
-            if (TokenUtils.peek(sigParser).type == LexerTokenType.IDENTIFIER) {
+            LexerToken nextToken = TokenUtils.peek(sigParser);
+
+            // Check for double sigil
+            if (nextToken.text.equals("$") || nextToken.text.equals("@") || nextToken.text.equals("%")) {
+                parser.throwError("Illegal character following sigil in a subroutine signature");
+            }
+
+            // Check for invalid character after sigil
+            if (nextToken.text.equals("#")) {
+                parser.throwError("'#' not allowed immediately following a sigil in a subroutine signature");
+            }
+
+            if (nextToken.type == LexerTokenType.IDENTIFIER) {
                 name = TokenUtils.consume(sigParser).text;
             }
 
@@ -54,17 +82,39 @@ public class SignatureParser {
             if (sigil.equals("@") || sigil.equals("%")) {
                 hasSlurpy = true;
                 maxParams = Integer.MAX_VALUE;
+
+                // Check if there are more parameters after slurpy
+                LexerToken checkToken = TokenUtils.peek(sigParser);
+                if (checkToken.text.equals(",")) {
+                    TokenUtils.consume(sigParser); // consume comma
+                    checkToken = TokenUtils.peek(sigParser);
+                    if (checkToken.type != LexerTokenType.EOF) {
+                        // Check if it's another slurpy
+                        if (checkToken.text.equals("@") || checkToken.text.equals("%")) {
+                            parser.throwError("Multiple slurpy parameters not allowed");
+                        } else {
+                            parser.throwError("Slurpy parameter not last");
+                        }
+                    }
+                }
                 break; // Slurpy must be last
             }
 
             // Handle scalar params
             Node defaultValue = null;
-            LexerToken nextToken = TokenUtils.peek(sigParser);
+            nextToken = TokenUtils.peek(sigParser);
             if (nextToken.text.equals("=") ||
                     nextToken.text.equals("||=") ||
                     nextToken.text.equals("//=")) {
 
                 String op = TokenUtils.consume(sigParser).text;
+
+                // Check if there's a default expression
+                if (TokenUtils.peek(sigParser).type == LexerTokenType.EOF ||
+                        TokenUtils.peek(sigParser).text.equals(",")) {
+                    parser.throwError("Optional parameter lacks default expression");
+                }
+
                 defaultValue = parseZeroOrOneList(sigParser, 0);
                 nodes.add(generateDefaultAssignment(defaultValue, op, maxParams, variable, tokenIndex));
             } else {
@@ -73,17 +123,23 @@ public class SignatureParser {
 
             maxParams++;
 
-            token = TokenUtils.consume(sigParser);
-            if (token.text.equals(",") || token.type == LexerTokenType.EOF) {
-                // Ok, we have a comma, so continue
+            token = TokenUtils.peek(sigParser);
+            if (token.text.equals(",")) {
+                TokenUtils.consume(sigParser); // consume comma
+            } else if (token.type == LexerTokenType.EOF) {
+                break;
             } else {
-                throw new PerlCompilerException("Expected ',' or ')' in signature prototype");
+                // Check for missing comma between parameters
+                if (token.text.equals("$") || token.text.equals("@") || token.text.equals("%")) {
+                    parser.throwError("syntax error");
+                }
+                parser.throwError("Expected ',' or ')' in signature prototype");
             }
         }
 
         // Check that all tokens were consumed
         if (TokenUtils.peek(sigParser).type != LexerTokenType.EOF) {
-            throw new PerlCompilerException("Expected ')' in signature prototype");
+            parser.throwError("Expected ')' in signature prototype");
         }
 
         sigParser.ctx.logDebug("signature min: " + minParams + " max: " + maxParams + " slurpy: " + hasSlurpy);
