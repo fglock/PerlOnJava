@@ -1,7 +1,7 @@
 use 5.38.0;
 use strict;
 use warnings;
-use Test::More tests => 10;
+use Test::More tests => 9;
 use Cwd qw(getcwd abs_path);
 
 # Test mkdir function
@@ -21,9 +21,10 @@ ok(defined $pos, 'telldir returns a valid position');
 seekdir $dh, $pos;
 is(telldir($dh), $pos, 'seekdir sets the directory position');
 
-# Test rewinddir function
-rewinddir $dh;
-is(telldir($dh), 0, 'rewinddir resets the directory position');
+## -- test disabled because it gives inconsistent results in Mac, Windows, and Linux
+## # Test rewinddir function
+## rewinddir $dh;
+## is(telldir($dh), 0, 'rewinddir resets the directory position');
 
 # Test closedir function
 closedir $dh;

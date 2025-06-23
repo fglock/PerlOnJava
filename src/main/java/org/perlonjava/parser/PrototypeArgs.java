@@ -45,6 +45,11 @@ public class PrototypeArgs {
         ListNode args = new ListNode(parser.tokenIndex);
         boolean hasParentheses = handleOpeningParenthesis(parser);
 
+        // Comma is forbidden here
+        if (prototype != null && !prototype.isEmpty() && isComma(TokenUtils.peek(parser))) {
+            parser.throwError("syntax error");
+        }
+
         if (prototype == null) {
             args = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
         } else {
@@ -61,6 +66,11 @@ public class PrototypeArgs {
                 parser.throwError("Too many arguments");
             }
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+        }
+
+        // Array or Hash dereference is forbidden here
+        if (TokenUtils.peek(parser).text.equals("{") || TokenUtils.peek(parser).text.equals("[")) {
+            parser.throwError("syntax error");
         }
 
         return args;
