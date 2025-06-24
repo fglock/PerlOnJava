@@ -5,7 +5,7 @@ import org.perlonjava.runtime.RuntimeScalar;
 
 public interface IOHandle {
 
-    RuntimeScalar write(byte[] data);
+    RuntimeScalar write(String string);
 
     RuntimeScalar close();
 

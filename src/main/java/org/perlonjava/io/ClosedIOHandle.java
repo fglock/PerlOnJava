@@ -6,7 +6,7 @@ import org.perlonjava.runtime.RuntimeScalar;
 public class ClosedIOHandle implements IOHandle {
 
     @Override
-    public RuntimeScalar write(byte[] data) {
+    public RuntimeScalar write(String string) {
         return RuntimeIO.handleIOError("Cannot write to a closed handle.");
     }
 

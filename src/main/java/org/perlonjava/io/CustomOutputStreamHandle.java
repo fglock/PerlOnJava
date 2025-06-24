@@ -16,7 +16,8 @@ public class CustomOutputStreamHandle implements IOHandle {
     }
 
     @Override
-    public RuntimeScalar write(byte[] data) {
+    public RuntimeScalar write(String string) {
+        var data = string.getBytes();
         try {
             outputStream.write(data);
             return scalarTrue; // Indicate success
