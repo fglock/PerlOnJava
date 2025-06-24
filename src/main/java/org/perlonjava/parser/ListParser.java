@@ -35,7 +35,7 @@ public class ListParser {
         if (looksLikeEmptyList(parser)) {
             // Return an empty list if it looks like an empty list
             if (minItems > 0) {
-                throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+                parser.throwError("syntax error");
             }
             return new ListNode(parser.tokenIndex);
         }
@@ -48,7 +48,7 @@ public class ListParser {
             TokenUtils.consume(parser);
             expr = new ListNode(parseList(parser, ")", 0), parser.tokenIndex);
             if (expr.elements.size() > 1) {
-                throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+                parser.throwError("syntax error");
             }
         } else if (token.type == LexerTokenType.EOF || ParserTables.LIST_TERMINATORS.contains(token.text) || token.text.equals(",")) {
             // No argument
@@ -58,7 +58,7 @@ public class ListParser {
             expr = ListNode.makeList(parser.parseExpression(parser.getPrecedence("isa") + 1));
         }
         if (expr.elements.size() < minItems) {
-            throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+            parser.throwError("syntax error");
         }
         return expr;
     }
@@ -135,7 +135,7 @@ public class ListParser {
                 TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             }
             if (!isSpaceAfterPrintBlock(parser) || looksLikeEmptyList(parser)) {
-                throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+                parser.throwError("syntax error");
             }
         }
 
@@ -167,7 +167,7 @@ public class ListParser {
         parser.ctx.logDebug("parseZeroOrMoreList end: " + expr);
 
         if (expr.elements.size() < minItems) {
-            throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+            parser.throwError("syntax error");
         }
         return expr;
     }
@@ -218,7 +218,7 @@ public class ListParser {
         }
 
         if (expr.elements.size() < minItems) {
-            throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+            parser.throwError("syntax error");
         }
         parser.ctx.logDebug("parseList end");
 
