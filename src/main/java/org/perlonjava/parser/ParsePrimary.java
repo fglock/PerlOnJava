@@ -5,8 +5,6 @@ import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
-import java.util.Set;
-
 import static org.perlonjava.parser.TokenUtils.peek;
 import static org.perlonjava.runtime.GlobalVariable.existsGlobalCodeRef;
 
@@ -15,24 +13,6 @@ import static org.perlonjava.runtime.GlobalVariable.existsGlobalCodeRef;
  * It handles identifiers, numbers, strings, operators, and other primary constructs.
  */
 public class ParsePrimary {
-
-    // The list below was obtained by running this in the perl git:
-    // ack  'CORE::GLOBAL::\w+' | perl -n -e ' /CORE::GLOBAL::(\w+)/ && print $1, "\n" ' | sort -u
-    private static final Set<String> OVERRIDABLE_OP = Set.of(
-            "caller", "chdir", "close", "connect",
-            "die", "do",
-            "exit",
-            "fork",
-            "getpwuid", "glob",
-            "hex",
-            "kill",
-            "oct", "open",
-            "readline", "readpipe", "rename", "require",
-            "stat",
-            "time",
-            "uc",
-            "warn"
-    );
 
     /**
      * Parses a primary expression from the parser's token stream.
@@ -92,7 +72,7 @@ public class ParsePrimary {
             };
         }
 
-        if (!calledWithCore && operatorEnabled && OVERRIDABLE_OP.contains(operator)) {
+        if (!calledWithCore && operatorEnabled && ParserTables.OVERRIDABLE_OP.contains(operator)) {
             // It is possible to override the core function by defining
             // a subroutine in the current package, or in CORE::GLOBAL::
             //

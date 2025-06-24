@@ -28,7 +28,7 @@ public class Variable {
                 // - `for my $v (...`
                 // - `&name(...`
                 // - `obj->$name(...`
-                throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+                parser.throwError("syntax error");
             }
 
             // Create a Variable node

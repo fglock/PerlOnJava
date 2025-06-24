@@ -123,7 +123,7 @@ public class NumberParser {
             if (parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NUMBER) {
                 number.append(TokenUtils.consume(parser).text);
             } else {
-                throw new PerlCompilerException(parser.tokenIndex, "Malformed hexadecimal floating-point number", parser.ctx.errorUtil);
+                parser.throwError("Malformed hexadecimal floating-point number");
             }
         }
 
@@ -133,8 +133,9 @@ public class NumberParser {
             return new NumberNode(Double.toString(value), parser.tokenIndex);
         } catch (NumberFormatException e) {
             System.err.println("NumberFormatException: " + e.getMessage());
-            throw new PerlCompilerException(parser.tokenIndex, "Invalid hexadecimal number", parser.ctx.errorUtil);
+            parser.throwError("Invalid hexadecimal number");
         }
+        return null;
     }
 
     private static boolean isHexDigit(String text) {
@@ -178,7 +179,7 @@ public class NumberParser {
 
         LexerToken token = parser.tokens.get(parser.tokenIndex++);
         if (token.type != LexerTokenType.NUMBER) {
-            throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+            parser.throwError("syntax error");
         }
 
         number.append(token.text); // consume digits after '.'
@@ -204,7 +205,7 @@ public class NumberParser {
             int index = 1;
             for (; index < exponentPart.length(); index++) {
                 if (!Character.isDigit(exponentPart.charAt(index)) && exponentPart.charAt(index) != '_') {
-                    throw new PerlCompilerException(parser.tokenIndex, "Malformed number", parser.ctx.errorUtil);
+                    parser.throwError("Malformed number");
                 }
             }
             number.append(exponentPart);
