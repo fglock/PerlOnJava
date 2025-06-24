@@ -90,9 +90,10 @@ public class LayeredIOHandle implements IOHandle {
     }
 
     @Override
-    public RuntimeScalar write(byte[] data) {
+    public RuntimeScalar write(String data) {
         byte[] processedData = processOutputData(data);
-        return delegate.write(processedData);
+        // Write a string made of characters in the 0-255 range
+        return delegate.write(new String(processedData, StandardCharsets.ISO_8859_1));
     }
 
     @Override
@@ -105,19 +106,17 @@ public class LayeredIOHandle implements IOHandle {
         return result;
     }
 
-    private byte[] processOutputData(byte[] data) {
+    private byte[] processOutputData(String data) {
         switch (mode) {
             case CRLF:
-                return convertLfToCrlf(data);
+                return convertLfToCrlf(data.getBytes());
             case UTF8:
             case ENCODING:
-                // For text modes, we would typically receive character data
-                // and need to encode it. This is a simplified version.
                 return encodeText(data);
             case BYTES:
             case DEFAULT:
             default:
-                return data;
+                return data.getBytes();
         }
     }
 
@@ -135,27 +134,13 @@ public class LayeredIOHandle implements IOHandle {
         }
     }
 
-    private byte[] encodeText(byte[] data) {
-        if (encoder == null) return data;
-
+    private byte[] encodeText(String data) {
+        if (encoder == null) return data.getBytes();
         try {
-            // This is simplified - in practice, we'd receive character data
-            String text = new String(data, encoding);
-            encodeBuffer.clear();
-            CharBuffer charBuffer = CharBuffer.wrap(text);
-
-            CoderResult result = encoder.encode(charBuffer, encodeBuffer, false);
-            if (result.isError()) {
-                result.throwException();
-            }
-
-            encodeBuffer.flip();
-            byte[] encoded = new byte[encodeBuffer.remaining()];
-            encodeBuffer.get(encoded);
-            return encoded;
+            return data.getBytes(encoding);
         } catch (Exception e) {
             // Fallback to original data
-            return data;
+            return data.getBytes();
         }
     }
 
@@ -268,7 +253,7 @@ public class LayeredIOHandle implements IOHandle {
             encodeBuffer.flip();
             byte[] pending = new byte[encodeBuffer.remaining()];
             encodeBuffer.get(pending);
-            delegate.write(pending);
+            delegate.write(new String(pending));
             encodeBuffer.clear();
         }
 

@@ -179,7 +179,8 @@ public class SocketIO implements IOHandle {
      * @return a RuntimeScalar indicating success (true) or failure (false)
      */
     @Override
-    public RuntimeScalar write(byte[] data) {
+    public RuntimeScalar write(String string) {
+        var data = string.getBytes();
         try {
             if (outputStream != null) {
                 outputStream.write(data);

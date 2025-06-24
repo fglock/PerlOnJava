@@ -53,8 +53,9 @@ public class CustomFileChannel implements IOHandle {
     }
 
     @Override
-    public RuntimeScalar write(byte[] data) {
+    public RuntimeScalar write(String string) {
         try {
+            var data = string.getBytes();
             ByteBuffer byteBuffer = ByteBuffer.wrap(data);
             int bytesWritten = fileChannel.write(byteBuffer);
             return new RuntimeScalar(bytesWritten);

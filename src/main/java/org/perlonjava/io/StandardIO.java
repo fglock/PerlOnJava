@@ -85,7 +85,8 @@ public class StandardIO implements IOHandle {
     }
 
     @Override
-    public RuntimeScalar write(byte[] data) {
+    public RuntimeScalar write(String string) {
+        var data = string.getBytes();
         synchronized (localBuffer) {
             int dataLength = data.length;
             int spaceLeft = LOCAL_BUFFER_SIZE - bufferPosition;

@@ -335,8 +335,7 @@ public class RuntimeIO implements RuntimeScalarReference {
 
     public RuntimeScalar write(String data) {
         needFlush = true;
-        byte[] bytes = data.getBytes();
-        return ioHandle.write(bytes);
+        return ioHandle.write(data);
     }
 
     public RuntimeScalar fileno() {

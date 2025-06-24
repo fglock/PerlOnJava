@@ -59,7 +59,8 @@ public class InMemoryIO implements IOHandle {
     }
 
     @Override
-    public RuntimeScalar write(byte[] data) {
+    public RuntimeScalar write(String string) {
+        var data = string.getBytes();
         try {
             byteArrayOutputStream.write(data);
             return RuntimeScalarCache.scalarTrue;
