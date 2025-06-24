@@ -1,7 +1,13 @@
 package org.perlonjava.io;
 
 import org.perlonjava.runtime.RuntimeScalar;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CharsetEncoder;
+import java.nio.charset.CoderResult;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 
 public class LayeredIOHandle implements IOHandle {
@@ -9,10 +15,31 @@ public class LayeredIOHandle implements IOHandle {
     private IOMode mode;
     private Charset encoding;
 
+    // State for handling buffer boundaries
+    private byte[] pendingInputBytes = new byte[0];
+    private CharsetDecoder decoder;
+    private CharsetEncoder encoder;
+    private ByteBuffer encodeBuffer;
+    private boolean lastWasCR = false; // For CRLF handling across boundaries
+
     public LayeredIOHandle(IOHandle delegate) {
         this.delegate = delegate;
         this.mode = IOMode.DEFAULT;
         this.encoding = StandardCharsets.UTF_8;
+        initializeCodecs();
+    }
+
+    private void initializeCodecs() {
+        if (encoding != null) {
+            decoder = encoding.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPLACE)
+                    .onUnmappableCharacter(CodingErrorAction.REPLACE);
+            encoder = encoding.newEncoder()
+                    .onMalformedInput(CodingErrorAction.REPLACE)
+                    .onUnmappableCharacter(CodingErrorAction.REPLACE);
+            // Buffer for encoding operations
+            encodeBuffer = ByteBuffer.allocate(8192);
+        }
     }
 
     public IOHandle getDelegate() {
@@ -22,6 +49,10 @@ public class LayeredIOHandle implements IOHandle {
     public RuntimeScalar binmode(String modeStr) {
         try {
             parseAndSetMode(modeStr);
+            initializeCodecs();
+            // Reset state when changing modes
+            pendingInputBytes = new byte[0];
+            lastWasCR = false;
             return new RuntimeScalar(1);
         } catch (Exception e) {
             return new RuntimeScalar(0);
@@ -38,6 +69,7 @@ public class LayeredIOHandle implements IOHandle {
             case ":bytes":
             case ":raw":
                 this.mode = IOMode.BYTES;
+                this.encoding = null;
                 break;
             case ":crlf":
                 this.mode = IOMode.CRLF;
@@ -67,7 +99,8 @@ public class LayeredIOHandle implements IOHandle {
     public RuntimeScalar read(byte[] buffer) {
         RuntimeScalar result = delegate.read(buffer);
         if (result.getInt() > 0) {
-            processInputData(buffer, result.getInt());
+            int actualBytes = processInputData(buffer, result.getInt());
+            result = new RuntimeScalar(actualBytes);
         }
         return result;
     }
@@ -78,8 +111,9 @@ public class LayeredIOHandle implements IOHandle {
                 return convertLfToCrlf(data);
             case UTF8:
             case ENCODING:
-                // Data is already in bytes, just pass through
-                return data;
+                // For text modes, we would typically receive character data
+                // and need to encode it. This is a simplified version.
+                return encodeText(data);
             case BYTES:
             case DEFAULT:
             default:
@@ -87,33 +121,98 @@ public class LayeredIOHandle implements IOHandle {
         }
     }
 
-    private void processInputData(byte[] buffer, int bytesRead) {
+    private int processInputData(byte[] buffer, int bytesRead) {
         switch (mode) {
             case CRLF:
-                convertCrlfToLf(buffer, bytesRead);
-                break;
+                return convertCrlfToLfWithState(buffer, bytesRead);
             case UTF8:
             case ENCODING:
-                // Data handling would be done at a higher level
-                break;
+                return decodeText(buffer, bytesRead);
             case BYTES:
             case DEFAULT:
             default:
-                // No processing needed
-                break;
+                return bytesRead;
+        }
+    }
+
+    private byte[] encodeText(byte[] data) {
+        if (encoder == null) return data;
+
+        try {
+            // This is simplified - in practice, we'd receive character data
+            String text = new String(data, encoding);
+            encodeBuffer.clear();
+            CharBuffer charBuffer = CharBuffer.wrap(text);
+
+            CoderResult result = encoder.encode(charBuffer, encodeBuffer, false);
+            if (result.isError()) {
+                result.throwException();
+            }
+
+            encodeBuffer.flip();
+            byte[] encoded = new byte[encodeBuffer.remaining()];
+            encodeBuffer.get(encoded);
+            return encoded;
+        } catch (Exception e) {
+            // Fallback to original data
+            return data;
+        }
+    }
+
+    private int decodeText(byte[] buffer, int bytesRead) {
+        if (decoder == null) return bytesRead;
+
+        try {
+            // Combine pending bytes with new data
+            byte[] allBytes = new byte[pendingInputBytes.length + bytesRead];
+            System.arraycopy(pendingInputBytes, 0, allBytes, 0, pendingInputBytes.length);
+            System.arraycopy(buffer, 0, allBytes, pendingInputBytes.length, bytesRead);
+
+            ByteBuffer byteBuffer = ByteBuffer.wrap(allBytes);
+            CharBuffer charBuffer = CharBuffer.allocate(allBytes.length * 2);
+
+            CoderResult result = decoder.decode(byteBuffer, charBuffer, false);
+
+            // Handle incomplete sequences at end of buffer
+            int remainingBytes = byteBuffer.remaining();
+            if (remainingBytes > 0) {
+                pendingInputBytes = new byte[remainingBytes];
+                byteBuffer.get(pendingInputBytes);
+            } else {
+                pendingInputBytes = new byte[0];
+            }
+
+            // Convert back to bytes (simplified)
+            charBuffer.flip();
+            String decoded = charBuffer.toString();
+            byte[] decodedBytes = decoded.getBytes(StandardCharsets.UTF_8);
+
+            int actualLength = Math.min(decodedBytes.length, buffer.length);
+            System.arraycopy(decodedBytes, 0, buffer, 0, actualLength);
+
+            // Clear remaining buffer
+            for (int i = actualLength; i < buffer.length; i++) {
+                buffer[i] = 0;
+            }
+
+            return actualLength;
+        } catch (Exception e) {
+            // Fallback - return original data
+            return bytesRead;
         }
     }
 
     private byte[] convertLfToCrlf(byte[] data) {
-        // Count LF characters
+        // Count LF characters that need CR added
         int lfCount = 0;
-        for (byte b : data) {
-            if (b == '\n') lfCount++;
+        for (int i = 0; i < data.length; i++) {
+            if (data[i] == '\n' && (i == 0 || data[i-1] != '\r')) {
+                lfCount++;
+            }
         }
 
         if (lfCount == 0) return data;
 
-        // Create new array with space for additional CR characters
         byte[] result = new byte[data.length + lfCount];
         int j = 0;
         for (int i = 0; i < data.length; i++) {
@@ -123,43 +222,73 @@ public class LayeredIOHandle implements IOHandle {
             result[j++] = data[i];
         }
 
-        // Trim if we overallocated
-        if (j < result.length) {
-            byte[] trimmed = new byte[j];
-            System.arraycopy(result, 0, trimmed, 0, j);
-            return trimmed;
-        }
-
         return result;
     }
 
-    private void convertCrlfToLf(byte[] buffer, int length) {
+    private int convertCrlfToLfWithState(byte[] buffer, int length) {
         int writePos = 0;
-        for (int readPos = 0; readPos < length; readPos++) {
-            if (buffer[readPos] == '\r' && readPos + 1 < length && buffer[readPos + 1] == '\n') {
-                // Skip the CR
-                continue;
+        int readPos = 0;
+
+        // Handle case where previous buffer ended with CR
+        if (lastWasCR && length > 0 && buffer[0] == '\n') {
+            // Skip the LF since we already processed the CR->LF conversion
+            readPos = 1;
+            lastWasCR = false;
+        } else {
+            lastWasCR = false;
+        }
+
+        for (; readPos < length; readPos++) {
+            if (buffer[readPos] == '\r') {
+                if (readPos + 1 < length && buffer[readPos + 1] == '\n') {
+                    // CRLF sequence within buffer - skip CR, keep LF
+                    continue;
+                } else {
+                    // CR at end of buffer - remember for next read
+                    lastWasCR = true;
+                    buffer[writePos++] = '\n'; // Convert CR to LF
+                }
+            } else {
+                buffer[writePos++] = buffer[readPos];
             }
-            buffer[writePos++] = buffer[readPos];
         }
 
         // Clear the remaining bytes
         while (writePos < length) {
             buffer[writePos++] = 0;
         }
-    }
 
-    // Delegate all other methods
-    @Override
-    public RuntimeScalar close() {
-        return delegate.close();
+        return writePos;
     }
 
     @Override
     public RuntimeScalar flush() {
+        // Handle any pending encoded data
+        if (encoder != null && encodeBuffer != null && encodeBuffer.position() > 0) {
+            encodeBuffer.flip();
+            byte[] pending = new byte[encodeBuffer.remaining()];
+            encodeBuffer.get(pending);
+            delegate.write(pending);
+            encodeBuffer.clear();
+        }
+
+        // Flush any incomplete character sequences
+        if (decoder != null && pendingInputBytes.length > 0) {
+            // In a real implementation, we might need to handle
+            // incomplete sequences on flush
+        }
+
         return delegate.flush();
     }
 
+    @Override
+    public RuntimeScalar close() {
+        // Flush any pending data before closing
+        flush();
+        return delegate.close();
+    }
+
+    // Delegate remaining methods unchanged
     @Override
     public RuntimeScalar getc() {
         return delegate.getc();
@@ -182,6 +311,11 @@ public class LayeredIOHandle implements IOHandle {
 
     @Override
     public RuntimeScalar seek(long pos) {
+        // Reset state on seek
+        pendingInputBytes = new byte[0];
+        lastWasCR = false;
+        if (decoder != null) decoder.reset();
+        if (encoder != null) encoder.reset();
         return delegate.seek(pos);
     }
 
@@ -190,12 +324,11 @@ public class LayeredIOHandle implements IOHandle {
         return delegate.truncate(length);
     }
 
-    // Enum for IO modes
     private enum IOMode {
-        DEFAULT,    // Default mode
-        BYTES,      // :bytes or :raw - no encoding
-        CRLF,       // :crlf - convert line endings
-        UTF8,       // :utf8 - UTF-8 encoding
-        ENCODING    // :encoding(X) - specific encoding
+        DEFAULT,
+        BYTES,
+        CRLF,
+        UTF8,
+        ENCODING
     }
 }
