@@ -59,8 +59,4 @@ public interface IOHandle {
     default RuntimeScalar truncate(long length) {
         return RuntimeIO.handleIOError("Truncate operation is not supported.");
     }
-
-    default RuntimeScalar binmode(String arg) {
-        return RuntimeIO.handleIOError("Binmode operation is not supported.");
-    }
 }

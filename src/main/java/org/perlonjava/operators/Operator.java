@@ -120,7 +120,19 @@ public class Operator {
             // File handle
             RuntimeIO runtimeIO = fileHandle.getRuntimeIO();
             if (runtimeIO.ioHandle != null) {
-                return runtimeIO.ioHandle.binmode(arg);
+                // return runtimeIO.ioHandle.binmode(arg);
+
+                // TODO - add IO layer (binmode) as needed
+                //
+                // // Wrap the IOHandle before returning
+                // IOHandle handle = /* create CustomFileChannel or other handle */;
+                // IOHandle wrappedHandle = new LayeredIOHandle(handle);
+                //
+                // RuntimeIO runtimeIO = new RuntimeIO();
+                // runtimeIO.ioHandle = wrappedHandle;
+                // return runtimeIO;
+
+                return fileHandle;
             } else {
                 return RuntimeIO.handleIOError("No file handle available for binmode");
             }
