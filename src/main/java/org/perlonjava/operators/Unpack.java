@@ -46,19 +46,44 @@ public class Unpack {
             }
 
             int count = 1;
+            boolean isStarCount = false;
 
-            // Check for repeat count
-            if (i + 1 < template.length() && Character.isDigit(template.charAt(i + 1))) {
-                int j = i + 1;
-                while (j < template.length() && Character.isDigit(template.charAt(j))) {
-                    j++;
+            // Check for repeat count or *
+            if (i + 1 < template.length()) {
+                char nextChar = template.charAt(i + 1);
+                if (nextChar == '*') {
+                    isStarCount = true;
+                    i++; // Skip the '*' character
+                } else if (Character.isDigit(nextChar)) {
+                    int j = i + 1;
+                    while (j < template.length() && Character.isDigit(template.charAt(j))) {
+                        j++;
+                    }
+                    count = Integer.parseInt(template.substring(i + 1, j));
+                    i = j - 1;
                 }
-                count = Integer.parseInt(template.substring(i + 1, j));
-                i = j - 1;
+            }
+
+            if (isStarCount) {
+                // For star count, process all remaining bytes for this format
+                if (format == 'a' || format == 'A' || format == 'Z') {
+                    // For string formats, read all remaining bytes as one string
+                    count = buffer.remaining();
+                } else {
+                    // For other formats, calculate how many items we can read
+                    int formatSize = getFormatSize(format);
+                    if (formatSize == 0) {
+                        throw new RuntimeException("unpack: unknown format size for: " + format);
+                    }
+                    count = buffer.remaining() / formatSize;
+                }
             }
 
             for (int j = 0; j < count; j++) {
                 if (buffer.remaining() < getFormatSize(format)) {
+                    if (isStarCount) {
+                        break; // For star count, just stop when we run out of data
+                    }
                     throw new RuntimeException("unpack: not enough data");
                 }
 
