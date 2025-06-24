@@ -322,9 +322,10 @@ public class PrototypeArgs {
             if (refType == '$' && referenceArg instanceof OperatorNode opNode &&
                     opNode.operator.equals("\\")) {
                 // Get the subroutine name from the parser context
-                // String subName = parser.ctx.symbolTable.getCurrentPackage() + "::" + parser.currentSubroutineName;
+                String subName = parser.ctx.symbolTable.getFullyQualifiedSubroutineName();
+                String subNamePart = (subName == null || subName.isEmpty()) ? "" : " to " + subName;
                 parser.throwError("Type of arg " + (args.elements.size() + 1) +
-                        // " to " + subName +
+                        subNamePart +
                         " must be scalar (not single ref constructor)");
             }
             args.elements.add(new OperatorNode("\\", referenceArg, referenceArg.getIndex()));
