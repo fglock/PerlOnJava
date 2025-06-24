@@ -139,6 +139,19 @@ public class RuntimeIO implements RuntimeScalarReference {
             handleIOException(e, "open failed");
             fh = null;
         }
+
+
+        // TODO - add IO layer (binmode) as needed
+        //
+        // // Wrap the IOHandle before returning
+        // IOHandle handle = /* create CustomFileChannel or other handle */;
+        // IOHandle wrappedHandle = new LayeredIOHandle(handle);
+        //
+        // RuntimeIO runtimeIO = new RuntimeIO();
+        // runtimeIO.ioHandle = wrappedHandle;
+        // return runtimeIO;
+
+
         return fh;
     }
 
