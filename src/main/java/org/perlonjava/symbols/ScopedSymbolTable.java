@@ -42,6 +42,8 @@ public class ScopedSymbolTable {
     // A stack to manage nested scopes of symbol tables.
     private final Stack<SymbolTable> symbolTableStack = new Stack<>();
     private final Stack<PackageInfo> packageStack = new Stack<>();
+    // Stack to manage nested subroutine names for error messages
+    private final Stack<String> subroutineStack = new Stack<>();
     // Cache for the getAllVisibleVariables method
     private Map<Integer, SymbolTable.SymbolEntry> visibleVariablesCache;
 
@@ -58,6 +60,8 @@ public class ScopedSymbolTable {
         strictOptionsStack.push(0);
         // Initialize the package name
         packageStack.push(new PackageInfo("main", false));
+        // Initialize the subroutine stack with empty string (no subroutine)
+        subroutineStack.push("");
         // Initialize an empty symbol table
         symbolTableStack.push(new SymbolTable(0));
     }
@@ -125,6 +129,8 @@ public class ScopedSymbolTable {
         symbolTableStack.push(new SymbolTable(symbolTableStack.peek().index));
         // Push a copy of the current package name onto the stack
         packageStack.push(packageStack.peek());
+        // Push a copy of the current subroutine name onto the stack
+        subroutineStack.push(subroutineStack.peek());
         // Push a copy of the current warning categories map onto the stack
         warningFlagsStack.push(warningFlagsStack.peek());
         // Push a copy of the current feature categories map onto the stack
@@ -148,6 +154,7 @@ public class ScopedSymbolTable {
         while (symbolTableStack.size() > scopeIndex) {
             symbolTableStack.pop();
             packageStack.pop();
+            subroutineStack.pop();
             warningFlagsStack.pop();
             featureFlagsStack.pop();
             strictOptionsStack.pop();
@@ -309,6 +316,42 @@ public class ScopedSymbolTable {
     }
 
     /**
+     * Gets the current subroutine name.
+     *
+     * @return The name of the current subroutine, or empty string if not in a subroutine.
+     */
+    public String getCurrentSubroutine() {
+        return subroutineStack.peek();
+    }
+
+    /**
+     * Sets the current subroutine name.
+     *
+     * @param subroutineName The name of the subroutine to set as the current scope.
+     */
+    public void setCurrentSubroutine(String subroutineName) {
+        subroutineStack.pop();
+        subroutineStack.push(subroutineName != null ? subroutineName : "");
+    }
+
+    /**
+     * Gets the fully qualified subroutine name including package.
+     *
+     * @return The fully qualified subroutine name, or empty string if not in a subroutine.
+     */
+    public String getFullyQualifiedSubroutineName() {
+        String subroutineName = getCurrentSubroutine();
+        if (subroutineName.isEmpty()) {
+            return "";
+        }
+        // If the subroutine name already contains ::, it's already fully qualified
+        if (subroutineName.contains("::")) {
+            return subroutineName;
+        }
+        return getCurrentPackage() + "::" + subroutineName;
+    }
+
+    /**
      * Clones the symbol table to be used at runtime - this is used by eval-string.
      *
      * @return A cloned instance of ScopedSymbolTable.
@@ -326,6 +369,9 @@ public class ScopedSymbolTable {
 
         // Clone the current package
         st.setCurrentPackage(this.getCurrentPackage(), this.currentPackageIsClass());
+
+        // Clone the current subroutine
+        st.setCurrentSubroutine(this.getCurrentSubroutine());
 
         // Clone warning flags
         st.warningFlagsStack.pop(); // Remove the initial value pushed by enterScope
@@ -376,6 +422,12 @@ public class ScopedSymbolTable {
         sb.append("  packageStack: [\n");
         for (PackageInfo pkg : packageStack) {
             sb.append("    ").append(pkg.packageName).append(" ").append(pkg.isClass).append(",\n");
+        }
+        sb.append("  ],\n");
+
+        sb.append("  subroutineStack: [\n");
+        for (String sub : subroutineStack) {
+            sb.append("    \"").append(sub).append("\",\n");
         }
         sb.append("  ],\n");
 

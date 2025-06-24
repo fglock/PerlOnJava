@@ -172,21 +172,32 @@ public class SubroutineParser {
         // After parsing name, prototype, and attributes, we expect an opening curly brace '{' to denote the start of the subroutine block.
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
 
-        // Parse the block of the subroutine, which contains the actual code.
-        BlockNode block = ParseBlock.parseBlock(parser);
+        // Save the current subroutine context and set the new one
+        String previousSubroutine = parser.ctx.symbolTable.getCurrentSubroutine();
 
-        // After the block, we expect a closing curly brace '}' to denote the end of the subroutine.
-        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+        // Set the current subroutine name (use empty string for anonymous subs)
+        parser.ctx.symbolTable.setCurrentSubroutine(subName != null ? subName : "");
 
-        // Insert signature code in the block
-        if (signature != null) {
-            block.elements.addAll(0, signature.elements);
-        }
+        try {
+            // Parse the block of the subroutine, which contains the actual code.
+            BlockNode block = ParseBlock.parseBlock(parser);
 
-        if (subName == null) {
-            return handleAnonSub(parser, subName, prototype, attributes, block, currentIndex);
-        } else {
-            return handleNamedSub(parser, subName, prototype, attributes, block);
+            // After the block, we expect a closing curly brace '}' to denote the end of the subroutine.
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+
+            // Insert signature code in the block
+            if (signature != null) {
+                block.elements.addAll(0, signature.elements);
+            }
+
+            if (subName == null) {
+                return handleAnonSub(parser, subName, prototype, attributes, block, currentIndex);
+            } else {
+                return handleNamedSub(parser, subName, prototype, attributes, block);
+            }
+        } finally {
+            // Restore the previous subroutine context
+            parser.ctx.symbolTable.setCurrentSubroutine(previousSubroutine);
         }
     }
 
