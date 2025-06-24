@@ -242,7 +242,7 @@ public class PrototypeArgs {
     private static void handleScalarArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
         Node arg = parseArgumentWithComma(parser, isOptional, needComma, "scalar argument");
         if (arg != null) {
-            args.elements.add(new OperatorNode("scalar", arg, arg.getIndex()));
+            args.elements.add(toScalarContext(arg));
         }
     }
 
@@ -252,7 +252,7 @@ public class PrototypeArgs {
             args.elements.add(scalarUnderscore(parser));
             return;
         }
-        args.elements.add(new OperatorNode("scalar", arg, arg.getIndex()));
+        args.elements.add(toScalarContext(arg));
     }
 
     private static void handleTypeGlobArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
@@ -283,7 +283,7 @@ public class PrototypeArgs {
             args.elements.add(new OperatorNode("\\", expr, expr.getIndex()));
         } else {
             // Bare scalars
-            args.elements.add(new OperatorNode("scalar", expr, expr.getIndex()));
+            args.elements.add(toScalarContext(expr));
         }
     }
 
@@ -328,7 +328,7 @@ public class PrototypeArgs {
         if (arg instanceof OperatorNode opNode && (opNode.operator.equals("@") || opNode.operator.equals("%"))) {
             args.elements.add(new OperatorNode("\\", arg, arg.getIndex()));
         } else {
-            args.elements.add(new OperatorNode("scalar", arg, arg.getIndex()));
+            args.elements.add(toScalarContext(arg));
         }
     }
 
@@ -397,4 +397,45 @@ public class PrototypeArgs {
         }
         return expr;
     }
+
+    /**
+     * Transforms a node to scalar context only if necessary.
+     * Avoids wrapping nodes that are already scalar or don't need scalar conversion.
+     *
+     * @param node The node to potentially transform
+     * @return The node in scalar context (wrapped if needed, or original if already scalar)
+     */
+    private static Node toScalarContext(Node node) {
+        if (node == null) {
+            return null;
+        }
+
+        // Check if node is already a scalar operation
+        if (node instanceof OperatorNode opNode) {
+            switch (opNode.operator) {
+                case "scalar":
+                    // Already in scalar context
+                    return node;
+                case "$":
+                    // Scalar variable - already scalar
+                    return node;
+                case "\\":
+                    // Reference - already scalar (references are scalars in Perl)
+                    return node;
+                // Add other scalar operations as needed
+                case "int", "abs", "length", "defined", "undef":
+                    return node;
+            }
+        }
+
+        // Check if node is inherently scalar (literals)
+        if (node instanceof org.perlonjava.astnode.NumberNode ||
+                node instanceof org.perlonjava.astnode.StringNode) {
+            return node;
+        }
+
+        // Otherwise, wrap in scalar context
+        return new OperatorNode("scalar", node, node.getIndex());
+    }
+
 }
