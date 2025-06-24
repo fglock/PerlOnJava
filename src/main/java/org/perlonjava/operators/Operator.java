@@ -1,5 +1,7 @@
 package org.perlonjava.operators;
 
+import org.perlonjava.io.IOHandle;
+import org.perlonjava.io.LayeredIOHandle;
 import org.perlonjava.regex.RuntimeRegex;
 import org.perlonjava.runtime.*;
 
@@ -115,22 +117,25 @@ public class Operator {
     }
 
     public static RuntimeScalar binmode(RuntimeScalar fileHandle, RuntimeList runtimeList) {
-        String arg = runtimeList.getFirst().toString();
+        String ioLayer = runtimeList.getFirst().toString();
         if (fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
             // File handle
             RuntimeIO runtimeIO = fileHandle.getRuntimeIO();
             if (runtimeIO.ioHandle != null) {
-                // return runtimeIO.ioHandle.binmode(arg);
+                if (ioLayer.isEmpty()) {
+                    ioLayer = ":raw";
+                }
 
-                // TODO - add IO layer (binmode) as needed
-                //
-                // // Wrap the IOHandle before returning
-                // IOHandle handle = /* create CustomFileChannel or other handle */;
-                // IOHandle wrappedHandle = new LayeredIOHandle(handle);
-                //
-                // RuntimeIO runtimeIO = new RuntimeIO();
-                // runtimeIO.ioHandle = wrappedHandle;
-                // return runtimeIO;
+                // Unwrap if already wrapped
+                IOHandle baseHandle = runtimeIO.ioHandle;
+                if (baseHandle instanceof LayeredIOHandle) {
+                    baseHandle = ((LayeredIOHandle) baseHandle).getDelegate();
+                }
+
+                // Wrap the IOHandle and set the ioLayer
+                LayeredIOHandle wrappedHandle = new LayeredIOHandle(baseHandle);
+                wrappedHandle.binmode(ioLayer);
+                runtimeIO.ioHandle = wrappedHandle;
 
                 return fileHandle;
             } else {

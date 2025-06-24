@@ -15,6 +15,10 @@ public class LayeredIOHandle implements IOHandle {
         this.encoding = StandardCharsets.UTF_8;
     }
 
+    public IOHandle getDelegate() {
+        return delegate;
+    }
+
     public RuntimeScalar binmode(String modeStr) {
         try {
             parseAndSetMode(modeStr);
