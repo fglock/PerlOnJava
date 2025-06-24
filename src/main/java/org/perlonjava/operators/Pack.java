@@ -43,14 +43,20 @@ public class Pack {
 
             int count = 1;
 
-            // Check for repeat count
-            if (i + 1 < template.length() && Character.isDigit(template.charAt(i + 1))) {
-                int j = i + 1;
-                while (j < template.length() && Character.isDigit(template.charAt(j))) {
-                    j++;
+            // Check for repeat count or '*'
+            if (i + 1 < template.length()) {
+                char nextChar = template.charAt(i + 1);
+                if (Character.isDigit(nextChar)) {
+                    int j = i + 1;
+                    while (j < template.length() && Character.isDigit(template.charAt(j))) {
+                        j++;
+                    }
+                    count = Integer.parseInt(template.substring(i + 1, j));
+                    i = j - 1;
+                } else if (nextChar == '*') {
+                    count = values.size() - valueIndex; // Use all remaining values
+                    i++; // consume the '*'
                 }
-                count = Integer.parseInt(template.substring(i + 1, j));
-                i = j - 1;
             }
 
             if (format == 'b' || format == 'B') {

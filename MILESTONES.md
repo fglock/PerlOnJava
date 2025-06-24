@@ -240,6 +240,7 @@ The following areas are currently under active development to enhance the functi
   - Added overload operators: `!`, `+`, `-`, `*`, `/`, `%`, `int`, `neg`, `log`, `sqrt`, `cos`, `sin`, `exp`, `abs`, `atan2`, `**`, `@{}`, `%{}`. `${}`.
   - Subroutine prototypes are fully implemented. Added or fixed: `+`, `;`, `*`, `\@`, `\%`, `\$`, `\[@%]`.
   - Added double quoted string escapes: `\U`, `\L`, `\u`, `\l`.
+  - Added star count (`C*`) in `pack`, `unpack`.
   - Added `# line` preprocessor directive.
   - `Test::More` module: added `subtest`.
   - `CORE::` operators have the same prototypes as in Perl.
