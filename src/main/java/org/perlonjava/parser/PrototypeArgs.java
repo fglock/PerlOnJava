@@ -18,7 +18,6 @@ import static org.perlonjava.parser.OperatorParser.scalarUnderscore;
  * <p>
  * Perl prototype characters:
  * $ - scalar argument
- *
  * @ - array argument (consumes remaining args)
  * % - hash argument (consumes remaining args)
  * & - code reference or block
@@ -54,6 +53,14 @@ public class PrototypeArgs {
             args = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
         } else {
             parsePrototypeArguments(parser, args, prototype);
+
+            // Check for too many arguments without parentheses only if prototype expects 2+ args
+            if (!hasParentheses && countPrototypeArgs(prototype) >= 2) {
+                // If we see a comma after parsing all required args, there are too many
+                if (isComma(TokenUtils.peek(parser))) {
+                    parser.throwError("Too many arguments");
+                }
+            }
         }
 
         if (hasParentheses) {
@@ -74,6 +81,49 @@ public class PrototypeArgs {
         }
 
         return args;
+    }
+
+    /**
+     * Count the number of arguments expected by a prototype.
+     * This counts all arguments before @ or % (which consume all remaining).
+     *
+     * @param prototype The prototype string
+     * @return The number of discrete arguments expected
+     */
+    private static int countPrototypeArgs(String prototype) {
+        int count = 0;
+        boolean inBackslash = false;
+        boolean inGroup = false;
+
+        for (int i = 0; i < prototype.length(); i++) {
+            char c = prototype.charAt(i);
+
+            if (inBackslash) {
+                if (c == '[') {
+                    inGroup = true;
+                } else if (!inGroup) {
+                    count++;
+                    inBackslash = false;
+                }
+            } else if (inGroup) {
+                if (c == ']') {
+                    count++;
+                    inGroup = false;
+                    inBackslash = false;
+                }
+            } else {
+                switch (c) {
+                    case ' ', '\t', '\n', ';' -> {} // Ignore whitespace and optional separator
+                    case '\\' -> inBackslash = true;
+                    case '@', '%' -> {
+                        return count; // These consume all remaining args
+                    }
+                    case '$', '_', '*', '&', '+' -> count++;
+                }
+            }
+        }
+
+        return count;
     }
 
     /**
@@ -149,6 +199,14 @@ public class PrototypeArgs {
      * @return The parsed argument node, or null if parsing failed and the argument was optional
      */
     private static Node parseArgumentWithComma(Parser parser, boolean isOptional, boolean needComma, String expectedType) {
+        // Check if we're at the end of arguments before checking for comma
+        if (Parser.isExpressionTerminator(TokenUtils.peek(parser))) {
+            if (!isOptional) {
+                parser.throwError("Not enough arguments");
+            }
+            return null;
+        }
+
         if (needComma && !consumeCommaIfPresent(parser, isOptional)) {
             return null;
         }
@@ -176,11 +234,19 @@ public class PrototypeArgs {
             return;
         }
 
+        // Check if we're at the end of arguments
+        if (Parser.isExpressionTerminator(TokenUtils.peek(parser))) {
+            if (!isOptional) {
+                parser.throwError("Not enough arguments");
+            }
+            return;
+        }
+
         // Parse the expression
         Node expr = parser.parseExpression(parser.getPrecedence(","));
         if (expr == null) {
             if (!isOptional) {
-                parser.throwError("syntax error, expected argument");
+                parser.throwError("Not enough arguments");
             }
             return;
         }
@@ -247,27 +313,41 @@ public class PrototypeArgs {
         }
 
         boolean isGroup = prototype.charAt(prototypeIndex) == '[';
-        String expectedType = isGroup ? "reference" : "reference to " + prototype.charAt(prototypeIndex);
+        char refType = isGroup ? ' ' : prototype.charAt(prototypeIndex);
+        String expectedType = isGroup ? "reference" : "reference to " + refType;
 
         Node referenceArg = parseArgumentWithComma(parser, isOptional, needComma, expectedType);
         if (referenceArg != null) {
+            // Check if user passed an explicit reference when prototype expects auto-reference
+            if (refType == '$' && referenceArg instanceof OperatorNode opNode &&
+                    opNode.operator.equals("\\")) {
+                // Get the subroutine name from the parser context
+                // String subName = parser.ctx.symbolTable.getCurrentPackage() + "::" + parser.currentSubroutineName;
+                parser.throwError("Type of arg " + (args.elements.size() + 1) +
+                        // " to " + subName +
+                        " must be scalar (not single ref constructor)");
+            }
             args.elements.add(new OperatorNode("\\", referenceArg, referenceArg.getIndex()));
         }
 
         if (!isGroup) {
-            return prototypeIndex + 1;
+            return prototypeIndex;  // Return the index of the character after '\X', not one beyond it
         }
 
         while (prototypeIndex < prototype.length() && prototype.charAt(prototypeIndex) != ']') {
             prototypeIndex++;
         }
-        return prototypeIndex + 1;
+        return prototypeIndex + 1;  // For groups, skip past the closing ']'
     }
 
     private static boolean consumeCommaIfPresent(Parser parser, boolean isOptional) {
         if (!isComma(TokenUtils.peek(parser))) {
             if (isOptional) {
                 return false;
+            }
+            // Check if we're at the end of arguments before requiring a comma
+            if (Parser.isExpressionTerminator(TokenUtils.peek(parser))) {
+                parser.throwError("Not enough arguments");
             }
             parser.throwError("syntax error, expected comma");
         }
@@ -280,8 +360,14 @@ public class PrototypeArgs {
             if (isOptional) {
                 return null;
             }
-            parser.throwError("syntax error, expected " + expectedType);
+            parser.throwError("Not enough arguments");
         }
-        return parser.parseExpression(parser.getPrecedence(","));
+        Node expr = parser.parseExpression(parser.getPrecedence(","));
+        if (expr == null) {
+            if (!isOptional) {
+                parser.throwError("Not enough arguments");
+            }
+        }
+        return expr;
     }
 }
