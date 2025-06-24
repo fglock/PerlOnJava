@@ -77,20 +77,31 @@ public class SubroutineParser {
             return nameNode;
         }
 
-        // Handle the parameter list for the subroutine call
-        ListNode arguments;
-        if (TokenUtils.peek(parser).text.equals("->")) {
-            // method call without parentheses
-            arguments = new ListNode(parser.tokenIndex);
-        } else {
-            arguments = consumeArgsWithPrototype(parser, prototype);
-        }
+        // Save the current subroutine context
+        String previousSubroutine = parser.ctx.symbolTable.getCurrentSubroutine();
 
-        // Rewrite and return the subroutine call as `&name(arguments)`
-        return new BinaryOperatorNode("(",
-                new OperatorNode("&", nameNode, currentIndex),
-                arguments,
-                currentIndex);
+        try {
+            // Set the subroutine being called for error messages
+            parser.ctx.symbolTable.setCurrentSubroutine(fullName);
+
+            // Handle the parameter list for the subroutine call
+            ListNode arguments;
+            if (TokenUtils.peek(parser).text.equals("->")) {
+                // method call without parentheses
+                arguments = new ListNode(parser.tokenIndex);
+            } else {
+                arguments = consumeArgsWithPrototype(parser, prototype);
+            }
+
+            // Rewrite and return the subroutine call as `&name(arguments)`
+            return new BinaryOperatorNode("(",
+                    new OperatorNode("&", nameNode, currentIndex),
+                    arguments,
+                    currentIndex);
+        } finally {
+            // Restore the previous subroutine context
+            parser.ctx.symbolTable.setCurrentSubroutine(previousSubroutine);
+        }
     }
 
     public static Node parseSubroutineDefinition(Parser parser, boolean wantName, String declaration) {
