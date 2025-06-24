@@ -19,6 +19,7 @@ public class GlobalContext {
     public static final String LAST_FH = "main::" + Character.toString('L' - 'A' + 1) + "AST_FH"; // $^LAST_FH
     public static final String GLOBAL_PHASE = "main::" + Character.toString('G' - 'A' + 1) + "LOBAL_PHASE"; // $^GLOBAL_PHASE
     public static final String TAINT = "main::" + Character.toString('T' - 'A' + 1) + "AINT"; // $^TAINT
+    public static final String OPEN = "main::" + Character.toString('O' - 'A' + 1) + "PEN"; // $^OPEN
 
     // Internal name of the "./src/main/perl/lib" directory
     public static final String JAR_PERLLIB = "jar:PERL5LIB";

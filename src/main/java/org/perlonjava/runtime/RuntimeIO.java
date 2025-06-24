@@ -118,6 +118,20 @@ public class RuntimeIO implements RuntimeScalarReference {
     public static RuntimeIO open(String fileName, String mode) {
         RuntimeIO fh = new RuntimeIO();
         try {
+
+            String ioLayers = "";
+            // Check if mode contains IO layers (indicated by ':')
+            int colonIndex = mode.indexOf(':');
+            if (colonIndex != -1) {
+                ioLayers = mode.substring(colonIndex);
+                mode = mode.substring(0, colonIndex);
+
+                // If empty fileMode, default to read mode
+                if (mode.isEmpty()) {
+                    mode = "<";
+                }
+            }
+
             Path filePath = getPath(fileName);
             Set<StandardOpenOption> options = fh.convertMode(mode);
 
@@ -135,23 +149,13 @@ public class RuntimeIO implements RuntimeScalarReference {
                 RuntimeScalar size = fh.ioHandle.tell();
                 fh.ioHandle.seek(size.getLong()); // Move to end for appending
             }
+
+            fh.binmode(ioLayers);
+
         } catch (IOException e) {
             handleIOException(e, "open failed");
             fh = null;
         }
-
-
-        // TODO - add IO layer (binmode) as needed
-        //
-        // // Wrap the IOHandle before returning
-        // IOHandle handle = /* create CustomFileChannel or other handle */;
-        // IOHandle wrappedHandle = new LayeredIOHandle(handle);
-        //
-        // RuntimeIO runtimeIO = new RuntimeIO();
-        // runtimeIO.ioHandle = wrappedHandle;
-        // return runtimeIO;
-
-
         return fh;
     }
 
@@ -234,6 +238,33 @@ public class RuntimeIO implements RuntimeScalarReference {
             // throw  new PerlCompilerException("Invalid fileHandle type: " + fileHandle.type);
         }
         return fh;
+    }
+
+    public void binmode(String ioLayer) {
+        if (ioLayer.isEmpty()) {
+            // No layers specified, check ${^OPEN} for default layers
+            ioLayer = getGlobalVariable(GlobalContext.OPEN).toString();
+        }
+        if (ioLayer.isEmpty() || ioLayer.equals(":")) {
+            // If only ":" is specified, use OS default
+            String osName = System.getProperty("os.name").toLowerCase();
+            if (osName.contains("win")) {
+                ioLayer = ":crlf";
+            } else {
+                ioLayer = ":raw";
+            }
+        }
+
+        // Unwrap if already wrapped
+        IOHandle baseHandle = ioHandle;
+        if (baseHandle instanceof LayeredIOHandle) {
+            baseHandle = ((LayeredIOHandle) baseHandle).getDelegate();
+        }
+
+        // Wrap the IOHandle and set the ioLayer
+        LayeredIOHandle wrappedHandle = new LayeredIOHandle(baseHandle);
+        wrappedHandle.binmode(ioLayer);
+        ioHandle = wrappedHandle;
     }
 
     private Set<StandardOpenOption> convertMode(String mode) {

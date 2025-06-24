@@ -1,7 +1,5 @@
 package org.perlonjava.operators;
 
-import org.perlonjava.io.IOHandle;
-import org.perlonjava.io.LayeredIOHandle;
 import org.perlonjava.regex.RuntimeRegex;
 import org.perlonjava.runtime.*;
 
@@ -122,21 +120,7 @@ public class Operator {
             // File handle
             RuntimeIO runtimeIO = fileHandle.getRuntimeIO();
             if (runtimeIO.ioHandle != null) {
-                if (ioLayer.isEmpty()) {
-                    ioLayer = ":raw";
-                }
-
-                // Unwrap if already wrapped
-                IOHandle baseHandle = runtimeIO.ioHandle;
-                if (baseHandle instanceof LayeredIOHandle) {
-                    baseHandle = ((LayeredIOHandle) baseHandle).getDelegate();
-                }
-
-                // Wrap the IOHandle and set the ioLayer
-                LayeredIOHandle wrappedHandle = new LayeredIOHandle(baseHandle);
-                wrappedHandle.binmode(ioLayer);
-                runtimeIO.ioHandle = wrappedHandle;
-
+                runtimeIO.binmode(ioLayer);
                 return fileHandle;
             } else {
                 return RuntimeIO.handleIOError("No file handle available for binmode");
