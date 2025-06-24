@@ -317,12 +317,19 @@ public class CoreOperatorResolver {
                 // Example: "read",
                 if (prototype != null) {
                     parser.ctx.logDebug("CORE operator " + operator2 + " with prototype " + prototype);
-                    // TODO - error message: "Too many arguments for read"
-                    ListNode arguments = consumeArgsWithPrototype(parser, prototype);
-                    return new OperatorNode(
-                            operator2,
-                            arguments,
-                            currentIndex);
+                    // Set the operator name as the subroutine name for better error messages
+                    String previousSubName = parser.ctx.symbolTable.getCurrentSubroutine();
+                    parser.ctx.symbolTable.setCurrentSubroutine(operator2);
+                    try {
+                        ListNode arguments = consumeArgsWithPrototype(parser, prototype);
+                        return new OperatorNode(
+                                operator2,
+                                arguments,
+                                currentIndex);
+                    } finally {
+                        // Restore the previous subroutine name
+                        parser.ctx.symbolTable.setCurrentSubroutine(previousSubName);
+                    }
                 }
         }
         return null;

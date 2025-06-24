@@ -335,23 +335,6 @@ public class ScopedSymbolTable {
     }
 
     /**
-     * Gets the fully qualified subroutine name including package.
-     *
-     * @return The fully qualified subroutine name, or empty string if not in a subroutine.
-     */
-    public String getFullyQualifiedSubroutineName() {
-        String subroutineName = getCurrentSubroutine();
-        if (subroutineName.isEmpty()) {
-            return "";
-        }
-        // If the subroutine name already contains ::, it's already fully qualified
-        if (subroutineName.contains("::")) {
-            return subroutineName;
-        }
-        return getCurrentPackage() + "::" + subroutineName;
-    }
-
-    /**
      * Clones the symbol table to be used at runtime - this is used by eval-string.
      *
      * @return A cloned instance of ScopedSymbolTable.

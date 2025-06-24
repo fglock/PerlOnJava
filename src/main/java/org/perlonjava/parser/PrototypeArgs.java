@@ -36,7 +36,7 @@ public class PrototypeArgs {
      * @param parser The parser instance
      */
     private static void throwNotEnoughArgumentsError(Parser parser) {
-        String subName = parser.ctx.symbolTable.getFullyQualifiedSubroutineName();
+        String subName = parser.ctx.symbolTable.getCurrentSubroutine();
         String errorMsg = (subName == null || subName.isEmpty())
                 ? "Not enough arguments"
                 : "Not enough arguments for " + subName;
@@ -49,7 +49,7 @@ public class PrototypeArgs {
      * @param parser The parser instance
      */
     private static void throwTooManyArgumentsError(Parser parser) {
-        String subName = parser.ctx.symbolTable.getFullyQualifiedSubroutineName();
+        String subName = parser.ctx.symbolTable.getCurrentSubroutine();
         String errorMsg = (subName == null || subName.isEmpty())
                 ? "Too many arguments"
                 : "Too many arguments for " + subName;
@@ -348,7 +348,7 @@ public class PrototypeArgs {
             if (refType == '$' && referenceArg instanceof OperatorNode opNode &&
                     opNode.operator.equals("\\")) {
                 // Get the subroutine name from the parser context
-                String subName = parser.ctx.symbolTable.getFullyQualifiedSubroutineName();
+                String subName = parser.ctx.symbolTable.getCurrentSubroutine();
                 String subNamePart = (subName == null || subName.isEmpty()) ? "" : " to " + subName;
                 parser.throwError("Type of arg " + (args.elements.size() + 1) +
                         subNamePart +
