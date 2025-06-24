@@ -31,6 +31,32 @@ import static org.perlonjava.parser.OperatorParser.scalarUnderscore;
 public class PrototypeArgs {
 
     /**
+     * Throws a "Not enough arguments" error with the subroutine name if available.
+     *
+     * @param parser The parser instance
+     */
+    private static void throwNotEnoughArgumentsError(Parser parser) {
+        String subName = parser.ctx.symbolTable.getFullyQualifiedSubroutineName();
+        String errorMsg = (subName == null || subName.isEmpty())
+                ? "Not enough arguments"
+                : "Not enough arguments for " + subName;
+        parser.throwError(errorMsg);
+    }
+
+    /**
+     * Throws a "Too many arguments" error with the subroutine name if available.
+     *
+     * @param parser The parser instance
+     */
+    private static void throwTooManyArgumentsError(Parser parser) {
+        String subName = parser.ctx.symbolTable.getFullyQualifiedSubroutineName();
+        String errorMsg = (subName == null || subName.isEmpty())
+                ? "Too many arguments"
+                : "Too many arguments for " + subName;
+        parser.throwError(errorMsg);
+    }
+
+    /**
      * Consumes arguments from the parser according to a specified prototype.
      * If the prototype is null, parses a list of zero or more elements.
      * Handles optional parentheses around arguments.
@@ -58,7 +84,7 @@ public class PrototypeArgs {
             if (!hasParentheses && countPrototypeArgs(prototype) >= 2) {
                 // If we see a comma after parsing all required args, there are too many
                 if (isComma(TokenUtils.peek(parser))) {
-                    parser.throwError("Too many arguments");
+                    throwTooManyArgumentsError(parser);
                 }
             }
         }
@@ -70,7 +96,7 @@ public class PrototypeArgs {
             }
 
             if (!TokenUtils.peek(parser).text.equals(")")) {
-                parser.throwError("Too many arguments");
+                throwTooManyArgumentsError(parser);
             }
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
         }
@@ -202,7 +228,7 @@ public class PrototypeArgs {
         // Check if we're at the end of arguments before checking for comma
         if (Parser.isExpressionTerminator(TokenUtils.peek(parser))) {
             if (!isOptional) {
-                parser.throwError("Not enough arguments");
+                throwNotEnoughArgumentsError(parser);
             }
             return null;
         }
@@ -237,7 +263,7 @@ public class PrototypeArgs {
         // Check if we're at the end of arguments
         if (Parser.isExpressionTerminator(TokenUtils.peek(parser))) {
             if (!isOptional) {
-                parser.throwError("Not enough arguments");
+                throwNotEnoughArgumentsError(parser);
             }
             return;
         }
@@ -246,7 +272,7 @@ public class PrototypeArgs {
         Node expr = parser.parseExpression(parser.getPrecedence(","));
         if (expr == null) {
             if (!isOptional) {
-                parser.throwError("Not enough arguments");
+                throwNotEnoughArgumentsError(parser);
             }
             return;
         }
@@ -348,7 +374,7 @@ public class PrototypeArgs {
             }
             // Check if we're at the end of arguments before requiring a comma
             if (Parser.isExpressionTerminator(TokenUtils.peek(parser))) {
-                parser.throwError("Not enough arguments");
+                throwNotEnoughArgumentsError(parser);
             }
             parser.throwError("syntax error, expected comma");
         }
@@ -361,12 +387,12 @@ public class PrototypeArgs {
             if (isOptional) {
                 return null;
             }
-            parser.throwError("Not enough arguments");
+            throwNotEnoughArgumentsError(parser);
         }
         Node expr = parser.parseExpression(parser.getPrecedence(","));
         if (expr == null) {
             if (!isOptional) {
-                parser.throwError("Not enough arguments");
+                throwNotEnoughArgumentsError(parser);
             }
         }
         return expr;
