@@ -80,7 +80,7 @@ public class EmitOperatorNode {
             case "readdir" -> EmitOperator.handleReaddirOperator(emitterVisitor, node);
             case "glob" -> EmitOperator.handleGlobBuiltin(emitterVisitor, node);
             case "rindex", "index" -> EmitOperator.handleIndexBuiltin(emitterVisitor, node);
-            case "pack", "unpack", "mkdir", "opendir", "seekdir", "crypt", "vec", "each" ->
+            case "pack", "unpack", "mkdir", "opendir", "seekdir", "crypt", "vec", "each", "read" ->
                     EmitOperator.handleVecBuiltin(emitterVisitor, node);
             case "atan2" -> EmitOperator.handleAtan2(emitterVisitor, node);
             case "scalar" -> EmitOperator.handleScalar(emitterVisitor, node);
