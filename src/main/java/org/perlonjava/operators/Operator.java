@@ -258,6 +258,14 @@ public class Operator {
         throw new PerlCompilerException("No input source available");
     }
 
+    public static RuntimeScalar tell(RuntimeScalar fileHandle) {
+        RuntimeIO fh = fileHandle.getRuntimeIO();
+        if (fh.ioHandle != null) {
+            return fh.ioHandle.tell();
+        }
+        throw new PerlCompilerException("No input source available");
+    }
+
     /**
      * Reads EOF flag from a file handle.
      *
