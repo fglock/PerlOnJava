@@ -249,6 +249,7 @@ The following areas are currently under active development to enhance the functi
   - `Test::More` module: added `subtest`.
   - `CORE::` operators have the same prototypes as in Perl.
   - Bugfix: fix a problem with Windows newlines and qw(). Also fixed `mkdir` in Windows.
+  - Bugfix: `-E` switch was setting strict mode.
   - Added Makefile.
   - Debian package can be created with `make deb`.
   - Planned release date: 2025-12-10.
