@@ -59,18 +59,27 @@ public class Operator {
         String mode = runtimeList.getFirst().toString();
         if (runtimeList.size() > 1) {
             // 3-argument open
-            String fileName = runtimeList.elements.get(1).toString();
-            fh = RuntimeIO.open(fileName, mode);
+            RuntimeScalar secondArg = runtimeList.elements.get(1).scalar();
+
+            // Check if the second argument is a scalar reference (for in-memory operations)
+            if (secondArg.type == RuntimeScalarType.REFERENCE) {
+                // Open to in-memory scalar
+                fh = RuntimeIO.open(secondArg, mode);
+            } else {
+                // Regular file open
+                String fileName = secondArg.toString();
+                fh = RuntimeIO.open(fileName, mode);
+            }
         } else {
             // 2-argument open
             fh = RuntimeIO.open(mode);
         }
         if (fh == null) {
-            return new RuntimeScalar();
+            return scalarFalse;
         }
         fileHandle.type = RuntimeScalarType.GLOB;
         fileHandle.value = fh;
-        return new RuntimeScalar(1); // success
+        return scalarTrue; // success
     }
 
     /**
