@@ -57,7 +57,7 @@ public class EmitBinaryOperatorNode {
             case "eof", "open", "printf", "print", "say" ->
                     EmitOperator.handleSayOperator(emitterVisitor, node);
 
-            case "close", "readline", "fileno", "getc" ->
+            case "close", "readline", "fileno", "getc", "tell" ->
                     EmitOperator.handleReadlineOperator(emitterVisitor, node);
 
             case "truncate" ->
