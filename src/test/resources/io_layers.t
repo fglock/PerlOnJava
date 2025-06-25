@@ -1,7 +1,11 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+use utf8;  # This tells Perl that this source file contains UTF-8
 use Test::More;
+
+# Set UTF-8 encoding on STDERR for diagnostic output
+binmode STDERR, ':encoding(UTF-8)';
 
 # Test data
 my $utf8_text = "Hello 世界 café naïve résumé";
@@ -89,19 +93,29 @@ subtest 'UTF-8 debugging tests' => sub {
         my $read_text = do { local $/; <$in> };
         close $in;
 
-        diag("Read text: '$read_text'");
+        # Encode the text for safe diagnostic output
+        my $diag_text = $read_text;
+        utf8::encode($diag_text) if utf8::is_utf8($diag_text);
+        diag("Read text: '$diag_text'");
         diag("Read text length: " . length($read_text));
 
         # Character by character comparison
         my @orig_chars = split //, $utf8_text;
         my @read_chars = split //, $read_text;
 
+        is(scalar(@read_chars), scalar(@orig_chars), 'Same number of characters');
+        is($read_text, $utf8_text, 'Read text matches original');
+
         for (my $i = 0; $i < @orig_chars || $i < @read_chars; $i++) {
             my $orig = $orig_chars[$i] // '';
             my $read = $read_chars[$i] // '';
             if ($orig ne $read) {
-                diag("Char $i differs: expected '" . $orig . "' (U+" . sprintf("%04X", ord($orig)) .
-                    "), got '" . $read . "' (U+" . sprintf("%04X", ord($read)) . ")");
+                my $orig_diag = $orig;
+                my $read_diag = $read;
+                utf8::encode($orig_diag) if utf8::is_utf8($orig_diag);
+                utf8::encode($read_diag) if utf8::is_utf8($read_diag);
+                diag("Char $i differs: expected '" . $orig_diag . "' (U+" . sprintf("%04X", ord($orig)) .
+                    "), got '" . $read_diag . "' (U+" . sprintf("%04X", ord($read)) . ")");
             }
         }
     };
