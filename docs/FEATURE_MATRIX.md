@@ -263,7 +263,7 @@ This list is under review.
 - ✅  **`do` file**: File execution using `do` is implemented.
 - ✅  **`print` operators**: `print`, `printf` and `say` statements are implemented, with support for file handles.
 - ✅  **`printf` and `sprintf`**: String formatting is implemented.
-- ✅  **I/O operators**: `open`, `readline`, `eof`, `close`, `unlink`, `readpipe`, `fileno`, `getc`, `read` are implemented.
+- ✅  **I/O operators**: `open`, `readline`, `eof`, `close`, `unlink`, `readpipe`, `fileno`, `getc`, `read`, `tell` are implemented.
 - ❌  **I/O operators**: `socket`, `seek`, `truncate`, `bind`, `connect`, `accept`, `listen` are not implemented.
 - ✅  **`open`**: 2-argument `open` supported forms are: `<-`, `-`, `>-`, `filename`.
 - ❌  **`open`**: In-memory files are not implemented.
