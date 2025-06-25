@@ -261,11 +261,18 @@ public class RuntimeIO implements RuntimeScalarReference {
             baseHandle = ((LayeredIOHandle) baseHandle).getDelegate();
         }
 
-        // Wrap the IOHandle and set the ioLayer
+        // Special handling for :raw mode - just use the base handle directly
+        if (ioLayer.equals(":raw") || ioLayer.equals(":bytes")) {
+            ioHandle = baseHandle;
+            return;
+        }
+
+        // For other modes, wrap the IOHandle and set the ioLayer
         LayeredIOHandle wrappedHandle = new LayeredIOHandle(baseHandle);
         wrappedHandle.binmode(ioLayer);
         ioHandle = wrappedHandle;
     }
+
 
     private Set<StandardOpenOption> convertMode(String mode) {
         Set<StandardOpenOption> options = MODE_OPTIONS.get(mode);
