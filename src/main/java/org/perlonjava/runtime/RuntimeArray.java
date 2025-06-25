@@ -144,6 +144,15 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     }
 
     /**
+     * Adds this array to a RuntimeList.
+     *
+     * @param list The RuntimeList to which elements will be added.
+     */
+    public void addToList(RuntimeList list) {
+        list.add(this);
+    }
+
+    /**
      * Returns the number of elements in the array.
      *
      * @return The size of the array.
