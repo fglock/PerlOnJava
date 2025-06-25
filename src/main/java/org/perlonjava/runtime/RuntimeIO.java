@@ -47,10 +47,9 @@ public class RuntimeIO implements RuntimeScalarReference {
     public static RuntimeIO stderr = new RuntimeIO(new StandardIO(System.err, false));
     public static RuntimeIO stdin = new RuntimeIO(new StandardIO(System.in));
     // Static variable to store the last accessed filehandle -  `${^LAST_FH}`
-    public static RuntimeIO lastAccesseddHandle = stdout;
-    public static RuntimeIO selectedHandle = stdout;
-
-
+    public static RuntimeIO lastAccesseddHandle;
+    public static RuntimeIO selectedHandle;
+    
     static {
         // Initialize mode options
         MODE_OPTIONS.put("<", EnumSet.of(StandardOpenOption.READ));
@@ -100,6 +99,8 @@ public class RuntimeIO implements RuntimeScalarReference {
         getGlobalIO("main::STDOUT").set(stdout);
         getGlobalIO("main::STDERR").set(stderr);
         getGlobalIO("main::STDIN").set(stdin);
+        lastAccesseddHandle = stdout;
+        selectedHandle = stdout;
     }
 
     // Constructor to open the file, without mode specification
