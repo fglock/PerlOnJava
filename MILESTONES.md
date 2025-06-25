@@ -242,6 +242,7 @@ The following areas are currently under active development to enhance the functi
   - Added double quoted string escapes: `\U`, `\L`, `\u`, `\l`.
   - Added star count (`C*`) in `pack`, `unpack`.
   - Syntax: identifiers starting with `::` are in `main` package.
+  - Added I/O layers support to `open`, `binmode`: `:raw`, `:bytes`, `:crlf`, `:utf8`, `:encoding()`.
   - Added `# line` preprocessor directive.
   - `Test::More` module: added `subtest`.
   - `CORE::` operators have the same prototypes as in Perl.
@@ -249,8 +250,6 @@ The following areas are currently under active development to enhance the functi
   - Added Makefile.
   - Debian package can be created with `make deb`.
   - Planned release date: 2025-12-10
-
-  - WIP Adding I/O layers support to `open`, `binmode`.
 
 ### v4.0.0 Milestone (Planned Release Date: 2026-05-10)
 
