@@ -1,6 +1,7 @@
 use feature 'say';
 use strict;
 use warnings;
+use Test::More;
 
 ###################
 # Perl UNIVERSAL Methods Tests
@@ -23,71 +24,48 @@ use warnings;
 my $base_obj = MyBase->new();
 my $derived_obj = MyDerived->new();
 
-# Test can() method
-print "not " if !$base_obj->can('base_method');
-say "ok # base_obj can base_method";
+subtest 'can() method' => sub {
+    ok($base_obj->can('base_method'), 'base_obj can base_method');
+    ok(!$base_obj->can('derived_method'), 'base_obj cannot can derived_method');
+    ok($derived_obj->can('base_method'), 'derived_obj can base_method');
+    ok($derived_obj->can('derived_method'), 'derived_obj can derived_method');
+};
 
-print "not " if $base_obj->can('derived_method');
-say "ok # base_obj cannot can derived_method";
+subtest 'isa() method' => sub {
+    ok($base_obj->isa('MyBase'), 'base_obj isa MyBase');
+    ok(!$base_obj->isa('MyDerived'), 'base_obj not isa MyDerived');
+    ok($derived_obj->isa('MyBase'), 'derived_obj isa MyBase');
+    ok($derived_obj->isa('MyDerived'), 'derived_obj isa MyDerived');
+};
 
-print "not " if !$derived_obj->can('base_method');
-say "ok # derived_obj can base_method";
+subtest 'DOES() method' => sub {
+    ok($base_obj->DOES('MyBase'), 'base_obj DOES MyBase');
+    ok(!$base_obj->DOES('MyDerived'), 'base_obj not DOES MyDerived');
+    ok($derived_obj->DOES('MyBase'), 'derived_obj DOES MyBase');
+    ok($derived_obj->DOES('MyDerived'), 'derived_obj DOES MyDerived');
+};
 
-print "not " if !$derived_obj->can('derived_method');
-say "ok # derived_obj can derived_method";
+subtest 'VERSION() method' => sub {
+    is($base_obj->VERSION(), '1.0', 'base_obj VERSION is 1.0');
+    is($derived_obj->VERSION(), '1.1', 'derived_obj VERSION is 1.1');
+};
 
-# Test isa() method
-print "not " if !$base_obj->isa('MyBase');
-say "ok # base_obj isa MyBase";
+subtest 'VERSION() with REQUIRE' => sub {
+    # Test VERSION() with version requirement - base object
+    eval { $base_obj->VERSION('0.9') };
+    ok(!$@, 'base_obj VERSION >= 0.9');
 
-print "not " if $base_obj->isa('MyDerived');
-say "ok # base_obj not isa MyDerived";
+    eval { $base_obj->VERSION('1.1') };
+    ok($@, 'base_obj VERSION < 1.1');
+    like($@, qr/MyBase version 1.1(?:.0)? required/, 'base_obj VERSION < 1.1 error message');
 
-print "not " if !$derived_obj->isa('MyBase');
-say "ok # derived_obj isa MyBase";
+    # Test VERSION() with version requirement - derived object
+    eval { $derived_obj->VERSION('1.0') };
+    ok(!$@, 'derived_obj VERSION >= 1.0');
 
-print "not " if !$derived_obj->isa('MyDerived');
-say "ok # derived_obj isa MyDerived";
+    eval { $derived_obj->VERSION('1.2') };
+    ok($@, 'derived_obj VERSION < 1.2');
+    like($@, qr/MyDerived version 1.2(?:.0)? required/, 'derived_obj VERSION < 1.2 error message');
+};
 
-# Test DOES() method (same as isa() in this context)
-print "not " if !$base_obj->DOES('MyBase');
-say "ok # base_obj DOES MyBase";
-
-print "not " if $base_obj->DOES('MyDerived');
-say "ok # base_obj not DOES MyDerived";
-
-print "not " if !$derived_obj->DOES('MyBase');
-say "ok # derived_obj DOES MyBase";
-
-print "not " if !$derived_obj->DOES('MyDerived');
-say "ok # derived_obj DOES MyDerived";
-
-# Test VERSION() method
-print "not " if $base_obj->VERSION() ne '1.0';
-say "ok # base_obj VERSION is 1.0 <" . $base_obj->VERSION() . ">";
-
-print "not " if $derived_obj->VERSION() ne '1.1';
-say "ok # derived_obj VERSION is 1.1";
-
-# Test VERSION() with REQUIRE
-eval { $base_obj->VERSION('0.9') };
-print "not " if $@;
-say "ok # base_obj VERSION >= 0.9";
-
-eval { $base_obj->VERSION('1.1') };
-print "not " if !$@;
-say "ok # base_obj VERSION < 1.1";
-print "not " if $@ !~ /MyBase version 1.1(?:.0)? required/;
-say "ok # base_obj VERSION < 1.1 message <" . substr($@, 0, 30) . ">";
-
-$derived_obj->VERSION('1.0');
-eval { $derived_obj->VERSION('1.0') };
-print "not " if $@;
-say "ok # derived_obj VERSION >= 1.0 <$@>";
-
-eval { $derived_obj->VERSION('1.2') };
-print "not " if !$@;
-say "ok # derived_obj VERSION < 1.2";
-print "not " if $@ !~ /MyDerived version 1.2(?:.0)? required/;
-say "ok # base_obj VERSION < 1.2 message <" . substr($@, 0, 30) . ">";
-
+done_testing();
