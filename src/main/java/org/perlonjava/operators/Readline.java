@@ -3,6 +3,7 @@ package org.perlonjava.operators;
 import org.perlonjava.runtime.*;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 public class Readline {
@@ -72,18 +73,30 @@ public class Readline {
     /**
      * Reads a specified number of characters from a file handle into a scalar.
      *
-     * @param fileHandle The file handle.
-     * @param scalar     The scalar to read data into.
-     * @param length     The number of characters to read (as RuntimeScalar).
-     * @param offset     The offset to start writing in the scalar (as RuntimeScalar).
+     * @param args A RuntimeList containing fileHandle, scalar, length, and offset.
      * @return The number of characters read, or 0 at EOF, or undef on error.
      */
-    public static RuntimeScalar read(RuntimeScalar fileHandle, RuntimeScalar scalar, RuntimeScalar length, RuntimeScalar offset) {
+    public static RuntimeScalar read(RuntimeList args) {
+
+        // Extract arguments from the list
+        RuntimeScalar fileHandle = (RuntimeScalar) args.elements.get(0);
+        RuntimeScalar scalar = (RuntimeScalar) args.elements.get(1);
+        RuntimeScalar length = (RuntimeScalar) args.elements.get(2);
+        RuntimeScalar offset = args.elements.size() > 3
+                ? (RuntimeScalar) args.elements.get(3)
+                : new RuntimeScalar(0);
+        
         RuntimeIO fh = fileHandle.getRuntimeIO();
+
+        if (fh == null) {
+            getGlobalVariable("main::!").set("read file handle is closed");
+            return scalarFalse;
+        }
 
         // Check if the IO object is set up for reading
         if (fh.ioHandle == null) {
-            throw new PerlCompilerException("read is not supported for output streams");
+            getGlobalVariable("main::!").set("read is not open for input");
+            return scalarFalse;
         }
 
         // Convert length and offset to integers
@@ -126,10 +139,5 @@ public class Readline {
 
         // Return the number of characters read
         return new RuntimeScalar(bytesRead);
-    }
-
-    // Overloaded method without offset
-    public static RuntimeScalar read(RuntimeScalar fileHandle, RuntimeScalar scalar, RuntimeScalar length) {
-        return read(fileHandle, scalar, length, new RuntimeScalar(0));
     }
 }
