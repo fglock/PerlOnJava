@@ -19,59 +19,60 @@ use strict;
 use warnings;
 use feature 'say';
 use feature 'isa';
+use Test::More;
 
 ###################
 # Typeglob operations
 
-my $fh = *STDOUT;
-print "not " if $fh ne "*main::STDOUT"; say "ok # typeglob stringifies to name: $fh";
+subtest 'Typeglob stringification' => sub {
+    my $fh = *STDOUT;
+    is($fh, "*main::STDOUT", "typeglob stringifies to name");
 
-my $fh2 = \*STDOUT;
-print "not " if substr($fh2, 0, 5) ne "GLOB("; say "ok # typeglob reference stringifies to name: $fh2";
-
-eval 'print $fh "# 123\n";' or print "not "; say "ok # variable with typeglob can be used as file handle";
-
-eval 'print $fh2 "# 124\n";' or print "not "; say "ok # variable with typeglob reference can be used as file handle";
-
-my $res =
-eval q{
-    BEGIN { $main::{X1} = \123; }
-    return X1;
+    my $fh2 = \*STDOUT;
+    like($fh2, qr/^GLOB\(/, "typeglob reference stringifies to GLOB(...)");
 };
-print "not " if $res ne 123;
-say "ok # reference in a code slot <$res> <" . substr($@, 0, 20) . ">";
 
-$res =
-eval q{
-    BEGIN { *main::X2 = \123; }
-    return X2;
+subtest 'Using typeglobs as file handles' => sub {
+    my $fh = *STDOUT;
+    my $fh2 = \*STDOUT;
+
+    ok(eval 'print $fh "# 123\n"; 1', "variable with typeglob can be used as file handle");
+    ok(eval 'print $fh2 "# 124\n"; 1', "variable with typeglob reference can be used as file handle");
 };
-print "not " if defined $res;
-say "ok # reference in a code slot <" . ($res // "") . "> <" . substr($@, 0, 20) . ">";
 
-# Bareword "X" not allowed while "strict subs" in use at -e line 2, near "\", X "
-say "not" if $@ !~ /^Bareword "X2" not allowed/;
-say "ok # error message <" . substr($@, 0, 20) . ">";
+subtest 'References in code slots' => sub {
+    my $res = eval q{
+        BEGIN { $main::{X1} = \123; }
+        return X1;
+    };
+    is($res, 123, "scalar reference in main code slot");
 
-{
-package Testing;
-my $res =
-eval q{
-    BEGIN { $Testing::{_X1} = \123; }
-    return _X1;
+    $res = eval q{
+        BEGIN { *main::X2 = \123; }
+        return X2;
+    };
+    ok(!defined $res, "reference in code slot returns undef");
+    like($@, qr/^Bareword "X2" not allowed/, "error message for bareword");
 };
-print "not " if $res ne 123;
-say "ok # scalar reference in a code slot <$res> <" . substr($@, 0, 20) . ">";
-}
 
-{
-package Testing2;
-my @res =
-eval q{
-    BEGIN { $Testing2::{_X1} = [123, 456]; }
-    return _X1;
+subtest 'References in package code slots' => sub {
+    {
+        package Testing;
+        my $res = eval q{
+            BEGIN { $Testing::{_X1} = \123; }
+            return _X1;
+        };
+        ::is($res, 123, "scalar reference in Testing package code slot");
+    }
+
+    {
+        package Testing2;
+        my @res = eval q{
+            BEGIN { $Testing2::{_X1} = [123, 456]; }
+            return _X1;
+        };
+        ::is("@res", "123 456", "array reference in Testing2 package code slot");
+    }
 };
-print "not " if "@res" ne "123 456";
-say "ok # array reference in a code slot <@res> <" . substr($@, 0, 20) . ">";
-}
 
+done_testing();

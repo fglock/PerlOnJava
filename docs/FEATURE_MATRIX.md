@@ -192,6 +192,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **Subroutine signatures**: Formal parameters are implemented.
 - 🚧  **Subroutine attributes**: `prototype` is implemented. Other subroutine attributes are not yet supported.
 - ✅  **`lvalue` subroutines**: Subroutines with attribute `:lvalue` are supported.
+- ✅  **`Forcing main package`**: Identifiers starting with `::` are in `main` package.
 - ❌  **Lexical subroutines**: Subroutines declared `my`, `state`, or `our` are not yet supported.
 
 ## Regular Expressions

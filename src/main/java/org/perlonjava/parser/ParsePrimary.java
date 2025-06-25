@@ -131,6 +131,18 @@ public class ParsePrimary {
             case "'", "\"", "/", "//", "/=", "`":
                 // Handle single and double-quoted strings
                 return StringParser.parseRawString(parser, token.text);
+            case "::":
+                // Handle :: at the beginning, which means main::
+                // Transform ::foo into main::foo
+                LexerToken nextToken2 = peek(parser);
+                if (nextToken2.type == LexerTokenType.IDENTIFIER) {
+                    // Insert "main" before the ::
+                    parser.tokens.add(parser.tokenIndex - 1, new LexerToken(LexerTokenType.IDENTIFIER, "main"));
+                    parser.tokenIndex--; // Go back to process "main"
+                    return parseIdentifier(parser, parser.tokenIndex,
+                            new LexerToken(LexerTokenType.IDENTIFIER, "main"), "main");
+                }
+                throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
             case "\\":
                 // Take reference
                 parser.parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
