@@ -266,7 +266,7 @@ This list is under review.
 - ✅  **I/O operators**: `open`, `readline`, `eof`, `close`, `unlink`, `readpipe`, `fileno`, `getc`, `read`, `tell` are implemented.
 - ❌  **I/O operators**: `socket`, `seek`, `truncate`, `bind`, `connect`, `accept`, `listen` are not implemented.
 - ✅  **`open`**: 2-argument `open` supported forms are: `<-`, `-`, `>-`, `filename`.
-- ❌  **`open`**: In-memory files are not implemented.
+- ✅  **`open`**: In-memory files are implemented.
 - ✅  **`select`**: `select(filehandle)` is implemented.
 - ✅  **Short-circuit and, or**: Short-circuit logical operators are supported.
 - ✅  **Low-precedence/high precedence operators**: Logical operators like `not`, `or`, `and`, `xor` are supported.
