@@ -241,6 +241,7 @@ The following areas are currently under active development to enhance the functi
   - Subroutine prototypes are fully implemented. Added or fixed: `+`, `;`, `*`, `\@`, `\%`, `\$`, `\[@%]`.
   - Added double quoted string escapes: `\U`, `\L`, `\u`, `\l`.
   - Added star count (`C*`) in `pack`, `unpack`.
+  - Syntax: identifiers starting with `::` are in `main` package.
   - Added `# line` preprocessor directive.
   - `Test::More` module: added `subtest`.
   - `CORE::` operators have the same prototypes as in Perl.
