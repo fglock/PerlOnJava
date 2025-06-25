@@ -13,6 +13,9 @@ public class FeatureFlags {
     // A hierarchy of feature bundles
     private static final Map<String, String[]> featureBundles = new HashMap<>();
 
+    // Instance-level enabled features tracking
+    private final Set<String> enabledFeatures = new HashSet<>();
+
     static {
         // Initialize the hierarchy of feature bundles
         featureBundles.put(":default", new String[]{"indirect", "multidimensional", "bareword_filehandles"});
@@ -37,7 +40,7 @@ public class FeatureFlags {
     }
 
     /**
-     * Constructs a FeatureFlags object associated with a ScopedSymbolTable.
+     * Constructs a FeatureFlags object.
      */
     public FeatureFlags() {
     }
@@ -57,15 +60,56 @@ public class FeatureFlags {
     }
 
     /**
+     * Returns a list of all bundle names.
+     *
+     * @return A list of all bundle names.
+     */
+    public static List<String> getBundleList() {
+        return new ArrayList<>(featureBundles.keySet());
+    }
+
+    /**
      * Checks if a feature exists.
      *
      * @param feature The name of the feature to check.
      * @return True if the feature exists, false otherwise.
      */
     public static boolean featureExists(String feature) {
-        return getFeatureList().contains(feature);
+        if (feature == null) {
+            return false;
+        }
+        return getFeatureList().contains(feature.trim());
     }
 
+    /**
+     * Checks if a bundle exists.
+     *
+     * @param bundle The name of the bundle to check.
+     * @return True if the bundle exists, false otherwise.
+     */
+    public static boolean bundleExists(String bundle) {
+        if (bundle == null) {
+            return false;
+        }
+        return featureBundles.containsKey(bundle.trim());
+    }
+
+    /**
+     * Gets the features in a specific bundle.
+     *
+     * @param bundle The name of the bundle.
+     * @return Array of feature names in the bundle, or null if bundle doesn't exist.
+     */
+    public static String[] getBundleFeatures(String bundle) {
+        if (bundle == null) {
+            return null;
+        }
+        return featureBundles.get(bundle.trim());
+    }
+
+    /**
+     * Initialize with default features enabled.
+     */
     public void initializeEnabledFeatures() {
         // Enable default features
         enableFeatureBundle(":default");
@@ -90,26 +134,76 @@ public class FeatureFlags {
     }
 
     /**
+     * Enables a single feature.
+     *
+     * @param feature The name of the feature to enable.
+     */
+    public void enableFeature(String feature) {
+        if (feature != null && featureExists(feature)) {
+            enabledFeatures.add(feature.trim());
+
+            // Also try to enable it in the symbol table if available
+            try {
+                ScopedSymbolTable symbolTable = getCurrentScope();
+                if (symbolTable != null) {
+                    symbolTable.enableFeatureCategory(feature.trim());
+                }
+            } catch (Exception e) {
+                // Ignore if symbol table operations fail
+            }
+        }
+    }
+
+    /**
+     * Disables a single feature.
+     *
+     * @param feature The name of the feature to disable.
+     */
+    public void disableFeature(String feature) {
+        if (feature != null) {
+            enabledFeatures.remove(feature.trim());
+
+            // Also try to disable it in the symbol table if available
+            try {
+                ScopedSymbolTable symbolTable = getCurrentScope();
+                if (symbolTable != null) {
+                    symbolTable.disableFeatureCategory(feature.trim());
+                }
+            } catch (Exception e) {
+                // Ignore if symbol table operations fail
+            }
+        }
+    }
+
+    /**
      * Sets the state of a feature bundle and its features.
      *
      * @param bundle The name of the feature bundle.
      * @param state  The state to set (true for enabled, false for disabled).
      */
     private void setFeatureState(String bundle, boolean state) {
-        ScopedSymbolTable symbolTable = getCurrentScope();
-        if (featureBundles.containsKey(bundle)) {
-            for (String feature : featureBundles.get(bundle)) {
+        if (bundle == null) {
+            return;
+        }
+
+        String trimmedBundle = bundle.trim();
+
+        if (featureBundles.containsKey(trimmedBundle)) {
+            // It's a bundle - enable/disable all features in the bundle
+            String[] features = featureBundles.get(trimmedBundle);
+            for (String feature : features) {
                 if (state) {
-                    symbolTable.enableFeatureCategory(feature);
+                    enableFeature(feature);
                 } else {
-                    symbolTable.disableFeatureCategory(feature);
+                    disableFeature(feature);
                 }
             }
-        } else {
+        } else if (featureExists(trimmedBundle)) {
+            // It's a single feature
             if (state) {
-                symbolTable.enableFeatureCategory(bundle);
+                enableFeature(trimmedBundle);
             } else {
-                symbolTable.disableFeatureCategory(bundle);
+                disableFeature(trimmedBundle);
             }
         }
     }
@@ -121,6 +215,65 @@ public class FeatureFlags {
      * @return True if the feature is enabled, false otherwise.
      */
     public boolean isFeatureEnabled(String feature) {
-        return getCurrentScope().isFeatureCategoryEnabled(feature);
+        if (feature == null) {
+            return false;
+        }
+
+        String trimmedFeature = feature.trim();
+
+        // First check our local tracking
+        if (enabledFeatures.contains(trimmedFeature)) {
+            return true;
+        }
+
+        // Also check the symbol table if available
+        try {
+            ScopedSymbolTable symbolTable = getCurrentScope();
+            if (symbolTable != null) {
+                return symbolTable.isFeatureCategoryEnabled(trimmedFeature);
+            }
+        } catch (Exception e) {
+            // Ignore if symbol table operations fail
+        }
+
+        return false;
+    }
+
+    /**
+     * Gets all currently enabled features.
+     *
+     * @return Set of enabled feature names.
+     */
+    public Set<String> getEnabledFeatures() {
+        return new HashSet<>(enabledFeatures);
+    }
+
+    /**
+     * Clears all enabled features.
+     */
+    public void clearAllFeatures() {
+        enabledFeatures.clear();
+
+        // Also try to clear from symbol table if available
+        try {
+            ScopedSymbolTable symbolTable = getCurrentScope();
+            if (symbolTable != null) {
+                for (String feature : getFeatureList()) {
+                    symbolTable.disableFeatureCategory(feature);
+                }
+            }
+        } catch (Exception e) {
+            // Ignore if symbol table operations fail
+        }
+    }
+
+    /**
+     * Returns a string representation of the current feature state.
+     *
+     * @return String showing enabled features.
+     */
+    @Override
+    public String toString() {
+        return "FeatureFlags{enabledFeatures=" + enabledFeatures + "}";
     }
 }

@@ -26,6 +26,10 @@ public final class Configuration {
     private Configuration() {
     }
 
+    public static String getPerlVersionBundle() {
+        return ":" + perlVersion.substring(1, perlVersion.lastIndexOf('.'));
+    }
+
     public static String getPerlVersionNoV() {
         return perlVersion.startsWith("v") ? perlVersion.substring(1) : perlVersion;
     }
