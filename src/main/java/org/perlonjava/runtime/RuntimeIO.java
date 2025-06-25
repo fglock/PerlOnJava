@@ -12,6 +12,7 @@ import org.perlonjava.io.*;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
@@ -156,6 +157,40 @@ public class RuntimeIO implements RuntimeScalarReference {
             handleIOException(e, "open failed");
             fh = null;
         }
+        return fh;
+    }
+
+    // Add this new method to handle scalar references
+    public static RuntimeIO open(RuntimeScalar scalarRef, String mode) {
+        RuntimeIO fh = new RuntimeIO();
+
+        // Check if the argument is a scalar reference
+        if (scalarRef.type != RuntimeScalarType.REFERENCE) {
+            handleIOError("Not a SCALAR reference");
+            return null;
+        }
+
+        // Get the referenced scalar
+        RuntimeScalar targetScalar = (RuntimeScalar) scalarRef.value;
+
+        // Create ScalarBackedIO
+        ScalarBackedIO scalarIO = new ScalarBackedIO(targetScalar);
+
+        // Handle different modes
+        if (mode.equals(">")) {
+            // Truncate for write mode
+            targetScalar.set("");
+        } else if (mode.equals(">>")) {
+            // Seek to end for append mode
+            String content = targetScalar.toString();
+            int length = content.getBytes(StandardCharsets.ISO_8859_1).length;
+            scalarIO.seek(length);
+        }
+        // For "<" (read) mode, no special handling needed
+
+        fh.ioHandle = scalarIO;
+        addHandle(fh.ioHandle);
+
         return fh;
     }
 
