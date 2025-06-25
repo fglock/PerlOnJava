@@ -49,7 +49,7 @@ public class RuntimeIO implements RuntimeScalarReference {
     // Static variable to store the last accessed filehandle -  `${^LAST_FH}`
     public static RuntimeIO lastAccesseddHandle;
     public static RuntimeIO selectedHandle;
-    
+
     static {
         // Initialize mode options
         MODE_OPTIONS.put("<", EnumSet.of(StandardOpenOption.READ));
