@@ -42,6 +42,7 @@ public class Pack {
             }
 
             int count = 1;
+            boolean hasStar = false;
 
             // Check for repeat count or '*'
             if (i + 1 < template.length()) {
@@ -54,6 +55,7 @@ public class Pack {
                     count = Integer.parseInt(template.substring(i + 1, j));
                     i = j - 1;
                 } else if (nextChar == '*') {
+                    hasStar = true;
                     count = values.size() - valueIndex; // Use all remaining values
                     i++; // consume the '*'
                 }
@@ -64,8 +66,29 @@ public class Pack {
                     throw new RuntimeException("pack: not enough arguments");
                 }
                 RuntimeScalar value = (RuntimeScalar) values.get(valueIndex++);
-                writeBitString(output, value.toString(), count, format);
+                String bitString = value.toString();
+                if (hasStar) {
+                    count = bitString.length(); // For bit strings with *, use the entire string length
+                }
+                writeBitString(output, bitString, count, format);
+            } else if (format == 'a' || format == 'A' || format == 'Z') {
+                // String formats consume only one value
+                if (valueIndex >= values.size()) {
+                    throw new RuntimeException("pack: not enough arguments");
+                }
+                RuntimeScalar value = (RuntimeScalar) values.get(valueIndex++);
+                String str = value.toString();
+                if (hasStar) {
+                    // For string formats with *, use the string length as count
+                    if (format == 'Z') {
+                        count = str.length() + 1; // Include space for null terminator
+                    } else {
+                        count = str.length();
+                    }
+                }
+                writeString(output, str, count, format);
             } else {
+                // Numeric formats
                 for (int j = 0; j < count; j++) {
                     if (valueIndex >= values.size()) {
                         throw new RuntimeException("pack: not enough arguments");
@@ -103,12 +126,6 @@ public class Pack {
                             break;
                         case 'd':
                             writeDouble(output, value.getDouble());
-                            break;
-                        case 'a':
-                        case 'A':
-                        case 'Z':
-                            writeString(output, value.toString(), count, format);
-                            j = count; // Exit the inner loop
                             break;
                         default:
                             throw new RuntimeException("pack: unsupported format character: " + format);
@@ -279,7 +296,9 @@ public class Pack {
     private static void writeBitString(ByteArrayOutputStream output, String str, int count, char format) {
         int bitIndex = 0;
         int byteValue = 0;
-        for (int i = 0; i < str.length(); i++) {
+        int bitsToProcess = Math.min(str.length(), count);
+
+        for (int i = 0; i < bitsToProcess; i++) {
             char c = str.charAt(i);
             if (format == 'b') {
                 byteValue |= (c == '1' ? 1 : 0) << bitIndex;

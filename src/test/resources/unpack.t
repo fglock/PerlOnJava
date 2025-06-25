@@ -85,4 +85,79 @@ $packed = pack('C3', 1, 2, 3);
 my @unpacked = unpack('C3', $packed);
 is_deeply(\@unpacked, [1, 2, 3], 'Repeat count (C3)');
 
+# Test * modifier
+subtest 'Star (*) modifier tests' => sub {
+    # Test C* - unpack all bytes
+    my $packed = pack('C5', 10, 20, 30, 40, 50);
+    my @unpacked = unpack('C*', $packed);
+    is_deeply(\@unpacked, [10, 20, 30, 40, 50], 'C* unpacks all bytes');
+
+    # Test S* - unpack all shorts
+    $packed = pack('S4', 1000, 2000, 3000, 4000);
+    @unpacked = unpack('S*', $packed);
+    is_deeply(\@unpacked, [1000, 2000, 3000, 4000], 'S* unpacks all shorts');
+
+    # Test L* - unpack all longs
+    $packed = pack('L3', 100000, 200000, 300000);
+    @unpacked = unpack('L*', $packed);
+    is_deeply(\@unpacked, [100000, 200000, 300000], 'L* unpacks all longs');
+
+    # Test a* - unpack rest as string
+    $packed = pack('a10', 'Hello Perl');
+    my $str = unpack('a*', $packed);
+    is($str, 'Hello Perl', 'a* unpacks entire string');
+
+    # Test A* - unpack rest as space-padded string (strips trailing spaces)
+    $packed = pack('A10', 'Hi');
+    $str = unpack('A*', $packed);
+    is($str, 'Hi', 'A* unpacks and strips trailing spaces');
+
+    # Test Z* - unpack rest as null-terminated string
+    $packed = pack('Z10', 'Hello');
+    $str = unpack('Z*', $packed);
+    is($str, 'Hello', 'Z* unpacks null-terminated string');
+
+    # Test mixed patterns with *
+    $packed = pack('C2 S3', 10, 20, 100, 200, 300);
+    @unpacked = unpack('C2 S*', $packed);
+    is_deeply(\@unpacked, [10, 20, 100, 200, 300], 'Mixed pattern C2 S*');
+
+    # Test * with no remaining data
+    $packed = pack('C2', 10, 20);
+    @unpacked = unpack('C2 S*', $packed);
+    is_deeply(\@unpacked, [10, 20], 'S* with no remaining data returns empty');
+
+    # Test n* and v* (big/little endian shorts)
+    $packed = pack('n3', 256, 512, 1024);
+    @unpacked = unpack('n*', $packed);
+    is_deeply(\@unpacked, [256, 512, 1024], 'n* unpacks all big-endian shorts');
+
+    $packed = pack('v3', 256, 512, 1024);
+    @unpacked = unpack('v*', $packed);
+    is_deeply(\@unpacked, [256, 512, 1024], 'v* unpacks all little-endian shorts');
+
+    # Test N* and V* (big/little endian longs)
+    $packed = pack('N2', 65536, 131072);
+    @unpacked = unpack('N*', $packed);
+    is_deeply(\@unpacked, [65536, 131072], 'N* unpacks all big-endian longs');
+
+    $packed = pack('V2', 65536, 131072);
+    @unpacked = unpack('V*', $packed);
+    is_deeply(\@unpacked, [65536, 131072], 'V* unpacks all little-endian longs');
+
+    # Test f* and d* (floats and doubles)
+    $packed = pack('f3', 1.1, 2.2, 3.3);
+    @unpacked = unpack('f*', $packed);
+    is(scalar @unpacked, 3, 'f* unpacks correct number of floats');
+    cmp_ok(abs($unpacked[0] - 1.1), '<', 0.0001, 'First float value');
+    cmp_ok(abs($unpacked[1] - 2.2), '<', 0.0001, 'Second float value');
+    cmp_ok(abs($unpacked[2] - 3.3), '<', 0.0001, 'Third float value');
+
+    $packed = pack('d2', 1.11111111, 2.22222222);
+    @unpacked = unpack('d*', $packed);
+    is(scalar @unpacked, 2, 'd* unpacks correct number of doubles');
+    cmp_ok(abs($unpacked[0] - 1.11111111), '<', 0.00000001, 'First double value');
+    cmp_ok(abs($unpacked[1] - 2.22222222), '<', 0.00000001, 'Second double value');
+};
+
 done_testing();
