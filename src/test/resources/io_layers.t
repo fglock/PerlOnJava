@@ -2,10 +2,14 @@
 use strict;
 use warnings;
 use utf8;  # This tells Perl that this source file contains UTF-8
-use Test::More;
 
-# Set UTF-8 encoding on STDERR for diagnostic output
-binmode STDERR, ':encoding(UTF-8)';
+BEGIN {
+    # Set UTF-8 encoding BEFORE loading Test::More
+    binmode STDERR, ':encoding(UTF-8)';
+    binmode STDOUT, ':encoding(UTF-8)';
+}
+
+use Test::More;
 
 # Test data
 my $utf8_text = "Hello 世界 café naïve résumé";
