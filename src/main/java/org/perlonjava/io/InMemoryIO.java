@@ -54,16 +54,30 @@ public class InMemoryIO implements IOHandle {
                     decoderHelper = new CharsetDecoderHelper();
                 }
 
-                byte[] buffer = new byte[maxBytes];
-                int bytesRead = byteArrayInputStream.read(buffer);
+                StringBuilder result = new StringBuilder();
 
-                String result = decoderHelper.decode(buffer, bytesRead, charset);
+                // Keep reading while we need more data for multi-byte sequences
+                do {
+                    byte[] buffer = new byte[maxBytes];
+                    int bytesRead = byteArrayInputStream.read(buffer);
 
-                if (bytesRead == -1) {
-                    isEOF = true;
-                }
+                    if (bytesRead == -1) {
+                        isEOF = true;
+                        // Decode any remaining bytes on EOF
+                        String decoded = decoderHelper.decode(buffer, bytesRead, charset);
+                        if (!decoded.isEmpty()) {
+                            result.append(decoded);
+                        }
+                        break;
+                    }
 
-                return new RuntimeScalar(result);
+                    String decoded = decoderHelper.decode(buffer, bytesRead, charset);
+                    result.append(decoded);
+
+                    // Continue if we need more data to decode a complete character
+                } while (decoderHelper.needsMoreData() && !isEOF);
+
+                return new RuntimeScalar(result.toString());
             }
         } catch (IOException e) {
             handleIOException(e, "Read operation failed");

@@ -49,17 +49,26 @@ public class CustomFileChannel implements IOHandle {
                 decoderHelper = new CharsetDecoderHelper();
             }
 
-            byte[] buffer = new byte[maxBytes];
-            ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
-            int bytesRead = fileChannel.read(byteBuffer);
+            StringBuilder result = new StringBuilder();
 
-            String result = decoderHelper.decode(buffer, bytesRead, charset);
+            // Keep reading while we need more data for multi-byte sequences
+            do {
+                byte[] buffer = new byte[maxBytes];
+                ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
+                int bytesRead = fileChannel.read(byteBuffer);
 
-            if (bytesRead == -1) {
-                isEOF = true;
-            }
+                String decoded = decoderHelper.decode(buffer, bytesRead, charset);
+                result.append(decoded);
 
-            return new RuntimeScalar(result);
+                if (bytesRead == -1) {
+                    isEOF = true;
+                    break;
+                }
+
+                // Continue if we need more data to decode a complete character
+            } while (decoderHelper.needsMoreData() && !isEOF);
+
+            return new RuntimeScalar(result.toString());
         } catch (IOException e) {
             return handleIOException(e, "Read operation failed");
         }

@@ -146,27 +146,27 @@ public class LayeredIOHandle implements IOHandle {
     }
 
     @Override
-    public RuntimeScalar read(int maxBytes) {
+    public RuntimeScalar read(int maxChars) {
         RuntimeScalar result;
 
         switch (mode) {
             case UTF8:
                 // Delegate UTF-8 decoding to the underlying handle
-                result = delegate.read(maxBytes, StandardCharsets.UTF_8);
+                result = delegate.read(maxChars, StandardCharsets.UTF_8);
                 break;
 
             case ENCODING:
                 // Delegate encoding-specific decoding to the underlying handle
                 if (encoding != null) {
-                    result = delegate.read(maxBytes, encoding);
+                    result = delegate.read(maxChars, encoding);
                 } else {
-                    result = delegate.read(maxBytes);
+                    result = delegate.read(maxChars);
                 }
                 break;
 
             case CRLF:
                 // For CRLF mode, we still need to process after reading
-                result = delegate.read(maxBytes);
+                result = delegate.read(maxChars);
                 String data = result.toString();
                 if (!data.isEmpty()) {
                     return new RuntimeScalar(convertCrlfToLf(data));
@@ -177,7 +177,7 @@ public class LayeredIOHandle implements IOHandle {
             case DEFAULT:
             default:
                 // Pass through raw bytes as string (ISO-8859-1)
-                result = delegate.read(maxBytes);
+                result = delegate.read(maxChars);
                 break;
         }
 
