@@ -2,8 +2,7 @@ package org.perlonjava.perlmodule;
 
 import org.perlonjava.runtime.*;
 
-import static org.perlonjava.runtime.FeatureFlags.featureExists;
-import static org.perlonjava.runtime.FeatureFlags.getFeatureList;
+import static org.perlonjava.runtime.FeatureFlags.*;
 
 /**
  * The FeatureFlags class provides functionalities similar to the Perl feature module.
@@ -46,7 +45,7 @@ public class Feature extends PerlModuleBase {
     public static RuntimeList useFeature(RuntimeArray args, int ctx) {
         for (int i = 1; i < args.size(); i++) {
             String bundle = args.get(i).toString();
-            if (!featureExists(bundle)) {
+            if (!FeatureFlags.featureExists(bundle) && !FeatureFlags.bundleExists(bundle)) {
                 throw new PerlCompilerException("Unknown feature category '" + bundle + "'");
             }
             featureManager.enableFeatureBundle(bundle);

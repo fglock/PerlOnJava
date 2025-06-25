@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import static org.perlonjava.Configuration.getPerlVersionBundle;
 import static org.perlonjava.Configuration.perlVersion;
 
 /**
@@ -680,7 +681,7 @@ public class ArgumentParser {
 
         StringBuilder useStatements = new StringBuilder();
         if (parsedArgs.useVersion) {
-            useStatements.append("use ").append(perlVersion).append(";\n");
+            useStatements.append("use feature '").append(getPerlVersionBundle()).append("';\n");
         }
         for (ModuleUseStatement moduleStatement : parsedArgs.moduleUseStatements) {
             useStatements.append(moduleStatement.toString()).append("\n");
