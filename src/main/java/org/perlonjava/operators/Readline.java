@@ -44,11 +44,10 @@ public class Readline {
         int separator = hasSeparator ? sep.charAt(0) : '\n';
 
         StringBuilder line = new StringBuilder();
-        byte[] buffer = new byte[1]; // Buffer to read one byte at a time
 
-        int bytesRead;
-        while ((bytesRead = runtimeIO.ioHandle.read(buffer).getInt()) != -1) {
-            char c = (char) buffer[0];
+        String readChar;
+        while (!(readChar = runtimeIO.ioHandle.read(1).toString()).isEmpty()) {
+            char c = readChar.charAt(0);
             line.append(c);
             // Break if we've reached the separator (if defined)
             if (hasSeparator && c == separator) {
@@ -91,17 +90,14 @@ public class Readline {
         int lengthValue = length.getInt();
         int offsetValue = offset.getInt();
 
-        // Prepare the buffer and read data
-        byte[] buffer = new byte[lengthValue];
-        int bytesRead = fh.ioHandle.read(buffer).getInt();
+        // Read data using the new API
+        String readData = fh.ioHandle.read(lengthValue).toString();
+        int bytesRead = readData.length();
 
-        if (bytesRead == -1) {
-            // Error occurred
-            return scalarUndef;
+        if (bytesRead == 0) {
+            // EOF or error
+            return new RuntimeScalar(0);
         }
-
-        // Convert bytes to string
-        String readData = new String(buffer, 0, bytesRead);
 
         // Handle offset
         StringBuilder scalarValue = new StringBuilder(scalar.toString());
@@ -116,7 +112,14 @@ public class Readline {
         }
 
         // Insert the read data at the specified offset
-        scalarValue.replace(offsetValue, offsetValue + readData.length(), readData);
+        if (offsetValue + readData.length() <= scalarValue.length()) {
+            // Replace within existing string
+            scalarValue.replace(offsetValue, offsetValue + readData.length(), readData);
+        } else {
+            // Extend the string
+            scalarValue.setLength(offsetValue);
+            scalarValue.append(readData);
+        }
 
         // Update the scalar with the new value
         scalar.set(scalarValue.toString());

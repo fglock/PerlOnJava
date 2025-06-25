@@ -4,6 +4,7 @@ import org.perlonjava.runtime.RuntimeScalar;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
@@ -17,7 +18,7 @@ public class CustomOutputStreamHandle implements IOHandle {
 
     @Override
     public RuntimeScalar write(String string) {
-        var data = string.getBytes();
+        var data = string.getBytes(StandardCharsets.ISO_8859_1);
         try {
             outputStream.write(data);
             return scalarTrue; // Indicate success

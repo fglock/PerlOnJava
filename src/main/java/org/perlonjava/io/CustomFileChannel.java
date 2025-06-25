@@ -9,6 +9,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Set;
@@ -38,15 +40,26 @@ public class CustomFileChannel implements IOHandle {
         this.isEOF = false;
     }
 
+    private CharsetDecoderHelper decoderHelper;
+
     @Override
-    public RuntimeScalar read(byte[] buffer) {
+    public RuntimeScalar read(int maxBytes, Charset charset) {
         try {
+            if (decoderHelper == null) {
+                decoderHelper = new CharsetDecoderHelper();
+            }
+
+            byte[] buffer = new byte[maxBytes];
             ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
             int bytesRead = fileChannel.read(byteBuffer);
+
+            String result = decoderHelper.decode(buffer, bytesRead, charset);
+
             if (bytesRead == -1) {
                 isEOF = true;
             }
-            return new RuntimeScalar(bytesRead);
+
+            return new RuntimeScalar(result);
         } catch (IOException e) {
             return handleIOException(e, "Read operation failed");
         }
@@ -55,7 +68,7 @@ public class CustomFileChannel implements IOHandle {
     @Override
     public RuntimeScalar write(String string) {
         try {
-            var data = string.getBytes();
+            var data = string.getBytes(StandardCharsets.ISO_8859_1);
             ByteBuffer byteBuffer = ByteBuffer.wrap(data);
             int bytesWritten = fileChannel.write(byteBuffer);
             return new RuntimeScalar(bytesWritten);

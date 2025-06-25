@@ -6,6 +6,8 @@ import org.perlonjava.runtime.RuntimeScalarCache;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 
 import static org.perlonjava.runtime.RuntimeIO.handleIOException;
 
@@ -24,7 +26,7 @@ public class InMemoryIO implements IOHandle {
         }
 
         // Convert the string representation of the scalar to a byte array
-        byte[] data = scalar.toString().getBytes(); // Use the default charset
+        byte[] data = scalar.toString().getBytes(StandardCharsets.ISO_8859_1);
 
         if (length > data.length) {
             throw new IllegalArgumentException("Truncate length exceeds data length.");
@@ -42,25 +44,36 @@ public class InMemoryIO implements IOHandle {
         this.isEOF = false;
     }
 
+    private CharsetDecoderHelper decoderHelper;
+
     @Override
-    public RuntimeScalar read(byte[] buffer) {
+    public RuntimeScalar read(int maxBytes, Charset charset) {
         try {
             if (byteArrayInputStream != null) {
+                if (decoderHelper == null) {
+                    decoderHelper = new CharsetDecoderHelper();
+                }
+
+                byte[] buffer = new byte[maxBytes];
                 int bytesRead = byteArrayInputStream.read(buffer);
+
+                String result = decoderHelper.decode(buffer, bytesRead, charset);
+
                 if (bytesRead == -1) {
                     isEOF = true;
                 }
-                return new RuntimeScalar(bytesRead);
+
+                return new RuntimeScalar(result);
             }
         } catch (IOException e) {
             handleIOException(e, "Read operation failed");
         }
-        return RuntimeScalarCache.scalarUndef;
+        return new RuntimeScalar("");  // Return empty string instead of undef
     }
 
     @Override
     public RuntimeScalar write(String string) {
-        var data = string.getBytes();
+        var data = string.getBytes(StandardCharsets.ISO_8859_1);
         try {
             byteArrayOutputStream.write(data);
             return RuntimeScalarCache.scalarTrue;

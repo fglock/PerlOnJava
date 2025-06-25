@@ -7,6 +7,8 @@ import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -86,7 +88,7 @@ public class StandardIO implements IOHandle {
 
     @Override
     public RuntimeScalar write(String string) {
-        var data = string.getBytes();
+        var data = string.getBytes(StandardCharsets.ISO_8859_1);
         synchronized (localBuffer) {
             int dataLength = data.length;
             int spaceLeft = LOCAL_BUFFER_SIZE - bufferPosition;
@@ -170,20 +172,31 @@ public class StandardIO implements IOHandle {
         return RuntimeScalarCache.scalarTrue;
     }
 
+    private CharsetDecoderHelper decoderHelper;
+
     @Override
-    public RuntimeScalar read(byte[] buffer) {
+    public RuntimeScalar read(int maxBytes, Charset charset) {
         try {
             if (inputStream != null) {
+                if (decoderHelper == null) {
+                    decoderHelper = new CharsetDecoderHelper();
+                }
+
+                byte[] buffer = new byte[maxBytes];
                 int bytesRead = inputStream.read(buffer);
+
+                String result = decoderHelper.decode(buffer, bytesRead, charset);
+
                 if (bytesRead == -1) {
                     isEOF = true;
                 }
-                return new RuntimeScalar(bytesRead);
+
+                return new RuntimeScalar(result);
             }
         } catch (IOException e) {
             return handleIOException(e, "Read operation failed");
         }
-        return RuntimeScalarCache.scalarUndef;
+        return new RuntimeScalar("");  // Return empty string instead of undef
     }
 
     @Override

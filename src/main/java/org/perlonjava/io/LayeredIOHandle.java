@@ -22,6 +22,12 @@ public class LayeredIOHandle implements IOHandle {
     private ByteBuffer encodeBuffer;
     private boolean lastWasCR = false; // For CRLF handling across boundaries
 
+    // Add UTF-8 input buffer
+    private ByteBuffer utf8InputBuffer;
+
+    // Debug flag
+    private static final boolean DEBUG = true;
+
     public LayeredIOHandle(IOHandle delegate) {
         this.delegate = delegate;
         this.mode = IOMode.DEFAULT;
@@ -39,6 +45,9 @@ public class LayeredIOHandle implements IOHandle {
                     .onUnmappableCharacter(CodingErrorAction.REPLACE);
             // Buffer for encoding operations
             encodeBuffer = ByteBuffer.allocate(8192);
+            // Buffer for UTF-8 input handling
+            utf8InputBuffer = ByteBuffer.allocate(4096);
+            utf8InputBuffer.limit(0); // Start with empty buffer
         }
     }
 
@@ -62,6 +71,7 @@ public class LayeredIOHandle implements IOHandle {
     private void parseAndSetMode(String modeStr) {
         if (modeStr == null || modeStr.isEmpty()) {
             this.mode = IOMode.BYTES;
+            this.encoding = null;
             return;
         }
 
@@ -91,32 +101,140 @@ public class LayeredIOHandle implements IOHandle {
 
     @Override
     public RuntimeScalar write(String data) {
-        byte[] processedData = processOutputData(data);
-        // Write a string made of characters in the 0-255 range
-        return delegate.write(new String(processedData, StandardCharsets.ISO_8859_1));
+        if (DEBUG) {
+            System.err.println("LayeredIOHandle.write: mode=" + mode + ", data length=" + data.length());
+            System.err.println("LayeredIOHandle.write: data='" + data + "'");
+        }
+
+        if (mode == IOMode.UTF8 || mode == IOMode.ENCODING) {
+            // For UTF-8 and encoding modes, we need to convert the string to bytes
+            // and then pass those bytes as a byte-string to the delegate
+            byte[] encodedBytes = processOutputData(data);
+
+            if (DEBUG) {
+                System.err.println("LayeredIOHandle.write: encoded to " + encodedBytes.length + " bytes");
+                StringBuilder hex = new StringBuilder();
+                for (byte b : encodedBytes) {
+                    hex.append(String.format("%02X ", b & 0xFF));
+                }
+                System.err.println("LayeredIOHandle.write: bytes=" + hex.toString());
+            }
+
+            // Convert bytes to a string where each character represents one byte
+            StringBuilder byteString = new StringBuilder(encodedBytes.length);
+            for (byte b : encodedBytes) {
+                byteString.append((char)(b & 0xFF));
+            }
+
+            if (DEBUG) {
+                System.err.println("LayeredIOHandle.write: byteString length=" + byteString.length());
+            }
+
+            return delegate.write(byteString.toString());
+        } else if (mode == IOMode.CRLF) {
+            // For CRLF mode, process the data and convert
+            byte[] processedBytes = processOutputData(data);
+            StringBuilder byteString = new StringBuilder(processedBytes.length);
+            for (byte b : processedBytes) {
+                byteString.append((char)(b & 0xFF));
+            }
+            return delegate.write(byteString.toString());
+        } else {
+            // For BYTES and DEFAULT modes, pass through directly
+            return delegate.write(data);
+        }
     }
 
     @Override
-    public RuntimeScalar read(byte[] buffer) {
-        RuntimeScalar result = delegate.read(buffer);
-        if (result.getInt() > 0) {
-            int actualBytes = processInputData(buffer, result.getInt());
-            result = new RuntimeScalar(actualBytes);
+    public RuntimeScalar read(int maxBytes) {
+        RuntimeScalar result;
+
+        switch (mode) {
+            case UTF8:
+                // Delegate UTF-8 decoding to the underlying handle
+                result = delegate.read(maxBytes, StandardCharsets.UTF_8);
+                break;
+
+            case ENCODING:
+                // Delegate encoding-specific decoding to the underlying handle
+                if (encoding != null) {
+                    result = delegate.read(maxBytes, encoding);
+                } else {
+                    result = delegate.read(maxBytes);
+                }
+                break;
+
+            case CRLF:
+                // For CRLF mode, we still need to process after reading
+                result = delegate.read(maxBytes);
+                String data = result.toString();
+                if (!data.isEmpty()) {
+                    return new RuntimeScalar(convertCrlfToLf(data));
+                }
+                return result;
+
+            case BYTES:
+            case DEFAULT:
+            default:
+                // Pass through raw bytes as string (ISO-8859-1)
+                result = delegate.read(maxBytes);
+                break;
         }
+
+        if (DEBUG) {
+            System.err.println("LayeredIOHandle.read: mode=" + mode + ", result length=" + result.toString().length());
+        }
+
         return result;
+    }
+
+    private String convertCrlfToLf(String data) {
+        StringBuilder result = new StringBuilder();
+
+        for (int i = 0; i < data.length(); i++) {
+            char c = data.charAt(i);
+            if (c == '\r') {
+                if (i + 1 < data.length() && data.charAt(i + 1) == '\n') {
+                    // Skip CR in CRLF
+                    continue;
+                } else {
+                    // Convert lone CR to LF
+                    result.append('\n');
+                }
+            } else {
+                result.append(c);
+            }
+        }
+
+        return result.toString();
     }
 
     private byte[] processOutputData(String data) {
         switch (mode) {
             case CRLF:
-                return convertLfToCrlf(data.getBytes());
+                // Get bytes as ISO-8859-1 to preserve byte values
+                byte[] bytes = new byte[data.length()];
+                for (int i = 0; i < data.length(); i++) {
+                    bytes[i] = (byte) data.charAt(i);
+                }
+                return convertLfToCrlf(bytes);
             case UTF8:
+                byte[] utf8Bytes = data.getBytes(StandardCharsets.UTF_8);
+                if (DEBUG) {
+                    System.err.println("processOutputData: UTF8 encoding produced " + utf8Bytes.length + " bytes from " + data.length() + " chars");
+                }
+                return utf8Bytes;
             case ENCODING:
                 return encodeText(data);
             case BYTES:
             case DEFAULT:
             default:
-                return data.getBytes();
+                // Convert string to bytes preserving character values
+                byte[] rawBytes = new byte[data.length()];
+                for (int i = 0; i < data.length(); i++) {
+                    rawBytes[i] = (byte) data.charAt(i);
+                }
+                return rawBytes;
         }
     }
 
@@ -125,6 +243,12 @@ public class LayeredIOHandle implements IOHandle {
             case CRLF:
                 return convertCrlfToLfWithState(buffer, bytesRead);
             case UTF8:
+                // For UTF-8 mode, bytes are already UTF-8 encoded
+                // No conversion needed, just pass through
+                if (DEBUG) {
+                    System.err.println("processInputData: UTF8 mode, passing through " + bytesRead + " bytes");
+                }
+                return bytesRead;
             case ENCODING:
                 return decodeText(buffer, bytesRead);
             case BYTES:
@@ -135,12 +259,22 @@ public class LayeredIOHandle implements IOHandle {
     }
 
     private byte[] encodeText(String data) {
-        if (encoder == null) return data.getBytes();
+        if (encoder == null || encoding == null) {
+            byte[] bytes = new byte[data.length()];
+            for (int i = 0; i < data.length(); i++) {
+                bytes[i] = (byte) data.charAt(i);
+            }
+            return bytes;
+        }
         try {
             return data.getBytes(encoding);
         } catch (Exception e) {
-            // Fallback to original data
-            return data.getBytes();
+            // Fallback
+            byte[] bytes = new byte[data.length()];
+            for (int i = 0; i < data.length(); i++) {
+                bytes[i] = (byte) data.charAt(i);
+            }
+            return bytes;
         }
     }
 
@@ -167,13 +301,15 @@ public class LayeredIOHandle implements IOHandle {
                 pendingInputBytes = new byte[0];
             }
 
-            // Convert back to bytes (simplified)
+            // Convert decoded characters back to the buffer
             charBuffer.flip();
             String decoded = charBuffer.toString();
-            byte[] decodedBytes = decoded.getBytes(StandardCharsets.UTF_8);
 
-            int actualLength = Math.min(decodedBytes.length, buffer.length);
-            System.arraycopy(decodedBytes, 0, buffer, 0, actualLength);
+            // Convert string to bytes where each character is one byte
+            int actualLength = Math.min(decoded.length(), buffer.length);
+            for (int i = 0; i < actualLength; i++) {
+                buffer[i] = (byte) decoded.charAt(i);
+            }
 
             // Clear remaining buffer
             for (int i = actualLength; i < buffer.length; i++) {
@@ -253,7 +389,12 @@ public class LayeredIOHandle implements IOHandle {
             encodeBuffer.flip();
             byte[] pending = new byte[encodeBuffer.remaining()];
             encodeBuffer.get(pending);
-            delegate.write(new String(pending));
+
+            StringBuilder byteString = new StringBuilder(pending.length);
+            for (byte b : pending) {
+                byteString.append((char)(b & 0xFF));
+            }
+            delegate.write(byteString.toString());
             encodeBuffer.clear();
         }
 
@@ -301,6 +442,10 @@ public class LayeredIOHandle implements IOHandle {
         lastWasCR = false;
         if (decoder != null) decoder.reset();
         if (encoder != null) encoder.reset();
+        if (utf8InputBuffer != null) {
+            utf8InputBuffer.clear();
+            utf8InputBuffer.limit(0);
+        }
         return delegate.seek(pos);
     }
 
