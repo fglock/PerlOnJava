@@ -50,6 +50,8 @@ public class PerlLanguageProviderExecutionTest {
      */
     @Test
     public void testExecutePerlCode() {
+        PerlLanguageProvider.resetAll();
+
         // Set up test options
         ArgumentParser.CompilerOptions options = new ArgumentParser.CompilerOptions();
         options.code = "print 'Hello, World!';";
@@ -79,6 +81,8 @@ public class PerlLanguageProviderExecutionTest {
      */
     @Test
     public void testExecutePerlCodeWithError() {
+        PerlLanguageProvider.resetAll();
+
         // Set up test options with invalid Perl code
         ArgumentParser.CompilerOptions options = new ArgumentParser.CompilerOptions();
         options.code = "print 'Hello, World!' 123;"; // Syntax error in Perl code
