@@ -9,6 +9,8 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 
 import static org.perlonjava.runtime.RuntimeIO.handleIOException;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
@@ -149,22 +151,26 @@ public class SocketIO implements IOHandle {
         return scalarUndef;
     }
 
-    /**
-     * Reads data from the socket into the provided buffer.
-     *
-     * @param buffer the buffer to store the read data
-     * @return a RuntimeScalar containing the number of bytes read, or undefined if end-of-file is reached
-     */
+    private CharsetDecoderHelper decoderHelper;
+
     @Override
-    public RuntimeScalar read(byte[] buffer) {
+    public RuntimeScalar read(int maxBytes, Charset charset) {
         try {
             if (inputStream != null) {
+                if (decoderHelper == null) {
+                    decoderHelper = new CharsetDecoderHelper();
+                }
+
+                byte[] buffer = new byte[maxBytes];
                 int bytesRead = inputStream.read(buffer);
+
+                String result = decoderHelper.decode(buffer, bytesRead, charset);
+
                 if (bytesRead == -1) {
                     isEOF = true;
-                    return scalarUndef;
                 }
-                return new RuntimeScalar(bytesRead);
+
+                return new RuntimeScalar(result);
             }
             throw new IllegalStateException("No input stream available");
         } catch (IOException e) {
@@ -175,12 +181,12 @@ public class SocketIO implements IOHandle {
     /**
      * Writes data to the socket.
      *
-     * @param data the data to be written to the socket
+     * @param string the data to be written to the socket
      * @return a RuntimeScalar indicating success (true) or failure (false)
      */
     @Override
     public RuntimeScalar write(String string) {
-        var data = string.getBytes();
+        var data = string.getBytes(StandardCharsets.ISO_8859_1);
         try {
             if (outputStream != null) {
                 outputStream.write(data);

@@ -3,6 +3,9 @@ package org.perlonjava.io;
 import org.perlonjava.runtime.RuntimeIO;
 import org.perlonjava.runtime.RuntimeScalar;
 
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+
 public interface IOHandle {
 
     RuntimeScalar write(String string);
@@ -23,7 +26,10 @@ public interface IOHandle {
         return RuntimeIO.handleIOError("eof operation is not supported.");
     }
 
-    default RuntimeScalar read(byte[] buffer) {
+    default RuntimeScalar read(int maxBytes) {
+        return read(maxBytes, StandardCharsets.ISO_8859_1);
+    }
+    default RuntimeScalar read(int maxBytes, Charset charset) {
         return RuntimeIO.handleIOError("read operation is not supported.");
     }
 

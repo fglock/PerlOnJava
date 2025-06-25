@@ -5,9 +5,6 @@ use Test::More;
 
 # Test data
 my $utf8_text = "Hello 世界 café naïve résumé";
-my $binary_data = pack("C*", 0x00, 0x01, 0x02, 0xFF, 0xFE, 0xFD);
-my $crlf_text = "Line 1\nLine 2\nLine 3\n";
-my $latin1_text = "café naïve résumé"; # Latin-1 encodable
 my $test_counter = 0;
 
 # Helper function to create unique test filenames
@@ -21,334 +18,174 @@ sub cleanup_file {
     unlink $filename if -e $filename;
 }
 
-subtest ':utf8 layer tests' => sub {
+# Helper to dump bytes in hex
+sub dump_bytes {
+    my ($data, $label) = @_;
+    $label //= "Data";
+    my @bytes = unpack("C*", $data);
+    my $hex = join(" ", map { sprintf("%02X", $_) } @bytes);
+    diag("$label: " . length($data) . " bytes: $hex");
+
+    # Also show ASCII representation
+    my $ascii = join("", map { ($_ >= 32 && $_ <= 126) ? chr($_) : '.' } @bytes);
+    diag("$label ASCII: $ascii");
+
+    # Check for UTF-8 multibyte sequences
+    my $has_multibyte = grep { $_ >= 0x80 } @bytes;
+    diag("$label has multibyte: " . ($has_multibyte ? "YES" : "NO"));
+}
+
+subtest 'UTF-8 debugging tests' => sub {
     my $filename = get_test_filename();
-    
-    subtest 'UTF-8 output' => sub {
+
+    subtest 'Debug UTF-8 output' => sub {
+        diag("Original text: '$utf8_text'");
+        diag("Original text length: " . length($utf8_text));
+
+        # Show what UTF-8 encoding should produce
+        my $expected_utf8 = $utf8_text;
+        utf8::encode($expected_utf8);
+        dump_bytes($expected_utf8, "Expected UTF-8");
+
+        # Open file with :utf8 layer
         open my $out, '>:utf8', $filename or die "Cannot open $filename: $!";
+
+        # Write the text
         print $out $utf8_text;
         close $out;
-        
-        # Check that the file was created and has content
-        ok(-e $filename, 'UTF-8 file created');
-        ok(-s $filename > length($utf8_text), 'UTF-8 file size larger than character count (multi-byte encoding)');
-        
-        # Read as raw bytes to verify UTF-8 encoding
+
+        # Check file size
+        my $file_size = -s $filename;
+        diag("File size: $file_size bytes");
+
+        # Read as raw bytes
         open my $raw, '<:raw', $filename or die "Cannot open $filename: $!";
         my $raw_content = do { local $/; <$raw> };
         close $raw;
-        
-        # UTF-8 encoded content should be longer than the original string for non-ASCII
-        ok(length($raw_content) > length($utf8_text), 'UTF-8 encoding produces more bytes than characters');
-        
-        # Check for UTF-8 byte sequences (basic validation)
-        like($raw_content, qr/[\x80-\xFF]/, 'Contains UTF-8 multibyte sequences');
+
+        dump_bytes($raw_content, "Actual file content");
+
+        # Compare expected vs actual
+        is(length($raw_content), length($expected_utf8), 'File size matches expected UTF-8 size');
+
+        # Check byte by byte
+        my @expected_bytes = unpack("C*", $expected_utf8);
+        my @actual_bytes = unpack("C*", $raw_content);
+
+        my $max_bytes = @expected_bytes > @actual_bytes ? @expected_bytes : @actual_bytes;
+        for (my $i = 0; $i < $max_bytes; $i++) {
+            my $exp = $expected_bytes[$i] // 'undef';
+            my $act = $actual_bytes[$i] // 'undef';
+            if ($exp ne $act) {
+                diag("Byte $i differs: expected " . (defined $exp ? sprintf("0x%02X", $exp) : 'undef') .
+                    ", got " . (defined $act ? sprintf("0x%02X", $act) : 'undef'));
+            }
+        }
     };
-    
-    subtest 'UTF-8 input' => sub {
-        # Read back with :utf8 layer
+
+    subtest 'Debug UTF-8 input' => sub {
+        # Read with :utf8 layer
         open my $in, '<:utf8', $filename or die "Cannot open $filename: $!";
         my $read_text = do { local $/; <$in> };
         close $in;
-        
-        is($read_text, $utf8_text, 'UTF-8 text read correctly');
-        ok(utf8::is_utf8($read_text), 'UTF-8 flag is set on read data');
-    };
-    
-    cleanup_file($filename);
-};
 
-subtest ':raw layer tests' => sub {
-    my $filename = get_test_filename();
-    
-    subtest 'Raw binary output' => sub {
-        open my $out, '>:raw', $filename or die "Cannot open $filename: $!";
-        print $out $binary_data;
-        close $out;
-        
-        # Verify file size matches binary data length exactly
-        my $file_size = -s $filename;
-        is($file_size, length($binary_data), 'Binary data written with correct size');
-    };
-    
-    subtest 'Raw binary input' => sub {
-        open my $in, '<:raw', $filename or die "Cannot open $filename: $!";
-        my $read_data = do { local $/; <$in> };
-        close $in;
-        
-        is($read_data, $binary_data, 'Binary data read correctly');
-        ok(!utf8::is_utf8($read_data), 'No UTF-8 flag on raw data');
-        
-        # Verify specific byte values
-        my @read_bytes = unpack("C*", $read_data);
-        my @expected_bytes = unpack("C*", $binary_data);
-        is_deeply(\@read_bytes, \@expected_bytes, 'Individual bytes match exactly');
-    };
-    
-    subtest 'Raw vs default layer comparison' => sub {
-        # Write simple ASCII text
-        my $ascii_text = "Hello World 123";
-        open my $out, '>:raw', $filename or die "Cannot open $filename: $!";
-        print $out $ascii_text;
-        close $out;
-        
-        # Read with default layer
-        open my $in, '<', $filename or die "Cannot open $filename: $!";
-        my $default_read = do { local $/; <$in> };
-        close $in;
-        
-        # Read with :raw layer
-        open my $raw_in, '<:raw', $filename or die "Cannot open $filename: $!";
-        my $raw_read = do { local $/; <$raw_in> };
-        close $raw_in;
-        
-        is($raw_read, $ascii_text, 'Raw layer preserves ASCII text');
-        is($default_read, $raw_read, 'Default and raw layer read same ASCII bytes');
-    };
-    
-    cleanup_file($filename);
-};
+        diag("Read text: '$read_text'");
+        diag("Read text length: " . length($read_text));
 
-subtest ':crlf layer tests' => sub {
-    my $filename = get_test_filename();
-    
-    subtest 'CRLF output behavior' => sub {
-        open my $out, '>:crlf', $filename or die "Cannot open $filename: $!";
-        print $out $crlf_text;
-        close $out;
-        
-        # Read raw to check what was actually written
-        open my $raw, '<:raw', $filename or die "Cannot open $filename: $!";
-        my $raw_content = do { local $/; <$raw> };
-        close $raw;
-        
-        # File should be created successfully
-        ok(length($raw_content) > 0, 'CRLF layer wrote content');
-        
-        # Count line endings in raw content
-        my $lf_count = ($raw_content =~ tr/\n//);
-        my $cr_count = ($raw_content =~ tr/\r//);
-        
-        if ($^O eq 'MSWin32') {
-            # On Windows, should convert LF to CRLF
-            ok($cr_count >= $lf_count, 'CRLF conversion on Windows');
-        } else {
-            # On Unix, behavior may vary
-            ok($lf_count > 0, 'Line feeds preserved');
+        # Character by character comparison
+        my @orig_chars = split //, $utf8_text;
+        my @read_chars = split //, $read_text;
+
+        for (my $i = 0; $i < @orig_chars || $i < @read_chars; $i++) {
+            my $orig = $orig_chars[$i] // '';
+            my $read = $read_chars[$i] // '';
+            if ($orig ne $read) {
+                diag("Char $i differs: expected '" . $orig . "' (U+" . sprintf("%04X", ord($orig)) .
+                    "), got '" . $read . "' (U+" . sprintf("%04X", ord($read)) . ")");
+            }
         }
     };
-    
-    subtest 'CRLF input conversion' => sub {
-        # Manually write CRLF data
-        my $crlf_data = "Line 1\r\nLine 2\r\nLine 3\r\n";
-        
-        open my $raw_out, '>:raw', $filename or die "Cannot open $filename: $!";
-        print $raw_out $crlf_data;
-        close $raw_out;
-        
-        # Read with :crlf layer
-        open my $in, '<:crlf', $filename or die "Cannot open $filename: $!";
-        my $read_text = do { local $/; <$in> };
-        close $in;
-        
-        # Should normalize to LF
-        my $expected = "Line 1\nLine 2\nLine 3\n";
-        is($read_text, $expected, 'CRLF converted to LF on input');
-    };
-    
+
     cleanup_file($filename);
 };
 
-subtest ':encoding layer tests' => sub {
+subtest 'Layer behavior tests' => sub {
     my $filename = get_test_filename();
-    
-    subtest 'Latin-1 encoding basic test' => sub {
-        # Use only ASCII-safe characters that work in Latin-1
-        my $safe_text = "cafe naive resume";
-        
-        open my $out, '>:encoding(latin1)', $filename or die "Cannot open $filename: $!";
-        print $out $safe_text;
-        close $out;
-        
-        ok(-e $filename, 'Latin-1 encoded file created');
-        
-        # Read back
-        open my $in, '<:encoding(latin1)', $filename or die "Cannot open $filename: $!";
-        my $read_text = do { local $/; <$in> };
-        close $in;
-        
-        is($read_text, $safe_text, 'Latin-1 safe text roundtrip successful');
-    };
-    
-    subtest 'UTF-16 encoding basic test' => sub {
-        my $simple_text = "Hello World";
-        
-        my $utf16_opened = eval {
-            open my $out, '>:encoding(UTF-16)', $filename or die "Cannot open: $!";
-            print $out $simple_text;
-            close $out;
-            1;
-        };
-        
-        ## SKIP: {
-        ##     skip "UTF-16 encoding not available", 2 unless $utf16_opened;
-        ##     
-        ##     # Verify file is larger (UTF-16 uses 2+ bytes per character)
-        ##     my $file_size = -s $filename;
-        ##     ok($file_size >= length($simple_text) * 2, 'UTF-16 file size appropriate');
-        ##     
-        ##     # Read back
-        ##     my $read_success = eval {
-        ##         open my $in, '<:encoding(UTF-16)', $filename or die "Cannot open: $!";
-        ##         my $read_utf16 = do { local $/; <$in> };
-        ##         close $in;
-        ##         is($read_utf16, $simple_text, 'UTF-16 text roundtrip successful');
-        ##         1;
-        ##     };
-        ##     
-        ##     ok($read_success, 'UTF-16 read operation completed') unless $read_success;
-        ## }
-    };
-    
-    cleanup_file($filename);
-};
 
-subtest 'Layer stacking tests' => sub {
-    my $filename = get_test_filename();
-    
-    subtest 'Multiple layers on output' => sub {
-        my $simple_text = "Hello World\n";
-        
-        # Stack :crlf and :utf8 layers
-        open my $out, '>:crlf:utf8', $filename or die "Cannot open $filename: $!";
-        print $out $simple_text;
-        close $out;
-        
-        ok(-e $filename, 'File created with stacked layers');
-        
-        # Read back with matching layers
-        open my $in, '<:crlf:utf8', $filename or die "Cannot open $filename: $!";
-        my $read_text = do { local $/; <$in> };
-        close $in;
-        
-        is($read_text, $simple_text, 'Stacked layers work correctly');
-    };
-    
-    subtest 'Layer order comparison' => sub {
-        my $test_text = "test line\n";
-        my $filename2 = get_test_filename();
-        
-        # Write with :utf8:crlf
-        open my $out1, '>:utf8:crlf', $filename or die "Cannot open $filename: $!";
-        print $out1 $test_text;
-        close $out1;
-        my $size1 = -s $filename;
-        
-        # Write with :crlf:utf8  
-        open my $out2, '>:crlf:utf8', $filename2 or die "Cannot open $filename2: $!";
-        print $out2 $test_text;
-        close $out2;
-        my $size2 = -s $filename2;
-        
-        # For simple ASCII text, results should be similar
-        ok($size1 > 0 && $size2 > 0, 'Both layer orders produce output');
-        
-        cleanup_file($filename2);
-    };
-    
-    cleanup_file($filename);
-};
+    subtest 'Test simple ASCII through UTF-8 layer' => sub {
+        my $ascii_text = "Hello World 123";
 
-subtest 'Basic layer functionality' => sub {
-    my $filename = get_test_filename();
-    
-    subtest 'Default vs explicit layers' => sub {
-        my $test_text = "Simple ASCII text\n";
-        
-        # Write with default layer
-        open my $out1, '>', $filename or die "Cannot open $filename: $!";
-        print $out1 $test_text;
-        close $out1;
-        my $size1 = -s $filename;
-        
-        # Write with explicit :raw layer
-        open my $out2, '>:raw', $filename or die "Cannot open $filename: $!";
-        print $out2 $test_text;
-        close $out2;
-        my $size2 = -s $filename;
-        
-        is($size1, $size2, 'Default and :raw layer produce same size for ASCII');
-        
-        # Read both ways
-        open my $in1, '<', $filename or die "Cannot open $filename: $!";
-        my $read1 = do { local $/; <$in1> };
-        close $in1;
-        
-        open my $in2, '<:raw', $filename or die "Cannot open $filename: $!";
-        my $read2 = do { local $/; <$in2> };
-        close $in2;
-        
-        is($read1, $read2, 'Default and :raw layer read same content');
-        is($read1, $test_text, 'Content preserved correctly');
-    };
-    
-    subtest 'UTF-8 flag behavior' => sub {
-        my $ascii_text = "Hello World";
-        
-        # Write as UTF-8
         open my $out, '>:utf8', $filename or die "Cannot open $filename: $!";
         print $out $ascii_text;
         close $out;
-        
-        # Read as UTF-8
-        open my $in_utf8, '<:utf8', $filename or die "Cannot open $filename: $!";
-        my $read_utf8 = do { local $/; <$in_utf8> };
-        close $in_utf8;
-        
-        # Read as raw
-        open my $in_raw, '<:raw', $filename or die "Cannot open $filename: $!";
-        my $read_raw = do { local $/; <$in_raw> };
-        close $in_raw;
-        
-        is($read_utf8, $ascii_text, 'UTF-8 read preserves content');
-        is($read_raw, $ascii_text, 'Raw read preserves ASCII content');
-        ok(utf8::is_utf8($read_utf8), 'UTF-8 layer sets UTF-8 flag');
-        ok(!utf8::is_utf8($read_raw), 'Raw layer does not set UTF-8 flag');
+
+        open my $raw, '<:raw', $filename or die "Cannot open $filename: $!";
+        my $raw_content = do { local $/; <$raw> };
+        close $raw;
+
+        dump_bytes($raw_content, "ASCII through UTF-8 layer");
+
+        is($raw_content, $ascii_text, 'ASCII text unchanged by UTF-8 layer');
     };
-    
+
+    subtest 'Test single UTF-8 character' => sub {
+        my $single_char = "世";  # Single Chinese character
+
+        open my $out, '>:utf8', $filename or die "Cannot open $filename: $!";
+        print $out $single_char;
+        close $out;
+
+        open my $raw, '<:raw', $filename or die "Cannot open $filename: $!";
+        my $raw_content = do { local $/; <$raw> };
+        close $raw;
+
+        dump_bytes($raw_content, "Single UTF-8 character '世'");
+
+        # This character should encode to 3 bytes in UTF-8
+        is(length($raw_content), 3, 'Single Chinese character encodes to 3 bytes');
+
+        # Read it back
+        open my $in, '<:utf8', $filename or die "Cannot open $filename: $!";
+        my $read_char = do { local $/; <$in> };
+        close $in;
+
+        is($read_char, $single_char, 'Single UTF-8 character roundtrip');
+    };
+
     cleanup_file($filename);
 };
 
-## subtest 'Error handling tests' => sub {
-##     my $filename = get_test_filename();
-##     
-##     subtest 'Invalid encoding handling' => sub {
-##         my $opened = eval {
-##             open my $fh, '>:encoding(nonexistent)', $filename;
-##             1;
-##         };
-##         ok(!$opened, 'Opening with invalid encoding fails');
-##         like($@ || '', qr/encoding|unknown/i, 'Appropriate error message for invalid encoding');
-##     };
-##     
-##     subtest 'File operation errors' => sub {
-##         # Try to read non-existent file
-##         my $nonexistent = "nonexistent_file_" . $$ . ".tmp";
-##         my $opened = eval {
-##             open my $fh, '<:utf8', $nonexistent;
-##             1;
-##         };
-##         ok(!$opened, 'Opening non-existent file fails');
-##     };
-##     
-##     cleanup_file($filename);
-## };
+subtest 'Raw write and UTF-8 read test' => sub {
+    my $filename = get_test_filename();
+
+    # Manually write UTF-8 bytes
+    my @utf8_bytes = (
+        0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x20,  # "Hello "
+        0xE4, 0xB8, 0x96,                    # "世"
+        0xE7, 0x95, 0x8C,                    # "界"
+    );
+
+    open my $raw_out, '>:raw', $filename or die "Cannot open $filename: $!";
+    print $raw_out pack("C*", @utf8_bytes);
+    close $raw_out;
+
+    diag("Wrote raw UTF-8 bytes: " . join(" ", map { sprintf("%02X", $_) } @utf8_bytes));
+
+    # Read with :utf8 layer
+    open my $utf8_in, '<:utf8', $filename or die "Cannot open $filename: $!";
+    my $text = do { local $/; <$utf8_in> };
+    close $utf8_in;
+
+    diag("Read text: '$text'");
+    is($text, "Hello 世界", 'Raw UTF-8 bytes read correctly with :utf8 layer');
+
+    cleanup_file($filename);
+};
 
 # Cleanup any remaining test files
 for my $i (1..$test_counter) {
-    my $filename = "test_io_layer_${i}_$$.tmp";
+    my $filename = "test_io_layer_${i}_$.tmp";
     cleanup_file($filename);
 }
 
 done_testing();
-

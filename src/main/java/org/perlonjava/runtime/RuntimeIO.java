@@ -309,10 +309,6 @@ public class RuntimeIO implements RuntimeScalarReference {
         return ret;
     }
 
-    public int read(byte[] buffer) {
-        return ioHandle.read(buffer).getInt();
-    }
-
     public RuntimeScalar eof() {
         lastSelectedHandle = this;
         return ioHandle.eof();
