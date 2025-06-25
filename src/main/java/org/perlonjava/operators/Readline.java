@@ -77,15 +77,14 @@ public class Readline {
      * @return The number of characters read, or 0 at EOF, or undef on error.
      */
     public static RuntimeScalar read(RuntimeList args) {
-
         // Extract arguments from the list
         RuntimeScalar fileHandle = (RuntimeScalar) args.elements.get(0);
-        RuntimeScalar scalar = (RuntimeScalar) args.elements.get(1);
+        RuntimeScalar scalar = ((RuntimeScalar) args.elements.get(1)).scalarDeref();
         RuntimeScalar length = (RuntimeScalar) args.elements.get(2);
         RuntimeScalar offset = args.elements.size() > 3
                 ? (RuntimeScalar) args.elements.get(3)
                 : new RuntimeScalar(0);
-        
+
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
         if (fh == null) {
@@ -108,12 +107,21 @@ public class Readline {
         int bytesRead = readData.length();
 
         if (bytesRead == 0) {
-            // EOF or error
+            // EOF or error - clear the scalar when reading 0 bytes
+            scalar.set("");
             return new RuntimeScalar(0);
         }
 
         // Handle offset
         StringBuilder scalarValue = new StringBuilder(scalar.toString());
+
+        // Special case: if offset is 0 and no offset was explicitly provided,
+        // replace the entire scalar content
+        if (offsetValue == 0 && args.elements.size() <= 3) {
+            scalar.set(readData);
+            return new RuntimeScalar(bytesRead);
+        }
+
         if (offsetValue < 0) {
             offsetValue = scalarValue.length() + offsetValue;
         }
