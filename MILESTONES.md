@@ -241,6 +241,7 @@ The following areas are currently under active development to enhance the functi
   - Subroutine prototypes are fully implemented. Added or fixed: `+`, `;`, `*`, `\@`, `\%`, `\$`, `\[@%]`.
   - Added double quoted string escapes: `\U`, `\L`, `\u`, `\l`.
   - Added star count (`C*`) in `pack`, `unpack`.
+  - Added operators: `read`.
   - Syntax: identifiers starting with `::` are in `main` package.
   - Added I/O layers support to `open`, `binmode`: `:raw`, `:bytes`, `:crlf`, `:utf8`, `:encoding()`.
   - Added `# line` preprocessor directive.
