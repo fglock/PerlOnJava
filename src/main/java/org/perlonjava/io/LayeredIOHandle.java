@@ -26,7 +26,7 @@ public class LayeredIOHandle implements IOHandle {
     private ByteBuffer utf8InputBuffer;
 
     // Debug flag
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
 
     public LayeredIOHandle(IOHandle delegate) {
         this.delegate = delegate;
