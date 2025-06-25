@@ -329,6 +329,29 @@ This list is under review.
 - ❌  **`fork` operator**: `fork` is not implemented.
 - ❌  **`system` operator**: `system` is not implemented.
 - ❌  **`binmode` operator**: `binmode` is not implemented.
+- ✅  **`I/O layers**: `open`, `binmode` support these layers: `:raw`, `:bytes`, `:crlf`, `:utf8`, `:encoding()`.
+
+    The supported encodings are those provided by Java's `Charset.forName()` method. This includes:
+    
+    **Standard Charsets (guaranteed to be available in all Java implementations):**
+    - `US-ASCII` - Seven-bit ASCII
+    - `ISO-8859-1` - ISO Latin Alphabet No. 1 (Latin-1)
+    - `UTF-8` - Eight-bit UCS Transformation Format
+    - `UTF-16BE` - Sixteen-bit UCS Transformation Format, big-endian byte order
+    - `UTF-16LE` - Sixteen-bit UCS Transformation Format, little-endian byte order
+    - `UTF-16` - Sixteen-bit UCS Transformation Format, byte order identified by an optional byte-order mark
+    
+    **Common Extended Charsets (usually available):**
+    - `windows-1252` - Windows Western European
+    - `ISO-8859-2` through `ISO-8859-16` - Various ISO Latin alphabets
+    - `Shift_JIS` - Japanese
+    - `EUC-JP` - Japanese
+    - `GB2312`, `GBK`, `GB18030` - Chinese
+    - `Big5` - Traditional Chinese
+    - `EUC-KR` - Korean
+    - `windows-1251` - Windows Cyrillic
+    - `KOI8-R` - Russian
+
 
 ## Namespaces and Global Variables
 - ✅  **Global variable infrastructure**: Support for global variables is implemented.
