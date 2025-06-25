@@ -85,10 +85,10 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                 case MATCH -> new RuntimeScalar(RuntimeRegex.matchString());
                 case PREMATCH -> new RuntimeScalar(RuntimeRegex.preMatchString());
                 case POSTMATCH -> new RuntimeScalar(RuntimeRegex.postMatchString());
-                case LAST_FH -> new RuntimeScalar(RuntimeIO.lastSelectedHandle);
-                case INPUT_LINE_NUMBER -> RuntimeIO.lastSelectedHandle == null
+                case LAST_FH -> new RuntimeScalar(RuntimeIO.lastAccesseddHandle);
+                case INPUT_LINE_NUMBER -> RuntimeIO.lastAccesseddHandle == null
                         ? scalarUndef
-                        : getScalarInt(RuntimeIO.lastSelectedHandle.currentLineNumber);
+                        : getScalarInt(RuntimeIO.lastAccesseddHandle.currentLineNumber);
                 case LAST_PAREN_MATCH -> new RuntimeScalar(RuntimeRegex.lastCaptureString());
                 default -> scalarUndef;
             };

@@ -47,7 +47,9 @@ public class RuntimeIO implements RuntimeScalarReference {
     public static RuntimeIO stderr = new RuntimeIO(new StandardIO(System.err, false));
     public static RuntimeIO stdin = new RuntimeIO(new StandardIO(System.in));
     // Static variable to store the last accessed filehandle -  `${^LAST_FH}`
-    public static RuntimeIO lastSelectedHandle = stdout;
+    public static RuntimeIO lastAccesseddHandle = stdout;
+    public static RuntimeIO selectedHandle = stdout;
+
 
     static {
         // Initialize mode options
@@ -81,7 +83,7 @@ public class RuntimeIO implements RuntimeScalarReference {
     public static void setCustomOutputStream(OutputStream out) {
         // stdout = new RuntimeIO(new CustomOutputStreamHandle(out));
         // lastSelectedHandle = stdout;
-        lastSelectedHandle = new RuntimeIO(new CustomOutputStreamHandle(out));
+        lastAccesseddHandle = new RuntimeIO(new CustomOutputStreamHandle(out));
     }
 
     public static RuntimeScalar handleIOError(String message) {
@@ -352,17 +354,17 @@ public class RuntimeIO implements RuntimeScalarReference {
     }
 
     public RuntimeScalar eof() {
-        lastSelectedHandle = this;
+        lastAccesseddHandle = this;
         return ioHandle.eof();
     }
 
     public RuntimeScalar tell() {
-        lastSelectedHandle = this;
+        lastAccesseddHandle = this;
         return ioHandle.tell();
     }
 
     public RuntimeScalar seek(long pos) {
-        lastSelectedHandle = this;
+        lastAccesseddHandle = this;
         return ioHandle.seek(pos);
     }
 
