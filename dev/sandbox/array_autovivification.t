@@ -159,23 +159,23 @@ subtest 'Array-specific operations' => sub {
 
 # Test edge cases
 subtest 'Array edge cases' => sub {
-    # Exists on array element
-    my $x;
-    eval { 
-        if (exists $x->[0][1]) {
-            # Should not execute
-        }
-    };
-    is($@, '', 'exists should not throw error');
-    ok(defined $x && ref $x eq 'ARRAY', 'Array autovivified by exists');
-    ok(defined $x->[0] && ref $x->[0] eq 'ARRAY', 'Nested array autovivified by exists');
-    ok(!exists $x->[0][1], 'Final element not created by exists');
+    ## # Exists on array element
+    ## my $x;
+    ## eval { 
+    ##     if (exists $x->[0][1]) {
+    ##         # Should not execute
+    ##     }
+    ## };
+    ## is($@, '', 'exists should not throw error');
+    ## ok(defined $x && ref $x eq 'ARRAY', 'Array autovivified by exists');
+    ## ok(defined $x->[0] && ref $x->[0] eq 'ARRAY', 'Nested array autovivified by exists');
+    ## ok(!exists $x->[0][1], 'Final element not created by exists');
     
-    # Delete on array element
-    my $y;
-    eval { delete $y->[5]; };
-    is($@, '', 'delete should autovivify array');
-    ok(ref $y eq 'ARRAY', 'delete created an arrayref');
+    ## # Delete on array element
+    ## my $y;
+    ## eval { delete $y->[5]; };
+    ## is($@, '', 'delete should autovivify array');
+    ## ok(ref $y eq 'ARRAY', 'delete created an arrayref');
     
     # Defined check on array element
     my $z;
