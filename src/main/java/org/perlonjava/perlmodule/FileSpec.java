@@ -76,7 +76,8 @@ public class FileSpec extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for canonpath() method");
         }
         String path = args.get(1).toString();
-        String canonPath = path.replaceAll("[/\\\\]+", File.separator).replaceAll(File.separator + "\\." + File.separator, File.separator);
+        String canonPath = path.replaceAll("[/\\\\]+", File.separator)
+                .replaceAll(Pattern.quote(File.separator) + "\\." + Pattern.quote(File.separator), File.separator);
         return new RuntimeScalar(canonPath).getList();
     }
 
