@@ -50,6 +50,9 @@ public class CustomOutputStreamHandle implements IOHandle {
     /** The underlying Java OutputStream that performs actual output operations */
     private final OutputStream outputStream;
 
+    /** Tracks the number of bytes written for tell() functionality */
+    private long bytesWritten = 0;
+
     /**
      * Creates a new output handle wrapping the given OutputStream.
      *
@@ -79,6 +82,7 @@ public class CustomOutputStreamHandle implements IOHandle {
         var data = string.getBytes(StandardCharsets.ISO_8859_1);
         try {
             outputStream.write(data);
+            bytesWritten += data.length;
             return scalarTrue; // Indicate success
         } catch (IOException e) {
             // Return false on I/O error, matching Perl's behavior
@@ -128,5 +132,41 @@ public class CustomOutputStreamHandle implements IOHandle {
         } catch (IOException e) {
             return new RuntimeScalar(0); // Indicate failure
         }
+    }
+
+    /**
+     * Returns the current position in the output stream.
+     *
+     * <p>For output streams, this returns the total number of bytes written
+     * since the stream was opened. This value is maintained internally as
+     * OutputStream doesn't provide position information.
+     *
+     * <p>Note: This position may not correspond to the actual file position
+     * if the underlying stream performs buffering or transformation.
+     *
+     * @return RuntimeScalar containing the number of bytes written, or -1 on error
+     */
+    @Override
+    public RuntimeScalar tell() {
+        return new RuntimeScalar(bytesWritten);
+    }
+
+    /**
+     * Attempts to seek to a position in the output stream.
+     *
+     * <p>Since OutputStream doesn't support seeking, this method always fails
+     * and returns -1. This matches Perl's behavior when seeking on unseekable
+     * streams like pipes or sockets.
+     *
+     * <p>For seekable output, use a RandomAccessFile-based handle instead.
+     *
+     * @param position the byte position to seek to (ignored)
+     * @return RuntimeScalar with -1 indicating seek is not supported
+     */
+    @Override
+    public RuntimeScalar seek(long position) {
+        // OutputStream doesn't support seeking
+        // Return -1 to indicate failure, matching Perl's behavior
+        return new RuntimeScalar(-1);
     }
 }
