@@ -261,28 +261,4 @@ public class SocketIO implements IOHandle {
             return handleIOException(e, "close operation failed");
         }
     }
-
-
-    /**
-     * Reads a single byte from the socket's input stream.
-     *
-     * @return a RuntimeScalar containing the byte read, or undefined if end-of-file is reached
-     */
-    public RuntimeScalar getc() {
-        try {
-            if (inputStream != null) {
-                int byteRead = inputStream.read();
-                if (byteRead == -1) {
-                    isEOF = true;
-                    return scalarUndef;
-                }
-                return new RuntimeScalar(byteRead);
-            }
-            throw new IllegalStateException("No input stream available");
-        } catch (IOException e) {
-            return handleIOException(e, "getc operation failed");
-        }
-    }
-
-
 }
