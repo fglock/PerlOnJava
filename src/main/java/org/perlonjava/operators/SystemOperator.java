@@ -35,9 +35,8 @@ public class SystemOperator {
             flushAllHandles();
 
             // Determine the operating system and set the shell command accordingly
-            String os = System.getProperty("os.name").toLowerCase();
             String[] shellCommand;
-            if (os.contains("win")) {
+            if (SystemUtils.osIsWindows()) {
                 // Windows
                 shellCommand = new String[]{"cmd.exe", "/c", command.toString()};
             } else {

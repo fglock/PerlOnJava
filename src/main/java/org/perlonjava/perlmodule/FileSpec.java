@@ -3,6 +3,7 @@ package org.perlonjava.perlmodule;
 import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.SystemUtils;
 
 import java.io.File;
 import java.nio.file.Paths;
@@ -52,11 +53,11 @@ public class FileSpec extends PerlModuleBase {
             fileSpec.registerMethod("file_name_is_absolute", "$");
             fileSpec.registerMethod("path", "");
             fileSpec.registerMethod("join", "@");
-            fileSpec.registerMethod("splitpath", "$$");
+            fileSpec.registerMethod("splitpath", "$");
             fileSpec.registerMethod("splitdir", "$");
-            fileSpec.registerMethod("catpath", "$$$");
-            fileSpec.registerMethod("abs2rel", "$$");
-            fileSpec.registerMethod("rel2abs", "$$");
+            fileSpec.registerMethod("catpath", "$$");
+            fileSpec.registerMethod("abs2rel", "$");
+            fileSpec.registerMethod("rel2abs", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing File::Spec method: " + e.getMessage());
         }
@@ -125,7 +126,7 @@ public class FileSpec extends PerlModuleBase {
      * @return A {@link RuntimeList} containing the null device path.
      */
     public static RuntimeList devnull(RuntimeArray args, int ctx) {
-        String devNull = System.getProperty("os.name").toLowerCase().contains("win") ? "NUL" : "/dev/null";
+        String devNull = SystemUtils.osIsWindows() ? "NUL" : "/dev/null";
         return new RuntimeScalar(devNull).getList();
     }
 
@@ -137,7 +138,7 @@ public class FileSpec extends PerlModuleBase {
      * @return A {@link RuntimeList} containing the root directory path.
      */
     public static RuntimeList rootdir(RuntimeArray args, int ctx) {
-        String rootDir = System.getProperty("os.name").toLowerCase().contains("win") ? "\\" : "/";
+        String rootDir = SystemUtils.osIsWindows() ? "\\" : "/";
         return new RuntimeScalar(rootDir).getList();
     }
 
@@ -151,7 +152,7 @@ public class FileSpec extends PerlModuleBase {
     public static RuntimeList tmpdir(RuntimeArray args, int ctx) {
         String tmpDir = System.getenv("TMPDIR");
         if (tmpDir == null || tmpDir.isEmpty()) {
-            tmpDir = System.getProperty("os.name").toLowerCase().contains("win") ? System.getenv("TEMP") : "/tmp";
+            tmpDir = SystemUtils.osIsWindows() ? System.getenv("TEMP") : "/tmp";
         }
         return new RuntimeScalar(tmpDir).getList();
     }
@@ -193,7 +194,7 @@ public class FileSpec extends PerlModuleBase {
      * @return A {@link RuntimeList} containing a boolean indicating case tolerance.
      */
     public static RuntimeList case_tolerant(RuntimeArray args, int ctx) {
-        boolean caseTolerant = System.getProperty("os.name").toLowerCase().contains("win");
+        boolean caseTolerant = SystemUtils.osIsWindows();
         return new RuntimeScalar(caseTolerant).getList();
     }
 
@@ -259,7 +260,7 @@ public class FileSpec extends PerlModuleBase {
         String directory = path;
         String file = "";
 
-        if (System.getProperty("os.name").toLowerCase().contains("win")) {
+        if (SystemUtils.osIsWindows()) {
             int colonIndex = path.indexOf(':');
             if (colonIndex != -1) {
                 volume = path.substring(0, colonIndex + 1);

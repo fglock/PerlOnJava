@@ -47,7 +47,7 @@ public class ModuleOperators {
 
                         String path = resource.getPath();
                         // Remove leading slash if on Windows
-                        if (System.getProperty("os.name").toLowerCase().contains("win") && path.startsWith("/")) {
+                        if (SystemUtils.osIsWindows() && path.startsWith("/")) {
                             path = path.substring(1);
                         }
                         fullName = Paths.get(path);
