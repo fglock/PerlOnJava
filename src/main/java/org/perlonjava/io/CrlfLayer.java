@@ -23,7 +23,6 @@ class CrlfLayer implements IOLayer {
 
     @Override
     public void reset() {
-        layeredIOHandle.lastWasCR = false;
     }
 
     private byte[] convertCrlfToLf(byte[] data) {
