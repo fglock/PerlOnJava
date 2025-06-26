@@ -493,7 +493,7 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
 
         // Special handling for :raw mode - just use the base handle directly
-        if (ioLayer.equals(":raw") || ioLayer.equals(":bytes")) {
+        if (ioLayer.equals(":raw") || ioLayer.equals(":bytes") || ioLayer.equals(":unix")) {
             ioHandle = baseHandle;
             return;
         }
