@@ -38,12 +38,6 @@ public class LayeredIOHandle implements IOHandle {
     /** Stack of I/O layers to apply to data */
     private List<IOLayer> layers = new ArrayList<>();
 
-    /** Buffer for incomplete multi-byte sequences or partial data from previous reads */
-    private byte[] pendingInputBytes = new byte[0];
-
-    /** Tracks if the last character read was a CR, used for CRLF handling across read boundaries */
-    boolean lastWasCR = false;
-
     /** Debug flag for development/troubleshooting */
     private static final boolean DEBUG = false;
 
@@ -80,8 +74,6 @@ public class LayeredIOHandle implements IOHandle {
         try {
             parseAndSetLayers(modeStr);
             // Reset state when changing modes to avoid corruption
-            pendingInputBytes = new byte[0];
-            lastWasCR = false;
             return new RuntimeScalar(1);
         } catch (Exception e) {
             return new RuntimeScalar(0);
@@ -113,9 +105,7 @@ public class LayeredIOHandle implements IOHandle {
             if (part.isEmpty()) continue;
 
             IOLayer layer = createLayer(part);
-            if (layer != null) {
-                layers.add(layer);
-            }
+            layers.add(layer);
         }
 
         // If no layers were added, default to bytes
@@ -344,8 +334,6 @@ public class LayeredIOHandle implements IOHandle {
     @Override
     public RuntimeScalar seek(long pos) {
         // Reset state on seek to avoid corruption from partial data
-        pendingInputBytes = new byte[0];
-        lastWasCR = false;
         // Reset all layers
         for (IOLayer layer : layers) {
             layer.reset();
