@@ -188,7 +188,7 @@ public class LayeredIOHandle implements IOHandle {
      */
     private IOLayer createLayer(String layerSpec) {
         return switch (layerSpec) {
-            case "bytes", "raw" -> new BytesLayer();
+            case "bytes", "raw", "unix" -> new BytesLayer();
             case "crlf" -> new CrlfLayer(this);
             case "utf8" -> new Utf8Layer();
             default -> {

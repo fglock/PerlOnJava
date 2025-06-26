@@ -244,7 +244,7 @@ The following areas are currently under active development to enhance the functi
   - Added operators: `read`, `tell`.
   - Added `open` option: in-memory files.
   - Syntax: identifiers starting with `::` are in `main` package.
-  - Added I/O layers support to `open`, `binmode`: `:raw`, `:bytes`, `:crlf`, `:utf8`, `:encoding()`.
+  - Added I/O layers support to `open`, `binmode`: `:raw`, `:bytes`, `:crlf`, `:utf8`, `:unix`, `:encoding()`.
   - Added `# line` preprocessor directive.
   - `Test::More` module: added `subtest`.
   - `CORE::` operators have the same prototypes as in Perl.
