@@ -241,6 +241,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - ❌  **Regex Optimizations**: Using `use re 'eval';` for runtime regex compilation is not supported.
 - ❌  **Regex Compilation Flags**: Setting default regex flags with `use re '/flags';` is not supported.
 - ❌  **Overloading**: `qr` overloading is not implemented.
+- ❌  **Duplicate named capture groups**: Java's regular expression engine does not support duplicate named capture groups. In Java, each named capturing group must have a unique name within a regular expression.
 
 
 ## Statements and Special Operators
@@ -525,8 +526,6 @@ The DBI module provides seamless integration with JDBC drivers:
 - ❌  **Fetching network info**: endprotoent, endservent, gethostbyaddr, gethostbyname, gethostent, getnetbyaddr, getnetbyname, getnetent, getprotobyname, getprotobynumber, getprotoent, getservbyname, getservbyport, getservent, sethostent, setnetent, setprotoent, setservent
 - ❌  **Keywords related to the control flow of the Perl program**: `dump` operator.
 - ❌  **Tail calls**: `goto` going to a different subroutine as a tail call is not supported.
-- ❌  **Regex differences**:
-    - Java's regular expression engine does not support duplicate named capture groups. In Java, each named capturing group must have a unique name within a regular expression.
 
 
 ## Language Differences and Workarounds
