@@ -156,33 +156,6 @@ public class ScalarBackedIO implements IOHandle {
     }
 
     @Override
-    public RuntimeScalar getc() {
-        if (isClosed || isEOF) {
-            return RuntimeScalarCache.scalarUndef;
-        }
-
-        String content = backingScalar.toString();
-        byte[] contentBytes = content.getBytes(StandardCharsets.ISO_8859_1);
-
-        if (position >= contentBytes.length) {
-            isEOF = true;
-            return RuntimeScalarCache.scalarUndef;
-        }
-
-        char ch = (char)(contentBytes[position] & 0xFF);
-        position++;
-
-        return new RuntimeScalar(String.valueOf(ch));
-    }
-
-//    @Override
-//    public RuntimeScalar stat() {
-//        // Return basic stat info for in-memory scalar
-//        // Most fields will be 0 or -1 for non-file handles
-//        return new RuntimeScalar(-1);
-//    }
-
-    @Override
     public RuntimeScalar bind(String address, int port) {
         throw new PerlCompilerException("Can't bind on in-memory scalar handle");
     }

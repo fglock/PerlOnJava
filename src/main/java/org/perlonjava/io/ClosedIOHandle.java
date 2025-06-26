@@ -21,11 +21,6 @@ public class ClosedIOHandle implements IOHandle {
     }
 
     @Override
-    public RuntimeScalar getc() {
-        return RuntimeIO.handleIOError("Cannot get character from a closed handle.");
-    }
-
-    @Override
     public RuntimeScalar fileno() {
         return RuntimeIO.handleIOError("Cannot get file number from a closed handle.");
     }

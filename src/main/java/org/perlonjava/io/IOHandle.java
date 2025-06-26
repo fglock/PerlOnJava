@@ -14,10 +14,6 @@ public interface IOHandle {
 
     RuntimeScalar flush();
 
-    default RuntimeScalar getc() {
-        return RuntimeIO.handleIOError("getc operation is not supported.");
-    }
-
     default RuntimeScalar fileno() {
         return RuntimeIO.handleIOError("fileno operation is not supported.");
     }

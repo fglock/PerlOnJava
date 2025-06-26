@@ -303,16 +303,6 @@ public class LayeredIOHandle implements IOHandle {
     }
 
     /**
-     * Reads a single character from the handle.
-     *
-     * @return RuntimeScalar containing the character or undef on EOF
-     */
-    @Override
-    public RuntimeScalar getc() {
-        return delegate.getc();
-    }
-
-    /**
      * Gets the file descriptor number for this handle.
      *
      * @return RuntimeScalar containing the file descriptor number

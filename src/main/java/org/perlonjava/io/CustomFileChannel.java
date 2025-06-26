@@ -265,31 +265,6 @@ public class CustomFileChannel implements IOHandle {
     }
 
     /**
-     * Reads a single character (byte) from the file.
-     *
-     * <p>This method reads exactly one byte and returns it as an integer value
-     * (0-255). Returns undef on EOF.
-     *
-     * @return RuntimeScalar containing the byte value (0-255) or undef on EOF
-     */
-    @Override
-    public RuntimeScalar getc() {
-        try {
-            ByteBuffer singleByteBuffer = ByteBuffer.allocate(1);
-            int bytesRead = fileChannel.read(singleByteBuffer);
-            if (bytesRead == -1) {
-                isEOF = true;
-                return RuntimeScalarCache.scalarUndef;
-            }
-            singleByteBuffer.flip();
-            // Return byte as unsigned value (0-255)
-            return new RuntimeScalar(singleByteBuffer.get() & 0xFF);
-        } catch (IOException e) {
-            return handleIOException(e, "getc failed");
-        }
-    }
-
-    /**
      * Truncates the file to the specified length.
      *
      * <p>If the file is currently larger than the specified length, the extra data
