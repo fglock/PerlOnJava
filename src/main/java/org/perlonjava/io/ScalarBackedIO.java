@@ -1,5 +1,6 @@
 package org.perlonjava.io;
 
+import org.perlonjava.runtime.RuntimeIO;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarCache;
 import org.perlonjava.runtime.PerlCompilerException;
@@ -106,17 +107,36 @@ public class ScalarBackedIO implements IOHandle {
         return new RuntimeScalar(position);
     }
 
+    /**
+     * Seeks to a new position based on the whence parameter.
+     *
+     * @param pos the offset in bytes
+     * @param whence the reference point for the offset (SEEK_SET, SEEK_CUR, or SEEK_END)
+     * @return RuntimeScalar with true on success
+     */
     @Override
-    public RuntimeScalar seek(long pos) {
+    public RuntimeScalar seek(long pos, int whence) {
         String content = backingScalar.toString();
         int contentLength = content.getBytes(StandardCharsets.ISO_8859_1).length;
 
-        if (pos < 0) {
-            // Seek from end
-            position = Math.max(0, contentLength + (int)pos);
-        } else {
-            position = (int)pos;
+        long newPosition;
+
+        switch (whence) {
+            case SEEK_SET: // from beginning
+                newPosition = pos;
+                break;
+            case SEEK_CUR: // from current position
+                newPosition = position + pos;
+                break;
+            case SEEK_END: // from end
+                newPosition = contentLength + pos;
+                break;
+            default:
+                return RuntimeIO.handleIOError("Invalid whence value: " + whence);
         }
+
+        // Clamp position to valid range [0, contentLength]
+        position = (int) Math.max(0, Math.min(newPosition, contentLength));
 
         isEOF = position >= contentLength;
         return RuntimeScalarCache.scalarTrue;
