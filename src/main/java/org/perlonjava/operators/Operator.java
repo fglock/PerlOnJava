@@ -1,5 +1,6 @@
 package org.perlonjava.operators;
 
+import org.perlonjava.io.IOHandle;
 import org.perlonjava.regex.RuntimeRegex;
 import org.perlonjava.runtime.*;
 
@@ -140,12 +141,19 @@ public class Operator {
     }
 
     public static RuntimeScalar seek(RuntimeScalar fileHandle, RuntimeList runtimeList) {
-        long length = runtimeList.getFirst().getLong();
+        long position = runtimeList.getFirst().getLong();
+        int whence = IOHandle.SEEK_SET; // Default to SEEK_SET
+
+        // Check if whence parameter is provided
+        if (runtimeList.size() > 1) {
+            whence = runtimeList.elements.get(1).scalar().getInt();
+        }
+
         if (fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
             // File handle
             RuntimeIO runtimeIO = fileHandle.getRuntimeIO();
             if (runtimeIO.ioHandle != null) {
-                return runtimeIO.ioHandle.seek(length);  // TODO - "whence" argument
+                return runtimeIO.ioHandle.seek(position, whence);
             } else {
                 return RuntimeIO.handleIOError("No file handle available for seek");
             }

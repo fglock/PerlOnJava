@@ -323,22 +323,23 @@ public class LayeredIOHandle implements IOHandle {
     }
 
     /**
-     * Seeks to a new position in the file.
+     * Seeks to a new position in the file based on the whence parameter.
      *
      * <p>This method resets all layer state to ensure clean reads from
      * the new position.
      *
-     * @param pos the position to seek to
+     * @param pos the offset in bytes
+     * @param whence the reference point for the offset (SEEK_SET, SEEK_CUR, or SEEK_END)
      * @return RuntimeScalar indicating success/failure
      */
     @Override
-    public RuntimeScalar seek(long pos) {
+    public RuntimeScalar seek(long pos, int whence) {
         // Reset state on seek to avoid corruption from partial data
         // Reset all layers
         for (IOLayer layer : layers) {
             layer.reset();
         }
-        return delegate.seek(pos);
+        return delegate.seek(pos, whence);
     }
 
     /**
