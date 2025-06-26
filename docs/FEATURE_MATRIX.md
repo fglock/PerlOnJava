@@ -175,6 +175,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **Flip-flop operator `..` and `...`**: The flip-flop operators are implemented.
 - ❌  **Tied Arrays**: Tied arrays are not yet implemented.
 - ❌  **Tied Hashes**: Tied hashes are not yet implemented.
+- ❌  **Array exists**: `exists` for array indexes is not yet implemented.
 
 ## Subroutines
 - ✅  **Subroutine hoisting**: Invoking subroutines before their actual declaration in the code.
