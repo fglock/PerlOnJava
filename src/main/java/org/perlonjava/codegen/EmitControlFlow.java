@@ -38,7 +38,7 @@ public class EmitControlFlow {
                 // Extract the label name.
                 labelStr = ((IdentifierNode) arg).name;
             } else {
-                throw new RuntimeException("Not implemented: " + node);
+                throw new PerlCompilerException(node.tokenIndex, "Not implemented: " + node, ctx.errorUtil);
             }
         }
 
@@ -119,7 +119,7 @@ public class EmitControlFlow {
             if (arg instanceof IdentifierNode) {
                 labelName = ((IdentifierNode) arg).name;
             } else {
-                throw new RuntimeException("Invalid goto label: " + node);
+                throw new PerlCompilerException(node.tokenIndex, "Invalid goto label: " + node, ctx.errorUtil);
             }
         }
 
