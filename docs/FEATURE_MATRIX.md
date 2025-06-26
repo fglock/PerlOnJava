@@ -11,16 +11,17 @@
 7. [Subroutines](#subroutines)
 8. [Regular Expressions](#regular-expressions)
 9. [Statements and Special Operators](#statements-and-special-operators)
-10. [Namespaces and Global Variables](#namespaces-and-global-variables)
-11. [Perl Modules, Pragmas, Features](#perl-modules-pragmas-features)
-  - [Pragmas](#pragmas)
-  - [Core modules](#core-modules)
-  - [Non-core modules](#non-core-modules)
-  - [DBI module](#dbi-module)
-12. [Non-strict and Obsolete Features](#non-strict-and-obsolete-features)
-13. [Features Probably Incompatible with JVM](#features-probably-incompatible-with-jvm)
-14. [Language Differences and Workarounds](#language-differences-and-workarounds)
-15. [Optimizations](#optimizations)
+10. [I/O Operations](#io-operations)
+11. [Namespaces and Global Variables](#namespaces-and-global-variables)
+12. [Perl Modules, Pragmas, Features](#perl-modules-pragmas-features)
+- [Pragmas](#pragmas)
+- [Core modules](#core-modules)
+- [Non-core modules](#non-core-modules)
+- [DBI module](#dbi-module)
+13. [Non-strict and Obsolete Features](#non-strict-and-obsolete-features)
+14. [Features Probably Incompatible with JVM](#features-probably-incompatible-with-jvm)
+15. [Language Differences and Workarounds](#language-differences-and-workarounds)
+16. [Optimizations](#optimizations)
 
 ## Summary
 
@@ -53,7 +54,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **Perl line numbers in bytecode**: Bytecode includes line numbers for better debugging.
 - ✅  **Perl-like runtime error messages**: Runtime errors are formatted similarly to Perl's.
 - ✅  **Comments**: Support for comments and POD (documentation) in code is implemented.
-- ❌  **Perl-like warnings**: Internal support for most warnings is missing. Warnings need to be formatted to resemble Perl’s output.
+- ❌  **Perl-like warnings**: Internal support for most warnings is missing. Warnings need to be formatted to resemble Perl's output.
 - ❌  **Perl debugger**: The built-in Perl debugger (`perl -d`) is not implemented..
 
 
@@ -263,11 +264,6 @@ This list is under review.
 - ✅  **`do` file**: File execution using `do` is implemented.
 - ✅  **`print` operators**: `print`, `printf` and `say` statements are implemented, with support for file handles.
 - ✅  **`printf` and `sprintf`**: String formatting is implemented.
-- ✅  **I/O operators**: `open`, `readline`, `eof`, `close`, `unlink`, `readpipe`, `fileno`, `getc`, `read`, `tell` are implemented.
-- ❌  **I/O operators**: `socket`, `seek`, `truncate`, `bind`, `connect`, `accept`, `listen` are not implemented.
-- ✅  **`open`**: 2-argument `open` supported forms are: `<-`, `-`, `>-`, `filename`.
-- ✅  **`open`**: In-memory files are implemented.
-- ✅  **`select`**: `select(filehandle)` is implemented.
 - ✅  **Short-circuit and, or**: Short-circuit logical operators are supported.
 - ✅  **Low-precedence/high precedence operators**: Logical operators like `not`, `or`, `and`, `xor` are supported.
 - ✅  **Ternary operator**: The ternary conditional operator is implemented.
@@ -329,29 +325,65 @@ This list is under review.
 - ❌  **`fork` operator**: `fork` is not implemented.
 - ❌  **`system` operator**: `system` is not implemented.
 - ❌  **`binmode` operator**: `binmode` is not implemented.
-- ✅  **`I/O layers**: `open`, `binmode` support these layers: `:raw`, `:bytes`, `:crlf`, `:utf8`, `:unix`, `:encoding()`.
-- ✅  **`I/O layers**: layers can be stacked..
 
-    The supported encodings are those provided by Java's `Charset.forName()` method. This includes:
-    
-    **Standard Charsets (guaranteed to be available in all Java implementations):**
-    - `US-ASCII` - Seven-bit ASCII
-    - `ISO-8859-1` - ISO Latin Alphabet No. 1 (Latin-1)
-    - `UTF-8` - Eight-bit UCS Transformation Format
-    - `UTF-16BE` - Sixteen-bit UCS Transformation Format, big-endian byte order
-    - `UTF-16LE` - Sixteen-bit UCS Transformation Format, little-endian byte order
-    - `UTF-16` - Sixteen-bit UCS Transformation Format, byte order identified by an optional byte-order mark
-    
-    **Common Extended Charsets (usually available):**
-    - `windows-1252` - Windows Western European
-    - `ISO-8859-2` through `ISO-8859-16` - Various ISO Latin alphabets
-    - `Shift_JIS` - Japanese
-    - `EUC-JP` - Japanese
-    - `GB2312`, `GBK`, `GB18030` - Chinese
-    - `Big5` - Traditional Chinese
-    - `EUC-KR` - Korean
-    - `windows-1251` - Windows Cyrillic
-    - `KOI8-R` - Russian
+## I/O Operations
+
+### Basic I/O Operators
+- ✅  **`open`**: File opening is implemented with support for:
+  - 2-argument forms: `<-`, `-`, `>-`, `filename`
+  - 3-argument forms with explicit modes
+  - In-memory files
+- ✅  **`readline`**: Reading lines from filehandles
+- ✅  **`eof`**: End-of-file detection
+- ✅  **`close`**: Closing filehandles
+- ✅  **`unlink`**: File deletion
+- ✅  **`readpipe`**: Command output capture
+- ✅  **`fileno`**: File descriptor retrieval
+- ✅  **`getc`**: Character reading
+- ✅  **`read`**: Block reading with length specification
+- ✅  **`tell`**: Current file position
+- ✅  **`select`**: `select(filehandle)` for default output selection
+
+### Unimplemented I/O Operators
+- ❌  **`socket`**: Socket creation
+- ❌  **`seek`**: File position manipulation
+- ❌  **`truncate`**: File truncation
+- ❌  **`bind`**: Socket binding
+- ❌  **`connect`**: Socket connection
+- ❌  **`accept`**: Connection acceptance
+- ❌  **`listen`**: Socket listening
+
+### I/O Layers
+- ✅  **Layer support**: `open` and `binmode` support these I/O layers:
+  - `:raw` - Binary mode, no translation
+  - `:bytes` - Similar to :raw, ensures byte semantics
+  - `:crlf` - Convert CRLF to LF on input, LF to CRLF on output
+  - `:utf8` - UTF-8 encoding/decoding
+  - `:unix` - Unix-style line endings (LF only)
+  - `:encoding(ENCODING)` - Specific character encoding
+- ✅  **Layer stacking**: Multiple layers can be combined (e.g., `:raw:utf8`)
+
+### Supported Encodings
+The `:encoding()` layer supports all encodings provided by Java's `Charset.forName()` method:
+
+**Standard Charsets (guaranteed available):**
+- `US-ASCII` - Seven-bit ASCII
+- `ISO-8859-1` - ISO Latin Alphabet No. 1 (Latin-1)
+- `UTF-8` - Eight-bit UCS Transformation Format
+- `UTF-16BE` - Sixteen-bit UCS, big-endian byte order
+- `UTF-16LE` - Sixteen-bit UCS, little-endian byte order
+- `UTF-16` - Sixteen-bit UCS with optional byte-order mark
+
+**Common Extended Charsets (usually available):**
+- `windows-1252` - Windows Western European
+- `ISO-8859-2` through `ISO-8859-16` - Various ISO Latin alphabets
+- `Shift_JIS` - Japanese
+- `EUC-JP` - Japanese
+- `GB2312`, `GBK`, `GB18030` - Chinese
+- `Big5` - Traditional Chinese
+- `EUC-KR` - Korean
+- `windows-1251` - Windows Cyrillic
+- `KOI8-R` - Russian
 
 
 ## Namespaces and Global Variables
@@ -366,8 +398,8 @@ This list is under review.
 - ❌  **Compiler flags**:  The special variables `$^H`, `%^H`, `${^WARNING_BITS}` are not implemented.
 - ✅  **`caller` operator**: `caller` returns `($package, $filename, $line)`.
   - ❌  **Extended call stack information**: extra debug information like `(caller($level))[9]` is not implemented.<br>
-        This means we don't include subroutine names in error messages yet.<br>
-        Extra debug information: `($package, $filename, $line, $subroutine, $hasargs, $wantarray, $evaltext, $is_require, $hints, $bitmask, $hinthash)`
+    This means we don't include subroutine names in error messages yet.<br>
+    Extra debug information: `($package, $filename, $line, $subroutine, $hasargs, $wantarray, $evaltext, $is_require, $hints, $bitmask, $hinthash)`
 
 ## Perl Modules, Pragmas, Features
 
@@ -455,7 +487,7 @@ This list is under review.
 
 #### JDBC Integration
 The DBI module provides seamless integration with JDBC drivers:
-- Configure JDBC drivers: See [Adding JDBC Drivers](../README.md#adding-jdbc-drivers)
+- Configure JDBC drivers: See [Adding JDBC Drivers](JDBC_GUIDE.md#adding-jdbc-drivers)
 - Connect to databases: See [Database Connection Examples](JDBC_GUIDE.md#database-connection-examples)
 
 #### Implemented Methods
