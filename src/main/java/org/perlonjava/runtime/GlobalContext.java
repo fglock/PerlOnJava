@@ -37,7 +37,7 @@ public class GlobalContext {
             String varName = "main::" + Character.toString(c - 'A' + 1);
             GlobalVariable.getGlobalVariable(varName);
         }
-        GlobalVariable.getGlobalVariable("main::" + Character.toString('O' - 'A' + 1)).set("jvm");    // initialize $^O
+        GlobalVariable.getGlobalVariable("main::" + Character.toString('O' - 'A' + 1)).set(SystemUtils.getPerlOsName());    // initialize $^O
         GlobalVariable.getGlobalVariable("main::" + Character.toString('V' - 'A' + 1)).set(Configuration.perlVersion);    // initialize $^V
 
         GlobalVariable.getGlobalVariable("main::]").set(Configuration.getPerlVersionOld());    // initialize $] to Perl version

@@ -285,8 +285,7 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
         if (ioLayer.isEmpty() || ioLayer.equals(":")) {
             // If only ":" is specified, use OS default
-            String osName = System.getProperty("os.name").toLowerCase();
-            if (osName.contains("win")) {
+            if (SystemUtils.osIsWindows()) {
                 ioLayer = ":crlf";
             } else {
                 ioLayer = ":raw";
