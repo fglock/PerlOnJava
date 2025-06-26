@@ -510,4 +510,5 @@ This section is being worked on.
 - ❌  **Inline "constant" subroutines optimization**: Optimization for inline constants is not yet implemented.
 - ❌  **Overload optimization**: Preprocessing in overload should be cached.
 - ❌  **I/O optimization**: Use low-level readline to optimize input.
+- ❌  **I/O optimization**: Extract I/O buffering code (StandardIO.java) into a new layer, and add it at the top before other layers.
 
