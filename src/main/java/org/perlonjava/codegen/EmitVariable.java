@@ -274,7 +274,7 @@ public class EmitVariable {
                 mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "setFromList", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeArray;", true);
                 break;
             default:
-                throw new PerlCompilerException("Unsupported assignment context: " + lvalueContext);
+                throw new PerlCompilerException(node.tokenIndex, "Unsupported assignment context: " + lvalueContext, ctx.errorUtil);
         }
         EmitOperator.handleVoidContext(emitterVisitor);
         emitterVisitor.ctx.logDebug("SET end");
@@ -314,7 +314,8 @@ public class EmitVariable {
             case "$" -> "Internals::initialize_state_variable";
             case "@" -> "Internals::initialize_state_array";
             case "%" -> "Internals::initialize_state_hash";
-            default -> throw new IllegalArgumentException("Unsupported variable type: " + sigil);
+            default ->
+                    throw new PerlCompilerException(node.tokenIndex, "Unsupported variable type: " + sigil, ctx.errorUtil);
         };
         Node initStateVariable = new BinaryOperatorNode(
                 "(",
@@ -412,7 +413,7 @@ public class EmitVariable {
                                     methodDescriptor = "(Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeHash;";
                                 }
                                 default ->
-                                        throw new IllegalArgumentException("Unsupported variable type: " + var.charAt(0));
+                                        throw new PerlCompilerException(node.tokenIndex, "Unsupported variable type: " + var.charAt(0), ctx.errorUtil);
                             }
 
                             ctx.mv.visitLdcInsn(var);
@@ -444,7 +445,7 @@ public class EmitVariable {
                                 methodDescriptor = "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeHash;";
                             }
                             default ->
-                                    throw new IllegalArgumentException("Unsupported variable type: " + var.charAt(0));
+                                    throw new PerlCompilerException(node.tokenIndex, "Unsupported variable type: " + var.charAt(0), ctx.errorUtil);
                         }
 
                         Node codeRef = new OperatorNode("__SUB__", null, node.tokenIndex);
