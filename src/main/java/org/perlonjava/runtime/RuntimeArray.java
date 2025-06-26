@@ -187,7 +187,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         }
         if (index < 0 || index >= elements.size()) {
             // Lazy autovivification
-            return new RuntimeArrayProxy(this, index);
+            return new RuntimeArrayProxyEntry(this, index);
         }
         return elements.get(index);
     }
@@ -205,7 +205,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         }
         if (index < 0 || index >= elements.size()) {
             // Lazy autovivification
-            return new RuntimeArrayProxy(this, index);
+            return new RuntimeArrayProxyEntry(this, index);
         }
         return elements.get(index);
     }

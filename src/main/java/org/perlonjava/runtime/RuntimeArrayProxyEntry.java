@@ -3,11 +3,11 @@ package org.perlonjava.runtime;
 import java.util.Stack;
 
 /**
- * RuntimeArrayProxy acts as a proxy for accessing elements within a RuntimeArray.
+ * RuntimeArrayProxyEntry acts as a proxy for accessing elements within a RuntimeArray.
  * It provides a mechanism to lazily initialize (vivify) elements in the array
  * when they are accessed.
  */
-public class RuntimeArrayProxy extends RuntimeBaseProxy {
+public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
     private static final Stack<Integer> dynamicStateStackInt = new Stack<>();
     private static final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
 
@@ -17,12 +17,12 @@ public class RuntimeArrayProxy extends RuntimeBaseProxy {
     private final int key;
 
     /**
-     * Constructs a RuntimeArrayProxy for a given index in the specified parent array.
+     * Constructs a RuntimeArrayProxyEntry for a given index in the specified parent array.
      *
      * @param parent the parent RuntimeArray containing the elements
      * @param key    the index in the array for which this proxy is created
      */
-    public RuntimeArrayProxy(RuntimeArray parent, int key) {
+    public RuntimeArrayProxyEntry(RuntimeArray parent, int key) {
         super();
         this.parent = parent;
         this.key = key;
