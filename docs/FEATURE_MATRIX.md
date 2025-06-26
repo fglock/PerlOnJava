@@ -342,10 +342,10 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **`read`**: Block reading with length specification
 - ✅  **`tell`**: Current file position
 - ✅  **`select`**: `select(filehandle)` for default output selection
+- 🚧  **`seek`**: File position manipulation. `whence` argument is not yet implemented.
 
 ### Unimplemented I/O Operators
 - ❌  **`socket`**: Socket creation
-- ❌  **`seek`**: File position manipulation
 - ❌  **`truncate`**: File truncation
 - ❌  **`bind`**: Socket binding
 - ❌  **`connect`**: Socket connection
