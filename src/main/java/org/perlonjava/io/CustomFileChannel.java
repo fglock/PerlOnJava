@@ -19,20 +19,81 @@ import static org.perlonjava.runtime.RuntimeIO.handleIOException;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 
+/**
+ * A custom file channel implementation that provides Perl-compatible I/O operations.
+ *
+ * <p>This class wraps Java's {@link FileChannel} to provide an implementation of
+ * {@link IOHandle} that supports file-based I/O operations. It handles character
+ * encoding/decoding, EOF detection, and provides Perl-style return values for
+ * all operations.
+ *
+ * <p>Key features:
+ * <ul>
+ *   <li>Supports both file path and file descriptor based construction</li>
+ *   <li>Handles multi-byte character sequences correctly across read boundaries</li>
+ *   <li>Tracks EOF state for Perl-compatible EOF detection</li>
+ *   <li>Provides atomic position-based operations (tell, seek)</li>
+ *   <li>Supports file truncation</li>
+ * </ul>
+ *
+ * <p>Example usage:
+ * <pre>
+ * // Open a file for reading
+ * Set&lt;StandardOpenOption&gt; options = Set.of(StandardOpenOption.READ);
+ * CustomFileChannel channel = new CustomFileChannel(Paths.get("file.txt"), options);
+ *
+ * // Read data
+ * RuntimeScalar data = channel.read(1024, StandardCharsets.UTF_8);
+ *
+ * // Check EOF
+ * if (channel.eof().getBoolean()) {
+ *     // End of file reached
+ * }
+ * </pre>
+ *
+ * @see IOHandle
+ * @see FileChannel
+ */
 public class CustomFileChannel implements IOHandle {
 
+    /** The underlying Java NIO FileChannel for actual I/O operations */
     private final FileChannel fileChannel;
+
+    /** Tracks whether end-of-file has been reached during reading */
     private boolean isEOF;
 
+    /** Helper for handling multi-byte character decoding across read boundaries */
+    private CharsetDecoderHelper decoderHelper;
+
+    /**
+     * Creates a new CustomFileChannel for the specified file path.
+     *
+     * @param path the path to the file to open
+     * @param options the options specifying how the file is opened (READ, WRITE, etc.)
+     * @throws IOException if an I/O error occurs opening the file
+     */
     public CustomFileChannel(Path path, Set<StandardOpenOption> options) throws IOException {
         this.fileChannel = FileChannel.open(path, options);
         this.isEOF = false;
     }
 
+    /**
+     * Creates a new CustomFileChannel from an existing file descriptor.
+     *
+     * <p>This constructor is useful for wrapping standard I/O streams (stdin, stdout, stderr)
+     * or file descriptors obtained from native code.
+     *
+     * @param fd the file descriptor to wrap
+     * @param options the options specifying the mode (must contain either READ or WRITE)
+     * @throws IOException if an I/O error occurs
+     * @throws IllegalArgumentException if options don't contain READ or WRITE
+     */
     public CustomFileChannel(FileDescriptor fd, Set<StandardOpenOption> options) throws IOException {
         if (options.contains(StandardOpenOption.READ)) {
+            // Create a read channel from the file descriptor
             this.fileChannel = new FileInputStream(fd).getChannel();
         } else if (options.contains(StandardOpenOption.WRITE)) {
+            // Create a write channel from the file descriptor
             this.fileChannel = new FileOutputStream(fd).getChannel();
         } else {
             throw new IllegalArgumentException("Invalid options for FileDescriptor");
@@ -40,11 +101,21 @@ public class CustomFileChannel implements IOHandle {
         this.isEOF = false;
     }
 
-    private CharsetDecoderHelper decoderHelper;
-
+    /**
+     * Reads data from the file with proper character encoding support.
+     *
+     * <p>This method handles multi-byte character sequences correctly, buffering
+     * incomplete sequences until enough data is available to decode them properly.
+     * This is crucial for UTF-8 and other variable-length encodings.
+     *
+     * @param maxBytes the maximum number of bytes to read
+     * @param charset the character encoding to use for decoding
+     * @return RuntimeScalar containing the decoded string data
+     */
     @Override
     public RuntimeScalar read(int maxBytes, Charset charset) {
         try {
+            // Initialize decoder helper on first use
             if (decoderHelper == null) {
                 decoderHelper = new CharsetDecoderHelper();
             }
@@ -53,14 +124,17 @@ public class CustomFileChannel implements IOHandle {
 
             // Keep reading while we need more data for multi-byte sequences
             do {
+                // Allocate buffer for reading
                 byte[] buffer = new byte[maxBytes];
                 ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
                 int bytesRead = fileChannel.read(byteBuffer);
 
+                // Decode the bytes, handling partial sequences
                 String decoded = decoderHelper.decode(buffer, bytesRead, charset);
                 result.append(decoded);
 
                 if (bytesRead == -1) {
+                    // End of file reached
                     isEOF = true;
                     break;
                 }
@@ -74,9 +148,20 @@ public class CustomFileChannel implements IOHandle {
         }
     }
 
+    /**
+     * Writes a string to the file.
+     *
+     * <p>The string is converted to bytes using ISO-8859-1 encoding, which
+     * preserves byte values for binary data. This allows the method to handle
+     * both text and binary data correctly.
+     *
+     * @param string the string data to write
+     * @return RuntimeScalar containing the number of bytes written
+     */
     @Override
     public RuntimeScalar write(String string) {
         try {
+            // Convert string to bytes, treating each char as a byte value
             var data = string.getBytes(StandardCharsets.ISO_8859_1);
             ByteBuffer byteBuffer = ByteBuffer.wrap(data);
             int bytesWritten = fileChannel.write(byteBuffer);
@@ -86,6 +171,11 @@ public class CustomFileChannel implements IOHandle {
         }
     }
 
+    /**
+     * Closes the file channel and releases any system resources.
+     *
+     * @return RuntimeScalar with true value on success
+     */
     @Override
     public RuntimeScalar close() {
         try {
@@ -96,11 +186,23 @@ public class CustomFileChannel implements IOHandle {
         }
     }
 
+    /**
+     * Checks if end-of-file has been reached.
+     *
+     * <p>The EOF flag is set when a read operation returns -1 (no more data).
+     *
+     * @return RuntimeScalar with true if EOF reached, false otherwise
+     */
     @Override
     public RuntimeScalar eof() {
         return new RuntimeScalar(isEOF);
     }
 
+    /**
+     * Gets the current position in the file.
+     *
+     * @return RuntimeScalar containing the current byte position, or -1 on error
+     */
     @Override
     public RuntimeScalar tell() {
         try {
@@ -111,20 +213,37 @@ public class CustomFileChannel implements IOHandle {
         }
     }
 
+    /**
+     * Seeks to a new position in the file.
+     *
+     * <p>Seeking clears the EOF flag since we may no longer be at the end of file.
+     *
+     * @param pos the byte position to seek to
+     * @return RuntimeScalar with true on success
+     */
     @Override
     public RuntimeScalar seek(long pos) {
         try {
             fileChannel.position(pos);
-            isEOF = false;
+            isEOF = false;  // Clear EOF flag after seeking
             return scalarTrue;
         } catch (IOException e) {
             return handleIOException(e, "seek failed");
         }
     }
 
+    /**
+     * Flushes any buffered data to the underlying storage device.
+     *
+     * <p>This method forces any buffered data to be written to the storage device,
+     * but does not update file metadata.
+     *
+     * @return RuntimeScalar with true on success
+     */
     @Override
     public RuntimeScalar flush() {
         try {
+            // Force content to be written, but not metadata
             fileChannel.force(false);
             return scalarTrue;
         } catch (IOException e) {
@@ -132,11 +251,27 @@ public class CustomFileChannel implements IOHandle {
         }
     }
 
+    /**
+     * Gets the file descriptor number for this channel.
+     *
+     * <p>Note: FileChannel does not expose the underlying file descriptor in Java,
+     * so this method returns undef. This is a limitation of the Java API.
+     *
+     * @return RuntimeScalar with undef value
+     */
     @Override
     public RuntimeScalar fileno() {
         return RuntimeScalarCache.scalarUndef; // FileChannel does not expose a file descriptor
     }
 
+    /**
+     * Reads a single character (byte) from the file.
+     *
+     * <p>This method reads exactly one byte and returns it as an integer value
+     * (0-255). Returns undef on EOF.
+     *
+     * @return RuntimeScalar containing the byte value (0-255) or undef on EOF
+     */
     @Override
     public RuntimeScalar getc() {
         try {
@@ -147,12 +282,23 @@ public class CustomFileChannel implements IOHandle {
                 return RuntimeScalarCache.scalarUndef;
             }
             singleByteBuffer.flip();
+            // Return byte as unsigned value (0-255)
             return new RuntimeScalar(singleByteBuffer.get() & 0xFF);
         } catch (IOException e) {
             return handleIOException(e, "getc failed");
         }
     }
 
+    /**
+     * Truncates the file to the specified length.
+     *
+     * <p>If the file is currently larger than the specified length, the extra data
+     * is discarded. If the file is smaller, it is extended with null bytes.
+     *
+     * @param length the desired length of the file in bytes
+     * @return RuntimeScalar with true on success
+     * @throws IllegalArgumentException if length is negative
+     */
     public RuntimeScalar truncate(long length) {
         try {
             if (length < 0) {

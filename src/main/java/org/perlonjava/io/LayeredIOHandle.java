@@ -1,65 +1,85 @@
 package org.perlonjava.io;
 
 import org.perlonjava.runtime.RuntimeScalar;
-import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
+
 import java.nio.charset.Charset;
-import java.nio.charset.CharsetDecoder;
-import java.nio.charset.CharsetEncoder;
-import java.nio.charset.CoderResult;
-import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
+/**
+ * A layered I/O handle implementation that supports Perl-style I/O layers.
+ *
+ * <p>This class wraps an existing IOHandle and applies a stack of I/O layers
+ * that can transform data during read and write operations. Layers are applied
+ * in reverse order for writes (top-down) and forward order for reads (bottom-up).
+ *
+ * <p>Supported layers include:
+ * <ul>
+ *   <li>{@code :bytes} or {@code :raw} - Raw byte mode (no transformation)</li>
+ *   <li>{@code :crlf} - CRLF line ending conversion</li>
+ *   <li>{@code :utf8} - UTF-8 encoding/decoding</li>
+ *   <li>{@code :encoding(name)} - Custom encoding (e.g., :encoding(UTF-16))</li>
+ * </ul>
+ *
+ * <p>Example usage:
+ * <pre>
+ * LayeredIOHandle handle = new LayeredIOHandle(baseHandle);
+ * handle.binmode(":utf8:crlf");  // Apply UTF-8 encoding and CRLF conversion
+ * </pre>
+ *
+ * @see IOHandle
+ * @see IOLayer
+ */
 public class LayeredIOHandle implements IOHandle {
+    /** The underlying I/O handle that performs actual I/O operations */
     private final IOHandle delegate;
-    private IOMode mode;
-    private Charset encoding;
 
-    // State for handling buffer boundaries
+    /** Stack of I/O layers to apply to data */
+    private List<IOLayer> layers = new ArrayList<>();
+
+    /** Buffer for incomplete multi-byte sequences or partial data from previous reads */
     private byte[] pendingInputBytes = new byte[0];
-    private CharsetDecoder decoder;
-    private CharsetEncoder encoder;
-    private ByteBuffer encodeBuffer;
-    private boolean lastWasCR = false; // For CRLF handling across boundaries
 
-    // Add UTF-8 input buffer
-    private ByteBuffer utf8InputBuffer;
+    /** Tracks if the last character read was a CR, used for CRLF handling across read boundaries */
+    boolean lastWasCR = false;
 
-    // Debug flag
+    /** Debug flag for development/troubleshooting */
     private static final boolean DEBUG = false;
 
+    /**
+     * Creates a new layered I/O handle wrapping the given delegate.
+     *
+     * @param delegate the underlying I/O handle to wrap
+     */
     public LayeredIOHandle(IOHandle delegate) {
         this.delegate = delegate;
-        this.mode = IOMode.DEFAULT;
-        this.encoding = StandardCharsets.UTF_8;
-        initializeCodecs();
     }
 
-    private void initializeCodecs() {
-        if (encoding != null) {
-            decoder = encoding.newDecoder()
-                    .onMalformedInput(CodingErrorAction.REPLACE)
-                    .onUnmappableCharacter(CodingErrorAction.REPLACE);
-            encoder = encoding.newEncoder()
-                    .onMalformedInput(CodingErrorAction.REPLACE)
-                    .onUnmappableCharacter(CodingErrorAction.REPLACE);
-            // Buffer for encoding operations
-            encodeBuffer = ByteBuffer.allocate(8192);
-            // Buffer for UTF-8 input handling
-            utf8InputBuffer = ByteBuffer.allocate(4096);
-            utf8InputBuffer.limit(0); // Start with empty buffer
-        }
-    }
-
+    /**
+     * Gets the underlying delegate I/O handle.
+     *
+     * @return the wrapped I/O handle
+     */
     public IOHandle getDelegate() {
         return delegate;
     }
 
+    /**
+     * Sets the I/O layers for this handle based on a mode string.
+     *
+     * <p>The mode string can contain multiple layers separated by colons.
+     * For example: ":utf8:crlf" applies UTF-8 encoding and CRLF conversion.
+     *
+     * <p>This method resets any pending input state when changing modes.
+     *
+     * @param modeStr the mode string specifying layers (e.g., ":utf8", ":crlf", ":encoding(UTF-16)")
+     * @return RuntimeScalar with value 1 on success, 0 on failure
+     */
     public RuntimeScalar binmode(String modeStr) {
         try {
-            parseAndSetMode(modeStr);
-            initializeCodecs();
-            // Reset state when changing modes
+            parseAndSetLayers(modeStr);
+            // Reset state when changing modes to avoid corruption
             pendingInputBytes = new byte[0];
             lastWasCR = false;
             return new RuntimeScalar(1);
@@ -68,397 +88,289 @@ public class LayeredIOHandle implements IOHandle {
         }
     }
 
-    private void parseAndSetMode(String modeStr) {
+    /**
+     * Parses the mode string and sets up the appropriate I/O layers.
+     *
+     * <p>If no mode string is provided or it's empty, defaults to bytes mode.
+     * The method handles special cases like :encoding(...) which contains parentheses.
+     *
+     * @param modeStr the mode string to parse
+     * @throws IllegalArgumentException if an unknown layer is specified
+     */
+    private void parseAndSetLayers(String modeStr) {
+        layers.clear();
+
         if (modeStr == null || modeStr.isEmpty()) {
-            this.mode = IOMode.BYTES;
-            this.encoding = null;
+            // Default to raw bytes mode
+            layers.add(new BytesLayer());
             return;
         }
 
-        switch (modeStr) {
-            case ":bytes":
-            case ":raw":
-                this.mode = IOMode.BYTES;
-                this.encoding = null;
-                break;
-            case ":crlf":
-                this.mode = IOMode.CRLF;
-                break;
-            case ":utf8":
-                this.mode = IOMode.UTF8;
-                this.encoding = StandardCharsets.UTF_8;
-                break;
-            default:
-                if (modeStr.startsWith(":encoding(") && modeStr.endsWith(")")) {
-                    String encodingName = modeStr.substring(10, modeStr.length() - 1);
-                    this.mode = IOMode.ENCODING;
-                    this.encoding = Charset.forName(encodingName);
-                } else {
-                    throw new IllegalArgumentException("Unknown binmode: " + modeStr);
-                }
+        // Split by ':' but handle :encoding(...) specially
+        String[] parts = splitLayers(modeStr);
+
+        for (String part : parts) {
+            if (part.isEmpty()) continue;
+
+            IOLayer layer = createLayer(part);
+            if (layer != null) {
+                layers.add(layer);
+            }
+        }
+
+        // If no layers were added, default to bytes
+        if (layers.isEmpty()) {
+            layers.add(new BytesLayer());
         }
     }
 
+    /**
+     * Splits a mode string into individual layer specifications.
+     *
+     * <p>This method handles the special case of :encoding(...) which contains
+     * parentheses and should not be split at the colon inside the parentheses.
+     *
+     * @param modeStr the mode string to split
+     * @return array of layer specifications
+     */
+    private String[] splitLayers(String modeStr) {
+        List<String> result = new ArrayList<>();
+        int start = 0;
+        int i = 0;
+
+        while (i < modeStr.length()) {
+            if (modeStr.charAt(i) == ':') {
+                // Found a colon separator
+                if (i > start) {
+                    result.add(modeStr.substring(start, i));
+                }
+                start = i + 1;
+                i++;
+            } else if (modeStr.startsWith("encoding(", i)) {
+                // Special handling for encoding(...) to keep it as one unit
+                int closeIdx = modeStr.indexOf(')', i);
+                if (closeIdx != -1) {
+                    // Add any content before encoding(...)
+                    if (i > start && start < i) {
+                        result.add(modeStr.substring(start, i));
+                    }
+                    // Add the complete encoding(...) specification
+                    result.add(modeStr.substring(i, closeIdx + 1));
+                    i = closeIdx + 1;
+                    start = i;
+                    // Skip any trailing colon
+                    if (i < modeStr.length() && modeStr.charAt(i) == ':') {
+                        start++;
+                        i++;
+                    }
+                } else {
+                    i++;
+                }
+            } else {
+                i++;
+            }
+        }
+
+        // Add any remaining content
+        if (start < modeStr.length()) {
+            result.add(modeStr.substring(start));
+        }
+
+        return result.toArray(new String[0]);
+    }
+
+    /**
+     * Creates an IOLayer instance based on the layer specification.
+     *
+     * @param layerSpec the layer specification (e.g., "utf8", "crlf", "encoding(UTF-16)")
+     * @return the created IOLayer instance
+     * @throws IllegalArgumentException if the layer specification is unknown
+     */
+    private IOLayer createLayer(String layerSpec) {
+        return switch (layerSpec) {
+            case "bytes", "raw" -> new BytesLayer();
+            case "crlf" -> new CrlfLayer(this);
+            case "utf8" -> new Utf8Layer();
+            default -> {
+                // Handle encoding(...) specifications
+                if (layerSpec.startsWith("encoding(") && layerSpec.endsWith(")")) {
+                    String encodingName = layerSpec.substring(9, layerSpec.length() - 1);
+                    try {
+                        Charset charset = Charset.forName(encodingName);
+                        yield new EncodingLayer(charset);
+                    } catch (Exception e) {
+                        throw new IllegalArgumentException("Unknown encoding: " + encodingName);
+                    }
+                }
+                throw new IllegalArgumentException("Unknown layer: " + layerSpec);
+            }
+        };
+    }
+
+    /**
+     * Writes data to the handle, applying all layers in reverse order.
+     *
+     * <p>Layers are applied top-down (reverse order) for writing. For example,
+     * with layers [:utf8, :crlf], data is first encoded to UTF-8, then CRLF
+     * conversion is applied.
+     *
+     * @param data the string data to write
+     * @return RuntimeScalar indicating success/failure or bytes written
+     */
     @Override
     public RuntimeScalar write(String data) {
         if (DEBUG) {
-            System.err.println("LayeredIOHandle.write: mode=" + mode + ", data length=" + data.length());
-            System.err.println("LayeredIOHandle.write: data='" + data + "'");
+            System.err.println("LayeredIOHandle.write: layers=" + layers.size() + ", data length=" + data.length());
         }
 
-        if (mode == IOMode.UTF8 || mode == IOMode.ENCODING) {
-            // For UTF-8 and encoding modes, we need to convert the string to bytes
-            // and then pass those bytes as a byte-string to the delegate
-            byte[] encodedBytes = processOutputData(data);
+        // Convert string to bytes using ISO-8859-1 to preserve byte values
+        byte[] bytes = data.getBytes(StandardCharsets.ISO_8859_1);
 
-            if (DEBUG) {
-                System.err.println("LayeredIOHandle.write: encoded to " + encodedBytes.length + " bytes");
-                StringBuilder hex = new StringBuilder();
-                for (byte b : encodedBytes) {
-                    hex.append(String.format("%02X ", b & 0xFF));
-                }
-                System.err.println("LayeredIOHandle.write: bytes=" + hex.toString());
-            }
-
-            // Convert bytes to a string where each character represents one byte
-            StringBuilder byteString = new StringBuilder(encodedBytes.length);
-            for (byte b : encodedBytes) {
-                byteString.append((char)(b & 0xFF));
-            }
-
-            if (DEBUG) {
-                System.err.println("LayeredIOHandle.write: byteString length=" + byteString.length());
-            }
-
-            return delegate.write(byteString.toString());
-        } else if (mode == IOMode.CRLF) {
-            // For CRLF mode, process the data and convert
-            byte[] processedBytes = processOutputData(data);
-            StringBuilder byteString = new StringBuilder(processedBytes.length);
-            for (byte b : processedBytes) {
-                byteString.append((char)(b & 0xFF));
-            }
-            return delegate.write(byteString.toString());
-        } else {
-            // For BYTES and DEFAULT modes, pass through directly
-            return delegate.write(data);
+        // Apply layers in reverse order for writing (top-down)
+        for (int i = layers.size() - 1; i >= 0; i--) {
+            bytes = layers.get(i).processOutput(bytes);
         }
+
+        // Convert bytes back to a string where each character represents one byte
+        // This preserves the byte values when passing to the delegate
+        StringBuilder byteString = new StringBuilder(bytes.length);
+        for (byte b : bytes) {
+            byteString.append((char)(b & 0xFF));
+        }
+
+        return delegate.write(byteString.toString());
     }
 
+    /**
+     * Reads data from the handle, applying all layers in forward order.
+     *
+     * <p>Layers are applied bottom-up (forward order) for reading. For example,
+     * with layers [:utf8, :crlf], CRLF conversion is applied first, then UTF-8
+     * decoding.
+     *
+     * @param maxChars maximum number of characters to read
+     * @return RuntimeScalar containing the read data
+     */
     @Override
     public RuntimeScalar read(int maxChars) {
-        RuntimeScalar result;
+        // Read raw data from the delegate
+        RuntimeScalar result = delegate.read(maxChars);
+        String data = result.toString();
 
-        switch (mode) {
-            case UTF8:
-                // Delegate UTF-8 decoding to the underlying handle
-                result = delegate.read(maxChars, StandardCharsets.UTF_8);
-                break;
-
-            case ENCODING:
-                // Delegate encoding-specific decoding to the underlying handle
-                if (encoding != null) {
-                    result = delegate.read(maxChars, encoding);
-                } else {
-                    result = delegate.read(maxChars);
-                }
-                break;
-
-            case CRLF:
-                // For CRLF mode, we still need to process after reading
-                result = delegate.read(maxChars);
-                String data = result.toString();
-                if (!data.isEmpty()) {
-                    return new RuntimeScalar(convertCrlfToLf(data));
-                }
-                return result;
-
-            case BYTES:
-            case DEFAULT:
-            default:
-                // Pass through raw bytes as string (ISO-8859-1)
-                result = delegate.read(maxChars);
-                break;
+        if (data.isEmpty()) {
+            return result;
         }
 
-        if (DEBUG) {
-            System.err.println("LayeredIOHandle.read: mode=" + mode + ", result length=" + result.toString().length());
-        }
-
-        return result;
-    }
-
-    private String convertCrlfToLf(String data) {
-        StringBuilder result = new StringBuilder();
-
+        // Convert string to bytes, treating each character as a byte value
+        byte[] bytes = new byte[data.length()];
         for (int i = 0; i < data.length(); i++) {
-            char c = data.charAt(i);
-            if (c == '\r') {
-                if (i + 1 < data.length() && data.charAt(i + 1) == '\n') {
-                    // Skip CR in CRLF
-                    continue;
-                } else {
-                    // Convert lone CR to LF
-                    result.append('\n');
-                }
-            } else {
-                result.append(c);
-            }
+            bytes[i] = (byte) data.charAt(i);
         }
 
-        return result.toString();
+        // Apply layers in forward order for reading (bottom-up)
+        for (IOLayer layer : layers) {
+            bytes = layer.processInput(bytes);
+        }
+
+        // Convert processed bytes back to string
+        StringBuilder sb = new StringBuilder(bytes.length);
+        for (byte b : bytes) {
+            sb.append((char)(b & 0xFF));
+        }
+
+        return new RuntimeScalar(sb.toString());
     }
 
-    private byte[] processOutputData(String data) {
-        switch (mode) {
-            case CRLF:
-                // Get bytes as ISO-8859-1 to preserve byte values
-                byte[] bytes = new byte[data.length()];
-                for (int i = 0; i < data.length(); i++) {
-                    bytes[i] = (byte) data.charAt(i);
-                }
-                return convertLfToCrlf(bytes);
-            case UTF8:
-                byte[] utf8Bytes = data.getBytes(StandardCharsets.UTF_8);
-                if (DEBUG) {
-                    System.err.println("processOutputData: UTF8 encoding produced " + utf8Bytes.length + " bytes from " + data.length() + " chars");
-                }
-                return utf8Bytes;
-            case ENCODING:
-                return encodeText(data);
-            case BYTES:
-            case DEFAULT:
-            default:
-                // Convert string to bytes preserving character values
-                byte[] rawBytes = new byte[data.length()];
-                for (int i = 0; i < data.length(); i++) {
-                    rawBytes[i] = (byte) data.charAt(i);
-                }
-                return rawBytes;
-        }
-    }
-
-    private int processInputData(byte[] buffer, int bytesRead) {
-        switch (mode) {
-            case CRLF:
-                return convertCrlfToLfWithState(buffer, bytesRead);
-            case UTF8:
-                // For UTF-8 mode, bytes are already UTF-8 encoded
-                // No conversion needed, just pass through
-                if (DEBUG) {
-                    System.err.println("processInputData: UTF8 mode, passing through " + bytesRead + " bytes");
-                }
-                return bytesRead;
-            case ENCODING:
-                return decodeText(buffer, bytesRead);
-            case BYTES:
-            case DEFAULT:
-            default:
-                return bytesRead;
-        }
-    }
-
-    private byte[] encodeText(String data) {
-        if (encoder == null || encoding == null) {
-            byte[] bytes = new byte[data.length()];
-            for (int i = 0; i < data.length(); i++) {
-                bytes[i] = (byte) data.charAt(i);
-            }
-            return bytes;
-        }
-        try {
-            return data.getBytes(encoding);
-        } catch (Exception e) {
-            // Fallback
-            byte[] bytes = new byte[data.length()];
-            for (int i = 0; i < data.length(); i++) {
-                bytes[i] = (byte) data.charAt(i);
-            }
-            return bytes;
-        }
-    }
-
-    private int decodeText(byte[] buffer, int bytesRead) {
-        if (decoder == null) return bytesRead;
-
-        try {
-            // Combine pending bytes with new data
-            byte[] allBytes = new byte[pendingInputBytes.length + bytesRead];
-            System.arraycopy(pendingInputBytes, 0, allBytes, 0, pendingInputBytes.length);
-            System.arraycopy(buffer, 0, allBytes, pendingInputBytes.length, bytesRead);
-
-            ByteBuffer byteBuffer = ByteBuffer.wrap(allBytes);
-            CharBuffer charBuffer = CharBuffer.allocate(allBytes.length * 2);
-
-            CoderResult result = decoder.decode(byteBuffer, charBuffer, false);
-
-            // Handle incomplete sequences at end of buffer
-            int remainingBytes = byteBuffer.remaining();
-            if (remainingBytes > 0) {
-                pendingInputBytes = new byte[remainingBytes];
-                byteBuffer.get(pendingInputBytes);
-            } else {
-                pendingInputBytes = new byte[0];
-            }
-
-            // Convert decoded characters back to the buffer
-            charBuffer.flip();
-            String decoded = charBuffer.toString();
-
-            // Convert string to bytes where each character is one byte
-            int actualLength = Math.min(decoded.length(), buffer.length);
-            for (int i = 0; i < actualLength; i++) {
-                buffer[i] = (byte) decoded.charAt(i);
-            }
-
-            // Clear remaining buffer
-            for (int i = actualLength; i < buffer.length; i++) {
-                buffer[i] = 0;
-            }
-
-            return actualLength;
-        } catch (Exception e) {
-            // Fallback - return original data
-            return bytesRead;
-        }
-    }
-
-    private byte[] convertLfToCrlf(byte[] data) {
-        // Count LF characters that need CR added
-        int lfCount = 0;
-        for (int i = 0; i < data.length; i++) {
-            if (data[i] == '\n' && (i == 0 || data[i-1] != '\r')) {
-                lfCount++;
-            }
-        }
-
-        if (lfCount == 0) return data;
-
-        byte[] result = new byte[data.length + lfCount];
-        int j = 0;
-        for (int i = 0; i < data.length; i++) {
-            if (data[i] == '\n' && (i == 0 || data[i-1] != '\r')) {
-                result[j++] = '\r';
-            }
-            result[j++] = data[i];
-        }
-
-        return result;
-    }
-
-    private int convertCrlfToLfWithState(byte[] buffer, int length) {
-        int writePos = 0;
-        int readPos = 0;
-
-        // Handle case where previous buffer ended with CR
-        if (lastWasCR && length > 0 && buffer[0] == '\n') {
-            // Skip the LF since we already processed the CR->LF conversion
-            readPos = 1;
-            lastWasCR = false;
-        } else {
-            lastWasCR = false;
-        }
-
-        for (; readPos < length; readPos++) {
-            if (buffer[readPos] == '\r') {
-                if (readPos + 1 < length && buffer[readPos + 1] == '\n') {
-                    // CRLF sequence within buffer - skip CR, keep LF
-                    continue;
-                } else {
-                    // CR at end of buffer - remember for next read
-                    lastWasCR = true;
-                    buffer[writePos++] = '\n'; // Convert CR to LF
-                }
-            } else {
-                buffer[writePos++] = buffer[readPos];
-            }
-        }
-
-        // Clear the remaining bytes
-        while (writePos < length) {
-            buffer[writePos++] = 0;
-        }
-
-        return writePos;
-    }
-
+    /**
+     * Flushes any buffered data to the underlying handle.
+     *
+     * @return RuntimeScalar indicating success/failure
+     */
     @Override
     public RuntimeScalar flush() {
-        // Handle any pending encoded data
-        if (encoder != null && encodeBuffer != null && encodeBuffer.position() > 0) {
-            encodeBuffer.flip();
-            byte[] pending = new byte[encodeBuffer.remaining()];
-            encodeBuffer.get(pending);
-
-            StringBuilder byteString = new StringBuilder(pending.length);
-            for (byte b : pending) {
-                byteString.append((char)(b & 0xFF));
-            }
-            delegate.write(byteString.toString());
-            encodeBuffer.clear();
-        }
-
-        // Flush any incomplete character sequences
-        if (decoder != null && pendingInputBytes.length > 0) {
-            // In a real implementation, we might need to handle
-            // incomplete sequences on flush
-        }
-
         return delegate.flush();
     }
 
+    /**
+     * Closes the handle after flushing any buffered data.
+     *
+     * @return RuntimeScalar indicating success/failure
+     */
     @Override
     public RuntimeScalar close() {
-        // Flush any pending data before closing
         flush();
         return delegate.close();
     }
 
-    // Delegate remaining methods unchanged
+    /**
+     * Reads a single character from the handle.
+     *
+     * @return RuntimeScalar containing the character or undef on EOF
+     */
     @Override
     public RuntimeScalar getc() {
         return delegate.getc();
     }
 
+    /**
+     * Gets the file descriptor number for this handle.
+     *
+     * @return RuntimeScalar containing the file descriptor number
+     */
     @Override
     public RuntimeScalar fileno() {
         return delegate.fileno();
     }
 
+    /**
+     * Checks if the handle has reached end-of-file.
+     *
+     * @return RuntimeScalar with true if at EOF, false otherwise
+     */
     @Override
     public RuntimeScalar eof() {
         return delegate.eof();
     }
 
+    /**
+     * Gets the current position in the file.
+     *
+     * @return RuntimeScalar containing the current position
+     */
     @Override
     public RuntimeScalar tell() {
         return delegate.tell();
     }
 
+    /**
+     * Seeks to a new position in the file.
+     *
+     * <p>This method resets all layer state to ensure clean reads from
+     * the new position.
+     *
+     * @param pos the position to seek to
+     * @return RuntimeScalar indicating success/failure
+     */
     @Override
     public RuntimeScalar seek(long pos) {
-        // Reset state on seek
+        // Reset state on seek to avoid corruption from partial data
         pendingInputBytes = new byte[0];
         lastWasCR = false;
-        if (decoder != null) decoder.reset();
-        if (encoder != null) encoder.reset();
-        if (utf8InputBuffer != null) {
-            utf8InputBuffer.clear();
-            utf8InputBuffer.limit(0);
+        // Reset all layers
+        for (IOLayer layer : layers) {
+            layer.reset();
         }
         return delegate.seek(pos);
     }
 
+    /**
+     * Truncates the file to the specified length.
+     *
+     * @param length the new length of the file
+     * @return RuntimeScalar indicating success/failure
+     */
     @Override
     public RuntimeScalar truncate(long length) {
         return delegate.truncate(length);
-    }
-
-    private enum IOMode {
-        DEFAULT,
-        BYTES,
-        CRLF,
-        UTF8,
-        ENCODING
     }
 }
