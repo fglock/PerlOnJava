@@ -8,6 +8,10 @@ import java.nio.charset.StandardCharsets;
 
 public interface IOHandle {
 
+    int SEEK_SET = 0;  // Seek from beginning of file
+    int SEEK_CUR = 1;  // Seek from current position
+    int SEEK_END = 2;  // Seek from end of file
+    
     RuntimeScalar write(String string);
 
     RuntimeScalar close();
@@ -25,6 +29,7 @@ public interface IOHandle {
     default RuntimeScalar read(int maxBytes) {
         return read(maxBytes, StandardCharsets.ISO_8859_1);
     }
+
     default RuntimeScalar read(int maxBytes, Charset charset) {
         return RuntimeIO.handleIOError("read operation is not supported.");
     }
@@ -50,8 +55,12 @@ public interface IOHandle {
         return RuntimeIO.handleIOError("Accept operation is not supported.");
     }
 
-    default RuntimeScalar seek(long pos) {
+    default RuntimeScalar seek(long pos, int whence) {
         return RuntimeIO.handleIOError("Seek operation is not supported.");
+    }
+
+    default RuntimeScalar seek(long pos) {
+        return seek(pos, IOHandle.SEEK_SET);
     }
 
     default RuntimeScalar truncate(long length) {

@@ -214,17 +214,46 @@ public class CustomFileChannel implements IOHandle {
     }
 
     /**
-     * Seeks to a new position in the file.
+     * Seeks to a new position in the file based on the whence parameter.
+     *
+     * <p>The whence parameter determines how the position is calculated:
+     * <ul>
+     *   <li>SEEK_SET (0): Set position to pos bytes from the beginning of the file</li>
+     *   <li>SEEK_CUR (1): Set position to current position + pos bytes</li>
+     *   <li>SEEK_END (2): Set position to end of file + pos bytes</li>
+     * </ul>
      *
      * <p>Seeking clears the EOF flag since we may no longer be at the end of file.
      *
-     * @param pos the byte position to seek to
-     * @return RuntimeScalar with true on success
+     * @param pos the offset in bytes
+     * @param whence the reference point for the offset (SEEK_SET, SEEK_CUR, or SEEK_END)
+     * @return RuntimeScalar with true on success, false on failure
      */
     @Override
-    public RuntimeScalar seek(long pos) {
+    public RuntimeScalar seek(long pos, int whence) {
         try {
-            fileChannel.position(pos);
+            long newPosition;
+
+            switch (whence) {
+                case SEEK_SET: // from beginning
+                    newPosition = pos;
+                    break;
+                case SEEK_CUR: // from current position
+                    newPosition = fileChannel.position() + pos;
+                    break;
+                case SEEK_END: // from end of file
+                    newPosition = fileChannel.size() + pos;
+                    break;
+                default:
+                    return handleIOException(new IOException("Invalid whence value: " + whence), "seek failed");
+            }
+
+            // Ensure the new position is not negative
+            if (newPosition < 0) {
+                return handleIOException(new IOException("Negative seek position"), "seek failed");
+            }
+
+            fileChannel.position(newPosition);
             isEOF = false;  // Clear EOF flag after seeking
             return scalarTrue;
         } catch (IOException e) {
