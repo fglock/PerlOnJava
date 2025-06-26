@@ -3,6 +3,45 @@ use strict;
 use warnings;
 use Test::More;
 
+# Summary of Array Autovivification Rules in Perl
+# 
+# **Operations that DO autovivify:**
+# - Assignment: `$a->[0] = 'val'`
+# - Element access: `$a->[0]` (creates empty array `$a = []`, but not the element)
+# - push function: `push @{$a}, 'item'`
+# - pop function: `pop @{$a}`
+# - shift function: `shift @{$a}`
+# - unshift function: `unshift @{$a}, 'item'`
+# - splice function: `splice @{$a}, 0, 0, 'item'`
+# - grep function: `grep { $_ } @{$a}`
+# - map function: `map { $_ } @{$a}`
+# - foreach loop: `foreach (@{$a}) { }`
+# - delete function: `delete $a->[0]`
+# - exists function: `exists $a->[0][1]` (creates parent structures)
+# - defined function: `defined $a->[0]` (creates the array)
+# - Array length read: `$#{$a}`
+# - Array length set: `$#{$a} = 10`
+# 
+# **Operations that do NOT autovivify:**
+# - Direct dereference in rvalue context: `my @list = @{$a}`
+# - sort function: `sort @{$a}`
+# - reverse function: `reverse @{$a}`
+# - Scalar context: `my $count = @{$a}`
+# - Function return values: `@{get_undef()}`
+# - Constant values: `@{undef}`
+# 
+# **Key principles:**
+# 1. Operations that can modify the array structure will autovivify
+# 2. Array element access always autovivifies the array itself, even in read-only contexts
+# 3. Multi-level access autovivifies all intermediate levels but not the final element
+# 4. Non-modifying operations (sort, reverse) do not autovivify
+# 5. Operations that work through aliases (grep, map, foreach) autovivify because they can potentially modify
+# 
+# **Key difference from hashes:**
+# Arrays distinguish between modifying operations (push, pop, shift, unshift)
+# and non-modifying operations (sort, reverse), while most hash operations autovivify regardless.
+
+
 # Test autovivification in lvalue contexts (should NOT throw errors)
 subtest 'Array autovivification in lvalue contexts' => sub {
     my $x;
