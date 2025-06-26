@@ -329,7 +329,7 @@ This list is under review.
 - ❌  **`fork` operator**: `fork` is not implemented.
 - ❌  **`system` operator**: `system` is not implemented.
 - ❌  **`binmode` operator**: `binmode` is not implemented.
-- ✅  **`I/O layers**: `open`, `binmode` support these layers: `:raw`, `:bytes`, `:crlf`, `:utf8`, `:encoding()`.
+- ✅  **`I/O layers**: `open`, `binmode` support these layers: `:raw`, `:bytes`, `:crlf`, `:utf8`, `:unix`, `:encoding()`.
 - ✅  **`I/O layers**: layers can be stacked..
 
     The supported encodings are those provided by Java's `Charset.forName()` method. This includes:

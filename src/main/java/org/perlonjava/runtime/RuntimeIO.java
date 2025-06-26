@@ -486,9 +486,9 @@ public class RuntimeIO implements RuntimeScalarReference {
             }
         }
 
-        // Unwrap if already wrapped
+        // Unwrap all layers to get to the base handle
         IOHandle baseHandle = ioHandle;
-        if (baseHandle instanceof LayeredIOHandle) {
+        while (baseHandle instanceof LayeredIOHandle) {
             baseHandle = ((LayeredIOHandle) baseHandle).getDelegate();
         }
 
