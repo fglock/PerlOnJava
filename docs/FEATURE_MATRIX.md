@@ -177,6 +177,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - ❌  **Tied Hashes**: Tied hashes are not yet implemented.
 - ❌  **Array exists**: `exists` for array indexes is not yet implemented.
 - ❌  **Array delete**: `delete` for array indexes is not yet implemented.
+- ❌  **`$#array`**: Lvalue array count is implemented: `$#{$sl} = 10`.
 
 ## Subroutines
 - ✅  **Subroutine hoisting**: Invoking subroutines before their actual declaration in the code.
