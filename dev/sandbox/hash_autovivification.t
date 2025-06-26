@@ -3,6 +3,33 @@ use strict;
 use warnings;
 use Test::More;
 
+# Summary of Hash Autovivification Rules in Perl
+# 
+# **Operations that DO autovivify:**
+# - Assignment: `$h->{key} = 'val'`
+# - Element access: `$h->{key}` (creates empty hash `$h = {}`, but not the key)
+# - keys function: `keys %{$h}`
+# - values function: `values %{$h}`
+# - each function: `each %{$h}`
+# - delete function: `delete $h->{key}`
+# - exists function: `exists $h->{a}{b}` (creates parent structures)
+# - defined function: `defined $h->{key}` (creates the hash)
+# 
+# **Operations that do NOT autovivify:**
+# - Direct dereference in rvalue context: `my @list = %{$h}`
+# - Function return values: `%{get_undef()}`
+# - Constant values: `%{undef}`
+# 
+# **Key principles:**
+# 1. Any operation that could potentially modify the data structure will autovivify
+# 2. Hash element access always autovivifies the hash itself, even in read-only contexts
+# 3. Multi-level access autovivifies all intermediate levels but not the final element
+# 4. Pure read operations on the whole hash (not individual elements) do not autovivify
+# 
+# **For the Text::CSV_PP case:**
+# The operation `%{$self->{_CACHE}} = %$ctx` should autovivify both `$self` (to a hashref) and `$self->{_CACHE}` (to a hashref)
+# because it's an assignment operation.
+
 # Test autovivification in lvalue contexts (should NOT throw errors)
 subtest 'Autovivification in lvalue contexts' => sub {
     my $x;
