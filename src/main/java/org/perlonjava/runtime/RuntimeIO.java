@@ -469,6 +469,7 @@ public class RuntimeIO implements RuntimeScalarReference {
      *
      * <p>If no layers are specified, checks the ${^OPEN} variable for defaults.
      * On Windows, defaults to :crlf, otherwise :raw.
+     * Layers can be stacked, e.g., ":utf8:crlf".
      *
      * @param ioLayer the layer specification (e.g., ":utf8", ":crlf", ":raw")
      */
