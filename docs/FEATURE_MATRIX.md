@@ -39,7 +39,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - Warnings and strict pragma
 - Some core modules and pragmas
 - Method Resolution Order (C3 only)
-- File operations and I/O (binmode not supported)
+- File operations and I/O
 
 ❌ Not Supported:
 - XS modules and C integration
@@ -224,8 +224,6 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  **Atomic Grouping**: Use of `(?>...)` for atomic groups is supported.
 
 ### Missing Regular Expression Features
-
-This list is under review.
 
 - ❌  **Dynamically-scoped regex variables**: Regex variables are not dynamically-scoped.
 - ❌  **Underscore in named captures** `(?<test_field>test)` the name in named captures cannot have underscores.
