@@ -118,7 +118,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
             return elements.get(key);
         }
         // Lazy autovivification
-        return new RuntimeHashProxy(this, key);
+        return new RuntimeHashProxyEntry(this, key);
     }
 
     /**
@@ -133,7 +133,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
             return elements.get(key);
         }
         // Lazy autovivification
-        return new RuntimeHashProxy(this, key);
+        return new RuntimeHashProxyEntry(this, key);
     }
 
     /**

@@ -3,11 +3,11 @@ package org.perlonjava.runtime;
 import java.util.Stack;
 
 /**
- * RuntimeHashProxy acts as a proxy for accessing elements within a RuntimeHash.
+ * RuntimeHashProxyEntry acts as a proxy for accessing elements within a RuntimeHash.
  * It provides a mechanism to lazily initialize (vivify) elements in the hash
  * when they are accessed.
  */
-public class RuntimeHashProxy extends RuntimeBaseProxy {
+public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
     private static final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
 
     // Reference to the parent RuntimeHash
@@ -16,12 +16,12 @@ public class RuntimeHashProxy extends RuntimeBaseProxy {
     private final String key;
 
     /**
-     * Constructs a RuntimeHashProxy for a given key in the specified parent hash.
+     * Constructs a RuntimeHashProxyEntry for a given key in the specified parent hash.
      *
      * @param parent the parent RuntimeHash containing the elements
      * @param key    the key in the hash for which this proxy is created
      */
-    public RuntimeHashProxy(RuntimeHash parent, String key) {
+    public RuntimeHashProxyEntry(RuntimeHash parent, String key) {
         super();
         this.parent = parent;
         this.key = key;
