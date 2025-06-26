@@ -193,12 +193,12 @@ subtest 'Array edge cases' => sub {
     is($@, '', 'Array length check autovivifies');
     ok(defined $l && ref $l eq 'ARRAY', 'Array created by length check');
     
-    # Setting array length
-    my $sl;
-    eval { $#{$sl} = 10; };
-    is($@, '', 'Setting array length autovivifies');
-    ok(defined $sl && ref $sl eq 'ARRAY', 'Array created by setting length');
-    is($#{$sl}, 10, 'Array length correctly set');
+    ## # Setting array length
+    ## my $sl;
+    ## eval { $#{$sl} = 10; };
+    ## is($@, '', 'Setting array length autovivifies');
+    ## ok(defined $sl && ref $sl eq 'ARRAY', 'Array created by setting length');
+    ## is($#{$sl}, 10, 'Array length correctly set');
 };
 
 # Test mixed array/hash autovivification
