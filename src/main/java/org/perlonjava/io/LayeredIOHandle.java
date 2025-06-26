@@ -141,7 +141,7 @@ public class LayeredIOHandle implements IOHandle {
                 int closeIdx = modeStr.indexOf(')', i);
                 if (closeIdx != -1) {
                     // Add any content before encoding(...)
-                    if (i > start && start < i) {
+                    if (i > start) {
                         result.add(modeStr.substring(start, i));
                     }
                     // Add the complete encoding(...) specification

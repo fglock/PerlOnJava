@@ -361,6 +361,7 @@ PerlOnJava implements most core Perl features with some key differences:
   - `:unix` - Unix-style line endings (LF only)
   - `:encoding(ENCODING)` - Specific character encoding
 - ✅  **Layer stacking**: Multiple layers can be combined (e.g., `:raw:utf8`)
+- ❌  **Multibyte encoding support for `seek`, `tell`, `truncate`**: These operations are not yet implemented for multibyte encodings.
 
 ### Supported Encodings
 The `:encoding()` layer supports all encodings provided by Java's `Charset.forName()` method:
