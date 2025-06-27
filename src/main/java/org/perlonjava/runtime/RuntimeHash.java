@@ -70,6 +70,11 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
      * @param array The RuntimeArray to which this hash will be added.
      */
     public void addToArray(RuntimeArray array) {
+
+        if (this.elements instanceof AutovivificationHash) {
+            throw new PerlCompilerException("Can't use an undefined value as an HASH reference");
+        }
+
         List<RuntimeScalar> elements = array.elements;
         for (Map.Entry<String, RuntimeScalar> entry : this.elements.entrySet()) {
             elements.add(new RuntimeScalar(entry.getKey()));
