@@ -2,7 +2,7 @@ package org.perlonjava.parser;
 
 import org.perlonjava.astnode.*;
 
-public class ScalarContextHelper {
+public class ParserNodeUtils {
     /**
      * Transforms a node to scalar context only if necessary.
      * Avoids wrapping nodes that are already scalar or don't need scalar conversion.
@@ -60,5 +60,10 @@ public class ScalarContextHelper {
     static OperatorNode scalarUnderscore(Parser parser) {
         return new OperatorNode(
                 "$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
+    }
+
+    static OperatorNode atUnderscore(Parser parser) {
+        return new OperatorNode("@",
+                new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
     }
 }

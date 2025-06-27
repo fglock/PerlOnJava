@@ -5,7 +5,7 @@ import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
-import static org.perlonjava.parser.ScalarContextHelper.scalarUnderscore;
+import static org.perlonjava.parser.ParserNodeUtils.scalarUnderscore;
 import static org.perlonjava.parser.TokenUtils.peek;
 import static org.perlonjava.runtime.GlobalVariable.existsGlobalCodeRef;
 

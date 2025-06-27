@@ -11,7 +11,7 @@ import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 
 import static org.perlonjava.parser.NumberParser.parseNumber;
-import static org.perlonjava.parser.ScalarContextHelper.scalarUnderscore;
+import static org.perlonjava.parser.ParserNodeUtils.scalarUnderscore;
 import static org.perlonjava.parser.SpecialBlockParser.runSpecialBlock;
 import static org.perlonjava.parser.SpecialBlockParser.setCurrentScope;
 import static org.perlonjava.parser.StringParser.parseVstring;

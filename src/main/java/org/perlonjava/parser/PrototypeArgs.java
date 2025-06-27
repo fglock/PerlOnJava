@@ -6,7 +6,7 @@ import org.perlonjava.runtime.PerlCompilerException;
 
 import static org.perlonjava.parser.ListParser.consumeCommas;
 import static org.perlonjava.parser.ListParser.isComma;
-import static org.perlonjava.parser.ScalarContextHelper.scalarUnderscore;
+import static org.perlonjava.parser.ParserNodeUtils.scalarUnderscore;
 
 /**
  * The PrototypeArgs class is responsible for parsing arguments based on a given prototype.
@@ -241,7 +241,7 @@ public class PrototypeArgs {
     private static void handleScalarArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
         Node arg = parseArgumentWithComma(parser, isOptional, needComma, "scalar argument");
         if (arg != null) {
-            args.elements.add(ScalarContextHelper.toScalarContext(arg));
+            args.elements.add(ParserNodeUtils.toScalarContext(arg));
         }
     }
 
@@ -251,7 +251,7 @@ public class PrototypeArgs {
             args.elements.add(scalarUnderscore(parser));
             return;
         }
-        args.elements.add(ScalarContextHelper.toScalarContext(arg));
+        args.elements.add(ParserNodeUtils.toScalarContext(arg));
     }
 
     private static void handleTypeGlobArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
@@ -282,7 +282,7 @@ public class PrototypeArgs {
             args.elements.add(new OperatorNode("\\", expr, expr.getIndex()));
         } else {
             // Bare scalars
-            args.elements.add(ScalarContextHelper.toScalarContext(expr));
+            args.elements.add(ParserNodeUtils.toScalarContext(expr));
         }
     }
 
@@ -327,7 +327,7 @@ public class PrototypeArgs {
         if (arg instanceof OperatorNode opNode && (opNode.operator.equals("@") || opNode.operator.equals("%"))) {
             args.elements.add(new OperatorNode("\\", arg, arg.getIndex()));
         } else {
-            args.elements.add(ScalarContextHelper.toScalarContext(arg));
+            args.elements.add(ParserNodeUtils.toScalarContext(arg));
         }
     }
 
