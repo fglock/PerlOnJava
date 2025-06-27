@@ -73,6 +73,18 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         return set(new RuntimeScalar(value));
     }
 
+    @Override
+    public RuntimeHash hashDeref() {
+        vivify();  // Ensure the scalar exists in parent hash
+        return lvalue.hashDeref();  // Delegate to the actual scalar
+    }
+
+    @Override
+    public RuntimeArray arrayDeref() {
+        vivify();  // Ensure the scalar exists in parent hash
+        return lvalue.arrayDeref();  // Delegate to the actual scalar
+    }
+
     /**
      * Undefines the underlying scalar value.
      *
