@@ -12,6 +12,9 @@ public class RuntimeScalarCache {
     public static RuntimeScalarReadOnly scalarFalse;
     public static RuntimeScalarReadOnly scalarUndef;
     public static RuntimeScalarReadOnly scalarEmptyString;
+    public static RuntimeScalarReadOnly scalarZero;
+    public static RuntimeScalarReadOnly scalarOne;
+
     // Range of integers to cache
     static int minInt = -100;
     static int maxInt = 100;
@@ -29,6 +32,8 @@ public class RuntimeScalarCache {
         scalarTrue = new RuntimeScalarReadOnly(true);
         scalarUndef = new RuntimeScalarReadOnly();
         scalarEmptyString = new RuntimeScalarReadOnly("");
+        scalarZero = new RuntimeScalarReadOnly(0);
+        scalarOne = new RuntimeScalarReadOnly(1);
     }
 
     /**
