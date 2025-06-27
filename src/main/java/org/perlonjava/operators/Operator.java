@@ -467,6 +467,11 @@ public class Operator {
      * @return a RuntimeList containing the elements that were removed
      */
     public static RuntimeList splice(RuntimeArray runtimeArray, RuntimeList list) {
+
+        if (runtimeArray.elements instanceof AutovivificationArray arrayProxy) {
+            arrayProxy.vivify(runtimeArray);
+        }
+
         RuntimeList removedElements = new RuntimeList();
 
         int size = runtimeArray.elements.size();
