@@ -115,6 +115,11 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
      * @return A scalar representing the new size of the array.
      */
     public static RuntimeScalar push(RuntimeArray runtimeArray, RuntimeDataProvider value) {
+
+        if (runtimeArray.elements instanceof AutovivificationArray arrayProxy) {
+            arrayProxy.vivify(runtimeArray);
+        }
+
         value.addToArray(runtimeArray);
         return getScalarInt(runtimeArray.elements.size());
     }
@@ -127,6 +132,11 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
      * @return A scalar representing the new size of the array.
      */
     public static RuntimeScalar unshift(RuntimeArray runtimeArray, RuntimeDataProvider value) {
+
+        if (runtimeArray.elements instanceof AutovivificationArray arrayProxy) {
+            arrayProxy.vivify(runtimeArray);
+        }
+
         RuntimeArray arr = new RuntimeArray();
         RuntimeArray.push(arr, value);
         runtimeArray.elements.addAll(0, arr.elements);
@@ -233,13 +243,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     public RuntimeArray setFromList(RuntimeList value) {
 
         if (this.elements instanceof AutovivificationArray arrayProxy) {
-            // Trigger autovivification: Convert the undefined scalar to an array reference.
-            // This happens when code like @$undef_scalar = (...) is executed.
-            // The AutovivificationArray was created when the undefined scalar was first
-            // dereferenced as an array, and now we complete the autovivification by
-            // setting the scalar's type to ARRAYREFERENCE and its value to this array.
-            arrayProxy.scalarToAutovivify.value = this;
-            arrayProxy.scalarToAutovivify.type = RuntimeScalarType.ARRAYREFERENCE;
+            arrayProxy.vivify(this);
         }
 
         this.elements = new ArrayList<>();
@@ -329,6 +333,11 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
      * @return A RuntimeList representing the sliced elements.
      */
     public RuntimeList getSlice(RuntimeList value) {
+
+        if (this.elements instanceof AutovivificationArray arrayProxy) {
+            arrayProxy.vivify(this);
+        }
+
         RuntimeList result = new RuntimeList();
         List<RuntimeBaseEntity> outElements = result.elements;
         Iterator<RuntimeScalar> iterator = value.iterator();
