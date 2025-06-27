@@ -78,6 +78,11 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
      * @return The last value of the array, or undefined if empty.
      */
     public static RuntimeScalar pop(RuntimeArray runtimeArray) {
+
+        if (runtimeArray.elements instanceof AutovivificationArray arrayProxy) {
+            arrayProxy.vivify(runtimeArray);
+        }
+
         if (runtimeArray.isEmpty()) {
             return new RuntimeScalar(); // Return undefined if empty
         }
@@ -91,6 +96,11 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
      * @return The first value of the array, or undefined if empty.
      */
     public static RuntimeScalar shift(RuntimeArray runtimeArray) {
+
+        if (runtimeArray.elements instanceof AutovivificationArray arrayProxy) {
+            arrayProxy.vivify(runtimeArray);
+        }
+
         if (runtimeArray.isEmpty()) {
             return new RuntimeScalar(); // Return undefined if empty
         }
@@ -149,6 +159,11 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
      * @param array The RuntimeArray to which elements will be added.
      */
     public void addToArray(RuntimeArray array) {
+
+        if (this.elements instanceof AutovivificationArray) {
+            throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
+        }
+
         List<RuntimeScalar> elements = array.elements;
         for (RuntimeScalar arrElem : this.elements) {
             elements.add(new RuntimeScalar(arrElem));
@@ -323,6 +338,11 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
      * @return A scalar representing the size of the array.
      */
     public RuntimeScalar scalar() {
+
+        if (this.elements instanceof AutovivificationArray) {
+            throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
+        }
+
         return getScalarInt(elements.size());
     }
 
