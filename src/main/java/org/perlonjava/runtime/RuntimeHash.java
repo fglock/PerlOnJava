@@ -92,6 +92,12 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
      * @return A RuntimeArray containing the updated hash.
      */
     public RuntimeArray setFromList(RuntimeList value) {
+
+        if (this.elements instanceof AutovivificationHash hashProxy) {
+            // This will trigger auto-vivification
+            hashProxy.autovivifyCallback.run();
+        }
+
         RuntimeHash hash = createHash(value);
         this.elements = hash.elements;
         return new RuntimeArray(this);
