@@ -582,20 +582,19 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
         return switch (type) {
             case UNDEF -> {
-                // Autovivification: Create a new empty hash
+                // Autovivification: When dereferencing an undefined scalar as a hash,
+                // Perl automatically creates a new hash reference.
                 var newHash = new RuntimeHash();
 
-                // Install a hook that will convert this scalar to a hash reference
-                // on the first write operation. The proxy intercepts hash list
-                // assignments and triggers the autovivification.
-                newHash.elements = new AutovivificationHash(() -> {
-                    // This callback is invoked when a list is assigned to the hash
-                    // It converts the undefined scalar into a hash reference
-                    this.type = RuntimeScalarType.HASHREFERENCE;
-                    this.value = newHash;
-                });
+                // Create a special hash that knows about this scalar. When the hash
+                // receives its first assignment (e.g., %$ref = (...)), it will
+                // automatically convert this scalar from UNDEF to a proper hash reference.
+                // This implements Perl's autovivification behavior where undefined
+                // scalars become references when used as such.
+                newHash.elements = new AutovivificationHash(this);
 
-                // Return the new hash (still empty but ready for autovivification)
+                // Return the newly created hash. At this point, the scalar is still UNDEF,
+                // but will be autovivified to a hash reference on first write operation.
                 yield newHash;
             }
             case HASHREFERENCE ->

@@ -2,6 +2,8 @@ package org.perlonjava.runtime;
 
 import java.util.*;
 
+import static org.perlonjava.runtime.RuntimeScalarType.HASHREFERENCE;
+
 /**
  * The RuntimeHash class simulates Perl hashes.
  *
@@ -86,18 +88,25 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
     }
 
     /**
-     * Replaces the whole hash with the elements of a list.
+     * Replaces the entire hash contents with key-value pairs from a list.
+     * This method implements Perl's list assignment to a hash: %hash = (key1, val1, key2, val2, ...)
      *
-     * @param value The RuntimeList containing the elements to set in the hash.
-     * @return A RuntimeArray containing the updated hash.
+     * @param value The RuntimeList containing alternating keys and values to populate the hash.
+     * @return A RuntimeArray containing this hash (for method chaining or further operations).
      */
     public RuntimeArray setFromList(RuntimeList value) {
 
         if (this.elements instanceof AutovivificationHash hashProxy) {
-            // This will trigger auto-vivification
-            hashProxy.autovivifyCallback.run();
+            // Trigger autovivification: Convert the undefined scalar to a hash reference.
+            // This happens when code like %$undef_scalar = (...) is executed.
+            // The AutovivificationHash was created when the undefined scalar was first
+            // dereferenced as a hash, and now we complete the autovivification by
+            // setting the scalar's type to HASHREFERENCE and its value to this hash.
+            hashProxy.scalarToAutovivify.value = this;
+            hashProxy.scalarToAutovivify.type = HASHREFERENCE;
         }
 
+        // Create a new hash from the provided list and replace our elements
         RuntimeHash hash = createHash(value);
         this.elements = hash.elements;
         return new RuntimeArray(this);
@@ -181,7 +190,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
      */
     public RuntimeScalar createReference() {
         RuntimeScalar result = new RuntimeScalar();
-        result.type = RuntimeScalarType.HASHREFERENCE;
+        result.type = HASHREFERENCE;
         result.value = this;
         return result;
     }
