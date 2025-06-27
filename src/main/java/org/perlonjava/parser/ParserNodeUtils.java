@@ -2,13 +2,36 @@ package org.perlonjava.parser;
 
 import org.perlonjava.astnode.*;
 
+/**
+ * Utility class for common node transformations and operations used during parsing.
+ * <p>
+ * This class provides helper methods for working with AST nodes, particularly for
+ * context conversions and creating commonly used node patterns.
+ */
 public class ParserNodeUtils {
     /**
      * Transforms a node to scalar context only if necessary.
-     * Avoids wrapping nodes that are already scalar or don't need scalar conversion.
+     * <p>
+     * This method implements an optimization by avoiding unnecessary wrapping of nodes
+     * that are already in scalar context or inherently produce scalar values.
+     * <p>
+     * The following nodes are considered already scalar and returned as-is:
+     * <ul>
+     *   <li>null values</li>
+     *   <li>Nodes already wrapped with scalar context operator</li>
+     *   <li>Scalar variables ($var) and references (\$var)</li>
+     *   <li>Operators that always return scalar values (int, abs, length, etc.)</li>
+     *   <li>File test operators (-e, -f, -d, etc.)</li>
+     *   <li>Binary operators that produce scalar results (+, -, ==, etc.)</li>
+     *   <li>Number and string literal nodes</li>
+     * </ul>
+     * <p>
+     * Nodes that can return lists in list context (like keys, values, split, etc.)
+     * are wrapped with a scalar context operator.
      *
-     * @param node The node to potentially transform
-     * @return The node in scalar context (wrapped if needed, or original if already scalar)
+     * @param node The node to potentially transform to scalar context
+     * @return The node in scalar context - either the original node if already scalar,
+     *         or wrapped in a scalar context operator if transformation is needed
      */
     static Node toScalarContext(Node node) {
         boolean isAlreadyScalar = switch (node) {
@@ -57,11 +80,29 @@ public class ParserNodeUtils {
         return isAlreadyScalar ? node : new OperatorNode("scalar", node, node.getIndex());
     }
 
+    /**
+     * Creates an AST node representing the scalar variable $_.
+     * <p>
+     * The $_ variable is Perl's default scalar variable, used implicitly by many
+     * operations when no explicit variable is provided.
+     *
+     * @param parser The parser instance, used to get the current token index
+     * @return An OperatorNode representing the scalar variable $_
+     */
     static OperatorNode scalarUnderscore(Parser parser) {
         return new OperatorNode(
                 "$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
     }
 
+    /**
+     * Creates an AST node representing the array variable @_.
+     * <p>
+     * The @_ array is Perl's default array for subroutine arguments. When a
+     * subroutine is called, its arguments are passed via this array.
+     *
+     * @param parser The parser instance, used to get the current token index
+     * @return An OperatorNode representing the array variable @_
+     */
     static OperatorNode atUnderscore(Parser parser) {
         return new OperatorNode("@",
                 new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
