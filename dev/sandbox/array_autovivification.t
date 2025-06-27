@@ -41,6 +41,16 @@ use Test::More;
 # Arrays distinguish between modifying operations (push, pop, shift, unshift)
 # and non-modifying operations (sort, reverse), while most hash operations autovivify regardless.
 
+# Test autovivification on double deref
+subtest 'Array autovivification in double deref' => sub {
+    my $x;
+    $x->[0][0];
+    is_deeply($x, [[]], "double deref");
+
+    my $x2;
+    $x2->[0][0] = 3;
+    is_deeply($x2, [[3]], "double deref lvalue");
+};
 
 # Test autovivification in lvalue contexts (should NOT throw errors)
 subtest 'Array autovivification in lvalue contexts' => sub {

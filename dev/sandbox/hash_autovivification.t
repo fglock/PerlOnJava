@@ -30,6 +30,17 @@ use Test::More;
 # The operation `%{$self->{_CACHE}} = %$ctx` should autovivify both `$self` (to a hashref) and `$self->{_CACHE}` (to a hashref)
 # because it's an assignment operation.
 
+# Test autovivification on double deref
+subtest 'Hash autovivification in double deref' => sub {
+    my $x;
+    $x->{a}{a};
+    is_deeply($x, { a => {} }, "double deref");
+
+    my $x2;
+    $x2->{a}{a} = 3;
+    is_deeply($x2, { a => { a => 3 } }, "double deref lvalue");
+};
+ 
 # Test autovivification in lvalue contexts (should NOT throw errors)
 subtest 'Autovivification in lvalue contexts' => sub {
     my $x;
