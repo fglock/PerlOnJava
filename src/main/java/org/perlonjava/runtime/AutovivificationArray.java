@@ -31,4 +31,14 @@ public class AutovivificationArray extends ArrayList<RuntimeScalar> {
     public AutovivificationArray(RuntimeScalar scalarToAutovivify) {
         this.scalarToAutovivify = scalarToAutovivify;
     }
+
+    public void vivify(RuntimeArray array) {
+        // Trigger autovivification: Convert the undefined scalar to an array reference.
+        // This happens when code like @$undef_scalar = (...) is executed.
+        // The AutovivificationArray was created when the undefined scalar was first
+        // dereferenced as an array, and now we complete the autovivification by
+        // setting the scalar's type to ARRAYREFERENCE and its value to this array.
+        scalarToAutovivify.value = array;
+        scalarToAutovivify.type = RuntimeScalarType.ARRAYREFERENCE;
+    }
 }

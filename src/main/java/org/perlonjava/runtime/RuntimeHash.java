@@ -97,13 +97,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
     public RuntimeArray setFromList(RuntimeList value) {
 
         if (this.elements instanceof AutovivificationHash hashProxy) {
-            // Trigger autovivification: Convert the undefined scalar to a hash reference.
-            // This happens when code like %$undef_scalar = (...) is executed.
-            // The AutovivificationHash was created when the undefined scalar was first
-            // dereferenced as a hash, and now we complete the autovivification by
-            // setting the scalar's type to HASHREFERENCE and its value to this hash.
-            hashProxy.scalarToAutovivify.value = this;
-            hashProxy.scalarToAutovivify.type = HASHREFERENCE;
+            hashProxy.vivify(this);
         }
 
         // Create a new hash from the provided list and replace our elements
@@ -247,6 +241,11 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
      * @return A RuntimeList containing the values associated with the specified keys.
      */
     public RuntimeList getSlice(RuntimeList value) {
+
+        if (this.elements instanceof AutovivificationHash hashProxy) {
+            hashProxy.vivify(this);
+        }
+
         RuntimeList result = new RuntimeList();
         List<RuntimeBaseEntity> outElements = result.elements;
         Iterator<RuntimeScalar> iterator = value.iterator();
