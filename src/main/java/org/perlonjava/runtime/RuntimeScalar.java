@@ -542,17 +542,38 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         };
     }
 
-    // Method to implement `%$v`
+    /**
+     * Dereferences this scalar as a hash reference using the `%$v` operator.
+     *
+     * <p>This method implements Perl's hash dereference operator `%$v`, which treats
+     * the scalar as a hash reference and returns the underlying hash. If the scalar
+     * is undefined, it performs autovivification by creating a new hash and converting
+     * this scalar into a reference to that hash.
+     *
+     * <p><b>Autovivification:</b> When dereferencing an undefined scalar as a hash,
+     * Perl automatically creates a new hash and makes the scalar a reference to it.
+     * This is implemented using a {@link AutovivificationHash} that intercepts the first write
+     * operation to trigger the conversion.
+     *
+     * <p><b>Overloading:</b> If the scalar is a blessed object, this method first
+     * checks for overloaded hash dereference behavior using the `(%{}` overload key.
+     *
+     * @return The dereferenced RuntimeHash object
+     * @throws PerlCompilerException if the scalar contains a string (when strict refs
+     *         is in use) or any other non-hash-reference value
+     */
     public RuntimeHash hashDeref() {
-        // Check if object is eligible for overloading
+        // Check if object is eligible for overloading (blessed objects)
         int blessId = this.blessedId();
         if (blessId != 0) {
             // Prepare overload context and check if object is eligible for overloading
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
-                // Try overload method
+                // Try to call the overloaded hash dereference method `(%{}`
                 RuntimeScalar result = ctx.tryOverload("(%{}", new RuntimeArray(this));
-                // If the subroutine returns the object itself then it will not be called again
+                // If the overload method returns a different object (not self),
+                // recursively dereference the returned value
+                // This prevents infinite recursion when the overload returns the same object
                 if (result != null && result.value.hashCode() != this.value.hashCode()) {
                     return result.hashDeref();
                 }
@@ -560,11 +581,32 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
 
         return switch (type) {
-            case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as an HASH reference");
-            case HASHREFERENCE -> (RuntimeHash) value;
+            case UNDEF -> {
+                // Autovivification: Create a new empty hash
+                var newHash = new RuntimeHash();
+
+                // Install a hook that will convert this scalar to a hash reference
+                // on the first write operation. The proxy intercepts hash list
+                // assignments and triggers the autovivification.
+                newHash.elements = new AutovivificationHash(() -> {
+                    // This callback is invoked when a list is assigned to the hash
+                    // It converts the undefined scalar into a hash reference
+                    this.type = RuntimeScalarType.HASHREFERENCE;
+                    this.value = newHash;
+                });
+
+                // Return the new hash (still empty but ready for autovivification)
+                yield newHash;
+            }
+            case HASHREFERENCE ->
+                // Simple case: already a hash reference, just return the hash
+                    (RuntimeHash) value;
             case STRING ->
+                // Strict refs violation: attempting to use a string as a hash ref
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref while \"strict refs\" in use");
-            default -> throw new PerlCompilerException("Variable does not contain a hash reference");
+            default ->
+                // All other types (INTEGER, DOUBLE, etc.) cannot be dereferenced as hashes
+                    throw new PerlCompilerException("Variable does not contain a hash reference");
         };
     }
 
