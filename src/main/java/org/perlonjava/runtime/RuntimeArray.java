@@ -401,6 +401,11 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
      * @return The updated array with aliases.
      */
     public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
+
+        if (this.elements instanceof AutovivificationArray arrayProxy) {
+            arrayProxy.vivify(this);
+        }
+
         arr.elements.addAll(this.elements);
         return arr;
     }
@@ -411,6 +416,11 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
      * @return An iterator over the elements of the array.
      */
     public Iterator<RuntimeScalar> iterator() {
+
+        if (this.elements instanceof AutovivificationArray arrayProxy) {
+            arrayProxy.vivify(this);
+        }
+
         return new RuntimeArrayIterator();
     }
 
