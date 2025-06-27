@@ -12,6 +12,7 @@ import java.util.List;
 
 import static org.perlonjava.lexer.LexerTokenType.OPERATOR;
 import static org.perlonjava.parser.NumberParser.parseNumber;
+import static org.perlonjava.parser.ParserNodeUtils.atUnderscore;
 import static org.perlonjava.parser.TokenUtils.peek;
 
 /**
@@ -207,7 +208,7 @@ public class OperatorParser {
             operand = ListParser.parseZeroOrOneList(parser, 0);
             if (((ListNode) operand).elements.isEmpty()) {
                 // create `$_` variable
-                operand = ScalarContextHelper.scalarUnderscore(parser);
+                operand = ParserNodeUtils.scalarUnderscore(parser);
             }
         }
         return new EvalOperatorNode(
@@ -318,7 +319,7 @@ public class OperatorParser {
         if (operand.elements.isEmpty()) {
             // `print` without arguments means `print $_`
             operand.elements.add(
-                    ScalarContextHelper.scalarUnderscore(parser)
+                    ParserNodeUtils.scalarUnderscore(parser)
             );
         }
         return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
@@ -387,8 +388,7 @@ public class OperatorParser {
                 case "shift":
                     // create `@_` variable
                     // XXX in main program, use `@ARGV`
-                    operand = new OperatorNode(
-                            "@", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
+                    operand = atUnderscore(parser);
                     break;
                 case "localtime":
                 case "gmtime":
@@ -413,7 +413,7 @@ public class OperatorParser {
                     break;
                 default:
                     // create `$_` variable
-                    operand = ScalarContextHelper.scalarUnderscore(parser);
+                    operand = ParserNodeUtils.scalarUnderscore(parser);
                     break;
             }
         }

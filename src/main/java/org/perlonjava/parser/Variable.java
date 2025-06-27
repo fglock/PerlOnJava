@@ -5,6 +5,7 @@ import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
+import static org.perlonjava.parser.ParserNodeUtils.atUnderscore;
 import static org.perlonjava.parser.TokenUtils.peek;
 
 public class Variable {
@@ -38,7 +39,7 @@ public class Variable {
             TokenUtils.consume(parser); // Consume the '{'
             Node block = ParseBlock.parseBlock(parser); // Parse the block inside the curly brackets
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}"); // Consume the '}'
-            return new OperatorNode(sigil, ScalarContextHelper.toScalarContext(block), parser.tokenIndex);
+            return new OperatorNode(sigil, ParserNodeUtils.toScalarContext(block), parser.tokenIndex);
         }
 
         // Not a variable name, not a block. This could be a dereference like @$a
@@ -84,7 +85,7 @@ public class Variable {
         Node list;
         // If the next token is not `(`, handle auto-call by transforming `&subr` to `&subr(@_)`
         if (!peek(parser).text.equals("(")) {
-            list = new OperatorNode("@", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
+            list = atUnderscore(parser);
         } else {
             // Otherwise, parse the list of arguments
             list = ListParser.parseZeroOrMoreList(parser,

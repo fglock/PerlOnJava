@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.perlonjava.parser.ListParser.parseZeroOrOneList;
+import static org.perlonjava.parser.ParserNodeUtils.atUnderscore;
 
 /**
  * SignatureParser handles parsing of Perl subroutine signatures.
@@ -156,7 +157,7 @@ public class SignatureParser {
                 defaultValue = parseZeroOrOneList(sigParser, 0);
 
                 // Generate conditional assignment for the default value
-                nodes.add(generateDefaultAssignment(defaultValue, op, maxParams, variable, tokenIndex));
+                nodes.add(generateDefaultAssignment(defaultValue, op, maxParams, variable, parser));
             } else {
                 // Required parameter (no default value)
                 minParams++;
@@ -194,7 +195,7 @@ public class SignatureParser {
                         new BinaryOperatorNode("<=",
                                 new BinaryOperatorNode("<=",
                                         new NumberNode(Integer.toString(minParams), tokenIndex),
-                                        new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex),
+                                        atUnderscore(parser),
                                         tokenIndex),
                                 new NumberNode(Integer.toString(maxParams), tokenIndex),
                                 tokenIndex)
@@ -214,7 +215,7 @@ public class SignatureParser {
                         new OperatorNode("my",
                                 new ListNode(variables, tokenIndex),
                                 tokenIndex),
-                        new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex),
+                        atUnderscore(parser),
                         tokenIndex));
 
         return new ListNode(nodes, tokenIndex);
@@ -234,10 +235,11 @@ public class SignatureParser {
      * @param op The assignment operator (=, //=, or ||=)
      * @param paramIndex The parameter's position in the signature (0-based)
      * @param variable The variable node to assign to
-     * @param tokenIndex Token index for error reporting
+     * @param parser Parser instance
      * @return AST node for the conditional default assignment
      */
-    private static Node generateDefaultAssignment(Node defaultValue, String op, int paramIndex, Node variable, int tokenIndex) {
+    private static Node generateDefaultAssignment(Node defaultValue, String op, int paramIndex, Node variable, Parser parser) {
+        int tokenIndex = parser.tokenIndex;
         if (variable == null) {
             // Anonymous parameter with default: $ = value
             // This is valid syntax but effectively a no-op
@@ -251,7 +253,7 @@ public class SignatureParser {
                     "&&",
                     new BinaryOperatorNode(
                             "<",
-                            new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex),
+                            atUnderscore(parser),
                             new NumberNode(Integer.toString(paramIndex + 1), tokenIndex),
                             tokenIndex),
                     new BinaryOperatorNode(

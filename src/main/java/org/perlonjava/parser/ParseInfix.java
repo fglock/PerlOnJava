@@ -105,8 +105,7 @@ public class ParseInfix {
                         TokenUtils.consume(parser);
                         return new BinaryOperatorNode("(",
                                 left,
-                                new OperatorNode("@",
-                                        new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex),
+                                ParserNodeUtils.atUnderscore(parser),
                                 parser.tokenIndex);
                     case "@":
                         // ->@[0,-1];
