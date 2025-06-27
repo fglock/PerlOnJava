@@ -157,10 +157,20 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
      * @return A RuntimeScalar indicating whether the key exists.
      */
     public RuntimeScalar exists(RuntimeScalar key) {
+
+        if (this.elements instanceof AutovivificationHash hashProxy) {
+            hashProxy.vivify(this);
+        }
+
         return new RuntimeScalar(elements.containsKey(key.toString()));
     }
 
     public RuntimeScalar exists(String key) {
+
+        if (this.elements instanceof AutovivificationHash hashProxy) {
+            hashProxy.vivify(this);
+        }
+
         return new RuntimeScalar(elements.containsKey(key));
     }
 
@@ -175,6 +185,11 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
      * @return The value associated with the deleted key, or an empty RuntimeScalar if the key did not exist.
      */
     public RuntimeScalar delete(RuntimeScalar key) {
+
+        if (this.elements instanceof AutovivificationHash hashProxy) {
+            hashProxy.vivify(this);
+        }
+
         String k = key.toString();
         if (elements.containsKey(k)) {
             return new RuntimeScalar(elements.remove(k));
@@ -282,6 +297,11 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
      * @return A RuntimeArray containing the keys of the hash.
      */
     public RuntimeArray keys() {
+
+        if (this.elements instanceof AutovivificationHash hashProxy) {
+            hashProxy.vivify(this);
+        }
+
         RuntimeArray list = new RuntimeArray();
         for (String key : elements.keySet()) {
             RuntimeArray.push(list, new RuntimeScalar(key));
@@ -296,6 +316,11 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
      * @return A RuntimeArray containing the values of the hash.
      */
     public RuntimeArray values() {
+
+        if (this.elements instanceof AutovivificationHash hashProxy) {
+            hashProxy.vivify(this);
+        }
+
         RuntimeArray list = new RuntimeArray();
         for (RuntimeScalar value : elements.values()) {
             RuntimeArray.push(list, value); // push an alias to the value
@@ -310,6 +335,11 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
      * @return A RuntimeList containing the next key-value pair, or an empty list if the iterator is exhausted.
      */
     public RuntimeList each() {
+
+        if (this.elements instanceof AutovivificationHash hashProxy) {
+            hashProxy.vivify(this);
+        }
+
         if (hashIterator == null) {
             hashIterator = iterator();
         }
