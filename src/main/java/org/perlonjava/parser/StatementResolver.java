@@ -6,6 +6,7 @@ import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
+import static org.perlonjava.parser.ScalarContextHelper.scalarUnderscore;
 import static org.perlonjava.parser.TokenUtils.consume;
 import static org.perlonjava.parser.TokenUtils.peek;
 
@@ -146,7 +147,7 @@ public class StatementResolver {
                     yield new For1Node(
                             null,
                             false,
-                            new OperatorNode("$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex),  // $_
+                            scalarUnderscore(parser),  // $_
                             modifierExpression,
                             expression,
                             null,

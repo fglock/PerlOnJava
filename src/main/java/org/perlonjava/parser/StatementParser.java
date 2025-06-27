@@ -11,6 +11,7 @@ import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 
 import static org.perlonjava.parser.NumberParser.parseNumber;
+import static org.perlonjava.parser.ScalarContextHelper.scalarUnderscore;
 import static org.perlonjava.parser.SpecialBlockParser.runSpecialBlock;
 import static org.perlonjava.parser.SpecialBlockParser.setCurrentScope;
 import static org.perlonjava.parser.StringParser.parseVstring;
@@ -141,8 +142,7 @@ public class StatementParser {
 
         // Use $_ as the default loop variable if not specified
         if (varNode == null) {
-            varNode = new OperatorNode(
-                    "$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);  // $_
+            varNode = scalarUnderscore(parser);  // $_
         }
 
         return new For1Node(label, true, varNode, initialization, body, continueNode, parser.tokenIndex);

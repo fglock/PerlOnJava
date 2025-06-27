@@ -5,6 +5,7 @@ import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
+import static org.perlonjava.parser.ScalarContextHelper.scalarUnderscore;
 import static org.perlonjava.parser.TokenUtils.peek;
 import static org.perlonjava.runtime.GlobalVariable.existsGlobalCodeRef;
 
@@ -191,8 +192,7 @@ public class ParsePrimary {
                         operand = ListParser.parseZeroOrOneList(parser, 0);
                         if (((ListNode) operand).elements.isEmpty()) {
                             // create `$_` variable
-                            operand = new OperatorNode(
-                                    "$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
+                            operand = scalarUnderscore(parser);
                         }
                     }
                     return new OperatorNode(operator, operand, parser.tokenIndex);
