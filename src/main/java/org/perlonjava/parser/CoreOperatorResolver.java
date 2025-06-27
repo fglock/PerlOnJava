@@ -82,7 +82,7 @@ public class CoreOperatorResolver {
                 operand = ListParser.parseZeroOrOneList(parser, 0);
                 if (((ListNode) operand).elements.isEmpty()) {
                     // Create `$_` variable if no argument is provided
-                    operand = OperatorParser.scalarUnderscore(parser);
+                    operand = ScalarContextHelper.scalarUnderscore(parser);
                 }
                 return new OperatorNode("qx", operand, parser.tokenIndex);
             case "unpack":
@@ -91,7 +91,7 @@ public class CoreOperatorResolver {
                 if (((ListNode) operand).elements.size() == 1) {
                     // Create `$_` variable if only one argument is provided
                     ((ListNode) operand).elements.add(
-                            OperatorParser.scalarUnderscore(parser)
+                            ScalarContextHelper.scalarUnderscore(parser)
                     );
                 }
                 return new OperatorNode(token.text, operand, parser.tokenIndex);
@@ -213,7 +213,7 @@ public class CoreOperatorResolver {
                 if (((ListNode) operand).elements.isEmpty()) {
                     // `defined` without arguments means `defined $_`
                     ((ListNode) operand).elements.add(
-                            OperatorParser.scalarUnderscore(parser)
+                            ScalarContextHelper.scalarUnderscore(parser)
                     );
                 }
                 return new OperatorNode(token.text, operand, currentIndex);

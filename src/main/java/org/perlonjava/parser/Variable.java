@@ -38,7 +38,7 @@ public class Variable {
             TokenUtils.consume(parser); // Consume the '{'
             Node block = ParseBlock.parseBlock(parser); // Parse the block inside the curly brackets
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}"); // Consume the '}'
-            return new OperatorNode(sigil, PrototypeArgs.toScalarContext(block), parser.tokenIndex);
+            return new OperatorNode(sigil, ScalarContextHelper.toScalarContext(block), parser.tokenIndex);
         }
 
         // Not a variable name, not a block. This could be a dereference like @$a
