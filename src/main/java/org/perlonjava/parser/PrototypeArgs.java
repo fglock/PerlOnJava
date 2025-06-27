@@ -405,7 +405,7 @@ public class PrototypeArgs {
      * @param node The node to potentially transform
      * @return The node in scalar context (wrapped if needed, or original if already scalar)
      */
-    private static Node toScalarContext(Node node) {
+    static Node toScalarContext(Node node) {
         if (node == null) {
             return null;
         }
