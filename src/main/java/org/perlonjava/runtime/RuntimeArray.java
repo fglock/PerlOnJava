@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Stack;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
+import static org.perlonjava.runtime.RuntimeScalarType.ARRAYREFERENCE;
+import static org.perlonjava.runtime.RuntimeScalarType.HASHREFERENCE;
 
 /**
  * The RuntimeArray class simulates Perl arrays.
@@ -229,7 +231,18 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
      * @return The updated RuntimeArray.
      */
     public RuntimeArray setFromList(RuntimeList value) {
-        this.elements.clear();
+
+        if (this.elements instanceof AutovivificationArray arrayProxy) {
+            // Trigger autovivification: Convert the undefined scalar to an array reference.
+            // This happens when code like @$undef_scalar = (...) is executed.
+            // The AutovivificationArray was created when the undefined scalar was first
+            // dereferenced as an array, and now we complete the autovivification by
+            // setting the scalar's type to ARRAYREFERENCE and its value to this array.
+            arrayProxy.scalarToAutovivify.value = this;
+            arrayProxy.scalarToAutovivify.type = RuntimeScalarType.ARRAYREFERENCE;
+        }
+
+        this.elements = new ArrayList<>();
         value.addToArray(this);
         return this;
     }
