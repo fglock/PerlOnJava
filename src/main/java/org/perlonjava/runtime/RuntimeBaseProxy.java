@@ -156,6 +156,16 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         return ret;
     }
 
+    // Method to implement `exists $v->{key}`
+    @Override
+    public RuntimeScalar hashDerefExists(RuntimeScalar index) {
+        vivify();
+        RuntimeScalar ret = lvalue.hashDerefExists(index);
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return ret;
+    }
+
     /**
      * Performs a pre-increment operation on the underlying scalar.
      *
