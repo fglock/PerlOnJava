@@ -77,9 +77,7 @@ public class TermReadKey extends PerlModuleBase {
         saveOriginalTerminalSettings();
         
         // Register shutdown hook to restore terminal
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            restoreTerminalMode();
-        }));
+        Runtime.getRuntime().addShutdownHook(new Thread(TermReadKey::restoreTerminalMode));
     }
 
     /**
@@ -87,7 +85,7 @@ public class TermReadKey extends PerlModuleBase {
      * ReadMode(mode, [filehandle])
      */
     public static RuntimeList readMode(RuntimeArray args, int ctx) {
-        if (args.size() == 0) {
+        if (args.isEmpty()) {
             return new RuntimeList(scalarUndef);
         }
 
@@ -115,7 +113,7 @@ public class TermReadKey extends PerlModuleBase {
     public static RuntimeList readKey(RuntimeArray args, int ctx) {
         int timeout = -1; // -1 means no timeout
         
-        if (args.size() > 0 && args.get(0).getDefinedBoolean()) {
+        if (!args.isEmpty() && args.get(0).getDefinedBoolean()) {
             timeout = args.get(0).getInt();
         }
 
@@ -140,7 +138,7 @@ public class TermReadKey extends PerlModuleBase {
     public static RuntimeList readLine(RuntimeArray args, int ctx) {
         int timeout = -1;
         
-        if (args.size() > 0 && args.get(0).getDefinedBoolean()) {
+        if (!args.isEmpty() && args.get(0).getDefinedBoolean()) {
             timeout = args.get(0).getInt();
         }
 
@@ -325,7 +323,7 @@ public class TermReadKey extends PerlModuleBase {
             // Simple timeout implementation - not perfect but functional
             long startTime = System.currentTimeMillis();
             while (!reader.ready()) {
-                if (System.currentTimeMillis() - startTime > timeoutSeconds * 1000) {
+                if (System.currentTimeMillis() - startTime > timeoutSeconds * 1000L) {
                     return 0; // timeout
                 }
                 try {
@@ -347,7 +345,7 @@ public class TermReadKey extends PerlModuleBase {
         if (timeoutSeconds > 0) {
             long startTime = System.currentTimeMillis();
             while (in.available() == 0) {
-                if (System.currentTimeMillis() - startTime > timeoutSeconds * 1000) {
+                if (System.currentTimeMillis() - startTime > timeoutSeconds * 1000L) {
                     return 0; // timeout
                 }
                 try {
@@ -368,7 +366,7 @@ public class TermReadKey extends PerlModuleBase {
         if (timeoutSeconds > 0) {
             long startTime = System.currentTimeMillis();
             while (!reader.ready()) {
-                if (System.currentTimeMillis() - startTime > timeoutSeconds * 1000) {
+                if (System.currentTimeMillis() - startTime > timeoutSeconds * 1000L) {
                     return null; // timeout
                 }
                 try {
