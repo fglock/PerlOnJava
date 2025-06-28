@@ -128,8 +128,9 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
      * @return The value associated with the key, or a proxy for lazy autovivification if the key does not exist.
      */
     public RuntimeScalar get(String key) {
-        if (elements.containsKey(key)) {
-            return elements.get(key);
+        var value = elements.get(key);
+        if (value != null) {
+            return value;
         }
         // Lazy autovivification
         return new RuntimeHashProxyEntry(this, key);
@@ -143,8 +144,9 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
      */
     public RuntimeScalar get(RuntimeScalar keyScalar) {
         String key = keyScalar.toString();
-        if (elements.containsKey(key)) {
-            return elements.get(key);
+        var value = elements.get(key);
+        if (value != null) {
+            return value;
         }
         // Lazy autovivification
         return new RuntimeHashProxyEntry(this, key);
@@ -191,8 +193,9 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         }
 
         String k = key.toString();
-        if (elements.containsKey(k)) {
-            return new RuntimeScalar(elements.remove(k));
+        var value = elements.remove(k);
+        if (value != null) {
+            return new RuntimeScalar(value);
         }
         return new RuntimeScalar();
     }
