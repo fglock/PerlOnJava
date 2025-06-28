@@ -132,6 +132,7 @@ public class GlobalContext {
         YamlPP.initialize();
         UnicodeNormalize.initialize();
         TimeHiRes.initialize();
+        TermReadLine.initialize();
 
         // Reset method cache after initializing UNIVERSAL
         InheritanceResolver.invalidateCache();
