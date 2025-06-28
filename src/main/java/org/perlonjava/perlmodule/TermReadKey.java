@@ -398,7 +398,7 @@ public class TermReadKey extends PerlModuleBase {
         // Windows terminal size detection
         // This would typically require JNI or external commands
         try {
-            Process proc = Runtime.getRuntime().exec("mode con");
+            Process proc = Runtime.getRuntime().exec(new String[]{"cmd", "/c", "mode", "con"});
             BufferedReader reader = new BufferedReader(new InputStreamReader(proc.getInputStream()));
             String line;
             int cols = 80, rows = 24;
