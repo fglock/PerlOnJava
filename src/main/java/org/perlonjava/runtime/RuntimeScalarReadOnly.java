@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import static org.perlonjava.runtime.RuntimeScalarType.UNDEF;
+
 /**
  * The RuntimeScalarReadOnly class represents an immutable scalar value in the runtime environment.
  * It is used for caching and reusing common scalar values such as integers, booleans, and strings.
@@ -22,7 +24,7 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
         this.s = "";
         this.d = 0;
         this.value = null;
-        this.type = RuntimeScalarType.UNDEF;
+        this.type = UNDEF;
     }
 
     /**
@@ -119,5 +121,21 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
     @Override
     public boolean getBoolean() {
         return b;
+    }
+
+    @Override
+    public RuntimeHash hashDeref() {
+        if (this.type == UNDEF) {
+            throw new PerlCompilerException("Can't use an undefined value as a HASH reference");
+        }
+        throw new PerlCompilerException("Can't use value as a HASH reference");
+    }
+
+    @Override
+    public RuntimeArray arrayDeref() {
+        if (this.type == UNDEF) {
+            throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
+        }
+        throw new PerlCompilerException("Can't use value as an ARRAY reference");
     }
 }
