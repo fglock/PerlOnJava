@@ -114,6 +114,11 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
      * @return A RuntimeScalar containing the integer index of the last element, or -1 if the array is empty
      */
     public static RuntimeScalar indexLastElem(RuntimeArray runtimeArray) {
+
+        if (runtimeArray.elements instanceof AutovivificationArray arrayProxy) {
+            arrayProxy.vivify(runtimeArray);
+        }
+
         return getScalarInt(runtimeArray.elements.size() - 1);
     }
 
