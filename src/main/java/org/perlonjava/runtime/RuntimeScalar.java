@@ -448,20 +448,18 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             return this.hashDeref().get(index);
         }
 
-        switch (type) {
-            case UNDEF:
+        return switch (type) {
+            case UNDEF -> {
                 // hash autovivification
                 type = RuntimeScalarType.HASHREFERENCE;
                 value = new RuntimeHash();
-            case HASHREFERENCE:
-                return ((RuntimeHash) value).get(index.toString());
-            case STRING:
-                throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref");
-            case GLOB:
-                ((RuntimeGlob) value).hashDerefGet(index);
-            default:
-                throw new PerlCompilerException("Not a HASH reference");
-        }
+                yield ((RuntimeHash) value).get(index.toString());
+            }
+            case HASHREFERENCE -> ((RuntimeHash) value).get(index.toString());
+            case STRING -> throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref");
+            case GLOB -> ((RuntimeGlob) value).hashDerefGet(index);
+            default -> throw new PerlCompilerException("Not a HASH reference");
+        };
     }
 
     // Method to implement `delete $v->{key}`
@@ -473,7 +471,12 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
 
         return switch (type) {
-            case UNDEF -> new RuntimeScalar();
+            case UNDEF ->  {
+                // hash autovivification
+                type = RuntimeScalarType.HASHREFERENCE;
+                value = new RuntimeHash();
+                yield ((RuntimeHash) value).delete(index);
+            }
             case HASHREFERENCE -> ((RuntimeHash) value).delete(index);
             case STRING -> throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref");
             default -> throw new PerlCompilerException("Not a HASH reference");
@@ -489,7 +492,12 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
 
         return switch (type) {
-            case UNDEF -> new RuntimeScalar();
+            case UNDEF -> {
+                // hash autovivification
+                type = RuntimeScalarType.HASHREFERENCE;
+                value = new RuntimeHash();
+                yield ((RuntimeHash) value).exists(index);
+            }
             case HASHREFERENCE -> ((RuntimeHash) value).exists(index);
             case STRING -> throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref");
             default -> throw new PerlCompilerException("Not a HASH reference");
