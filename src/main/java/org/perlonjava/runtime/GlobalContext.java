@@ -133,6 +133,7 @@ public class GlobalContext {
         UnicodeNormalize.initialize();
         TimeHiRes.initialize();
         TermReadLine.initialize();
+        TermReadKey.initialize();
 
         // Reset method cache after initializing UNIVERSAL
         InheritanceResolver.invalidateCache();
