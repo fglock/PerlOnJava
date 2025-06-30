@@ -261,6 +261,7 @@ The following areas are currently under active development to enhance the functi
   - Term::ReadLine
   - Term::ReadKey
   - Test::More `use_ok`, `require_ok`
+  - calling these operators in scalar context: "localtime", "gmtime", "caller".
 
 ### v4.0.0 Milestone (Planned Release Date: 2026-05-10)
 
