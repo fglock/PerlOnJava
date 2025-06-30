@@ -66,12 +66,11 @@ public class TermReadKey extends PerlModuleBase {
 
         // Define EXPORT array with commonly exported functions
         readkey.defineExport("EXPORT",
-                "ReadMode", "ReadKey", "ReadLine", "GetTerminalSize");
-
-        // Define EXPORT_OK array with all exportable functions
-        readkey.defineExport("EXPORT_OK",
                 "ReadMode", "ReadKey", "ReadLine", "GetTerminalSize",
                 "SetTerminalSize", "GetSpeed", "GetControlChars", "SetControlChars");
+
+        // Define EXPORT_OK array with all exportable functions
+        readkey.defineExport("EXPORT_OK");
 
         try {
             readkey.registerMethod("ReadMode", "readMode", "$;$");
