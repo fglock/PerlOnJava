@@ -47,6 +47,9 @@
 │   │               ├── symbols/
 │   │               |   ├── ScopedSymbolTable.java
 │   │               |   └── other symbol table classes
+│   │               ├── terminal/
+│   │               |   ├── TerminalHandler.java
+│   │               |   └── other platform-specific terminal classes
 │   │               └── runtime/
 │   │                   ├── RuntimeScalar.java
 │   │                   └── other runtime classes
