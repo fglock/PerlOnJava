@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -569,20 +570,22 @@ public class Operator {
             }
             return new RuntimeScalar(sb.reverse().toString());
         } else {
+            // Get the list first to validate it
+            RuntimeList inputList = value.getList();
+
+            // Check for autovivification before processing
+            inputList.validateNoAutovivification();
+
             RuntimeList result = new RuntimeList();
-            List<RuntimeBaseEntity> outElements = result.elements;
-            Iterator<RuntimeScalar> iterator = value.iterator();
 
-            // First, collect all elements
-            List<RuntimeScalar> tempList = new ArrayList<>();
+            // Collect all elements into the result list
+            Iterator<RuntimeScalar> iterator = inputList.iterator();
             while (iterator.hasNext()) {
-                tempList.add(iterator.next());
+                result.elements.add(iterator.next());
             }
 
-            // Then add them in reverse order
-            for (int i = tempList.size() - 1; i >= 0; i--) {
-                outElements.add(tempList.get(i));
-            }
+            // Use Java's built-in reverse
+            Collections.reverse(result.elements);
 
             return result;
         }

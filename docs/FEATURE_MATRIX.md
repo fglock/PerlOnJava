@@ -4,6 +4,7 @@
 
 1. [Compiler Usability](#compiler-usability)
 2. [Testing](#testing)
+3. [Autovivification](#autovivification)
 3. [Scalars](#scalars)
 4. [Objects](#objects)
 5. [Operators](#operators)
@@ -79,6 +80,42 @@ PerlOnJava implements most core Perl features with some key differences:
 ## Testing
 - ✅  **TAP tests**: Running standard Perl testing protocol.
 - ✅  **CI/CD**: Github testing pipeline in Ubuntu and Windows.
+
+
+## Autovivification
+
+Distinguish between contexts where undefined references should automatically create data structures versus where they should throw errors.
+
+### When Autovivification Occurs:
+- **Lvalue contexts**: `$arr->[0] = 'value'`, `$hash->{key} = 'value'`
+- **Modifying operations**: `push @{$undef}, 'item'`, `pop @{$undef}`, `shift @{$undef}`, `unshift @{$undef}, 'item'`
+- **Element access**: `$undef->[0]`, `$undef->{key}` (creates the container but not the element)
+- **Operations that can modify through aliases**: `grep { $_ = uc } @{$undef}`, `map { $_ * 2 } @{$undef}`
+- **Foreach loops**: `foreach (@{$undef}) { ... }`
+
+### When Autovivification Does NOT Occur (throws error):
+- **Non-modifying operations**: `sort @{$undef}`, `reverse @{$undef}`
+- **Rvalue dereferencing**: `my @list = @{$undef}`, `my %hash = %{$undef}`
+- **Scalar context**: `my $count = @{$undef}`
+
+### Examples:
+```perl
+# These autovivify (create the data structure):
+my $x;
+$x->[0] = 'hello';        # $x becomes []
+push @{$x}, 'world';      # works, autovivifies
+
+my $y;
+$y->{name} = 'Alice';     # $y becomes {}
+$y->{age}++;              # autovivifies element
+
+# These throw "Can't use an undefined value as an ARRAY/HASH reference":
+my $z;
+my @sorted = sort @{$z};  # ERROR
+my @reversed = reverse @{$z};  # ERROR
+my @copy = @{$z};         # ERROR
+```
+
 
 ## Scalars
 - ✅  **`my` variable declaration**: Local variables can be declared using `my`.
