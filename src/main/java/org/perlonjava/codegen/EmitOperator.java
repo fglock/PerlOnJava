@@ -57,7 +57,7 @@ public class EmitOperator {
      * @param emitterVisitor The visitor used for code emission.
      * @param node           The operator node representing the 'keys' operation.
      */
-    static void handleKeysOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
+    static void handleOpWithList(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         emitOperator(node.operator, emitterVisitor);
@@ -290,13 +290,6 @@ public class EmitOperator {
         // Accept the operand in SCALAR context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         emitterVisitor.pushCallContext();
-        emitOperator(node.operator, emitterVisitor);
-    }
-
-    // Handles the 'vec' built-in function, which manipulates bits in a string.
-    static void handleVecBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
-        // Accept the operand in LIST context.
-        node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         emitOperator(node.operator, emitterVisitor);
     }
 

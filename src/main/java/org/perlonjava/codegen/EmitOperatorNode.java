@@ -29,8 +29,9 @@ public class EmitOperatorNode {
             // Variable access operators
             case "$", "@", "%", "*", "&" -> EmitVariable.handleVariableOperator(emitterVisitor, node);
 
-            // Hash operations
-            case "keys", "values" -> EmitOperator.handleKeysOperator(emitterVisitor, node);
+            // Operations that take a list of operands
+            case "keys", "values", "pack", "unpack", "mkdir", "opendir", "seekdir", "crypt", "vec", "each", "read" ->
+                    EmitOperator.handleOpWithList(emitterVisitor, node);
 
             // Variable declarations
             case "our", "state", "my" -> EmitVariable.handleMyOperator(emitterVisitor, node);
@@ -80,8 +81,6 @@ public class EmitOperatorNode {
             case "readdir" -> EmitOperator.handleReaddirOperator(emitterVisitor, node);
             case "glob" -> EmitOperator.handleGlobBuiltin(emitterVisitor, node);
             case "rindex", "index" -> EmitOperator.handleIndexBuiltin(emitterVisitor, node);
-            case "pack", "unpack", "mkdir", "opendir", "seekdir", "crypt", "vec", "each", "read" ->
-                    EmitOperator.handleVecBuiltin(emitterVisitor, node);
             case "atan2" -> EmitOperator.handleAtan2(emitterVisitor, node);
             case "scalar" -> EmitOperator.handleScalar(emitterVisitor, node);
             case "delete", "exists" -> EmitOperator.handleDeleteExists(emitterVisitor, node);
