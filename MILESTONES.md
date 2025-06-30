@@ -257,8 +257,10 @@ The following areas are currently under active development to enhance the functi
   - Debian package can be created with `make deb`.
   - Planned release date: 2025-12-10.
 
-  - Term::ReadLine WIP
-  - Term::ReadKey WIP
+- Work in Progress
+  - Term::ReadLine
+  - Term::ReadKey
+  - Test::More `use_ok`, `require_ok`
 
 ### v4.0.0 Milestone (Planned Release Date: 2026-05-10)
 

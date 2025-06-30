@@ -8,6 +8,7 @@ use Data::Dumper;
 our @EXPORT = qw(
     plan ok is isnt like unlike cmp_ok can_ok isa_ok
     pass fail diag done_testing is_deeply subtest
+    use_ok require_ok
 );
 
 our $Test_Count = 0;
@@ -189,6 +190,77 @@ sub subtest {
     # Report subtest result
     ok($result, $name);
     return $result;
+}
+
+sub require_ok {
+    my ($module_or_file) = @_;
+    my $test_name;
+
+    # Determine if it's a module name or file path
+    if ($module_or_file =~ /\.pl$/ || $module_or_file =~ /\//) {
+        # It's a file
+        $test_name = "require '$module_or_file'";
+    } else {
+        # It's a module name
+        $test_name = "require $module_or_file";
+        # Convert module name to file path for require
+        my $file = $module_or_file;
+        $file =~ s/::/\//g;
+        $file .= '.pm';
+        $module_or_file = $file;
+    }
+
+    my $result = eval {
+        require $module_or_file;
+        1;
+    };
+
+    if ($result) {
+        ok(1, $test_name);
+    } else {
+        ok(0, $test_name);
+        my $error = $@ || 'Unknown error';
+        # Clean up the error message
+        $error =~ s/\n$//;
+        diag("Error loading $module_or_file: $error");
+    }
+
+    return $result;
+}
+
+sub use_ok {
+    my ($module, @imports) = @_;
+    my $test_name = "use $module";
+
+    # Check if first import is a version number
+    my $version;
+    if (@imports && $imports[0] =~ /^[\d\.]+$/) {
+        $version = shift @imports;
+        $test_name .= " $version";
+    }
+
+    if (@imports) {
+        $test_name .= " qw(" . join(' ', @imports) . ")";
+    }
+
+    # Build the use statement
+    my $use_statement = "package " . caller() . "; use $module";
+    $use_statement .= " $version" if $version;
+    $use_statement .= " qw(" . join(' ', @imports) . ")" if @imports;
+
+    my $result = eval $use_statement;
+
+    if (defined $result || $@ eq '') {
+        ok(1, $test_name);
+        return 1;
+    } else {
+        ok(0, $test_name);
+        my $error = $@ || 'Unknown error';
+        # Clean up the error message
+        $error =~ s/\n$//;
+        diag("Error loading $module: $error");
+        return 0;
+    }
 }
 
 1;
