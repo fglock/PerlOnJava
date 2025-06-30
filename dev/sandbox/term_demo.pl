@@ -7,7 +7,7 @@ use Term::ReadKey;
 print "=== Term::ReadLine and Term::ReadKey Demo ===\n\n";
 
 # Platform detection
-my $is_windows = $^O eq 'MSWin32';
+my $is_windows = $^O =~ /win/i;
 my $platform = $is_windows ? 'Windows' : ($^O eq 'darwin' ? 'macOS' : 'Linux');
 my $eof_key = $is_windows ? 'Ctrl-Z' : 'Ctrl-D';
 print "Running on: $platform\n";
