@@ -93,7 +93,7 @@ Distinguish between contexts where undefined references should automatically cre
 - **Operations that can modify through aliases**: `grep { $_ = uc } @{$undef}`, `map { $_ * 2 } @{$undef}`
 - **Foreach loops**: `foreach (@{$undef}) { ... }`
 
-### When Autovivification Does NOT Occur (throws error):
+### When Autovivification Does NOT Occur, and throws error in `strict` mode:
 - **Non-modifying operations**: `sort @{$undef}`, `reverse @{$undef}`
 - **Rvalue dereferencing**: `my @list = @{$undef}`, `my %hash = %{$undef}`
 - **Scalar context**: `my $count = @{$undef}`
