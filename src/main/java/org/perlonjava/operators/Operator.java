@@ -183,8 +183,14 @@ public class Operator {
 
     public static RuntimeScalar select(RuntimeList runtimeList, int ctx) {
         if (runtimeList.isEmpty()) {
+            // select (returns current filehandle)
             return new RuntimeScalar(RuntimeIO.selectedHandle);
         }
+        if (runtimeList.size() == 4) {
+            // select RBITS,WBITS,EBITS,TIMEOUT (syscall)
+            throw new PerlCompilerException("not implemented: select RBITS,WBITS,EBITS,TIMEOUT");
+        }
+        // select FILEHANDLE (returns/sets current filehandle)
         RuntimeScalar fh = new RuntimeScalar(RuntimeIO.selectedHandle);
         RuntimeIO.selectedHandle = runtimeList.getFirst().getRuntimeIO();
         RuntimeIO.lastAccesseddHandle = RuntimeIO.selectedHandle;

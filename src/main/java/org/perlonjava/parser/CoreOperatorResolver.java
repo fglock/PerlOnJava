@@ -50,14 +50,29 @@ public class CoreOperatorResolver {
                 // Handle 'not' keyword as a unary operator with an operand
                 operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
                 return new OperatorNode(token.text, operand, currentIndex);
-            case "abs", "caller", "chdir", "chomp", "chop", "chr", "cos", "exit", "exp", "fc",
-                 "glob", "gmtime", "hex", "int", "lc", "lcfirst", "length", "localtime", "log",
-                 "oct", "ord", "pop", "pos", "prototype", "quotemeta", "rand", "ref", "reset",
-                 "rmdir", "select", "shift", "sin", "sleep", "sqrt", "srand", "study", "uc",
-                 "ucfirst", "undef":
-                // Handle operators with one optional argument
-                return OperatorParser.parseOperatorWithOneOptionalArgument(parser, token);
-            case "stat", "lstat":
+             case "abs", "caller", "chdir", "chomp", "chop", "chr", "cos", "exit", "exp", "fc",
+                  "glob", "gmtime", "hex", "int", "lc", "lcfirst", "length", "localtime", "log",
+                  "oct", "ord", "pop", "pos", "prototype", "quotemeta", "rand", "ref", "reset",
+                  "rmdir", "shift", "sin", "sleep", "sqrt", "srand", "study", "uc",
+                  "ucfirst", "undef":
+                 // Handle operators with one optional argument
+                 return OperatorParser.parseOperatorWithOneOptionalArgument(parser, token);
+             case "select":
+                 // Handle 'select' operator with two different syntaxes:
+                 // 1. select FILEHANDLE or select (returns/sets current filehandle)
+                 // 2. select RBITS,WBITS,EBITS,TIMEOUT (syscall)
+                 operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
+                 int argCount = ((ListNode) operand).elements.size();
+                 if (argCount == 0 || argCount == 1 || argCount == 4) {
+                     // select or select FILEHANDLE
+                     // select RBITS,WBITS,EBITS,TIMEOUT (syscall version)
+                     return new OperatorNode(token.text, operand, currentIndex);
+                 } else {
+                     throw new PerlCompilerException(parser.tokenIndex,
+                         "Wrong number of arguments for select: expected 0, 1, or 4, got " + argCount,
+                         parser.ctx.errorUtil);
+                 }
+             case "stat", "lstat":
                 // Handle 'stat' and 'lstat' operators with special handling for `stat _`
                 LexerToken nextToken = peek(parser);
                 boolean paren = false;
