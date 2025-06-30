@@ -27,8 +27,15 @@ public class EmitOperator {
                 operatorHandler.getDescriptor(),
                 operatorHandler.getMethodType() == Opcodes.INVOKEINTERFACE
         );
-        // If the context is VOID, pop the result from the stack.
-        handleVoidContext(emitterVisitor);
+
+        // Handle context
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+            // If the context is VOID, pop the result from the stack.
+            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+        } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR && !operatorHandler.getDescriptor().endsWith("/RuntimeScalar;")) {
+            // If the context is SCALAR, cast the result to RuntimeScalar.
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+        }
     }
 
     /**
@@ -54,14 +61,6 @@ public class EmitOperator {
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         emitOperator(node.operator, emitterVisitor);
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
-            // Convert to scalar if in SCALAR context.
-            castToScalar(emitterVisitor);
-        }
-    }
-
-    private static void castToScalar(EmitterVisitor emitterVisitor) {
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
     }
 
     /**
@@ -240,9 +239,6 @@ public class EmitOperator {
             emitterVisitor.ctx.mv.visitLdcInsn(emitterVisitor.ctx.symbolTable.getCurrentPackage());
         }
         emitOperator(node.operator, emitterVisitor);
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
-            castToScalar(emitterVisitor);
-        }
     }
 
     // Handles the 'diamond' operator, which reads input from a file or standard input.
@@ -519,10 +515,6 @@ public class EmitOperator {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         emitterVisitor.pushCallContext();
         emitOperator(operator, emitterVisitor);
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
-            // Convert to scalar if in SCALAR context.
-            castToScalar(emitterVisitor);
-        }
     }
 
     static void handlePrototypeOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
