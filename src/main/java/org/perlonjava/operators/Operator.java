@@ -188,6 +188,32 @@ public class Operator {
         }
         if (runtimeList.size() == 4) {
             // select RBITS,WBITS,EBITS,TIMEOUT (syscall)
+            RuntimeScalar rbits = runtimeList.elements.get(0).scalar();
+            RuntimeScalar wbits = runtimeList.elements.get(1).scalar();
+            RuntimeScalar ebits = runtimeList.elements.get(2).scalar();
+            RuntimeScalar timeout = runtimeList.elements.get(3).scalar();
+
+            // Special case: if all bit vectors are undef, just sleep
+            if (!rbits.getDefinedBoolean() && !wbits.getDefinedBoolean() && !ebits.getDefinedBoolean()) {
+                double sleepTime = timeout.getDouble();
+                if (sleepTime > 0) {
+                    try {
+                        // Convert seconds to milliseconds
+                        long millis = (long) (sleepTime * 1000);
+                        int nanos = (int) ((sleepTime * 1000 - millis) * 1_000_000);
+                        Thread.sleep(millis, nanos);
+                    } catch (InterruptedException e) {
+                        // Restore interrupted status
+                        Thread.currentThread().interrupt();
+                        // Return remaining time (we don't track it precisely, so return 0)
+                        return new RuntimeScalar(0);
+                    }
+                }
+                // Return 0 to indicate the sleep completed
+                return new RuntimeScalar(0);
+            }
+
+            // Full select implementation not yet supported
             throw new PerlCompilerException("not implemented: select RBITS,WBITS,EBITS,TIMEOUT");
         }
         // select FILEHANDLE (returns/sets current filehandle)
