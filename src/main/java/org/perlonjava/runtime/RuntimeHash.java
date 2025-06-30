@@ -200,6 +200,19 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         return new RuntimeScalar();
     }
 
+    public RuntimeScalar delete(String key) {
+
+        if (this.elements instanceof AutovivificationHash hashProxy) {
+            hashProxy.vivify(this);
+        }
+
+        var value = elements.remove(key);
+        if (value != null) {
+            return new RuntimeScalar(value);
+        }
+        return new RuntimeScalar();
+    }
+
     /**
      * Creates a reference to the hash.
      *

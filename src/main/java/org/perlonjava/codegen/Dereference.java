@@ -35,16 +35,34 @@ public class Dereference {
 
                 ArrayLiteralNode right = (ArrayLiteralNode) node.right;
                 if (right.elements.size() == 1) {
-                    // Optimization: Extract the single element if the list has only one item
                     Node elem = right.elements.getFirst();
-                    elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+                    // Special case: numeric literal - use get(int) directly
+                    if (elem instanceof NumberNode numberNode && numberNode.value.indexOf('.') == -1) {
+                        try {
+                            int index = Integer.parseInt(numberNode.value);
+                            emitterVisitor.ctx.mv.visitLdcInsn(index);
+                            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
+                                    "get", "(I)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                        } catch (NumberFormatException e) {
+                            // Fall back to RuntimeScalar if the number is too large
+                            elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
+                                    "get", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                        }
+                    } else {
+                        // Single element but not an integer literal
+                        elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
+                                "get", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                    }
                 } else {
                     // emit the [0] as a RuntimeList
                     ListNode nodeRight = right.asListNode();
                     nodeRight.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
+                            "get", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                 }
-
-                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", "get", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
                 EmitOperator.handleVoidContext(emitterVisitor);
                 return;
@@ -65,7 +83,8 @@ public class Dereference {
                 ListNode nodeRight = ((ArrayLiteralNode) node.right).asListNode();
                 nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
-                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray", "getSlice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
+                        "getSlice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
 
                 EmitOperator.handleVoidContext(emitterVisitor);
                 return;
@@ -120,12 +139,29 @@ public class Dereference {
                 if (nodeRight.elements.size() == 1 && nodeZero instanceof IdentifierNode) {
                     // Convert IdentifierNode to StringNode:  {a} to {"a"}
                     nodeRight.elements.set(0, new StringNode(((IdentifierNode) nodeZero).name, ((IdentifierNode) nodeZero).tokenIndex));
+                    nodeZero = nodeRight.elements.getFirst(); // Update nodeZero to the new StringNode
                 }
 
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) $var{}  autoquote " + node.right);
-                nodeRight.accept(scalarVisitor);
 
-                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash", hashOperation, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                // Optimization: if there's only one element and it's a string literal
+                if (nodeRight.elements.size() == 1 && nodeZero instanceof StringNode) {
+                    // Special case: string literal - use get(String) directly
+                    emitterVisitor.ctx.mv.visitLdcInsn(((StringNode) nodeZero).value);
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
+                            hashOperation, "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                } else if (nodeRight.elements.size() == 1) {
+                    // Single element but not a string literal
+                    Node elem = nodeRight.elements.getFirst();
+                    elem.accept(scalarVisitor);
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
+                            hashOperation, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                } else {
+                    // Multiple elements
+                    nodeRight.accept(scalarVisitor);
+                    emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
+                            hashOperation, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                }
 
                 EmitOperator.handleVoidContext(emitterVisitor);
                 return;
@@ -157,7 +193,8 @@ public class Dereference {
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) $var{}  autoquote " + node.right);
                 nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
-                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash", hashOperation + "Slice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
+                        hashOperation + "Slice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
 
                 EmitOperator.handleVoidContext(emitterVisitor);
                 return;
