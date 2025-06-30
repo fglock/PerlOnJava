@@ -189,18 +189,16 @@ public class TermReadLine extends PerlModuleBase {
      * Returns the input filehandle or undef.
      */
     public static RuntimeList getInputHandle(RuntimeArray args, int ctx) {
-        // In a real implementation, this would return a Perl glob for STDIN
-        // For now, return undef since we can't easily represent Java streams as Perl globs
-        return new RuntimeList(scalarUndef);
+        // Return a Perl glob for STDIN
+        return new RuntimeList(new RuntimeScalar(RuntimeIO.stdin));
     }
 
     /**
      * Returns the output filehandle or undef.
      */
     public static RuntimeList getOutputHandle(RuntimeArray args, int ctx) {
-        // In a real implementation, this would return a Perl glob for STDOUT
-        // For now, return undef since we can't easily represent Java streams as Perl globs
-        return new RuntimeList(scalarUndef);
+        // Return a Perl glob for STDOUT
+        return new RuntimeList(new RuntimeScalar(RuntimeIO.stdout));
     }
 
     /**
