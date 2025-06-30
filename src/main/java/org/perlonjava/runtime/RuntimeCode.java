@@ -451,7 +451,17 @@ public class RuntimeCode extends RuntimeBaseEntity implements RuntimeScalarRefer
                 return (RuntimeList) this.methodHandle.invoke(this.codeObject, a, callContext);
             }
         } catch (NullPointerException e) {
-            throw new PerlCompilerException("Undefined subroutine called at ");
+
+            if (this.methodHandle == null) {
+                throw new PerlCompilerException("Subroutine exists but has null method handle (possible compilation or registration error) at ");
+            } else if (this.codeObject == null && !isStatic) {
+                throw new PerlCompilerException("Subroutine exists but has null code object at ");
+            } else {
+                // Original NPE from somewhere else
+                throw new PerlCompilerException("Null pointer exception in subroutine call: " + e.getMessage() + " at ");
+            }
+
+            //throw new PerlCompilerException("Undefined subroutine called at ");
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
             if (!(targetException instanceof RuntimeException)) {
