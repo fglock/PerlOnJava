@@ -1,10 +1,7 @@
 package org.perlonjava.perlmodule;
 
 import org.perlonjava.operators.ReferenceOperators;
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeHash;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.*;
 
 import java.io.*;
 import java.util.ArrayList;
@@ -59,15 +56,15 @@ public class TermReadLine extends PerlModuleBase {
 
         try {
             readline.registerMethod("new", "newReadLine", "$;$");
-            readline.registerMethod("ReadLine", "getReadLinePackage", "$");  // Changed from ""
-            readline.registerMethod("readline", "readLine", "$$");  // Already has $
-            readline.registerMethod("addhistory", "addHistory", "$$");  // Already has $
-            readline.registerMethod("IN", "getInputHandle", "$");  // Changed from ""
-            readline.registerMethod("OUT", "getOutputHandle", "$");  // Changed from ""
-            readline.registerMethod("MinLine", "minLine", "$;$");  // Already has ;$
-            readline.registerMethod("findConsole", "findConsole", "$");  // Changed from ""
-            readline.registerMethod("Attribs", "getAttribs", "$");  // Changed from ""
-            readline.registerMethod("Features", "getFeatures", "$");  // Changed from ""
+            readline.registerMethod("ReadLine", "getReadLinePackage", "");
+            readline.registerMethod("readline", "readLine", "$$");
+            readline.registerMethod("addhistory", "addHistory", "$$");
+            readline.registerMethod("IN", "getInputHandle", "$");
+            readline.registerMethod("OUT", "getOutputHandle", "$");
+            readline.registerMethod("MinLine", "minLine", "$;$");
+            readline.registerMethod("findConsole", "findConsole", "$");
+            readline.registerMethod("Attribs", "getAttribs", "$");
+            readline.registerMethod("Features", "getFeatures", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Term::ReadLine method: " + e.getMessage());
         }
@@ -76,7 +73,7 @@ public class TermReadLine extends PerlModuleBase {
 
     private void initializeAttributes() {
         attributes = new HashMap<>();
-        attributes.put("appname", appName);
+        attributes.put("appname", appName != null ? appName : "");  // Default to empty string
         attributes.put("minline", minLine);
         attributes.put("autohistory", autoHistory);
         attributes.put("library_version", "PerlOnJava-1.0");
@@ -126,7 +123,7 @@ public class TermReadLine extends PerlModuleBase {
      * Returns the actual package name that executes the commands.
      */
     public static RuntimeList getReadLinePackage(RuntimeArray args, int ctx) {
-        // No need to extract instance for this method
+        // This can be called as class method or instance method
         return new RuntimeList(new RuntimeScalar("Term::ReadLine::PerlOnJava"));
     }
 
@@ -140,10 +137,14 @@ public class TermReadLine extends PerlModuleBase {
         String prompt = args.size() > 1 ? args.get(1).toString() : "";
 
         try {
-            if (instance.outputWriter != null && !prompt.isEmpty()) {
-                instance.outputWriter.print(prompt);
-                instance.outputWriter.flush();
+            // Print prompt to STDOUT using RuntimeIO
+            if (!prompt.isEmpty()) {
+                RuntimeIO.stdout.write(prompt);
+                RuntimeIO.stdout.flush();
             }
+
+            // Flush all file handles to ensure prompt is visible
+            RuntimeIO.flushFileHandles();
 
             String line = instance.inputReader.readLine();
             if (line == null) {
@@ -222,6 +223,8 @@ public class TermReadLine extends PerlModuleBase {
      * Finds appropriate console input/output file names.
      */
     public static RuntimeList findConsole(RuntimeArray args, int ctx) {
+        // This method can be called as either class method or instance method
+        // When called as instance method, args.get(0) will be the object
         String os = System.getProperty("os.name").toLowerCase();
         String inputFile, outputFile;
 
@@ -245,20 +248,35 @@ public class TermReadLine extends PerlModuleBase {
      * Returns a reference to a hash describing internal configuration.
      */
     public static RuntimeList getAttribs(RuntimeArray args, int ctx) {
-        RuntimeHash termHash = args.get(0).hashDeref();
-        TermReadLine instance = (TermReadLine) termHash.get("_instance").value;
+        TermReadLine instance;
+
+        // Handle both instance method and class method calls
+        if (args.size() > 1 && args.get(0).toString().equals("Term::ReadLine")) {
+            // Called as Term::ReadLine->Attribs($term)
+            RuntimeHash termHash = args.get(1).hashDeref();
+            instance = (TermReadLine) termHash.get("_instance").value;
+        } else {
+            // Called as $term->Attribs()
+            RuntimeHash termHash = args.get(0).hashDeref();
+            instance = (TermReadLine) termHash.get("_instance").value;
+        }
+
         RuntimeHash attribsHash = new RuntimeHash();
 
         for (Map.Entry<String, Object> entry : instance.attributes.entrySet()) {
             RuntimeScalar value;
-            if (entry.getValue() instanceof String) {
-                value = new RuntimeScalar((String) entry.getValue());
-            } else if (entry.getValue() instanceof Integer) {
-                value = new RuntimeScalar((Integer) entry.getValue());
-            } else if (entry.getValue() instanceof Boolean) {
-                value = getScalarBoolean((Boolean) entry.getValue());
+            Object attrValue = entry.getValue();
+
+            if (attrValue == null) {
+                value = scalarUndef;
+            } else if (attrValue instanceof String) {
+                value = new RuntimeScalar((String) attrValue);
+            } else if (attrValue instanceof Integer) {
+                value = new RuntimeScalar((Integer) attrValue);
+            } else if (attrValue instanceof Boolean) {
+                value = getScalarBoolean((Boolean) attrValue);
             } else {
-                value = new RuntimeScalar(entry.getValue().toString());
+                value = new RuntimeScalar(attrValue.toString());
             }
             attribsHash.put(entry.getKey(), value);
         }
