@@ -382,6 +382,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`read`**: Block reading with length specification
 - ✅  **`tell`**: Current file position
 - ✅  **`select`**: `select(filehandle)` for default output selection
+- ✅  **`select`**: `select(undef,undef,undef,$time)` for sleep function
 - ✅  **`seek`**: File position manipulation.
 
 ### Unimplemented I/O Operators
