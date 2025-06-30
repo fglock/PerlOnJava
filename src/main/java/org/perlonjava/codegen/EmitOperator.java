@@ -56,8 +56,12 @@ public class EmitOperator {
         emitOperator(node.operator, emitterVisitor);
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             // Convert to scalar if in SCALAR context.
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+            castToScalar(emitterVisitor);
         }
+    }
+
+    private static void castToScalar(EmitterVisitor emitterVisitor) {
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
     }
 
     /**
@@ -237,7 +241,7 @@ public class EmitOperator {
         }
         emitOperator(node.operator, emitterVisitor);
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+            castToScalar(emitterVisitor);
         }
     }
 
@@ -515,6 +519,10 @@ public class EmitOperator {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         emitterVisitor.pushCallContext();
         emitOperator(operator, emitterVisitor);
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+            // Convert to scalar if in SCALAR context.
+            castToScalar(emitterVisitor);
+        }
     }
 
     static void handlePrototypeOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
