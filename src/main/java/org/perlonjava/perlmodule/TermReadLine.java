@@ -1,5 +1,6 @@
 package org.perlonjava.perlmodule;
 
+import org.perlonjava.operators.ReferenceOperators;
 import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeHash;
 import org.perlonjava.runtime.RuntimeList;
@@ -57,20 +58,21 @@ public class TermReadLine extends PerlModuleBase {
         TermReadLine readline = new TermReadLine();
 
         try {
-            readline.registerMethod("new", "newReadLine", "$;$$");
-            readline.registerMethod("ReadLine", "getReadLinePackage", "");
-            readline.registerMethod("readline", "readLine", "$");
-            readline.registerMethod("addhistory", "addHistory", "$");
-            readline.registerMethod("IN", "getInputHandle", "");
-            readline.registerMethod("OUT", "getOutputHandle", "");
-            readline.registerMethod("MinLine", "minLine", ";$");
-            readline.registerMethod("findConsole", "findConsole", "");
-            readline.registerMethod("Attribs", "getAttribs", "");
-            readline.registerMethod("Features", "getFeatures", "");
+            readline.registerMethod("new", "newReadLine", "$;$");
+            readline.registerMethod("ReadLine", "getReadLinePackage", "$");  // Changed from ""
+            readline.registerMethod("readline", "readLine", "$$");  // Already has $
+            readline.registerMethod("addhistory", "addHistory", "$$");  // Already has $
+            readline.registerMethod("IN", "getInputHandle", "$");  // Changed from ""
+            readline.registerMethod("OUT", "getOutputHandle", "$");  // Changed from ""
+            readline.registerMethod("MinLine", "minLine", "$;$");  // Already has ;$
+            readline.registerMethod("findConsole", "findConsole", "$");  // Changed from ""
+            readline.registerMethod("Attribs", "getAttribs", "$");  // Changed from ""
+            readline.registerMethod("Features", "getFeatures", "$");  // Changed from ""
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Term::ReadLine method: " + e.getMessage());
         }
     }
+
 
     private void initializeAttributes() {
         attributes = new HashMap<>();
@@ -109,13 +111,22 @@ public class TermReadLine extends PerlModuleBase {
         }
 
         TermReadLine instance = new TermReadLine(appName, in, out);
-        return new RuntimeList(new RuntimeScalar(instance));
+
+        // Create a hash to store the instance (similar to DBI's dbh)
+        RuntimeHash termHash = new RuntimeHash();
+        termHash.put("_instance", new RuntimeScalar(instance));
+        termHash.put("appname", new RuntimeScalar(appName));
+
+        // Create blessed reference for Perl compatibility
+        RuntimeScalar termRef = ReferenceOperators.bless(termHash.createReference(), new RuntimeScalar("Term::ReadLine"));
+        return termRef.getList();
     }
 
     /**
      * Returns the actual package name that executes the commands.
      */
     public static RuntimeList getReadLinePackage(RuntimeArray args, int ctx) {
+        // No need to extract instance for this method
         return new RuntimeList(new RuntimeScalar("Term::ReadLine::PerlOnJava"));
     }
 
@@ -124,7 +135,8 @@ public class TermReadLine extends PerlModuleBase {
      * Returns undef on EOF.
      */
     public static RuntimeList readLine(RuntimeArray args, int ctx) {
-        TermReadLine instance = (TermReadLine) args.get(0).value;
+        RuntimeHash termHash = args.get(0).hashDeref();
+        TermReadLine instance = (TermReadLine) termHash.get("_instance").value;
         String prompt = args.size() > 1 ? args.get(1).toString() : "";
 
         try {
@@ -153,7 +165,8 @@ public class TermReadLine extends PerlModuleBase {
      * Adds a line to the history.
      */
     public static RuntimeList addHistory(RuntimeArray args, int ctx) {
-        TermReadLine instance = (TermReadLine) args.get(0).value;
+        RuntimeHash termHash = args.get(0).hashDeref();
+        TermReadLine instance = (TermReadLine) termHash.get("_instance").value;
         if (args.size() > 1) {
             String line = args.get(1).toString();
             instance.addToHistory(line);
@@ -193,7 +206,8 @@ public class TermReadLine extends PerlModuleBase {
      * Sets or gets the minimum line length for history inclusion.
      */
     public static RuntimeList minLine(RuntimeArray args, int ctx) {
-        TermReadLine instance = (TermReadLine) args.get(0).value;
+        RuntimeHash termHash = args.get(0).hashDeref();
+        TermReadLine instance = (TermReadLine) termHash.get("_instance").value;
         int oldValue = instance.minLine;
 
         if (args.size() > 1 && args.get(1).getDefinedBoolean()) {
@@ -231,7 +245,8 @@ public class TermReadLine extends PerlModuleBase {
      * Returns a reference to a hash describing internal configuration.
      */
     public static RuntimeList getAttribs(RuntimeArray args, int ctx) {
-        TermReadLine instance = (TermReadLine) args.get(0).value;
+        RuntimeHash termHash = args.get(0).hashDeref();
+        TermReadLine instance = (TermReadLine) termHash.get("_instance").value;
         RuntimeHash attribsHash = new RuntimeHash();
 
         for (Map.Entry<String, Object> entry : instance.attributes.entrySet()) {
@@ -248,21 +263,22 @@ public class TermReadLine extends PerlModuleBase {
             attribsHash.put(entry.getKey(), value);
         }
 
-        return new RuntimeList(new RuntimeScalar(attribsHash));
+        return new RuntimeList(attribsHash.createReference());
     }
 
     /**
      * Returns a reference to a hash with features present in current implementation.
      */
     public static RuntimeList getFeatures(RuntimeArray args, int ctx) {
-        TermReadLine instance = (TermReadLine) args.get(0).value;
+        RuntimeHash termHash = args.get(0).hashDeref();
+        TermReadLine instance = (TermReadLine) termHash.get("_instance").value;
         RuntimeHash featuresHash = new RuntimeHash();
 
         for (Map.Entry<String, Boolean> entry : instance.features.entrySet()) {
             featuresHash.put(entry.getKey(), getScalarBoolean(entry.getValue()));
         }
 
-        return new RuntimeList(new RuntimeScalar(featuresHash));
+        return new RuntimeList(featuresHash.createReference());
     }
 
     // Additional utility methods for history management
