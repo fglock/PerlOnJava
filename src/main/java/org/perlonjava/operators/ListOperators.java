@@ -65,6 +65,10 @@ public class ListOperators {
      * @throws RuntimeException If the Perl comparator subroutine throws an exception.
      */
     public static RuntimeList sort(RuntimeList runtimeList, RuntimeScalar perlComparatorClosure, String packageName) {
+
+        // Check each element to ensure it's not an undefined array reference
+        runtimeList.validateNoAutovivification();
+
         // Create a new list from the elements of this RuntimeArray
         RuntimeArray array = runtimeList.getArrayOfAlias();
 

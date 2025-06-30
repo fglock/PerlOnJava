@@ -378,6 +378,28 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
     }
 
     /**
+     * Validates that all elements in this list are not AutovivificationArrays or AutovivificationHashes.
+     * This should be called by operations that should NOT autovivify (like sort, reverse).
+     *
+     * @throws PerlCompilerException if any element contains an autovivification placeholder
+     */
+    public void validateNoAutovivification() {
+        for (RuntimeBaseEntity element : elements) {
+            switch (element) {
+                case RuntimeArray array when array.elements instanceof AutovivificationArray ->
+                        throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
+
+                case RuntimeHash hash when hash.elements instanceof AutovivificationHash ->
+                        throw new PerlCompilerException("Can't use an undefined value as a HASH reference");
+
+                default -> {
+                    // Element is valid, continue checking
+                }
+            }
+        }
+    }
+
+    /**
      * Saves the current state of the instance.
      *
      * <p>This method creates a snapshot of the current elements,
