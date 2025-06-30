@@ -250,10 +250,11 @@ The following areas are currently under active development to enhance the functi
   - `Test::More` module: added `subtest`.
   - `CORE::` operators have the same prototypes as in Perl.
   - Added module: `Fcntl`.
+  - Test::More: added `use_ok`, `require_ok`
   - Improved autovivification handling: distinguish between contexts where undefined references should automatically create data structures versus where they should throw errors.
   - Bugfix: fix a problem with Windows newlines and qw(). Also fixed `mkdir` in Windows.
   - Bugfix: `-E` switch was setting strict mode.
-  - BugFix: fix calling these operators in scalar context: "localtime", "gmtime", "caller".
+  - BugFix: fix calling context in operators that return list.
   - Added Makefile.
   - Debian package can be created with `make deb`.
   - Planned release date: 2025-12-10.
@@ -261,7 +262,6 @@ The following areas are currently under active development to enhance the functi
 - Work in Progress
   - Term::ReadLine
   - Term::ReadKey
-  - Test::More `use_ok`, `require_ok`
 
 ### v4.0.0 Milestone (Planned Release Date: 2026-05-10)
 
