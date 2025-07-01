@@ -9,6 +9,7 @@ import java.io.*;
 import java.util.*;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.RuntimeScalarType.JAVAOBJECT;
 
 /**
  * Text::CSV module implementation for PerlOnJava.
@@ -405,6 +406,11 @@ public class TextCsv extends PerlModuleBase {
     private static CSVFormat buildCSVFormat(RuntimeHash self) {
         CSVFormat.Builder builder = CSVFormat.DEFAULT.builder();
 
+        RuntimeScalar cached = self.get("_CSVFormat");
+        if (cached.type == JAVAOBJECT) {
+            return (CSVFormat) cached.value;
+        }
+
         // builder.setSkipHeaderRecord(false);
         // builder.setAllowMissingColumnNames(true);
 
@@ -447,7 +453,9 @@ public class TextCsv extends PerlModuleBase {
             builder.setRecordSeparator("");
         }
 
-        return builder.build();
+        CSVFormat csvFormat = builder.build();
+        cached.set(csvFormat);  // Save in cache
+        return csvFormat;
     }
 
     /**
