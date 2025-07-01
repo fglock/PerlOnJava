@@ -507,6 +507,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Time::HiRes** module.
 - ✅  **HTTP::Date** module.
 - ✅  **URI::Escape** module.
+- ✅  **Test** module.
 - ✅  **Text::Balanced** use the same version as Perl.
 - ✅  **Benchmark** use the same version as Perl.
 - 🚧  **Test::More** some features missing: `skip`, `BAIL_OUT`.

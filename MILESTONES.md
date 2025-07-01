@@ -249,7 +249,7 @@ The following areas are currently under active development to enhance the functi
   - Added `# line` preprocessor directive.
   - `Test::More` module: added `subtest`.
   - `CORE::` operators have the same prototypes as in Perl.
-  - Added module: `Fcntl`.
+  - Added modules: `Fcntl`, `Test`.
   - Test::More: added `use_ok`, `require_ok`
   - Improved autovivification handling: distinguish between contexts where undefined references should automatically create data structures versus where they should throw errors.
   - Bugfix: fix a problem with Windows newlines and qw(). Also fixed `mkdir` in Windows.

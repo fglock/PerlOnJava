@@ -74,6 +74,14 @@ public class IdentifierParser {
 
         LexerToken token = parser.tokens.get(parser.tokenIndex);
         LexerToken nextToken = parser.tokens.get(parser.tokenIndex + 1);
+
+        // Special case for `$|`, because the tokenizer can generate $ |=
+        if (token.type == LexerTokenType.OPERATOR && token.text.startsWith("|")) {
+            // Consume the '|' from the next token (which might be "|=" or just "|")
+            variableName.append(TokenUtils.consumeChar(parser));
+            return variableName.toString(); // Returns "|" for the special variable $|
+        }
+
         while (true) {
             // Check for various token types that can form part of an identifier
             if (token.type == LexerTokenType.OPERATOR || token.type == LexerTokenType.NUMBER || token.type == LexerTokenType.STRING) {
