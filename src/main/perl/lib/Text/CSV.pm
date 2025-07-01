@@ -17,7 +17,7 @@ sub new {
     my $self = {
         sep_char            => ',',
         quote_char          => '"',
-        escape_char         => '\\',
+        escape_char         => undef,
         binary              => 0,
         auto_diag           => 0,
         always_quote        => 0,

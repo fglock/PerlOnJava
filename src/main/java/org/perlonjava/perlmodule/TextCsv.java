@@ -67,6 +67,16 @@ public class TextCsv extends PerlModuleBase {
 
         RuntimeHash self = args.get(0).hashDeref();
         RuntimeScalar line = args.get(1);
+        RuntimeArray fields = new RuntimeArray();
+
+        if (line.toString().isEmpty()) {
+            // Perl Text::CSV treats an empty input string ("") as a single empty field
+            RuntimeArray.push(fields, scalarEmptyString);
+            self.put("_fields", fields.createReference());
+            self.put("_string", line);
+            clearError(self);
+            return scalarTrue.getList();
+        }
 
         try {
             // Build CSV format from attributes
@@ -78,7 +88,6 @@ public class TextCsv extends PerlModuleBase {
 
             if (!records.isEmpty()) {
                 CSVRecord record = records.get(0);
-                RuntimeArray fields = new RuntimeArray();
 
                 for (String field : record) {
                     RuntimeScalar value = new RuntimeScalar(field);
@@ -257,7 +266,6 @@ public class TextCsv extends PerlModuleBase {
         }
 
         RuntimeArray printArgs = new RuntimeArray();
-        RuntimeArray.push(printArgs, fh);
         RuntimeArray.push(printArgs, new RuntimeScalar(output));
         Operator.print(printArgs.getList(), fh);
 
@@ -397,6 +405,9 @@ public class TextCsv extends PerlModuleBase {
     private static CSVFormat buildCSVFormat(RuntimeHash self) {
         CSVFormat.Builder builder = CSVFormat.DEFAULT.builder();
 
+        // builder.setSkipHeaderRecord(false);
+        // builder.setAllowMissingColumnNames(true);
+
         // Set delimiter
         String sepChar = self.get("sep_char").toString();
         if (sepChar.length() == 1) {
@@ -415,6 +426,8 @@ public class TextCsv extends PerlModuleBase {
         String escapeChar = self.get("escape_char").toString();
         if (escapeChar.length() == 1) {
             builder.setEscape(escapeChar.charAt(0));
+        } else {
+            builder.setEscape(null);
         }
 
         // Handle other options
