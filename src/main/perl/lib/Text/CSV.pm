@@ -9,6 +9,44 @@ our $VERSION = '2.06';
 
 # Additional pure-Perl convenience methods
 
+sub new {
+    my $class = shift;
+    my %args = @_ == 1 && ref $_[0] eq 'HASH' ? %{$_[0]} : @_;
+
+    # Set default attributes
+    my $self = {
+        sep_char            => ',',
+        quote_char          => '"',
+        escape_char         => '"',
+        binary              => 0,
+        auto_diag           => 0,
+        always_quote        => 0,
+        eol                 => undef,
+        allow_loose_quotes  => 0,
+        allow_whitespace    => 0,
+        blank_is_undef      => 0,
+        empty_is_undef       => 0,
+        quote_empty         => 0,
+        quote_space         => 1,
+        quote_binary        => 1,
+        decode_utf8        => 1,
+        keep_meta_info      => 0,
+        strict              => 0,
+        formula             => 'none',
+        column_names        => [],
+
+        # Clear error state
+        _ERROR_CODE         => 0,
+        _ERROR_STR          => '',
+        _ERROR_POS          => 0,
+        _ERROR_FIELD        => 0,
+
+        %args
+    };
+
+    return bless $self, $class;
+}
+
 sub say {
     my ($self, $fh, $fields) = @_;
 

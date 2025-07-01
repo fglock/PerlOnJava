@@ -36,7 +36,6 @@ public class TextCsv extends PerlModuleBase {
         TextCsv csv = new TextCsv();
         try {
             // Register all supported Text::CSV methods
-            // csv.registerMethod("new", null);
             csv.registerMethod("parse", null);
             csv.registerMethod("fields", null);
             csv.registerMethod("combine", null);
@@ -56,51 +55,6 @@ public class TextCsv extends PerlModuleBase {
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Text::CSV method: " + e.getMessage());
         }
-    }
-
-    /**
-     * Creates a new Text::CSV instance.
-     */
-    public static RuntimeList new_(RuntimeArray args, int ctx) {
-        RuntimeHash self = new RuntimeHash();
-
-        // Set default attributes
-        self.put("sep_char", new RuntimeScalar(","));
-        self.put("quote_char", new RuntimeScalar("\""));
-        self.put("escape_char", new RuntimeScalar("\""));
-        self.put("binary", scalarFalse);
-        self.put("auto_diag", scalarFalse);
-        self.put("always_quote", scalarFalse);
-        self.put("eol", scalarUndef);
-        self.put("allow_loose_quotes", scalarFalse);
-        self.put("allow_whitespace", scalarFalse);
-        self.put("blank_is_undef", scalarFalse);
-        self.put("empty_is_undef", scalarFalse);
-        self.put("quote_empty", scalarFalse);
-        self.put("quote_space", scalarTrue);
-        self.put("quote_binary", scalarTrue);
-        self.put("decode_utf8", scalarTrue);
-        self.put("keep_meta_info", scalarFalse);
-        self.put("strict", scalarFalse);
-        self.put("formula", new RuntimeScalar("none"));
-        self.put("column_names", new RuntimeArray().createReference());
-
-        // Clear error state
-        self.put("_ERROR_CODE", scalarZero);
-        self.put("_ERROR_STR", new RuntimeScalar(""));
-        self.put("_ERROR_POS", scalarZero);
-        self.put("_ERROR_FIELD", scalarZero);
-
-        // Apply options if provided
-        if (args.size() > 1 && args.get(1).type == RuntimeScalarType.HASHREFERENCE) {
-            RuntimeHash opts = args.get(1).hashDeref();
-            applyOptions(self, opts);
-        }
-
-        // Create blessed reference - fixed to use ReferenceOperators.bless
-        RuntimeScalar selfRef = ReferenceOperators.bless(self.createReference(), new RuntimeScalar("Text::CSV"));
-
-        return selfRef.getList();
     }
 
     /**
