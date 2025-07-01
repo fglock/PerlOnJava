@@ -193,11 +193,14 @@ public class StatementResolver {
         consume(parser, LexerTokenType.OPERATOR, "{");
 
         int braceCount = 1; // Track nested braces
+        boolean hasHashIndicator = false;  // Found =>, or comma in hash-like context
+        boolean hasBlockIndicator = false; // Found ;, or statement modifier
+
         while (braceCount > 0) {
             LexerToken token = consume(parser);
             parser.ctx.logDebug("isHashLiteral " + token + " braceCount:" + braceCount);
             if (token.type == LexerTokenType.EOF) {
-                break; // not a hash literal;
+                break; // Let caller handle EOF error
             }
 
             // Update brace count based on token
@@ -207,32 +210,58 @@ public class StatementResolver {
                 default -> braceCount;
             };
 
-            // Check for hash/block indicators at depth 1
+            // Only check for indicators at depth 1
             if (braceCount == 1 && !token.text.matches("[{(\\[)}\\]]")) {
                 switch (token.text) {
-                    case ",", "=>" -> {
-                        parser.ctx.logDebug("isHashLiteral TRUE");
-                        parser.tokenIndex = currentIndex;
-                        return true; // Likely a hash literal
+                    case "=>" -> {
+                        // Fat comma is a definitive hash indicator
+                        hasHashIndicator = true;
                     }
                     case ";" -> {
-                        parser.tokenIndex = currentIndex;
-                        return false; // Likely a block
+                        // Semicolon is a definitive block indicator
+                        hasBlockIndicator = true;
+                    }
+                    case "," -> {
+                        // Comma alone is not definitive - could be function args or hash
+                        // Continue scanning for more evidence
+                        parser.ctx.logDebug("isHashLiteral found comma, continuing scan");
                     }
                     case "for", "while", "if", "unless", "until", "foreach" -> {
-                        if (!TokenUtils.peek(parser).text.equals("=>")) {
-                            parser.ctx.logDebug("isHashLiteral FALSE");
-                            parser.tokenIndex = currentIndex;
-                            return false; // Likely a block
+                        // Check if this is a hash key (followed by =>) or statement modifier
+                        LexerToken nextToken = TokenUtils.peek(parser);
+                        if (!nextToken.text.equals("=>") && !nextToken.text.equals(",")) {
+                            // Statement modifier - definitive block indicator
+                            parser.ctx.logDebug("isHashLiteral found statement modifier");
+                            hasBlockIndicator = true;
                         }
                     }
                 }
             }
+
+            // Early exit if we have definitive evidence
+            if (hasBlockIndicator) {
+                parser.ctx.logDebug("isHashLiteral FALSE - block indicator found");
+                parser.tokenIndex = currentIndex;
+                return false;
+            }
         }
 
-        parser.ctx.logDebug("isHashLiteral undecided");
         parser.tokenIndex = currentIndex;
-        return true;
+
+        // Decision logic:
+        // - If we found => it's definitely a hash
+        // - If we found block indicators, it's a block
+        // - Otherwise, default to hash (empty {} is a hash ref)
+        if (hasHashIndicator) {
+            parser.ctx.logDebug("isHashLiteral TRUE - hash indicator found");
+            return true;
+        } else if (hasBlockIndicator) {
+            parser.ctx.logDebug("isHashLiteral FALSE - block indicator found");
+            return false;
+        } else {
+            parser.ctx.logDebug("isHashLiteral TRUE - default for ambiguous case");
+            return true; // Default: {} is an empty hash ref
+        }
     }
 
     public static void parseStatementTerminator(Parser parser) {
