@@ -247,10 +247,9 @@ The following areas are currently under active development to enhance the functi
   - Syntax: identifiers starting with `::` are in `main` package.
   - Added I/O layers support to `open`, `binmode`: `:raw`, `:bytes`, `:crlf`, `:utf8`, `:unix`, `:encoding()`.
   - Added `# line` preprocessor directive.
-  - `Test::More` module: added `subtest`.
+  - `Test::More` module: added `subtest`, `use_ok`, `require_ok`.
   - `CORE::` operators have the same prototypes as in Perl.
   - Added modules: `Fcntl`, `Test`.
-  - Test::More: added `use_ok`, `require_ok`
   - Improved autovivification handling: distinguish between contexts where undefined references should automatically create data structures versus where they should throw errors.
   - Bugfix: fix a problem with Windows newlines and qw(). Also fixed `mkdir` in Windows.
   - Bugfix: `-E` switch was setting strict mode.
@@ -262,6 +261,7 @@ The following areas are currently under active development to enhance the functi
 - Work in Progress
   - Term::ReadLine
   - Term::ReadKey
+  - Text::CSV
   - XSLoader or Dynaloader for JVM
 
 ### v4.0.0 Milestone (Planned Release Date: 2026-05-10)
