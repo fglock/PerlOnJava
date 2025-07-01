@@ -430,6 +430,8 @@ public class TextCsv extends PerlModuleBase {
         RuntimeScalar eol = self.get("eol");
         if (eol.type != RuntimeScalarType.UNDEF) {
             builder.setRecordSeparator(eol.toString());
+        } else {
+            builder.setRecordSeparator("");
         }
 
         return builder.build();

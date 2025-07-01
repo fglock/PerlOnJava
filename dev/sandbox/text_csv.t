@@ -185,7 +185,7 @@ ok($csv_opts, 'Created Text::CSV object with options');
     
     ok($csv->print($fh, ['foo', 'bar', 'baz']), 'Print to filehandle');
     close $fh;
-    
+
     # Note: print adds EOL if set
     chomp $output if $output =~ /\n$/;
     is($output, 'foo,bar,baz', 'Print output is correct');
