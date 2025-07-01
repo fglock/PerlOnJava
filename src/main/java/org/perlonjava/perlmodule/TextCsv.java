@@ -163,10 +163,6 @@ public class TextCsv extends PerlModuleBase {
             printer.flush();
 
             String csvString = sw.toString();
-            // Remove trailing newline if no eol set
-            if (self.get("eol").type == RuntimeScalarType.UNDEF && csvString.endsWith("\n")) {
-                csvString = csvString.substring(0, csvString.length() - 1);
-            }
 
             self.put("_string", new RuntimeScalar(csvString));
             clearError(self);
@@ -347,27 +343,6 @@ public class TextCsv extends PerlModuleBase {
         CSVFormat csvFormat = builder.build();
         cached.set(csvFormat);  // Save in cache
         return csvFormat;
-    }
-
-    /**
-     * Apply options to instance.
-     */
-    private static void applyOptions(RuntimeHash self, RuntimeHash opts) {
-        for (Map.Entry<String, RuntimeScalar> entry : opts.elements.entrySet()) {
-            String key = entry.getKey();
-            RuntimeScalar value = entry.getValue();
-
-            // Validate certain options
-            if (key.equals("sep_char") || key.equals("quote_char") || key.equals("escape_char")) {
-                if (value.type != RuntimeScalarType.UNDEF && value.toString().length() != 1) {
-                    setError(self, INI_SEPARATOR_CONFLICT,
-                            "INI - " + key + " must be exactly one character", 0, 0);
-                    continue;
-                }
-            }
-
-            self.put(key, value);
-        }
     }
 
     /**
