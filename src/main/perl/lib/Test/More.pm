@@ -8,7 +8,7 @@ use Data::Dumper;
 our @EXPORT = qw(
     plan ok is isnt like unlike cmp_ok can_ok isa_ok
     pass fail diag done_testing is_deeply subtest
-    use_ok require_ok
+    use_ok require_ok skip
 );
 
 our $Test_Count = 0;
@@ -261,6 +261,10 @@ sub use_ok {
         diag("Error loading $module: $error");
         return 0;
     }
+}
+
+sub skip {
+    die "Test::More::skip() is not implemented";
 }
 
 1;
