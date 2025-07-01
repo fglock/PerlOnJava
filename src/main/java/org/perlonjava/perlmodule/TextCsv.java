@@ -1,12 +1,14 @@
 package org.perlonjava.perlmodule;
 
+import org.apache.commons.csv.*;
 import org.perlonjava.operators.Operator;
 import org.perlonjava.operators.Readline;
 import org.perlonjava.runtime.*;
-import org.perlonjava.operators.ReferenceOperators;
-import org.apache.commons.csv.*;
-import java.io.*;
-import java.util.*;
+
+import java.io.StringWriter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.RuntimeScalarType.JAVAOBJECT;
@@ -22,6 +24,8 @@ public class TextCsv extends PerlModuleBase {
     private static final int EIF_LOOSE_UNESCAPED_QUOTE = 2034;
     private static final int EIQ_QUOTED_FIELD_NOT_TERMINATED = 2027;
     private static final int ECB_BINARY_CHARACTER = 2110;
+
+    private static String cacheKey = "_CSVFormat";
 
     /**
      * Constructor initializes the Text::CSV module.
@@ -283,6 +287,7 @@ public class TextCsv extends PerlModuleBase {
             RuntimeScalar sep = args.get(1);
             if (sep.type != RuntimeScalarType.UNDEF && sep.toString().length() == 1) {
                 self.put("sep_char", sep);
+                self.delete(cacheKey);
             }
         }
 
@@ -299,6 +304,7 @@ public class TextCsv extends PerlModuleBase {
             RuntimeScalar quote = args.get(1);
             if (quote.type != RuntimeScalarType.UNDEF && quote.toString().length() == 1) {
                 self.put("quote_char", quote);
+                self.delete(cacheKey);
             }
         }
 
@@ -406,7 +412,7 @@ public class TextCsv extends PerlModuleBase {
     private static CSVFormat buildCSVFormat(RuntimeHash self) {
         CSVFormat.Builder builder = CSVFormat.DEFAULT.builder();
 
-        RuntimeScalar cached = self.get("_CSVFormat");
+        RuntimeScalar cached = self.get(cacheKey);
         if (cached.type == JAVAOBJECT) {
             return (CSVFormat) cached.value;
         }
