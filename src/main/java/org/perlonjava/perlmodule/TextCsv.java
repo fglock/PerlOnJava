@@ -48,15 +48,7 @@ public class TextCsv extends PerlModuleBase {
             csv.registerMethod("print", null);
             csv.registerMethod("getline", null);
             csv.registerMethod("error_diag", null);
-            csv.registerMethod("sep_char", null);
-            csv.registerMethod("quote_char", null);
-            // csv.registerMethod("escape_char", null);
-            // csv.registerMethod("binary", null);
-            // csv.registerMethod("eol", null);
-            // csv.registerMethod("always_quote", null);
-            csv.registerMethod("column_names", null);
             csv.registerMethod("getline_hr", null);
-            // csv.registerMethod("header", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Text::CSV method: " + e.getMessage());
         }
@@ -275,70 +267,6 @@ public class TextCsv extends PerlModuleBase {
         Operator.print(printArgs.getList(), fh);
 
         return scalarTrue.getList();
-    }
-
-    /**
-     * Get/set separator character.
-     */
-    public static RuntimeList sep_char(RuntimeArray args, int ctx) {
-        RuntimeHash self = args.get(0).hashDeref();
-
-        if (args.size() > 1) {
-            RuntimeScalar sep = args.get(1);
-            if (sep.type != RuntimeScalarType.UNDEF && sep.toString().length() == 1) {
-                self.put("sep_char", sep);
-                self.delete(cacheKey);
-            }
-        }
-
-        return self.get("sep_char").getList();
-    }
-
-    /**
-     * Get/set quote character.
-     */
-    public static RuntimeList quote_char(RuntimeArray args, int ctx) {
-        RuntimeHash self = args.get(0).hashDeref();
-
-        if (args.size() > 1) {
-            RuntimeScalar quote = args.get(1);
-            if (quote.type != RuntimeScalarType.UNDEF && quote.toString().length() == 1) {
-                self.put("quote_char", quote);
-                self.delete(cacheKey);
-            }
-        }
-
-        return self.get("quote_char").getList();
-    }
-
-    /**
-     * Get/set column names.
-     */
-    public static RuntimeList column_names(RuntimeArray args, int ctx) {
-        RuntimeHash self = args.get(0).hashDeref();
-
-        if (args.size() > 1) {
-            RuntimeArray names = new RuntimeArray();
-
-            // Handle array reference
-            if (args.get(1).type == RuntimeScalarType.ARRAYREFERENCE) {
-                names = args.get(1).arrayDeref();
-            } else {
-                // Handle list of names
-                for (int i = 1; i < args.size(); i++) {
-                    RuntimeArray.push(names, args.get(i));
-                }
-            }
-
-            self.put("column_names", names.createReference());
-        }
-
-        RuntimeScalar namesRef = self.get("column_names");
-        if (namesRef != null && namesRef.type == RuntimeScalarType.ARRAYREFERENCE) {
-            return namesRef.arrayDeref().getList();
-        }
-
-        return new RuntimeList();
     }
 
     /**

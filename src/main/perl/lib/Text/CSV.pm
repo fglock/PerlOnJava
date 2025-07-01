@@ -47,6 +47,42 @@ sub new {
     return bless $self, $class;
 }
 
+sub sep_char {
+    my ($self, $sep) = @_;
+
+    if (defined $sep) {
+        die "sep_char must be a single character" unless length($sep) == 1;
+        $self->{sep_char} = $sep;
+        delete $self->{cacheKey};  # Invalidate cache if needed
+    }
+
+    return $self->{sep_char};
+}
+
+sub quote_char {
+    my ($self, $quote) = @_;
+
+    if (defined $quote) {
+        die "quote_char must be a single character" unless length($quote) == 1;
+        $self->{quote_char} = $quote;
+        delete $self->{cacheKey};  # Invalidate cache if needed
+    }
+
+    return $self->{quote_char};
+}
+
+sub column_names {
+    my ($self, @names) = @_;
+
+    if (@names) {
+        # Flatten array ref if provided (e.g., $csv->column_names(\@headers))
+        @names = @{ $names[0] } if (scalar(@names) == 1 && ref($names[0]) eq 'ARRAY');
+        $self->{column_names} = \@names;
+    }
+
+    return @{ $self->{column_names} || [] };
+}
+
 sub say {
     my ($self, $fh, $fields) = @_;
 
