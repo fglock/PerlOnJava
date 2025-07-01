@@ -99,12 +99,7 @@ ok($csv_opts, 'Created Text::CSV object with options');
     my $line = 'foo,,baz';
     ok($csv->parse($line), 'Parse line with empty field');
     my @fields = $csv->fields();
-    # Adjust expectation based on actual behavior
-    SKIP: {
-        skip "Empty field parsing may not be implemented correctly", 1
-            if @fields == 1 && $fields[0] eq 'foo,,baz';
-        is_deeply(\@fields, ['foo', '', 'baz'], 'Empty fields preserved');
-    }
+    is_deeply(\@fields, ['foo', '', 'baz'], 'Empty fields preserved');
 }
 
 # Test undef handling
@@ -116,13 +111,9 @@ ok($csv_opts, 'Created Text::CSV object with options');
     
     ok($csv_undef->parse('foo,,baz'), 'Parse with undef options');
     my @fields = $csv_undef->fields();
-    SKIP: {
-        skip "Empty field parsing may not be implemented correctly", 3
-            if @fields == 1;
-        is($fields[0], 'foo', 'First field is string');
-        ok(!defined($fields[1]), 'Empty field is undef');
-        is($fields[2], 'baz', 'Third field is string');
-    }
+    is($fields[0], 'foo', 'First field is string');
+    ok(!defined($fields[1]), 'Empty field is undef');
+    is($fields[2], 'baz', 'Third field is string');
 }
 
 # Test combine with undef
@@ -161,20 +152,17 @@ ok($csv_opts, 'Created Text::CSV object with options');
     my $csv = Text::CSV->new();  # Fresh instance
     my $bad_line = '"unterminated';
     my $result = $csv->parse($bad_line);
-    SKIP: {
-        skip "Error handling may not detect unterminated quotes", 4
-            if $result;
-        ok(!$result, 'Parse fails on unterminated quote');
+  
+    ok(!$result, 'Parse fails on unterminated quote');
         
-        # In scalar context
-        my $error = $csv->error_diag();
-        ok($error, 'Error message in scalar context');
+    # In scalar context
+    my $error = $csv->error_diag();
+    ok($error, 'Error message in scalar context');
         
-        # In list context
-        my ($code, $str, $pos, $rec, $fld) = $csv->error_diag();
-        ok($code, 'Error code is set');
-        ok($str, 'Error string is set');
-    }
+    # In list context
+    my ($code, $str, $pos, $rec, $fld) = $csv->error_diag();
+    ok($code, 'Error code is set');
+    ok($str, 'Error string is set');
 }
 
 # Test print to string (using scalar ref as filehandle)
@@ -204,18 +192,13 @@ ok($csv_opts, 'Created Text::CSV object with options');
     # by manually creating the expected hash structure
     my @fields = $csv->fields();
     my @cols = $csv->column_names();
-    
-    SKIP: {
-        skip "Field parsing may not be working correctly", 3
-            if @fields == 1 && $fields[0] eq $test_line;
             
-        my %hash;
-        @hash{@cols} = @fields;
+    my %hash;
+    @hash{@cols} = @fields;
         
-        is($hash{name}, 'John', 'Hash field name correct');
-        is($hash{age}, '30', 'Hash field age correct');
-        is($hash{city}, 'NYC', 'Hash field city correct');
-    }
+    is($hash{name}, 'John', 'Hash field name correct');
+    is($hash{age}, '30', 'Hash field age correct');
+    is($hash{city}, 'NYC', 'Hash field city correct');
 }
 
 # Test EOL handling
@@ -249,25 +232,22 @@ ok($csv_opts, 'Created Text::CSV object with options');
     ok($csv->parse(''), 'Parse empty string');
     my @fields = $csv->fields();
     is_deeply(\@fields, [''], 'Empty string gives one empty field');
-    
+
+    # Just space
+    ok($csv->parse(' '), 'Parse space');
+    @fields = $csv->fields();
+    is_deeply(\@fields, [' '], 'Space gives one empty field');
+
     # Just separators
     ok($csv->parse(',,,'), 'Parse just separators');
     @fields = $csv->fields();
-    SKIP: {
-        skip "Empty field parsing may not be implemented correctly", 1
-            if @fields == 1 && $fields[0] eq ',,,';
-        is_deeply(\@fields, ['', '', '', ''], 'Just separators gives empty fields');
-    }
+    is_deeply(\@fields, ['', '', '', ''], 'Just separators gives empty fields');
     
     # Whitespace handling
     my $csv_ws = Text::CSV->new({ allow_whitespace => 1 });
     ok($csv_ws->parse(' foo , bar , baz '), 'Parse with whitespace');
     @fields = $csv_ws->fields();
-    SKIP: {
-        skip "Field parsing with whitespace may not be working", 1
-            if @fields == 1;
-        is_deeply(\@fields, ['foo', 'bar', 'baz'], 'Whitespace is trimmed');
-    }
+    is_deeply(\@fields, ['foo', 'bar', 'baz'], 'Whitespace is trimmed');
 }
 
 done_testing();
