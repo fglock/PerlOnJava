@@ -83,6 +83,26 @@ sub column_names {
     return @{ $self->{column_names} || [] };
 }
 
+sub print {
+    my ($self, $fh, $fields) = @_;
+
+    # Validate arguments
+    return 0 unless defined $fh && ref($fields) eq 'ARRAY';
+
+    # Combine fields into a CSV string
+    my $status = $self->combine(@$fields);
+    return 0 unless $status;
+
+    # Add EOL if configured
+    my $output = $self->{_string};
+    $output .= $self->{eol} if exists $self->{eol};
+
+    # Print to filehandle
+    print $fh $output;
+
+    return 1;
+}
+
 sub say {
     my ($self, $fh, $fields) = @_;
 
