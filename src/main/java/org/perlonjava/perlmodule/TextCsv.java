@@ -45,7 +45,6 @@ public class TextCsv extends PerlModuleBase {
             csv.registerMethod("fields", null);
             csv.registerMethod("combine", null);
             csv.registerMethod("string", null);
-            csv.registerMethod("print", null);
             csv.registerMethod("getline", null);
             csv.registerMethod("error_diag", null);
             csv.registerMethod("getline_hr", null);
@@ -225,48 +224,6 @@ public class TextCsv extends PerlModuleBase {
         }
 
         return scalarUndef.getList();
-    }
-
-    /**
-     * Print fields to a filehandle.
-     */
-    public static RuntimeList print(RuntimeArray args, int ctx) {
-        if (args.size() < 3) {
-            return scalarFalse.getList();
-        }
-
-        RuntimeHash self = args.get(0).hashDeref();
-        RuntimeScalar fh = args.get(1);
-        RuntimeScalar fieldsRef = args.get(2);
-
-        if (fieldsRef.type != RuntimeScalarType.ARRAYREFERENCE) {
-            return scalarFalse.getList();
-        }
-
-        // Combine the fields
-        RuntimeArray combineArgs = new RuntimeArray();
-        RuntimeArray.push(combineArgs, args.get(0));
-        for (RuntimeScalar field : fieldsRef.arrayDeref().elements) {
-            RuntimeArray.push(combineArgs, field);
-        }
-
-        RuntimeList combineResult = combine(combineArgs, ctx);
-        if (!combineResult.getFirst().getBoolean()) {
-            return scalarFalse.getList();
-        }
-
-        // Print to filehandle
-        String output = self.get("_string").toString();
-        RuntimeScalar eol = self.get("eol");
-        if (eol.type != RuntimeScalarType.UNDEF) {
-            output += eol.toString();
-        }
-
-        RuntimeArray printArgs = new RuntimeArray();
-        RuntimeArray.push(printArgs, new RuntimeScalar(output));
-        Operator.print(printArgs.getList(), fh);
-
-        return scalarTrue.getList();
     }
 
     /**
