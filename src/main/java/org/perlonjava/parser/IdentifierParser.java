@@ -76,7 +76,8 @@ public class IdentifierParser {
         LexerToken nextToken = parser.tokens.get(parser.tokenIndex + 1);
 
         // Special case for `$|`, because the tokenizer can generate $ |=
-        if (token.type == LexerTokenType.OPERATOR && token.text.startsWith("|")) {
+        char firstChar = token.text.charAt(0);
+        if (token.type == LexerTokenType.OPERATOR && "!|/*+-<>&~.=%".indexOf(firstChar) >= 0) {
             // Consume the '|' from the next token (which might be "|=" or just "|")
             variableName.append(TokenUtils.consumeChar(parser));
             return variableName.toString(); // Returns "|" for the special variable $|
