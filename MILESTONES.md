@@ -262,7 +262,7 @@ The following areas are currently under active development to enhance the functi
 - Work in Progress
   - Term::ReadLine
   - Term::ReadKey
-  - Dynaloader for JVM
+  - XSLoader or Dynaloader for JVM
 
 ### v4.0.0 Milestone (Planned Release Date: 2026-05-10)
 
