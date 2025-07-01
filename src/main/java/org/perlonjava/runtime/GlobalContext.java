@@ -134,6 +134,7 @@ public class GlobalContext {
         TimeHiRes.initialize();
         TermReadLine.initialize();
         TermReadKey.initialize();
+        TextCsv.initialize();
 
         // Reset method cache after initializing UNIVERSAL
         InheritanceResolver.invalidateCache();
