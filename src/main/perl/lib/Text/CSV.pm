@@ -4,6 +4,8 @@ use warnings;
 
 our $VERSION = '2.06';
 
+use constant cacheKey => "_CSVFormat";
+
 # NOTE: Core functionality is implemented in:
 #       src/main/java/org/perlonjava/perlmodule/TextCsv.java
 
@@ -53,7 +55,7 @@ sub sep_char {
     if (defined $sep) {
         die "sep_char must be a single character" unless length($sep) == 1;
         $self->{sep_char} = $sep;
-        delete $self->{cacheKey};  # Invalidate cache if needed
+        delete $self->{+cacheKey};  # Invalidate cache if needed
     }
 
     return $self->{sep_char};
@@ -65,7 +67,7 @@ sub quote_char {
     if (defined $quote) {
         die "quote_char must be a single character" unless length($quote) == 1;
         $self->{quote_char} = $quote;
-        delete $self->{cacheKey};  # Invalidate cache if needed
+        delete $self->{+cacheKey};  # Invalidate cache if needed
     }
 
     return $self->{quote_char};
