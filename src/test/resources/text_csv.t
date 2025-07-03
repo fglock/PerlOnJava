@@ -85,10 +85,10 @@ ok($csv_opts, 'Created Text::CSV object with options');
     my $csv = Text::CSV->new();  # Fresh instance
     is($csv->sep_char(), ',', 'Default separator is comma');
     is($csv->quote_char(), '"', 'Default quote char is double quote');
-    
+
     $csv->sep_char('|');
     is($csv->sep_char(), '|', 'Set separator works');
-    
+
     $csv->quote_char("'");
     is($csv->quote_char(), "'", 'Set quote char works');
 }
@@ -108,7 +108,7 @@ ok($csv_opts, 'Created Text::CSV object with options');
         blank_is_undef => 1,
         empty_is_undef => 1
     });
-    
+
     ok($csv_undef->parse('foo,,baz'), 'Parse with undef options');
     my @fields = $csv_undef->fields();
     is($fields[0], 'foo', 'First field is string');
@@ -140,7 +140,7 @@ ok($csv_opts, 'Created Text::CSV object with options');
     $csv->column_names(@names);
     my @got_names = $csv->column_names();
     is_deeply(\@got_names, \@names, 'Column names set and retrieved');
-    
+
     # Test with arrayref
     $csv->column_names(['id', 'value', 'description']);
     @got_names = $csv->column_names();
@@ -152,13 +152,13 @@ ok($csv_opts, 'Created Text::CSV object with options');
     my $csv = Text::CSV->new();  # Fresh instance
     my $bad_line = '"unterminated';
     my $result = $csv->parse($bad_line);
-  
+
     ok(!$result, 'Parse fails on unterminated quote');
-        
+
     # In scalar context
     my $error = $csv->error_diag();
     ok($error, 'Error message in scalar context');
-        
+
     # In list context
     my ($code, $str, $pos, $rec, $fld) = $csv->error_diag();
     ok($code, 'Error code is set');
@@ -167,58 +167,43 @@ ok($csv_opts, 'Created Text::CSV object with options');
 
 # Test print to string (using scalar ref as filehandle)
 {
-    my $csv = Text::CSV->new();  # Fresh instance
+    my $csv = Text::CSV->new({ eol => "\n" }); # Set EOL to make test predictable
     my $output = '';
     open my $fh, '>', \$output or die "Cannot open string filehandle: $!";
-    
+
     ok($csv->print($fh, ['foo', 'bar', 'baz']), 'Print to filehandle');
     close $fh;
 
-    # Note: print adds EOL if set
-    chomp $output if $output =~ /\n$/;
-    is($output, 'foo,bar,baz', 'Print output is correct');
+    is($output, "foo,bar,baz\n", 'Print output is correct with EOL');
 }
 
 # Test getline_hr with column names
 {
     my $csv = Text::CSV->new();  # Fresh instance
     $csv->column_names(['name', 'age', 'city']);
-    
+
     # Simulate reading a line
     my $test_line = 'John,30,NYC';
     ok($csv->parse($test_line), 'Parse line for getline_hr test');
-    
+
     # Since getline_hr needs actual file reading, we test the concept
     # by manually creating the expected hash structure
     my @fields = $csv->fields();
     my @cols = $csv->column_names();
-            
+
     my %hash;
     @hash{@cols} = @fields;
-        
+
     is($hash{name}, 'John', 'Hash field name correct');
     is($hash{age}, '30', 'Hash field age correct');
     is($hash{city}, 'NYC', 'Hash field city correct');
-}
-
-# Test EOL handling
-{
-    my $csv_eol = Text::CSV->new({ eol => "\r\n" });
-    ok($csv_eol->combine('foo', 'bar'), 'Combine with EOL set');
-    
-    my $output = '';
-    open my $fh, '>', \$output or die "Cannot open string filehandle: $!";
-    ok($csv_eol->print($fh, ['test', 'line']), 'Print with custom EOL');
-    close $fh;
-    
-    like($output, qr/\r\n$/, 'Custom EOL is used');
 }
 
 # Test binary mode
 {
     my $csv_binary = Text::CSV->new({ binary => 1 });
     my $binary_data = "foo\x00bar";
-    
+
     ok($csv_binary->combine($binary_data, 'baz'), 'Combine with binary data');
     my $string = $csv_binary->string();
     ok($string, 'Binary data handled');
@@ -227,7 +212,7 @@ ok($csv_opts, 'Created Text::CSV object with options');
 # Test edge cases
 {
     my $csv = Text::CSV->new();  # Fresh instance
-    
+
     # Empty string
     ok($csv->parse(''), 'Parse empty string');
     my @fields = $csv->fields();
@@ -242,7 +227,7 @@ ok($csv_opts, 'Created Text::CSV object with options');
     ok($csv->parse(',,,'), 'Parse just separators');
     @fields = $csv->fields();
     is_deeply(\@fields, ['', '', '', ''], 'Just separators gives empty fields');
-    
+
     # Whitespace handling
     my $csv_ws = Text::CSV->new({ allow_whitespace => 1 });
     ok($csv_ws->parse(' foo , bar , baz '), 'Parse with whitespace');
@@ -250,5 +235,42 @@ ok($csv_opts, 'Created Text::CSV object with options');
     is_deeply(\@fields, ['foo', 'bar', 'baz'], 'Whitespace is trimmed');
 }
 
-done_testing();
+# Test EOL and Print/Say Interaction
+{
+    my $output;
+    my $fh;
 
+    # 1. print() with default eol (undef) should not add a newline
+    my $csv_no_eol = Text::CSV->new();
+    $output = '';
+    open $fh, '>', \$output;
+    $csv_no_eol->print($fh, ['a', 'b']);
+    close $fh;
+    is($output, 'a,b', 'print() with eol=>undef adds no newline');
+
+    # 2. print() with a defined eol should add exactly one EOL
+    my $csv_eol = Text::CSV->new({ eol => "\r\n" });
+    $output = '';
+    open $fh, '>', \$output;
+    $csv_eol->print($fh, ['a', 'b']);
+    close $fh;
+    is($output, "a,b\r\n", 'print() with eol=>crlf adds exactly one crlf');
+
+    # 3. say() with default eol (undef) should add $/
+    my $csv_say = Text::CSV->new();
+    $output = '';
+    open $fh, '>', \$output;
+    $csv_say->say($fh, ['a', 'b']);
+    close $fh;
+    is($output, 'a,b' . $/, 'say() with eol=>undef adds $/');
+
+    # 4. say() with a defined eol should use that eol and not add another
+    my $csv_say_eol = Text::CSV->new({ eol => "!\n" });
+    $output = '';
+    open $fh, '>', \$output;
+    $csv_say_eol->say($fh, ['a', 'b']);
+    close $fh;
+    is($output, "a,b!\n", 'say() with a defined eol uses that eol');
+}
+
+done_testing();
