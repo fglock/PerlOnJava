@@ -132,6 +132,11 @@ sub string {
     return $self->{_string};
 }
 
+sub fields {
+    my $self = shift;
+    return @{ $self->{_fields} || [] };
+}
+
 sub column_names {
     my ($self, @names) = @_;
 
