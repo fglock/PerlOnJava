@@ -17,6 +17,12 @@ use warnings;
 #     { RaiseError => 1 }
 # );
 
+# Cache variables for prepare_cached and connect_cached
+our %CACHED_STATEMENTS;
+our $MAX_CACHED_STATEMENTS = 100;
+our %CACHED_CONNECTIONS;
+our $MAX_CACHED_CONNECTIONS = 10;
+
 sub do {
     my ($dbh, $statement, $attr, @params) = @_;
     my $sth = $dbh->prepare($statement, $attr) or return undef;
@@ -34,6 +40,23 @@ sub clone {
     my ($dbh) = @_;
     my %new_dbh = %{$dbh};  # Shallow copy
     return bless \%new_dbh, ref($dbh);
+}
+
+sub err {
+    my ($handle) = @_;
+    return $handle->{err};
+}
+
+sub errstr {
+    my ($handle) = @_;
+    return $handle->{errstr} || '';
+}
+
+sub state {
+    my ($handle) = @_;
+    my $state = $handle->{state};
+    # Return empty string for success code 00000
+    return ($state && $state eq '00000') ? '' : ($state || 'S1000');
 }
 
 sub selectrow_arrayref {
@@ -115,13 +138,13 @@ sub fetchall_arrayref {
             $row_count++;
         }
     }
-    elsif (ref($slice) eq 'REF' && ref($$slice) eq 'HASH') {
+    elsif (ref($slice) eq 'REF' && ref($slice) eq 'HASH') {
         # Column index to name mapping
         while (!defined($max_rows) || $row_count < $max_rows) {
             my $row = $sth->fetchrow_arrayref();
             last unless $row;
             my %new_row;
-            while (my ($idx, $key) = each %{$$slice}) {
+            while (my ($idx, $key) = each %{$slice}) {
                 $new_row{$key} = $row->[$idx];
             }
             push @rows, \%new_row;
@@ -241,6 +264,94 @@ sub selectall_hashref {
 
     # Reuse fetchall_hashref to do the heavy lifting
     return $sth->fetchall_hashref($key_field);
+}
+
+sub bind_columns {
+    my ($sth, @refs) = @_;
+    return 1 unless @refs;
+
+    # Clear existing bound columns
+    $sth->{bound_columns} = {};
+
+    # Bind each column reference
+    for (my $i = 0; $i < @refs; $i++) {
+        $sth->bind_col($i + 1, $refs[$i]) or return undef;
+    }
+    return 1;
+}
+
+sub trace {
+    my ($dbh, $level, $output) = @_;
+    $level ||= 0;
+
+    $dbh->{TraceLevel} = $level;
+    $dbh->{TraceOutput} = $output if defined $output;
+
+    return $level;
+}
+
+sub trace_msg {
+    my ($dbh, $msg, $level) = @_;
+    $level ||= 0;
+
+    my $current_level = $dbh->{TraceLevel} || 0;
+    if ($level <= $current_level) {
+        if ($dbh->{TraceOutput}) {
+            # TODO: Write to custom output
+            print STDERR $msg;
+        } else {
+            print STDERR $msg;
+        }
+    }
+    return 1;
+}
+
+sub prepare_cached {
+    my ($dbh, $sql, $attr, $if_active) = @_;
+
+    my $cache_key = $dbh->{Name} . ':' . $sql;
+
+    if (exists $CACHED_STATEMENTS{$cache_key}) {
+        my $sth = $CACHED_STATEMENTS{$cache_key};
+        if ($sth->{Database}{Active}) {
+            return $sth;
+        }
+    }
+
+    my $sth = $dbh->prepare($sql, $attr) or return undef;
+
+    # Implement simple LRU by removing oldest if cache is full
+    if (keys %CACHED_STATEMENTS >= $MAX_CACHED_STATEMENTS) {
+        my @keys = keys %CACHED_STATEMENTS;
+        delete $CACHED_STATEMENTS{$keys[0]};
+    }
+
+    $CACHED_STATEMENTS{$cache_key} = $sth;
+    return $sth;
+}
+
+sub connect_cached {
+    my ($class, $dsn, $user, $pass, $attr) = @_;
+
+    my $cache_key = "$dsn:$user";
+
+    if (exists $CACHED_CONNECTIONS{$cache_key}) {
+        my $dbh = $CACHED_CONNECTIONS{$cache_key};
+        if ($dbh->{Active} && $dbh->ping) {
+            return $dbh;
+        }
+    }
+
+    my $dbh = $class->connect($dsn, $user, $pass, $attr) or return undef;
+
+    # Implement simple LRU
+    if (keys %CACHED_CONNECTIONS >= $MAX_CACHED_CONNECTIONS) {
+        my @keys = keys %CACHED_CONNECTIONS;
+        delete $CACHED_CONNECTIONS{$keys[0]};
+    }
+
+    $CACHED_CONNECTIONS{$cache_key} = $dbh;
+    return $dbh;
 }
 
 1;
