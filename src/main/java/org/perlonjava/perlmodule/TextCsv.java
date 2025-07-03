@@ -1,14 +1,12 @@
 package org.perlonjava.perlmodule;
 
 import org.apache.commons.csv.*;
-import org.perlonjava.operators.Operator;
 import org.perlonjava.operators.Readline;
 import org.perlonjava.runtime.*;
 
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.RuntimeScalarType.JAVAOBJECT;
@@ -25,7 +23,7 @@ public class TextCsv extends PerlModuleBase {
     private static final int EIQ_QUOTED_FIELD_NOT_TERMINATED = 2027;
     private static final int ECB_BINARY_CHARACTER = 2110;
 
-    private static String cacheKey = "_CSVFormat";
+    private static final String cacheKey = "_CSVFormat";
 
     /**
      * Constructor initializes the Text::CSV module.
@@ -48,6 +46,7 @@ public class TextCsv extends PerlModuleBase {
             csv.registerMethod("getline", null);
             csv.registerMethod("error_diag", null);
             csv.registerMethod("getline_hr", null);
+            csv.registerMethod("eol", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Text::CSV method: " + e.getMessage());
         }
@@ -85,6 +84,7 @@ public class TextCsv extends PerlModuleBase {
             if (!records.isEmpty()) {
                 CSVRecord record = records.get(0);
 
+                int fieldIndex = 0;
                 for (String field : record) {
                     RuntimeScalar value = new RuntimeScalar(field);
 
@@ -100,6 +100,7 @@ public class TextCsv extends PerlModuleBase {
 
                     // Fixed to use static push method
                     RuntimeArray.push(fields, value);
+                    fieldIndex++;
                 }
 
                 self.put("_fields", fields.createReference());
@@ -162,7 +163,7 @@ public class TextCsv extends PerlModuleBase {
             printer.printRecord(values);
             printer.flush();
 
-            String csvString = sw.toString();
+            String csvString = sw.toString().trim(); // Remove trailing newline
 
             self.put("_string", new RuntimeScalar(csvString));
             clearError(self);
@@ -186,6 +187,25 @@ public class TextCsv extends PerlModuleBase {
         }
 
         return scalarUndef.getList();
+    }
+
+    /**
+     * Get/set eol attribute.
+     */
+    public static RuntimeList eol(RuntimeArray args, int ctx) {
+        RuntimeHash self = args.get(0).hashDeref();
+
+        if (args.size() > 1) {
+            // Setter
+            RuntimeScalar eol = args.get(1);
+            self.put("eol", eol);
+            // Invalidate cache
+            self.delete(cacheKey);
+        }
+
+        // Getter
+        RuntimeScalar eol = self.get("eol");
+        return eol != null ? eol.getList() : scalarUndef.getList();
     }
 
     /**
@@ -291,15 +311,13 @@ public class TextCsv extends PerlModuleBase {
      * Build CSVFormat from attributes.
      */
     private static CSVFormat buildCSVFormat(RuntimeHash self) {
-        CSVFormat.Builder builder = CSVFormat.DEFAULT.builder();
-
         RuntimeScalar cached = self.get(cacheKey);
-        if (cached.type == JAVAOBJECT) {
+        if (cached != null && cached.type == JAVAOBJECT) {
             return (CSVFormat) cached.value;
         }
 
-        // builder.setSkipHeaderRecord(false);
-        // builder.setAllowMissingColumnNames(true);
+        // Start with RFC4180 format which handles quote doubling correctly
+        CSVFormat.Builder builder = CSVFormat.RFC4180.builder();
 
         // Set delimiter
         String sepChar = self.get("sep_char").toString();
@@ -315,12 +333,24 @@ public class TextCsv extends PerlModuleBase {
             builder.setQuote(null);
         }
 
-        // Set escape character
-        String escapeChar = self.get("escape_char").toString();
-        if (escapeChar.length() == 1) {
-            builder.setEscape(escapeChar.charAt(0));
-        } else {
+        // Handle escape character properly
+        RuntimeScalar escapeChar = self.get("escape_char");
+
+        // In standard CSV, when escape_char is undef, we should NOT set an escape character
+        // This allows quote doubling to work properly
+        if (escapeChar.type == RuntimeScalarType.UNDEF) {
             builder.setEscape(null);
+        } else {
+            // Check if escape_char was explicitly set to something different from quote_char
+            String escapeStr = escapeChar.toString();
+            String quoteStr = quoteChar.toString();
+
+            if (!escapeStr.equals(quoteStr) && escapeStr.length() == 1) {
+                builder.setEscape(escapeStr.charAt(0));
+            } else {
+                // If escape_char equals quote_char or is empty, use quote doubling
+                builder.setEscape(null);
+            }
         }
 
         // Handle other options
@@ -332,18 +362,21 @@ public class TextCsv extends PerlModuleBase {
             builder.setQuoteMode(QuoteMode.ALL);
         }
 
-        // Set record separator if specified
-        RuntimeScalar eol = self.get("eol");
-        if (eol.type != RuntimeScalarType.UNDEF) {
-            builder.setRecordSeparator(eol.toString());
-        } else {
-            builder.setRecordSeparator("");
-        }
+        // Don't set record separator for parsing single lines
+        builder.setRecordSeparator(null);
 
         CSVFormat csvFormat = builder.build();
-        cached.set(csvFormat);  // Save in cache
+
+        // Cache the format
+        if (cached == null) {
+            cached = new RuntimeScalar();
+            self.put(cacheKey, cached);
+        }
+        cached.set(csvFormat);
+
         return csvFormat;
     }
+
 
     /**
      * Set error information.
