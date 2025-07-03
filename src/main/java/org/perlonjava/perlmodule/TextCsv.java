@@ -38,15 +38,12 @@ public class TextCsv extends PerlModuleBase {
     public static void initialize() {
         TextCsv csv = new TextCsv();
         try {
-            // Register all supported Text::CSV methods
+            // Register core CSV methods (high-level methods now in Perl)
             csv.registerMethod("parse", null);
             csv.registerMethod("fields", null);
             csv.registerMethod("combine", null);
             csv.registerMethod("string", null);
             csv.registerMethod("getline", null);
-            csv.registerMethod("error_diag", null);
-            csv.registerMethod("getline_hr", null);
-            csv.registerMethod("eol", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Text::CSV method: " + e.getMessage());
         }
@@ -98,7 +95,6 @@ public class TextCsv extends PerlModuleBase {
                         value = scalarUndef;
                     }
 
-                    // Fixed to use static push method
                     RuntimeArray.push(fields, value);
                     fieldIndex++;
                 }
@@ -149,7 +145,6 @@ public class TextCsv extends PerlModuleBase {
             List<String> values = new ArrayList<>();
             for (int i = 1; i < args.size(); i++) {
                 RuntimeScalar field = args.get(i);
-                // Fixed to check type instead of isUndef()
                 if (field.type == RuntimeScalarType.UNDEF) {
                     values.add("");
                 } else {
@@ -190,25 +185,6 @@ public class TextCsv extends PerlModuleBase {
     }
 
     /**
-     * Get/set eol attribute.
-     */
-    public static RuntimeList eol(RuntimeArray args, int ctx) {
-        RuntimeHash self = args.get(0).hashDeref();
-
-        if (args.size() > 1) {
-            // Setter
-            RuntimeScalar eol = args.get(1);
-            self.put("eol", eol);
-            // Invalidate cache
-            self.delete(cacheKey);
-        }
-
-        // Getter
-        RuntimeScalar eol = self.get("eol");
-        return eol != null ? eol.getList() : scalarUndef.getList();
-    }
-
-    /**
      * Parse a line from a filehandle.
      */
     public static RuntimeList getline(RuntimeArray args, int ctx) {
@@ -220,11 +196,8 @@ public class TextCsv extends PerlModuleBase {
         RuntimeScalar fh = args.get(1);
 
         // Read a line from the filehandle
-        RuntimeArray readArgs = new RuntimeArray();
-        RuntimeArray.push(readArgs, fh);
         RuntimeScalar line = Readline.readline(fh.getRuntimeIO());
 
-        // Fixed to check type instead of isUndef()
         if (line.type == RuntimeScalarType.UNDEF) {
             return scalarUndef.getList();
         }
@@ -232,7 +205,7 @@ public class TextCsv extends PerlModuleBase {
         // Parse the line
         RuntimeArray parseArgs = new RuntimeArray();
         RuntimeArray.push(parseArgs, args.get(0));
-        RuntimeArray.push(parseArgs, line.getFirst());
+        RuntimeArray.push(parseArgs, line);
 
         RuntimeList result = parse(parseArgs, ctx);
         if (result.getFirst().getBoolean()) {
@@ -240,71 +213,6 @@ public class TextCsv extends PerlModuleBase {
         }
 
         return scalarUndef.getList();
-    }
-
-    /**
-     * Parse a line and return as hashref using column names.
-     */
-    public static RuntimeList getline_hr(RuntimeArray args, int ctx) {
-        if (args.size() < 2) {
-            return scalarUndef.getList();
-        }
-
-        RuntimeHash self = args.get(0).hashDeref();
-
-        // Check if column names are set
-        RuntimeScalar colNamesRef = self.get("column_names");
-        if (colNamesRef.type == RuntimeScalarType.UNDEF || colNamesRef.arrayDeref().size() == 0) {
-            setError(self, 3002, "getline_hr() called before column_names()", 0, 0);
-            return scalarUndef.getList();
-        }
-
-        // Get a line
-        RuntimeList lineResult = getline(args, ctx);
-        if (lineResult.isEmpty() || lineResult.getFirst().type == RuntimeScalarType.UNDEF) {
-            return scalarUndef.getList();
-        }
-
-        // Convert to hash
-        RuntimeArray fields = lineResult.getFirst().arrayDeref();
-        RuntimeArray colNames = colNamesRef.arrayDeref();
-        RuntimeHash hash = new RuntimeHash();
-
-        for (int i = 0; i < colNames.size() && i < fields.size(); i++) {
-            hash.put(colNames.get(i).toString(), fields.get(i));
-        }
-
-        return hash.createReference().getList();
-    }
-
-    /**
-     * Get error diagnostics.
-     */
-    public static RuntimeList error_diag(RuntimeArray args, int ctx) {
-        RuntimeHash self = null;
-
-        if (args.size() > 0 && args.get(0).type == RuntimeScalarType.HASHREFERENCE) {
-            self = args.get(0).hashDeref();
-        }
-
-        if (self == null) {
-            // Class method call - return last global error
-            return new RuntimeScalar("").getList();
-        }
-
-        // Instance method call
-        if (ctx == RuntimeContextType.LIST) {
-            RuntimeList result = new RuntimeList();
-            result.add(self.get("_ERROR_CODE"));
-            result.add(self.get("_ERROR_STR"));
-            result.add(self.get("_ERROR_POS"));
-            result.add(scalarZero); // record number
-            result.add(self.get("_ERROR_FIELD"));
-            return result;
-        } else {
-            // Scalar context - return error string
-            return self.get("_ERROR_STR").getList();
-        }
     }
 
     /**
@@ -377,29 +285,60 @@ public class TextCsv extends PerlModuleBase {
         return csvFormat;
     }
 
-
     /**
-     * Set error information.
+     * Set error information using Perl calling convention.
      */
     private static void setError(RuntimeHash self, int code, String message, int pos, int field) {
-        self.put("_ERROR_CODE", new RuntimeScalar(code));
-        self.put("_ERROR_STR", new RuntimeScalar(message));
-        self.put("_ERROR_POS", new RuntimeScalar(pos));
-        self.put("_ERROR_FIELD", new RuntimeScalar(field));
+        try {
+            // Call Perl _set_error method
+            RuntimeArray args = new RuntimeArray();
+            RuntimeArray.push(args, self.createReference());
+            RuntimeArray.push(args, new RuntimeScalar(code));
+            RuntimeArray.push(args, new RuntimeScalar(message));
+            RuntimeArray.push(args, new RuntimeScalar(pos));
+            RuntimeArray.push(args, new RuntimeScalar(field));
 
-        // Handle auto_diag
-        if (self.get("auto_diag").getBoolean()) {
-            System.err.println("# CSV ERROR: " + code + " - " + message);
+            // Call the Perl method
+            RuntimeCode.apply(
+                    GlobalVariable.getGlobalCodeRef("Text::CSV::_set_error"),
+                    args,
+                    RuntimeContextType.SCALAR
+            );
+        } catch (Exception e) {
+            // Fallback to direct hash manipulation if Perl method fails
+            self.put("_ERROR_CODE", new RuntimeScalar(code));
+            self.put("_ERROR_STR", new RuntimeScalar(message));
+            self.put("_ERROR_POS", new RuntimeScalar(pos));
+            self.put("_ERROR_FIELD", new RuntimeScalar(field));
+
+            // Handle auto_diag
+            if (self.get("auto_diag").getBoolean()) {
+                System.err.println("# CSV ERROR: " + code + " - " + message);
+            }
         }
     }
 
     /**
-     * Clear error state.
+     * Clear error state using Perl calling convention.
      */
     private static void clearError(RuntimeHash self) {
-        self.put("_ERROR_CODE", scalarZero);
-        self.put("_ERROR_STR", new RuntimeScalar(""));
-        self.put("_ERROR_POS", scalarZero);
-        self.put("_ERROR_FIELD", scalarZero);
+        try {
+            // Call Perl _clear_error method
+            RuntimeArray args = new RuntimeArray();
+            RuntimeArray.push(args, self.createReference());
+
+            // Call the Perl method
+            RuntimeCode.apply(
+                    GlobalVariable.getGlobalCodeRef("Text::CSV::_clear_error"),
+                    args,
+                    RuntimeContextType.SCALAR
+            );
+        } catch (Exception e) {
+            // Fallback to direct hash manipulation if Perl method fails
+            self.put("_ERROR_CODE", scalarZero);
+            self.put("_ERROR_STR", new RuntimeScalar(""));
+            self.put("_ERROR_POS", scalarZero);
+            self.put("_ERROR_FIELD", scalarZero);
+        }
     }
 }
