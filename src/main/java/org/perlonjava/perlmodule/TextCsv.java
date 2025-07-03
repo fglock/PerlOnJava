@@ -41,7 +41,6 @@ public class TextCsv extends PerlModuleBase {
             // Register core CSV methods (high-level methods now in Perl)
             csv.registerMethod("parse", null);
             csv.registerMethod("combine", null);
-            csv.registerMethod("getline", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Text::CSV method: " + e.getMessage());
         }
@@ -152,37 +151,6 @@ public class TextCsv extends PerlModuleBase {
             setError(self, ECB_BINARY_CHARACTER, e.getMessage(), 0, 0);
             return scalarFalse.getList();
         }
-    }
-
-    /**
-     * Parse a line from a filehandle.
-     */
-    public static RuntimeList getline(RuntimeArray args, int ctx) {
-        if (args.size() < 2) {
-            return scalarUndef.getList();
-        }
-
-        RuntimeHash self = args.get(0).hashDeref();
-        RuntimeScalar fh = args.get(1);
-
-        // Read a line from the filehandle
-        RuntimeScalar line = Readline.readline(fh.getRuntimeIO());
-
-        if (line.type == RuntimeScalarType.UNDEF) {
-            return scalarUndef.getList();
-        }
-
-        // Parse the line
-        RuntimeArray parseArgs = new RuntimeArray();
-        RuntimeArray.push(parseArgs, args.get(0));
-        RuntimeArray.push(parseArgs, line);
-
-        RuntimeList result = parse(parseArgs, ctx);
-        if (result.getFirst().getBoolean()) {
-            return self.get("_fields").getList();
-        }
-
-        return scalarUndef.getList();
     }
 
     /**

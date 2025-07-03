@@ -17,31 +17,31 @@ sub new {
 
     # Set default attributes
     my $self = {
-        sep_char            => ',',
-        quote_char          => '"',
-        escape_char         => undef,
-        binary              => 0,
-        auto_diag           => 0,
-        always_quote        => 0,
-        eol                 => undef,
-        allow_loose_quotes  => 0,
-        allow_whitespace    => 0,
-        blank_is_undef      => 0,
-        empty_is_undef       => 0,
-        quote_empty         => 0,
-        quote_space         => 1,
-        quote_binary        => 1,
+        sep_char           => ',',
+        quote_char         => '"',
+        escape_char        => undef,
+        binary             => 0,
+        auto_diag          => 0,
+        always_quote       => 0,
+        eol                => undef,
+        allow_loose_quotes => 0,
+        allow_whitespace   => 0,
+        blank_is_undef     => 0,
+        empty_is_undef     => 0,
+        quote_empty        => 0,
+        quote_space        => 1,
+        quote_binary       => 1,
         decode_utf8        => 1,
-        keep_meta_info      => 0,
-        strict              => 0,
-        formula             => 'none',
-        column_names        => [],
+        keep_meta_info     => 0,
+        strict             => 0,
+        formula            => 'none',
+        column_names       => [],
 
         # Clear error state
-        _ERROR_CODE         => 0,
-        _ERROR_STR          => '',
-        _ERROR_POS          => 0,
-        _ERROR_FIELD        => 0,
+        _ERROR_CODE        => 0,
+        _ERROR_STR         => '',
+        _ERROR_POS         => 0,
+        _ERROR_FIELD       => 0,
 
         %args
     };
@@ -55,7 +55,7 @@ sub sep_char {
     if (defined $sep) {
         die "sep_char must be a single character" unless length($sep) == 1;
         $self->{sep_char} = $sep;
-        delete $self->{+cacheKey};  # Invalidate cache if needed
+        delete $self->{+cacheKey}; # Invalidate cache if needed
     }
 
     return $self->{sep_char};
@@ -67,7 +67,7 @@ sub quote_char {
     if (defined $quote) {
         die "quote_char must be a single character" unless length($quote) == 1;
         $self->{quote_char} = $quote;
-        delete $self->{+cacheKey};  # Invalidate cache if needed
+        delete $self->{+cacheKey}; # Invalidate cache if needed
     }
 
     return $self->{quote_char};
@@ -78,7 +78,7 @@ sub escape_char {
 
     if (@_ > 1) {
         $self->{escape_char} = $escape;
-        delete $self->{+cacheKey};  # Invalidate cache if needed
+        delete $self->{+cacheKey}; # Invalidate cache if needed
     }
 
     return $self->{escape_char};
@@ -89,7 +89,7 @@ sub binary {
 
     if (defined $binary) {
         $self->{binary} = $binary ? 1 : 0;
-        delete $self->{+cacheKey};  # Invalidate cache if needed
+        delete $self->{+cacheKey}; # Invalidate cache if needed
     }
 
     return $self->{binary};
@@ -110,7 +110,7 @@ sub always_quote {
 
     if (defined $always_quote) {
         $self->{always_quote} = $always_quote ? 1 : 0;
-        delete $self->{+cacheKey};  # Invalidate cache if needed
+        delete $self->{+cacheKey}; # Invalidate cache if needed
     }
 
     return $self->{always_quote};
@@ -121,7 +121,7 @@ sub eol {
 
     if (@_ > 1) {
         $self->{eol} = $eol;
-        delete $self->{+cacheKey};  # Invalidate cache if needed
+        delete $self->{+cacheKey}; # Invalidate cache if needed
     }
 
     return $self->{eol};
@@ -134,7 +134,24 @@ sub string {
 
 sub fields {
     my $self = shift;
-    return @{ $self->{_fields} || [] };
+    return @{$self->{_fields} || []};
+}
+
+# Add this method after the fields() method:
+sub getline {
+    my ($self, $fh) = @_;
+
+    # Read a line from the filehandle
+    my $line = <$fh>;
+
+    return undef unless defined $line;
+
+    # Parse the line
+    if ($self->parse($line)) {
+        return $self->fields;
+    }
+
+    return undef;
 }
 
 sub column_names {
@@ -142,11 +159,11 @@ sub column_names {
 
     if (@names) {
         # Flatten array ref if provided (e.g., $csv->column_names(\@headers))
-        @names = @{ $names[0] } if (scalar(@names) == 1 && ref($names[0]) eq 'ARRAY');
+        @names = @{$names[0]} if (scalar(@names) == 1 && ref($names[0]) eq 'ARRAY');
         $self->{column_names} = \@names;
     }
 
-    return @{ $self->{column_names} || [] };
+    return @{$self->{column_names} || []};
 }
 
 sub getline_hr {
@@ -189,7 +206,8 @@ sub error_diag {
             0, # record number
             $self->{_ERROR_FIELD} // 0
         );
-    } else {
+    }
+    else {
         # Scalar context - return error string
         return $self->{_ERROR_STR} // "";
     }
@@ -261,7 +279,7 @@ sub getline_all {
 
     # Handle offset
     if (defined $offset && $offset > 0) {
-        for (1..$offset) {
+        for (1 .. $offset) {
             last unless $self->getline($fh);
         }
     }
@@ -313,12 +331,14 @@ sub csv {
         open my $fh, '<', $in or die $!;
         $data = _read_csv($csv, $fh, $headers);
         close $fh;
-    } elsif (ref $in || -f $in) {
+    }
+    elsif (ref $in || -f $in) {
         # File or filehandle
         my $fh;
         if (ref $in) {
             $fh = $in;
-        } else {
+        }
+        else {
             open $fh, '<', $in or die "$in: $!";
         }
         $data = _read_csv($csv, $fh, $headers);
@@ -343,7 +363,8 @@ sub _read_csv {
             push @rows, $row;
         }
         return \@rows;
-    } else {
+    }
+    else {
         return $csv->getline_all($fh);
     }
 }
@@ -354,7 +375,8 @@ sub _write_csv {
     my $fh;
     if (ref $out eq 'SCALAR') {
         open $fh, '>', $out or die $!;
-    } elsif (ref $out || $out) {
+    }
+    elsif (ref $out || $out) {
         $fh = ref $out ? $out : do {
             open my $fh, '>', $out or die "$out: $!";
             $fh;
@@ -372,8 +394,9 @@ sub _write_csv {
     for my $row (@$data) {
         if (ref $row eq 'HASH') {
             my @cols = $csv->column_names;
-            $csv->print($fh, [@{$row}{@cols}]);
-        } else {
+            $csv->print($fh, [ @{$row}{@cols} ]);
+        }
+        else {
             $csv->print($fh, $row);
         }
     }
@@ -383,10 +406,10 @@ sub _write_csv {
 
 # Re-export constants
 use constant {
-    CSV_FLAGS_IS_QUOTED => 0x0001,
-    CSV_FLAGS_IS_BINARY => 0x0002,
+    CSV_FLAGS_IS_QUOTED      => 0x0001,
+    CSV_FLAGS_IS_BINARY      => 0x0002,
     CSV_FLAGS_ERROR_IN_FIELD => 0x0004,
-    CSV_FLAGS_IS_MISSING => 0x0010,
+    CSV_FLAGS_IS_MISSING     => 0x0010,
 };
 
 1;
