@@ -275,11 +275,6 @@ public class TextCsv extends PerlModuleBase {
 
         CSVFormat csvFormat = builder.build();
 
-        // Cache the format
-        if (cached == null) {
-            cached = new RuntimeScalar();
-            self.put(cacheKey, cached);
-        }
         cached.set(csvFormat);
 
         return csvFormat;
