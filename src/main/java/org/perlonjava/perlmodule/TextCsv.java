@@ -289,56 +289,35 @@ public class TextCsv extends PerlModuleBase {
      * Set error information using Perl calling convention.
      */
     private static void setError(RuntimeHash self, int code, String message, int pos, int field) {
-        try {
-            // Call Perl _set_error method
-            RuntimeArray args = new RuntimeArray();
-            RuntimeArray.push(args, self.createReference());
-            RuntimeArray.push(args, new RuntimeScalar(code));
-            RuntimeArray.push(args, new RuntimeScalar(message));
-            RuntimeArray.push(args, new RuntimeScalar(pos));
-            RuntimeArray.push(args, new RuntimeScalar(field));
+        // Call Perl _set_error method
+        RuntimeArray args = new RuntimeArray();
+        RuntimeArray.push(args, self.createReference());
+        RuntimeArray.push(args, new RuntimeScalar(code));
+        RuntimeArray.push(args, new RuntimeScalar(message));
+        RuntimeArray.push(args, new RuntimeScalar(pos));
+        RuntimeArray.push(args, new RuntimeScalar(field));
 
-            // Call the Perl method
-            RuntimeCode.apply(
-                    GlobalVariable.getGlobalCodeRef("Text::CSV::_set_error"),
-                    args,
-                    RuntimeContextType.SCALAR
-            );
-        } catch (Exception e) {
-            // Fallback to direct hash manipulation if Perl method fails
-            self.put("_ERROR_CODE", new RuntimeScalar(code));
-            self.put("_ERROR_STR", new RuntimeScalar(message));
-            self.put("_ERROR_POS", new RuntimeScalar(pos));
-            self.put("_ERROR_FIELD", new RuntimeScalar(field));
-
-            // Handle auto_diag
-            if (self.get("auto_diag").getBoolean()) {
-                System.err.println("# CSV ERROR: " + code + " - " + message);
-            }
-        }
+        // Call the Perl method
+        RuntimeCode.apply(
+                GlobalVariable.getGlobalCodeRef("Text::CSV::_set_error"),
+                args,
+                RuntimeContextType.SCALAR
+        );
     }
 
     /**
      * Clear error state using Perl calling convention.
      */
     private static void clearError(RuntimeHash self) {
-        try {
-            // Call Perl _clear_error method
-            RuntimeArray args = new RuntimeArray();
-            RuntimeArray.push(args, self.createReference());
+        // Call Perl _clear_error method
+        RuntimeArray args = new RuntimeArray();
+        RuntimeArray.push(args, self.createReference());
 
-            // Call the Perl method
-            RuntimeCode.apply(
-                    GlobalVariable.getGlobalCodeRef("Text::CSV::_clear_error"),
-                    args,
-                    RuntimeContextType.SCALAR
-            );
-        } catch (Exception e) {
-            // Fallback to direct hash manipulation if Perl method fails
-            self.put("_ERROR_CODE", scalarZero);
-            self.put("_ERROR_STR", new RuntimeScalar(""));
-            self.put("_ERROR_POS", scalarZero);
-            self.put("_ERROR_FIELD", scalarZero);
-        }
+        // Call the Perl method
+        RuntimeCode.apply(
+                GlobalVariable.getGlobalCodeRef("Text::CSV::_clear_error"),
+                args,
+                RuntimeContextType.SCALAR
+        );
     }
 }
