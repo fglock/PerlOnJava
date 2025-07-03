@@ -40,7 +40,6 @@ public class TextCsv extends PerlModuleBase {
         try {
             // Register core CSV methods (high-level methods now in Perl)
             csv.registerMethod("parse", null);
-            csv.registerMethod("fields", null);
             csv.registerMethod("combine", null);
             csv.registerMethod("getline", null);
         } catch (NoSuchMethodException e) {
@@ -110,20 +109,6 @@ public class TextCsv extends PerlModuleBase {
             setError(self, EIQ_QUOTED_FIELD_NOT_TERMINATED, e.getMessage(), 0, 0);
             return scalarFalse.getList();
         }
-    }
-
-    /**
-     * Get parsed fields.
-     */
-    public static RuntimeList fields(RuntimeArray args, int ctx) {
-        RuntimeHash self = args.get(0).hashDeref();
-        RuntimeScalar fieldsRef = self.get("_fields");
-
-        if (fieldsRef != null && fieldsRef.type == RuntimeScalarType.ARRAYREFERENCE) {
-            return fieldsRef.arrayDeref().getList();
-        }
-
-        return new RuntimeList();
     }
 
     /**
