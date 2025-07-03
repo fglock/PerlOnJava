@@ -23,23 +23,6 @@ public class Dbi extends PerlModuleBase {
     private static final int DBI_ERROR_CODE = 2000000000;  // Default $DBI::stderr value
     private static final String GENERAL_ERROR_STATE = "S1000";
 
-    private static final int MAX_CACHED_STATEMENTS = 100;
-    private static final int MAX_CACHED_CONNECTIONS = 10;
-
-    private static final Map<String, RuntimeScalar> CACHED_STATEMENTS = new LinkedHashMap<>(MAX_CACHED_STATEMENTS, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, RuntimeScalar> eldest) {
-            return size() > MAX_CACHED_STATEMENTS;
-        }
-    };
-
-    private static final Map<String, RuntimeScalar> CACHED_CONNECTIONS = new LinkedHashMap<>(MAX_CACHED_CONNECTIONS, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, RuntimeScalar> eldest) {
-            return size() > MAX_CACHED_CONNECTIONS;
-        }
-    };
-
     /**
      * Constructor initializes the DBI module.
      */
@@ -63,9 +46,6 @@ public class Dbi extends PerlModuleBase {
             dbi.registerMethod("fetchrow_hashref", null);
             dbi.registerMethod("rows", null);
             dbi.registerMethod("disconnect", null);
-            dbi.registerMethod("err", null);
-            dbi.registerMethod("errstr", null);
-            dbi.registerMethod("state", null);
             dbi.registerMethod("last_insert_id", null);
             dbi.registerMethod("begin_work", null);
             dbi.registerMethod("commit", null);
@@ -73,20 +53,15 @@ public class Dbi extends PerlModuleBase {
             dbi.registerMethod("bind_param", null);
             dbi.registerMethod("bind_param_inout", null);
             dbi.registerMethod("bind_col", null);
-            dbi.registerMethod("bind_columns", null);
             dbi.registerMethod("table_info", null);
             dbi.registerMethod("column_info", null);
             dbi.registerMethod("primary_key_info", null);
             dbi.registerMethod("foreign_key_info", null);
             dbi.registerMethod("type_info", null);
             dbi.registerMethod("ping", null);
-            dbi.registerMethod("trace", null);
-            dbi.registerMethod("trace_msg", null);
             dbi.registerMethod("available_drivers", null);
             dbi.registerMethod("data_sources", null);
             dbi.registerMethod("get_info", null);
-            dbi.registerMethod("prepare_cached", null);
-            dbi.registerMethod("connect_cached", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing DBI method: " + e.getMessage());
         }
@@ -497,13 +472,6 @@ public class Dbi extends PerlModuleBase {
         try {
             Connection conn = (Connection) dbh.get("connection").value;
             String name = dbh.get("Name").toString();
-            String username = dbh.get("Username").toString();
-            String cacheKey = name + ":" + username;
-
-            CACHED_CONNECTIONS.remove(cacheKey);
-
-            String stmtPrefix = name + ":";
-            CACHED_STATEMENTS.entrySet().removeIf(entry -> entry.getKey().startsWith(stmtPrefix));
 
             conn.close();
             dbh.put("Active", new RuntimeScalar(false));
@@ -516,49 +484,6 @@ public class Dbi extends PerlModuleBase {
         }
         RuntimeScalar msg = new RuntimeScalar("DBI disconnect() failed: " + getGlobalVariable("DBI::errstr"));
         return handleError(dbh, msg);
-    }
-
-    /**
-     * Returns the native database engine error code from the last driver method called.
-     *
-     * @param args RuntimeArray containing handle (dbh or sth)
-     * @param ctx  Context parameter
-     * @return RuntimeList containing error code
-     */
-    public static RuntimeList err(RuntimeArray args, int ctx) {
-        RuntimeHash handle = args.get(0).hashDeref();
-        RuntimeScalar errorCode = handle.get("err");
-        return new RuntimeArray(errorCode != null ? errorCode : scalarUndef).getList();
-    }
-
-    /**
-     * Returns the native database engine error message from the last driver method called.
-     *
-     * @param args RuntimeArray containing handle (dbh or sth)
-     * @param ctx  Context parameter
-     * @return RuntimeList containing error message
-     */
-    public static RuntimeList errstr(RuntimeArray args, int ctx) {
-        RuntimeHash handle = args.get(0).hashDeref();
-        RuntimeScalar errorMessage = handle.get("errstr");
-        return new RuntimeArray(errorMessage != null ? errorMessage : new RuntimeScalar("")).getList();
-    }
-
-    /**
-     * Returns the SQLSTATE code for the last driver method called.
-     *
-     * @param args RuntimeArray containing handle (dbh or sth)
-     * @param ctx  Context parameter
-     * @return RuntimeList containing SQLSTATE code
-     */
-    public static RuntimeList state(RuntimeArray args, int ctx) {
-        RuntimeHash handle = args.get(0).hashDeref();
-        RuntimeScalar state = handle.get("state");
-        // Return empty string for success code 00000
-        if (state != null && "00000".equals(state.toString())) {
-            return new RuntimeArray(new RuntimeScalar("")).getList();
-        }
-        return new RuntimeArray(state != null ? state : new RuntimeScalar(GENERAL_ERROR_STATE)).getList();
     }
 
     /**
@@ -713,31 +638,6 @@ public class Dbi extends PerlModuleBase {
             setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
         }
         RuntimeScalar msg = new RuntimeScalar("DBI bind_col() failed: " + getGlobalVariable("DBI::errstr"));
-        return handleError(dbh, msg);
-    }
-
-    public static RuntimeList bind_columns(RuntimeArray args, int ctx) {
-        RuntimeHash sth = args.get(0).hashDeref();
-        RuntimeHash dbh = sth.get("Database").hashDeref();
-        try {
-            if (args.size() < 2) {
-                return scalarTrue.getList();
-            }
-
-            // Clear existing bound columns
-            sth.put("bound_columns", new RuntimeHash().createReference());
-
-            // Bind each column reference
-            for (int i = 1; i < args.size(); i++) {
-                // bind sth, colIndex, valueRef
-                bind_col(new RuntimeArray(args.get(0), new RuntimeScalar(i), args.get(i)), ctx);
-            }
-
-            return scalarTrue.getList();
-        } catch (Exception e) {
-            setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-        }
-        RuntimeScalar msg = new RuntimeScalar("DBI bind_columns() failed: " + getGlobalVariable("DBI::errstr"));
         return handleError(dbh, msg);
     }
 
@@ -908,40 +808,6 @@ public class Dbi extends PerlModuleBase {
         }
     }
 
-    public static RuntimeList trace(RuntimeArray args, int ctx) {
-        RuntimeHash dbh = args.get(0).hashDeref();
-        int level = args.size() > 1 ? args.get(1).getInt() : 0;
-        RuntimeScalar output = args.size() > 2 ? args.get(2) : null;
-
-        // Store trace level
-        dbh.put("TraceLevel", new RuntimeScalar(level));
-        if (output != null) {
-            dbh.put("TraceOutput", output);
-        }
-
-        return new RuntimeScalar(level).getList();
-    }
-
-    public static RuntimeList trace_msg(RuntimeArray args, int ctx) {
-        RuntimeHash dbh = args.get(0).hashDeref();
-        String msg = args.get(1).toString();
-        int level = args.size() > 2 ? args.get(2).getInt() : 0;
-
-        RuntimeScalar currentLevel = dbh.get("TraceLevel");
-        if (currentLevel != null && level <= currentLevel.getInt()) {
-            RuntimeScalar output = dbh.get("TraceOutput");
-            if (output != null) {
-                // Write to custom output
-                System.out.println(msg); // Simplified - extend for custom output handling
-            } else {
-                // Default to STDERR
-                System.err.println(msg);
-            }
-        }
-
-        return scalarTrue.getList();
-    }
-
     public static RuntimeList available_drivers(RuntimeArray args, int ctx) {
         RuntimeArray drivers = new RuntimeArray();
         try {
@@ -1015,68 +881,4 @@ public class Dbi extends PerlModuleBase {
         RuntimeScalar msg = new RuntimeScalar("DBI get_info() failed: " + getGlobalVariable("DBI::errstr"));
         return handleError(dbh, msg);
     }
-
-    public static RuntimeList prepare_cached(RuntimeArray args, int ctx) {
-        RuntimeHash dbh = args.get(0).hashDeref();
-        try {
-            if (args.size() < 2) {
-                throw new IllegalStateException("Bad number of arguments for DBI->prepare_cached");
-            }
-
-            String sql = args.get(1).toString();
-            RuntimeScalar attr = args.size() > 2 ? args.get(2) : new RuntimeHash().createReference();
-
-            String cacheKey = dbh.get("Name").toString() + ":" + sql;
-
-            RuntimeScalar cachedStmt = CACHED_STATEMENTS.get(cacheKey);
-            if (cachedStmt != null && cachedStmt.hashDeref().get("Database").hashDeref().get("Active").getBoolean()) {
-                return cachedStmt.getList();
-            }
-
-            RuntimeList result = prepare(new RuntimeArray(args.get(0), args.get(1), attr), ctx);
-
-            CACHED_STATEMENTS.put(cacheKey, result.getFirst());
-
-            return result;
-        } catch (Exception e) {
-            setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-            RuntimeScalar msg = new RuntimeScalar("DBI prepare_cached() failed: " + getGlobalVariable("DBI::errstr"));
-            return handleError(dbh, msg);
-        }
-    }
-
-    public static RuntimeList connect_cached(RuntimeArray args, int ctx) {
-        try {
-            if (args.size() < 4) {
-                throw new IllegalStateException("Bad number of arguments for DBI->connect_cached");
-            }
-
-            String cacheKey = args.get(1).toString() + ":" + args.get(2).toString();
-
-            RuntimeScalar cachedDbh = CACHED_CONNECTIONS.get(cacheKey);
-            if (cachedDbh != null) {
-                RuntimeHash dbh = cachedDbh.hashDeref();
-                if (dbh.get("Active").getBoolean()) {
-                    RuntimeArray pingArgs = new RuntimeArray(cachedDbh);
-                    if (ping(pingArgs, ctx).getFirst().getBoolean()) {
-                        return cachedDbh.getList();
-                    }
-                }
-            }
-
-            RuntimeList result = connect(args, ctx);
-
-            if (!result.isEmpty()) {
-                CACHED_CONNECTIONS.put(cacheKey, result.getFirst());
-            }
-
-            return result;
-        } catch (Exception e) {
-            RuntimeHash dbh = new RuntimeHash();
-            setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-            RuntimeScalar msg = new RuntimeScalar("DBI connect_cached() failed: " + getGlobalVariable("DBI::errstr"));
-            return handleError(dbh, msg);
-        }
-    }
 }
-
