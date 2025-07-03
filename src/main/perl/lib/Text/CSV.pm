@@ -127,6 +127,11 @@ sub eol {
     return $self->{eol};
 }
 
+sub string {
+    my $self = shift;
+    return $self->{_string};
+}
+
 sub column_names {
     my ($self, @names) = @_;
 

@@ -42,7 +42,6 @@ public class TextCsv extends PerlModuleBase {
             csv.registerMethod("parse", null);
             csv.registerMethod("fields", null);
             csv.registerMethod("combine", null);
-            csv.registerMethod("string", null);
             csv.registerMethod("getline", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Text::CSV method: " + e.getMessage());
@@ -168,20 +167,6 @@ public class TextCsv extends PerlModuleBase {
             setError(self, ECB_BINARY_CHARACTER, e.getMessage(), 0, 0);
             return scalarFalse.getList();
         }
-    }
-
-    /**
-     * Get the combined CSV string.
-     */
-    public static RuntimeList string(RuntimeArray args, int ctx) {
-        RuntimeHash self = args.get(0).hashDeref();
-        RuntimeScalar str = self.get("_string");
-
-        if (str != null) {
-            return str.getList();
-        }
-
-        return scalarUndef.getList();
     }
 
     /**
