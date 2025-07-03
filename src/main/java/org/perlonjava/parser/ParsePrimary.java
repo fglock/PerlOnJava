@@ -3,7 +3,9 @@ package org.perlonjava.parser;
 import org.perlonjava.astnode.*;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.perlmodule.Subs;
 import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.RuntimeGlob;
 
 import static org.perlonjava.parser.ParserNodeUtils.scalarUnderscore;
 import static org.perlonjava.parser.TokenUtils.peek;
@@ -79,12 +81,14 @@ public class ParsePrimary {
             //
             // Optimization: only test this if an override was defined
             //
-            if (existsGlobalCodeRef(parser.ctx.symbolTable.getCurrentPackage() + "::" + operator)) {
+            String fullName = parser.ctx.symbolTable.getCurrentPackage() + "::" + operator;
+            if (Subs.isSubs.getOrDefault(fullName, false)) {
                 // ' use subs "hex"; sub hex { 456 } print hex("123"), "\n" '
                 parser.tokenIndex = startIndex;   // backtrack
                 return SubroutineParser.parseSubroutineCall(parser, false);
             }
-            if (existsGlobalCodeRef("CORE::GLOBAL::" + operator)) {
+            String coreGlobalName = "CORE::GLOBAL::" + operator;
+            if (RuntimeGlob.isGlobAssigned(coreGlobalName) && existsGlobalCodeRef(coreGlobalName)) {
                 // ' BEGIN { *CORE::GLOBAL::hex = sub { 456 } } print hex("123"), "\n" '
                 parser.tokenIndex = startIndex;   // backtrack
                 // Rewrite the subroutine name

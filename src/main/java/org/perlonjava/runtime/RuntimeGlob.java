@@ -1,6 +1,7 @@
 package org.perlonjava.runtime;
 
 import java.util.Iterator;
+import java.util.TreeMap;
 
 import static org.perlonjava.runtime.RuntimeScalarType.*;
 
@@ -36,6 +37,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @throws IllegalStateException if the typeglob assignment is not implemented for the given type.
      */
     public RuntimeScalar set(RuntimeScalar value) {
+        markGlobAsAssigned();
+
         // System.out.println("glob set " + this.globName + " to " + value.type);
         switch (value.type) {
             case CODE:
@@ -82,6 +85,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return The scalar value associated with the provided RuntimeGlob.
      */
     public RuntimeScalar set(RuntimeGlob value) {
+        markGlobAsAssigned();
+
         // Retrieve the name of the glob from the provided RuntimeGlob object.
         String globName = value.globName;
 
@@ -102,6 +107,24 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
         // Return the scalar value associated with the provided RuntimeGlob.
         return value.scalar();
+    }
+
+    private void markGlobAsAssigned() {
+        // Mark this name as having been assigned via glob syntax (e.g. *CORE::GLOBAL::do = ...)
+        // This distinction is crucial because subroutines assigned via glob assignment
+        // are eligible to override built-in operators, whereas those defined using
+        // 'sub CORE::GLOBAL::do { ... }' are not, unless a glob was assigned first.
+        //
+        // PerlOnJava does not use real Perl globs (Gv structures), so this global
+        // hash acts as a minimal tracking mechanism to emulate Perl's override behavior.
+        //
+        // Later, during compilation of built-in operators (like 'do EXPR'), we can consult
+        // this map to determine whether to check for an override in CORE::GLOBAL.
+        GlobalVariable.globalGlobs.put(globName, true);
+    }
+
+    public static boolean isGlobAssigned(String globName) {
+        return GlobalVariable.globalGlobs.getOrDefault(globName, false);
     }
 
     /**
