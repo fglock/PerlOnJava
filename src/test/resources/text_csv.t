@@ -273,4 +273,147 @@ ok($csv_opts, 'Created Text::CSV object with options');
     is($output, "a,b!\n", 'say() with a defined eol uses that eol');
 }
 
+# Test StringWriter reuse - combine multiple times with same instance
+{
+    my $csv = Text::CSV->new();  # Single instance for multiple combines
+
+    # First combine
+    my @fields1 = ('foo', 'bar', 'baz');
+    ok($csv->combine(@fields1), 'First combine operation');
+    my $string1 = $csv->string();
+    is($string1, 'foo,bar,baz', 'First combine result correct');
+
+    # Second combine - should NOT contain first result
+    my @fields2 = ('qux', 'quux', 'corge');
+    ok($csv->combine(@fields2), 'Second combine operation');
+    my $string2 = $csv->string();
+    is($string2, 'qux,quux,corge', 'Second combine result correct (no accumulation)');
+
+    # Third combine with quoted fields
+    my @fields3 = ('hello', 'world,test', 'end');
+    ok($csv->combine(@fields3), 'Third combine operation');
+    my $string3 = $csv->string();
+    is($string3, 'hello,"world,test",end', 'Third combine result correct (no accumulation)');
+
+    # Fourth combine with empty and undef
+    my @fields4 = ('start', '', undef, 'finish');
+    ok($csv->combine(@fields4), 'Fourth combine operation');
+    my $string4 = $csv->string();
+    is($string4, 'start,,,finish', 'Fourth combine result correct (no accumulation)');
+}
+
+# Test StringWriter reuse with different CSV formats
+{
+    my $csv = Text::CSV->new({ always_quote => 1 });  # Single instance
+
+    # First combine with always_quote
+    ok($csv->combine('a', 'b', 'c'), 'First combine with always_quote');
+    my $string1 = $csv->string();
+    is($string1, '"a","b","c"', 'First quoted combine result');
+
+    # Second combine - should not accumulate
+    ok($csv->combine('x', 'y', 'z'), 'Second combine with always_quote');
+    my $string2 = $csv->string();
+    is($string2, '"x","y","z"', 'Second quoted combine result (no accumulation)');
+
+    # Change format and combine again
+    $csv->always_quote(0);  # This should invalidate cache
+    ok($csv->combine('m', 'n', 'o'), 'Third combine after format change');
+    my $string3 = $csv->string();
+    is($string3, 'm,n,o', 'Third combine result after format change (no quotes, no accumulation)');
+}
+
+# Test alternating parse and combine operations
+{
+    my $csv = Text::CSV->new();  # Single instance
+
+    # Parse first
+    ok($csv->parse('one,two,three'), 'Parse operation');
+    my @parsed1 = $csv->fields();
+    is_deeply(\@parsed1, ['one', 'two', 'three'], 'Parse fields correct');
+
+    # Combine next
+    ok($csv->combine('four', 'five', 'six'), 'Combine after parse');
+    my $string1 = $csv->string();
+    is($string1, 'four,five,six', 'Combine result correct');
+
+    # Parse again
+    ok($csv->parse('seven,eight,nine'), 'Parse after combine');
+    my @parsed2 = $csv->fields();
+    is_deeply(\@parsed2, ['seven', 'eight', 'nine'], 'Parse fields correct after combine');
+
+    # Combine again
+    ok($csv->combine('ten', 'eleven', 'twelve'), 'Second combine');
+    my $string2 = $csv->string();
+    is($string2, 'ten,eleven,twelve', 'Second combine result correct (no accumulation)');
+}
+
+# Test high-volume reuse (simulating large file processing)
+{
+    my $csv = Text::CSV->new();  # Single instance
+
+    # Test many combine operations
+    for my $i (1..10) {
+        my @fields = ("field${i}a", "field${i}b", "field${i}c");
+        ok($csv->combine(@fields), "Combine operation $i");
+        my $string = $csv->string();
+        is($string, "field${i}a,field${i}b,field${i}c", "Combine result $i correct (no accumulation)");
+    }
+}
+
+# Test cache invalidation with StringWriter reuse
+{
+    my $csv = Text::CSV->new({ sep_char => ',' });
+
+    # First combine
+    ok($csv->combine('a', 'b', 'c'), 'Combine with comma separator');
+    is($csv->string(), 'a,b,c', 'Comma separator result');
+
+    # Change separator (should invalidate cache)
+    $csv->sep_char('|');
+    ok($csv->combine('x', 'y', 'z'), 'Combine with pipe separator');
+    is($csv->string(), 'x|y|z', 'Pipe separator result (no accumulation from previous)');
+
+    # Change back
+    $csv->sep_char(',');
+    ok($csv->combine('m', 'n', 'o'), 'Combine with comma separator again');
+    is($csv->string(), 'm,n,o', 'Comma separator result again (no accumulation)');
+}
+
+# Test StringWriter reuse with print method
+{
+    my $csv = Text::CSV->new({ eol => "\n" });
+
+    # First print
+    my $output1 = '';
+    open my $fh1, '>', \$output1;
+    ok($csv->print($fh1, ['a', 'b', 'c']), 'First print operation');
+    close $fh1;
+    is($output1, "a,b,c\n", 'First print output correct');
+
+    # Second print - should not accumulate
+    my $output2 = '';
+    open my $fh2, '>', \$output2;
+    ok($csv->print($fh2, ['x', 'y', 'z']), 'Second print operation');
+    close $fh2;
+    is($output2, "x,y,z\n", 'Second print output correct (no accumulation)');
+}
+
+# Test error conditions don't affect StringWriter reuse
+{
+    my $csv = Text::CSV->new();
+
+    # Successful combine
+    ok($csv->combine('good', 'data'), 'Successful combine');
+    is($csv->string(), 'good,data', 'Successful result');
+
+    # This might cause an error in some implementations
+    # but should not affect subsequent operations
+    my $result = $csv->combine();  # No arguments
+
+    # Another successful combine should work regardless
+    ok($csv->combine('more', 'data'), 'Combine after potential error');
+    is($csv->string(), 'more,data', 'Result after potential error (no accumulation)');
+}
+
 done_testing();
