@@ -165,7 +165,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Simple arithmetic**: Operators like `+`, `-`, `*`, and `%` are supported.
 - ✅  **Numeric Comparison operators**: Comparison operators such as `==`, `!=`, `>`, `<`, etc., are implemented.
 - ✅  **defined-or**: `//` operator.
-- ✅  **low-precedence-xor**: `^^` operator.
+- ✅  **low-precedence-xor**: `^^` and `^^=` operator.
 - ✅  **String concat**: Concatenation of strings using `.` is supported.
 - ✅  **String Comparison operators**: String comparison operators such as `eq`, `ne`, `lt`, `gt`, etc., are implemented.
 - ✅  **`q`, `qq`, `qw`, `qx` String operators**: Various string quoting mechanisms are supported.

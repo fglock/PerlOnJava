@@ -244,6 +244,7 @@ The following areas are currently under active development to enhance the functi
   - Added star count (`C*`) in `pack`, `unpack`.
   - Added operators: `read`, `tell`, `seek`.
   - Added operator: `select(undef,undef,undef,$time)`.
+  - Added operator: `^^=`.
   - Added `open` option: in-memory files.
   - Syntax: identifiers starting with `::` are in `main` package.
   - Added I/O layers support to `open`, `binmode`: `:raw`, `:bytes`, `:crlf`, `:utf8`, `:unix`, `:encoding()`.

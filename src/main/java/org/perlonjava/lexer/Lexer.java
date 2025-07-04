@@ -356,6 +356,12 @@ public class Lexer {
                     break;
                 case '^':
                     if (position + 3 <= input.length
+                            && input[position + 1] == '^'
+                            && input[position + 2] == '=') {
+                        position += 3;
+                        return new LexerToken(LexerTokenType.OPERATOR, "^^=");
+                    }
+                    if (position + 3 <= input.length
                             && input[position + 1] == '.'
                             && input[position + 2] == '=') {
                         position += 3;

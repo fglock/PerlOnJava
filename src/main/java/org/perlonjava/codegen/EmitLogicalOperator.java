@@ -20,24 +20,6 @@ import static org.perlonjava.operators.ScalarFlipFlopOperator.flipFlops;
 public class EmitLogicalOperator {
 
     /**
-     * Emits bytecode for the xor operator.
-     *
-     * @param emitterVisitor The visitor used for code emission.
-     * @param node           The binary operator node representing the xor operation.
-     */
-    static void emitXorOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
-        EmitterContext ctx = emitterVisitor.ctx;
-        MethodVisitor mv = ctx.mv;
-
-        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Operator", "xor", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
-
-        // If the context is VOID, pop the result from the stack
-        EmitOperator.handleVoidContext(emitterVisitor);
-    }
-
-    /**
      * Emits bytecode for the flip-flop operator, which is used in range-like conditions.
      *
      * @param emitterVisitor The visitor used for code emission.

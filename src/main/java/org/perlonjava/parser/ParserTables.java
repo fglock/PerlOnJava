@@ -18,7 +18,7 @@ public class ParserTables {
             "lt", "gt", "le", "ge", "<<", ">>", "+", "-", "*",
             "**", "/", "%", ".", "=", "**=", "+=", "*=", "&=", "&.=",
             "<<=", "&&=", "-=", "/=", "|=", "|.=", ">>=", "||=", ".=",
-            "%=", "^=", "^.=", "//=", "x=", "=~", "!~", "x", "..", "...", "isa"
+            "%=", "^=", "^.=", "//=", "x=", "^^=", "=~", "!~", "x", "..", "...", "isa"
     );
     // Map of CORE operators to prototype strings
     public static final Map<String, String> CORE_PROTOTYPES = new HashMap<>();
