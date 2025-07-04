@@ -22,7 +22,14 @@ public class GlobalVariable {
     static final Map<String, RuntimeScalar> globalIORefs = new HashMap<>();
 
     // Flags used by operator override
+
+    // globalGlobs: Tracks typeglob assignments (e.g., *CORE::GLOBAL::hex = sub {...})
+    // Used to detect when built-in operators have been globally overridden
     static final Map<String, Boolean> globalGlobs = new HashMap<>();
+
+    // isSubs: Tracks subroutines declared via 'use subs' pragma (e.g., use subs 'hex')
+    // Maps fully-qualified names (package::subname) to indicate they should be called
+    // as user-defined subroutines instead of built-in operators
     public static final Map<String, Boolean> isSubs = new HashMap<>();
 
     // Regular expression for regex variables like $main::1
