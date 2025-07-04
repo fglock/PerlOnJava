@@ -19,7 +19,7 @@ package org.perlonjava;
 public final class Configuration {
 
     // Perl version information
-    public static final String perlVersion = "v5.40.0";
+    public static final String perlVersion = "v5.42.0";
     public static final String jarVersion = "3.0.0";
 
     // Prevent instantiation

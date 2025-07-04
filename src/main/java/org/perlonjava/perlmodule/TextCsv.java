@@ -211,7 +211,8 @@ public class TextCsv extends PerlModuleBase {
         // Don't set record separator for parsing single lines
         builder.setRecordSeparator(null);
 
-        CSVFormat csvFormat = builder.build();
+        // Use get() instead of deprecated build()
+        CSVFormat csvFormat = builder.get();
 
         cached.set(csvFormat);
 
