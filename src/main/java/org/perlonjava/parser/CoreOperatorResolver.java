@@ -45,6 +45,12 @@ public class CoreOperatorResolver {
                 return new StringNode(parser.ctx.symbolTable.getCurrentPackage(), parser.tokenIndex);
             case "__SUB__", "time", "times", "fork", "wait", "wantarray":
                 // Handle operators with zero arguments
+                LexerToken nextToken2 = peek(parser);
+                // Handle optional empty parentheses
+                if (nextToken2.text.equals("(")) {
+                    TokenUtils.consume(parser);
+                    TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+                }
                 return new OperatorNode(token.text, null, currentIndex);
             case "not":
                 // Handle 'not' keyword as a unary operator with an operand
