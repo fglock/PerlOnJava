@@ -12,16 +12,40 @@ import static org.perlonjava.parser.TokenUtils.peek;
 import static org.perlonjava.runtime.GlobalVariable.existsGlobalCodeRef;
 
 /**
- * The ParsePrimary class is responsible for parsing primary expressions in the source code.
- * It handles identifiers, numbers, strings, operators, and other primary constructs.
+ * The ParsePrimary class is responsible for parsing primary expressions in Perl source code.
+ *
+ * <p>Primary expressions are the basic building blocks of the language, including:
+ * <ul>
+ *   <li>Identifiers (variables, subroutines, keywords)</li>
+ *   <li>Literals (numbers, strings)</li>
+ *   <li>Operators (unary and special operators)</li>
+ *   <li>Grouping constructs (parentheses, brackets, braces)</li>
+ * </ul>
+ *
+ * <p>This class handles the complex logic of Perl's syntax, including:
+ * <ul>
+ *   <li>Core function overriding via CORE::GLOBAL::</li>
+ *   <li>Feature-based operator enabling (say, fc, state, etc.)</li>
+ *   <li>Autoquoting with the fat comma (=>)</li>
+ *   <li>Reference operators (\)</li>
+ *   <li>File test operators (-f, -d, etc.)</li>
+ * </ul>
+ *
+ * @see Parser
+ * @see Node
  */
 public class ParsePrimary {
 
     /**
      * Parses a primary expression from the parser's token stream.
      *
-     * @param parser The parser instance used for parsing.
-     * @return A Node representing the parsed primary expression.
+     * <p>This is the main entry point for parsing primary expressions. It consumes
+     * the next token from the input stream and delegates to appropriate parsing
+     * methods based on the token type.
+     *
+     * @param parser The parser instance containing the token stream and parsing context
+     * @return A Node representing the parsed primary expression, or null for EOF
+     * @throws PerlCompilerException if an unexpected token is encountered
      */
     public static Node parsePrimary(Parser parser) {
         int startIndex = parser.tokenIndex;
@@ -31,75 +55,111 @@ public class ParsePrimary {
 
         switch (token.type) {
             case IDENTIFIER:
+                // Handle identifiers: variables, subroutines, keywords, etc.
                 return parseIdentifier(parser, startIndex, token, operator);
             case NUMBER:
-                // Handle number literals
+                // Handle numeric literals (integers, floats, hex, octal, binary)
                 return NumberParser.parseNumber(parser, token);
             case STRING:
-                // Handle string literals
+                // Handle string literals (already parsed by lexer)
                 return new StringNode(token.text, parser.tokenIndex);
             case OPERATOR:
+                // Handle operators and special constructs
                 return parseOperator(parser, token, operator);
             case EOF:
-                // Handle end of input
+                // Handle end of input gracefully
                 return null;
             default:
-                // Throw an exception for any unexpected token
+                // Any other token type is a syntax error
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
         }
     }
 
+    /**
+     * Parses an identifier token, which could be a keyword, subroutine call, or variable.
+     *
+     * <p>This method handles several complex cases:
+     * <ul>
+     *   <li>Autoquoting: identifiers before => are treated as strings</li>
+     *   <li>CORE:: prefix: explicit core function calls (CORE::print)</li>
+     *   <li>Feature checking: some operators require specific features (say, fc, state)</li>
+     *   <li>Function overriding: checks for user-defined overrides of core functions</li>
+     *   <li>Core operators: delegates to CoreOperatorResolver for built-in operators</li>
+     *   <li>Subroutine calls: defaults to parsing as a subroutine call</li>
+     * </ul>
+     *
+     * @param parser The parser instance
+     * @param startIndex The token index where this identifier started
+     * @param token The identifier token being parsed
+     * @param operator The text of the identifier (same as token.text)
+     * @return A Node representing the parsed identifier construct
+     * @throws PerlCompilerException if CORE:: is used with a non-keyword
+     */
     private static Node parseIdentifier(Parser parser, int startIndex, LexerToken token, String operator) {
         String nextTokenText = peek(parser).text;
+
+        // Check for autoquoting: bareword => is treated as "bareword"
         if (nextTokenText.equals("=>")) {
-            // Autoquote
+            // Autoquote: convert identifier to string literal
             return new StringNode(token.text, parser.tokenIndex);
         }
 
         boolean operatorEnabled = false;
         boolean calledWithCore = false;
 
-        // Try to parse a builtin operation; backtrack if it fails
+        // Check if this is an explicit CORE:: call (e.g., CORE::print)
         if (token.text.equals("CORE") && nextTokenText.equals("::")) {
             calledWithCore = true;
-            operatorEnabled = true;
-            TokenUtils.consume(parser);  // "::"
-            token = TokenUtils.consume(parser); // operator
+            operatorEnabled = true; // CORE:: functions are always enabled
+            TokenUtils.consume(parser);  // consume "::"
+            token = TokenUtils.consume(parser); // consume the actual operator
             operator = token.text;
         } else if (!nextTokenText.equals("::")) {
             // Check if the operator is enabled in the current scope
+            // Some operators require specific features to be enabled
             operatorEnabled = switch (operator) {
-                case "say", "fc", "state", "evalbytes" -> parser.ctx.symbolTable.isFeatureCategoryEnabled(operator);
-                case "__SUB__" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("current_sub");
-                default -> true;
+                case "say", "fc", "state", "evalbytes" ->
+                        parser.ctx.symbolTable.isFeatureCategoryEnabled(operator);
+                case "__SUB__" ->
+                        parser.ctx.symbolTable.isFeatureCategoryEnabled("current_sub");
+                default -> true; // Most operators are always enabled
             };
         }
 
+        // Check for overridable operators (unless explicitly called with CORE::)
         if (!calledWithCore && operatorEnabled && ParserTables.OVERRIDABLE_OP.contains(operator)) {
-            // It is possible to override the core function by defining
-            // a subroutine in the current package, or in CORE::GLOBAL::
-            //
-            // Optimization: only test this if an override was defined
-            //
+            // Core functions can be overridden in two ways:
+            // 1. By defining a subroutine in the current package
+            // 2. By defining a subroutine in CORE::GLOBAL::
+
+            // Check for local package override
             String fullName = parser.ctx.symbolTable.getCurrentPackage() + "::" + operator;
             if (Subs.isSubs.getOrDefault(fullName, false)) {
-                // ' use subs "hex"; sub hex { 456 } print hex("123"), "\n" '
-                parser.tokenIndex = startIndex;   // backtrack
+                // Example: 'use subs "hex"; sub hex { 456 } print hex("123"), "\n"'
+                parser.tokenIndex = startIndex;   // backtrack to reparse as subroutine
                 return SubroutineParser.parseSubroutineCall(parser, false);
             }
+
+            // Check for CORE::GLOBAL:: override
             String coreGlobalName = "CORE::GLOBAL::" + operator;
             if (RuntimeGlob.isGlobAssigned(coreGlobalName) && existsGlobalCodeRef(coreGlobalName)) {
-                // ' BEGIN { *CORE::GLOBAL::hex = sub { 456 } } print hex("123"), "\n" '
-                parser.tokenIndex = startIndex;   // backtrack
-                // Rewrite the subroutine name
-                parser.tokens.add(startIndex, new LexerToken(LexerTokenType.IDENTIFIER, "CORE"));
-                parser.tokens.add(startIndex + 1, new LexerToken(LexerTokenType.OPERATOR, "::"));
-                parser.tokens.add(startIndex + 2, new LexerToken(LexerTokenType.IDENTIFIER, "GLOBAL"));
-                parser.tokens.add(startIndex + 3, new LexerToken(LexerTokenType.OPERATOR, "::"));
-                return SubroutineParser.parseSubroutineCall(parser, false);
+                // Special case: 'do' followed by '{' is a do-block, not a function call
+                if (operator.equals("do") && nextTokenText.equals("{")) {
+                    // This is a do block, not a do function call - let CoreOperatorResolver handle it
+                } else {
+                    // Example: 'BEGIN { *CORE::GLOBAL::hex = sub { 456 } } print hex("123"), "\n"'
+                    parser.tokenIndex = startIndex;   // backtrack
+                    // Rewrite the tokens to call CORE::GLOBAL::operator
+                    parser.tokens.add(startIndex, new LexerToken(LexerTokenType.IDENTIFIER, "CORE"));
+                    parser.tokens.add(startIndex + 1, new LexerToken(LexerTokenType.OPERATOR, "::"));
+                    parser.tokens.add(startIndex + 2, new LexerToken(LexerTokenType.IDENTIFIER, "GLOBAL"));
+                    parser.tokens.add(startIndex + 3, new LexerToken(LexerTokenType.OPERATOR, "::"));
+                    return SubroutineParser.parseSubroutineCall(parser, false);
+                }
             }
         }
 
+        // Try to parse as a core operator/keyword
         if (operatorEnabled) {
             Node operation = CoreOperatorResolver.parseCoreOperator(parser, token, startIndex);
             if (operation != null) {
@@ -107,108 +167,153 @@ public class ParsePrimary {
             }
         }
 
+        // If CORE:: was used but the operator wasn't recognized, it's an error
         if (calledWithCore) {
-            throw new PerlCompilerException(parser.tokenIndex, "CORE::" + operator + " is not a keyword", parser.ctx.errorUtil);
+            throw new PerlCompilerException(parser.tokenIndex,
+                    "CORE::" + operator + " is not a keyword", parser.ctx.errorUtil);
         }
 
-        // Handle any other identifier as a subroutine call or identifier node
+        // Default: treat as a subroutine call or bareword
         parser.tokenIndex = startIndex;   // backtrack
         return SubroutineParser.parseSubroutineCall(parser, false);
     }
 
+    /**
+     * Parses operator tokens and special constructs.
+     *
+     * <p>This method handles a wide variety of operators and special constructs:
+     * <ul>
+     *   <li>Grouping operators: (), [], {}</li>
+     *   <li>Quote operators: ', ", /, `, etc.</li>
+     *   <li>Reference operator: \</li>
+     *   <li>Sigils: $, @, %, *, &</li>
+     *   <li>Unary operators: !, +, -, ~, ++, --</li>
+     *   <li>File test operators: -f, -d, etc.</li>
+     *   <li>Special constructs: <<heredoc, diamond operator <></li>
+     * </ul>
+     *
+     * @param parser The parser instance
+     * @param token The operator token being parsed
+     * @param operator The operator text (same as token.text)
+     * @return A Node representing the parsed operator construct
+     * @throws PerlCompilerException if the operator is not recognized or used incorrectly
+     */
     private static Node parseOperator(Parser parser, LexerToken token, String operator) {
         Node operand;
         switch (token.text) {
             case "(":
-                // Handle parentheses to parse a nested expression or to construct a list
+                // Parentheses create a list context and group expressions
                 return new ListNode(ListParser.parseList(parser, ")", 0), parser.tokenIndex);
+
             case "{":
-                // Handle curly brackets to parse a nested expression
+                // Curly braces create anonymous hash references
                 return new HashLiteralNode(ListParser.parseList(parser, "}", 0), parser.tokenIndex);
+
             case "[":
-                // Handle square brackets to parse a nested expression
+                // Square brackets create anonymous array references
                 return new ArrayLiteralNode(ListParser.parseList(parser, "]", 0), parser.tokenIndex);
+
             case ".":
-                // Handle fractional numbers
+                // Dot at the beginning of a primary expression is a fractional number (.5)
                 return NumberParser.parseFractionalNumber(parser);
+
             case "<", "<<":
+                // Diamond operator <> or heredoc <<EOF
                 return OperatorParser.parseDiamondOperator(parser, token);
+
             case "'", "\"", "/", "//", "/=", "`":
-                // Handle single and double-quoted strings
+                // Quote-like operators for strings, regexes, and command execution
                 return StringParser.parseRawString(parser, token.text);
+
             case "::":
-                // Handle :: at the beginning, which means main::
-                // Transform ::foo into main::foo
+                // Leading :: means main:: (e.g., ::foo is main::foo)
+                // This allows accessing global variables even when a lexical exists
                 LexerToken nextToken2 = peek(parser);
                 if (nextToken2.type == LexerTokenType.IDENTIFIER) {
-                    // Insert "main" before the ::
+                    // Insert "main" before the :: to create main::identifier
                     parser.tokens.add(parser.tokenIndex - 1, new LexerToken(LexerTokenType.IDENTIFIER, "main"));
                     parser.tokenIndex--; // Go back to process "main"
                     return parseIdentifier(parser, parser.tokenIndex,
                             new LexerToken(LexerTokenType.IDENTIFIER, "main"), "main");
                 }
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
+
             case "\\":
-                // Take reference
-                parser.parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
+                // Reference operator: \$var, \@array, \%hash, \&sub
+                // Set flag to prevent &sub from being called during parsing
+                parser.parsingTakeReference = true;
                 operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
                 parser.parsingTakeReference = false;
                 return new OperatorNode(token.text, operand, parser.tokenIndex);
+
             case "$", "$#", "@", "%", "*":
+                // Variable sigils: $scalar, @array, %hash, *glob, $#array
                 return Variable.parseVariable(parser, token.text);
+
             case "&":
+                // Code sigil: &subroutine
                 return Variable.parseCoderefVariable(parser, token);
+
             case "!", "+":
-                // Handle unary operators like `! +`
+                // Simple unary operators
                 operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
                 return new OperatorNode(token.text, operand, parser.tokenIndex);
+
             case "~", "~.":
-                // Handle unary operators like `~ ~.`
+                // Bitwise complement operators
+                // ~ is string bitwise complement by default, binary~ with 'use feature "bitwise"'
+                // ~. is always numeric bitwise complement
                 if (parser.ctx.symbolTable.isFeatureCategoryEnabled("bitwise")) {
                     if (operator.equals("~")) {
-                        operator = "binary" + operator;
+                        operator = "binary" + operator; // Mark as binary bitwise
                     }
                 } else {
                     if (operator.equals("~.")) {
+                        // ~. requires bitwise feature
                         throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
                     }
                 }
                 operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
                 return new OperatorNode(operator, operand, parser.tokenIndex);
+
             case "--":
             case "++":
-                // Handle unary operators like `++`
+                // Pre-increment/decrement operators
                 operand = parser.parseExpression(parser.getPrecedence(token.text));
                 return new OperatorNode(token.text, operand, parser.tokenIndex);
+
             case "-":
-                // Handle unary operators like `- -d`
+                // Unary minus or file test operator (-f, -d, etc.)
                 LexerToken nextToken = parser.tokens.get(parser.tokenIndex);
                 if (nextToken.type == LexerTokenType.IDENTIFIER && nextToken.text.length() == 1) {
-                    // Handle `-d`
+                    // File test operator: -f filename, -d $dir, etc.
                     operator = "-" + nextToken.text;
                     parser.tokenIndex++;
                     nextToken = peek(parser);
                     if (nextToken.text.equals("_")) {
-                        // Handle `-f _`
+                        // Special case: -f _ uses the stat buffer from the last file test
                         TokenUtils.consume(parser);
                         operand = new IdentifierNode("_", parser.tokenIndex);
                     } else {
+                        // Parse the filename/handle argument
                         operand = ListParser.parseZeroOrOneList(parser, 0);
                         if (((ListNode) operand).elements.isEmpty()) {
-                            // create `$_` variable
+                            // No argument provided, use $_ as default
                             operand = scalarUnderscore(parser);
                         }
                     }
                     return new OperatorNode(operator, operand, parser.tokenIndex);
                 }
-                // Unary minus
+                // Regular unary minus
                 operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
                 if (operand instanceof IdentifierNode identifierNode) {
-                    // "-name" return string
+                    // Special case: -bareword becomes "-bareword" (string)
                     return new StringNode("-" + identifierNode.name, parser.tokenIndex);
                 }
                 return new OperatorNode("unaryMinus", operand, parser.tokenIndex);
+
             default:
+                // Unknown operator
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
         }
     }
