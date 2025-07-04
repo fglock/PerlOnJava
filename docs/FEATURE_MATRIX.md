@@ -227,6 +227,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **exists**: `exists &sub` is implemented.
 - ✅  **defined**: `defined &sub` is implemented.
 - ✅  **CORE namespace**: `CORE` is implemented.
+- ❌  **CORE operator references**: Taking a reference to a `CORE` operator is not implemented: `BEGIN { *shove = \&CORE::push; } shove @array, 1,2,3;`
 - ✅  **CORE::GLOBAL namespace**: `CORE::GLOBAL` and core function overrides are implemented.
 - ✅  **alternate subroutine call syntax**: `&$sub`, `&$sub(args)` syntax is implemented.
 - ✅  **Subroutine prototypes**: Prototypes `$`, `@`, `%`, `&`, `;`, `_`, `+`, `*`, `\@`, `\%`, `\$`, `\[@%]`, empty string and undef are supported.
