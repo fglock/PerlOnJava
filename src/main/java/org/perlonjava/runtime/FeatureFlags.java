@@ -35,6 +35,7 @@ public class FeatureFlags {
         featureBundles.put(":5.36", new String[]{"bareword_filehandles", "bitwise", "current_sub", "evalbytes", "fc", "isa", "postderef_qq", "say", "signatures", "state", "unicode_eval", "unicode_strings"});
         featureBundles.put(":5.38", new String[]{"bitwise", "current_sub", "evalbytes", "fc", "isa", "module_true", "postderef_qq", "say", "signatures", "state", "unicode_eval", "unicode_strings"});
         featureBundles.put(":5.40", new String[]{"bitwise", "current_sub", "evalbytes", "fc", "isa", "module_true", "postderef_qq", "say", "signatures", "state", "try", "unicode_eval", "unicode_strings"});
+        featureBundles.put(":5.42", new String[]{"bitwise", "current_sub", "evalbytes", "fc", "isa", "module_true", "postderef_qq", "say", "signatures", "state", "try", "unicode_eval", "unicode_strings"});
         // Not bundled:
         featureBundles.put("postderef", new String[]{"postderef"});
     }
