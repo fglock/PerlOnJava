@@ -25,7 +25,7 @@ public class ParserTables {
     // Set of operators that are right associative.
     static final Set<String> RIGHT_ASSOC_OP = Set.of(
             "=", "**=", "+=", "*=", "&=", "&.=", "<<=", "&&=", "-=", "/=", "|=", "|.=",
-            ">>=", "||=", ".=", "%=", "^=", "^.=", "//=", "x=", "**", "?"
+            ">>=", "||=", ".=", "%=", "^=", "^.=", "//=", "x=", "^^=", "**", "?"
     );
     // Map to store operator precedence values.
     static final Map<String, Integer> precedenceMap = new HashMap<>();
@@ -307,7 +307,7 @@ public class ParserTables {
         addOperatorsToMap(3, "not");
         addOperatorsToMap(4, "print");
         addOperatorsToMap(5, ",", "=>");
-        addOperatorsToMap(6, "=", "**=", "+=", "*=", "&=", "&.=", "<<=", "&&=", "-=", "/=", "|=", "|.=", ">>=", "||=", ".=", "%=", "^=", "^.=", "//=", "x=");
+        addOperatorsToMap(6, "=", "**=", "+=", "*=", "&=", "&.=", "<<=", "&&=", "-=", "/=", "|=", "|.=", ">>=", "||=", ".=", "%=", "^=", "^.=", "//=", "x=", "^^=");
         addOperatorsToMap(7, "?");
         addOperatorsToMap(8, "..", "...");
         addOperatorsToMap(9, "||", "^^", "//");
