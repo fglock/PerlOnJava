@@ -23,9 +23,6 @@ public class EmitBinaryOperatorNode {
             case "&&", "and" ->
                     EmitLogicalOperator.emitLogicalOperator(emitterVisitor, node, Opcodes.IFEQ, "getBoolean");
 
-            case "xor", "^^" ->
-                    EmitLogicalOperator.emitXorOperator(emitterVisitor, node);
-
             case "&&=" ->
                     EmitLogicalOperator.emitLogicalAssign(emitterVisitor, node, Opcodes.IFEQ, "getBoolean");
 
@@ -79,7 +76,7 @@ public class EmitBinaryOperatorNode {
             // Compound assignment operators
             case "**=", "+=", "*=", "&=", "&.=", "binary&=", "<<=", "-=", "/=",
                  "|=", "|.=", "binary|=", ">>=", ".=", "%=", "^=", "^.=",
-                 "binary^=", "x=" ->
+                 "binary^=", "x=", "^^=" ->
                     EmitBinaryOperator.handleCompoundAssignment(emitterVisitor, node);
 
             // Range and flip-flop operators
@@ -93,7 +90,7 @@ public class EmitBinaryOperatorNode {
                     EmitOperatorChained.emitChainedComparison(emitterVisitor, node);
 
             // Binary operators
-            case "%", "&", "&.", "*", "**", "+", "-", "/",
+            case "%", "&", "&.", "*", "**", "+", "-", "/", "^^", "xor",
                  "<<", "<=>", ">>", "^", "^.", "|", "|.",
                  "bless", "cmp", "isa" ->
                     EmitBinaryOperator.handleBinaryOperator(emitterVisitor, node,
