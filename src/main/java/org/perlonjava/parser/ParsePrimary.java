@@ -132,21 +132,22 @@ public class ParsePrimary {
             // 1. By defining a subroutine in the current package
             // 2. By defining a subroutine in CORE::GLOBAL::
 
-            // Check for local package override
-            String fullName = parser.ctx.symbolTable.getCurrentPackage() + "::" + operator;
-            if (Subs.isSubs.getOrDefault(fullName, false)) {
-                // Example: 'use subs "hex"; sub hex { 456 } print hex("123"), "\n"'
-                parser.tokenIndex = startIndex;   // backtrack to reparse as subroutine
-                return SubroutineParser.parseSubroutineCall(parser, false);
-            }
+            // Special case: 'do' followed by '{' is a do-block, not a function call
+            if (operator.equals("do") && nextTokenText.equals("{")) {
+                // This is a do block, not a do function call - let CoreOperatorResolver handle it
+            } else {
 
-            // Check for CORE::GLOBAL:: override
-            String coreGlobalName = "CORE::GLOBAL::" + operator;
-            if (RuntimeGlob.isGlobAssigned(coreGlobalName) && existsGlobalCodeRef(coreGlobalName)) {
-                // Special case: 'do' followed by '{' is a do-block, not a function call
-                if (operator.equals("do") && nextTokenText.equals("{")) {
-                    // This is a do block, not a do function call - let CoreOperatorResolver handle it
-                } else {
+                // Check for local package override
+                String fullName = parser.ctx.symbolTable.getCurrentPackage() + "::" + operator;
+                if (Subs.isSubs.getOrDefault(fullName, false)) {
+                    // Example: 'use subs "hex"; sub hex { 456 } print hex("123"), "\n"'
+                    parser.tokenIndex = startIndex;   // backtrack to reparse as subroutine
+                    return SubroutineParser.parseSubroutineCall(parser, false);
+                }
+
+                // Check for CORE::GLOBAL:: override
+                String coreGlobalName = "CORE::GLOBAL::" + operator;
+                if (RuntimeGlob.isGlobAssigned(coreGlobalName) && existsGlobalCodeRef(coreGlobalName)) {
                     // Example: 'BEGIN { *CORE::GLOBAL::hex = sub { 456 } } print hex("123"), "\n"'
                     parser.tokenIndex = startIndex;   // backtrack
                     // Rewrite the tokens to call CORE::GLOBAL::operator
