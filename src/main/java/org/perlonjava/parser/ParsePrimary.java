@@ -3,7 +3,7 @@ package org.perlonjava.parser;
 import org.perlonjava.astnode.*;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.perlmodule.Subs;
+import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeGlob;
 
@@ -139,7 +139,7 @@ public class ParsePrimary {
 
                 // Check for local package override
                 String fullName = parser.ctx.symbolTable.getCurrentPackage() + "::" + operator;
-                if (Subs.isSubs.getOrDefault(fullName, false)) {
+                if (GlobalVariable.isSubs.getOrDefault(fullName, false)) {
                     // Example: 'use subs "hex"; sub hex { 456 } print hex("123"), "\n"'
                     parser.tokenIndex = startIndex;   // backtrack to reparse as subroutine
                     return SubroutineParser.parseSubroutineCall(parser, false);
