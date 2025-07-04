@@ -2,16 +2,11 @@ package org.perlonjava.perlmodule;
 
 import org.perlonjava.runtime.*;
 
-import java.util.HashMap;
-import java.util.Map;
-
 /**
  * The Subs class is responsible for creating variables in the current package.
  * It mimics the behavior of Perl's subs module, allowing variables to be declared.
  */
 public class Subs extends PerlModuleBase {
-
-    public static final Map<String, Boolean> isSubs = new HashMap<>();
 
     public Subs() {
         super("subs");
@@ -49,7 +44,7 @@ public class Subs extends PerlModuleBase {
             String variableString = variableObj.toString();
             String fullName = caller + "::" + variableString;
             GlobalVariable.getGlobalCodeRef(fullName);
-            isSubs.put(fullName, true);
+            GlobalVariable.isSubs.put(fullName, true);
         }
 
         return new RuntimeList();
