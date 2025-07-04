@@ -36,21 +36,19 @@ public class CoreOperatorResolver {
         switch (token.text) {
             case "__LINE__":
                 // Returns the current line number as a NumberNode
+                handleEmptyParentheses(parser);
                 return new NumberNode(Integer.toString(parser.ctx.errorUtil.getLineNumber(parser.tokenIndex)), parser.tokenIndex);
             case "__FILE__":
                 // Returns the current file name as a StringNode
+                handleEmptyParentheses(parser);
                 return new StringNode(parser.ctx.errorUtil.getFileName(), parser.tokenIndex);
             case "__PACKAGE__":
                 // Returns the current package name as a StringNode
+                handleEmptyParentheses(parser);
                 return new StringNode(parser.ctx.symbolTable.getCurrentPackage(), parser.tokenIndex);
             case "__SUB__", "time", "times", "fork", "wait", "wantarray":
                 // Handle operators with zero arguments
-                LexerToken nextToken2 = peek(parser);
-                // Handle optional empty parentheses
-                if (nextToken2.text.equals("(")) {
-                    TokenUtils.consume(parser);
-                    TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
-                }
+                handleEmptyParentheses(parser);
                 return new OperatorNode(token.text, null, currentIndex);
             case "not":
                 // Handle 'not' keyword as a unary operator with an operand
@@ -354,5 +352,14 @@ public class CoreOperatorResolver {
                 }
         }
         return null;
+    }
+
+    private static void handleEmptyParentheses(Parser parser) {
+        LexerToken nextToken2 = peek(parser);
+        // Handle optional empty parentheses
+        if (nextToken2.text.equals("(")) {
+            TokenUtils.consume(parser);
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+        }
     }
 }
