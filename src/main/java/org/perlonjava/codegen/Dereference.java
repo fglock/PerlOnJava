@@ -11,7 +11,7 @@ public class Dereference {
     /**
      * Handles the postfix `[]` operator.
      */
-    static void handleArrayElementOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
+    static void handleArrayElementOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node, String arrayOperation) {
         emitterVisitor.ctx.logDebug("handleArrayElementOperator " + node + " in context " + emitterVisitor.ctx.contextType);
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
@@ -43,25 +43,25 @@ public class Dereference {
                             int index = Integer.parseInt(numberNode.value);
                             emitterVisitor.ctx.mv.visitLdcInsn(index);
                             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
-                                    "get", "(I)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                                    arrayOperation, "(I)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                         } catch (NumberFormatException e) {
                             // Fall back to RuntimeScalar if the number is too large
                             elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
-                                    "get", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                                    arrayOperation, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                         }
                     } else {
                         // Single element but not an integer literal
                         elem.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
-                                "get", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                                arrayOperation, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                     }
                 } else {
                     // emit the [0] as a RuntimeList
                     ListNode nodeRight = right.asListNode();
                     nodeRight.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
-                            "get", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                            arrayOperation, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                 }
 
                 EmitOperator.handleVoidContext(emitterVisitor);
@@ -84,7 +84,7 @@ public class Dereference {
                 nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
-                        "getSlice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
+                        arrayOperation + "Slice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
 
                 EmitOperator.handleVoidContext(emitterVisitor);
                 return;
