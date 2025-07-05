@@ -417,7 +417,8 @@ public class EmitOperator {
                         }
                         case "[" -> {
                             // Handle array element operator.
-                            throw new PerlCompilerException(node.tokenIndex, "Not implemented: ARRAY operator: " + operator, emitterVisitor.ctx.errorUtil);
+                            Dereference.handleArrayElementOperator(emitterVisitor, binop, operator);
+                            return;
                         }
                         case "->" -> {
                             if (binop.right instanceof HashLiteralNode) { // ->{x}

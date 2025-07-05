@@ -40,7 +40,7 @@ public class EmitBinaryOperatorNode {
 
             // Dereference operators
             case "->" -> Dereference.handleArrowOperator(emitterVisitor, node);
-            case "[" -> Dereference.handleArrayElementOperator(emitterVisitor, node);
+            case "[" -> Dereference.handleArrayElementOperator(emitterVisitor, node, "get");
             case "{" -> Dereference.handleHashElementOperator(emitterVisitor, node, "get");
             case "(" -> EmitSubroutine.handleApplyOperator(emitterVisitor, node);
 

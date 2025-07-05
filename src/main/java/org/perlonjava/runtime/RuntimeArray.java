@@ -220,6 +220,10 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         return (index < 0 || index >= elements.size()) ? scalarFalse : scalarTrue;
     }
 
+    public RuntimeScalar exists(RuntimeScalar index) {
+        return this.exists(index.getInt());
+    }
+
     /**
      * Delete an array element.
      *
@@ -239,6 +243,10 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         RuntimeScalar previous = this.get(index);
         this.set(index, scalarUndef);
         return previous;
+    }
+
+    public RuntimeScalar delete(RuntimeScalar index) {
+        return this.delete(index.getInt());
     }
 
     /**
