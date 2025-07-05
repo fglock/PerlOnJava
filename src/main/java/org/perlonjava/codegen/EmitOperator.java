@@ -428,7 +428,8 @@ public class EmitOperator {
                             }
                             if (binop.right instanceof ArrayLiteralNode) { // ->[x]
                                 // Handle arrow array dereference
-                                throw new PerlCompilerException(node.tokenIndex, "Not implemented: ARRAY operator: " + operator, emitterVisitor.ctx.errorUtil);
+                                Dereference.handleArrowArrayDeref(emitterVisitor, binop, operator);
+                                return;
                             }
                         }
                     }

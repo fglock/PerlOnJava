@@ -278,7 +278,7 @@ public class Dereference {
         }
     }
 
-    private static void handleArrowArrayDeref(EmitterVisitor emitterVisitor, BinaryOperatorNode node, String arrayOperation) {
+    public static void handleArrowArrayDeref(EmitterVisitor emitterVisitor, BinaryOperatorNode node, String arrayOperation) {
         emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) ->[] ");
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
@@ -299,11 +299,12 @@ public class Dereference {
         String methodName = switch (arrayOperation) {
             case "get" -> "arrayDerefGet";
             case "delete" -> "arrayDerefDelete";
+            case "exists" -> "arrayDerefExists";
             default ->
                     throw new PerlCompilerException(node.tokenIndex, "Not implemented: array operation: " + arrayOperation, emitterVisitor.ctx.errorUtil);
         };
 
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "arrayDerefGet", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", methodName, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         EmitOperator.handleVoidContext(emitterVisitor);
     }
 
