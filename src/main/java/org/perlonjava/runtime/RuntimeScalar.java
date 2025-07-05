@@ -524,6 +524,16 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
     }
 
+    // Method to implement `delete $v->[10]`
+    public RuntimeScalar arrayDerefDelete(RuntimeScalar index) {
+        return this.arrayDeref().delete(index);
+    }
+
+    // Method to implement `exists $v->[10]`
+    public RuntimeScalar arrayDerefExists(RuntimeScalar index) {
+        return this.arrayDeref().exists(index);
+    }
+
     // Method to implement `@$v`
     public RuntimeArray arrayDeref() {
         // Check if object is eligible for overloading
