@@ -44,9 +44,8 @@ PerlOnJava implements most core Perl features with some key differences:
 
 ❌ Not Supported:
 - XS modules and C integration
-- Unicode manipulation
 - Threading
-- Some advanced Perl features (formats, tied variables)
+- Some Perl features (formats, tied variables)
 - System-level operations (fork, exec)
 
 ## Compiler Usability
@@ -138,7 +137,6 @@ my @copy = @{$z};         # ERROR
 - ✅  **Typeglob as hash**: `*$val{$k}` for `SCALAR`, `ARRAY`, `HASH`, `CODE`, `IO` is implemented.
 - ✅  **Use string as a scalar reference**: Support for scalar references from strings is implemented.
 - ❌  **Tied Scalars**: Support for tying scalars to classes is missing.
-- ❌  **Unicode**: Support for non-Unicode strings is not implemented.
 - ❌  **Taint checks**: Support for taint checks is not implemented.
 - ❌  **`local` special cases**: `local *HANDLE = *HANDLE` doesn't create a new typeglob.
 - ❌  **Variable attributes**: Variable attributes are not yet supported.
