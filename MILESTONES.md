@@ -252,6 +252,7 @@ The following areas are currently under active development to enhance the functi
   - `Test::More` module: added `subtest`, `use_ok`, `require_ok`.
   - `CORE::` operators have the same prototypes as in Perl.
   - Added modules: `Fcntl`, `Test`, `Text::CSV`.
+  - Operator `$#` returns an lvalue.
   - Improved autovivification handling: distinguish between contexts where undefined references should automatically create data structures versus where they should throw errors.
   - Bugfix: fix a problem with Windows newlines and qw(). Also fixed `mkdir` in Windows.
   - Bugfix: `-E` switch was setting strict mode.
