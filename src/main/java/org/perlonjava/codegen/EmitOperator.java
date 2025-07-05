@@ -403,30 +403,32 @@ public class EmitOperator {
                         emitterVisitor.ctx.logDebug("exists & " + operatorNode.operand);
                         if (operatorNode.operand instanceof IdentifierNode identifierNode) {
                             // exists &sub
-                            String name = identifierNode.name;
-                            String fullName = NameNormalizer.normalizeVariableName(name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
-                            emitterVisitor.ctx.mv.visitLdcInsn(fullName); // emit string
-                            emitterVisitor.ctx.mv.visitMethodInsn(
-                                    Opcodes.INVOKESTATIC,
-                                    "org/perlonjava/runtime/GlobalVariable",
-                                    "existsGlobalCodeRefAsScalar",
-                                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                                    false);
+                            handleExistsSubroutine(emitterVisitor, identifierNode);
                             return;
                         }
                     }
                 } else {
                     BinaryOperatorNode binop = (BinaryOperatorNode) operand.elements.getFirst();
-                    if (binop.operator.equals("{")) {
-                        // Handle hash element operator.
-                        Dereference.handleHashElementOperator(emitterVisitor, binop, operator);
-                        return;
-                    }
-                    if (binop.operator.equals("->")) {
-                        if (binop.right instanceof HashLiteralNode) { // ->{x}
-                            // Handle arrow hash dereference
-                            Dereference.handleArrowHashDeref(emitterVisitor, binop, operator);
+                    switch (binop.operator) {
+                        case "{" -> {
+                            // Handle hash element operator.
+                            Dereference.handleHashElementOperator(emitterVisitor, binop, operator);
                             return;
+                        }
+                        case "[" -> {
+                            // Handle array element operator.
+                            throw new PerlCompilerException(node.tokenIndex, "Not implemented: ARRAY operator: " + operator, emitterVisitor.ctx.errorUtil);
+                        }
+                        case "->" -> {
+                            if (binop.right instanceof HashLiteralNode) { // ->{x}
+                                // Handle arrow hash dereference
+                                Dereference.handleArrowHashDeref(emitterVisitor, binop, operator);
+                                return;
+                            }
+                            if (binop.right instanceof ArrayLiteralNode) { // ->[x]
+                                // Handle arrow array dereference
+                                throw new PerlCompilerException(node.tokenIndex, "Not implemented: ARRAY operator: " + operator, emitterVisitor.ctx.errorUtil);
+                            }
                         }
                     }
                 }
@@ -434,6 +436,20 @@ public class EmitOperator {
         }
         // Throw an exception if the operator is not implemented.
         throw new PerlCompilerException(node.tokenIndex, "Not implemented: operator: " + operator, emitterVisitor.ctx.errorUtil);
+    }
+
+    private static void handleExistsSubroutine(EmitterVisitor emitterVisitor, IdentifierNode identifierNode) {
+        // exists &sub
+        String name = identifierNode.name;
+        String fullName = NameNormalizer.normalizeVariableName(name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
+        emitterVisitor.ctx.mv.visitLdcInsn(fullName); // emit string
+        emitterVisitor.ctx.mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/GlobalVariable",
+                "existsGlobalCodeRefAsScalar",
+                "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                false);
+        handleVoidContext(emitterVisitor);
     }
 
     // Handles the 'package' operator, which sets the current package for the symbol table.
