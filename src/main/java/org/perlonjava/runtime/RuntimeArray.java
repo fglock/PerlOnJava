@@ -5,7 +5,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Stack;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
+import static org.perlonjava.runtime.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.RuntimeScalarType.ARRAYREFERENCE;
 import static org.perlonjava.runtime.RuntimeScalarType.HASHREFERENCE;
 
@@ -205,6 +205,40 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
      */
     public RuntimeScalar addToScalar(RuntimeScalar scalar) {
         return scalar.set(this.size());
+    }
+
+    /**
+     * Checks if a specific index exists.
+     *
+     * @param index The index of the value to retrieve.
+     * @return Perl value True or False.
+     */
+    public RuntimeScalar exists(int index) {
+        if (index < 0) {
+            index = elements.size() + index; // Handle negative indices
+        }
+        return (index < 0 || index >= elements.size()) ? scalarFalse : scalarTrue;
+    }
+
+    /**
+     * Delete an array element.
+     *
+     * @param index The index of the value to delete.
+     * @return The value deleted.
+     */
+    public RuntimeScalar delete(int index) {
+        if (index < 0) {
+            index = elements.size() + index; // Handle negative indices
+        }
+        if (index < 0 || index >= elements.size()) {
+            return scalarUndef;
+        };
+        if (index == elements.size() - 1) {
+            return pop(this);
+        }
+        RuntimeScalar previous = this.get(index);
+        this.set(index, scalarUndef);
+        return previous;
     }
 
     /**
