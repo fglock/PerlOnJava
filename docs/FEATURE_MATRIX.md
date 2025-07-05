@@ -210,11 +210,11 @@ my @copy = @{$z};         # ERROR
 - ✅  **Hash literals**: Hash literals are supported.
 - ✅  **List operator `..`**: List constructors are implemented.
 - ✅  **Flip-flop operator `..` and `...`**: The flip-flop operators are implemented.
+- ✅  **`$#array`**: Lvalue array count is implemented: `$#{$sl} = 10`.
 - ❌  **Tied Arrays**: Tied arrays are not yet implemented.
 - ❌  **Tied Hashes**: Tied hashes are not yet implemented.
 - ❌  **Array exists**: `exists` for array indexes is not yet implemented.
 - ❌  **Array delete**: `delete` for array indexes is not yet implemented.
-- ❌  **`$#array`**: Lvalue array count is implemented: `$#{$sl} = 10`.
 
 ## Subroutines
 - ✅  **Subroutine hoisting**: Invoking subroutines before their actual declaration in the code.
