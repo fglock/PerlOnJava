@@ -361,6 +361,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`...` ellipsis statement**: `...` is supported.
 - ✅  **`system` operator**: `system` is implemented.
 - ✅  **`exec` operator**: `exec` is implemented.
+- ❌  **`system` operator**: Indirect object notation for `system` and `exec` is not implemented.
 
 ## I/O Operations
 
