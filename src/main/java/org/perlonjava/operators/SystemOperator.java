@@ -117,32 +117,25 @@ public class SystemOperator {
             processBuilder.directory(new File(userDir));
 
             process = processBuilder.start();
+            String line;
+            reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
 
             if (captureOutput) {
                 // For backticks: capture stdout, stderr goes to terminal
-                reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-                String line;
                 while ((line = reader.readLine()) != null) {
                     output.append(line).append("\n");
                 }
-
-                // Still need to handle stderr for backticks
-                errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-                while ((line = errorReader.readLine()) != null) {
-                    System.err.println(line);
-                }
             } else {
                 // For system(): pipe stdout and stderr to terminal
-                reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-                String line;
                 while ((line = reader.readLine()) != null) {
                     System.out.println(line);
                 }
+            }
 
-                errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-                while ((line = errorReader.readLine()) != null) {
-                    System.err.println(line);
-                }
+            // pipe stderr to terminal
+            errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+            while ((line = errorReader.readLine()) != null) {
+                System.err.println(line);
             }
 
             exitCode = process.waitFor();
