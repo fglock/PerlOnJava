@@ -361,7 +361,6 @@ my @copy = @{$z};         # ERROR
 - ✅  **`...` ellipsis statement**: `...` is supported.
 - ✅  **`system` operator**: `system` is implemented.
 - ✅  **`exec` operator**: `exec` is implemented.
-- ❌  **`fork` operator**: `fork` is not implemented.
 
 ## I/O Operations
 
@@ -557,7 +556,8 @@ The DBI module provides seamless integration with JDBC drivers:
 - ❌  **`reset("A-Z")`** resetting global variables is not implemented.
 - ❌  **Indirect object syntax** indirect object syntax is not implemented.
 
-## Features Probably Incompatible with JVM
+## Features Incompatible with JVM
+- ❌  **`fork` operator**: `fork` is not implemented. Calling `fork` will always fail and return `undef`.
 - ❌  **`DESTROY`**: Handling of object destruction may be incompatible with JVM garbage collection.
   - For more details see: `dev/design/auto_close.md`.
   - Some modules that depend on `DESTROY`: `SelectSaver`, `File::Temp`.
