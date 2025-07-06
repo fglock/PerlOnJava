@@ -362,7 +362,6 @@ my @copy = @{$z};         # ERROR
 - ❌  **`exec` operator**: `exec` is not implemented.
 - ❌  **`fork` operator**: `fork` is not implemented.
 - ❌  **`system` operator**: `system` is not implemented.
-- ❌  **`binmode` operator**: `binmode` is not implemented.
 
 ## I/O Operations
 
