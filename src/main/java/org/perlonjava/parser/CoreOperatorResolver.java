@@ -181,24 +181,17 @@ public class CoreOperatorResolver {
             case "readline", "eof", "tell", "getc", "open", "close", "fileno", "truncate":
                 // Handle file-related operators with special handling for default handles
                 operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
-                Node handle = null;
+                Node handle;
                 if (((ListNode) operand).elements.isEmpty()) {
                     String defaultHandle = switch (token.text) {
-                        case "readline":
-                            yield "main::ARGV";
-                        case "eof":
-                            yield "main::STDIN";
-                        case "tell":
-                            yield "main::^LAST_FH";
-                        case "getc":
-                            yield "main::STDIN";
-                        case "open":
-                        case "fileno":
-                            throw new PerlCompilerException(parser.tokenIndex, "Not enough arguments for " + token.text, parser.ctx.errorUtil);
-                        case "close":
-                            yield "main::STDIN";    // XXX TODO use currently selected file handle
-                        default:
-                            throw new IllegalStateException("Unexpected value: " + token.text);
+                        case "readline" -> "main::ARGV";
+                        case "eof" -> "main::STDIN";
+                        case "tell" -> "main::^LAST_FH";
+                        case "getc" -> "main::STDIN";
+                        case "open", "fileno" ->
+                                throw new PerlCompilerException(parser.tokenIndex, "Not enough arguments for " + token.text, parser.ctx.errorUtil);
+                        case "close" -> "main::STDIN";    // XXX TODO use currently selected file handle
+                        default -> throw new PerlCompilerException(parser.tokenIndex, "Unexpected value: " + token.text, parser.ctx.errorUtil);
                     };
                     handle = new IdentifierNode(defaultHandle, currentIndex);
                 } else {
@@ -243,7 +236,7 @@ public class CoreOperatorResolver {
                     if (listNode.elements.size() != 1) {
                         throw new PerlCompilerException(parser.tokenIndex, "Too many arguments for " + token.text, parser.ctx.errorUtil);
                     }
-                    operand = listNode.elements.get(0);
+                    operand = listNode.elements.getFirst();
                 }
                 return new OperatorNode(token.text, operand, currentIndex);
             case "our", "state", "my":
