@@ -6,9 +6,13 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.GlobalVariable.setGlobalVariable;
 import static org.perlonjava.runtime.RuntimeIO.flushAllHandles;
 
 /**
@@ -17,8 +21,12 @@ import static org.perlonjava.runtime.RuntimeIO.flushAllHandles;
  */
 public class SystemOperator {
 
+    // Pattern to detect shell metacharacters
+    private static final Pattern SHELL_METACHARACTERS = Pattern.compile("[*?\\[\\]{}()<>|&;`'\"\\\\$\\s]");
+
     /**
      * Executes a system command and returns the output as a RuntimeDataProvider.
+     * This implements Perl's backtick operator (`command`).
      *
      * @param command The command to execute as a RuntimeScalar.
      * @param ctx     The context type, determining the return type (list or scalar).
@@ -26,10 +34,84 @@ public class SystemOperator {
      * @throws PerlCompilerException if an error occurs during command execution or stream handling.
      */
     public static RuntimeDataProvider systemCommand(RuntimeScalar command, int ctx) {
+        CommandResult result = executeCommand(command.toString(), true);
+
+        // Set $? to the exit status
+        getGlobalVariable("main::?").set(result.exitCode);
+
+        return processOutput(result.output, ctx);
+    }
+
+    /**
+     * Executes a system command and returns the exit status.
+     * This implements Perl's system() function.
+     *
+     * @param args The command and arguments as RuntimeList.
+     * @return The exit status as a RuntimeScalar.
+     * @throws PerlCompilerException if an error occurs during command execution.
+     */
+    public static RuntimeScalar system(RuntimeList args) {
+        List<RuntimeBaseEntity> elements = args.elements;
+        if (elements.isEmpty()) {
+            throw new PerlCompilerException("system: no command specified");
+        }
+
+        CommandResult result;
+
+        if (elements.size() == 1) {
+            // Single argument - check for shell metacharacters
+            String command = elements.get(0).toString();
+            if (SHELL_METACHARACTERS.matcher(command).find()) {
+                // Has shell metacharacters, use shell
+                result = executeCommand(command, false);
+            } else {
+                // No shell metacharacters, split into words and execute directly
+                String[] words = command.trim().split("\\s+");
+                result = executeCommandDirect(Arrays.asList(words));
+            }
+        } else {
+            // Multiple arguments - execute directly without shell
+            List<String> commandArgs = new ArrayList<>();
+            for (RuntimeBaseEntity element : elements) {
+                commandArgs.add(element.toString());
+            }
+            result = executeCommandDirect(commandArgs);
+        }
+
+        // Set $? to the exit status
+        getGlobalVariable("main::?").set(result.exitCode);
+
+        return new RuntimeScalar(result.exitCode);
+    }
+
+    /**
+     * Executes a system command and returns the exit status.
+     * This implements Perl's system() function with a single scalar argument.
+     *
+     * @param command The command to execute as a RuntimeScalar.
+     * @return The exit status as a RuntimeScalar.
+     * @throws PerlCompilerException if an error occurs during command execution.
+     */
+    public static RuntimeScalar system(RuntimeScalar command) {
+        RuntimeList args = new RuntimeList();
+        args.elements.add(command);
+        return system(args);
+    }
+
+    /**
+     * Common method to execute a command through the shell.
+     *
+     * @param command       The command to execute.
+     * @param captureOutput Whether to capture stdout (true for backticks, false for system).
+     * @return CommandResult containing output and exit code.
+     * @throws PerlCompilerException if an error occurs during command execution.
+     */
+    private static CommandResult executeCommand(String command, boolean captureOutput) {
         StringBuilder output = new StringBuilder();
         Process process = null;
         BufferedReader reader = null;
         BufferedReader errorReader = null;
+        int exitCode = -1;
 
         try {
             flushAllHandles();
@@ -38,10 +120,10 @@ public class SystemOperator {
             String[] shellCommand;
             if (SystemUtils.osIsWindows()) {
                 // Windows
-                shellCommand = new String[]{"cmd.exe", "/c", command.toString()};
+                shellCommand = new String[]{"cmd.exe", "/c", command};
             } else {
                 // Unix-like (Linux, macOS)
-                shellCommand = new String[]{"/bin/sh", "-c", command.toString()};
+                shellCommand = new String[]{"/bin/sh", "-c", command};
             }
 
             ProcessBuilder processBuilder = new ProcessBuilder(shellCommand);
@@ -50,22 +132,30 @@ public class SystemOperator {
 
             process = processBuilder.start();
 
-            // Capture standard output
-            reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String line;
-            while ((line = reader.readLine()) != null) {
-                output.append(line).append("\n");
+            // Capture standard output only if requested (backticks)
+            if (captureOutput) {
+                reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append("\n");
+                }
             }
 
             // Capture and print standard error to STDERR
             errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+            String line;
             while ((line = errorReader.readLine()) != null) {
                 System.err.println(line);
             }
 
-            process.waitFor();
-        } catch (IOException | InterruptedException e) {
-            throw new PerlCompilerException("Error: " + e.getMessage());
+            exitCode = process.waitFor();
+        } catch (IOException e) {
+            // Command failed to start - return -1 as per Perl spec
+            setGlobalVariable("main::!", e.getMessage());
+            exitCode = -1;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new PerlCompilerException("Command execution interrupted: " + e.getMessage());
         } finally {
             closeQuietly(reader);
             closeQuietly(errorReader);
@@ -74,7 +164,54 @@ public class SystemOperator {
             }
         }
 
-        return processOutput(output.toString(), ctx);
+        return new CommandResult(output.toString(), exitCode);
+    }
+
+    /**
+     * Executes a command directly without shell interpretation.
+     *
+     * @param commandArgs List of command and arguments.
+     * @return CommandResult containing output and exit code.
+     * @throws PerlCompilerException if an error occurs during command execution.
+     */
+    private static CommandResult executeCommandDirect(List<String> commandArgs) {
+        Process process = null;
+        BufferedReader errorReader = null;
+        int exitCode = -1;
+
+        try {
+            flushAllHandles();
+
+            ProcessBuilder processBuilder = new ProcessBuilder(commandArgs);
+            String userDir = System.getProperty("user.dir");
+            processBuilder.directory(new File(userDir));
+
+            process = processBuilder.start();
+
+            // For system(), we don't capture stdout - it goes to the terminal
+            // Capture and print standard error to STDERR
+            errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+            String line;
+            while ((line = errorReader.readLine()) != null) {
+                System.err.println(line);
+            }
+
+            exitCode = process.waitFor();
+        } catch (IOException e) {
+            // Command failed to start - return -1 as per Perl spec
+            setGlobalVariable("main::!", e.getMessage());
+            exitCode = -1;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new PerlCompilerException("Command execution interrupted: " + e.getMessage());
+        } finally {
+            closeQuietly(errorReader);
+            if (process != null) {
+                process.destroy();
+            }
+        }
+
+        return new CommandResult("", exitCode);
     }
 
     /**
@@ -124,6 +261,19 @@ public class SystemOperator {
             return list;
         } else {
             return new RuntimeScalar(output);
+        }
+    }
+
+    /**
+     * Helper class to hold command execution results.
+     */
+    private static class CommandResult {
+        final String output;
+        final int exitCode;
+
+        CommandResult(String output, int exitCode) {
+            this.output = output;
+            this.exitCode = exitCode;
         }
     }
 }
