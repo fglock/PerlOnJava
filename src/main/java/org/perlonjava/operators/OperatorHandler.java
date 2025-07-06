@@ -152,6 +152,8 @@ public class OperatorHandler {
         put("sprintf", "sprintf", "org/perlonjava/operators/SprintfOperator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         put("systemCommand", "systemCommand", "org/perlonjava/operators/SystemOperator", "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;");
+        put("system", "system", "org/perlonjava/operators/SystemOperator", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeScalar;");
+
         put("indexLastElem", "indexLastElem", "org/perlonjava/runtime/RuntimeArray", "(Lorg/perlonjava/runtime/RuntimeArray;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("pop", "pop", "org/perlonjava/runtime/RuntimeArray", "(Lorg/perlonjava/runtime/RuntimeArray;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("shift", "shift", "org/perlonjava/runtime/RuntimeArray", "(Lorg/perlonjava/runtime/RuntimeArray;)Lorg/perlonjava/runtime/RuntimeScalar;");

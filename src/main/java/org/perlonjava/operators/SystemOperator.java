@@ -50,7 +50,7 @@ public class SystemOperator {
      * @return The exit status as a RuntimeScalar.
      * @throws PerlCompilerException if an error occurs during command execution.
      */
-    public static RuntimeScalar system(RuntimeList args) {
+    public static RuntimeScalar system(RuntimeList args, int ctx) {
         List<RuntimeBaseEntity> elements = args.elements;
         if (elements.isEmpty()) {
             throw new PerlCompilerException("system: no command specified");
@@ -82,20 +82,6 @@ public class SystemOperator {
         getGlobalVariable("main::?").set(result.exitCode);
 
         return new RuntimeScalar(result.exitCode);
-    }
-
-    /**
-     * Executes a system command and returns the exit status.
-     * This implements Perl's system() function with a single scalar argument.
-     *
-     * @param command The command to execute as a RuntimeScalar.
-     * @return The exit status as a RuntimeScalar.
-     * @throws PerlCompilerException if an error occurs during command execution.
-     */
-    public static RuntimeScalar system(RuntimeScalar command) {
-        RuntimeList args = new RuntimeList();
-        args.elements.add(command);
-        return system(args);
     }
 
     /**
