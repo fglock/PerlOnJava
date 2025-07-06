@@ -46,10 +46,13 @@ public class CoreOperatorResolver {
                 // Returns the current package name as a StringNode
                 handleEmptyParentheses(parser);
                 return new StringNode(parser.ctx.symbolTable.getCurrentPackage(), parser.tokenIndex);
-            case "__SUB__", "time", "times", "fork", "wait", "wantarray":
+            case "__SUB__", "time", "times", "wait", "wantarray":
                 // Handle operators with zero arguments
                 handleEmptyParentheses(parser);
                 return new OperatorNode(token.text, null, currentIndex);
+            case "fork":
+                handleEmptyParentheses(parser);
+                return new OperatorNode(token.text, new ListNode(currentIndex), currentIndex);
             case "not":
                 // Handle 'not' keyword as a unary operator with an operand
                 operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
