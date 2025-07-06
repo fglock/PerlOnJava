@@ -174,7 +174,7 @@ public class CoreOperatorResolver {
                 // Handle 'pack' operator with one or more arguments
                 operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
                 return new OperatorNode(token.text, operand, currentIndex);
-            case "reverse", "splice", "unlink", "mkdir", "die", "warn":
+            case "reverse", "splice", "unlink", "mkdir", "die", "warn", "system":
                 // Handle operators with any number of arguments
                 operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
                 return new OperatorNode(token.text, operand, currentIndex);
@@ -307,7 +307,7 @@ public class CoreOperatorResolver {
                     }
                 }
                 return StringParser.parseRawString(parser, token.text);
-            case "system", "dump", "exec", "format", "write", "dbmclose", "dbmopen":
+            case "dump", "exec", "format", "write", "dbmclose", "dbmopen":
                 // Not implemented
                 throw new PerlCompilerException(parser.tokenIndex, "Not implemented: operator: " + token.text, parser.ctx.errorUtil);
             case "accept", "bind", "connect", "getpeername", "getsockname", "getsockopt",
