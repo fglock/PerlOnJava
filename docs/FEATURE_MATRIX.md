@@ -359,9 +359,9 @@ my @copy = @{$z};         # ERROR
 - ✅  **setting `$_` in `while` loop with `<>`**: automatic setting `$_` in `while` loops is implemented.
 - ✅  **`do BLOCK while`**: `do` executes once before the conditional is evaluated.
 - ✅  **`...` ellipsis statement**: `...` is supported.
+- ✅  **`system` operator**: `system` is implemented.
 - ❌  **`exec` operator**: `exec` is not implemented.
 - ❌  **`fork` operator**: `fork` is not implemented.
-- ❌  **`system` operator**: `system` is not implemented.
 
 ## I/O Operations
 

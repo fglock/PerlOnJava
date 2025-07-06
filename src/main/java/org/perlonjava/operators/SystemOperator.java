@@ -60,7 +60,7 @@ public class SystemOperator {
 
         if (elements.size() == 1) {
             // Single argument - check for shell metacharacters
-            String command = elements.get(0).toString();
+            String command = elements.getFirst().toString();
             if (SHELL_METACHARACTERS.matcher(command).find()) {
                 // Has shell metacharacters, use shell
                 result = executeCommand(command, false);
@@ -118,20 +118,31 @@ public class SystemOperator {
 
             process = processBuilder.start();
 
-            // Capture standard output only if requested (backticks)
             if (captureOutput) {
+                // For backticks: capture stdout, stderr goes to terminal
                 reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
                 String line;
                 while ((line = reader.readLine()) != null) {
                     output.append(line).append("\n");
                 }
-            }
 
-            // Capture and print standard error to STDERR
-            errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-            String line;
-            while ((line = errorReader.readLine()) != null) {
-                System.err.println(line);
+                // Still need to handle stderr for backticks
+                errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+                while ((line = errorReader.readLine()) != null) {
+                    System.err.println(line);
+                }
+            } else {
+                // For system(): pipe stdout and stderr to terminal
+                reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    System.out.println(line);
+                }
+
+                errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+                while ((line = errorReader.readLine()) != null) {
+                    System.err.println(line);
+                }
             }
 
             exitCode = process.waitFor();
@@ -162,6 +173,7 @@ public class SystemOperator {
      */
     private static CommandResult executeCommandDirect(List<String> commandArgs) {
         Process process = null;
+        BufferedReader reader = null;
         BufferedReader errorReader = null;
         int exitCode = -1;
 
@@ -174,10 +186,14 @@ public class SystemOperator {
 
             process = processBuilder.start();
 
-            // For system(), we don't capture stdout - it goes to the terminal
-            // Capture and print standard error to STDERR
-            errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+            // For system(), pipe stdout and stderr to terminal
+            reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
             String line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println(line);
+            }
+
+            errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
             while ((line = errorReader.readLine()) != null) {
                 System.err.println(line);
             }
@@ -191,6 +207,7 @@ public class SystemOperator {
             Thread.currentThread().interrupt();
             throw new PerlCompilerException("Command execution interrupted: " + e.getMessage());
         } finally {
+            closeQuietly(reader);
             closeQuietly(errorReader);
             if (process != null) {
                 process.destroy();

@@ -242,7 +242,7 @@ The following areas are currently under active development to enhance the functi
   - Subroutine prototypes are fully implemented. Added or fixed: `+`, `;`, `*`, `\@`, `\%`, `\$`, `\[@%]`.
   - Added double quoted string escapes: `\U`, `\L`, `\u`, `\l`.
   - Added star count (`C*`) in `pack`, `unpack`.
-  - Added operators: `read`, `tell`, `seek`.
+  - Added operators: `read`, `tell`, `seek`, `system`.
   - Added operator: `select(undef,undef,undef,$time)`.
   - Added operator: `^^=`.
   - Added operator: `delete`, `exists` for array indexes.
