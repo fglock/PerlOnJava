@@ -46,7 +46,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - XS modules and C integration
 - Threading
 - Some Perl features (formats, tied variables)
-- System-level operations (fork, exec)
+- Some system-level operations (fork)
 
 ## Compiler Usability
 - ✅  **Wrapper scripts**: (jperl/jperl.bat) for easier command-line usage.
@@ -360,7 +360,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`do BLOCK while`**: `do` executes once before the conditional is evaluated.
 - ✅  **`...` ellipsis statement**: `...` is supported.
 - ✅  **`system` operator**: `system` is implemented.
-- ❌  **`exec` operator**: `exec` is not implemented.
+- ✅  **`exec` operator**: `exec` is implemented.
 - ❌  **`fork` operator**: `fork` is not implemented.
 
 ## I/O Operations

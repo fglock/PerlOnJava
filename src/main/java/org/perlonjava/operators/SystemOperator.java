@@ -14,6 +14,7 @@ import java.util.regex.Pattern;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.GlobalVariable.setGlobalVariable;
 import static org.perlonjava.runtime.RuntimeIO.flushAllHandles;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
  * The SystemOperator class provides functionality to execute system commands
@@ -271,5 +272,107 @@ public class SystemOperator {
             this.output = output;
             this.exitCode = exitCode;
         }
+    }
+
+    /**
+     * Executes a command and attempts to replace the current process.
+     * This implements Perl's exec() function.
+     * <p>
+     * Note: In Java, we cannot truly replace the current process like Unix exec(),
+     * so this implementation executes the command and then terminates the JVM
+     * with the command's exit code.
+     *
+     * @param args The command and arguments as RuntimeList.
+     * @throws PerlCompilerException if an error occurs during command execution.
+     */
+    public static RuntimeScalar exec(RuntimeList args, int ctx) {
+        List<RuntimeBaseEntity> elements = args.elements;
+        if (elements.isEmpty()) {
+            throw new PerlCompilerException("exec: no command specified");
+        }
+
+        try {
+            flushAllHandles();
+
+            int exitCode;
+
+            if (elements.size() == 1) {
+                // Single argument - check for shell metacharacters
+                String command = elements.getFirst().toString();
+                if (SHELL_METACHARACTERS.matcher(command).find()) {
+                    // Has shell metacharacters, use shell
+                    exitCode = execCommand(command);
+                } else {
+                    // No shell metacharacters, split into words and execute directly
+                    String[] words = command.trim().split("\\s+");
+                    exitCode = execCommandDirect(Arrays.asList(words));
+                }
+            } else {
+                // Multiple arguments - execute directly without shell
+                List<String> commandArgs = new ArrayList<>();
+                for (RuntimeBaseEntity element : elements) {
+                    commandArgs.add(element.toString());
+                }
+                exitCode = execCommandDirect(commandArgs);
+            }
+
+            // exec() should never return in Perl, so we terminate the JVM
+            System.exit(exitCode);
+
+        } catch (Exception e) {
+            // If we get here, the command failed to start
+            setGlobalVariable("main::!", e.getMessage());
+        }
+        return scalarUndef;
+    }
+
+    /**
+     * Executes a command through the shell for exec().
+     *
+     * @param command The command to execute.
+     * @return The exit code of the command.
+     * @throws IOException if an error occurs during command execution.
+     * @throws InterruptedException if the command execution is interrupted.
+     */
+    private static int execCommand(String command) throws IOException, InterruptedException {
+        // Determine the operating system and set the shell command accordingly
+        String[] shellCommand;
+        if (SystemUtils.osIsWindows()) {
+            // Windows
+            shellCommand = new String[]{"cmd.exe", "/c", command};
+        } else {
+            // Unix-like (Linux, macOS)
+            shellCommand = new String[]{"/bin/sh", "-c", command};
+        }
+
+        ProcessBuilder processBuilder = new ProcessBuilder(shellCommand);
+        String userDir = System.getProperty("user.dir");
+        processBuilder.directory(new File(userDir));
+
+        // For exec(), we want the command to take over completely
+        processBuilder.inheritIO();
+
+        Process process = processBuilder.start();
+        return process.waitFor();
+    }
+
+    /**
+     * Executes a command directly without shell interpretation for exec().
+     *
+     * @param commandArgs List of command and arguments.
+     * @return The exit code of the command.
+     * @throws IOException if an error occurs during command execution.
+     * @throws InterruptedException if the command execution is interrupted.
+     */
+    private static int execCommandDirect(List<String> commandArgs) throws IOException, InterruptedException {
+        ProcessBuilder processBuilder = new ProcessBuilder(commandArgs);
+        String userDir = System.getProperty("user.dir");
+        processBuilder.directory(new File(userDir));
+
+        // For exec(), we want the command to take over completely
+        processBuilder.inheritIO();
+
+        Process process = processBuilder.start();
+        return process.waitFor();
     }
 }
