@@ -142,12 +142,16 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // System.out.println("glob hashDerefGet " + index.toString());
         return switch (index.toString()) {
             case "CODE" -> GlobalVariable.getGlobalCodeRef(this.globName);
-            case "IO" -> GlobalVariable.getGlobalIO(this.globName);
+            case "IO" -> getIO();
             case "SCALAR" -> GlobalVariable.getGlobalVariable(this.globName);
             case "ARRAY" -> GlobalVariable.getGlobalArray(this.globName).createReference();
             case "HASH" -> GlobalVariable.getGlobalHash(this.globName).createReference();
             default -> new RuntimeScalar();
         };
+    }
+
+    public RuntimeScalar getIO() {
+        return GlobalVariable.getGlobalIO(this.globName);
     }
 
     /**
