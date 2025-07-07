@@ -238,7 +238,7 @@ The following areas are currently under active development to enhance the functi
 
 - **v3.0.1**: Next minor version
   - Update Perl version to `5.42.0`.
-  - Added overload operators: `!`, `+`, `-`, `*`, `/`, `%`, `int`, `neg`, `log`, `sqrt`, `cos`, `sin`, `exp`, `abs`, `atan2`, `**`, `@{}`, `%{}`. `${}`.
+  - Added overload operators: `!`, `+`, `-`, `*`, `/`, `%`, `int`, `neg`, `log`, `sqrt`, `cos`, `sin`, `exp`, `abs`, `atan2`, `**`, `@{}`, `%{}`. `${}`, `&{}`.
   - Subroutine prototypes are fully implemented. Added or fixed: `+`, `;`, `*`, `\@`, `\%`, `\$`, `\[@%]`.
   - Added double quoted string escapes: `\U`, `\L`, `\u`, `\l`.
   - Added star count (`C*`) in `pack`, `unpack`.
