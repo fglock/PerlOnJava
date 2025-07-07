@@ -461,6 +461,22 @@ public class RuntimeIO implements RuntimeScalarReference {
             // Handle: print STDOUT ...
             fh = (RuntimeIO) runtimeScalar.value;
         }
+
+        // Check if object is eligible for overloading `*{}`
+        int blessId = runtimeScalar.blessedId();
+        if (blessId != 0) {
+            // Prepare overload context and check if object is eligible for overloading
+            OverloadContext ctx = OverloadContext.prepare(blessId);
+            if (ctx != null) {
+                // Try overload method
+                RuntimeScalar result = ctx.tryOverload("(*{}", new RuntimeArray(runtimeScalar));
+                // If the subroutine returns the object itself then it will not be called again
+                if (result != null && result.value.hashCode() != runtimeScalar.value.hashCode()) {
+                    return getRuntimeIO(result);
+                }
+            }
+        }
+
         return fh;
     }
 
