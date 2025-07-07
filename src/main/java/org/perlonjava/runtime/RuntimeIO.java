@@ -404,7 +404,7 @@ public class RuntimeIO implements RuntimeScalarReference {
                 strings.set(0, arg);
             }
 
-            System.out.println("open pipe: mode=" + mode + " cmd=" + strings + " layers=" + ioLayers);
+            // System.out.println("open pipe: mode=" + mode + " cmd=" + strings + " layers=" + ioLayers);
 
             if (">".equals(mode)) {
                 if (strings.size() == 1) {
