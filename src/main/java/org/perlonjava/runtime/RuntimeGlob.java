@@ -346,7 +346,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return An Iterator<RuntimeScalar> for iterating over the elements.
      */
     public Iterator<RuntimeScalar> iterator() {
-        return this.scalar().iterator();
+        return super.iterator();
     }
 
     /**

@@ -370,6 +370,7 @@ my @copy = @{$z};         # ERROR
   - 2-argument forms: `<-`, `-`, `>-`, `filename`
   - 3-argument forms with explicit modes
   - In-memory files
+  - ❌ `open` is not supported for pipe `-|`
 - ✅  **`readline`**: Reading lines from filehandles
 - ✅  **`eof`**: End-of-file detection
 - ✅  **`close`**: Closing filehandles
@@ -479,12 +480,12 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - 🚧  **overload** pragma:
   - ✅ Implemented: `""`, `0+`, `bool`, `fallback`, `nomethod`.
   - ✅ Implemented: `!`, `+`, `-`, `*`, `/`, `%`, `int`, `neg`, `log`, `sqrt`, `cos`, `sin`, `exp`, `abs`, `atan2`, `**`.
-  - ✅ Implemented: `@{}`, `%{}`, `${}`, `&{}`.
+  - ✅ Implemented: `@{}`, `%{}`, `${}`, `&{}`, `*{}`.
   - ❌ Missing: `<=>`, `cmp`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `lt`, `le`, `gt`, `ge`, `eq`, `ne`.
   - ❌ Missing: `++`, `--`, `=`, `qr`, `<>`.
   - ❌ Missing: `&`, `|`, `^`, `~`, `<<`, `>>`, `&.`, `|.`, `^.`, `~.`, `x`, `.`.
   - ❌ Missing: `+=`, `-=`, `*=`, `/=`, `%=`, `**=`, `<<=`, `>>=`, `x=`, `.=`, `&=`, `|=`, `^=`, `&.=`, `|.=`, `^.=`.
-  - ❌ Missing: `*{}`, `-X`.
+  - ❌ Missing: `-X`.
 - ❌  **overloading** pragma
 
 

@@ -80,7 +80,7 @@ public class Operator {
             return scalarFalse;
         }
         fileHandle.type = RuntimeScalarType.GLOBREFERENCE;
-        fileHandle.value = fh;
+        fileHandle.value = new RuntimeGlob(null).setIO(fh);
         return scalarTrue; // success
     }
 

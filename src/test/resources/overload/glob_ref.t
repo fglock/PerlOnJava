@@ -70,23 +70,23 @@ is( ref(\*$obj), 'GLOB', 'Reference to dereferenced object returns GLOB ref type
     ok( *$stderr_obj, 'Can dereference STDERR glob object' );
 }
 
-# Test 7: Test with pipe
-{
-    my $pid = open(my $pipe, '-|');
-    if (!defined $pid) {
-        die "Cannot fork: $!";
-    } elsif ($pid == 0) {
-        # Child process
-        print "From child";
-        exit(0);
-    } else {
-        # Parent process
-        my $pipe_obj = MyGlob->new( $pipe );
-        my $line = readline(*$pipe_obj);
-        close(*$pipe_obj);
-        is( $line, "From child", 'Pipe operations work through dereferenced glob' );
-    }
-}
+## # Test 7: Test with pipe
+## {
+##     my $pid = open(my $pipe, '-|');
+##     if (!defined $pid) {
+##         die "Cannot fork: $!";
+##     } elsif ($pid == 0) {
+##         # Child process
+##         print "From child";
+##         exit(0);
+##     } else {
+##         # Parent process
+##         my $pipe_obj = MyGlob->new( $pipe );
+##         my $line = readline(*$pipe_obj);
+##         close(*$pipe_obj);
+##         is( $line, "From child", 'Pipe operations work through dereferenced glob' );
+##     }
+## }
 
 # Test 8: Test fileno
 {
