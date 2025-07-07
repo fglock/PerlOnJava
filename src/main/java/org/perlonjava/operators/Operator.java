@@ -79,7 +79,7 @@ public class Operator {
         if (fh == null) {
             return scalarFalse;
         }
-        fileHandle.type = RuntimeScalarType.GLOB;
+        fileHandle.type = RuntimeScalarType.GLOBREFERENCE;
         fileHandle.value = fh;
         return scalarTrue; // success
     }

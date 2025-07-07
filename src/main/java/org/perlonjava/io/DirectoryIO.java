@@ -52,7 +52,7 @@ public class DirectoryIO {
             Path fullDirPath = Paths.get(System.getProperty("user.dir"), dirPath);
             DirectoryStream<Path> stream = Files.newDirectoryStream(fullDirPath);
             DirectoryIO dirIO = new DirectoryIO(stream, dirPath);
-            dirHandle.type = RuntimeScalarType.GLOB;
+            dirHandle.type = RuntimeScalarType.GLOBREFERENCE;
             dirHandle.value = new RuntimeIO(dirIO);
             return scalarTrue;
         } catch (IOException e) {

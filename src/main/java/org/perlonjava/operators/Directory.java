@@ -130,11 +130,7 @@ public class Directory {
         RuntimeScalar dirHandle = args.getFirst();
         RuntimeScalar position = (RuntimeScalar) args.elements.getLast();
 
-        if (dirHandle.type != RuntimeScalarType.GLOB) {
-            throw new RuntimeException("Invalid directory handle");
-        }
-
-        RuntimeIO dirIO = (RuntimeIO) dirHandle.value;
+        RuntimeIO dirIO = dirHandle.getRuntimeIO();
         int position1 = position.getInt();
         if (dirIO.directoryIO == null) {
             RuntimeIO.handleIOError("seekdir is not supported for non-directory streams");

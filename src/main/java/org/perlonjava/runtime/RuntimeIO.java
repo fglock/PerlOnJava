@@ -91,13 +91,19 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
     };
 
-    /** Standard output stream handle (STDOUT) */
+    /**
+     * Standard output stream handle (STDOUT)
+     */
     public static RuntimeIO stdout = new RuntimeIO(new StandardIO(System.out, true));
 
-    /** Standard error stream handle (STDERR) */
+    /**
+     * Standard error stream handle (STDERR)
+     */
     public static RuntimeIO stderr = new RuntimeIO(new StandardIO(System.err, false));
 
-    /** Standard input stream handle (STDIN) */
+    /**
+     * Standard input stream handle (STDIN)
+     */
     public static RuntimeIO stdin = new RuntimeIO(new StandardIO(System.in));
 
     /**
@@ -194,7 +200,7 @@ public class RuntimeIO implements RuntimeScalarReference {
     /**
      * Handles IOException by extracting the message and setting $!.
      *
-     * @param e the IOException that occurred
+     * @param e       the IOException that occurred
      * @param message additional context about the operation that failed
      * @return RuntimeScalar false value for error indication
      */
@@ -253,7 +259,7 @@ public class RuntimeIO implements RuntimeScalarReference {
      * </pre>
      *
      * @param fileName the name of the file to open
-     * @param mode the mode string, optionally including I/O layers
+     * @param mode     the mode string, optionally including I/O layers
      * @return RuntimeIO handle for the opened file, or null on error
      */
     public static RuntimeIO open(String fileName, String mode) {
@@ -313,7 +319,7 @@ public class RuntimeIO implements RuntimeScalarReference {
      * </pre>
      *
      * @param scalarRef a reference to a scalar that will back the file
-     * @param mode the file mode (">", "<", ">>")
+     * @param mode      the file mode (">", "<", ">>")
      * @return RuntimeIO handle for the scalar-backed file, or null on error
      */
     public static RuntimeIO open(RuntimeScalar scalarRef, String mode) {
@@ -444,19 +450,12 @@ public class RuntimeIO implements RuntimeScalarReference {
      */
     public static RuntimeIO getRuntimeIO(RuntimeScalar runtimeScalar) {
         RuntimeIO fh;
-        if (runtimeScalar.type == RuntimeScalarType.GLOBREFERENCE) {
-            // Handle: my $fh2 = \*STDOUT;
-            fh = (RuntimeIO) ((RuntimeGlob) runtimeScalar.value).getIO().value;
-        } else if (runtimeScalar.type == RuntimeScalarType.GLOB) {
-            // Handle: my $fh = *STDOUT;
-            if (runtimeScalar.value instanceof RuntimeGlob) {
-                fh = (RuntimeIO) ((RuntimeGlob) runtimeScalar.value).getIO().value;
-            } else {
-                // Direct I/O handle
-                fh = (RuntimeIO) runtimeScalar.value;
-            }
+        // Handle: my $fh2 = \*STDOUT;
+        // Handle: my $fh = *STDOUT;
+        if (runtimeScalar.value instanceof RuntimeGlob runtimeGlob) {
+            fh = (RuntimeIO) runtimeGlob.getIO().value;
         } else {
-            // Handle: print STDOUT ...
+            // Direct I/O handle created by open() or opendir()
             fh = (RuntimeIO) runtimeScalar.value;
         }
 
@@ -674,7 +673,7 @@ public class RuntimeIO implements RuntimeScalarReference {
      * Only valid for socket handles.
      *
      * @param address the local address to bind to
-     * @param port the local port to bind to
+     * @param port    the local port to bind to
      * @return RuntimeScalar indicating success/failure
      */
     public RuntimeScalar bind(String address, int port) {
@@ -686,7 +685,7 @@ public class RuntimeIO implements RuntimeScalarReference {
      * Only valid for socket handles.
      *
      * @param address the remote address to connect to
-     * @param port the remote port to connect to
+     * @param port    the remote port to connect to
      * @return RuntimeScalar indicating success/failure
      */
     public RuntimeScalar connect(String address, int port) {
