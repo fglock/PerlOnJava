@@ -446,13 +446,11 @@ public class RuntimeIO implements RuntimeScalarReference {
         RuntimeIO fh;
         if (runtimeScalar.type == RuntimeScalarType.GLOBREFERENCE) {
             // Handle: my $fh2 = \*STDOUT;
-            String globName = ((RuntimeGlob) runtimeScalar.value).globName;
-            fh = (RuntimeIO) getGlobalIO(globName).value;
+            fh = (RuntimeIO) ((RuntimeGlob) runtimeScalar.value).getIO().value;
         } else if (runtimeScalar.type == RuntimeScalarType.GLOB) {
             // Handle: my $fh = *STDOUT;
             if (runtimeScalar.value instanceof RuntimeGlob) {
-                String globName = ((RuntimeGlob) runtimeScalar.value).globName;
-                fh = (RuntimeIO) getGlobalIO(globName).value;
+                fh = (RuntimeIO) ((RuntimeGlob) runtimeScalar.value).getIO().value;
             } else {
                 // Direct I/O handle
                 fh = (RuntimeIO) runtimeScalar.value;
