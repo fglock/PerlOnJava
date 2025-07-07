@@ -7,6 +7,8 @@ import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
+import static org.perlonjava.runtime.RuntimeScalarType.GLOB;
+import static org.perlonjava.runtime.RuntimeScalarType.GLOBREFERENCE;
 
 /**
  * The GlobalVariable class manages global variables, arrays, hashes, and references
@@ -19,7 +21,7 @@ public class GlobalVariable {
     static final Map<String, RuntimeArray> globalArrays = new HashMap<>();
     static final Map<String, RuntimeHash> globalHashes = new HashMap<>();
     static final Map<String, RuntimeScalar> globalCodeRefs = new HashMap<>();
-    static final Map<String, RuntimeScalar> globalIORefs = new HashMap<>();
+    static final Map<String, RuntimeGlob> globalIORefs = new HashMap<>();
 
     // Flags used by operator override
 
@@ -229,10 +231,10 @@ public class GlobalVariable {
      * @param key The key of the global IO reference.
      * @return The RuntimeScalar representing the global IO reference.
      */
-    public static RuntimeScalar getGlobalIO(String key) {
-        RuntimeScalar var = globalIORefs.get(key);
+    public static RuntimeGlob getGlobalIO(String key) {
+        RuntimeGlob var = globalIORefs.get(key);
         if (var == null) {
-            var = new RuntimeScalar().set(new RuntimeIO());
+            var = new RuntimeGlob(key);
             globalIORefs.put(key, var);
         }
         return var;

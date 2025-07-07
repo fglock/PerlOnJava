@@ -214,9 +214,9 @@ public class RuntimeIO implements RuntimeScalarReference {
      */
     public static void initStdHandles() {
         // Initialize STDOUT, STDERR, STDIN in the main package
-        getGlobalIO("main::STDOUT").set(stdout);
-        getGlobalIO("main::STDERR").set(stderr);
-        getGlobalIO("main::STDIN").set(stdin);
+        getGlobalIO("main::STDOUT").setIO(stdout);
+        getGlobalIO("main::STDERR").setIO(stderr);
+        getGlobalIO("main::STDIN").setIO(stdin);
         lastAccesseddHandle = stdout;
         selectedHandle = stdout;
     }

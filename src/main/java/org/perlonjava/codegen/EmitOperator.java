@@ -490,7 +490,7 @@ public class EmitOperator {
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/GlobalVariable",
                     "getGlobalIO",
-                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeGlob;",
                     false);
         } else if (node instanceof BlockNode) {
             // {STDERR}  or  {$fh}

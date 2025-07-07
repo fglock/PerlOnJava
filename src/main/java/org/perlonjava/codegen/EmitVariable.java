@@ -94,15 +94,13 @@ public class EmitVariable {
             if (sigil.equals("*")) {
                 // typeglob
                 String fullName = NameNormalizer.normalizeVariableName(name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeGlob");
-                mv.visitInsn(Opcodes.DUP);
                 mv.visitLdcInsn(fullName); // emit string
-                mv.visitMethodInsn(
-                        Opcodes.INVOKESPECIAL,
-                        "org/perlonjava/runtime/RuntimeGlob",
-                        "<init>",
-                        "(Ljava/lang/String;)V",
-                        false); // Call new RuntimeGlob(String)
+                emitterVisitor.ctx.mv.visitMethodInsn(
+                        Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/GlobalVariable",
+                        "getGlobalIO",
+                        "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeGlob;",
+                        false);
                 return;
             }
 
