@@ -14,6 +14,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
     // The name of the typeglob
     public String globName;
+    public RuntimeScalar IO;
 
     /**
      * Constructor for RuntimeGlob.
@@ -26,6 +27,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // Initialize the RuntimeScalar fields
         this.type = RuntimeScalarType.GLOB;
         this.value = this;
+        this.IO = new RuntimeScalar();
     }
 
     /**
@@ -48,10 +50,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 InheritanceResolver.invalidateCache();
 
                 return value;
-            case GLOB:
-                if (value.value instanceof RuntimeIO) {
-                    // *STDOUT = $new_handle
-                    GlobalVariable.getGlobalIO(this.globName).set(value);
+            case GLOB, GLOBREFERENCE:
+                // *STDOUT = $new_handle
+                if (value.value instanceof RuntimeGlob runtimeGlob) {
+                    this.set(runtimeGlob);
                 }
                 return value;
             case ARRAYREFERENCE:
@@ -92,9 +94,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
         // Set the current scalar to the global code reference associated with the glob name.
         this.set(GlobalVariable.getGlobalCodeRef(globName));
+        // Invalidate the method resolution cache
+        InheritanceResolver.invalidateCache();
 
         // Set the current scalar to the global IO (input/output) reference associated with the glob name.
-        this.set(GlobalVariable.getGlobalIO(globName));
+        this.setIO(GlobalVariable.getGlobalIO(globName).getIO());
 
         // Set the current scalar to a reference of the global array associated with the glob name.
         this.set(GlobalVariable.getGlobalArray(globName).createReference());
@@ -142,7 +146,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // System.out.println("glob hashDerefGet " + index.toString());
         return switch (index.toString()) {
             case "CODE" -> GlobalVariable.getGlobalCodeRef(this.globName);
-            case "IO" -> getIO();
+            case "IO" -> IO;
             case "SCALAR" -> GlobalVariable.getGlobalVariable(this.globName);
             case "ARRAY" -> GlobalVariable.getGlobalArray(this.globName).createReference();
             case "HASH" -> GlobalVariable.getGlobalHash(this.globName).createReference();
@@ -151,7 +155,15 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     public RuntimeScalar getIO() {
-        return GlobalVariable.getGlobalIO(this.globName);
+        return this.IO;
+    }
+    public RuntimeGlob setIO(RuntimeScalar io) {
+        this.IO = io;
+        return this;
+    }
+    public RuntimeGlob setIO(RuntimeIO io) {
+        this.IO = new RuntimeScalar(io);
+        return this;
     }
 
     /**
@@ -374,7 +386,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         GlobalVariable.getGlobalArray(this.globName).dynamicSaveState();
         GlobalVariable.getGlobalHash(this.globName).dynamicSaveState();
         GlobalVariable.getGlobalVariable(this.globName).dynamicSaveState();
-        GlobalVariable.getGlobalIO(this.globName).dynamicSaveState();
+        this.IO.dynamicSaveState();
     }
 
     /**
@@ -382,7 +394,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      */
     @Override
     public void dynamicRestoreState() {
-        GlobalVariable.getGlobalIO(this.globName).dynamicRestoreState();
+        this.IO.dynamicRestoreState();
         GlobalVariable.getGlobalVariable(this.globName).dynamicRestoreState();
         GlobalVariable.getGlobalHash(this.globName).dynamicRestoreState();
         GlobalVariable.getGlobalArray(this.globName).dynamicRestoreState();
