@@ -351,10 +351,33 @@ public class RuntimeCode extends RuntimeBaseEntity implements RuntimeScalarRefer
         if (runtimeScalar.type == RuntimeScalarType.CODE) {
             // Cast the value to RuntimeCode and call apply()
             return ((RuntimeCode) runtimeScalar.value).apply(a, callContext);
-        } else {
-            // If the type is not CODE, throw an exception indicating an invalid state
-            throw new PerlCompilerException("Not a CODE reference");
         }
+
+        RuntimeScalar overloadedCode = handleCodeOverload(runtimeScalar);
+        if (overloadedCode != null) {
+            return apply(overloadedCode, a, callContext);
+        }
+
+        // If the type is not CODE, throw an exception indicating an invalid state
+        throw new PerlCompilerException("Not a CODE reference");
+    }
+
+    private static RuntimeScalar handleCodeOverload(RuntimeScalar runtimeScalar) {
+        // Check if object is eligible for overloading
+        int blessId = runtimeScalar.blessedId();
+        if (blessId != 0) {
+            // Prepare overload context and check if object is eligible for overloading
+            OverloadContext ctx = OverloadContext.prepare(blessId);
+            if (ctx != null) {
+                // Try overload method
+                RuntimeScalar result = ctx.tryOverload("(&{}", new RuntimeArray(runtimeScalar));
+                // If the subroutine returns the object itself then it will not be called again
+                if (result != null && result.value.hashCode() != runtimeScalar.value.hashCode()) {
+                    return result;
+                }
+            }
+        }
+        return null;
     }
 
     // Method to apply (execute) a subroutine reference
@@ -387,6 +410,12 @@ public class RuntimeCode extends RuntimeBaseEntity implements RuntimeScalarRefer
                 throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called at ");
             }
         }
+
+        RuntimeScalar overloadedCode = handleCodeOverload(runtimeScalar);
+        if (overloadedCode != null) {
+            return apply(overloadedCode, subroutineName, list, callContext);
+        }
+
         throw new PerlCompilerException("Not a CODE reference");
     }
 
