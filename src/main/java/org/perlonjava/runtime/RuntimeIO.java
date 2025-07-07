@@ -413,12 +413,15 @@ public class RuntimeIO implements RuntimeScalarReference {
                     fh.ioHandle = new PipeOutputChannel(strings);
                 }
             }
-            if ("<".equals(mode)) {
+            else if ("<".equals(mode)) {
                 if (strings.size() == 1) {
                     fh.ioHandle = new PipeInputChannel(strings.getFirst());
                 } else {
                     fh.ioHandle = new PipeInputChannel(strings);
                 }
+            } else {
+                handleIOError("open failed: invalid mode for pipe");
+                return null;
             }
 
             // Add the handle to the LRU cache
@@ -426,8 +429,6 @@ public class RuntimeIO implements RuntimeScalarReference {
 
             // Apply any I/O layers
             fh.binmode(ioLayers);
-
-            throw new IOException();
         } catch (IOException e) {
             handleIOException(e, "open failed");
             fh = null;
