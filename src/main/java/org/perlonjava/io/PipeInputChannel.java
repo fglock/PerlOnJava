@@ -7,8 +7,8 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.InputStream;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -18,32 +18,14 @@ import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 
 /**
- * A pipe input channel that reads data from an external program.
+ * A pipe input channel that reads raw octets from an external program.
  *
  * <p>This class implements the Perl "-|" pipe mode, which allows reading
  * output from an external command. The command is executed in a separate
  * process, and its stdout is available for reading through this channel.
  *
- * <p>Key features:
- * <ul>
- *   <li>Supports both shell commands and direct program execution</li>
- *   <li>Handles multi-byte character sequences correctly</li>
- *   <li>Tracks EOF state when the external program terminates</li>
- *   <li>Provides access to the process exit code</li>
- * </ul>
- *
- * <p>Example usage:
- * <pre>
- * // Create a pipe to read from 'sort' command
- * PipeInputChannel pipe = new PipeInputChannel("sort -u file.txt");
- *
- * // Read sorted output
- * RuntimeScalar data = pipe.read(1024, StandardCharsets.UTF_8);
- *
- * // Close and get exit code
- * pipe.close();
- * int exitCode = pipe.getExitCode();
- * </pre>
+ * <p>This implementation reads raw octets (bytes) rather than lines,
+ * which is more faithful to how Perl's I/O system actually works.
  */
 public class PipeInputChannel implements IOHandle {
 
@@ -53,8 +35,8 @@ public class PipeInputChannel implements IOHandle {
     /** The external process */
     private Process process;
 
-    /** Reader for the process stdout */
-    private BufferedReader reader;
+    /** Input stream from the process stdout */
+    private InputStream inputStream;
 
     /** Reader for the process stderr (for error handling) */
     private BufferedReader errorReader;
@@ -65,8 +47,115 @@ public class PipeInputChannel implements IOHandle {
     /** The exit code of the process (-1 if not yet terminated) */
     private int exitCode = -1;
 
-    /** Helper for handling multi-byte character decoding */
-    private CharsetDecoderHelper decoderHelper;
+    // ... (constructor and setup methods remain the same, but remove BufferedReader setup)
+
+    /**
+     * Common setup for the process builder.
+     *
+     * @param processBuilder the process builder to configure
+     * @throws IOException if an I/O error occurs starting the process
+     */
+    private void setupProcess(ProcessBuilder processBuilder) throws IOException {
+        // Set working directory to current directory
+        String userDir = System.getProperty("user.dir");
+        processBuilder.directory(new File(userDir));
+
+        // Start the process
+        process = processBuilder.start();
+
+        // Keep raw input stream for octet reading
+        inputStream = process.getInputStream();
+
+        // Create reader for stderr only
+        errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+
+        // Start a thread to consume stderr to prevent blocking
+        Thread errorThread = new Thread(() -> {
+            try (BufferedReader err = errorReader) {
+                String line;
+                while ((line = err.readLine()) != null) {
+                    System.err.println(line);
+                }
+            } catch (IOException e) {
+                // Ignore - process might have terminated
+            }
+        });
+        errorThread.setDaemon(true);
+        errorThread.start();
+    }
+
+    /**
+     * Reads raw octets from the process stdout.
+     * This reads exactly the requested number of bytes (or less if EOF/error).
+     *
+     * @param maxBytes the maximum number of bytes to read
+     * @param charset the character encoding to use for converting bytes to string
+     * @return RuntimeScalar containing the read data
+     */
+    @Override
+    public RuntimeScalar read(int maxBytes, Charset charset) {
+        if (isEOF) {
+            return new RuntimeScalar("");
+        }
+
+        try {
+            // Read raw bytes from the process input stream
+            byte[] buffer = new byte[maxBytes];
+            int bytesRead = inputStream.read(buffer, 0, maxBytes);
+
+            if (bytesRead == -1) {
+                // End of stream reached
+                isEOF = true;
+                checkProcessExit();
+                return new RuntimeScalar("");
+            }
+
+            if (bytesRead == 0) {
+                // No data available right now, but stream is not closed
+                return new RuntimeScalar("");
+            }
+
+            // Convert the bytes to string using the specified charset
+            String result = new String(buffer, 0, bytesRead, charset);
+            return new RuntimeScalar(result);
+
+        } catch (IOException e) {
+            isEOF = true;
+            checkProcessExit();
+            return handleIOException(e, "Read from pipe failed");
+        }
+    }
+
+    /**
+     * Closes the pipe and terminates the process if still running.
+     *
+     * @return RuntimeScalar with true on success
+     */
+    @Override
+    public RuntimeScalar close() {
+        try {
+            if (inputStream != null) {
+                inputStream.close();
+            }
+
+            if (process != null && process.isAlive()) {
+                // Give the process a moment to terminate naturally
+                try {
+                    exitCode = process.waitFor();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    // Force termination if interrupted
+                    process.destroyForcibly();
+                    exitCode = -1;
+                }
+            }
+
+            isEOF = true;
+            return scalarTrue;
+        } catch (IOException e) {
+            return handleIOException(e, "close pipe failed");
+        }
+    }
 
     /**
      * Creates a new PipeInputChannel for the specified command.
@@ -128,108 +217,6 @@ public class PipeInputChannel implements IOHandle {
     }
 
     /**
-     * Common setup for the process builder.
-     *
-     * @param processBuilder the process builder to configure
-     * @throws IOException if an I/O error occurs starting the process
-     */
-    private void setupProcess(ProcessBuilder processBuilder) throws IOException {
-        // Set working directory to current directory
-        String userDir = System.getProperty("user.dir");
-        processBuilder.directory(new File(userDir));
-
-        // Start the process
-        process = processBuilder.start();
-
-        // Create readers for stdout and stderr
-        reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-        errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-
-        // Start a thread to consume stderr to prevent blocking
-        Thread errorThread = new Thread(() -> {
-            try (BufferedReader err = errorReader) {
-                String line;
-                while ((line = err.readLine()) != null) {
-                    System.err.println(line);
-                }
-            } catch (IOException e) {
-                // Ignore - process might have terminated
-            }
-        });
-        errorThread.setDaemon(true);
-        errorThread.start();
-    }
-
-    /**
-     * Reads data from the process stdout with character encoding support.
-     *
-     * @param maxBytes the maximum number of bytes to read
-     * @param charset the character encoding to use
-     * @return RuntimeScalar containing the read data
-     */
-    @Override
-    public RuntimeScalar read(int maxBytes, Charset charset) {
-        if (isEOF) {
-            return new RuntimeScalar("");
-        }
-
-        try {
-            // For character-based reading from BufferedReader, we read lines
-            // and then convert to bytes for the charset handling
-            StringBuilder result = new StringBuilder();
-            int bytesRead = 0;
-
-            while (bytesRead < maxBytes && !isEOF) {
-                if (reader.ready()) {
-                    String line = reader.readLine();
-                    if (line == null) {
-                        isEOF = true;
-                        checkProcessExit();
-                        break;
-                    }
-
-                    // Add newline back (readLine removes it)
-                    line += "\n";
-                    byte[] lineBytes = line.getBytes(charset);
-
-                    if (bytesRead + lineBytes.length > maxBytes) {
-                        // Would exceed maxBytes, so we need to handle partial line
-                        int remainingBytes = maxBytes - bytesRead;
-                        String partialLine = new String(lineBytes, 0, remainingBytes, charset);
-                        result.append(partialLine);
-                        bytesRead = maxBytes;
-                        break;
-                    }
-
-                    result.append(line);
-                    bytesRead += lineBytes.length;
-                } else {
-                    // No data ready, check if process is still alive
-                    if (!process.isAlive()) {
-                        isEOF = true;
-                        checkProcessExit();
-                        break;
-                    }
-
-                    // Sleep briefly to avoid busy waiting
-                    try {
-                        Thread.sleep(10);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
-                }
-            }
-
-            return new RuntimeScalar(result.toString());
-        } catch (IOException e) {
-            isEOF = true;
-            checkProcessExit();
-            return handleIOException(e, "Read from pipe failed");
-        }
-    }
-
-    /**
      * Checks if the process has exited and captures the exit code.
      */
     private void checkProcessExit() {
@@ -252,37 +239,6 @@ public class PipeInputChannel implements IOHandle {
     @Override
     public RuntimeScalar write(String string) {
         return handleIOException(new IOException("Cannot write to input pipe"), "write to input pipe failed");
-    }
-
-    /**
-     * Closes the pipe and terminates the process if still running.
-     *
-     * @return RuntimeScalar with true on success
-     */
-    @Override
-    public RuntimeScalar close() {
-        try {
-            if (reader != null) {
-                reader.close();
-            }
-
-            if (process != null && process.isAlive()) {
-                // Give the process a moment to terminate naturally
-                try {
-                    exitCode = process.waitFor();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    // Force termination if interrupted
-                    process.destroyForcibly();
-                    exitCode = -1;
-                }
-            }
-
-            isEOF = true;
-            return scalarTrue;
-        } catch (IOException e) {
-            return handleIOException(e, "close pipe failed");
-        }
     }
 
     /**
