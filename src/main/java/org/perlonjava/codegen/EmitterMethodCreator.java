@@ -93,209 +93,223 @@ public class EmitterMethodCreator implements Opcodes {
     }
 
     public static byte[] getBytecode(EmitterContext ctx, Node ast, boolean useTryCatch) {
-        String[] env = ctx.symbolTable.getVariableNames();
+        try {
+            String[] env = ctx.symbolTable.getVariableNames();
 
-        // Create a ClassWriter with COMPUTE_FRAMES and COMPUTE_MAXS options for automatic frame and max
-        // stack size calculation
-        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
-        ctx.cw = cw;
+            // Create a ClassWriter with COMPUTE_FRAMES and COMPUTE_MAXS options for automatic frame and max
+            // stack size calculation
+            ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
+            ctx.cw = cw;
 
-        // The context type is determined by the caller.
-        ctx.contextType = RuntimeContextType.RUNTIME;
+            // The context type is determined by the caller.
+            ctx.contextType = RuntimeContextType.RUNTIME;
 
-        ByteCodeSourceMapper.setDebugInfoFileName(ctx);
+            ByteCodeSourceMapper.setDebugInfoFileName(ctx);
 
-        // Define the class with version, access flags, name, signature, superclass, and interfaces
-        cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, ctx.javaClassInfo.javaClassName, null, "java/lang/Object", null);
-        ctx.logDebug("Create class: " + ctx.javaClassInfo.javaClassName);
+            // Define the class with version, access flags, name, signature, superclass, and interfaces
+            cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, ctx.javaClassInfo.javaClassName, null, "java/lang/Object", null);
+            ctx.logDebug("Create class: " + ctx.javaClassInfo.javaClassName);
 
-        // Add instance fields to the class for closure variables
-        for (String fieldName : env) {
-            String descriptor = getVariableDescriptor(fieldName);
-            ctx.logDebug("Create instance field: " + descriptor);
-            cw.visitField(Opcodes.ACC_PUBLIC, fieldName, descriptor, null, null).visitEnd();
-        }
+            // Add instance fields to the class for closure variables
+            for (String fieldName : env) {
+                String descriptor = getVariableDescriptor(fieldName);
+                ctx.logDebug("Create instance field: " + descriptor);
+                cw.visitField(Opcodes.ACC_PUBLIC, fieldName, descriptor, null, null).visitEnd();
+            }
 
-        // Add instance field for __SUB__ code reference
-        cw.visitField(Opcodes.ACC_PUBLIC, "__SUB__", "Lorg/perlonjava/runtime/RuntimeScalar;", null, null).visitEnd();
+            // Add instance field for __SUB__ code reference
+            cw.visitField(Opcodes.ACC_PUBLIC, "__SUB__", "Lorg/perlonjava/runtime/RuntimeScalar;", null, null).visitEnd();
 
-        // Add a constructor with parameters for initializing the fields
-        StringBuilder constructorDescriptor = new StringBuilder("(");
-        for (int i = skipVariables; i < env.length; i++) {
-            String descriptor = getVariableDescriptor(env[i]);
-            constructorDescriptor.append(descriptor);
-        }
-        constructorDescriptor.append(")V");
-        ctx.logDebug("constructorDescriptor: " + constructorDescriptor);
-        ctx.mv =
-                cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", constructorDescriptor.toString(), null, null);
-        MethodVisitor mv = ctx.mv;
-        mv.visitCode();
-        mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
-        mv.visitMethodInsn(
-                Opcodes.INVOKESPECIAL,
-                "java/lang/Object",
-                "<init>",
-                "()V",
-                false); // Call the superclass constructor
-        for (int i = skipVariables; i < env.length; i++) {
-            String descriptor = getVariableDescriptor(env[i]);
-
+            // Add a constructor with parameters for initializing the fields
+            StringBuilder constructorDescriptor = new StringBuilder("(");
+            for (int i = skipVariables; i < env.length; i++) {
+                String descriptor = getVariableDescriptor(env[i]);
+                constructorDescriptor.append(descriptor);
+            }
+            constructorDescriptor.append(")V");
+            ctx.logDebug("constructorDescriptor: " + constructorDescriptor);
+            ctx.mv =
+                    cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", constructorDescriptor.toString(), null, null);
+            MethodVisitor mv = ctx.mv;
+            mv.visitCode();
             mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
-            mv.visitVarInsn(Opcodes.ALOAD, i - 2); // Load the constructor argument
-            mv.visitFieldInsn(
-                    Opcodes.PUTFIELD, ctx.javaClassInfo.javaClassName, env[i], descriptor); // Set the instance field
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESPECIAL,
+                    "java/lang/Object",
+                    "<init>",
+                    "()V",
+                    false); // Call the superclass constructor
+            for (int i = skipVariables; i < env.length; i++) {
+                String descriptor = getVariableDescriptor(env[i]);
+
+                mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
+                mv.visitVarInsn(Opcodes.ALOAD, i - 2); // Load the constructor argument
+                mv.visitFieldInsn(
+                        Opcodes.PUTFIELD, ctx.javaClassInfo.javaClassName, env[i], descriptor); // Set the instance field
+            }
+            mv.visitInsn(Opcodes.RETURN); // Return void
+            mv.visitMaxs(0, 0); // Automatically computed
+            mv.visitEnd();
+
+            // Create the public "apply" method for the generated class
+            ctx.logDebug("Create the method");
+            ctx.mv =
+                    cw.visitMethod(
+                            Opcodes.ACC_PUBLIC,
+                            "apply",
+                            "(Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
+                            null,
+                            new String[]{"java/lang/Exception"});
+            mv = ctx.mv;
+
+            // Generate the subroutine block
+            mv.visitCode();
+
+            // Initialize local variables with closure values from instance fields
+            // Skip some indices because they are reserved for special arguments (this, "@_" and call
+            // context)
+            for (int i = skipVariables; i < env.length; i++) {
+                String descriptor = getVariableDescriptor(env[i]);
+                mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
+                ctx.logDebug("Init closure variable: " + descriptor);
+                mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName, env[i], descriptor);
+                mv.visitVarInsn(Opcodes.ASTORE, i);
+            }
+
+            // Create a label for the return point
+            ctx.javaClassInfo.returnLabel = new Label();
+
+            // Prepare to visit the AST to generate bytecode
+            EmitterVisitor visitor = new EmitterVisitor(ctx);
+
+            // Setup local variables and environment for the method
+            Local.localRecord localRecord = Local.localSetup(ctx, ast, mv);
+
+            if (useTryCatch) {
+                ctx.logDebug("useTryCatch");
+
+                // --------------------------------
+                // Start of try-catch block
+                // --------------------------------
+
+                Label tryStart = new Label();
+                Label tryEnd = new Label();
+                Label catchBlock = new Label();
+                Label endCatch = new Label();
+
+                // Define the try-catch block
+                mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Exception");
+
+                mv.visitLabel(tryStart);
+                // --------------------------------
+                // Start of the try block
+                // --------------------------------
+
+                // Set $@ to an empty string if no exception occurs
+                mv.visitLdcInsn("main::@");
+                mv.visitLdcInsn("");
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/GlobalVariable",
+                        "setGlobalVariable",
+                        "(Ljava/lang/String;Ljava/lang/String;)V", false);
+
+                ast.accept(visitor);
+
+                // Handle the return value
+                ctx.logDebug("Return the last value");
+                mv.visitLabel(ctx.javaClassInfo.returnLabel); // "return" from other places arrive here
+
+                // --------------------------------
+                // End of the try block
+                // --------------------------------
+                mv.visitLabel(tryEnd);
+
+                // Jump over the catch block if no exception occurs
+                mv.visitJumpInsn(Opcodes.GOTO, endCatch);
+
+                // Start of the catch block
+                mv.visitLabel(catchBlock);
+
+                // The exception object is on the stack
+                // Example: print the stack trace of the caught exception
+                //   mv.visitMethodInsn(
+                //      Opcodes.INVOKEVIRTUAL, "java/lang/Exception", "printStackTrace", "()V", false);
+
+                // Convert the exception to a string
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/ErrorMessageUtil",
+                        "stringifyException",
+                        "(Ljava/lang/Exception;)Ljava/lang/String;", false);
+
+                // Set the global error variable "$@" using GlobalVariable.setGlobalVariable(key, value)
+                mv.visitLdcInsn("main::@");
+                mv.visitInsn(Opcodes.SWAP);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/GlobalVariable",
+                        "setGlobalVariable",
+                        "(Ljava/lang/String;Ljava/lang/String;)V", false);
+
+                // Restore the stack state to match the end of the try block if needed
+                // Return "undef"
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/RuntimeScalar",
+                        "undef",
+                        "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+
+                // End of the catch block
+                mv.visitLabel(endCatch);
+
+                // --------------------------------
+                // End of try-catch block
+                // --------------------------------
+            } else {
+                // No try-catch block is used
+
+                ast.accept(visitor);
+
+                // Handle the return value
+                ctx.logDebug("Return the last value");
+                mv.visitLabel(ctx.javaClassInfo.returnLabel); // "return" from other places arrive here
+            }
+
+            // Teardown local variables and environment after the method execution
+            Local.localTeardown(localRecord, mv);
+
+            // Transform the value in the stack to RuntimeList
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getList", "()Lorg/perlonjava/runtime/RuntimeList;", true);
+
+            mv.visitInsn(Opcodes.ARETURN); // Returns an Object
+            mv.visitMaxs(0, 0); // Automatically computed
+            mv.visitEnd();
+
+            // Complete the class
+            cw.visitEnd();
+            byte[] classData = cw.toByteArray(); // Generate the bytecode
+
+            if (ctx.compilerOptions.disassembleEnabled) {
+                // Disassemble the bytecode for debugging purposes
+                ClassReader cr = new ClassReader(classData);
+                StringWriter sw = new StringWriter();
+                PrintWriter pw = new PrintWriter(sw);
+                TraceClassVisitor tcv = new TraceClassVisitor(pw);
+                cr.accept(tcv, 0);
+
+                System.out.println(sw);
+            }
+            return classData;
+        } catch (ArrayIndexOutOfBoundsException e) {
+            throw new PerlCompilerException(
+                    ast.getIndex(),
+                    "Internal compiler error: Failed to generate bytecode. " +
+                            "This may indicate an issue with the generated code structure. " +
+                            "Original error: " + e.getMessage(),
+                    ctx.errorUtil);
+        } catch (Exception e) {
+            throw new PerlCompilerException(
+                    ast.getIndex(),
+                    "Unexpected error during bytecode generation: " + e.getMessage(),
+                    ctx.errorUtil);
         }
-        mv.visitInsn(Opcodes.RETURN); // Return void
-        mv.visitMaxs(0, 0); // Automatically computed
-        mv.visitEnd();
-
-        // Create the public "apply" method for the generated class
-        ctx.logDebug("Create the method");
-        ctx.mv =
-                cw.visitMethod(
-                        Opcodes.ACC_PUBLIC,
-                        "apply",
-                        "(Lorg/perlonjava/runtime/RuntimeArray;I)Lorg/perlonjava/runtime/RuntimeList;",
-                        null,
-                        new String[]{"java/lang/Exception"});
-        mv = ctx.mv;
-
-        // Generate the subroutine block
-        mv.visitCode();
-
-        // Initialize local variables with closure values from instance fields
-        // Skip some indices because they are reserved for special arguments (this, "@_" and call
-        // context)
-        for (int i = skipVariables; i < env.length; i++) {
-            String descriptor = getVariableDescriptor(env[i]);
-            mv.visitVarInsn(Opcodes.ALOAD, 0); // Load 'this'
-            ctx.logDebug("Init closure variable: " + descriptor);
-            mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName, env[i], descriptor);
-            mv.visitVarInsn(Opcodes.ASTORE, i);
-        }
-
-        // Create a label for the return point
-        ctx.javaClassInfo.returnLabel = new Label();
-
-        // Prepare to visit the AST to generate bytecode
-        EmitterVisitor visitor = new EmitterVisitor(ctx);
-
-        // Setup local variables and environment for the method
-        Local.localRecord localRecord = Local.localSetup(ctx, ast, mv);
-
-        if (useTryCatch) {
-            ctx.logDebug("useTryCatch");
-
-            // --------------------------------
-            // Start of try-catch block
-            // --------------------------------
-
-            Label tryStart = new Label();
-            Label tryEnd = new Label();
-            Label catchBlock = new Label();
-            Label endCatch = new Label();
-
-            // Define the try-catch block
-            mv.visitTryCatchBlock(tryStart, tryEnd, catchBlock, "java/lang/Exception");
-
-            mv.visitLabel(tryStart);
-            // --------------------------------
-            // Start of the try block
-            // --------------------------------
-
-            // Set $@ to an empty string if no exception occurs
-            mv.visitLdcInsn("main::@");
-            mv.visitLdcInsn("");
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/GlobalVariable",
-                    "setGlobalVariable",
-                    "(Ljava/lang/String;Ljava/lang/String;)V", false);
-
-            ast.accept(visitor);
-
-            // Handle the return value
-            ctx.logDebug("Return the last value");
-            mv.visitLabel(ctx.javaClassInfo.returnLabel); // "return" from other places arrive here
-
-            // --------------------------------
-            // End of the try block
-            // --------------------------------
-            mv.visitLabel(tryEnd);
-
-            // Jump over the catch block if no exception occurs
-            mv.visitJumpInsn(Opcodes.GOTO, endCatch);
-
-            // Start of the catch block
-            mv.visitLabel(catchBlock);
-
-            // The exception object is on the stack
-            // Example: print the stack trace of the caught exception
-            //   mv.visitMethodInsn(
-            //      Opcodes.INVOKEVIRTUAL, "java/lang/Exception", "printStackTrace", "()V", false);
-
-            // Convert the exception to a string
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/ErrorMessageUtil",
-                    "stringifyException",
-                    "(Ljava/lang/Exception;)Ljava/lang/String;", false);
-
-            // Set the global error variable "$@" using GlobalVariable.setGlobalVariable(key, value)
-            mv.visitLdcInsn("main::@");
-            mv.visitInsn(Opcodes.SWAP);
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/GlobalVariable",
-                    "setGlobalVariable",
-                    "(Ljava/lang/String;Ljava/lang/String;)V", false);
-
-            // Restore the stack state to match the end of the try block if needed
-            // Return "undef"
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/RuntimeScalar",
-                    "undef",
-                    "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
-
-            // End of the catch block
-            mv.visitLabel(endCatch);
-
-            // --------------------------------
-            // End of try-catch block
-            // --------------------------------
-        } else {
-            // No try-catch block is used
-
-            ast.accept(visitor);
-
-            // Handle the return value
-            ctx.logDebug("Return the last value");
-            mv.visitLabel(ctx.javaClassInfo.returnLabel); // "return" from other places arrive here
-        }
-
-        // Teardown local variables and environment after the method execution
-        Local.localTeardown(localRecord, mv);
-
-        // Transform the value in the stack to RuntimeList
-        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getList", "()Lorg/perlonjava/runtime/RuntimeList;", true);
-
-        mv.visitInsn(Opcodes.ARETURN); // Returns an Object
-        mv.visitMaxs(0, 0); // Automatically computed
-        mv.visitEnd();
-
-        // Complete the class
-        cw.visitEnd();
-        byte[] classData = cw.toByteArray(); // Generate the bytecode
-
-        if (ctx.compilerOptions.disassembleEnabled) {
-            // Disassemble the bytecode for debugging purposes
-            ClassReader cr = new ClassReader(classData);
-            StringWriter sw = new StringWriter();
-            PrintWriter pw = new PrintWriter(sw);
-            TraceClassVisitor tcv = new TraceClassVisitor(pw);
-            cr.accept(tcv, 0);
-
-            System.out.println(sw);
-        }
-        return classData;
     }
 
     public static Class<?> loadBytecode(EmitterContext ctx, byte[] classData) {
