@@ -9,15 +9,23 @@ BEGIN {
 }
 
 use Test::More;
-use File::Temp qw(tempfile);
-use Config;
+
+my $test_counter = 0;
+
+# Helper function to create unique test filenames
+sub get_test_filename {
+    return "test_io_pipe_" . (++$test_counter) . "_" . $$ . ".tmp";
+}
+
+# Helper function to cleanup test files
+sub cleanup_file {
+    my $filename = shift;
+    unlink $filename if -e $filename;
+}
 
 # Cross-platform command detection
 my $is_windows = ($^O eq 'MSWin32' || $^O eq 'cygwin');
 my $shell_cmd = $is_windows ? 'cmd /c' : 'sh -c';
-
-# Test counter for unique identifiers
-my $test_counter = 0;
 
 # Helper function to get cross-platform commands
 sub get_cross_platform_commands {
@@ -94,9 +102,8 @@ subtest 'Output pipe tests (writing to external commands)' => sub {
         );
         
         # Create a temporary file to capture sorted output
-        my ($temp_fh, $temp_file) = tempfile(UNLINK => 1);
-        close $temp_fh;
-        
+        my $temp_file = get_test_filename();
+
         my $sort_cmd = "$cmd{sort} > $temp_file";
         
         open my $pipe, "| $sort_cmd" or do {
@@ -122,6 +129,8 @@ subtest 'Output pipe tests (writing to external commands)' => sub {
         
         my @expected = ("apple\n", "banana\n", "cherry\n", "zebra\n");
         is_deeply(\@sorted_lines, \@expected, 'Lines were sorted correctly');
+
+        cleanup_file($temp_file);
     };
 };
 
@@ -285,10 +294,9 @@ subtest 'UTF-8 handling through pipes' => sub {
     
     subtest 'UTF-8 through output pipe' => sub {
         my $utf8_text = "UTF-8 test: café naïve résumé 世界";
-        
-        # Create temp file to capture output
-        my ($temp_fh, $temp_file) = tempfile(UNLINK => 1);
-        close $temp_fh;
+
+        # Create a temporary file to capture sorted output
+        my $temp_file = get_test_filename();
         
         my $cat_cmd = "$cmd{cat} > $temp_file";
         
@@ -312,6 +320,8 @@ subtest 'UTF-8 handling through pipes' => sub {
         close $result_fh;
         
         is($result, $utf8_text, 'UTF-8 text preserved through output pipe');
+
+        cleanup_file($temp_file);
     };
     
     subtest 'UTF-8 through input pipe' => sub {
