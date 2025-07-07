@@ -53,7 +53,8 @@ public class DirectoryIO {
             DirectoryStream<Path> stream = Files.newDirectoryStream(fullDirPath);
             DirectoryIO dirIO = new DirectoryIO(stream, dirPath);
             dirHandle.type = RuntimeScalarType.GLOBREFERENCE;
-            dirHandle.value = new RuntimeIO(dirIO);
+            dirHandle.value = new RuntimeGlob(null).setIO(new RuntimeIO(dirIO));
+
             return scalarTrue;
         } catch (IOException e) {
             handleIOException(e, "Directory operation failed");
