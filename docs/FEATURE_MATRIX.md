@@ -480,6 +480,11 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
   - ✅ Implemented: `""`, `0+`, `bool`, `fallback`, `nomethod`.
   - ✅ Implemented: `!`, `+`, `-`, `*`, `/`, `%`, `int`, `neg`, `log`, `sqrt`, `cos`, `sin`, `exp`, `abs`, `atan2`, `**`.
   - ✅ Implemented: `@{}`, `%{}`, `${}`.
+  - ❌ Missing: `<=>`, `cmp`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `lt`, `le`, `gt`, `ge`, `eq`, `ne`.
+  - ❌ Missing: `++`, `--`, `=`, `qr`, `<>`.
+  - ❌ Missing: `&`, `|`, `^`, `~`, `<<`, `>>`, `&.`, `|.`, `^.`, `~.`, `x`, `.`.
+  - ❌ Missing: `+=`, `-=`, `*=`, `/=`, `%=`, `**=`, `<<=`, `>>=`, `x=`, `.=`, `&=`, `|=`, `^=`, `&.=`, `|.=`, `^.=`.
+  - ❌ Missing: `&{}`, `*{}`, `-X`.
 - ❌  **overloading** pragma
 
 
