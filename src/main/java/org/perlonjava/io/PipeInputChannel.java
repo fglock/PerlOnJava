@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 
+import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeIO.handleIOException;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
@@ -149,6 +150,8 @@ public class PipeInputChannel implements IOHandle {
                     exitCode = -1;
                 }
             }
+
+            getGlobalVariable("main::?").set(exitCode << 8);
 
             isEOF = true;
             return scalarTrue;
