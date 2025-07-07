@@ -59,7 +59,11 @@ public class Operator {
 
         RuntimeIO fh;
         String mode = runtimeList.getFirst().toString();
-        if (runtimeList.size() > 1) {
+
+        if (mode.contains("|")) {
+            // Pipe open
+            fh = RuntimeIO.openPipe(runtimeList);
+        } else if (runtimeList.size() > 1) {
             // 3-argument open
             RuntimeScalar secondArg = runtimeList.elements.get(1).scalar();
 
