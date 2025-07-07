@@ -356,6 +356,86 @@ public class RuntimeIO implements RuntimeScalarReference {
     }
 
     /**
+     * Opens a pipe with a specific mode and optional I/O layers.
+     *
+     * @param runtimeList the mode string, optionally including I/O layers, followed by an external command and optional parameters
+     * @return RuntimeIO handle for the opened file, or null on error
+     */
+    public static RuntimeIO openPipe(RuntimeList runtimeList) {
+        RuntimeIO fh = new RuntimeIO();
+        try {
+            List<String> strings = new ArrayList<>();
+            for (RuntimeBaseEntity entity : runtimeList.elements) {
+                strings.add(entity.toString());
+            }
+            String arg = strings.getFirst();
+            String mode = null;
+            String ioLayers = "";
+
+            if (strings.size() > 1) {
+                if (arg.startsWith("|-")) {
+                    mode = ">";
+                    arg = arg.substring(2);
+                } else if (arg.startsWith("-|")) {
+                    mode = "<";
+                    arg = arg.substring(2);
+                }
+
+                // Check if mode contains IO layers (indicated by ':')
+                int colonIndex = arg.indexOf(':');
+                if (colonIndex == 0) {
+                    // Extract I/O layers from mode string
+                    ioLayers = arg;
+                    arg = "";
+                }
+            } else if (strings.size() == 1) {
+                if (arg.startsWith("|")) {
+                    mode = ">";
+                    arg = arg.substring(1);
+                } else if (arg.endsWith("|")) {
+                    mode = "<";
+                    arg = arg.substring(0, arg.length() - 1);
+                }
+            }
+
+            if (arg.isEmpty()) {
+                strings.removeFirst();
+            } else {
+                strings.set(0, arg);
+            }
+
+            System.out.println("open pipe: mode=" + mode + " cmd=" + strings + " layers=" + ioLayers);
+
+            if (">".equals(mode)) {
+                if (strings.size() == 1) {
+                    fh.ioHandle = new PipeOutputChannel(strings.getFirst());
+                } else {
+                    fh.ioHandle = new PipeOutputChannel(strings);
+                }
+            }
+            if ("<".equals(mode)) {
+                if (strings.size() == 1) {
+                    fh.ioHandle = new PipeInputChannel(strings.getFirst());
+                } else {
+                    fh.ioHandle = new PipeInputChannel(strings);
+                }
+            }
+
+            // Add the handle to the LRU cache
+            addHandle(fh.ioHandle);
+
+            // Apply any I/O layers
+            fh.binmode(ioLayers);
+
+            throw new IOException();
+        } catch (IOException e) {
+            handleIOException(e, "open failed");
+            fh = null;
+        }
+        return fh;
+    }
+
+    /**
      * Converts a filename to a Path object relative to the current directory.
      *
      * @param fileName the filename to convert
