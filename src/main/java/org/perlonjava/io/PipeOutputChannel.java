@@ -70,7 +70,7 @@ public class PipeOutputChannel implements IOHandle {
     private boolean isClosed;
 
     /** The exit code of the process (-1 if not yet terminated) */
-    private int exitCode = -1;
+    private int exitCode = 0;
 
     /**
      * Creates a new PipeOutputChannel for the specified command.
@@ -246,7 +246,6 @@ public class PipeOutputChannel implements IOHandle {
                     exitCode = -1;
                 }
             }
-
             getGlobalVariable("main::?").set(exitCode << 8);
 
             isClosed = true;
@@ -328,23 +327,6 @@ public class PipeOutputChannel implements IOHandle {
     @Override
     public RuntimeScalar truncate(long length) {
         return handleIOException(new IOException("Cannot truncate pipe"), "truncate pipe failed");
-    }
-
-    /**
-     * Gets the exit code of the process.
-     *
-     * @return the exit code, or -1 if the process hasn't exited yet
-     */
-    public int getExitCode() {
-        if (process != null && !process.isAlive() && exitCode == -1) {
-            try {
-                exitCode = process.waitFor();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                exitCode = -1;
-            }
-        }
-        return exitCode;
     }
 
     /**
