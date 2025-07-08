@@ -193,12 +193,15 @@ public class PipeOutputChannel implements IOHandle {
         }
 
         try {
-            // Convert string to bytes using ISO-8859-1 to preserve byte values
-            byte[] bytes = string.getBytes(StandardCharsets.ISO_8859_1);
+            // String contains raw bytes (each char is a byte value 0-255)
+            byte[] bytes = new byte[string.length()];
+            for (int i = 0; i < string.length(); i++) {
+                bytes[i] = (byte) string.charAt(i);
+            }
 
-            // Write the string to the process stdin
-            writer.write(string);
-            writer.flush();
+            // Write raw bytes to process
+            process.getOutputStream().write(bytes);
+            process.getOutputStream().flush();
 
             return new RuntimeScalar(bytes.length);
         } catch (IOException e) {
