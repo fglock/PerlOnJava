@@ -5,14 +5,73 @@ import java.nio.CharBuffer;
 import java.nio.charset.*;
 
 /**
- * Simplified encoding layer that handles character set conversions.
+ * Implementation of Perl's :encoding() IO layer for character set conversions.
+ *
+ * <p>This layer provides character encoding and decoding functionality similar to
+ * Perl's :encoding() layer. It transforms byte streams to/from character streams
+ * using the specified character encoding.</p>
+ *
+ * <p>In Perl, the :encoding() layer is used like:</p>
+ * <pre>
+ * open(my $fh, '<:encoding(UTF-8)', 'file.txt');
+ * </pre>
+ *
+ * <p>This implementation handles:</p>
+ * <ul>
+ *   <li>Decoding input bytes to characters according to the specified charset</li>
+ *   <li>Encoding output characters to bytes according to the specified charset</li>
+ *   <li>Buffering of incomplete multi-byte sequences</li>
+ *   <li>Handling of malformed and unmappable characters (replaced with substitution character)</li>
+ * </ul>
+ *
+ * <p>The layer maintains internal state for handling multi-byte character sequences
+ * that may span multiple read operations, similar to Perl's behavior.</p>
+ *
+ * @see IOLayer
  */
 public class EncodingLayer implements IOLayer {
-    private final Charset charset;
-    private final CharsetDecoder decoder;
-    private final CharsetEncoder encoder;
-    private String pendingBytes = "";
+    /**
+     * Default buffer size for input processing.
+     * This size is chosen to balance memory usage with performance.
+     */
+    private static final int BUFFER_SIZE = 1024;
 
+    /**
+     * The character set used for encoding/decoding operations.
+     */
+    private final Charset charset;
+
+    /**
+     * Decoder for converting bytes to characters.
+     * Configured to replace malformed input and unmappable characters
+     * with the replacement character (U+FFFD).
+     */
+    private final CharsetDecoder decoder;
+
+    /**
+     * Encoder for converting characters to bytes.
+     * Configured to replace malformed input and unmappable characters
+     * with the charset's default replacement byte sequence.
+     */
+    private final CharsetEncoder encoder;
+
+    /**
+     * Buffer for accumulating input bytes.
+     * This buffer holds incomplete multi-byte sequences between read operations,
+     * ensuring proper handling of character boundaries.
+     */
+    private ByteBuffer inputBuffer;
+
+    /**
+     * Constructs a new encoding layer with the specified character set.
+     *
+     * <p>The layer is configured to handle encoding errors by replacing
+     * problematic characters rather than throwing exceptions, matching
+     * Perl's default behavior for the :encoding() layer.</p>
+     *
+     * @param charset the character set to use for encoding/decoding operations
+     * @throws NullPointerException if charset is null
+     */
     public EncodingLayer(Charset charset) {
         this.charset = charset;
         this.decoder = charset.newDecoder()
@@ -21,107 +80,99 @@ public class EncodingLayer implements IOLayer {
         this.encoder = charset.newEncoder()
                 .onMalformedInput(CodingErrorAction.REPLACE)
                 .onUnmappableCharacter(CodingErrorAction.REPLACE);
+        this.inputBuffer = ByteBuffer.allocate(BUFFER_SIZE);
     }
 
+    /**
+     * Processes input by decoding bytes to characters according to the layer's charset.
+     *
+     * <p>This method accumulates input bytes and decodes them to characters.
+     * Incomplete multi-byte sequences are buffered and combined with subsequent
+     * input, ensuring proper handling of character boundaries across multiple
+     * read operations.</p>
+     *
+     * <p>The input string is treated as raw bytes where each character represents
+     * a single byte value (0-255). This matches Perl's internal representation
+     * when dealing with binary data.</p>
+     *
+     * @param input a string where each character represents a byte (0-255)
+     * @return the decoded character string
+     */
     @Override
     public String processInput(String input) {
-        // Decode bytes (as chars) to Unicode string
-        String combined = pendingBytes + input;
-
-        if (combined.isEmpty()) {
-            return "";
-        }
-
-        // Convert string to ByteBuffer
-        ByteBuffer bb = ByteBuffer.allocate(combined.length());
-        for (int i = 0; i < combined.length(); i++) {
-            bb.put((byte)(combined.charAt(i) & 0xFF));
-        }
-        bb.flip();
-
-        // For UTF-8, check if we have complete sequences
-        if (charset.equals(StandardCharsets.UTF_8)) {
-            int lastCompletePos = findLastCompleteUTF8(bb);
-            if (lastCompletePos < bb.limit()) {
-                // We have incomplete sequence at the end
-                bb.limit(lastCompletePos);
+        // Add new bytes to buffer
+        for (int i = 0; i < input.length(); i++) {
+            if (!inputBuffer.hasRemaining()) {
+                // Grow buffer if needed - double the capacity to avoid frequent reallocations
+                ByteBuffer newBuffer = ByteBuffer.allocate(inputBuffer.capacity() * 2);
+                inputBuffer.flip();
+                newBuffer.put(inputBuffer);
+                inputBuffer = newBuffer;
             }
+            // Extract byte value from character (0-255 range)
+            inputBuffer.put((byte) (input.charAt(i) & 0xFF));
         }
 
-        // Decode using the charset
-        CharBuffer cb = CharBuffer.allocate(bb.remaining() * 2);
-        CoderResult result = decoder.decode(bb, cb, false);
+        // Prepare buffer for reading
+        inputBuffer.flip();
 
-        // Save any remaining bytes (incomplete sequences)
-        pendingBytes = "";
-        if (bb.hasRemaining() || bb.limit() < combined.length()) {
-            StringBuilder pending = new StringBuilder();
-            // Get unprocessed bytes from original position
-            int startPos = bb.limit();
-            for (int i = startPos; i < combined.length(); i++) {
-                pending.append(combined.charAt(i));
-            }
-            pendingBytes = pending.toString();
-        }
+        // Decode available bytes
+        // Allocate output buffer with room for worst-case expansion (1 byte -> 1 char)
+        CharBuffer output = CharBuffer.allocate(inputBuffer.remaining() * 2);
 
-        cb.flip();
-        return cb.toString();
+        // Decode with false for endOfInput to handle incomplete sequences
+        CoderResult result = decoder.decode(inputBuffer, output, false);
+
+        // Compact buffer to keep undecoded bytes for next call
+        // This preserves incomplete multi-byte sequences
+        inputBuffer.compact();
+
+        // Prepare output for reading and convert to string
+        output.flip();
+        return output.toString();
     }
 
-    private int findLastCompleteUTF8(ByteBuffer bb) {
-        int pos = bb.position();
-        int limit = bb.limit();
-        int lastComplete = pos;
-
-        while (pos < limit) {
-            int b = bb.get(pos) & 0xFF;
-            int sequenceLength;
-
-            if ((b & 0x80) == 0) {
-                sequenceLength = 1;  // ASCII
-            } else if ((b & 0xE0) == 0xC0) {
-                sequenceLength = 2;  // 2-byte sequence
-            } else if ((b & 0xF0) == 0xE0) {
-                sequenceLength = 3;  // 3-byte sequence
-            } else if ((b & 0xF8) == 0xF0) {
-                sequenceLength = 4;  // 4-byte sequence
-            } else {
-                // Continuation byte or invalid - skip
-                pos++;
-                continue;
-            }
-
-            if (pos + sequenceLength <= limit) {
-                // We have a complete sequence
-                lastComplete = pos + sequenceLength;
-                pos += sequenceLength;
-            } else {
-                // Incomplete sequence
-                break;
-            }
-        }
-
-        return lastComplete;
-    }
-
+    /**
+     * Processes output by encoding characters to bytes according to the layer's charset.
+     *
+     * <p>This method encodes the character string to bytes using the specified charset,
+     * then converts each byte back to a character in the 0-255 range for transmission
+     * through the IO layer stack.</p>
+     *
+     * <p>This approach maintains compatibility with Perl's internal handling of
+     * binary data in strings.</p>
+     *
+     * @param output the character string to encode
+     * @return a string where each character represents a byte (0-255)
+     */
     @Override
     public String processOutput(String output) {
-        // Encode Unicode string to bytes
+        // Encode string to bytes using the charset
         byte[] bytes = output.getBytes(charset);
 
-        // Convert bytes to string where each char holds a byte
+        // Convert bytes back to string representation
+        // Each byte becomes a character in the 0-255 range
         StringBuilder result = new StringBuilder(bytes.length);
         for (byte b : bytes) {
-            result.append((char)(b & 0xFF));
+            result.append((char) (b & 0xFF));
         }
-
         return result.toString();
     }
 
+    /**
+     * Resets the encoding layer to its initial state.
+     *
+     * <p>This method clears all internal buffers and resets the encoder/decoder
+     * state. It should be called when switching between files or when explicitly
+     * resetting the IO stream.</p>
+     *
+     * <p>In Perl, this would typically happen when closing and reopening a filehandle
+     * or when explicitly calling binmode() to change the encoding.</p>
+     */
     @Override
     public void reset() {
         decoder.reset();
         encoder.reset();
-        pendingBytes = "";
+        inputBuffer.clear();
     }
 }

@@ -370,7 +370,7 @@ my @copy = @{$z};         # ERROR
   - 2-argument forms: `<-`, `-`, `>-`, `filename`
   - 3-argument forms with explicit modes
   - In-memory files
-  - ❌ `open` is not supported for pipe `-|`
+  - support for pipe input and output like: `-|`, `|-`, `ls|`, `|sort`.
 - ✅  **`readline`**: Reading lines from filehandles
 - ✅  **`eof`**: End-of-file detection
 - ✅  **`close`**: Closing filehandles
