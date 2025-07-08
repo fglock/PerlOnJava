@@ -138,7 +138,10 @@ subtest 'Absolute paths' => sub {
     my $abs_pattern = File::Spec->catfile($tmpdir, "*.txt");
     my @abs_files = glob($abs_pattern);
     is(scalar(@abs_files), 5, 'Glob with absolute path works');
-    like($abs_files[0], qr/^\Q$tmpdir\E/, 'Returns absolute paths');
+
+    # Normalize the tmpdir path for comparison
+    (my $normalized_tmpdir = $tmpdir) =~ s{//}{/}g;
+    like($abs_files[0], qr/^\Q$normalized_tmpdir\E/, 'Returns absolute paths');
 };
 
 subtest 'No recursion into subdirectories' => sub {
