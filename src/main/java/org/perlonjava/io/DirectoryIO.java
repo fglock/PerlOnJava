@@ -49,7 +49,15 @@ public class DirectoryIO {
         String dirPath = args.elements.get(1).toString();
 
         try {
-            Path fullDirPath = Paths.get(System.getProperty("user.dir"), dirPath);
+            // Fix: Check if path is absolute
+            Path fullDirPath;
+            Path path = Paths.get(dirPath);
+            if (path.isAbsolute()) {
+                fullDirPath = path;
+            } else {
+                fullDirPath = Paths.get(System.getProperty("user.dir")).resolve(dirPath);
+            }
+
             DirectoryStream<Path> stream = Files.newDirectoryStream(fullDirPath);
             DirectoryIO dirIO = new DirectoryIO(stream, dirPath);
             dirHandle.type = RuntimeScalarType.GLOBREFERENCE;

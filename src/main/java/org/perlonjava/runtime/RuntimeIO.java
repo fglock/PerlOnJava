@@ -443,8 +443,13 @@ public class RuntimeIO implements RuntimeScalarReference {
      * @return Path object for the file
      */
     public static Path getPath(String fileName) {
-        // Construct the full file path relative to the user.dir
-        return Paths.get(System.getProperty("user.dir"), fileName);
+        Path path = Paths.get(fileName);
+        if (path.isAbsolute()) {
+            return path;
+        } else {
+            // Resolve relative to current working directory
+            return Paths.get(System.getProperty("user.dir")).resolve(fileName);
+        }
     }
 
     /**
