@@ -104,8 +104,11 @@ public class EmitRegex {
         // Use default variable $_ if none specified
         handleVariableBinding(operand, 3, scalarVisitor);
 
+        // Push call context for SCALAR or LIST context.
+        emitterVisitor.pushCallContext();
+
         // Execute the transliteration
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/operators/RuntimeTransliterate", "transliterate", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/operators/RuntimeTransliterate", "transliterate", "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
         // Clean up stack if in void context
         EmitOperator.handleVoidContext(emitterVisitor);
