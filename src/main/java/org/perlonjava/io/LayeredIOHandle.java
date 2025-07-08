@@ -2,6 +2,7 @@ package org.perlonjava.io;
 
 import org.perlonjava.runtime.RuntimeScalar;
 
+import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -257,19 +258,37 @@ public class LayeredIOHandle implements IOHandle {
             bytes[i] = (byte) data.charAt(i);
         }
 
+        // Use streaming approach for layers
+        ByteBuffer input = ByteBuffer.wrap(bytes);
+        ByteBuffer output = ByteBuffer.allocate(bytes.length * 4); // Allow for expansion
+
         // Apply layers in forward order for reading (bottom-up)
         for (IOLayer layer : layers) {
-            bytes = layer.processInput(bytes);
+            output.clear();
+            StreamingContext context = new StreamingContext(input, output);
+            layer.processInput(context);
+
+            // Prepare output as input for next layer
+            output.flip();
+            if (output.hasRemaining()) {
+                input = ByteBuffer.allocate(output.remaining());
+                input.put(output);
+                input.flip();
+            } else {
+                // No output from this layer - use empty buffer
+                input = ByteBuffer.allocate(0);
+            }
         }
 
-        // Convert processed bytes back to string
-        StringBuilder sb = new StringBuilder(bytes.length);
-        for (byte b : bytes) {
-            sb.append((char)(b & 0xFF));
+        // Convert final result back to string
+        StringBuilder sb = new StringBuilder(input.remaining());
+        while (input.hasRemaining()) {
+            sb.append((char)(input.get() & 0xFF));
         }
 
         return new RuntimeScalar(sb.toString());
     }
+
 
     /**
      * Flushes any buffered data to the underlying handle.
