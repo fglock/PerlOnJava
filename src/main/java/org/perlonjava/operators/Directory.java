@@ -18,6 +18,33 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 
 public class Directory {
+
+    /**
+     * Helper method to resolve paths relative to the current working directory.
+     * If the path is absolute, it returns it as-is.
+     * If the path is relative, it resolves it against the current working directory.
+     */
+    private static Path resolvePath(String pathString) {
+        if (pathString == null || pathString.isEmpty()) {
+            return Paths.get(System.getProperty("user.dir"));
+        }
+
+        Path path = Paths.get(pathString);
+        if (path.isAbsolute()) {
+            return path;
+        } else {
+            // Resolve relative to current working directory
+            return Paths.get(System.getProperty("user.dir")).resolve(pathString);
+        }
+    }
+
+    /**
+     * Helper method to convert a Path to a File, resolving relative paths first.
+     */
+    private static File resolveFile(String pathString) {
+        return resolvePath(pathString).toFile();
+    }
+
     public static RuntimeScalar chdir(RuntimeScalar runtimeScalar) {
         //    chdir EXPR
         //    chdir FILEHANDLE
@@ -35,10 +62,7 @@ public class Directory {
         //            fchdir(2), passing handles raises an exception.
 
         String dirName = runtimeScalar.toString();
-        File newDir = new File(dirName);
-
-        // Resolve the directory to an absolute path
-        File absoluteDir = newDir.isAbsolute() ? newDir : new File(System.getProperty("user.dir"), dirName);
+        File absoluteDir = resolveFile(dirName);
 
         if (absoluteDir.exists() && absoluteDir.isDirectory()) {
             System.setProperty("user.dir", absoluteDir.getAbsolutePath());
@@ -53,7 +77,7 @@ public class Directory {
         String dirName = runtimeScalar.toString();
 
         try {
-            Path path = Paths.get(dirName);
+            Path path = resolvePath(dirName);
             Files.delete(path);
             return scalarTrue;
         } catch (IOException e) {
@@ -64,6 +88,7 @@ public class Directory {
     }
 
     public static RuntimeScalar opendir(RuntimeList args) {
+        // Note: DirectoryIO.openDir should also use resolvePath internally
         return DirectoryIO.openDir(args);
     }
 
@@ -162,7 +187,7 @@ public class Directory {
         fileName = fileName.replaceAll("/+$", "");
 
         try {
-            Path path = Paths.get(fileName);
+            Path path = resolvePath(fileName);
             Files.createDirectories(path);
 
             // Set permissions only if the file system supports POSIX permissions

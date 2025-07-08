@@ -82,11 +82,21 @@ public class ScalarGlobOperator {
         if (lastSlash >= 0) {
             // Pattern includes directory path
             String dirPath = pattern.substring(0, lastSlash);
-            targetDir = Paths.get(dirPath.isEmpty() ? "/" : dirPath);
+            if (dirPath.isEmpty()) {
+                targetDir = Paths.get("/");
+            } else {
+                Path path = Paths.get(dirPath);
+                if (path.isAbsolute()) {
+                    targetDir = path;
+                } else {
+                    // Resolve relative to current working directory
+                    targetDir = Paths.get(System.getProperty("user.dir")).resolve(dirPath);
+                }
+            }
             globPattern = pattern.substring(lastSlash + 1);
         } else {
             // No directory separator, use current directory
-            targetDir = Paths.get(".");
+            targetDir = Paths.get(System.getProperty("user.dir"));
             globPattern = pattern;
         }
 
@@ -110,7 +120,7 @@ public class ScalarGlobOperator {
                         return matcher.matches(path.getFileName());
                     })
                     .sorted()
-                    .iterator();;
+                    .iterator();
         } else {
             // Handle recursive patterns with Files.walk()
             // (This would be for extended glob patterns if supported)
