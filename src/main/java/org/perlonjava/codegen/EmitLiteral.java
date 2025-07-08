@@ -123,6 +123,15 @@ public class EmitLiteral {
         emitterVisitor.ctx.logDebug("visit(ListNode) in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
+        // Determine the context for list elements
+        EmitterVisitor elementContext;
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+            // In scalar context, list elements are also evaluated in scalar context
+            elementContext = emitterVisitor.with(RuntimeContextType.SCALAR);
+        } else {
+            elementContext = emitterVisitor.with(RuntimeContextType.LIST);
+        }
+
         // Create a new instance of RuntimeList
         mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
         mv.visitInsn(Opcodes.DUP);
@@ -139,7 +148,7 @@ public class EmitLiteral {
             emitterVisitor.ctx.javaClassInfo.incrementStackLevel(2);
 
             // emit the list element
-            element.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            element.accept(elementContext);
 
             emitterVisitor.ctx.javaClassInfo.decrementStackLevel(2);
 
