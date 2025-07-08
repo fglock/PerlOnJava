@@ -81,4 +81,6 @@ interface IOLayer {
      * position would be invalid at the new position.
      */
     void reset();
+
+    default byte[] flush() { return new byte[0]; }  // Default implementation
 }

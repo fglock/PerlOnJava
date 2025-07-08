@@ -100,26 +100,22 @@ public class PipeInputChannel implements IOHandle {
         }
 
         try {
-            // Read raw bytes from the process input stream
             byte[] buffer = new byte[maxBytes];
             int bytesRead = inputStream.read(buffer, 0, maxBytes);
 
             if (bytesRead == -1) {
-                // End of stream reached
                 isEOF = true;
                 checkProcessExit();
                 return new RuntimeScalar("");
             }
 
-            if (bytesRead == 0) {
-                // No data available right now, but stream is not closed
-                return new RuntimeScalar("");
+            // Convert bytes to string where each char represents a byte
+            StringBuilder sb = new StringBuilder(bytesRead);
+            for (int i = 0; i < bytesRead; i++) {
+                sb.append((char)(buffer[i] & 0xFF));
             }
 
-            // Convert the bytes to string using the specified charset
-            String result = new String(buffer, 0, bytesRead, charset);
-            return new RuntimeScalar(result);
-
+            return new RuntimeScalar(sb.toString());
         } catch (IOException e) {
             isEOF = true;
             checkProcessExit();

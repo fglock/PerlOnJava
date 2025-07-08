@@ -180,7 +180,7 @@ public class LayeredIOHandle implements IOHandle {
         return switch (layerSpec) {
             case "bytes", "raw", "unix" -> new BytesLayer();
             case "crlf" -> new CrlfLayer(this);
-            case "utf8" -> new Utf8Layer();
+            case "utf8" -> new EncodingLayer(StandardCharsets.UTF_8);
             default -> {
                 // Handle encoding(...) specifications
                 if (layerSpec.startsWith("encoding(") && layerSpec.endsWith(")")) {
