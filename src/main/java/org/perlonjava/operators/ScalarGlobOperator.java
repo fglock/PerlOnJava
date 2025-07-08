@@ -7,6 +7,7 @@ import org.perlonjava.runtime.RuntimeScalar;
 
 import java.io.IOException;
 import java.nio.file.*;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -67,11 +68,57 @@ public class ScalarGlobOperator {
     }
 
     private void initializeIterator(String pattern) throws IOException {
-        Path currentDir = Paths.get("").toAbsolutePath();
-        PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + pattern);
-        this.iterator = Files.walk(currentDir)
-                .filter(path -> matcher.matches(currentDir.relativize(path)))
-                .map(currentDir::relativize)
-                .iterator();
+        // Handle empty pattern
+        if (pattern.isEmpty()) {
+            this.iterator = Collections.emptyIterator();
+            return;
+        }
+
+        // Separate directory path from glob pattern
+        int lastSlash = pattern.lastIndexOf('/');
+        Path targetDir;
+        String globPattern;
+
+        if (lastSlash >= 0) {
+            // Pattern includes directory path
+            String dirPath = pattern.substring(0, lastSlash);
+            targetDir = Paths.get(dirPath.isEmpty() ? "/" : dirPath);
+            globPattern = pattern.substring(lastSlash + 1);
+        } else {
+            // No directory separator, use current directory
+            targetDir = Paths.get(".");
+            globPattern = pattern;
+        }
+
+        // Check if directory exists
+        if (!Files.exists(targetDir) || !Files.isDirectory(targetDir)) {
+            this.iterator = Collections.emptyIterator();
+            return;
+        }
+
+        // Handle simple wildcards non-recursively (matching Perl's behavior)
+        if (!globPattern.contains("**")) {
+            // Use Files.list() for non-recursive listing
+            PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + globPattern);
+            this.iterator = Files.list(targetDir)
+                    .filter(path -> {
+                        String fileName = path.getFileName().toString();
+                        // Exclude hidden files unless pattern explicitly includes them
+                        if (!globPattern.startsWith(".") && fileName.startsWith(".")) {
+                            return false;
+                        }
+                        return matcher.matches(path.getFileName());
+                    })
+                    .sorted()
+                    .iterator();;
+        } else {
+            // Handle recursive patterns with Files.walk()
+            // (This would be for extended glob patterns if supported)
+            PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + globPattern);
+            this.iterator = Files.walk(targetDir)
+                    .filter(path -> matcher.matches(targetDir.relativize(path)))
+                    .sorted()
+                    .iterator();
+        }
     }
 }
