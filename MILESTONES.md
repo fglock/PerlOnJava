@@ -268,6 +268,7 @@ The following areas are currently under active development to enhance the functi
   - Term::ReadLine
   - Term::ReadKey
   - File::Temp
+  - File::Path
   - XSLoader or Dynaloader for JVM
   - Add `tie` operation
 
