@@ -6,8 +6,6 @@ use Carp;
 use File::Spec;
 use File::Path qw(rmtree);
 use Fcntl qw(SEEK_SET SEEK_CUR SEEK_END O_RDWR O_CREAT O_EXCL);
-use IO::Handle;
-use IO::Seekable;
 use Scalar::Util qw(blessed);
 
 our $VERSION = '0.2311';
@@ -42,7 +40,6 @@ eval {
 
 # File::Temp object
 package File::Temp::Handle;
-use base qw(IO::Handle IO::Seekable);
 
 sub new {
     my $class = shift;
