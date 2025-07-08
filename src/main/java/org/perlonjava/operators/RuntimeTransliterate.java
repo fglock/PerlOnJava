@@ -57,9 +57,8 @@ public class RuntimeTransliterate {
                     result.append(mappedChar);
                     lastCharAdded = true;
                 }
-                if (translationMap[ch] != ch) {  // Only count if character actually changed
-                    count++;
-                }
+                // Always count characters that match the search pattern
+                count++;
             } else {
                 result.append(ch);
                 lastCharAdded = false;
@@ -76,13 +75,8 @@ public class RuntimeTransliterate {
         // Modify the original string
         originalString.set(resultString);
 
-        // Return count in scalar/void context, or the modified string in list context
-        if (ctx == RuntimeContextType.SCALAR || ctx == RuntimeContextType.VOID) {
-            return new RuntimeScalar(count);
-        } else {
-            // LIST context - though this is rare for tr///
-            return originalString;
-        }
+        // Always return the count (unless /r modifier is used)
+        return new RuntimeScalar(count);
     }
 
     /**
