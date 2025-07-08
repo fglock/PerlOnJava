@@ -1,74 +1,88 @@
 package org.perlonjava.io;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.nio.ByteBuffer;
 
-// CRLF layer
+// CRLF layer - handles line ending conversions
 class CrlfLayer implements IOLayer {
     private final LayeredIOHandle layeredIOHandle;
+
+    // State for handling CR at end of buffer
+    private boolean pendingCR = false;
 
     public CrlfLayer(LayeredIOHandle layeredIOHandle) {
         this.layeredIOHandle = layeredIOHandle;
     }
 
     @Override
-    public byte[] processInput(byte[] input) {
-        return convertCrlfToLf(input);
+    public void processInput(StreamingContext context) {
+        ByteBuffer input = context.getInput();
+        ByteBuffer output = context.getOutput();
+
+        while (input.hasRemaining() && output.hasRemaining()) {
+            byte b = input.get();
+
+            if (pendingCR) {
+                pendingCR = false;
+                if (b == '\n') {
+                    // CRLF -> LF (skip the CR)
+                    output.put((byte)'\n');
+                } else {
+                    // Lone CR -> LF
+                    output.put((byte)'\n');
+                    // Process current byte normally
+                    if (b == '\r') {
+                        pendingCR = true;
+                    } else {
+                        output.put(b);
+                    }
+                }
+            } else if (b == '\r') {
+                // Could be start of CRLF
+                if (input.hasRemaining()) {
+                    byte next = input.get(input.position()); // Peek
+                    if (next == '\n') {
+                        input.get(); // Consume the LF
+                        output.put((byte)'\n');
+                    } else {
+                        // Lone CR -> LF
+                        output.put((byte)'\n');
+                    }
+                } else {
+                    // CR at end of buffer - save state
+                    pendingCR = true;
+                }
+            } else {
+                output.put(b);
+            }
+        }
     }
 
     @Override
-    public byte[] processOutput(byte[] output) {
-        return convertLfToCrlf(output);
+    public void processOutput(StreamingContext context) {
+        ByteBuffer input = context.getInput();
+        ByteBuffer output = context.getOutput();
+
+        while (input.hasRemaining() && output.hasRemaining()) {
+            byte b = input.get();
+
+            if (b == '\n') {
+                // LF -> CRLF
+                if (output.remaining() >= 2) {
+                    output.put((byte)'\r');
+                    output.put((byte)'\n');
+                } else {
+                    // Not enough space - put byte back
+                    input.position(input.position() - 1);
+                    break;
+                }
+            } else {
+                output.put(b);
+            }
+        }
     }
 
     @Override
     public void reset() {
-    }
-
-    private byte[] convertCrlfToLf(byte[] data) {
-        List<Byte> result = new ArrayList<>();
-
-        for (int i = 0; i < data.length; i++) {
-            if (data[i] == '\r') {
-                if (i + 1 < data.length && data[i + 1] == '\n') {
-                    // Skip CR in CRLF
-                    continue;
-                } else {
-                    // Convert lone CR to LF
-                    result.add((byte) '\n');
-                }
-            } else {
-                result.add(data[i]);
-            }
-        }
-
-        byte[] output = new byte[result.size()];
-        for (int i = 0; i < result.size(); i++) {
-            output[i] = result.get(i);
-        }
-        return output;
-    }
-
-    private byte[] convertLfToCrlf(byte[] data) {
-        // Count LF characters that need CR added
-        int lfCount = 0;
-        for (int i = 0; i < data.length; i++) {
-            if (data[i] == '\n' && (i == 0 || data[i - 1] != '\r')) {
-                lfCount++;
-            }
-        }
-
-        if (lfCount == 0) return data;
-
-        byte[] result = new byte[data.length + lfCount];
-        int j = 0;
-        for (int i = 0; i < data.length; i++) {
-            if (data[i] == '\n' && (i == 0 || data[i - 1] != '\r')) {
-                result[j++] = '\r';
-            }
-            result[j++] = data[i];
-        }
-
-        return result;
+        pendingCR = false;
     }
 }
