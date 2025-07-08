@@ -1,88 +1,42 @@
 package org.perlonjava.io;
 
-import java.nio.ByteBuffer;
+/**
+ * Simplified layer that handles CRLF to LF conversion.
+ */
+public class CrlfLayer implements IOLayer {
+    private boolean lastWasCR = false;
 
-// CRLF layer - handles line ending conversions
-class CrlfLayer implements IOLayer {
-    private final LayeredIOHandle layeredIOHandle;
+    @Override
+    public String processInput(String input) {
+        // Convert CRLF to LF on input
+        StringBuilder result = new StringBuilder(input.length());
 
-    // State for handling CR at end of buffer
-    private boolean pendingCR = false;
+        for (int i = 0; i < input.length(); i++) {
+            char c = input.charAt(i);
 
-    public CrlfLayer(LayeredIOHandle layeredIOHandle) {
-        this.layeredIOHandle = layeredIOHandle;
+            if (lastWasCR && c == '\n') {
+                // Skip LF in CRLF sequence (CR was already converted to LF)
+                lastWasCR = false;
+            } else if (c == '\r') {
+                result.append('\n');
+                lastWasCR = true;
+            } else {
+                result.append(c);
+                lastWasCR = false;
+            }
+        }
+
+        return result.toString();
     }
 
     @Override
-    public void processInput(StreamingContext context) {
-        ByteBuffer input = context.getInput();
-        ByteBuffer output = context.getOutput();
-
-        while (input.hasRemaining() && output.hasRemaining()) {
-            byte b = input.get();
-
-            if (pendingCR) {
-                pendingCR = false;
-                if (b == '\n') {
-                    // CRLF -> LF (skip the CR)
-                    output.put((byte)'\n');
-                } else {
-                    // Lone CR -> LF
-                    output.put((byte)'\n');
-                    // Process current byte normally
-                    if (b == '\r') {
-                        pendingCR = true;
-                    } else {
-                        output.put(b);
-                    }
-                }
-            } else if (b == '\r') {
-                // Could be start of CRLF
-                if (input.hasRemaining()) {
-                    byte next = input.get(input.position()); // Peek
-                    if (next == '\n') {
-                        input.get(); // Consume the LF
-                        output.put((byte)'\n');
-                    } else {
-                        // Lone CR -> LF
-                        output.put((byte)'\n');
-                    }
-                } else {
-                    // CR at end of buffer - save state
-                    pendingCR = true;
-                }
-            } else {
-                output.put(b);
-            }
-        }
-    }
-
-    @Override
-    public void processOutput(StreamingContext context) {
-        ByteBuffer input = context.getInput();
-        ByteBuffer output = context.getOutput();
-
-        while (input.hasRemaining() && output.hasRemaining()) {
-            byte b = input.get();
-
-            if (b == '\n') {
-                // LF -> CRLF
-                if (output.remaining() >= 2) {
-                    output.put((byte)'\r');
-                    output.put((byte)'\n');
-                } else {
-                    // Not enough space - put byte back
-                    input.position(input.position() - 1);
-                    break;
-                }
-            } else {
-                output.put(b);
-            }
-        }
+    public String processOutput(String output) {
+        // Convert LF to CRLF on output
+        return output.replace("\n", "\r\n");
     }
 
     @Override
     public void reset() {
-        pendingCR = false;
+        lastWasCR = false;
     }
 }
