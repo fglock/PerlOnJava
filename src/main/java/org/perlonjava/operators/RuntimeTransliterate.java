@@ -1,5 +1,6 @@
 package org.perlonjava.operators;
 
+import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.RuntimeScalar;
 
 /**
@@ -39,20 +40,25 @@ public class RuntimeTransliterate {
      * @param originalString The original string to be transliterated
      * @return A new RuntimeScalar containing the transliterated string
      */
-    public RuntimeScalar transliterate(RuntimeScalar originalString) {
+    public RuntimeScalar transliterate(RuntimeScalar originalString, int ctx) {
         String input = originalString.toString();
         StringBuilder result = new StringBuilder();
         boolean lastCharAdded = false;
+        int count = 0;  // Track count of transliterated characters
 
         for (int i = 0; i < input.length(); i++) {
             char ch = input.charAt(i);
             if (deleteChars[ch]) {
                 lastCharAdded = false;
+                count++;  // Count deleted characters
             } else if (ch < 256 && usedChars[ch]) {
                 char mappedChar = translationMap[ch];
                 if (!squashDuplicates || result.length() == 0 || result.charAt(result.length() - 1) != mappedChar) {
                     result.append(mappedChar);
                     lastCharAdded = true;
+                }
+                if (translationMap[ch] != ch) {  // Only count if character actually changed
+                    count++;
                 }
             } else {
                 result.append(ch);
@@ -61,10 +67,22 @@ public class RuntimeTransliterate {
         }
 
         String resultString = result.toString();
-        if (!returnOriginal) {
-            originalString.set(resultString);
+
+        // Handle the /r modifier - return the transliterated string without modifying original
+        if (returnOriginal) {
+            return new RuntimeScalar(resultString);
         }
-        return new RuntimeScalar(resultString);
+
+        // Modify the original string
+        originalString.set(resultString);
+
+        // Return count in scalar/void context, or the modified string in list context
+        if (ctx == RuntimeContextType.SCALAR || ctx == RuntimeContextType.VOID) {
+            return new RuntimeScalar(count);
+        } else {
+            // LIST context - though this is rare for tr///
+            return originalString;
+        }
     }
 
     /**
