@@ -172,7 +172,7 @@ public class OperatorHandler {
         // List operators
         put("map", "map",
                 "org/perlonjava/operators/ListOperators",
-                "(Lorg/perlonjava/runtime/RuntimeList;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeList;");
+                "(Lorg/perlonjava/runtime/RuntimeList;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeList;");
         put("grep", "grep",
                 "org/perlonjava/operators/ListOperators",
                 "(Lorg/perlonjava/runtime/RuntimeList;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeList;");

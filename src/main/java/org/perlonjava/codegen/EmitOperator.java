@@ -237,7 +237,7 @@ public class EmitOperator {
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // subroutine
         if (operator.equals("sort")) {
             emitterVisitor.ctx.mv.visitLdcInsn(emitterVisitor.ctx.symbolTable.getCurrentPackage());
-        } else if (operator.equals("grep")) {
+        } else {
             emitterVisitor.pushCallContext();
         }
         emitOperator(node.operator, emitterVisitor);

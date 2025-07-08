@@ -17,7 +17,7 @@ public class ListOperators {
      * @return A new RuntimeList with the transformed elements.
      * @throws RuntimeException If the Perl map subroutine throws an exception.
      */
-    public static RuntimeList map(RuntimeList runtimeList, RuntimeScalar perlMapClosure) {
+    public static RuntimeList map(RuntimeList runtimeList, RuntimeScalar perlMapClosure, int ctx) {
 
         // Create a new list to hold the transformed elements
         List<RuntimeBaseEntity> transformedElements = new ArrayList<>();
@@ -52,8 +52,14 @@ public class ListOperators {
         RuntimeList transformedList = new RuntimeList();
         transformedList.elements = transformedElements;
 
-        // Return the transformed RuntimeList
-        return transformedList;
+        // Return based on context
+        if (ctx == RuntimeContextType.SCALAR) {
+            // Scalar context - return count of matching elements
+            return new RuntimeList(new RuntimeScalar(transformedList.countElements()));
+        } else {
+            // List context - return the filtered RuntimeList
+            return transformedList;
+        }
     }
 
     /**
