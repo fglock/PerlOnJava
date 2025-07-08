@@ -109,7 +109,7 @@ public class ListOperators {
      * @return A new RuntimeList with the elements that match the filter criteria.
      * @throws RuntimeException If the Perl filter subroutine throws an exception.
      */
-    public static RuntimeList grep(RuntimeList runtimeList, RuntimeScalar perlFilterClosure) {
+    public static RuntimeList grep(RuntimeList runtimeList, RuntimeScalar perlFilterClosure, int ctx) {
         RuntimeArray array = runtimeList.getArrayOfAlias();
 
         // Create a new list to hold the filtered elements
@@ -143,7 +143,13 @@ public class ListOperators {
         RuntimeList filteredList = new RuntimeList();
         filteredList.elements = filteredElements;
 
-        // Return the filtered RuntimeList
-        return filteredList;
+        // Return based on context
+        if (ctx == RuntimeContextType.SCALAR) {
+            // Scalar context - return count of matching elements
+            return new RuntimeList(new RuntimeScalar(filteredList.countElements()));
+        } else {
+            // List context - return the filtered RuntimeList
+            return filteredList;
+        }
     }
 }
