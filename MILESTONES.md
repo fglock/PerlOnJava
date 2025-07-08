@@ -249,6 +249,7 @@ The following areas are currently under active development to enhance the functi
   - Added `open` option: in-memory files.
   - Syntax: identifiers starting with `::` are in `main` package.
   - Added I/O layers support to `open`, `binmode`: `:raw`, `:bytes`, `:crlf`, `:utf8`, `:unix`, `:encoding()`.
+  - Add `open` support for pipe `-|`, `|-`, `ls|`, `|sort`.
   - Added `# line` preprocessor directive.
   - `Test::More` module: added `subtest`, `use_ok`, `require_ok`.
   - `CORE::` operators have the same prototypes as in Perl.
@@ -267,7 +268,6 @@ The following areas are currently under active development to enhance the functi
   - Term::ReadLine
   - Term::ReadKey
   - XSLoader or Dynaloader for JVM
-  - Add `open` support for pipe `-|`, `|-`, `ls|`, `|sort`.
 
 ### v4.0.0 Milestone (Planned Release Date: 2026-05-10)
 
