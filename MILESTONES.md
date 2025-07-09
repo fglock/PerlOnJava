@@ -9,6 +9,42 @@
 
 ## Completed Milestones
 
+- **v3.1.0**: Tracks Perl 5.42.0
+  - Update Perl version to `5.42.0`.
+  - Added features: `keyword_all`, `keyword_any`
+
+  - Accept input program in several ways:
+    1. **Piped input**: `echo 'print "Hello\n"' | ./jperl` - reads from pipe and executes immediately
+    2. **Interactive input**: `./jperl` - shows a prompt and waits for you to type code, then press Ctrl+D (on Unix/Linux/Mac) or Ctrl+Z (on Windows) to signal end of input
+    3. **File redirection**: `./jperl < script.pl` - reads from the file
+    4. **With arguments**: `./jperl -e 'print "Hello\n"'` or `./jperl script.pl`
+
+  - Added overload operators: `!`, `+`, `-`, `*`, `/`, `%`, `int`, `neg`, `log`, `sqrt`, `cos`, `sin`, `exp`, `abs`, `atan2`, `**`, `@{}`, `%{}`. `${}`, `&{}`, `*{}`.
+  - Subroutine prototypes are fully implemented. Added or fixed: `+`, `;`, `*`, `\@`, `\%`, `\$`, `\[@%]`.
+  - Added double quoted string escapes: `\U`, `\L`, `\u`, `\l`.
+  - Added star count (`C*`) in `pack`, `unpack`.
+  - Added operators: `read`, `tell`, `seek`, `system`, `exec`, `sysopen`, `chmod`.
+  - Added operator: `select(undef,undef,undef,$time)`.
+  - Added operator: `^^=`.
+  - Added operator: `delete`, `exists` for array indexes.
+  - Added `open` option: in-memory files.
+  - Syntax: identifiers starting with `::` are in `main` package.
+  - Added I/O layers support to `open`, `binmode`: `:raw`, `:bytes`, `:crlf`, `:utf8`, `:unix`, `:encoding()`.
+  - Add `open` support for pipe `-|`, `|-`, `ls|`, `|sort`.
+  - Added `# line` preprocessor directive.
+  - `Test::More` module: added `subtest`, `use_ok`, `require_ok`.
+  - `CORE::` operators have the same prototypes as in Perl.
+  - Added modules: `Fcntl`, `Test`, `Text::CSV`.
+  - Operator `$#` returns an lvalue.
+  - Improved autovivification handling: distinguish between contexts where undefined references should automatically create data structures versus where they should throw errors.
+  - Bugfix: fix a problem with Windows newlines and qw(). Also fixed `mkdir` in Windows.
+  - Bugfix: `-E` switch was setting strict mode.
+  - BugFix: fix calling context in operators that return list.
+  - BugFix: fix rules for overriding operators.
+  - Added Makefile.
+  - Debian package can be created with `make deb`.
+
+
 - **v3.0.0**: Performance Boost, New Modules, and Streamlined Configuration
   - Added `--upgrade` option to `Configure.pl` to upgrade dependencies.
   - Added `Dockerfile` configuration.
@@ -236,40 +272,7 @@ The following areas are currently under active development to enhance the functi
 
 ## Upcoming Milestones
 
-- **v3.0.1**: Next minor version
-  - Update Perl version to `5.42.0`.
-  - Added features: `keyword_all`, `keyword_any`
-
-  - Accept input program in several ways:
-    1. **Piped input**: `echo 'print "Hello\n"' | ./jperl` - reads from pipe and executes immediately
-    2. **Interactive input**: `./jperl` - shows a prompt and waits for you to type code, then press Ctrl+D (on Unix/Linux/Mac) or Ctrl+Z (on Windows) to signal end of input
-    3. **File redirection**: `./jperl < script.pl` - reads from the file
-    4. **With arguments**: `./jperl -e 'print "Hello\n"'` or `./jperl script.pl`
-
-  - Added overload operators: `!`, `+`, `-`, `*`, `/`, `%`, `int`, `neg`, `log`, `sqrt`, `cos`, `sin`, `exp`, `abs`, `atan2`, `**`, `@{}`, `%{}`. `${}`, `&{}`, `*{}`.
-  - Subroutine prototypes are fully implemented. Added or fixed: `+`, `;`, `*`, `\@`, `\%`, `\$`, `\[@%]`.
-  - Added double quoted string escapes: `\U`, `\L`, `\u`, `\l`.
-  - Added star count (`C*`) in `pack`, `unpack`.
-  - Added operators: `read`, `tell`, `seek`, `system`, `exec`, `sysopen`, `chmod`.
-  - Added operator: `select(undef,undef,undef,$time)`.
-  - Added operator: `^^=`.
-  - Added operator: `delete`, `exists` for array indexes.
-  - Added `open` option: in-memory files.
-  - Syntax: identifiers starting with `::` are in `main` package.
-  - Added I/O layers support to `open`, `binmode`: `:raw`, `:bytes`, `:crlf`, `:utf8`, `:unix`, `:encoding()`.
-  - Add `open` support for pipe `-|`, `|-`, `ls|`, `|sort`.
-  - Added `# line` preprocessor directive.
-  - `Test::More` module: added `subtest`, `use_ok`, `require_ok`.
-  - `CORE::` operators have the same prototypes as in Perl.
-  - Added modules: `Fcntl`, `Test`, `Text::CSV`.
-  - Operator `$#` returns an lvalue.
-  - Improved autovivification handling: distinguish between contexts where undefined references should automatically create data structures versus where they should throw errors.
-  - Bugfix: fix a problem with Windows newlines and qw(). Also fixed `mkdir` in Windows.
-  - Bugfix: `-E` switch was setting strict mode.
-  - BugFix: fix calling context in operators that return list.
-  - BugFix: fix rules for overriding operators.
-  - Added Makefile.
-  - Debian package can be created with `make deb`.
+- **v3.2.0**: Next minor version
   - Planned release date: 2025-12-10.
 
 - Work in Progress
