@@ -60,8 +60,14 @@ PerlOnJava implements most core Perl features with some key differences:
 
 ### Command line switches
 
+- ✅  Accept input program in several ways:
+    1. **Piped input**: `echo 'print "Hello\n"' | ./jperl` - reads from pipe and executes immediately
+    2. **Interactive input**: `./jperl` - shows a prompt and waits for you to type code, then press Ctrl+D (on Unix/Linux/Mac) or Ctrl+Z (on Windows) to signal end of input
+    3. **File redirection**: `./jperl < script.pl` - reads from the file
+    4. **With arguments**: `./jperl -e 'print "Hello\n"'` or `./jperl script.pl`
+
 - ✅  Accept command line switches from the shebang line.
-- ✅  Command line switches `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-S`, `-x`, `-v`, `-V`, `-?` are implemented.
+- ✅  Accept command line switches: `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-S`, `-x`, `-v`, `-V`, `-?` are implemented.
 - ❌  Missing command line switches include:
   - `-s`: Rudimentary switch parsing.
   - `-T`: Taint checks.
