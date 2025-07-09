@@ -256,14 +256,15 @@ public class ScalarGlobOperator {
             // Get current working directory
             String cwd = System.getProperty("user.dir");
 
-            // Normalize pattern - Perl uses forward slashes even on Windows
-            String normalizedPattern = pattern.replace('\\', '/');
-
-            // But we need to check if the original pattern was a Windows absolute path
+            // Check if this is a Windows absolute path BEFORE any normalization
             boolean isWindowsAbsolute = pattern.length() >= 3 &&
                     Character.isLetter(pattern.charAt(0)) &&
                     pattern.charAt(1) == ':' &&
                     (pattern.charAt(2) == '\\' || pattern.charAt(2) == '/');
+
+            // For Windows, we need to be careful about path separators vs escape chars
+            // Only convert backslashes that are clearly path separators
+            String normalizedPattern = normalizePathSeparators(pattern);
 
             // Separate directory from file pattern
             File baseDir = new File(cwd);
@@ -301,7 +302,6 @@ public class ScalarGlobOperator {
             // Convert glob pattern to regex
             Pattern regex = globToRegex(filePattern);
             if (regex == null) {
-                // Pattern couldn't be compiled - likely malformed
                 return results;
             }
 
@@ -311,7 +311,7 @@ public class ScalarGlobOperator {
                 for (File file : files) {
                     String fileName = file.getName();
 
-                    // Handle hidden files (on Windows, hidden attribute is different but we follow Unix convention)
+                    // Handle hidden files
                     if (!filePattern.startsWith(".") && fileName.startsWith(".")) {
                         continue;
                     }
@@ -328,12 +328,72 @@ public class ScalarGlobOperator {
                 results.add(pattern);
             }
         } catch (Exception e) {
-            // Log the error for debugging but don't crash
-            // In case of errors, return empty results
+            // Don't propagate exceptions - just return empty results
             System.err.println("Glob error for pattern '" + pattern + "': " + e.getMessage());
         }
 
         return results;
+    }
+
+    private String normalizePathSeparators(String pattern) {
+        // On Windows, we need to distinguish between path separators and escape backslashes
+        // This is tricky because both use backslash
+
+        // If not on Windows, just convert backslashes to forward slashes
+        if (File.separatorChar != '\\') {
+            return pattern.replace('\\', '/');
+        }
+
+        // On Windows, we need to be smarter
+        StringBuilder result = new StringBuilder();
+        boolean prevWasBackslash = false;
+
+        for (int i = 0; i < pattern.length(); i++) {
+            char c = pattern.charAt(i);
+
+            if (c == '\\') {
+                if (prevWasBackslash) {
+                    // Double backslash - this is an escaped backslash
+                    result.append("\\\\");
+                    prevWasBackslash = false;
+                } else {
+                    // Single backslash - could be path separator or escape
+                    // Look ahead to see what follows
+                    if (i + 1 < pattern.length()) {
+                        char next = pattern.charAt(i + 1);
+                        // If next char is a glob special char, it's an escape
+                        if (next == '*' || next == '?' || next == '[' || next == ']' || next == '{' || next == '}') {
+                            result.append('\\');
+                            prevWasBackslash = false;
+                        } else if (next == '\\') {
+                            // Could be escaped backslash or path with multiple separators
+                            prevWasBackslash = true;
+                        } else {
+                            // Probably a path separator
+                            result.append('/');
+                            prevWasBackslash = false;
+                        }
+                    } else {
+                        // Trailing backslash - treat as path separator
+                        result.append('/');
+                        prevWasBackslash = false;
+                    }
+                }
+            } else {
+                if (prevWasBackslash) {
+                    // Previous was single backslash followed by non-special char
+                    result.append('/');
+                    prevWasBackslash = false;
+                }
+                result.append(c);
+            }
+        }
+
+        if (prevWasBackslash) {
+            result.append('/');
+        }
+
+        return result.toString();
     }
 
     private Pattern globToRegex(String glob) {
@@ -345,38 +405,40 @@ public class ScalarGlobOperator {
             char c = glob.charAt(i);
 
             if (escaped) {
-                regex.append(Pattern.quote(String.valueOf(c)));
+                // Add the escaped character literally
+                if (c == 'n') {
+                    regex.append('\n');
+                } else if (c == 't') {
+                    regex.append('\t');
+                } else if (c == 'r') {
+                    regex.append('\r');
+                } else {
+                    regex.append(Pattern.quote(String.valueOf(c)));
+                }
                 escaped = false;
                 continue;
             }
 
-            if (c == '\\') {
-                if (i + 1 < glob.length()) {
-                    // We have a next character, so this is an escape
-                    escaped = true;
-                    continue;
-                } else {
-                    // Trailing backslash - treat as literal
-                    regex.append(Pattern.quote("\\"));
-                    continue;
-                }
+            if (c == '\\' && i + 1 < glob.length()) {
+                escaped = true;
+                continue;
+            } else if (c == '\\') {
+                // Trailing backslash - add it literally
+                regex.append(Pattern.quote("\\"));
+                continue;
             }
 
             if (inCharClass) {
                 if (c == ']') {
                     regex.append(']');
                     inCharClass = false;
-                } else if (c == '\\' && i + 1 < glob.length()) {
-                    char next = glob.charAt(i + 1);
-                    regex.append(Pattern.quote(String.valueOf(next)));
-                    i++;
                 } else {
-                    // Quote special regex chars inside character class
-                    if (c == '-' || c == '^') {
-                        regex.append(Pattern.quote(String.valueOf(c)));
-                    } else {
-                        regex.append(c);
+                    // Inside character class, most chars are literal
+                    // Only need to escape certain regex metacharacters
+                    if (c == '\\' || c == '-' || c == '^' || c == '[' || c == ']') {
+                        regex.append('\\');
                     }
+                    regex.append(c);
                 }
             } else {
                 switch (c) {
@@ -397,7 +459,9 @@ public class ScalarGlobOperator {
                     case '|':
                     case '^':
                     case '$':
-                        regex.append(Pattern.quote(String.valueOf(c)));
+                    case '{':
+                    case '}':
+                        regex.append('\\').append(c);
                         break;
                     default:
                         regex.append(c);
@@ -411,11 +475,11 @@ public class ScalarGlobOperator {
         try {
             return Pattern.compile(regex.toString());
         } catch (PatternSyntaxException e) {
-            // Return null if pattern is invalid
+            System.err.println("Failed to compile regex from glob '" + glob + "': " + regex.toString());
             return null;
         }
     }
-
+    
     private String formatResult(File file, boolean hasDirectory, boolean isAbsolute, String cwd) {
         String result;
 
