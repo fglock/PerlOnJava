@@ -78,7 +78,7 @@ sub new {
     # Set up stringification
     use overload
         '""' => sub { $_[0]->{_filename} },
-        '0+' => sub { $_[0]->{_fh}->fileno },
+        '0+' => sub { builtin::refaddr($_[0]) },
         fallback => 1;
 
     return $self;
