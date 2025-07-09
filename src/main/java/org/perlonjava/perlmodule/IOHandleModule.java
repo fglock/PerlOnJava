@@ -17,7 +17,7 @@ public class IOHandleModule extends PerlModuleBase {
         super("IO::Handle", false);
     }
 
-    public static void IOHandleInit() {
+    public static void initialize() {
         IOHandleModule ioHandle = new IOHandleModule();
         ioHandle.initializeExporter();
         try {
