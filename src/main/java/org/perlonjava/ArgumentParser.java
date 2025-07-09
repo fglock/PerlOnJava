@@ -2,8 +2,10 @@ package org.perlonjava;
 
 import org.perlonjava.runtime.*;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -34,6 +36,36 @@ public class ArgumentParser {
         parsedArgs.code = null; // Initialize code to null
 
         processArgs(args, parsedArgs);
+
+        // If no code was provided and no filename, try reading from stdin
+        if (parsedArgs.code == null) {
+            try {
+                // Try to read from stdin - this will work for pipes, redirections, and interactive input
+                StringBuilder stdinContent = new StringBuilder();
+                BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+
+                // Check if we're reading from a pipe/redirection vs interactive terminal
+                boolean isInteractive = System.console() != null;
+
+                if (isInteractive) {
+                    // Interactive mode - prompt the user and read until EOF (Ctrl+D)
+                    System.err.println("Enter Perl code (press Ctrl+D when done):");
+                }
+
+                // Read from stdin regardless of whether it's interactive or not
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    stdinContent.append(line).append("\n");
+                }
+
+                if (stdinContent.length() > 0) {
+                    parsedArgs.code = stdinContent.toString();
+                    parsedArgs.fileName = "-"; // Indicate that code came from stdin
+                }
+            } catch (IOException e) {
+                // If we can't read from stdin, continue with normal error handling
+            }
+        }
 
         // Modify the code based on specific flags like -p or -n
         modifyCodeBasedOnFlags(parsedArgs);
