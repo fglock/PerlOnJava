@@ -183,7 +183,7 @@ public class FileTemp extends PerlModuleBase {
             }
 
             if (xCount < 4) {
-                throw new IllegalArgumentException("Template must have at least 4 trailing X's");
+                throw new IllegalArgumentException("Template must end with at least 4 'X' characters");
             }
 
             String prefix = template.substring(0, xStart);
@@ -262,7 +262,7 @@ public class FileTemp extends PerlModuleBase {
             }
 
             if (xCount < 4) {
-                throw new IllegalArgumentException("Template must have at least 4 trailing X's");
+                throw new IllegalArgumentException("Template must end with at least 4 'X' characters");
             }
 
             String prefix = template.substring(0, xStart);

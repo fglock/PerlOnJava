@@ -50,6 +50,13 @@ sub new {
 
 package File::Temp;
 
+# Set up overloading at package level
+use overload
+    '""' => sub { $_[0]->{_filename} || $_[0]->{_dirname} || '' },
+    '0+' => sub { Scalar::Util::refaddr($_[0]) },
+    '*{}' => sub { $_[0]->{_fh} },
+    fallback => 1;
+
 # Constructor for OO interface
 sub new {
     my $class = shift;
@@ -74,13 +81,6 @@ sub new {
         _filename => $filename,
         _unlink   => $args{UNLINK},
     }, $class;
-
-    # Set up stringification
-    use overload
-        '""' => sub { $_[0]->{_filename} },
-        '0+' => sub { builtin::refaddr($_[0]) },
-        '*{}' => sub { $_[0]->{_fh} },
-        fallback => 1;
 
     return $self;
 }
@@ -107,11 +107,6 @@ sub newdir {
         _dirname => $dir,
         _cleanup => $args{CLEANUP},
     }, $class;
-
-    # Set up stringification
-    use overload
-        '""' => sub { $_[0]->{_dirname} },
-        fallback => 1;
 
     return $self;
 }
@@ -156,7 +151,7 @@ sub AUTOLOAD {
 
     return if $method eq 'DESTROY';
 
-    if (exists $self->{_fh} && $self->{_fh}->can($method)) {
+    if (exists $self->{_fh} && ref($self->{_fh}) && UNIVERSAL::can($self->{_fh}, $method)) {
         return $self->{_fh}->$method(@_);
     }
 
@@ -181,14 +176,14 @@ sub tempfile {
     }
 
     # Generate template if not provided
-    if (!defined $template) {
+    if (!defined $template || $template eq '') {
         $template = _generate_template();
     }
 
     # Ensure template has enough X's
     my $x_count = ($template =~ tr/X/X/);
     if ($x_count < 4) {
-        croak "Template must contain at least 4 trailing X characters";
+        croak "Template must end with at least 4 'X' characters";
     }
 
     # Prepend directory if specified
@@ -235,7 +230,7 @@ sub tempdir {
     my $cleanup = $args{CLEANUP} || 0;
 
     # Generate template if not provided
-    if (!defined $template) {
+    if (!defined $template || $template eq '') {
         $template = _generate_template();
         $tmpdir = 1 unless defined $dir;
     }
@@ -243,7 +238,7 @@ sub tempdir {
     # Ensure template has enough X's
     my $x_count = ($template =~ tr/X/X/);
     if ($x_count < 4) {
-        croak "Template must contain at least 4 trailing X characters";
+        croak "Template must end with at least 4 'X' characters";
     }
 
     # Prepend directory
