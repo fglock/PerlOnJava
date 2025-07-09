@@ -7,6 +7,8 @@ import java.util.Iterator;
 import java.util.List;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 
 public class ListOperators {
     /**
@@ -116,8 +118,6 @@ public class ListOperators {
      * @throws RuntimeException If the Perl filter subroutine throws an exception.
      */
     public static RuntimeList grep(RuntimeList runtimeList, RuntimeScalar perlFilterClosure, int ctx) {
-        RuntimeArray array = runtimeList.getArrayOfAlias();
-
         // Create a new list to hold the filtered elements
         List<RuntimeBaseEntity> filteredElements = new ArrayList<>();
 
@@ -125,7 +125,7 @@ public class ListOperators {
         RuntimeArray filterArgs = new RuntimeArray();
 
         // Iterate over each element in the current RuntimeArray
-        for (RuntimeScalar element : array.elements) {
+        for (RuntimeScalar element : runtimeList) {
             try {
                 // Create $_ argument for the filter subroutine
                 var_.set(element);
@@ -157,5 +157,71 @@ public class ListOperators {
             // List context - return the filtered RuntimeList
             return filteredList;
         }
+    }
+
+    /**
+     * Check the elements of this RuntimeArray using a Perl subroutine.
+     *
+     * @param runtimeList
+     * @param perlFilterClosure A RuntimeScalar representing the Perl filter subroutine.
+     * @return A new RuntimeScalar boolean true if all elements match the filter criteria.
+     * @throws RuntimeException If the Perl filter subroutine throws an exception.
+     */
+    public static RuntimeList all(RuntimeList runtimeList, RuntimeScalar perlFilterClosure, int ctx) {
+        RuntimeScalar var_ = getGlobalVariable("main::_");
+        RuntimeArray filterArgs = new RuntimeArray();
+
+        // Iterate over each element in the current RuntimeArray
+        for (RuntimeScalar element : runtimeList) {
+            try {
+                // Create $_ argument for the filter subroutine
+                var_.set(element);
+
+                // Apply the Perl filter subroutine with the argument
+                RuntimeList result = RuntimeCode.apply(perlFilterClosure, filterArgs, RuntimeContextType.SCALAR);
+
+                // Check the result of the filter subroutine
+                if (!result.getFirst().getBoolean()) {
+                    return scalarFalse.getList();
+                }
+            } catch (Exception e) {
+                // Wrap any exceptions thrown by the filter subroutine in a RuntimeException
+                throw new RuntimeException(e);
+            }
+        }
+        return scalarTrue.getList();
+    }
+
+    /**
+     * Check the elements of this RuntimeArray using a Perl subroutine.
+     *
+     * @param runtimeList
+     * @param perlFilterClosure A RuntimeScalar representing the Perl filter subroutine.
+     * @return A new RuntimeScalar boolean true if any elements match the filter criteria.
+     * @throws RuntimeException If the Perl filter subroutine throws an exception.
+     */
+    public static RuntimeList any(RuntimeList runtimeList, RuntimeScalar perlFilterClosure, int ctx) {
+        RuntimeScalar var_ = getGlobalVariable("main::_");
+        RuntimeArray filterArgs = new RuntimeArray();
+
+        // Iterate over each element in the current RuntimeArray
+        for (RuntimeScalar element : runtimeList) {
+            try {
+                // Create $_ argument for the filter subroutine
+                var_.set(element);
+
+                // Apply the Perl filter subroutine with the argument
+                RuntimeList result = RuntimeCode.apply(perlFilterClosure, filterArgs, RuntimeContextType.SCALAR);
+
+                // Check the result of the filter subroutine
+                if (result.getFirst().getBoolean()) {
+                    return scalarTrue.getList();
+                }
+            } catch (Exception e) {
+                // Wrap any exceptions thrown by the filter subroutine in a RuntimeException
+                throw new RuntimeException(e);
+            }
+        }
+        return scalarFalse.getList();
     }
 }

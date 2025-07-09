@@ -12,6 +12,12 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import org.jline.reader.LineReader;
+import org.jline.reader.LineReaderBuilder;
+import org.jline.reader.EndOfFileException;
+import org.jline.reader.UserInterruptException;
+import org.jline.terminal.Terminal;
+import org.jline.terminal.TerminalBuilder;
 
 import static org.perlonjava.Configuration.getPerlVersionBundle;
 import static org.perlonjava.Configuration.perlVersion;
@@ -40,27 +46,58 @@ public class ArgumentParser {
         // If no code was provided and no filename, try reading from stdin
         if (parsedArgs.code == null) {
             try {
-                // Try to read from stdin - this will work for pipes, redirections, and interactive input
                 StringBuilder stdinContent = new StringBuilder();
-                BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-
-                // Check if we're reading from a pipe/redirection vs interactive terminal
                 boolean isInteractive = System.console() != null;
 
                 if (isInteractive) {
-                    // Interactive mode - prompt the user and read until EOF (Ctrl+D)
-                    System.err.println("Enter Perl code (press Ctrl+D when done):");
-                }
+                    // Interactive mode with JLine for better editing experience
+                    try {
+                        Terminal terminal = TerminalBuilder.builder()
+                                .system(true)
+                                .build();
 
-                // Read from stdin regardless of whether it's interactive or not
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    stdinContent.append(line).append("\n");
+                        LineReader lineReader = LineReaderBuilder.builder()
+                                .terminal(terminal)
+                                .build();
+
+                        System.err.println("Enter Perl code (press Ctrl+D when done, or type 'exit' to quit):");
+                        System.err.println("Use arrow keys to navigate, Ctrl+A/E for home/end");
+
+                        String line;
+                        while (true) {
+                            try {
+                                line = lineReader.readLine("> ");
+                                if (line != null) {
+                                    if ("exit".equals(line.trim())) {
+                                        break;
+                                    }
+                                    stdinContent.append(line).append("\n");
+                                }
+                            } catch (EndOfFileException e) {
+                                // User pressed Ctrl+D
+                                break;
+                            } catch (UserInterruptException e) {
+                                // User pressed Ctrl+C
+                                System.err.println("\nInterrupted. Use 'exit' or Ctrl+D to quit.");
+                                break;
+                            }
+                        }
+
+                        terminal.close();
+                    } catch (Exception e) {
+                        // Fall back to basic readline if JLine fails
+                        System.err.println("Enhanced editing not available, falling back to basic mode.");
+                        System.err.println("Enter Perl code (press Ctrl+D when done):");
+                        fallbackReadlines(stdinContent);
+                    }
+                } else {
+                    // Non-interactive mode (pipes, redirections)
+                    fallbackReadlines(stdinContent);
                 }
 
                 if (stdinContent.length() > 0) {
                     parsedArgs.code = stdinContent.toString();
-                    parsedArgs.fileName = "-"; // Indicate that code came from stdin
+                    parsedArgs.fileName = "-";
                 }
             } catch (IOException e) {
                 // If we can't read from stdin, continue with normal error handling
@@ -72,6 +109,14 @@ public class ArgumentParser {
         return parsedArgs;
     }
 
+    private static void fallbackReadlines(StringBuilder stdinContent) throws IOException {
+        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+        String line;
+        while ((line = reader.readLine()) != null) {
+            stdinContent.append(line).append("\n");
+        }
+    }
+    
     /**
      * Processes the command-line arguments, distinguishing between switch and non-switch arguments.
      *

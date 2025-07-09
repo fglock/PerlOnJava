@@ -170,7 +170,7 @@ public class CoreOperatorResolver {
             case "sort":
                 // Handle 'sort' operator
                 return OperatorParser.parseSort(parser, token);
-            case "map", "grep":
+            case "map", "grep", "all", "any":
                 // Handle 'map' and 'grep' operators
                 return OperatorParser.parseMapGrep(parser, token);
             case "pack":
