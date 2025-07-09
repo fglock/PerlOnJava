@@ -8,25 +8,33 @@ on:
 
 jobs:
   build:
-
     # Define a matrix to run the job on multiple operating systems
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [windows-latest, ubuntu-latest]
-
+    
     steps:
       - uses: actions/checkout@v4
-
+      
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
           cache: maven
-
+      
+      # Add this step to configure Windows for UTF-8
+      - name: Configure Windows for UTF-8
+        if: runner.os == 'Windows'
+        run: chcp 65001
+        shell: cmd
+      
       - name: Build with Maven
         run: mvn -B package --file pom.xml
+        env:
+          JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8
+
 
     # Optional: Uploads the full dependency graph to GitHub to improve the quality of Dependabot alerts this repository can receive
     # - name: Update dependency graph
