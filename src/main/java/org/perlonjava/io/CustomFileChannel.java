@@ -115,33 +115,20 @@ public class CustomFileChannel implements IOHandle {
     @Override
     public RuntimeScalar read(int maxBytes, Charset charset) {
         try {
-            // Initialize decoder helper on first use
-            if (decoderHelper == null) {
-                decoderHelper = new CharsetDecoderHelper();
+            byte[] buffer = new byte[maxBytes];
+            ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
+            int bytesRead = fileChannel.read(byteBuffer);
+
+            if (bytesRead == -1) {
+                isEOF = true;
+                return new RuntimeScalar("");
             }
 
-            StringBuilder result = new StringBuilder();
-
-            // Keep reading while we need more data for multi-byte sequences
-            do {
-                // Allocate buffer for reading
-                byte[] buffer = new byte[maxBytes];
-                ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
-                int bytesRead = fileChannel.read(byteBuffer);
-
-                // Decode the bytes, handling partial sequences
-                String decoded = decoderHelper.decode(buffer, bytesRead, charset);
-                result.append(decoded);
-
-                if (bytesRead == -1) {
-                    // End of file reached
-                    isEOF = true;
-                    break;
-                }
-
-                // Continue if we need more data to decode a complete character
-            } while (decoderHelper.needsMoreData() && !isEOF);
-
+            // Convert bytes to string where each char represents a byte
+            StringBuilder result = new StringBuilder(bytesRead);
+            for (int i = 0; i < bytesRead; i++) {
+                result.append((char)(buffer[i] & 0xFF));
+            }
             return new RuntimeScalar(result.toString());
         } catch (IOException e) {
             return handleIOException(e, "Read operation failed");
@@ -161,8 +148,10 @@ public class CustomFileChannel implements IOHandle {
     @Override
     public RuntimeScalar write(String string) {
         try {
-            // Convert string to bytes, treating each char as a byte value
-            var data = string.getBytes(StandardCharsets.ISO_8859_1);
+            byte[] data = new byte[string.length()];
+            for (int i = 0; i < string.length(); i++) {
+                data[i] = (byte) string.charAt(i);
+            }
             ByteBuffer byteBuffer = ByteBuffer.wrap(data);
             int bytesWritten = fileChannel.write(byteBuffer);
             return new RuntimeScalar(bytesWritten);
