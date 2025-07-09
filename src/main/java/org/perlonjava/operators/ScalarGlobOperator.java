@@ -252,78 +252,85 @@ public class ScalarGlobOperator {
     private List<String> globSinglePattern(String pattern) {
         List<String> results = new ArrayList<>();
 
-        // Get current working directory
-        String cwd = System.getProperty("user.dir");
+        try {
+            // Get current working directory
+            String cwd = System.getProperty("user.dir");
 
-        // Normalize pattern - Perl uses forward slashes even on Windows
-        String normalizedPattern = pattern.replace('\\', '/');
+            // Normalize pattern - Perl uses forward slashes even on Windows
+            String normalizedPattern = pattern.replace('\\', '/');
 
-        // But we need to check if the original pattern was a Windows absolute path
-        boolean isWindowsAbsolute = pattern.length() >= 3 &&
-                Character.isLetter(pattern.charAt(0)) &&
-                pattern.charAt(1) == ':' &&
-                (pattern.charAt(2) == '\\' || pattern.charAt(2) == '/');
+            // But we need to check if the original pattern was a Windows absolute path
+            boolean isWindowsAbsolute = pattern.length() >= 3 &&
+                    Character.isLetter(pattern.charAt(0)) &&
+                    pattern.charAt(1) == ':' &&
+                    (pattern.charAt(2) == '\\' || pattern.charAt(2) == '/');
 
-        // Separate directory from file pattern
-        File baseDir = new File(cwd);
-        String filePattern = normalizedPattern;
-        boolean hasDirectory = false;
-        boolean isAbsolute = isWindowsAbsolute || normalizedPattern.startsWith("/");
+            // Separate directory from file pattern
+            File baseDir = new File(cwd);
+            String filePattern = normalizedPattern;
+            boolean hasDirectory = false;
+            boolean isAbsolute = isWindowsAbsolute || normalizedPattern.startsWith("/");
 
-        int lastSep = normalizedPattern.lastIndexOf('/');
+            int lastSep = normalizedPattern.lastIndexOf('/');
 
-        if (lastSep >= 0) {
-            hasDirectory = true;
-            String dirPart = normalizedPattern.substring(0, lastSep);
+            if (lastSep >= 0) {
+                hasDirectory = true;
+                String dirPart = normalizedPattern.substring(0, lastSep);
 
-            if (dirPart.isEmpty()) {
-                baseDir = new File("/");
-            } else {
-                // Convert back to native separators for File operations
-                dirPart = dirPart.replace('/', File.separatorChar);
-                baseDir = new File(dirPart);
-                if (!baseDir.isAbsolute()) {
-                    baseDir = new File(cwd, dirPart);
+                if (dirPart.isEmpty()) {
+                    baseDir = new File("/");
+                } else {
+                    // Convert back to native separators for File operations
+                    dirPart = dirPart.replace('/', File.separatorChar);
+                    baseDir = new File(dirPart);
+                    if (!baseDir.isAbsolute()) {
+                        baseDir = new File(cwd, dirPart);
+                    }
+                }
+
+                filePattern = normalizedPattern.substring(lastSep + 1);
+            }
+
+            if (!baseDir.exists() || filePattern.isEmpty()) {
+                if (!containsGlobChars(pattern)) {
+                    results.add(pattern);
+                }
+                return results;
+            }
+
+            // Convert glob pattern to regex
+            Pattern regex = globToRegex(filePattern);
+            if (regex == null) {
+                // Pattern couldn't be compiled - likely malformed
+                return results;
+            }
+
+            // List files and match against pattern
+            File[] files = baseDir.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    String fileName = file.getName();
+
+                    // Handle hidden files (on Windows, hidden attribute is different but we follow Unix convention)
+                    if (!filePattern.startsWith(".") && fileName.startsWith(".")) {
+                        continue;
+                    }
+
+                    if (regex.matcher(fileName).matches()) {
+                        String result = formatResult(file, hasDirectory, isAbsolute, cwd);
+                        results.add(result);
+                    }
                 }
             }
 
-            filePattern = normalizedPattern.substring(lastSep + 1);
-        }
-
-        if (!baseDir.exists() || filePattern.isEmpty()) {
-            if (!containsGlobChars(pattern)) {
+            // For exact matches that don't exist (from brace expansion)
+            if (results.isEmpty() && !containsGlobChars(pattern)) {
                 results.add(pattern);
             }
-            return results;
-        }
-
-        // Convert glob pattern to regex
-        Pattern regex = globToRegex(filePattern);
-        if (regex == null) {
-            return results;
-        }
-
-        // List files and match against pattern
-        File[] files = baseDir.listFiles();
-        if (files != null) {
-            for (File file : files) {
-                String fileName = file.getName();
-
-                // Handle hidden files (on Windows, hidden attribute is different but we follow Unix convention)
-                if (!filePattern.startsWith(".") && fileName.startsWith(".")) {
-                    continue;
-                }
-
-                if (regex.matcher(fileName).matches()) {
-                    String result = formatResult(file, hasDirectory, isAbsolute, cwd);
-                    results.add(result);
-                }
-            }
-        }
-
-        // For exact matches that don't exist (from brace expansion)
-        if (results.isEmpty() && !containsGlobChars(pattern)) {
-            results.add(pattern);
+        } catch (Exception e) {
+            // Log the error for debugging but don't crash
+            // In case of errors, return empty results
+            System.err.println("Glob error for pattern '" + pattern + "': " + e.getMessage());
         }
 
         return results;
@@ -344,8 +351,15 @@ public class ScalarGlobOperator {
             }
 
             if (c == '\\') {
-                escaped = true;
-                continue;
+                if (i + 1 < glob.length()) {
+                    // We have a next character, so this is an escape
+                    escaped = true;
+                    continue;
+                } else {
+                    // Trailing backslash - treat as literal
+                    regex.append(Pattern.quote("\\"));
+                    continue;
+                }
             }
 
             if (inCharClass) {
@@ -357,7 +371,12 @@ public class ScalarGlobOperator {
                     regex.append(Pattern.quote(String.valueOf(next)));
                     i++;
                 } else {
-                    regex.append(c);
+                    // Quote special regex chars inside character class
+                    if (c == '-' || c == '^') {
+                        regex.append(Pattern.quote(String.valueOf(c)));
+                    } else {
+                        regex.append(c);
+                    }
                 }
             } else {
                 switch (c) {
@@ -392,6 +411,7 @@ public class ScalarGlobOperator {
         try {
             return Pattern.compile(regex.toString());
         } catch (PatternSyntaxException e) {
+            // Return null if pattern is invalid
             return null;
         }
     }
