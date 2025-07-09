@@ -193,9 +193,9 @@ sub tempfile {
     my ($fd, $path);
     eval {
         if ($suffix) {
-            ($fd, $path) = org::perlonjava::perlmodule::FileTemp::_mkstemps('File::Temp', $template, $suffix);
+            ($fd, $path) = _mkstemps($template, $suffix);
         } else {
-            ($fd, $path) = org::perlonjava::perlmodule::FileTemp::_mkstemp('File::Temp', $template);
+            ($fd, $path) = _mkstemp($template);
         }
     };
     if ($@) {
@@ -205,8 +205,9 @@ sub tempfile {
 
     return $path unless $open;
 
-    # Open filehandle
-    open(my $fh, '+<&=', $fd) or croak "Could not open temp file: $!";
+    # Ignore the file descriptor and just open the file by path
+    # The Java side should have already closed its file descriptor
+    open(my $fh, '+<', $path) or croak "Could not open temp file: $!";
     binmode($fh);
 
     # Set up cleanup if needed

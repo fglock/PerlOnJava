@@ -371,6 +371,8 @@ my @copy = @{$z};         # ERROR
   - 3-argument forms with explicit modes
   - In-memory files
   - support for pipe input and output like: `-|`, `|-`, `ls|`, `|sort`.
+  - ❌ file modes using `&=`, like `+<&=` (duplicate an existing file descriptor) is not supported.
+
 - ✅  **`sysopen`**: File opening.
 - ✅  **`readline`**: Reading lines from filehandles
 - ✅  **`eof`**: End-of-file detection
