@@ -4,8 +4,6 @@ use strict;
 use warnings;
 use Carp;
 use Symbol;
-use SelectSaver;
-use IO;
 
 our $VERSION = '1.52';
 
@@ -90,10 +88,11 @@ sub format_write {
 
     my $old_fh = select($fh);
     my $old_fmt = $~ if defined $fmt;
-    $~ = $fmt if defined $fmt;
-    write($fh);
-    $~ = $old_fmt if defined $fmt;
-    select($old_fh);
+    die "Not implemented: format_write()"
+    # $~ = $fmt if defined $fmt;
+    # write($fh);
+    # $~ = $old_fmt if defined $fmt;
+    # select($old_fh);
 }
 
 sub getc {
