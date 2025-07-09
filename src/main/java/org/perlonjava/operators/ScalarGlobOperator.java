@@ -423,8 +423,9 @@ public class ScalarGlobOperator {
                 escaped = true;
                 continue;
             } else if (c == '\\') {
-                // Trailing backslash - add it literally
-                regex.append(Pattern.quote("\\"));
+                // Trailing backslash - don't add it as an escape character
+                // Instead, treat it as a literal backslash
+                regex.append("\\\\");
                 continue;
             }
 
@@ -479,7 +480,7 @@ public class ScalarGlobOperator {
             return null;
         }
     }
-    
+
     private String formatResult(File file, boolean hasDirectory, boolean isAbsolute, String cwd) {
         String result;
 
