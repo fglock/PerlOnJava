@@ -305,6 +305,9 @@ public class EmitterMethodCreator implements Opcodes {
                             "Original error: " + e.getMessage(),
                     ctx.errorUtil);
         } catch (Exception e) {
+            if (e instanceof PerlCompilerException) {
+                throw (PerlCompilerException) e;
+            }
             throw new PerlCompilerException(
                     ast.getIndex(),
                     "Unexpected error during bytecode generation: " + e.getMessage(),
