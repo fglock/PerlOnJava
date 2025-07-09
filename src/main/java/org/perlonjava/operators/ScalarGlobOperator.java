@@ -5,14 +5,14 @@ import org.perlonjava.runtime.RuntimeDataProvider;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
 
-import java.io.IOException;
-import java.nio.file.*;
+import java.io.File;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeIO.flushFileHandles;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 public class ScalarGlobOperator {
@@ -23,9 +23,9 @@ public class ScalarGlobOperator {
 
     private Iterator<String> iterator;
     private String currentPattern;
-    private boolean isExhausted = false;  // Add this field to track exhausted state
+    private boolean isExhausted = false;
 
-    public ScalarGlobOperator(String pattern) throws IOException {
+    public ScalarGlobOperator(String pattern) {
         this.currentPattern = pattern;
         initializeIterator(pattern);
     }
@@ -37,31 +37,14 @@ public class ScalarGlobOperator {
             ScalarGlobOperator globOperator = globOperators.get(id);
 
             if (globOperator == null) {
-                try {
-                    globOperator = new ScalarGlobOperator(pattern);
-                    globOperators.put(id, globOperator);
-                } catch (IOException e) {
-                    getGlobalVariable("main::!").set("Glob operation failed: " + e.getMessage());
-                    return scalarUndef;
-                }
+                globOperator = new ScalarGlobOperator(pattern);
+                globOperators.put(id, globOperator);
             } else if (!globOperator.currentPattern.equals(pattern)) {
-                try {
-                    globOperator.initializeIterator(pattern);
-                    globOperator.currentPattern = pattern;
-                } catch (IOException e) {
-                    getGlobalVariable("main::!").set("Glob operation failed: " + e.getMessage());
-                    return scalarUndef;
-                }
+                globOperator.initializeIterator(pattern);
+                globOperator.currentPattern = pattern;
             } else if (globOperator.isExhausted && !globOperator.iterator.hasNext()) {
-                // Reset exhausted state when called from a new context
-                // This mimics Perl's behavior where glob state resets in new execution contexts
-                try {
-                    globOperator.initializeIterator(pattern);
-                    globOperator.isExhausted = false;
-                } catch (IOException e) {
-                    getGlobalVariable("main::!").set("Glob operation failed: " + e.getMessage());
-                    return scalarUndef;
-                }
+                globOperator.initializeIterator(pattern);
+                globOperator.isExhausted = false;
             }
 
             if (globOperator.iterator.hasNext()) {
@@ -75,21 +58,16 @@ public class ScalarGlobOperator {
             }
         } else {
             RuntimeList resultList = new RuntimeList();
-            try {
-                ScalarGlobOperator globOperator = new ScalarGlobOperator(pattern);
-                globOperator.iterator.forEachRemaining(path -> resultList.elements.add(new RuntimeScalar(path)));
-            } catch (IOException e) {
-                getGlobalVariable("main::!").set("Glob operation failed: " + e.getMessage());
-            }
+            ScalarGlobOperator globOperator = new ScalarGlobOperator(pattern);
+            globOperator.iterator.forEachRemaining(path -> resultList.elements.add(new RuntimeScalar(path)));
             return resultList;
         }
     }
 
-    private void initializeIterator(String pattern) throws IOException {
-        this.isExhausted = false;  // Reset exhausted state when reinitializing
+    private void initializeIterator(String pattern) {
+        this.isExhausted = false;
         List<String> results = new ArrayList<>();
 
-        // Handle empty pattern
         if (pattern.isEmpty()) {
             this.iterator = Collections.emptyIterator();
             return;
@@ -108,13 +86,9 @@ public class ScalarGlobOperator {
             }
         }
 
-        // Sort results to match Perl's behavior
-        Collections.sort(results);
-
-        // Remove duplicates while preserving order
-        LinkedHashSet<String> uniqueResults = new LinkedHashSet<>(results);
-
-        this.iterator = uniqueResults.iterator();
+        // Sort results and remove duplicates
+        results = new ArrayList<>(new TreeSet<>(results));
+        this.iterator = results.iterator();
     }
 
     private List<String> parsePatterns(String pattern) {
@@ -159,16 +133,15 @@ public class ScalarGlobOperator {
             List<String> newResults = new ArrayList<>();
 
             for (String current : results) {
-                int braceStart = findNextBraceOutsideCharClass(current, 0);
+                int braceStart = findUnescapedChar(current, '{', 0);
                 if (braceStart == -1) {
                     newResults.add(current);
                     continue;
                 }
 
                 hasMoreBraces = true;
-                int braceEnd = findClosingBrace(current, braceStart);
+                int braceEnd = findMatchingBrace(current, braceStart);
                 if (braceEnd == -1) {
-                    // Malformed brace, treat as literal
                     newResults.add(current);
                     continue;
                 }
@@ -189,76 +162,55 @@ public class ScalarGlobOperator {
         return results;
     }
 
-    private int findNextBraceOutsideCharClass(String str, int start) {
-        boolean inCharClass = false;
+    private int findUnescapedChar(String str, char target, int start) {
         boolean escaped = false;
-
         for (int i = start; i < str.length(); i++) {
             char c = str.charAt(i);
-
             if (escaped) {
                 escaped = false;
                 continue;
             }
-
             if (c == '\\') {
                 escaped = true;
                 continue;
             }
-
-            if (c == '[' && !inCharClass) {
-                inCharClass = true;
-            } else if (c == ']' && inCharClass) {
-                inCharClass = false;
-            } else if (c == '{' && !inCharClass) {
+            if (c == target) {
                 return i;
             }
         }
-
         return -1;
     }
 
-    private int findClosingBrace(String str, int start) {
+    private int findMatchingBrace(String str, int start) {
         int depth = 1;
-        boolean inCharClass = false;
         boolean escaped = false;
 
         for (int i = start + 1; i < str.length(); i++) {
             char c = str.charAt(i);
-
             if (escaped) {
                 escaped = false;
                 continue;
             }
-
             if (c == '\\') {
                 escaped = true;
                 continue;
             }
-
-            if (c == '[' && !inCharClass) {
-                inCharClass = true;
-            } else if (c == ']' && inCharClass) {
-                inCharClass = false;
-            } else if (!inCharClass) {
-                if (c == '{') {
-                    depth++;
-                } else if (c == '}') {
-                    depth--;
-                    if (depth == 0) {
-                        return i;
-                    }
+            if (c == '{') {
+                depth++;
+            } else if (c == '}') {
+                depth--;
+                if (depth == 0) {
+                    return i;
                 }
             }
         }
-        return -1; // No matching closing brace
+        return -1;
     }
 
     private String[] splitBraceContent(String content) {
         List<String> parts = new ArrayList<>();
         StringBuilder current = new StringBuilder();
         int depth = 0;
-        boolean inCharClass = false;
         boolean escaped = false;
 
         for (int i = 0; i < content.length(); i++) {
@@ -276,25 +228,15 @@ public class ScalarGlobOperator {
                 continue;
             }
 
-            if (c == '[' && !inCharClass) {
-                inCharClass = true;
+            if (c == '{') {
+                depth++;
                 current.append(c);
-            } else if (c == ']' && inCharClass) {
-                inCharClass = false;
+            } else if (c == '}') {
+                depth--;
                 current.append(c);
-            } else if (!inCharClass) {
-                if (c == '{') {
-                    depth++;
-                    current.append(c);
-                } else if (c == '}') {
-                    depth--;
-                    current.append(c);
-                } else if (c == ',' && depth == 0) {
-                    parts.add(current.toString());
-                    current = new StringBuilder();
-                } else {
-                    current.append(c);
-                }
+            } else if (c == ',' && depth == 0) {
+                parts.add(current.toString());
+                current = new StringBuilder();
             } else {
                 current.append(c);
             }
@@ -307,105 +249,195 @@ public class ScalarGlobOperator {
         return parts.toArray(new String[0]);
     }
 
-    private List<String> globSinglePattern(String pattern) throws IOException {
+    private List<String> globSinglePattern(String pattern) {
         List<String> results = new ArrayList<>();
 
         // Get current working directory
-        Path cwd = Paths.get(System.getProperty("user.dir"));
+        String cwd = System.getProperty("user.dir");
 
-        // Separate directory path from glob pattern
-        int lastSlash = pattern.lastIndexOf('/');
-        Path targetDir;
-        String globPattern;
-        boolean isAbsolute = pattern.startsWith("/");
+        // Normalize pattern - Perl uses forward slashes even on Windows
+        String normalizedPattern = pattern.replace('\\', '/');
 
-        if (lastSlash >= 0) {
-            // Pattern includes directory path
-            String dirPath = pattern.substring(0, lastSlash);
-            if (dirPath.isEmpty()) {
-                targetDir = Paths.get("/");
+        // But we need to check if the original pattern was a Windows absolute path
+        boolean isWindowsAbsolute = pattern.length() >= 3 &&
+                Character.isLetter(pattern.charAt(0)) &&
+                pattern.charAt(1) == ':' &&
+                (pattern.charAt(2) == '\\' || pattern.charAt(2) == '/');
+
+        // Separate directory from file pattern
+        File baseDir = new File(cwd);
+        String filePattern = normalizedPattern;
+        boolean hasDirectory = false;
+        boolean isAbsolute = isWindowsAbsolute || normalizedPattern.startsWith("/");
+
+        int lastSep = normalizedPattern.lastIndexOf('/');
+
+        if (lastSep >= 0) {
+            hasDirectory = true;
+            String dirPart = normalizedPattern.substring(0, lastSep);
+
+            if (dirPart.isEmpty()) {
+                baseDir = new File("/");
             } else {
-                Path path = Paths.get(dirPath);
-                if (path.isAbsolute()) {
-                    targetDir = path;
-                } else {
-                    targetDir = cwd.resolve(dirPath);
+                // Convert back to native separators for File operations
+                dirPart = dirPart.replace('/', File.separatorChar);
+                baseDir = new File(dirPart);
+                if (!baseDir.isAbsolute()) {
+                    baseDir = new File(cwd, dirPart);
                 }
             }
-            globPattern = pattern.substring(lastSlash + 1);
-        } else {
-            // No directory separator, use current directory
-            targetDir = cwd;
-            globPattern = pattern;
+
+            filePattern = normalizedPattern.substring(lastSep + 1);
         }
 
-        // Check if directory exists
-        if (!Files.exists(targetDir) || !Files.isDirectory(targetDir)) {
-            // For brace expansion results that don't match files, return the pattern as-is
+        if (!baseDir.exists() || filePattern.isEmpty()) {
             if (!containsGlobChars(pattern)) {
                 results.add(pattern);
             }
             return results;
         }
 
-        // Handle exact matches (no wildcards)
-        if (!containsGlobChars(globPattern)) {
-            Path exactPath = targetDir.resolve(globPattern);
-            if (Files.exists(exactPath)) {
-                results.add(formatPath(exactPath, cwd, isAbsolute, pattern));
-            } else if (!containsGlobChars(pattern)) {
-                // For brace expansion results that don't match files, return the pattern as-is
-                results.add(pattern);
-            }
+        // Convert glob pattern to regex
+        Pattern regex = globToRegex(filePattern);
+        if (regex == null) {
             return results;
         }
 
-        // Use Files.list() for non-recursive listing
-        PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + globPattern);
+        // List files and match against pattern
+        File[] files = baseDir.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                String fileName = file.getName();
 
-        try (var stream = Files.list(targetDir)) {
-            stream.filter(path -> {
-                        String fileName = path.getFileName().toString();
-                        // Handle hidden files
-                        if (globPattern.equals(".*")) {
-                            // Special case: .* should match hidden files but not . and ..
-                            return fileName.startsWith(".") && !fileName.equals(".") && !fileName.equals("..");
-                        } else if (!globPattern.startsWith(".") && fileName.startsWith(".")) {
-                            // Exclude hidden files unless pattern explicitly includes them
-                            return false;
-                        }
-                        return matcher.matches(path.getFileName());
-                    })
-                    .sorted()
-                    .forEach(path -> results.add(formatPath(path, cwd, isAbsolute, pattern)));
+                // Handle hidden files (on Windows, hidden attribute is different but we follow Unix convention)
+                if (!filePattern.startsWith(".") && fileName.startsWith(".")) {
+                    continue;
+                }
+
+                if (regex.matcher(fileName).matches()) {
+                    String result = formatResult(file, hasDirectory, isAbsolute, cwd);
+                    results.add(result);
+                }
+            }
+        }
+
+        // For exact matches that don't exist (from brace expansion)
+        if (results.isEmpty() && !containsGlobChars(pattern)) {
+            results.add(pattern);
         }
 
         return results;
     }
 
-    private boolean containsGlobChars(String pattern) {
-        return pattern.contains("*") || pattern.contains("?") ||
-                pattern.contains("[") || pattern.contains("{");
-    }
+    private Pattern globToRegex(String glob) {
+        StringBuilder regex = new StringBuilder("^");
+        boolean escaped = false;
+        boolean inCharClass = false;
 
-    private String formatPath(Path path, Path cwd, boolean patternIsAbsolute, String originalPattern) {
-        // If pattern contains directory separator, preserve the directory structure
-        if (originalPattern.contains("/")) {
-            if (patternIsAbsolute) {
-                return path.toString();
+        for (int i = 0; i < glob.length(); i++) {
+            char c = glob.charAt(i);
+
+            if (escaped) {
+                regex.append(Pattern.quote(String.valueOf(c)));
+                escaped = false;
+                continue;
+            }
+
+            if (c == '\\') {
+                escaped = true;
+                continue;
+            }
+
+            if (inCharClass) {
+                if (c == ']') {
+                    regex.append(']');
+                    inCharClass = false;
+                } else if (c == '\\' && i + 1 < glob.length()) {
+                    char next = glob.charAt(i + 1);
+                    regex.append(Pattern.quote(String.valueOf(next)));
+                    i++;
+                } else {
+                    regex.append(c);
+                }
             } else {
-                // Return relative path from current directory
-                try {
-                    Path relativePath = cwd.relativize(path);
-                    return relativePath.toString();
-                } catch (IllegalArgumentException e) {
-                    // If paths have different roots, return absolute
-                    return path.toString();
+                switch (c) {
+                    case '*':
+                        regex.append(".*");
+                        break;
+                    case '?':
+                        regex.append(".");
+                        break;
+                    case '[':
+                        regex.append("[");
+                        inCharClass = true;
+                        break;
+                    case '.':
+                    case '(':
+                    case ')':
+                    case '+':
+                    case '|':
+                    case '^':
+                    case '$':
+                        regex.append(Pattern.quote(String.valueOf(c)));
+                        break;
+                    default:
+                        regex.append(c);
+                        break;
                 }
             }
-        } else {
-            // Pattern has no directory separator, return just the filename
-            return path.getFileName().toString();
         }
+
+        regex.append("$");
+
+        try {
+            return Pattern.compile(regex.toString());
+        } catch (PatternSyntaxException e) {
+            return null;
+        }
+    }
+
+    private String formatResult(File file, boolean hasDirectory, boolean isAbsolute, String cwd) {
+        String result;
+
+        if (isAbsolute) {
+            result = file.getAbsolutePath();
+        } else if (hasDirectory) {
+            try {
+                Path cwdPath = Paths.get(cwd);
+                Path filePath = file.toPath();
+
+                if (filePath.startsWith(cwdPath)) {
+                    result = cwdPath.relativize(filePath).toString();
+                } else {
+                    result = file.getPath();
+                }
+            } catch (Exception e) {
+                result = file.getPath();
+            }
+        } else {
+            result = file.getName();
+        }
+
+        // Always normalize to forward slashes for Perl compatibility
+        return result.replace('\\', '/');
+    }
+
+    private boolean containsGlobChars(String pattern) {
+        boolean escaped = false;
+        for (int i = 0; i < pattern.length(); i++) {
+            char c = pattern.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (c == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (c == '*' || c == '?' || c == '[' || c == '{') {
+                return true;
+            }
+        }
+        return false;
     }
 }
