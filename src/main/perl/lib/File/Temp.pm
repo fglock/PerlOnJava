@@ -35,7 +35,7 @@ my $TOP_SYSTEM_UID = 10;
 # Load Java backend if available
 eval {
     require 'org.perlonjava.perlmodule.FileTemp';
-    org::perlonjava::perlmodule::FileTemp::initialize();
+    initialize();
 };
 
 # File::Temp object
@@ -168,10 +168,16 @@ sub tempfile {
     my ($template, %args) = _parse_args(@_);
 
     # Set defaults
-    my $dir    = $args{DIR} || ($args{TMPDIR} ? File::Spec->tmpdir : undef);
+    my $dir = $args{DIR};
     my $suffix = $args{SUFFIX} || '';
     my $unlink = exists $args{UNLINK} ? $args{UNLINK} : (defined wantarray ? 1 : 0);
     my $open   = exists $args{OPEN} ? $args{OPEN} : 1;
+
+    # If no directory specified, use temp directory by default
+    # unless TMPDIR was explicitly set to false
+    if (!defined $dir && (!exists $args{TMPDIR} || $args{TMPDIR})) {
+        $dir = File::Spec->tmpdir;
+    }
 
     # Generate template if not provided
     if (!defined $template) {
@@ -250,7 +256,7 @@ sub tempdir {
     # Create temp directory
     my $path;
     eval {
-        $path = org::perlonjava::perlmodule::FileTemp::_mkdtemp('File::Temp', $template);
+        $path = _mkdtemp($template);
     };
     if ($@) {
         # Fallback to pure Perl implementation
@@ -273,7 +279,7 @@ sub mkstemp {
 
     my ($fd, $path);
     eval {
-        ($fd, $path) = org::perlonjava::perlmodule::FileTemp::_mkstemp('File::Temp', $template);
+        ($fd, $path) = _mkstemp($template);
     };
     if ($@) {
         ($fd, $path) = _mkstemp_perl($template, '');
@@ -292,7 +298,7 @@ sub mkstemps {
 
     my ($fd, $path);
     eval {
-        ($fd, $path) = org::perlonjava::perlmodule::FileTemp::_mkstemps('File::Temp', $template, $suffix);
+        ($fd, $path) = _mkstemps($template, $suffix);
     };
     if ($@) {
         ($fd, $path) = _mkstemp_perl($template, $suffix);
@@ -310,7 +316,7 @@ sub mkdtemp {
 
     my $path;
     eval {
-        $path = org::perlonjava::perlmodule::FileTemp::_mkdtemp('File::Temp', $template);
+        $path = _mkdtemp($template);
     };
     if ($@) {
         $path = _mkdtemp_perl($template);
@@ -409,7 +415,7 @@ sub unlink1 {
 
 sub cleanup {
     eval {
-        org::perlonjava::perlmodule::FileTemp::_cleanup('File::Temp');
+        _cleanup();
     };
     # Also clean up any Perl-level registrations
     _cleanup_registered();
@@ -515,12 +521,12 @@ sub _register_cleanup {
     if ($type eq 'file') {
         $CLEANUP_FILES{$pid}{$path} = 1;
         eval {
-            org::perlonjava::perlmodule::FileTemp::_register_temp_file('File::Temp', $path);
+            _register_temp_file($path);
         };
     } else {
         $CLEANUP_DIRS{$pid}{$path} = 1;
         eval {
-            org::perlonjava::perlmodule::FileTemp::_register_temp_dir('File::Temp', $path);
+            _register_temp_dir($path);
         };
     }
 }

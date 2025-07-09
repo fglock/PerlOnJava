@@ -4,6 +4,7 @@ import org.objectweb.asm.*;
 import org.objectweb.asm.util.TraceClassVisitor;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.astvisitor.EmitterVisitor;
+import org.perlonjava.runtime.ErrorMessageUtil;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 
@@ -303,6 +304,21 @@ public class EmitterMethodCreator implements Opcodes {
                     "Internal compiler error: Failed to generate bytecode. " +
                             "This may indicate an issue with the generated code structure. " +
                             "Original error: " + e.getMessage(),
+                    ctx.errorUtil);
+        } catch (NegativeArraySizeException e) {
+            // Special handling for ASM frame computation errors
+            String formattedError = String.format(
+                    "ASM bytecode generation failed: %s\n" +
+                            "This typically occurs when:\n" +
+                            "  - The method is too complex (too many local variables or deep nesting)\n" +
+                            "  - Invalid bytecode was generated (incorrect stack manipulation)\n" +
+                            "  - The computed max stack/locals size is incorrect\n" +
+                            "Consider simplifying the subroutine or breaking it into smaller parts.",
+                    e.getMessage()
+            );
+            throw new PerlCompilerException(
+                    ast.getIndex(),
+                    formattedError,
                     ctx.errorUtil);
         } catch (PerlCompilerException e) {
             throw e;

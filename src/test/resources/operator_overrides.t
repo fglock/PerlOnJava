@@ -2,6 +2,7 @@
 use strict;
 use warnings;
 use Test::More;
+use File::Temp qw(tempfile);
 
 # Test operator overrides with different operators to avoid conflicts
 # since once an operator is overridden, it can't be switched back
@@ -55,14 +56,12 @@ subtest 'do operator special case' => sub {
     is($result, "do_block_result", 'do BLOCK does not call override');
 
     # CORE::do should work normally
-    # Create a temp file for CORE::do test
-    my $tmpfile = "./test_do_$$.pl";
-    open my $fh, '>', $tmpfile or die "Cannot create $tmpfile: $!";
+    # Use File::Temp for CORE::do test
+    my ($fh, $tmpfile) = tempfile(SUFFIX => '.pl', UNLINK => 1);
     print $fh '"core_do_result"';
     close $fh;
 
-    my $core_result = CORE::do $tmpfile;
-    unlink $tmpfile;
+    my $core_result = CORE::do($tmpfile) or diag("CORE::do failed for '$tmpfile': $! $@");
     is($core_result, "core_do_result", 'CORE::do works normally');
 };
 

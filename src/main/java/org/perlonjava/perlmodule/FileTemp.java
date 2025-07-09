@@ -108,7 +108,7 @@ public class FileTemp extends PerlModuleBase {
      * Register a temporary file for cleanup
      */
     public static RuntimeList _register_temp_file(RuntimeArray args, int ctx) {
-        if (args.size() != 2) {
+        if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for _register_temp_file");
         }
 
@@ -187,8 +187,10 @@ public class FileTemp extends PerlModuleBase {
             }
 
             String prefix = template.substring(0, xStart);
-            Path dir = Paths.get(prefix).getParent();
-            String namePrefix = Paths.get(prefix).getFileName().toString();
+            Path templatePath = Paths.get(prefix);
+            Path dir = templatePath.getParent();
+            String namePrefix = templatePath.getFileName() != null ?
+                    templatePath.getFileName().toString() : "";
 
             if (dir == null) {
                 dir = Paths.get(getTempDir());
@@ -226,8 +228,8 @@ public class FileTemp extends PerlModuleBase {
                     // Return file descriptor and path
                     int fd = openFile ? openFileDescriptor(filePath) : -1;
                     return new RuntimeList(
-                        new RuntimeScalar(fd),
-                        new RuntimeScalar(filePath.toString())
+                            new RuntimeScalar(fd),
+                            new RuntimeScalar(filePath.toString())
                     );
 
                 } catch (FileAlreadyExistsException e) {
@@ -264,8 +266,10 @@ public class FileTemp extends PerlModuleBase {
             }
 
             String prefix = template.substring(0, xStart);
-            Path parentDir = Paths.get(prefix).getParent();
-            String namePrefix = Paths.get(prefix).getFileName().toString();
+            Path templatePath = Paths.get(prefix);
+            Path parentDir = templatePath.getParent();
+            String namePrefix = templatePath.getFileName() != null ?
+                    templatePath.getFileName().toString() : "";
 
             if (parentDir == null) {
                 parentDir = Paths.get(getTempDir());

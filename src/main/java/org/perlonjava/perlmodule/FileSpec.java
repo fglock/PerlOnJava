@@ -6,6 +6,7 @@ import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.SystemUtils;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
@@ -91,12 +92,52 @@ public class FileSpec extends PerlModuleBase {
      * @return A {@link RuntimeList} containing the concatenated directory path.
      */
     public static RuntimeList catdir(RuntimeArray args, int ctx) {
-        StringBuilder path = new StringBuilder();
-        for (int i = 1; i < args.size(); i++) {
-            if (i > 1) path.append(File.separator);
-            path.append(args.get(i).toString());
+        if (args.size() == 1) {
+            return new RuntimeScalar("").getList();
         }
-        return new RuntimeScalar(path.toString()).getList();
+
+        StringBuilder result = new StringBuilder();
+        boolean isWindows = SystemUtils.osIsWindows();
+        String separator = File.separator;
+
+        for (int i = 1; i < args.size(); i++) {
+            String part = args.get(i).toString();
+
+            // Skip empty parts
+            if (part.isEmpty()) {
+                continue;
+            }
+
+            // For Windows, normalize slashes to the system separator
+            if (isWindows) {
+                part = part.replace('/', '\\');
+            }
+
+            if (result.length() == 0) {
+                // First component
+                result.append(part);
+            } else {
+                // Check if we need to add a separator
+                char lastChar = result.charAt(result.length() - 1);
+                char firstChar = part.charAt(0);
+
+                boolean lastHasSep = (lastChar == '/' || lastChar == '\\');
+                boolean firstHasSep = (firstChar == '/' || firstChar == '\\');
+
+                if (!lastHasSep && !firstHasSep) {
+                    // Neither has separator, add one
+                    result.append(separator);
+                } else if (lastHasSep && firstHasSep) {
+                    // Both have separator, skip the first char of part
+                    part = part.substring(1);
+                }
+                // else: exactly one has separator, just append
+
+                result.append(part);
+            }
+        }
+
+        return new RuntimeScalar(result.toString()).getList();
     }
 
     /**
@@ -314,11 +355,44 @@ public class FileSpec extends PerlModuleBase {
         if (args.size() != 4) {
             throw new IllegalStateException("Bad number of arguments for catpath() method");
         }
+
         String volume = args.get(1).toString();
         String directory = args.get(2).toString();
         String file = args.get(3).toString();
-        String fullPath = volume + directory + (directory.endsWith(File.separator) ? "" : File.separator) + file;
-        return new RuntimeScalar(fullPath).getList();
+
+        StringBuilder fullPath = new StringBuilder();
+
+        // Add volume (for Windows drive letters)
+        if (!volume.isEmpty()) {
+            fullPath.append(volume);
+            // Ensure volume ends with colon on Windows
+            if (SystemUtils.osIsWindows() && !volume.endsWith(":")) {
+                fullPath.append(":");
+            }
+        }
+
+        // Add directory
+        if (!directory.isEmpty()) {
+            fullPath.append(directory);
+            // Ensure directory ends with separator if file is provided
+            if (!file.isEmpty()) {
+                char lastChar = directory.charAt(directory.length() - 1);
+                if (lastChar != '/' && lastChar != '\\') {
+                    fullPath.append(File.separator);
+                }
+            }
+        }
+
+        // Add file
+        fullPath.append(file);
+
+        // Clean up the path
+        String result = canonpath(new RuntimeArray(
+                new RuntimeScalar("dummy"),
+                new RuntimeScalar(fullPath.toString())
+        ), 0).elements.get(0).toString();
+
+        return new RuntimeScalar(result).getList();
     }
 
     /**
