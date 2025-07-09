@@ -535,14 +535,15 @@ public class RuntimeIO implements RuntimeScalarReference {
      * @return the extracted RuntimeIO
      */
     public static RuntimeIO getRuntimeIO(RuntimeScalar runtimeScalar) {
-        RuntimeIO fh;
+        RuntimeIO fh = null;
         // Handle: my $fh2 = \*STDOUT;
         // Handle: my $fh = *STDOUT;
+
         if (runtimeScalar.value instanceof RuntimeGlob runtimeGlob) {
             fh = (RuntimeIO) runtimeGlob.getIO().value;
-        } else {
-            // Direct I/O handle created by open() or opendir()
-            fh = (RuntimeIO) runtimeScalar.value;
+        } else if (runtimeScalar.value instanceof RuntimeIO runtimeIO) {
+            // Direct I/O handle
+            fh = runtimeIO;
         }
 
         if (fh == null) {
