@@ -38,8 +38,8 @@ public class FeatureFlags {
         featureBundles.put(":5.42", new String[]{"bitwise", "current_sub", "evalbytes", "fc", "isa", "module_true", "postderef_qq", "say", "signatures", "state", "try", "unicode_eval", "unicode_strings"});
         // Not bundled:
         featureBundles.put("postderef", new String[]{"postderef"});
-        featureBundles.put("postderef", new String[]{"keyword_all"});
-        featureBundles.put("postderef", new String[]{"keyword_any"});
+        featureBundles.put("keyword_all", new String[]{"keyword_all"});
+        featureBundles.put("keyword_any", new String[]{"keyword_any"});
     }
 
     /**
