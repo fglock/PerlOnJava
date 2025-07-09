@@ -9,6 +9,7 @@ import java.io.File;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -76,8 +77,9 @@ public class FileSpec extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for canonpath() method");
         }
         String path = args.get(1).toString();
-        String canonPath = path.replaceAll("[/\\\\]+", File.separator)
-                .replaceAll(Pattern.quote(File.separator) + "\\." + Pattern.quote(File.separator), File.separator);
+        String quotedSeparator = Matcher.quoteReplacement(File.separator);
+        String canonPath = path.replaceAll("[/\\\\]+", quotedSeparator)
+                .replaceAll(Pattern.quote(File.separator) + "\\." + Pattern.quote(File.separator), quotedSeparator);
         return new RuntimeScalar(canonPath).getList();
     }
 
