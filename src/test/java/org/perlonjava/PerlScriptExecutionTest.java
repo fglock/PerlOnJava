@@ -114,6 +114,15 @@ public class PerlScriptExecutionTest {
 
             // Read the content of the Perl script with UTF-8 encoding
             String content = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+
+            // Simple UTF-8 test print
+            if (filename.contains("io_layers")) {
+                System.err.println("=== UTF-8 Terminal Test ===");
+                System.err.println("Direct Java print: Hello 世界 café naïve résumé");
+                System.err.println("From file content: " + content.substring(content.indexOf("Hello"), content.indexOf("Hello") + 30));
+                System.err.println("=========================");
+            }
+
             ArgumentParser.CompilerOptions options = new ArgumentParser.CompilerOptions();
             options.code = content; // Set the code to be executed
             options.fileName = filename; // Set the filename for reference
