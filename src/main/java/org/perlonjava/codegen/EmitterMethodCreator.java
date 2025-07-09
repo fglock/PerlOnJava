@@ -304,15 +304,15 @@ public class EmitterMethodCreator implements Opcodes {
                             "This may indicate an issue with the generated code structure. " +
                             "Original error: " + e.getMessage(),
                     ctx.errorUtil);
-        } catch (Exception e) {
-            if (e instanceof PerlCompilerException) {
-                throw (PerlCompilerException) e;
-            }
+        } catch (PerlCompilerException e) {
+            throw e;
+        } catch (RuntimeException e) {
             throw new PerlCompilerException(
                     ast.getIndex(),
-                    "Unexpected error during bytecode generation: " + e.getMessage(),
+                    "Unexpected runtime error during bytecode generation: " + e.getMessage(),
                     ctx.errorUtil);
         }
+
     }
 
     public static Class<?> loadBytecode(EmitterContext ctx, byte[] classData) {
