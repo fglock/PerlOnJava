@@ -277,6 +277,7 @@ The following areas are currently under active development to enhance the functi
   - File::Temp
   - File::Path
   - IO::Handle
+  - feature - `keyword_all`, `keyword_any`
   - XSLoader or Dynaloader for JVM
   - Add `tie` operation
 
