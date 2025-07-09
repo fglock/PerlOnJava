@@ -15,63 +15,138 @@ import java.util.regex.PatternSyntaxException;
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
+/**
+ * Implements Perl's glob operator functionality for file pattern matching.
+ *
+ * <p>The glob operator expands file patterns containing wildcards (* ? []) and
+ * brace expansions ({a,b,c}) into lists of matching file paths. It maintains
+ * state between scalar context calls to iterate through results.</p>
+ *
+ * <p>Supported pattern features:
+ * <ul>
+ *   <li>* - matches any sequence of characters</li>
+ *   <li>? - matches any single character</li>
+ *   <li>[...] - character class matching</li>
+ *   <li>{a,b,c} - brace expansion for alternatives</li>
+ *   <li>Escape sequences with backslash</li>
+ * </ul>
+ * </p>
+ */
 public class ScalarGlobOperator {
 
-    // Map to store the state (glob iterator) for each operator instance
-    public static final Map<Integer, ScalarGlobOperator> globOperators = new HashMap<>();
+    /** Map storing glob operator instances by their unique ID for state management */
+    private static final Map<Integer, ScalarGlobOperator> globOperators = new HashMap<>();
+
+    /** Counter for generating unique operator IDs */
     public static Integer currentId = 0;
 
+    /** Iterator over the current glob results */
     private Iterator<String> iterator;
+
+    /** The current pattern being processed */
     private String currentPattern;
+
+    /** Flag indicating if the iterator has been exhausted */
     private boolean isExhausted = false;
 
+    /**
+     * Creates a new glob operator for the given pattern.
+     *
+     * @param pattern the glob pattern to match files against
+     */
     public ScalarGlobOperator(String pattern) {
         this.currentPattern = pattern;
         initializeIterator(pattern);
     }
 
+    /**
+     * Evaluates a glob pattern in the given context.
+     *
+     * <p>In scalar context, returns one result at a time, maintaining state
+     * between calls. In list context, returns all matching results at once.</p>
+     *
+     * @param id the unique identifier for this glob operator instance
+     * @param patternArg the glob pattern as a RuntimeScalar
+     * @param ctx the runtime context (scalar or list)
+     * @return RuntimeDataProvider containing the results
+     */
     public static RuntimeDataProvider evaluate(int id, RuntimeScalar patternArg, int ctx) {
         String pattern = patternArg.toString();
 
         if (ctx == RuntimeContextType.SCALAR) {
-            ScalarGlobOperator globOperator = globOperators.get(id);
-
-            if (globOperator == null) {
-                globOperator = new ScalarGlobOperator(pattern);
-                globOperators.put(id, globOperator);
-            } else if (!globOperator.currentPattern.equals(pattern)) {
-                globOperator.initializeIterator(pattern);
-                globOperator.currentPattern = pattern;
-            } else if (globOperator.isExhausted && !globOperator.iterator.hasNext()) {
-                globOperator.initializeIterator(pattern);
-                globOperator.isExhausted = false;
-            }
-
-            if (globOperator.iterator.hasNext()) {
-                String result = globOperator.iterator.next();
-                getGlobalVariable("main::_").set(result);
-                return new RuntimeScalar(result);
-            } else {
-                globOperator.isExhausted = true;
-                getGlobalVariable("main::_").set(scalarUndef);
-                return scalarUndef;
-            }
+            return evaluateInScalarContext(id, pattern);
         } else {
-            RuntimeList resultList = new RuntimeList();
-            ScalarGlobOperator globOperator = new ScalarGlobOperator(pattern);
-            globOperator.iterator.forEachRemaining(path -> resultList.elements.add(new RuntimeScalar(path)));
-            return resultList;
+            return evaluateInListContext(pattern);
         }
     }
 
+    /**
+     * Evaluates glob in scalar context, returning one result per call.
+     */
+    private static RuntimeDataProvider evaluateInScalarContext(int id, String pattern) {
+        ScalarGlobOperator globOperator = globOperators.get(id);
+
+        if (globOperator == null) {
+            // First call - create new operator
+            globOperator = new ScalarGlobOperator(pattern);
+            globOperators.put(id, globOperator);
+        } else if (!globOperator.currentPattern.equals(pattern)) {
+            // Pattern changed - reinitialize
+            globOperator.initializeIterator(pattern);
+            globOperator.currentPattern = pattern;
+        } else if (globOperator.isExhausted && !globOperator.iterator.hasNext()) {
+            // Iterator exhausted - restart for new iteration
+            globOperator.initializeIterator(pattern);
+            globOperator.isExhausted = false;
+        }
+
+        if (globOperator.iterator.hasNext()) {
+            String result = globOperator.iterator.next();
+            getGlobalVariable("main::_").set(result);
+            return new RuntimeScalar(result);
+        } else {
+            globOperator.isExhausted = true;
+            getGlobalVariable("main::_").set(scalarUndef);
+            return scalarUndef;
+        }
+    }
+
+    /**
+     * Evaluates glob in list context, returning all results at once.
+     */
+    private static RuntimeList evaluateInListContext(String pattern) {
+        RuntimeList resultList = new RuntimeList();
+        ScalarGlobOperator globOperator = new ScalarGlobOperator(pattern);
+        globOperator.iterator.forEachRemaining(path ->
+                resultList.elements.add(new RuntimeScalar(path)));
+        return resultList;
+    }
+
+    /**
+     * Initializes the iterator with results from the given pattern.
+     *
+     * @param pattern the glob pattern to process
+     */
     private void initializeIterator(String pattern) {
         this.isExhausted = false;
-        List<String> results = new ArrayList<>();
 
         if (pattern.isEmpty()) {
             this.iterator = Collections.emptyIterator();
             return;
         }
+
+        List<String> results = processPattern(pattern);
+
+        // Sort results and remove duplicates
+        results = new ArrayList<>(new TreeSet<>(results));
+        this.iterator = results.iterator();
+    }
+
+    /**
+     * Processes a glob pattern and returns all matching file paths.
+     */
+    private List<String> processPattern(String pattern) {
+        List<String> results = new ArrayList<>();
 
         // Parse pattern for multiple patterns separated by whitespace
         List<String> patterns = parsePatterns(pattern);
@@ -86,11 +161,15 @@ public class ScalarGlobOperator {
             }
         }
 
-        // Sort results and remove duplicates
-        results = new ArrayList<>(new TreeSet<>(results));
-        this.iterator = results.iterator();
+        return results;
     }
 
+    /**
+     * Parses a pattern string into individual patterns, handling quoted sections.
+     *
+     * @param pattern the pattern string to parse
+     * @return list of individual patterns
+     */
     private List<String> parsePatterns(String pattern) {
         List<String> patterns = new ArrayList<>();
         StringBuilder current = new StringBuilder();
@@ -123,6 +202,12 @@ public class ScalarGlobOperator {
         return patterns;
     }
 
+    /**
+     * Expands brace expressions in a pattern (e.g., {a,b,c} -> a, b, c).
+     *
+     * @param pattern the pattern containing brace expressions
+     * @return list of expanded patterns
+     */
     private List<String> expandBraces(String pattern) {
         List<String> results = new ArrayList<>();
         results.add(pattern);
@@ -162,6 +247,9 @@ public class ScalarGlobOperator {
         return results;
     }
 
+    /**
+     * Finds the first unescaped occurrence of a character.
+     */
     private int findUnescapedChar(String str, char target, int start) {
         boolean escaped = false;
         for (int i = start; i < str.length(); i++) {
@@ -181,6 +269,9 @@ public class ScalarGlobOperator {
         return -1;
     }
 
+    /**
+     * Finds the matching closing brace for an opening brace.
+     */
     private int findMatchingBrace(String str, int start) {
         int depth = 1;
         boolean escaped = false;
@@ -207,6 +298,9 @@ public class ScalarGlobOperator {
         return -1;
     }
 
+    /**
+     * Splits brace content by commas, respecting nested braces.
+     */
     private String[] splitBraceContent(String content) {
         List<String> parts = new ArrayList<>();
         StringBuilder current = new StringBuilder();
@@ -225,10 +319,7 @@ public class ScalarGlobOperator {
             if (c == '\\') {
                 current.append(c);
                 escaped = true;
-                continue;
-            }
-
-            if (c == '{') {
+            } else if (c == '{') {
                 depth++;
                 current.append(c);
             } else if (c == '}') {
@@ -249,50 +340,29 @@ public class ScalarGlobOperator {
         return parts.toArray(new String[0]);
     }
 
+    /**
+     * Performs glob matching for a single pattern.
+     *
+     * @param pattern the glob pattern to match
+     * @return list of matching file paths
+     */
     private List<String> globSinglePattern(String pattern) {
         List<String> results = new ArrayList<>();
 
         try {
-            // Get current working directory
             String cwd = System.getProperty("user.dir");
 
-            // Check if this is a Windows absolute path BEFORE any normalization
-            boolean isWindowsAbsolute = pattern.length() >= 3 &&
-                    Character.isLetter(pattern.charAt(0)) &&
-                    pattern.charAt(1) == ':' &&
-                    (pattern.charAt(2) == '\\' || pattern.charAt(2) == '/');
+            // Check for Windows absolute path
+            boolean isWindowsAbsolute = isWindowsAbsolutePath(pattern);
 
-            // For Windows, we need to be careful about path separators vs escape chars
-            // Only convert backslashes that are clearly path separators
+            // Normalize path separators
             String normalizedPattern = normalizePathSeparators(pattern);
 
-            // Separate directory from file pattern
-            File baseDir = new File(cwd);
-            String filePattern = normalizedPattern;
-            boolean hasDirectory = false;
-            boolean isAbsolute = isWindowsAbsolute || normalizedPattern.startsWith("/");
+            // Extract directory and file pattern
+            PathComponents components = extractPathComponents(normalizedPattern, cwd, isWindowsAbsolute);
 
-            int lastSep = normalizedPattern.lastIndexOf('/');
-
-            if (lastSep >= 0) {
-                hasDirectory = true;
-                String dirPart = normalizedPattern.substring(0, lastSep);
-
-                if (dirPart.isEmpty()) {
-                    baseDir = new File("/");
-                } else {
-                    // Convert back to native separators for File operations
-                    dirPart = dirPart.replace('/', File.separatorChar);
-                    baseDir = new File(dirPart);
-                    if (!baseDir.isAbsolute()) {
-                        baseDir = new File(cwd, dirPart);
-                    }
-                }
-
-                filePattern = normalizedPattern.substring(lastSep + 1);
-            }
-
-            if (!baseDir.exists() || filePattern.isEmpty()) {
+            if (!components.baseDir.exists() || components.filePattern.isEmpty()) {
+                // For non-existent paths or empty patterns, return literal if no glob chars
                 if (!containsGlobChars(pattern)) {
                     results.add(pattern);
                 }
@@ -300,102 +370,158 @@ public class ScalarGlobOperator {
             }
 
             // Convert glob pattern to regex
-            Pattern regex = globToRegex(filePattern);
+            Pattern regex = globToRegex(components.filePattern);
             if (regex == null) {
                 return results;
             }
 
-            // List files and match against pattern
-            File[] files = baseDir.listFiles();
-            if (files != null) {
-                for (File file : files) {
-                    String fileName = file.getName();
-
-                    // Handle hidden files
-                    if (!filePattern.startsWith(".") && fileName.startsWith(".")) {
-                        continue;
-                    }
-
-                    if (regex.matcher(fileName).matches()) {
-                        String result = formatResult(file, hasDirectory, isAbsolute, cwd);
-                        results.add(result);
-                    }
-                }
-            }
+            // Match files against pattern
+            matchFiles(components, regex, results, cwd);
 
             // For exact matches that don't exist (from brace expansion)
             if (results.isEmpty() && !containsGlobChars(pattern)) {
                 results.add(pattern);
             }
         } catch (Exception e) {
-            // Don't propagate exceptions - just return empty results
-            System.err.println("Glob error for pattern '" + pattern + "': " + e.getMessage());
+            // Return empty results on error
         }
 
         return results;
     }
 
-    private String normalizePathSeparators(String pattern) {
-        // On Windows, we need to distinguish between path separators and escape backslashes
-        // This is tricky because both use backslash
+    /**
+     * Checks if a pattern is a Windows absolute path.
+     */
+    private boolean isWindowsAbsolutePath(String pattern) {
+        return pattern.length() >= 3 &&
+                Character.isLetter(pattern.charAt(0)) &&
+                pattern.charAt(1) == ':' &&
+                (pattern.charAt(2) == '\\' || pattern.charAt(2) == '/');
+    }
 
-        // If not on Windows, just convert backslashes to forward slashes
+    /**
+     * Holds path components after parsing.
+     */
+    private static class PathComponents {
+        final File baseDir;
+        final String filePattern;
+        final boolean hasDirectory;
+        final boolean isAbsolute;
+
+        PathComponents(File baseDir, String filePattern, boolean hasDirectory, boolean isAbsolute) {
+            this.baseDir = baseDir;
+            this.filePattern = filePattern;
+            this.hasDirectory = hasDirectory;
+            this.isAbsolute = isAbsolute;
+        }
+    }
+
+    /**
+     * Extracts directory and file pattern components from a path.
+     */
+    private PathComponents extractPathComponents(String normalizedPattern, String cwd, boolean isWindowsAbsolute) {
+        File baseDir = new File(cwd);
+        String filePattern = normalizedPattern;
+        boolean hasDirectory = false;
+        boolean isAbsolute = isWindowsAbsolute || normalizedPattern.startsWith("/");
+
+        int lastSep = normalizedPattern.lastIndexOf('/');
+
+        if (lastSep >= 0) {
+            hasDirectory = true;
+            String dirPart = normalizedPattern.substring(0, lastSep);
+
+            if (dirPart.isEmpty()) {
+                baseDir = new File("/");
+            } else {
+                dirPart = dirPart.replace('/', File.separatorChar);
+                baseDir = new File(dirPart);
+                if (!baseDir.isAbsolute()) {
+                    baseDir = new File(cwd, dirPart);
+                }
+            }
+
+            filePattern = normalizedPattern.substring(lastSep + 1);
+        }
+
+        return new PathComponents(baseDir, filePattern, hasDirectory, isAbsolute);
+    }
+
+    /**
+     * Matches files in a directory against a pattern.
+     */
+    private void matchFiles(PathComponents components, Pattern regex, List<String> results, String cwd) {
+        File[] files = components.baseDir.listFiles();
+        if (files == null) {
+            return;
+        }
+
+        for (File file : files) {
+            String fileName = file.getName();
+
+            // Skip hidden files unless pattern starts with dot
+            if (!components.filePattern.startsWith(".") && fileName.startsWith(".")) {
+                continue;
+            }
+
+            if (regex.matcher(fileName).matches()) {
+                String result = formatResult(file, components.hasDirectory, components.isAbsolute, cwd);
+                results.add(result);
+            }
+        }
+    }
+
+    /**
+     * Normalizes path separators in a pattern, handling escape sequences.
+     *
+     * @param pattern the pattern to normalize
+     * @return normalized pattern with forward slashes
+     */
+    private String normalizePathSeparators(String pattern) {
         if (File.separatorChar != '\\') {
             return pattern.replace('\\', '/');
         }
 
-        // On Windows, we need to be smarter
+        // On Windows, distinguish between path separators and escape sequences
         StringBuilder result = new StringBuilder();
-        boolean prevWasBackslash = false;
 
         for (int i = 0; i < pattern.length(); i++) {
             char c = pattern.charAt(i);
 
-            if (c == '\\') {
-                if (prevWasBackslash) {
-                    // Double backslash - this is an escaped backslash
-                    result.append("\\\\");
-                    prevWasBackslash = false;
+            if (c == '\\' && i + 1 < pattern.length()) {
+                char next = pattern.charAt(i + 1);
+                // Check if this is an escape sequence
+                if (isGlobSpecialChar(next) || next == '\\') {
+                    result.append('\\').append(next);
+                    i++; // Skip the next character
                 } else {
-                    // Single backslash - could be path separator or escape
-                    // Look ahead to see what follows
-                    if (i + 1 < pattern.length()) {
-                        char next = pattern.charAt(i + 1);
-                        // If next char is a glob special char, it's an escape
-                        if (next == '*' || next == '?' || next == '[' || next == ']' || next == '{' || next == '}') {
-                            result.append('\\');
-                            prevWasBackslash = false;
-                        } else if (next == '\\') {
-                            // Could be escaped backslash or path with multiple separators
-                            prevWasBackslash = true;
-                        } else {
-                            // Probably a path separator
-                            result.append('/');
-                            prevWasBackslash = false;
-                        }
-                    } else {
-                        // Trailing backslash - treat as path separator
-                        result.append('/');
-                        prevWasBackslash = false;
-                    }
-                }
-            } else {
-                if (prevWasBackslash) {
-                    // Previous was single backslash followed by non-special char
+                    // Treat as path separator
                     result.append('/');
-                    prevWasBackslash = false;
                 }
+            } else if (c == '\\') {
+                // Trailing backslash - treat as path separator
+                result.append('/');
+            } else {
                 result.append(c);
             }
-        }
-
-        if (prevWasBackslash) {
-            result.append('/');
         }
 
         return result.toString();
     }
 
+    /**
+     * Checks if a character is a glob special character.
+     */
+    private boolean isGlobSpecialChar(char c) {
+        return c == '*' || c == '?' || c == '[' || c == ']' || c == '{' || c == '}';
+    }
+
+    /**
+     * Converts a glob pattern to a regular expression.
+     *
+     * @param glob the glob pattern
+     * @return compiled regex pattern, or null on error
+     */
     private Pattern globToRegex(String glob) {
         StringBuilder regex = new StringBuilder("^");
         boolean escaped = false;
@@ -406,19 +532,7 @@ public class ScalarGlobOperator {
                 char c = glob.charAt(i);
 
                 if (escaped) {
-                    // Add the escaped character literally
-                    if (c == 'n') {
-                        regex.append('\n');
-                    } else if (c == 't') {
-                        regex.append('\t');
-                    } else if (c == 'r') {
-                        regex.append('\r');
-                    } else {
-                        String charStr = String.valueOf(c);
-                        if (!charStr.isEmpty()) {
-                            regex.append(Pattern.quote(charStr));
-                        }
-                    }
+                    regex.append(Pattern.quote(String.valueOf(c)));
                     escaped = false;
                     continue;
                 }
@@ -426,23 +540,12 @@ public class ScalarGlobOperator {
                 if (c == '\\' && i + 1 < glob.length()) {
                     escaped = true;
                     continue;
-                } else if (c == '\\') {
-                    // Trailing backslash - treat it as a literal backslash
-                    regex.append("\\\\");
-                    continue;
                 }
 
                 if (inCharClass) {
+                    handleCharClassChar(c, regex);
                     if (c == ']') {
-                        regex.append(']');
                         inCharClass = false;
-                    } else {
-                        // Inside character class, most chars are literal
-                        // Only need to escape certain regex metacharacters
-                        if (c == '\\' || c == '-' || c == '^' || c == '[' || c == ']') {
-                            regex.append('\\');
-                        }
-                        regex.append(c);
                     }
                 } else {
                     switch (c) {
@@ -456,19 +559,8 @@ public class ScalarGlobOperator {
                             regex.append("[");
                             inCharClass = true;
                             break;
-                        case '.':
-                        case '(':
-                        case ')':
-                        case '+':
-                        case '|':
-                        case '^':
-                        case '$':
-                        case '{':
-                        case '}':
-                            regex.append('\\').append(c);
-                            break;
                         default:
-                            regex.append(c);
+                            regex.append(Pattern.quote(String.valueOf(c)));
                             break;
                     }
                 }
@@ -477,40 +569,67 @@ public class ScalarGlobOperator {
             regex.append("$");
             return Pattern.compile(regex.toString());
 
-        } catch (Exception e) {
-            System.err.println("Failed to create regex from glob '" + glob + "': " + e.getMessage());
-            System.err.println("Generated regex: " + regex.toString());
-            e.printStackTrace();
+        } catch (PatternSyntaxException e) {
             return null;
         }
     }
 
+    /**
+     * Handles a character inside a character class in regex conversion.
+     */
+    private void handleCharClassChar(char c, StringBuilder regex) {
+        // Inside character class, most chars are literal
+        if (c == '\\' || c == '-' || c == '^' || c == '[') {
+            regex.append('\\');
+        }
+        regex.append(c);
+    }
+
+    /**
+     * Formats a file result based on context.
+     */
     private String formatResult(File file, boolean hasDirectory, boolean isAbsolute, String cwd) {
         String result;
 
         if (isAbsolute) {
             result = file.getAbsolutePath();
         } else if (hasDirectory) {
-            try {
-                Path cwdPath = Paths.get(cwd);
-                Path filePath = file.toPath();
-
-                if (filePath.startsWith(cwdPath)) {
-                    result = cwdPath.relativize(filePath).toString();
-                } else {
-                    result = file.getPath();
-                }
-            } catch (Exception e) {
-                result = file.getPath();
-            }
+            result = getRelativePath(file, cwd);
         } else {
             result = file.getName();
         }
 
-        // Always normalize to forward slashes for Perl compatibility
+        // Normalize to forward slashes for Perl compatibility
         return result.replace('\\', '/');
     }
 
+    /**
+     * Gets the relative path of a file from the specified base directory.
+     *
+     * @param file the file to get the relative path for
+     * @param baseDir the base directory to calculate the relative path from (typically cwd)
+     * @return the relative path as a string
+     */
+    private String getRelativePath(File file, String baseDir) {
+        try {
+            Path basePath = Paths.get(baseDir);
+            Path filePath = file.toPath();
+
+            if (filePath.startsWith(basePath)) {
+                return basePath.relativize(filePath).toString();
+            }
+        } catch (Exception e) {
+            // Fall back to absolute path on error
+        }
+        return file.getPath();
+    }
+
+    /**
+     * Checks if a pattern contains glob wildcard characters.
+     *
+     * @param pattern the pattern to check
+     * @return true if pattern contains unescaped glob characters
+     */
     private boolean containsGlobChars(String pattern) {
         boolean escaped = false;
         for (int i = 0; i < pattern.length(); i++) {
