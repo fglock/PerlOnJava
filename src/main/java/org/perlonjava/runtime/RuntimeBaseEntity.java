@@ -9,7 +9,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
  * and array variables in the runtime environment. It provides common functionality
  * and interfaces for these entities.
  */
-public abstract class RuntimeBaseEntity implements RuntimeDataProvider, DynamicState {
+public abstract class RuntimeBaseEntity implements RuntimeDataProvider, DynamicState, Iterable<RuntimeScalar> {
     // Index to the class that this reference belongs
     public int blessId;
 
