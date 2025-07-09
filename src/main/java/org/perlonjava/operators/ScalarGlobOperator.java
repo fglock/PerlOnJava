@@ -401,82 +401,86 @@ public class ScalarGlobOperator {
         boolean escaped = false;
         boolean inCharClass = false;
 
-        for (int i = 0; i < glob.length(); i++) {
-            char c = glob.charAt(i);
-
-            if (escaped) {
-                // Add the escaped character literally
-                if (c == 'n') {
-                    regex.append('\n');
-                } else if (c == 't') {
-                    regex.append('\t');
-                } else if (c == 'r') {
-                    regex.append('\r');
-                } else {
-                    regex.append(Pattern.quote(String.valueOf(c)));
-                }
-                escaped = false;
-                continue;
-            }
-
-            if (c == '\\' && i + 1 < glob.length()) {
-                escaped = true;
-                continue;
-            } else if (c == '\\') {
-                // Trailing backslash - don't add it as an escape character
-                // Instead, treat it as a literal backslash
-                regex.append("\\\\");
-                continue;
-            }
-
-            if (inCharClass) {
-                if (c == ']') {
-                    regex.append(']');
-                    inCharClass = false;
-                } else {
-                    // Inside character class, most chars are literal
-                    // Only need to escape certain regex metacharacters
-                    if (c == '\\' || c == '-' || c == '^' || c == '[' || c == ']') {
-                        regex.append('\\');
-                    }
-                    regex.append(c);
-                }
-            } else {
-                switch (c) {
-                    case '*':
-                        regex.append(".*");
-                        break;
-                    case '?':
-                        regex.append(".");
-                        break;
-                    case '[':
-                        regex.append("[");
-                        inCharClass = true;
-                        break;
-                    case '.':
-                    case '(':
-                    case ')':
-                    case '+':
-                    case '|':
-                    case '^':
-                    case '$':
-                    case '{':
-                    case '}':
-                        regex.append('\\').append(c);
-                        break;
-                    default:
-                        regex.append(c);
-                        break;
-                }
-            }
-        }
-
-        regex.append("$");
-
         try {
+            for (int i = 0; i < glob.length(); i++) {
+                char c = glob.charAt(i);
+
+                if (escaped) {
+                    // Add the escaped character literally
+                    if (c == 'n') {
+                        regex.append('\n');
+                    } else if (c == 't') {
+                        regex.append('\t');
+                    } else if (c == 'r') {
+                        regex.append('\r');
+                    } else {
+                        String charStr = String.valueOf(c);
+                        if (!charStr.isEmpty()) {
+                            regex.append(Pattern.quote(charStr));
+                        }
+                    }
+                    escaped = false;
+                    continue;
+                }
+
+                if (c == '\\' && i + 1 < glob.length()) {
+                    escaped = true;
+                    continue;
+                } else if (c == '\\') {
+                    // Trailing backslash - treat it as a literal backslash
+                    regex.append("\\\\");
+                    continue;
+                }
+
+                if (inCharClass) {
+                    if (c == ']') {
+                        regex.append(']');
+                        inCharClass = false;
+                    } else {
+                        // Inside character class, most chars are literal
+                        // Only need to escape certain regex metacharacters
+                        if (c == '\\' || c == '-' || c == '^' || c == '[' || c == ']') {
+                            regex.append('\\');
+                        }
+                        regex.append(c);
+                    }
+                } else {
+                    switch (c) {
+                        case '*':
+                            regex.append(".*");
+                            break;
+                        case '?':
+                            regex.append(".");
+                            break;
+                        case '[':
+                            regex.append("[");
+                            inCharClass = true;
+                            break;
+                        case '.':
+                        case '(':
+                        case ')':
+                        case '+':
+                        case '|':
+                        case '^':
+                        case '$':
+                        case '{':
+                        case '}':
+                            regex.append('\\').append(c);
+                            break;
+                        default:
+                            regex.append(c);
+                            break;
+                    }
+                }
+            }
+
+            regex.append("$");
             return Pattern.compile(regex.toString());
-        } catch (PatternSyntaxException e) {
-            System.err.println("Failed to compile regex from glob '" + glob + "': " + regex.toString());
+
+        } catch (Exception e) {
+            System.err.println("Failed to create regex from glob '" + glob + "': " + e.getMessage());
+            System.err.println("Generated regex: " + regex.toString());
+            e.printStackTrace();
             return null;
         }
     }
