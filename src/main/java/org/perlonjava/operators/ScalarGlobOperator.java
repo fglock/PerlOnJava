@@ -248,10 +248,12 @@ public class ScalarGlobOperator {
     }
 
     /**
-     * Finds the first unescaped occurrence of a character.
+     * Finds the first unescaped occurrence of a character, skipping character classes.
      */
     private int findUnescapedChar(String str, char target, int start) {
         boolean escaped = false;
+        boolean inCharClass = false;
+
         for (int i = start; i < str.length(); i++) {
             char c = str.charAt(i);
             if (escaped) {
@@ -262,7 +264,19 @@ public class ScalarGlobOperator {
                 escaped = true;
                 continue;
             }
-            if (c == target) {
+
+            // Handle character classes
+            if (c == '[' && !inCharClass) {
+                inCharClass = true;
+                continue;
+            }
+            if (c == ']' && inCharClass) {
+                inCharClass = false;
+                continue;
+            }
+
+            // Only match target if not in character class
+            if (c == target && !inCharClass) {
                 return i;
             }
         }
@@ -270,11 +284,12 @@ public class ScalarGlobOperator {
     }
 
     /**
-     * Finds the matching closing brace for an opening brace.
+     * Finds the matching closing brace for an opening brace, skipping character classes.
      */
     private int findMatchingBrace(String str, int start) {
         int depth = 1;
         boolean escaped = false;
+        boolean inCharClass = false;
 
         for (int i = start + 1; i < str.length(); i++) {
             char c = str.charAt(i);
@@ -286,12 +301,26 @@ public class ScalarGlobOperator {
                 escaped = true;
                 continue;
             }
-            if (c == '{') {
-                depth++;
-            } else if (c == '}') {
-                depth--;
-                if (depth == 0) {
-                    return i;
+
+            // Handle character classes
+            if (c == '[' && !inCharClass) {
+                inCharClass = true;
+                continue;
+            }
+            if (c == ']' && inCharClass) {
+                inCharClass = false;
+                continue;
+            }
+
+            // Only process braces if not in character class
+            if (!inCharClass) {
+                if (c == '{') {
+                    depth++;
+                } else if (c == '}') {
+                    depth--;
+                    if (depth == 0) {
+                        return i;
+                    }
                 }
             }
         }
@@ -475,45 +504,49 @@ public class ScalarGlobOperator {
      * Normalizes path separators in a pattern, handling escape sequences.
      *
      * @param pattern the pattern to normalize
-     * @return normalized pattern with forward slashes
+     * @return normalized pattern with forward slashes where appropriate
      */
     private String normalizePathSeparators(String pattern) {
-        if (File.separatorChar != '\\') {
-            return pattern.replace('\\', '/');
+        // Don't normalize if no backslashes
+        if (pattern.indexOf('\\') == -1) {
+            return pattern;
         }
 
-        // On Windows, distinguish between path separators and escape sequences
-        StringBuilder result = new StringBuilder();
+        // On Unix/Mac, backslashes in patterns are always escape sequences
+        // Don't convert them to forward slashes
+        if (File.separatorChar == '/') {
+            return pattern;
+        }
 
+        // On Windows, only normalize if this looks like a pure path
+        // If it contains glob metacharacters, preserve all backslashes
+        boolean hasGlobChars = false;
         for (int i = 0; i < pattern.length(); i++) {
             char c = pattern.charAt(i);
-
-            if (c == '\\' && i + 1 < pattern.length()) {
-                char next = pattern.charAt(i + 1);
-                // Check if this is an escape sequence
-                if (isGlobSpecialChar(next) || next == '\\') {
-                    result.append('\\').append(next);
-                    i++; // Skip the next character
-                } else {
-                    // Treat as path separator
-                    result.append('/');
-                }
-            } else if (c == '\\') {
-                // Trailing backslash - treat as path separator
-                result.append('/');
-            } else {
-                result.append(c);
+            if (c == '*' || c == '?' || c == '[' || c == '{') {
+                hasGlobChars = true;
+                break;
             }
         }
 
-        return result.toString();
+        if (hasGlobChars) {
+            // This is a glob pattern, preserve all backslashes
+            return pattern;
+        }
+
+        // For pure paths without glob chars, convert backslashes to forward slashes
+        return pattern.replace('\\', '/');
     }
 
     /**
-     * Checks if a character is a glob special character.
+     * Handles a character inside a character class in regex conversion.
      */
-    private boolean isGlobSpecialChar(char c) {
-        return c == '*' || c == '?' || c == '[' || c == ']' || c == '{' || c == '}';
+    private void handleCharClassChar(char c, StringBuilder regex) {
+        // Inside character class, certain chars need escaping in Java regex
+        if (c == '\\' || c == '-' || c == '^' || c == '[' || c == ']') {
+            regex.append('\\');
+        }
+        regex.append(c);
     }
 
     /**
@@ -532,20 +565,32 @@ public class ScalarGlobOperator {
                 char c = glob.charAt(i);
 
                 if (escaped) {
-                    regex.append(Pattern.quote(String.valueOf(c)));
+                    if (inCharClass) {
+                        // In glob character class, \[ means literal [, \{ means literal {
+                        // In Java regex character class, [ needs to be escaped as \[
+                        if (c == ']' || c == '\\' || c == '-' || c == '^' || c == '[') {
+                            regex.append('\\');
+                        }
+                        regex.append(c);
+                    } else {
+                        // Outside character class, escaped char is literal
+                        regex.append("\\Q").append(c).append("\\E");
+                    }
                     escaped = false;
                     continue;
                 }
 
-                if (c == '\\' && i + 1 < glob.length()) {
+                if (c == '\\') {
                     escaped = true;
                     continue;
                 }
 
                 if (inCharClass) {
-                    handleCharClassChar(c, regex);
                     if (c == ']') {
+                        regex.append("]");
                         inCharClass = false;
+                    } else {
+                        handleCharClassChar(c, regex);
                     }
                 } else {
                     switch (c) {
@@ -556,11 +601,15 @@ public class ScalarGlobOperator {
                             regex.append(".");
                             break;
                         case '[':
-                            regex.append("[");
-                            inCharClass = true;
+                            if (hasMatchingBracket(glob, i)) {
+                                regex.append("[");
+                                inCharClass = true;
+                            } else {
+                                regex.append("\\Q[\\E");
+                            }
                             break;
                         default:
-                            regex.append(Pattern.quote(String.valueOf(c)));
+                            regex.append("\\Q").append(c).append("\\E");
                             break;
                     }
                 }
@@ -575,14 +624,32 @@ public class ScalarGlobOperator {
     }
 
     /**
-     * Handles a character inside a character class in regex conversion.
+     * Checks if a character is a glob special character.
      */
-    private void handleCharClassChar(char c, StringBuilder regex) {
-        // Inside character class, most chars are literal
-        if (c == '\\' || c == '-' || c == '^' || c == '[') {
-            regex.append('\\');
+    private boolean isGlobSpecialChar(char c) {
+        return c == '*' || c == '?' || c == '[' || c == ']' || c == '{' || c == '}';
+    }
+
+    /**
+     * Checks if a '[' at the given position has a matching ']'.
+     */
+    private boolean hasMatchingBracket(String glob, int startPos) {
+        boolean escaped = false;
+        for (int i = startPos + 1; i < glob.length(); i++) {
+            char c = glob.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (c == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (c == ']') {
+                return true;
+            }
         }
-        regex.append(c);
+        return false;
     }
 
     /**
