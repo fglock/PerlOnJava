@@ -238,6 +238,7 @@ The following areas are currently under active development to enhance the functi
 
 - **v3.0.1**: Next minor version
   - Update Perl version to `5.42.0`.
+  - Added features: `keyword_all`, `keyword_any`
 
   - Accept input program in several ways:
     1. **Piped input**: `echo 'print "Hello\n"' | ./jperl` - reads from pipe and executes immediately
@@ -277,7 +278,6 @@ The following areas are currently under active development to enhance the functi
   - File::Temp
   - File::Path
   - IO::Handle
-  - feature - `keyword_all`, `keyword_any`
   - XSLoader or Dynaloader for JVM
   - Add `tie` operation
 
