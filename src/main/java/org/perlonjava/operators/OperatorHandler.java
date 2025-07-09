@@ -181,6 +181,12 @@ public class OperatorHandler {
         put("sort", "sort",
                 "org/perlonjava/operators/ListOperators",
                 "(Lorg/perlonjava/runtime/RuntimeList;Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeList;");
+        put("all", "all",
+                "org/perlonjava/operators/ListOperators",
+                "(Lorg/perlonjava/runtime/RuntimeList;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeList;");
+        put("any", "any",
+                "org/perlonjava/operators/ListOperators",
+                "(Lorg/perlonjava/runtime/RuntimeList;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeList;");
 
         operatorHandlers.put("scalar",
                 new OperatorHandler("org/perlonjava/runtime/RuntimeDataProvider",

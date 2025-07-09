@@ -118,6 +118,10 @@ public class ParsePrimary {
             // Check if the operator is enabled in the current scope
             // Some operators require specific features to be enabled
             operatorEnabled = switch (operator) {
+                case "all" ->
+                        parser.ctx.symbolTable.isFeatureCategoryEnabled("keyword_all");
+                case "any" ->
+                        parser.ctx.symbolTable.isFeatureCategoryEnabled("keyword_any");
                 case "say", "fc", "state", "evalbytes" ->
                         parser.ctx.symbolTable.isFeatureCategoryEnabled(operator);
                 case "__SUB__" ->

@@ -18,7 +18,7 @@ public class FeatureFlags {
 
     static {
         // Initialize the hierarchy of feature bundles
-        featureBundles.put(":default", new String[]{"indirect", "multidimensional", "bareword_filehandles"});
+        featureBundles.put(":default", new String[]{"indirect", "multidimensional", "bareword_filehandles", "apostrophe_as_package_separator", "smartmatch"});
         featureBundles.put(":5.10", new String[]{"bareword_filehandles", "indirect", "multidimensional", "say", "state", "switch"});
         featureBundles.put(":5.12", new String[]{"bareword_filehandles", "indirect", "multidimensional", "say", "state", "switch", "unicode_strings"});
         featureBundles.put(":5.14", new String[]{"bareword_filehandles", "indirect", "multidimensional", "say", "state", "switch", "unicode_strings"});
@@ -38,6 +38,8 @@ public class FeatureFlags {
         featureBundles.put(":5.42", new String[]{"bitwise", "current_sub", "evalbytes", "fc", "isa", "module_true", "postderef_qq", "say", "signatures", "state", "try", "unicode_eval", "unicode_strings"});
         // Not bundled:
         featureBundles.put("postderef", new String[]{"postderef"});
+        featureBundles.put("keyword_all", new String[]{"keyword_all"});
+        featureBundles.put("keyword_any", new String[]{"keyword_any"});
     }
 
     /**

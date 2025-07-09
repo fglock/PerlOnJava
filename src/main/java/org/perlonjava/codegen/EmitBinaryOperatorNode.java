@@ -48,7 +48,7 @@ public class EmitBinaryOperatorNode {
             case "push", "unshift" -> EmitOperator.handlePushOperator(emitterVisitor, node);
 
             // Higher-order functions
-            case "map", "sort", "grep" -> EmitOperator.handleMapOperator(emitterVisitor, node);
+            case "map", "sort", "grep", "all", "any" -> EmitOperator.handleMapOperator(emitterVisitor, node);
 
             // I/O operations
             case "eof", "open", "printf", "print", "say" ->
@@ -97,7 +97,7 @@ public class EmitBinaryOperatorNode {
                             OperatorHandler.get(node.operator));
 
             default -> throw new PerlCompilerException(node.tokenIndex,
-                    "Unexpected infix operator: " + node.operator, emitterVisitor.ctx.errorUtil);
+                    "Not implemented operator: " + node.operator, emitterVisitor.ctx.errorUtil);
         }
     }
 }
