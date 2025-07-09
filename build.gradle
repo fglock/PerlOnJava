@@ -68,8 +68,6 @@ repositories {
 // Project dependencies
 dependencies {
     // Core dependencies
-    implementation 'org.jline:jline-reader:3.30.4'
-    implementation 'org.jline:jline-terminal:3.30.4'
     implementation 'org.ow2.asm:asm:9.8'                           // ByteCode manipulation
     implementation 'org.ow2.asm:asm-util:9.8'                     // ASM utilities
     implementation 'com.ibm.icu:icu4j:77.1'                       // Unicode support
