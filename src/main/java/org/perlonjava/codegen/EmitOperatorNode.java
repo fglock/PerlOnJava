@@ -30,7 +30,7 @@ public class EmitOperatorNode {
             case "$", "@", "%", "*", "&" -> EmitVariable.handleVariableOperator(emitterVisitor, node);
 
             // Operations that take a list of operands
-            case "keys", "values", "pack", "unpack", "mkdir", "opendir", "seekdir", "crypt", "vec", "each", "read" ->
+            case "keys", "values", "pack", "unpack", "mkdir", "opendir", "seekdir", "crypt", "vec", "each", "read", "sysopen", "chmod" ->
                     EmitOperator.handleOpWithList(emitterVisitor, node);
 
             // Variable declarations

@@ -371,6 +371,7 @@ my @copy = @{$z};         # ERROR
   - 3-argument forms with explicit modes
   - In-memory files
   - support for pipe input and output like: `-|`, `|-`, `ls|`, `|sort`.
+- ✅  **`sysopen`**: File opening.
 - ✅  **`readline`**: Reading lines from filehandles
 - ✅  **`eof`**: End-of-file detection
 - ✅  **`close`**: Closing filehandles
@@ -383,6 +384,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`select`**: `select(filehandle)` for default output selection
 - ✅  **`select`**: `select(undef,undef,undef,$time)` for sleep function
 - ✅  **`seek`**: File position manipulation.
+- ✅  **`chmod`**: File permissions.
 
 ### Unimplemented I/O Operators
 - ❌  **`socket`**: Socket creation
