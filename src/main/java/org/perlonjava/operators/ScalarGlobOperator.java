@@ -518,24 +518,36 @@ public class ScalarGlobOperator {
             return pattern;
         }
 
-        // On Windows, only normalize if this looks like a pure path
-        // If it contains glob metacharacters, preserve all backslashes
-        boolean hasGlobChars = false;
+        // On Windows, we need to normalize path separators but preserve escape sequences
+        // Find the last path separator before any glob metacharacters
+        int lastPathSep = -1;
+        int firstGlobChar = -1;
+
         for (int i = 0; i < pattern.length(); i++) {
             char c = pattern.charAt(i);
             if (c == '*' || c == '?' || c == '[' || c == '{') {
-                hasGlobChars = true;
+                firstGlobChar = i;
                 break;
+            }
+            if (c == '\\' || c == '/') {
+                lastPathSep = i;
             }
         }
 
-        if (hasGlobChars) {
-            // This is a glob pattern, preserve all backslashes
+        if (firstGlobChar == -1) {
+            // No glob chars, convert all backslashes to forward slashes
+            return pattern.replace('\\', '/');
+        }
+
+        if (lastPathSep == -1 || lastPathSep > firstGlobChar) {
+            // No path separators before glob chars, preserve all backslashes
             return pattern;
         }
 
-        // For pure paths without glob chars, convert backslashes to forward slashes
-        return pattern.replace('\\', '/');
+        // Normalize path separators up to the last separator before glob chars
+        String pathPart = pattern.substring(0, lastPathSep + 1).replace('\\', '/');
+        String globPart = pattern.substring(lastPathSep + 1);
+        return pathPart + globPart;
     }
 
     /**
@@ -666,8 +678,8 @@ public class ScalarGlobOperator {
             result = file.getName();
         }
 
-        // Normalize to forward slashes for Perl compatibility
-        return result.replace('\\', '/');
+        // Return native path separators for compatibility with File::Spec
+        return result;
     }
 
     /**
