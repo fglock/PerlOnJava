@@ -4,6 +4,7 @@ import org.perlonjava.runtime.*;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -101,7 +102,7 @@ public class ArgumentParser {
                         }
                     }
                 }
-                String fileContent = new String(Files.readAllBytes(Paths.get(filePath)));
+                String fileContent = Files.readString(Paths.get(filePath), StandardCharsets.UTF_8);
                 parsedArgs.code = fileContent;
                 processShebangLine(args, parsedArgs, fileContent, index);
             } catch (IOException e) {
