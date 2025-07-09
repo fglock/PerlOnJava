@@ -166,7 +166,7 @@ subtest 'Object-oriented interface' => sub {
 
     # Filehandle operations
     print $tmp "test data\n";
-    $tmp->seek(0, 0);  # 0 = SEEK_SET
+    seek($tmp, 0, 0);  # 0 = SEEK_SET
     my $data = <$tmp>;
     is($data, "test data\n", 'Can use object as filehandle');
 
@@ -587,32 +587,32 @@ subtest 'File operations and seeking' => sub {
     print $tmp "Line 3\n";
 
     # Test tell
-    my $pos = $tmp->tell();
+    my $pos = tell($tmp);
     ok($pos > 0, 'tell() returns position');
 
     # Test seeking
-    ok($tmp->seek(0, SEEK_SET), 'seek to beginning');
-    is($tmp->tell(), 0, 'tell() confirms position at beginning');
+    ok(seek($tmp, 0, SEEK_SET), 'seek to beginning');
+    is(tell($tmp), 0, 'tell() confirms position at beginning');
 
     # Test reading
     my $line = <$tmp>;
     is($line, "Line 1\n", 'Can read first line');
 
     # Seek to end
-    ok($tmp->seek(0, SEEK_END), 'seek to end');
-    my $end_pos = $tmp->tell();
+    ok(seek($tmp, 0, SEEK_END), 'seek to end');
+    my $end_pos = tell($tmp);
     is($end_pos, $pos, 'End position matches write position');
 
     # Seek relative
-    ok($tmp->seek(-7, SEEK_CUR), 'relative seek backwards');
+    ok(seek($tmp, -7, SEEK_CUR), 'relative seek backwards');
     $line = <$tmp>;
     chomp($line);
     is($line, "Line 3", 'Read correct line after relative seek');
 
     # Test truncate
-    ok($tmp->truncate(14), 'truncate file');
-    $tmp->seek(0, SEEK_END);
-    is($tmp->tell(), 14, 'File truncated to correct size');
+    ok(truncate($tmp, 14), 'truncate file');
+    seek($tmp, 0, SEEK_END);
+    is(tell($tmp), 14, 'File truncated to correct size');
 
     # Test autoflush
     $tmp->autoflush(1);

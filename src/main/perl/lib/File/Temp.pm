@@ -79,6 +79,7 @@ sub new {
     use overload
         '""' => sub { $_[0]->{_filename} },
         '0+' => sub { builtin::refaddr($_[0]) },
+        '*{}' => sub { $_[0]->{_fh} },
         fallback => 1;
 
     return $self;
@@ -285,7 +286,7 @@ sub mkstemp {
         ($fd, $path) = _mkstemp_perl($template, '');
     }
 
-    open(my $fh, '+<&=', $fd) or croak "Could not open temp file: $!";
+    open(my $fh, '+<', $fd) or croak "Could not open temp file: $!";
     binmode($fh);
 
     return wantarray ? ($fh, $path) : $fh;
@@ -304,7 +305,7 @@ sub mkstemps {
         ($fd, $path) = _mkstemp_perl($template, $suffix);
     }
 
-    open(my $fh, '+<&=', $fd) or croak "Could not open temp file: $!";
+    open(my $fh, '+<', $fd) or croak "Could not open temp file: $!";
     binmode($fh);
 
     return wantarray ? ($fh, $path) : $fh;
