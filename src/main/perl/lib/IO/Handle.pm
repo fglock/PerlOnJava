@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use Carp;
 use Symbol;
+use 5.38.0;
 
 our $VERSION = '1.52';
 
