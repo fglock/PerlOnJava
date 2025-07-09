@@ -286,7 +286,7 @@ sub mkstemp {
         ($fd, $path) = _mkstemp_perl($template, '');
     }
 
-    open(my $fh, '+<', $fd) or croak "Could not open temp file: $!";
+    open(my $fh, '+<', $path) or croak "Could not open temp file: $!";
     binmode($fh);
 
     return wantarray ? ($fh, $path) : $fh;
@@ -305,7 +305,7 @@ sub mkstemps {
         ($fd, $path) = _mkstemp_perl($template, $suffix);
     }
 
-    open(my $fh, '+<', $fd) or croak "Could not open temp file: $!";
+    open(my $fh, '+<', $path) or croak "Could not open temp file: $!";
     binmode($fh);
 
     return wantarray ? ($fh, $path) : $fh;
