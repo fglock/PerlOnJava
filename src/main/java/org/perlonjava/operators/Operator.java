@@ -4,15 +4,12 @@ import org.perlonjava.io.IOHandle;
 import org.perlonjava.regex.RuntimeRegex;
 import org.perlonjava.runtime.*;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
+import java.nio.file.*;
+import java.nio.file.attribute.PosixFilePermission;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -326,6 +323,183 @@ public class Operator {
     public static RuntimeScalar eof(RuntimeList runtimeList, RuntimeScalar fileHandle) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
         return fh.eof();
+    }
+
+    /**
+     * Opens a file using system-level open flags.
+     *
+     * @param runtimeList The list containing filehandle, filename, mode, and optional perms
+     * @return A RuntimeScalar indicating success (1) or failure (0)
+     */
+    public static RuntimeScalar sysopen(RuntimeList runtimeList) {
+        // sysopen FILEHANDLE,FILENAME,MODE
+        // sysopen FILEHANDLE,FILENAME,MODE,PERMS
+
+        if (runtimeList.size() < 3) {
+            throw new PerlCompilerException("Not enough arguments for sysopen");
+        }
+
+        RuntimeScalar fileHandle = runtimeList.elements.get(0).scalar();
+        String fileName = runtimeList.elements.get(1).toString();
+        int mode = (int) runtimeList.elements.get(2).scalar().getInt();
+        int perms = 0666; // Default permissions (octal)
+
+        if (runtimeList.size() >= 4) {
+            perms = (int) runtimeList.elements.get(3).scalar().getInt();
+        }
+
+        // Convert numeric flags to mode string for RuntimeIO
+        String modeStr = "";
+
+        // Common flag combinations
+        int O_RDONLY = 0;
+        int O_WRONLY = 1;
+        int O_RDWR = 2;
+        int O_CREAT = 0100; // 64 in decimal
+        int O_EXCL = 0200;  // 128 in decimal
+        int O_APPEND = 02000; // 1024 in decimal
+        int O_TRUNC = 01000;  // 512 in decimal
+
+        // Determine the base mode
+        int baseMode = mode & 3; // Get the lowest 2 bits
+
+        if (baseMode == O_RDONLY) {
+            modeStr = "<";
+        } else if (baseMode == O_WRONLY) {
+            if ((mode & O_APPEND) != 0) {
+                modeStr = ">>";
+            } else if ((mode & O_TRUNC) != 0 || (mode & O_CREAT) != 0) {
+                modeStr = ">";
+            } else {
+                modeStr = ">";
+            }
+        } else if (baseMode == O_RDWR) {
+            if ((mode & O_APPEND) != 0) {
+                modeStr = "+>>";
+            } else {
+                modeStr = "+<";
+            }
+        }
+
+        // If creating a new file, apply the permissions
+        if ((mode & O_CREAT) != 0) {
+            File file = new File(fileName);
+            if (!file.exists()) {
+                try {
+                    file.createNewFile();
+                    // Apply permissions to the newly created file
+                    applyFilePermissions(file.toPath(), perms);
+                } catch (IOException e) {
+                    // Failed to create file
+                    return scalarFalse;
+                }
+            }
+        }
+
+        RuntimeIO fh = RuntimeIO.open(fileName, modeStr);
+        if (fh == null) {
+            return scalarFalse;
+        }
+
+        fileHandle.type = RuntimeScalarType.GLOBREFERENCE;
+        fileHandle.value = new RuntimeGlob(null).setIO(fh);
+        return scalarTrue;
+    }
+
+    /**
+     * Changes file permissions.
+     *
+     * @param runtimeList The list containing mode and filenames
+     * @return A RuntimeScalar with the number of files successfully changed
+     */
+    public static RuntimeScalar chmod(RuntimeList runtimeList) {
+        // chmod MODE, LIST
+
+        if (runtimeList.size() < 2) {
+            throw new PerlCompilerException("Not enough arguments for chmod");
+        }
+
+        int mode = (int) runtimeList.elements.get(0).scalar().getInt();
+        int successCount = 0;
+
+        // Process each file in the list
+        for (int i = 1; i < runtimeList.size(); i++) {
+            String fileName = runtimeList.elements.get(i).toString();
+            Path path = Paths.get(fileName);
+
+            if (Files.exists(path)) {
+                if (applyFilePermissions(path, mode)) {
+                    successCount++;
+                }
+            }
+        }
+
+        return new RuntimeScalar(successCount);
+    }
+
+    /**
+     * Helper method to apply Unix-style permissions to a file.
+     * Uses PosixFilePermissions on Unix-like systems, falls back to basic permissions on Windows.
+     *
+     * @param path The path to the file
+     * @param mode The Unix permission mode (octal)
+     * @return true if permissions were successfully applied, false otherwise
+     */
+    private static boolean applyFilePermissions(Path path, int mode) {
+        try {
+            // Check if POSIX permissions are supported
+            if (FileSystems.getDefault().supportedFileAttributeViews().contains("posix")) {
+                // Use POSIX permissions on Unix-like systems
+                Set<PosixFilePermission> perms = new HashSet<>();
+
+                // Owner permissions
+                if ((mode & 0400) != 0) perms.add(PosixFilePermission.OWNER_READ);
+                if ((mode & 0200) != 0) perms.add(PosixFilePermission.OWNER_WRITE);
+                if ((mode & 0100) != 0) perms.add(PosixFilePermission.OWNER_EXECUTE);
+
+                // Group permissions
+                if ((mode & 040) != 0) perms.add(PosixFilePermission.GROUP_READ);
+                if ((mode & 020) != 0) perms.add(PosixFilePermission.GROUP_WRITE);
+                if ((mode & 010) != 0) perms.add(PosixFilePermission.GROUP_EXECUTE);
+
+                // Others permissions
+                if ((mode & 04) != 0) perms.add(PosixFilePermission.OTHERS_READ);
+                if ((mode & 02) != 0) perms.add(PosixFilePermission.OTHERS_WRITE);
+                if ((mode & 01) != 0) perms.add(PosixFilePermission.OTHERS_EXECUTE);
+
+                Files.setPosixFilePermissions(path, perms);
+            } else {
+                // Fall back to basic permissions on Windows
+                File file = path.toFile();
+
+                // Windows only supports read/write permissions, not execute
+                boolean ownerRead = (mode & 0400) != 0;
+                boolean ownerWrite = (mode & 0200) != 0;
+                boolean ownerExecute = (mode & 0100) != 0;
+
+                // On Windows, we can only set owner permissions
+                file.setReadable(ownerRead, true);
+                file.setWritable(ownerWrite, true);
+                file.setExecutable(ownerExecute, true);
+
+                // If any group/other has read permission, make readable by all
+                if ((mode & 044) != 0) {
+                    file.setReadable(true, false);
+                }
+                // If any group/other has write permission, make writable by all
+                if ((mode & 022) != 0) {
+                    file.setWritable(true, false);
+                }
+                // If any group/other has execute permission, make executable by all
+                if ((mode & 011) != 0) {
+                    file.setExecutable(true, false);
+                }
+            }
+            return true;
+        } catch (IOException | SecurityException e) {
+            // Permission denied or other error
+            return false;
+        }
     }
 
     /**
