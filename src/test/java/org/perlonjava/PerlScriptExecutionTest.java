@@ -16,6 +16,7 @@ import java.io.InputStream;
 import java.io.PrintStream;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -111,8 +112,8 @@ public class PerlScriptExecutionTest {
         try {
             PerlLanguageProvider.resetAll();
 
-            // Read the content of the Perl script
-            String content = new String(inputStream.readAllBytes());
+            // Read the content of the Perl script with UTF-8 encoding
+            String content = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
             ArgumentParser.CompilerOptions options = new ArgumentParser.CompilerOptions();
             options.code = content; // Set the code to be executed
             options.fileName = filename; // Set the filename for reference
