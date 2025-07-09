@@ -81,8 +81,23 @@ public class PerlScriptExecutionTest {
     }
 
     /**
+     * Gets the root cause of an exception by traversing the cause chain.
+     *
+     * @param throwable the exception to analyze
+     * @return the root cause of the exception
+     */
+    private Throwable getRootCause(Throwable throwable) {
+        Throwable rootCause = throwable;
+        while (rootCause.getCause() != null && rootCause.getCause() != rootCause) {
+            rootCause = rootCause.getCause();
+        }
+        return rootCause;
+    }
+
+    /**
      * Parameterized test that executes Perl scripts and verifies their output.
-     * The test fails if the output contains the string "not ok".
+     * The test fails if the output contains "not ok" at the beginning of a line,
+     * which indicates a failed test in TAP (Test Anything Protocol) format.
      *
      * @param filename the name of the Perl script file to be executed.
      */
@@ -115,19 +130,30 @@ public class PerlScriptExecutionTest {
 
             for (String line : output.lines().toList()) {
                 lineNumber++;
-                if (line.contains("not ok")) {
+
+                // Check for test failures - works with both Test::More TAP format and simple tests
+                if (line.trim().startsWith("not ok")) {
                     errorFound = true;
-                    fail("Output contains 'not ok' in " + filename + " at line " + lineNumber + ": " + line);
+                    fail("Test failure in " + filename + " at line " + lineNumber + ": " + line);
+                    break;
+                }
+
+                // Check for bail out (TAP format)
+                if (line.trim().startsWith("Bail out!")) {
+                    fail("Test bailed out in " + filename + " at line " + lineNumber + ": " + line);
                     break;
                 }
             }
 
             if (!errorFound) {
-                assertFalse(errorFound, "Output should not contain 'not ok' in " + filename);
+                assertFalse(errorFound, "Output should not contain test failures in " + filename);
             }
         } catch (Exception e) {
-            e.printStackTrace();
-            fail("Execution of " + filename + " failed: " + e.getMessage());
+            // Get the root cause and print its stack trace
+            Throwable rootCause = getRootCause(e);
+            System.err.println("Root cause error in " + filename + ":");
+            rootCause.printStackTrace(System.err);
+            fail("Execution of " + filename + " failed: " + rootCause.getMessage());
         }
     }
 
