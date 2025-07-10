@@ -320,4 +320,41 @@ public class OperatorHandler {
         // replace last argument with `I`
         return descriptor.replace("Lorg/perlonjava/runtime/RuntimeScalar;)", "I)");
     }
+
+    /**
+     * Gets the return type descriptor from this handler's method descriptor.
+     *
+     * @return The return type class name with semicolon (e.g., "RuntimeScalar;"),
+     *         or null if return type cannot be determined
+     */
+    public String getReturnTypeDescriptor() {
+        if (descriptor == null) {
+            return null;
+        }
+
+        // Extract return type from descriptor
+        int lastParen = descriptor.lastIndexOf(')');
+        if (lastParen == -1 || lastParen >= descriptor.length() - 1) {
+            return null;
+        }
+
+        String fullReturnType = descriptor.substring(lastParen + 1);
+
+        // Handle object types (start with 'L' and end with ';')
+        if (fullReturnType.startsWith("L") && fullReturnType.endsWith(";")) {
+            // Remove the 'L' prefix
+            fullReturnType = fullReturnType.substring(1);
+
+            // Extract just the class name with semicolon
+            int lastSlash = fullReturnType.lastIndexOf('/');
+            if (lastSlash != -1) {
+                return fullReturnType.substring(lastSlash + 1);
+            } else {
+                return fullReturnType;
+            }
+        }
+
+        // For primitive types or other cases
+        return null;
+    }
 }
