@@ -28,7 +28,19 @@ public class EmitLiteral {
         emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
+        // Elements in array literals are always evaluated in LIST context
         EmitterVisitor elementContext = emitterVisitor.with(RuntimeContextType.LIST);
+
+        // In VOID context, evaluate elements for side effects and pop the results
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+            for (Node element : node.elements) {
+                element.accept(elementContext);
+                // Pop the list result
+                mv.visitInsn(Opcodes.POP);
+            }
+            emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) end");
+            return;
+        }
 
         // Create a new instance of RuntimeArray
         mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeArray");
@@ -73,7 +85,19 @@ public class EmitLiteral {
         emitterVisitor.ctx.logDebug("visit(HashLiteralNode) in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
-        // Create a RuntimeList
+        // In VOID context, evaluate elements for side effects and pop the results
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+            EmitterVisitor elementContext = emitterVisitor.with(RuntimeContextType.LIST);
+            for (Node element : node.elements) {
+                element.accept(elementContext);
+                // Pop the list result
+                mv.visitInsn(Opcodes.POP);
+            }
+            emitterVisitor.ctx.logDebug("visit(HashLiteralNode) end");
+            return;
+        }
+
+        // Create a RuntimeList with elements in LIST context
         ListNode listNode = new ListNode(node.elements, node.tokenIndex);
         listNode.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
@@ -129,6 +153,16 @@ public class EmitLiteral {
     public static void emitList(EmitterVisitor emitterVisitor, ListNode node) {
         emitterVisitor.ctx.logDebug("visit(ListNode) in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
+        int contextType = emitterVisitor.ctx.contextType;
+
+        // In VOID context, just visit elements for side effects
+        if (contextType == RuntimeContextType.VOID) {
+            for (Node element : node.elements) {
+                element.accept(emitterVisitor);
+            }
+            emitterVisitor.ctx.logDebug("visit(ListNode) end");
+            return;
+        }
 
         // Create a new instance of RuntimeList
         mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
@@ -151,23 +185,16 @@ public class EmitLiteral {
 
             emitterVisitor.ctx.javaClassInfo.decrementStackLevel(2);
 
-            if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
-                // Call the add method to add the element to the RuntimeList
-                addElementToList(mv, element, emitterVisitor.ctx.contextType);
-            } else {
-                mv.visitInsn(Opcodes.POP);
-                // stack: [RuntimeList]
-            }
+            // Call the add method to add the element to the RuntimeList
+            addElementToList(mv, element, contextType);
 
             // The stack now has the RuntimeList instance again
         }
 
         // At this point, the stack has the fully populated RuntimeList instance
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+        if (contextType == RuntimeContextType.SCALAR) {
             // Transform the value in the stack to RuntimeScalar
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
         }
         emitterVisitor.ctx.logDebug("visit(ListNode) end");
     }
@@ -220,6 +247,11 @@ public class EmitLiteral {
      * @throws PerlCompilerException if the bare word is not implemented
      */
     public static void emitIdentifier(EmitterVisitor visitor, EmitterContext ctx, IdentifierNode node) {
+        // In VOID context, barewords have no side effects
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            return;
+        }
+
         if (ctx.symbolTable.isStrictOptionEnabled(STRICT_SUBS)) {
             throw new PerlCompilerException(
                     node.tokenIndex, "Bareword \"" + node.name + "\" not allowed while \"strict subs\" in use", ctx.errorUtil);
