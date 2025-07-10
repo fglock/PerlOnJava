@@ -28,6 +28,8 @@ public class EmitLiteral {
         emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
+        EmitterVisitor elementContext = emitterVisitor.with(RuntimeContextType.LIST);
+
         // Create a new instance of RuntimeArray
         mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeArray");
         mv.visitInsn(Opcodes.DUP);
@@ -40,9 +42,14 @@ public class EmitLiteral {
 
             // Duplicate the RuntimeArray instance to keep it on the stack
             mv.visitInsn(Opcodes.DUP);
+            // stack: [RuntimeArray] [RuntimeArray]
 
-            // emit the list element
-            element.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            emitterVisitor.ctx.javaClassInfo.incrementStackLevel(2);
+
+            // emit the array element
+            element.accept(elementContext);
+
+            emitterVisitor.ctx.javaClassInfo.decrementStackLevel(2);
 
             // Call the add method to add the element to the RuntimeArray
             addElementToArray(mv, element);
@@ -123,15 +130,6 @@ public class EmitLiteral {
         emitterVisitor.ctx.logDebug("visit(ListNode) in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
-        // Determine the context for list elements
-        EmitterVisitor elementContext;
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
-            // In scalar context, list elements are also evaluated in scalar context
-            elementContext = emitterVisitor.with(RuntimeContextType.SCALAR);
-        } else {
-            elementContext = emitterVisitor.with(RuntimeContextType.LIST);
-        }
-
         // Create a new instance of RuntimeList
         mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
         mv.visitInsn(Opcodes.DUP);
@@ -148,12 +146,18 @@ public class EmitLiteral {
             emitterVisitor.ctx.javaClassInfo.incrementStackLevel(2);
 
             // emit the list element
-            element.accept(elementContext);
+            // The context for list elements is the same as the list node context
+            element.accept(emitterVisitor);
 
             emitterVisitor.ctx.javaClassInfo.decrementStackLevel(2);
 
-            // Call the add method to add the element to the RuntimeList
-            addElementToList(mv, element);
+            if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+                // Call the add method to add the element to the RuntimeList
+                addElementToList(mv, element, emitterVisitor.ctx.contextType);
+            } else {
+                mv.visitInsn(Opcodes.POP);
+                // stack: [RuntimeList]
+            }
 
             // The stack now has the RuntimeList instance again
         }
@@ -211,8 +215,8 @@ public class EmitLiteral {
      * Emits bytecode for an identifier.
      *
      * @param visitor The emitter visitor
-     * @param ctx  The emission context
-     * @param node The IdentifierNode to be processed
+     * @param ctx     The emission context
+     * @param node    The IdentifierNode to be processed
      * @throws PerlCompilerException if the bare word is not implemented
      */
     public static void emitIdentifier(EmitterVisitor visitor, EmitterContext ctx, IdentifierNode node) {
@@ -231,18 +235,25 @@ public class EmitLiteral {
      * Stack before: [RuntimeList] [element]
      * Stack after: [RuntimeList]
      *
-     * @param mv The method visitor
+     * @param mv      The method visitor
      * @param element The element node being added
      */
-    private static void addElementToList(MethodVisitor mv, Node element) {
-        // Use ReturnTypeVisitor to determine the element's return type
-        String returnType = ReturnTypeVisitor.getReturnType(element);
+    private static void addElementToList(MethodVisitor mv, Node element, int contextType) {
+        String returnType;
 
         // Stack is currently: [RuntimeList] [element]
         // We need to swap to get: [element] [RuntimeList]
         mv.visitInsn(Opcodes.SWAP);
 
-        // Optimize based on return type using Java 21 enhanced switch
+        if (contextType == RuntimeContextType.SCALAR) {
+            // Special case for list in scalar context
+            returnType = "RuntimeScalar;";
+        } else {
+            // Use ReturnTypeVisitor to determine the element's return type
+            returnType = ReturnTypeVisitor.getReturnType(element);
+        }
+
+        // Optimize based on return type
         switch (returnType) {
             case "RuntimeScalar;" -> {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
@@ -274,7 +285,7 @@ public class EmitLiteral {
      * Stack before: [RuntimeArray] [element]
      * Stack after: [RuntimeArray]
      *
-     * @param mv The method visitor
+     * @param mv      The method visitor
      * @param element The element node being added
      */
     private static void addElementToArray(MethodVisitor mv, Node element) {
@@ -285,7 +296,7 @@ public class EmitLiteral {
         // We need to swap to get: [element] [RuntimeArray]
         mv.visitInsn(Opcodes.SWAP);
 
-        // Optimize based on return type using Java 21 enhanced switch
+        // Optimize based on return type
         switch (returnType) {
             case "RuntimeScalar;" -> {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
