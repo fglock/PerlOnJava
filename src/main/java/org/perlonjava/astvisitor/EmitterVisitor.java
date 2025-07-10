@@ -73,6 +73,13 @@ public class EmitterVisitor implements Visitor {
     }
 
     /**
+     * Pushes the current package name onto the stack.
+     */
+    public void pushCurrentPackage() {
+        ctx.mv.visitLdcInsn(ctx.symbolTable.getCurrentPackage());
+    }
+
+    /**
      * Visit methods for different AST node types.
      * Each method delegates to specialized emitter classes that handle
      * the bytecode generation for that specific node type.

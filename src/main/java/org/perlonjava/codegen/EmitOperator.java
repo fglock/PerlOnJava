@@ -247,7 +247,7 @@ public class EmitOperator {
         node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));  // list
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // subroutine
         if (operator.equals("sort")) {
-            emitterVisitor.ctx.mv.visitLdcInsn(emitterVisitor.ctx.symbolTable.getCurrentPackage());
+            emitterVisitor.pushCurrentPackage();
         } else {
             emitterVisitor.pushCallContext();
         }
@@ -577,8 +577,7 @@ public class EmitOperator {
 
     static void handlePrototypeOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        emitterVisitor.ctx.mv.visitLdcInsn(
-                emitterVisitor.ctx.symbolTable.getCurrentPackage());
+        emitterVisitor.pushCurrentPackage();
         emitOperator(node, emitterVisitor);
     }
 
@@ -668,8 +667,7 @@ public class EmitOperator {
                 if (operatorNode.operand instanceof OperatorNode ||
                         operatorNode.operand instanceof BlockNode) {
                     operatorNode.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-                    emitterVisitor.ctx.mv.visitLdcInsn(
-                            emitterVisitor.ctx.symbolTable.getCurrentPackage());
+                    emitterVisitor.pushCurrentPackage();
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                             "org/perlonjava/runtime/RuntimeCode",
                             "createCodeReference",
