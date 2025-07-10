@@ -5,6 +5,7 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.astvisitor.LValueVisitor;
+import org.perlonjava.astvisitor.ReturnTypeVisitor;
 import org.perlonjava.operators.OperatorHandler;
 import org.perlonjava.operators.ScalarGlobOperator;
 import org.perlonjava.runtime.NameNormalizer;
@@ -17,9 +18,22 @@ import org.perlonjava.runtime.RuntimeContextType;
  */
 public class EmitOperator {
 
-    static void emitOperator(String operator, EmitterVisitor emitterVisitor) {
+    static void emitOperator(Node node, EmitterVisitor emitterVisitor) {
+        // Extract operator string from the node
+        String operator = null;
+        if (node instanceof OperatorNode operatorNode) {
+            operator = operatorNode.operator;
+        } else if (node instanceof BinaryOperatorNode binaryOperatorNode) {
+            operator = binaryOperatorNode.operator;
+        } else {
+            throw new PerlCompilerException(node.getIndex(), "Node must be OperatorNode or BinaryOperatorNode", emitterVisitor.ctx.errorUtil);
+        }
+
         // Invoke the method for the operator.
         OperatorHandler operatorHandler = OperatorHandler.get(operator);
+    if (operatorHandler == null) {
+        throw new PerlCompilerException(node.getIndex(), "Operator \"" + operator + "\" doesn't have a defined JVM descriptor", emitterVisitor.ctx.errorUtil);
+    }
         emitterVisitor.ctx.mv.visitMethodInsn(
                 operatorHandler.getMethodType(),
                 operatorHandler.getClassName(),
@@ -30,11 +44,14 @@ public class EmitOperator {
 
         // Handle context
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            // If the context is VOID, pop the result from the stack.
+            // If the context is VOID, cleanup the result from the stack.
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-        } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR && !operatorHandler.getDescriptor().endsWith("/RuntimeScalar;")) {
-            // If the context is SCALAR, cast the result to RuntimeScalar.
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+        } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+            String returnType = ReturnTypeVisitor.getReturnType(node);
+            if (returnType != null && !returnType.equals("RuntimeScalar;")) {
+                // Cast the result to SCALAR
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+            }
         }
     }
 
@@ -48,7 +65,7 @@ public class EmitOperator {
         // Accept the operand in SCALAR context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         emitterVisitor.pushCallContext();
-        emitOperator(node.operator, emitterVisitor);
+        emitOperator(node, emitterVisitor);
     }
 
     /**
@@ -60,7 +77,7 @@ public class EmitOperator {
     static void handleOpWithList(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        emitOperator(node.operator, emitterVisitor);
+        emitOperator(node, emitterVisitor);
     }
 
     /**
@@ -98,7 +115,7 @@ public class EmitOperator {
         node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
         // Emit the operator
-        emitOperator(node.operator, emitterVisitor);
+        emitOperator(node, emitterVisitor);
     }
 
     static void handleTruncateOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
@@ -112,9 +129,7 @@ public class EmitOperator {
 
         // Accept the right operand in LIST context
         node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
-
-        // Emit the truncate operator
-        emitOperator("truncate", emitterVisitor);
+        emitOperator(node, emitterVisitor);
     }
 
     // Handles the 'say' operator for outputting data.
@@ -157,7 +172,7 @@ public class EmitOperator {
                     new OperatorNode("undef", null, node.tokenIndex).accept(scalarVisitor);
                 }
                 // Invoke the virtual method for the operator.
-                emitOperator(node.operator, emitterVisitor);
+                emitOperator(node, emitterVisitor);
                 return;
             }
         }
@@ -174,7 +189,7 @@ public class EmitOperator {
                 operand.elements.get(0).accept(scalarVisitor);
                 operand.elements.get(1).accept(scalarVisitor);
                 // Invoke the virtual method for the operator.
-                emitOperator(node.operator, emitterVisitor);
+                emitOperator(node, emitterVisitor);
                 return;
             }
         }
@@ -193,7 +208,7 @@ public class EmitOperator {
         // Push the formatted line number as a message.
         Node message = new StringNode(emitterVisitor.ctx.errorUtil.errorMessage(node.tokenIndex, ""), node.tokenIndex);
         message.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        emitOperator(node.operator, emitterVisitor);
+        emitOperator(node, emitterVisitor);
     }
 
     // Handles the 'reverse' built-in function, which reverses a list.
@@ -204,7 +219,7 @@ public class EmitOperator {
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         emitterVisitor.pushCallContext();
-        emitOperator(node.operator, emitterVisitor);
+        emitOperator(node, emitterVisitor);
     }
 
     // Handles the 'splice' built-in function, which modifies an array.
@@ -217,7 +232,7 @@ public class EmitOperator {
         operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         // Accept the remaining arguments in LIST context.
         args.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        emitOperator(node.operator, emitterVisitor);
+        emitOperator(node, emitterVisitor);
     }
 
     // Handles the 'push' operator, which adds elements to an array.
@@ -225,7 +240,7 @@ public class EmitOperator {
         // Accept both left and right operands in LIST context.
         node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));
         node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        emitOperator(node.operator, emitterVisitor);
+        emitOperator(node, emitterVisitor);
     }
 
     // Handles the 'map' operator, which applies a function to each element of a list.
@@ -240,7 +255,7 @@ public class EmitOperator {
         } else {
             emitterVisitor.pushCallContext();
         }
-        emitOperator(node.operator, emitterVisitor);
+        emitOperator(node, emitterVisitor);
     }
 
     // Handles the 'diamond' operator, which reads input from a file or standard input.
@@ -292,7 +307,7 @@ public class EmitOperator {
         // Accept the operand in SCALAR context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         emitterVisitor.pushCallContext();
-        emitOperator(node.operator, emitterVisitor);
+        emitOperator(node, emitterVisitor);
     }
 
     // Handles the 'range' operator, which creates a range of values.
@@ -300,7 +315,7 @@ public class EmitOperator {
         // Accept both left and right operands in SCALAR context.
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        emitOperator(node.operator, emitterVisitor);
+        emitOperator(node, emitterVisitor);
     }
 
     // Handles the 'substr' operator, which extracts a substring from a string.
@@ -308,7 +323,7 @@ public class EmitOperator {
         // Accept the left operand in SCALAR context and the right operand in LIST context.
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        emitOperator(node.operator, emitterVisitor);
+        emitOperator(node, emitterVisitor);
     }
 
     // Handles the 'repeat' operator, which repeats a string or list a specified number of times.
@@ -342,14 +357,14 @@ public class EmitOperator {
         // Accept both left and right operands in SCALAR context.
         node.left.accept(scalarVisitor); // target - left parameter
         node.right.accept(scalarVisitor); // right parameter
-        emitOperator(node.operator, emitterVisitor);
+        emitOperator(node, emitterVisitor);
     }
 
     // Handles the 'scalar' operator, which forces a list into scalar context.
     static void handleScalar(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Accept the operand in SCALAR context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        emitOperator(node.operator, emitterVisitor);
+        emitOperator(node, emitterVisitor);
     }
 
     // Handles the 'local' operator.
@@ -500,19 +515,19 @@ public class EmitOperator {
         }
     }
 
-    static void handleTimeOperator(EmitterVisitor emitterVisitor, String operator) {
-        emitOperator(operator, emitterVisitor);
+    static void handleTimeOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
+        emitOperator(node, emitterVisitor);
     }
 
-    static void handleWantArrayOperator(EmitterVisitor emitterVisitor) {
+    static void handleWantArrayOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ILOAD,
                 emitterVisitor.ctx.symbolTable.getVariableIndex("wantarray"));
-        emitOperator("wantarray", emitterVisitor);
+        emitOperator(node, emitterVisitor);
     }
 
-    static void handleUndefOperator(EmitterVisitor emitterVisitor, OperatorNode node, String operator) {
+    static void handleUndefOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         if (node.operand == null) {
-            emitOperator(operator, emitterVisitor);
+            emitOperator(node, emitterVisitor);
             return;
         }
         node.operand.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
@@ -524,23 +539,23 @@ public class EmitOperator {
         handleVoidContext(emitterVisitor);
     }
 
-    static void handleTimeRelatedOperator(EmitterVisitor emitterVisitor, OperatorNode node, String operator) {
+    static void handleTimeRelatedOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         emitterVisitor.pushCallContext();
-        emitOperator(operator, emitterVisitor);
+        emitOperator(node, emitterVisitor);
     }
 
     static void handlePrototypeOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         emitterVisitor.ctx.mv.visitLdcInsn(
                 emitterVisitor.ctx.symbolTable.getCurrentPackage());
-        emitOperator("prototype", emitterVisitor);
+        emitOperator(node, emitterVisitor);
     }
 
     static void handleRequireOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         emitterVisitor.ctx.mv.visitLdcInsn(node.getBooleanAnnotation("module_true"));
-        emitOperator("require", emitterVisitor);
+        emitOperator(node, emitterVisitor);
     }
 
     static void handleStatOperator(EmitterVisitor emitterVisitor, OperatorNode node, String operator) {
@@ -569,9 +584,9 @@ public class EmitOperator {
                                        EmitterVisitor emitterVisitor) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        OperatorHandler operatorHandler = OperatorHandler.get(operator);
+        OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
         if (operatorHandler != null) {
-            emitOperator(operator, emitterVisitor);
+            emitOperator(node, emitterVisitor);
         } else {
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                     "org/perlonjava/runtime/RuntimeScalar",
@@ -597,7 +612,7 @@ public class EmitOperator {
             operand = listNode.elements.getFirst();
         }
         operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        emitOperator(operator, emitterVisitor);
+        emitOperator(node, emitterVisitor);
     }
 
     /**

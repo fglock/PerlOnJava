@@ -80,8 +80,11 @@ public class EmitRegex {
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
         operand.elements.getFirst().accept(scalarVisitor);
         emitterVisitor.pushCallContext();
-        emitOperator("systemCommand", emitterVisitor);
+        // Create an OperatorNode for systemCommand
+        OperatorNode systemCmdNode = new OperatorNode("systemCommand", operand.elements.getFirst(), node.tokenIndex);
+        EmitOperator.emitOperator(systemCmdNode, emitterVisitor);
     }
+
 
     /**
      * Handles transliteration operations (tr/// or y///).

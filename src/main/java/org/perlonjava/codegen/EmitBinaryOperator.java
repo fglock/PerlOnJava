@@ -41,7 +41,7 @@ public class EmitBinaryOperator {
         node.left.accept(scalarVisitor); // left parameter
         node.right.accept(scalarVisitor); // right parameter
         // stack: [left, right]
-        emitOperator(node.operator, emitterVisitor);
+        emitOperator(node, emitterVisitor);
     }
 
     static void handleCompoundAssignment(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
@@ -54,7 +54,14 @@ public class EmitBinaryOperator {
         // stack: [left, left, right]
         // perform the operation
         String baseOperator = node.operator.substring(0, node.operator.length() - 1);
-        emitOperator(baseOperator, scalarVisitor);
+        // Create a BinaryOperatorNode for the base operation
+        BinaryOperatorNode baseOpNode = new BinaryOperatorNode(
+                baseOperator,
+                node.left,
+                node.right,
+                node.tokenIndex
+        );
+        EmitOperator.emitOperator(baseOpNode, scalarVisitor);
         // assign to the Lvalue
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         EmitOperator.handleVoidContext(emitterVisitor);
