@@ -4,6 +4,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
+import org.perlonjava.astvisitor.ReturnTypeVisitor;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.RuntimeScalarType;
@@ -44,13 +45,12 @@ public class EmitLiteral {
             element.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
             // Call the add method to add the element to the RuntimeArray
-            // This calls RuntimeDataProvider.addToArray() in order to allow [ 1, 2, $x, @x, %x ]
-            mv.visitInsn(Opcodes.SWAP);
-            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "addToArray", "(Lorg/perlonjava/runtime/RuntimeArray;)V", true);
+            addElementToArray(mv, element);
 
             // The stack now has the RuntimeArray instance again
         }
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "createReference", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "createReference", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
 
         EmitOperator.handleVoidContext(emitterVisitor);
         emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) end");
@@ -153,9 +153,7 @@ public class EmitLiteral {
             emitterVisitor.ctx.javaClassInfo.decrementStackLevel(2);
 
             // Call the add method to add the element to the RuntimeList
-            // This calls RuntimeDataProvider.addToList() in order to allow (1, 2, $x, @x, %x)
-            mv.visitInsn(Opcodes.SWAP);
-            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "addToList", "(Lorg/perlonjava/runtime/RuntimeList;)V", true);
+            addElementToList(mv, element);
 
             // The stack now has the RuntimeList instance again
         }
@@ -163,9 +161,9 @@ public class EmitLiteral {
         // At this point, the stack has the fully populated RuntimeList instance
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             // Transform the value in the stack to RuntimeScalar
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+            mv.visitInsn(Opcodes.POP);
         }
         emitterVisitor.ctx.logDebug("visit(ListNode) end");
     }
@@ -212,6 +210,7 @@ public class EmitLiteral {
     /**
      * Emits bytecode for an identifier.
      *
+     * @param visitor The emitter visitor
      * @param ctx  The emission context
      * @param node The IdentifierNode to be processed
      * @throws PerlCompilerException if the bare word is not implemented
@@ -223,6 +222,92 @@ public class EmitLiteral {
         } else {
             // Emit identifier as string
             new StringNode(node.name, node.tokenIndex).accept(visitor);
+        }
+    }
+
+    /**
+     * Optimized method to add an element to a RuntimeList.
+     * Uses specific method calls based on the element's return type to avoid interface dispatch.
+     * Stack before: [RuntimeList] [element]
+     * Stack after: [RuntimeList]
+     *
+     * @param mv The method visitor
+     * @param element The element node being added
+     */
+    private static void addElementToList(MethodVisitor mv, Node element) {
+        // Use ReturnTypeVisitor to determine the element's return type
+        String returnType = ReturnTypeVisitor.getReturnType(element);
+
+        // Stack is currently: [RuntimeList] [element]
+        // We need to swap to get: [element] [RuntimeList]
+        mv.visitInsn(Opcodes.SWAP);
+
+        // Optimize based on return type using Java 21 enhanced switch
+        switch (returnType) {
+//            case "RuntimeScalar;" -> {
+//                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
+//                        "addToList", "(Lorg/perlonjava/runtime/RuntimeList;)V", false);
+//            }
+//            case "RuntimeArray;" -> {
+//                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
+//                        "addToList", "(Lorg/perlonjava/runtime/RuntimeList;)V", false);
+//            }
+//            case "RuntimeHash;" -> {
+//                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
+//                        "addToList", "(Lorg/perlonjava/runtime/RuntimeList;)V", false);
+//            }
+//            case "RuntimeList;" -> {
+//                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList",
+//                        "addToList", "(Lorg/perlonjava/runtime/RuntimeList;)V", false);
+//            }
+            case null, default -> {
+                // Default case: use the interface for unknown types
+                mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider",
+                        "addToList", "(Lorg/perlonjava/runtime/RuntimeList;)V", true);
+            }
+        }
+    }
+
+    /**
+     * Optimized method to add an element to a RuntimeArray.
+     * Uses specific method calls based on the element's return type to avoid interface dispatch.
+     * Stack before: [RuntimeArray] [element]
+     * Stack after: [RuntimeArray]
+     *
+     * @param mv The method visitor
+     * @param element The element node being added
+     */
+    private static void addElementToArray(MethodVisitor mv, Node element) {
+        // Use ReturnTypeVisitor to determine the element's return type
+        String returnType = ReturnTypeVisitor.getReturnType(element);
+
+        // Stack is currently: [RuntimeArray] [element]
+        // We need to swap to get: [element] [RuntimeArray]
+        mv.visitInsn(Opcodes.SWAP);
+
+        // Optimize based on return type using Java 21 enhanced switch
+        switch (returnType) {
+//            case "RuntimeScalar;" -> {
+//                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
+//                        "addToArray", "(Lorg/perlonjava/runtime/RuntimeArray;)V", false);
+//            }
+//            case "RuntimeArray;" -> {
+//                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
+//                        "addToArray", "(Lorg/perlonjava/runtime/RuntimeArray;)V", false);
+//            }
+//            case "RuntimeHash;" -> {
+//                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
+//                        "addToArray", "(Lorg/perlonjava/runtime/RuntimeArray;)V", false);
+//            }
+//            case "RuntimeList;" -> {
+//                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList",
+//                        "addToArray", "(Lorg/perlonjava/runtime/RuntimeArray;)V", false);
+//            }
+            case null, default -> {
+                // Default case: use the interface for unknown types
+                mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider",
+                        "addToArray", "(Lorg/perlonjava/runtime/RuntimeArray;)V", true);
+            }
         }
     }
 }

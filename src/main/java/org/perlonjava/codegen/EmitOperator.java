@@ -44,14 +44,9 @@ public class EmitOperator {
 
         // Handle context
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
-            // If the context is VOID, cleanup the result from the stack.
-            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+            handleVoidContext(emitterVisitor);
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
-            String returnType = ReturnTypeVisitor.getReturnType(node);
-            if (returnType != null && !returnType.equals("RuntimeScalar;")) {
-                // Cast the result to SCALAR
-                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
-            }
+            handleScalarContext(emitterVisitor, node);
         }
     }
 
@@ -400,6 +395,47 @@ public class EmitOperator {
         // If the context is VOID, pop the result from the stack.
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+        }
+    }
+
+    /**
+     * Ensures the value on the stack is converted to RuntimeScalar if needed,
+     * based on the node's return type.
+     *
+     * @param emitterVisitor The visitor for emitting bytecode
+     * @param node The node that produced the value on the stack
+     */
+    public static void handleScalarContext(EmitterVisitor emitterVisitor, Node node) {
+        if (emitterVisitor.ctx.contextType != RuntimeContextType.SCALAR) {
+            return; // Not in scalar context, nothing to do
+        }
+
+        String returnType = ReturnTypeVisitor.getReturnType(node);
+        if (returnType != null && returnType.equals("RuntimeScalar;")) {
+            return; // Already a scalar
+        }
+
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+
+        // Convert to scalar based on return type
+        switch (returnType) {
+            case "RuntimeArray;" -> {
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
+                        "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            }
+            case "RuntimeHash;" -> {
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
+                        "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            }
+            case "RuntimeList;" -> {
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList",
+                        "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            }
+            case null, default -> {
+                // For unknown types or any other RuntimeDataProvider implementations
+                mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider",
+                        "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+            }
         }
     }
 
