@@ -145,10 +145,7 @@ public class EmitOperator {
 
     // Handles the unary plus operator, which is a no-op in many contexts.
     static void handleUnaryPlusOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
-        // Accept the operand in SCALAR context.
-        node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        // If the context is VOID, pop the result from the stack.
-        handleVoidContext(emitterVisitor);
+        node.operand.accept(emitterVisitor);
     }
 
     // Handles the 'index' built-in function, which finds the position of a substring.
