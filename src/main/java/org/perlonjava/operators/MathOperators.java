@@ -1,12 +1,10 @@
 package org.perlonjava.operators;
 
 import org.perlonjava.parser.NumberParser;
-import org.perlonjava.runtime.OverloadContext;
-import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.RuntimeScalar;
-import org.perlonjava.runtime.RuntimeScalarType;
+import org.perlonjava.runtime.*;
 
-import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
+import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 /**
  * Provides basic arithmetic operations for RuntimeScalar objects.
@@ -414,5 +412,21 @@ public class MathOperators {
         }
 
         return getScalarInt(runtimeScalar.getInt());
+    }
+
+    public static RuntimeScalar not(RuntimeScalar runtimeScalar) {
+        return switch (runtimeScalar.type) {
+            case INTEGER -> getScalarBoolean((int) runtimeScalar.value == 0);
+            case DOUBLE -> getScalarBoolean((double) runtimeScalar.value == 0.0);
+            case STRING -> {
+                String s = (String) runtimeScalar.value;
+                yield getScalarBoolean(s.isEmpty() || s.equals("0"));
+            }
+            case UNDEF -> scalarTrue;
+            case VSTRING -> scalarFalse;
+            case BOOLEAN -> getScalarBoolean(!(boolean) runtimeScalar.value);
+            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE -> Overload.bool_not(runtimeScalar);
+            default -> getScalarBoolean(!((RuntimeScalarReference) runtimeScalar.value).getBooleanRef());
+        };
     }
 }

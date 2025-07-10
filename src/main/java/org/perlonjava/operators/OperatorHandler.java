@@ -24,6 +24,8 @@ public class OperatorHandler {
         put("/", "divide", "org/perlonjava/operators/MathOperators");
         put("%", "modulus", "org/perlonjava/operators/MathOperators");
         put("unaryMinus", "unaryMinus", "org/perlonjava/operators/MathOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("!", "not", "org/perlonjava/operators/MathOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("not", "not", "org/perlonjava/operators/MathOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         put("^^", "xor", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("xor", "xor", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
@@ -44,15 +46,15 @@ public class OperatorHandler {
         put("^", "bitwiseXor", "org/perlonjava/operators/BitwiseOperators");
         put("<<", "shiftLeft", "org/perlonjava/operators/BitwiseOperators");
         put(">>", "shiftRight", "org/perlonjava/operators/BitwiseOperators");
-        put("bitwiseNot", "bitwiseNot", "org/perlonjava/operators/BitwiseOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("~", "bitwiseNot", "org/perlonjava/operators/BitwiseOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("&.", "bitwiseAndDot", "org/perlonjava/operators/BitwiseOperators");
         put("|.", "bitwiseOrDot", "org/perlonjava/operators/BitwiseOperators");
         put("^.", "bitwiseXorDot", "org/perlonjava/operators/BitwiseOperators");
-        put("bitwiseNotDot", "bitwiseNotDot", "org/perlonjava/operators/BitwiseOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("~.", "bitwiseNotDot", "org/perlonjava/operators/BitwiseOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("binary&", "bitwiseAndBinary", "org/perlonjava/operators/BitwiseOperators");
         put("binary|", "bitwiseOrBinary", "org/perlonjava/operators/BitwiseOperators");
         put("binary^", "bitwiseXorBinary", "org/perlonjava/operators/BitwiseOperators");
-        put("bitwiseNotBinary", "bitwiseNotBinary", "org/perlonjava/operators/BitwiseOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("binary~", "bitwiseNotBinary", "org/perlonjava/operators/BitwiseOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         // Scalar
         put("ord", "ord", "org/perlonjava/operators/ScalarOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
@@ -158,7 +160,7 @@ public class OperatorHandler {
         put("exec", "exec", "org/perlonjava/operators/SystemOperator", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("fork", "fork", "org/perlonjava/operators/SystemOperator", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeScalar;");
 
-        put("indexLastElem", "indexLastElem", "org/perlonjava/runtime/RuntimeArray", "(Lorg/perlonjava/runtime/RuntimeArray;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("$#", "indexLastElem", "org/perlonjava/runtime/RuntimeArray", "(Lorg/perlonjava/runtime/RuntimeArray;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("pop", "pop", "org/perlonjava/runtime/RuntimeArray", "(Lorg/perlonjava/runtime/RuntimeArray;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("shift", "shift", "org/perlonjava/runtime/RuntimeArray", "(Lorg/perlonjava/runtime/RuntimeArray;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("splice", "splice", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeArray;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;");
@@ -168,7 +170,6 @@ public class OperatorHandler {
         put("undef", "undef", "org/perlonjava/runtime/RuntimeScalar", "()Lorg/perlonjava/runtime/RuntimeScalar;");
         put("wantarray", "wantarray", "org/perlonjava/runtime/RuntimeScalar", "(I)Lorg/perlonjava/runtime/RuntimeScalar;");
 
-        put("not", "not", "org/perlonjava/runtime/RuntimeScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("prototype", "prototype", "org/perlonjava/runtime/RuntimeCode", "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         // List operators

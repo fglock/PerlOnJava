@@ -52,7 +52,14 @@ public class EmitOperatorChained {
         // Emit first comparison
         operands.get(0).accept(scalarVisitor);
         operands.get(1).accept(scalarVisitor);
-        emitOperator(operators.get(0), scalarVisitor);
+        // Create a BinaryOperatorNode for the first comparison
+        BinaryOperatorNode firstCompNode = new BinaryOperatorNode(
+                operators.get(0),
+                operands.get(0),
+                operands.get(1),
+                node.tokenIndex
+        );
+        EmitOperator.emitOperator(firstCompNode, scalarVisitor);
 
         if (operators.size() > 1) {
             // Set up labels for the chain
@@ -74,7 +81,14 @@ public class EmitOperatorChained {
                 emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
                 operands.get(i).accept(scalarVisitor);
                 operands.get(i + 1).accept(scalarVisitor);
-                emitOperator(operators.get(i), scalarVisitor);
+                // Create a BinaryOperatorNode for this comparison
+                BinaryOperatorNode compNode = new BinaryOperatorNode(
+                        operators.get(i),
+                        operands.get(i),
+                        operands.get(i + 1),
+                        node.tokenIndex
+                );
+                EmitOperator.emitOperator(compNode, scalarVisitor);
             }
 
             emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.GOTO, endLabel);
