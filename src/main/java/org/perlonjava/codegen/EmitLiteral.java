@@ -46,7 +46,7 @@ public class EmitLiteral {
      * </ul>
      *
      * @param emitterVisitor The visitor context for emitting bytecode
-     * @param node The ArrayLiteralNode representing the array literal in the AST
+     * @param node           The ArrayLiteralNode representing the array literal in the AST
      */
     public static void emitArrayLiteral(EmitterVisitor emitterVisitor, ArrayLiteralNode node) {
         emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) in context " + emitterVisitor.ctx.contextType);
@@ -95,8 +95,6 @@ public class EmitLiteral {
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider",
                 "createReference", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
 
-        // Handle void context if needed (though we already returned early for VOID)
-        EmitOperator.handleVoidContext(emitterVisitor);
         emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) end");
     }
 
@@ -114,7 +112,7 @@ public class EmitLiteral {
      * </ul>
      *
      * @param emitterVisitor The visitor context for emitting bytecode
-     * @param node The HashLiteralNode representing the hash literal in the AST
+     * @param node           The HashLiteralNode representing the hash literal in the AST
      */
     public static void emitHashLiteral(EmitterVisitor emitterVisitor, HashLiteralNode node) {
         emitterVisitor.ctx.logDebug("visit(HashLiteralNode) in context " + emitterVisitor.ctx.contextType);
@@ -143,7 +141,6 @@ public class EmitLiteral {
                 "createHashRef",
                 "(Lorg/perlonjava/runtime/RuntimeDataProvider;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
-        EmitOperator.handleVoidContext(emitterVisitor);
         emitterVisitor.ctx.logDebug("visit(HashLiteralNode) end");
     }
 
@@ -161,7 +158,7 @@ public class EmitLiteral {
      *   <li>V-strings: Sets the appropriate type flag on the RuntimeScalar</li>
      * </ul>
      *
-     * @param ctx The emission context containing method visitor and context information
+     * @param ctx  The emission context containing method visitor and context information
      * @param node The StringNode containing the string value and metadata
      */
     public static void emitString(EmitterContext ctx, StringNode node) {
@@ -211,14 +208,14 @@ public class EmitLiteral {
      * </ul>
      *
      * @param emitterVisitor The visitor context for emitting bytecode
-     * @param node The ListNode representing the list literal in the AST
+     * @param node           The ListNode representing the list literal in the AST
      */
     public static void emitList(EmitterVisitor emitterVisitor, ListNode node) {
         emitterVisitor.ctx.logDebug("visit(ListNode) in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
         int contextType = emitterVisitor.ctx.contextType;
 
-        // In VOID context, propagate VOID to elements (Perl-specific behavior)
+        // In VOID context, propagate VOID to elements
         if (contextType == RuntimeContextType.VOID) {
             for (Node element : node.elements) {
                 element.accept(emitterVisitor);
@@ -227,7 +224,31 @@ public class EmitLiteral {
             return;
         }
 
-        // Create a new RuntimeList instance
+        // In SCALAR context, optimize by evaluating elements for side effects
+        // and only keeping the last element's value
+        if (contextType == RuntimeContextType.SCALAR) {
+            if (node.elements.isEmpty()) {
+                // Empty list in scalar context returns undef
+                mv.visitFieldInsn(Opcodes.GETSTATIC, "org/perlonjava/runtime/RuntimeScalar",
+                        "undef", "Lorg/perlonjava/runtime/RuntimeScalar;");
+            } else {
+                // Evaluate all elements except the last in scalar context for side effects
+                for (int i = 0; i < node.elements.size() - 1; i++) {
+                    Node element = node.elements.get(i);
+                    element.accept(emitterVisitor);
+                    // Pop the result since we only need side effects
+                    mv.visitInsn(Opcodes.POP);
+                }
+
+                // Evaluate and keep the last element
+                node.elements.getLast().accept(emitterVisitor);
+                // The last element's value remains on stack as the result
+            }
+            emitterVisitor.ctx.logDebug("visit(ListNode) end");
+            return;
+        }
+
+        // LIST context: Create a new RuntimeList instance
         mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
         mv.visitInsn(Opcodes.DUP);
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
@@ -251,13 +272,6 @@ public class EmitLiteral {
             addElementToList(mv, element, contextType);
             // Stack: [RuntimeList]
         }
-
-        // In scalar context, convert the list to a scalar (returns the last element)
-        if (contextType == RuntimeContextType.SCALAR) {
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList",
-                    "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
-        }
-
         emitterVisitor.ctx.logDebug("visit(ListNode) end");
     }
 
@@ -275,7 +289,7 @@ public class EmitLiteral {
      *   <li>Unboxed context: Pushes primitive int or double values</li>
      * </ul>
      *
-     * @param ctx The emission context containing method visitor and context information
+     * @param ctx  The emission context containing method visitor and context information
      * @param node The NumberNode containing the numeric value as a string
      */
     public static void emitNumber(EmitterContext ctx, NumberNode node) {
@@ -335,8 +349,8 @@ public class EmitLiteral {
      * </ul>
      *
      * @param visitor The emitter visitor for context
-     * @param ctx The emission context
-     * @param node The IdentifierNode containing the bareword
+     * @param ctx     The emission context
+     * @param node    The IdentifierNode containing the bareword
      * @throws PerlCompilerException if strict subs is enabled
      */
     public static void emitIdentifier(EmitterVisitor visitor, EmitterContext ctx, IdentifierNode node) {
@@ -365,8 +379,8 @@ public class EmitLiteral {
      *
      * <p>Stack transformation: [RuntimeList] [element] → [RuntimeList]</p>
      *
-     * @param mv The method visitor for bytecode generation
-     * @param element The AST node representing the element being added
+     * @param mv          The method visitor for bytecode generation
+     * @param element     The AST node representing the element being added
      * @param contextType The context type (used for scalar context optimization)
      */
     private static void addElementToList(MethodVisitor mv, Node element, int contextType) {
@@ -407,7 +421,7 @@ public class EmitLiteral {
      *
      * <p>Stack transformation: [RuntimeArray] [element] → [RuntimeArray]</p>
      *
-     * @param mv The method visitor for bytecode generation
+     * @param mv      The method visitor for bytecode generation
      * @param element The AST node representing the element being added
      */
     private static void addElementToArray(MethodVisitor mv, Node element) {
