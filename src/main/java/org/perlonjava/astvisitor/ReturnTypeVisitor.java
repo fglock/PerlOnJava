@@ -73,6 +73,7 @@ public class ReturnTypeVisitor implements Visitor {
                 case "$":      // scalar dereference
                 case "*":      // glob dereference
                 case "$#":     // array last index
+                // case "scalar": // scalar context
                     returnType = RuntimeTypeConstants.SCALAR_TYPE;
                     break;
                 case "@":      // array dereference
