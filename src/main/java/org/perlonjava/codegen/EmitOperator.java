@@ -32,9 +32,9 @@ public class EmitOperator {
 
         // Invoke the method for the operator.
         OperatorHandler operatorHandler = OperatorHandler.get(operator);
-    if (operatorHandler == null) {
-        throw new PerlCompilerException(node.getIndex(), "Operator \"" + operator + "\" doesn't have a defined JVM descriptor", emitterVisitor.ctx.errorUtil);
-    }
+        if (operatorHandler == null) {
+            throw new PerlCompilerException(node.getIndex(), "Operator \"" + operator + "\" doesn't have a defined JVM descriptor", emitterVisitor.ctx.errorUtil);
+        }
         emitterVisitor.ctx.mv.visitMethodInsn(
                 operatorHandler.getMethodType(),
                 operatorHandler.getClassName(),
@@ -153,7 +153,6 @@ public class EmitOperator {
 
     // Handles the 'index' built-in function, which finds the position of a substring.
     static void handleIndexBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
-        MethodVisitor mv = emitterVisitor.ctx.mv;
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
         if (node.operand instanceof ListNode operand) {
             if (!operand.elements.isEmpty()) {
@@ -169,28 +168,18 @@ public class EmitOperator {
                 }
                 // Invoke the virtual method for the operator.
                 emitOperator(node, emitterVisitor);
-                return;
             }
         }
-        // Throw an exception if the operator is not implemented.
-        throw new PerlCompilerException(node.tokenIndex, "Not implemented: operator: " + node.operator, emitterVisitor.ctx.errorUtil);
     }
 
     // Handles the 'atan2' function, which calculates the arctangent of two numbers.
     static void handleAtan2(EmitterVisitor emitterVisitor, OperatorNode node) {
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
         if (node.operand instanceof ListNode operand) {
-            if (operand.elements.size() == 2) {
-                // Accept both elements in SCALAR context.
-                operand.elements.get(0).accept(scalarVisitor);
-                operand.elements.get(1).accept(scalarVisitor);
-                // Invoke the virtual method for the operator.
-                emitOperator(node, emitterVisitor);
-                return;
-            }
+            operand.elements.get(0).accept(scalarVisitor);
+            operand.elements.get(1).accept(scalarVisitor);
+            emitOperator(node, emitterVisitor);
         }
-        // Throw an exception if the operator is not implemented.
-        throw new PerlCompilerException(node.tokenIndex, "Not implemented: operator: " + node.operator, emitterVisitor.ctx.errorUtil);
     }
 
     // Handles the 'die' built-in function, which throws an exception.
@@ -403,7 +392,7 @@ public class EmitOperator {
      * based on the node's return type.
      *
      * @param emitterVisitor The visitor for emitting bytecode
-     * @param node The node that produced the value on the stack
+     * @param node           The node that produced the value on the stack
      */
     public static void handleScalarContext(EmitterVisitor emitterVisitor, Node node) {
         if (emitterVisitor.ctx.contextType != RuntimeContextType.SCALAR) {
