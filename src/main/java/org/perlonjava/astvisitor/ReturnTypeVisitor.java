@@ -41,74 +41,34 @@ public class ReturnTypeVisitor implements Visitor {
 
     @Override
     public void visit(BinaryOperatorNode node) {
-        try {
-            OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
-            if (operatorHandler != null) {
-//                String descriptor = operatorHandler.getDescriptor();
-//                // Extract return type from descriptor
-//                int lastSlash = descriptor.lastIndexOf(')');
-//                if (lastSlash != -1 && lastSlash < descriptor.length() - 1) {
-//                    String fullReturnType = descriptor.substring(lastSlash + 1);
-//                    // Extract just the class name with semicolon
-//                    int lastTypeSlash = fullReturnType.lastIndexOf('/');
-//                    if (lastTypeSlash != -1) {
-//                        returnType = fullReturnType.substring(lastTypeSlash + 1);
-//                    } else {
-//                        returnType = fullReturnType;
-//                    }
-//                } else {
-//                    returnType = null;
-//                }
-            } else {
-                returnType = null;
-            }
-        } catch (Exception e) {
-            // If operator not found in OperatorHandler
-            returnType = null;
-        }
+        returnType = null;
+        // XXX - some operators have special cases that are not handled by OperatorHandler
+//        OperatorHandler handler = OperatorHandler.get(node.operator);
+//        returnType = (handler != null) ? handler.getReturnTypeDescriptor() : null;
     }
 
     @Override
     public void visit(OperatorNode node) {
-        try {
-            OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
-            if (operatorHandler != null) {
-//                String descriptor = operatorHandler.getDescriptor();
-//                // Extract return type from descriptor
-//                int lastSlash = descriptor.lastIndexOf(')');
-//                if (lastSlash != -1 && lastSlash < descriptor.length() - 1) {
-//                    String fullReturnType = descriptor.substring(lastSlash + 1);
-//                    // Extract just the class name with semicolon
-//                    int lastTypeSlash = fullReturnType.lastIndexOf('/');
-//                    if (lastTypeSlash != -1) {
-//                        returnType = fullReturnType.substring(lastTypeSlash + 1);
-//                    } else {
-//                        returnType = fullReturnType;
-//                    }
-//                } else {
-//                    returnType = null;
-//                }
-            } else {
-                // Handle special cases not in OperatorHandler
-                switch (node.operator) {
-                    case "$":
-                    case "*":
-                    case "$#":
-                        returnType = "RuntimeScalar;";
-                        break;
-                    case "@":
-                        returnType = "RuntimeArray;";
-                        break;
-                    case "%":
-                        returnType = "RuntimeHash;";
-                        break;
-                    default:
-                        returnType = null;
-                }
+        returnType = null;
+        // XXX - some operators have special cases that are not handled by OperatorHandler
+//        OperatorHandler handler = OperatorHandler.get(node.operator);
+//        returnType = (handler != null) ? handler.getReturnTypeDescriptor() : null;
+
+        // Handle special cases not in OperatorHandler
+        if (returnType == null) {
+            switch (node.operator) {
+                case "$":
+                case "*":
+                case "$#":
+                    returnType = "RuntimeScalar;";
+                    break;
+                case "@":
+                    returnType = "RuntimeArray;";
+                    break;
+                case "%":
+                    returnType = "RuntimeHash;";
+                    break;
             }
-        } catch (Exception e) {
-            // If operator not found in OperatorHandler
-            returnType = null;
         }
     }
 
