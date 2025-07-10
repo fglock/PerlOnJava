@@ -92,6 +92,16 @@ public class ErrorMessageUtil {
 
         Throwable innermostCause = findInnermostCause(t);
         String message = innermostCause.getMessage();
+
+        // Use this for debugging
+        // t.printStackTrace();
+
+        // Handle null or empty messages
+        if (message == null || message.isEmpty()) {
+            // Use the exception class name as a fallback
+            message = innermostCause.getClass().getSimpleName();
+        }
+
         sb.append(message);
         if (!message.endsWith("\n")) {
             sb.append("\n");

@@ -164,14 +164,16 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
      * @param array The RuntimeArray to which elements will be added.
      */
     public void addToArray(RuntimeArray array) {
-
         if (this.elements instanceof AutovivificationArray) {
             throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
         }
 
-        List<RuntimeScalar> elements = array.elements;
-        for (RuntimeScalar arrElem : this.elements) {
-            elements.add(new RuntimeScalar(arrElem));
+        // Create a defensive copy to avoid ConcurrentModificationException
+        List<RuntimeScalar> elementsCopy = new ArrayList<>(this.elements);
+        List<RuntimeScalar> targetElements = array.elements;
+
+        for (RuntimeScalar arrElem : elementsCopy) {
+            targetElements.add(new RuntimeScalar(arrElem));
         }
     }
 
