@@ -244,22 +244,22 @@ public class EmitLiteral {
 
         // Optimize based on return type using Java 21 enhanced switch
         switch (returnType) {
-//            case "RuntimeScalar;" -> {
-//                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
-//                        "addToList", "(Lorg/perlonjava/runtime/RuntimeList;)V", false);
-//            }
-//            case "RuntimeArray;" -> {
-//                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
-//                        "addToList", "(Lorg/perlonjava/runtime/RuntimeList;)V", false);
-//            }
-//            case "RuntimeHash;" -> {
-//                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
-//                        "addToList", "(Lorg/perlonjava/runtime/RuntimeList;)V", false);
-//            }
-//            case "RuntimeList;" -> {
-//                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList",
-//                        "addToList", "(Lorg/perlonjava/runtime/RuntimeList;)V", false);
-//            }
+            case "RuntimeScalar;" -> {
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
+                        "addToList", "(Lorg/perlonjava/runtime/RuntimeList;)V", false);
+            }
+            case "RuntimeArray;" -> {
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
+                        "addToList", "(Lorg/perlonjava/runtime/RuntimeList;)V", false);
+            }
+            case "RuntimeHash;" -> {
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
+                        "addToList", "(Lorg/perlonjava/runtime/RuntimeList;)V", false);
+            }
+            case "RuntimeList;" -> {
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList",
+                        "addToList", "(Lorg/perlonjava/runtime/RuntimeList;)V", false);
+            }
             case null, default -> {
                 // Default case: use the interface for unknown types
                 mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider",
@@ -287,22 +287,22 @@ public class EmitLiteral {
 
         // Optimize based on return type using Java 21 enhanced switch
         switch (returnType) {
-//            case "RuntimeScalar;" -> {
-//                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
-//                        "addToArray", "(Lorg/perlonjava/runtime/RuntimeArray;)V", false);
-//            }
-//            case "RuntimeArray;" -> {
-//                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
-//                        "addToArray", "(Lorg/perlonjava/runtime/RuntimeArray;)V", false);
-//            }
-//            case "RuntimeHash;" -> {
-//                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
-//                        "addToArray", "(Lorg/perlonjava/runtime/RuntimeArray;)V", false);
-//            }
-//            case "RuntimeList;" -> {
-//                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList",
-//                        "addToArray", "(Lorg/perlonjava/runtime/RuntimeArray;)V", false);
-//            }
+            case "RuntimeScalar;" -> {
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
+                        "addToArray", "(Lorg/perlonjava/runtime/RuntimeArray;)V", false);
+            }
+            case "RuntimeArray;" -> {
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
+                        "addToArray", "(Lorg/perlonjava/runtime/RuntimeArray;)V", false);
+            }
+            case "RuntimeHash;" -> {
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
+                        "addToArray", "(Lorg/perlonjava/runtime/RuntimeArray;)V", false);
+            }
+            case "RuntimeList;" -> {
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList",
+                        "addToArray", "(Lorg/perlonjava/runtime/RuntimeArray;)V", false);
+            }
             case null, default -> {
                 // Default case: use the interface for unknown types
                 mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider",

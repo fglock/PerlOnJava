@@ -44,21 +44,21 @@ public class ReturnTypeVisitor implements Visitor {
         try {
             OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
             if (operatorHandler != null) {
-                String descriptor = operatorHandler.getDescriptor();
-                // Extract return type from descriptor
-                int lastSlash = descriptor.lastIndexOf(')');
-                if (lastSlash != -1 && lastSlash < descriptor.length() - 1) {
-                    String fullReturnType = descriptor.substring(lastSlash + 1);
-                    // Extract just the class name with semicolon
-                    int lastTypeSlash = fullReturnType.lastIndexOf('/');
-                    if (lastTypeSlash != -1) {
-                        returnType = fullReturnType.substring(lastTypeSlash + 1);
-                    } else {
-                        returnType = fullReturnType;
-                    }
-                } else {
-                    returnType = null;
-                }
+//                String descriptor = operatorHandler.getDescriptor();
+//                // Extract return type from descriptor
+//                int lastSlash = descriptor.lastIndexOf(')');
+//                if (lastSlash != -1 && lastSlash < descriptor.length() - 1) {
+//                    String fullReturnType = descriptor.substring(lastSlash + 1);
+//                    // Extract just the class name with semicolon
+//                    int lastTypeSlash = fullReturnType.lastIndexOf('/');
+//                    if (lastTypeSlash != -1) {
+//                        returnType = fullReturnType.substring(lastTypeSlash + 1);
+//                    } else {
+//                        returnType = fullReturnType;
+//                    }
+//                } else {
+//                    returnType = null;
+//                }
             } else {
                 returnType = null;
             }
@@ -73,21 +73,21 @@ public class ReturnTypeVisitor implements Visitor {
         try {
             OperatorHandler operatorHandler = OperatorHandler.get(node.operator);
             if (operatorHandler != null) {
-                String descriptor = operatorHandler.getDescriptor();
-                // Extract return type from descriptor
-                int lastSlash = descriptor.lastIndexOf(')');
-                if (lastSlash != -1 && lastSlash < descriptor.length() - 1) {
-                    String fullReturnType = descriptor.substring(lastSlash + 1);
-                    // Extract just the class name with semicolon
-                    int lastTypeSlash = fullReturnType.lastIndexOf('/');
-                    if (lastTypeSlash != -1) {
-                        returnType = fullReturnType.substring(lastTypeSlash + 1);
-                    } else {
-                        returnType = fullReturnType;
-                    }
-                } else {
-                    returnType = null;
-                }
+//                String descriptor = operatorHandler.getDescriptor();
+//                // Extract return type from descriptor
+//                int lastSlash = descriptor.lastIndexOf(')');
+//                if (lastSlash != -1 && lastSlash < descriptor.length() - 1) {
+//                    String fullReturnType = descriptor.substring(lastSlash + 1);
+//                    // Extract just the class name with semicolon
+//                    int lastTypeSlash = fullReturnType.lastIndexOf('/');
+//                    if (lastTypeSlash != -1) {
+//                        returnType = fullReturnType.substring(lastTypeSlash + 1);
+//                    } else {
+//                        returnType = fullReturnType;
+//                    }
+//                } else {
+//                    returnType = null;
+//                }
             } else {
                 // Handle special cases not in OperatorHandler
                 switch (node.operator) {
