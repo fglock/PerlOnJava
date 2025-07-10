@@ -54,6 +54,17 @@ public class ReturnTypeVisitor implements Visitor {
         // if (handler != null) {
         //     returnType = handler.getReturnTypeDescriptor();
         // }
+
+        // Handle special cases not in OperatorHandler
+        switch (node.operator) {
+            case "(":      // subroutine call
+                returnType = RuntimeTypeConstants.LIST_TYPE;
+                break;
+            case "+", "-", "/", "*", ".":
+                returnType = RuntimeTypeConstants.SCALAR_TYPE;
+                break;
+        }
+
     }
 
     @Override
@@ -68,21 +79,19 @@ public class ReturnTypeVisitor implements Visitor {
         // }
 
         // Handle special cases not in OperatorHandler
-        if (returnType == null) {
-            switch (node.operator) {
-                case "$":      // scalar dereference
-                case "*":      // glob dereference
-                case "$#":     // array last index
-                // case "scalar": // scalar context
-                    returnType = RuntimeTypeConstants.SCALAR_TYPE;
-                    break;
-                case "@":      // array dereference
-                    returnType = RuntimeTypeConstants.ARRAY_TYPE;
-                    break;
-                case "%":      // hash dereference
-                    returnType = RuntimeTypeConstants.HASH_TYPE;
-                    break;
-            }
+        switch (node.operator) {
+            case "$":      // scalar dereference
+            case "*":      // glob dereference
+            case "$#":     // array last index
+            case "scalar": // scalar context
+                returnType = RuntimeTypeConstants.SCALAR_TYPE;
+                break;
+            case "@":      // array dereference
+                returnType = RuntimeTypeConstants.ARRAY_TYPE;
+                break;
+            case "%":      // hash dereference
+                returnType = RuntimeTypeConstants.HASH_TYPE;
+                break;
         }
     }
 
@@ -135,7 +144,7 @@ public class ReturnTypeVisitor implements Visitor {
     @Override
     public void visit(SubroutineNode node) {
         // Subroutine definition itself doesn't have a return type
-        // (The subroutine call would return RuntimeList in list context or RuntimeScalar in scalar context)
+        // (The subroutine call would return RuntimeList)
         returnType = null;
     }
 
