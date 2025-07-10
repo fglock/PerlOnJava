@@ -411,18 +411,16 @@ public class EmitOperator {
         }
 
         String rawType = ReturnTypeVisitor.getReturnType(node);
-        String returnType = rawType != null ? RuntimeTypeConstants.internalNameToDescriptor(rawType) : null;
-
-        if (RuntimeTypeConstants.SCALAR_TYPE.equals(returnType)) {
+        if (RuntimeTypeConstants.SCALAR_TYPE.equals(rawType)) {
             return; // Already a scalar
         }
 
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
         // Convert to scalar based on return type
-        if (RuntimeTypeConstants.isKnownRuntimeType(returnType)) {
+        if (RuntimeTypeConstants.isKnownRuntimeType(rawType)) {
             // Extract the internal class name from the type descriptor
-            String className = RuntimeTypeConstants.descriptorToInternalName(returnType);
+            String className = RuntimeTypeConstants.descriptorToInternalName(rawType);
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, className,
                     "scalar", "()" + RuntimeTypeConstants.SCALAR_TYPE, false);
         } else {
