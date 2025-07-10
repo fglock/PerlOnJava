@@ -360,23 +360,6 @@ public class EmitOperator {
     static void handleScalar(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Accept the operand in SCALAR context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-
-//        // Check if the operand already returns a scalar
-//        String returnType = ReturnTypeVisitor.getReturnType(node.operand);
-//
-//        System.out.println("Return type: " + returnType);
-//
-//        // ReturnTypeVisitor already returns descriptors, no conversion needed
-//        if (RuntimeTypeConstants.SCALAR_TYPE.equals(returnType)) {
-//            // Already a scalar, no need to call the scalar operator
-//
-//            System.out.println("Already a scalar, no need to call the scalar operator");
-//            handleVoidContext(emitterVisitor);
-//            return;
-//        }
-
-        // Not already a scalar, proceed with the operator
-        emitOperator(node, emitterVisitor);
     }
 
     // Handles the 'local' operator.
