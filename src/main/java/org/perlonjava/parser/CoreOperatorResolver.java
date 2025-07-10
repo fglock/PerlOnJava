@@ -117,22 +117,6 @@ public class CoreOperatorResolver {
                     );
                 }
                 return new OperatorNode(token.text, operand, parser.tokenIndex);
-            case "readdir", "closedir", "telldir", "rewinddir":
-                // Handle operators with one mandatory argument
-                operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
-                return new OperatorNode(token.text, operand, currentIndex);
-            case "rindex", "index", "atan2", "crypt", "opendir", "seekdir":
-                // Handle operators with two mandatory arguments
-                operand = ListParser.parseZeroOrMoreList(parser, 2, false, true, false, false);
-                return new OperatorNode(token.text, operand, currentIndex);
-            case "vec":
-                // Handle operators with three mandatory arguments
-                operand = ListParser.parseZeroOrMoreList(parser, 3, false, true, false, false);
-                return new OperatorNode(token.text, operand, currentIndex);
-            case "socket":
-                // Handle operators with four mandatory arguments
-                operand = ListParser.parseZeroOrMoreList(parser, 4, false, true, false, false);
-                return new OperatorNode(token.text, operand, currentIndex);
             case "bless":
                 // Handle 'bless' operator with special handling for class name
                 ListNode operand1 = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
