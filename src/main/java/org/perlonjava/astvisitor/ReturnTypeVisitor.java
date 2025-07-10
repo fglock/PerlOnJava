@@ -119,12 +119,12 @@ public class ReturnTypeVisitor implements Visitor {
 
     @Override
     public void visit(ArrayLiteralNode node) {
-        returnType = "RuntimeArray;";
+        returnType = "RuntimeScalar;";
     }
 
     @Override
     public void visit(HashLiteralNode node) {
-        returnType = "RuntimeHash;";
+        returnType = "RuntimeScalar;";
     }
 
     @Override
