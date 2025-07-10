@@ -13,94 +13,130 @@ import static org.perlonjava.perlmodule.Strict.STRICT_SUBS;
 import static org.perlonjava.runtime.ScalarUtils.isInteger;
 
 /**
- * This class contains static methods for emitting bytecode for various literal types
- * in the Perl-to-Java compiler.
+ * Handles bytecode generation for literal values in the Perl-to-Java compiler.
+ *
+ * <p>This class provides static methods to emit JVM bytecode for various Perl literal types
+ * including strings, numbers, arrays, hashes, lists, and bareword identifiers. It handles
+ * context-sensitive code generation, optimizing for void, scalar, and list contexts.</p>
+ *
+ * <p>Key features:</p>
+ * <ul>
+ *   <li>Context-aware code generation (void, scalar, list)</li>
+ *   <li>Optimized bytecode for void context to avoid unnecessary object creation</li>
+ *   <li>Support for boxed and unboxed numeric values</li>
+ *   <li>Proper handling of Perl's context propagation rules</li>
+ *   <li>Type-specific optimizations using direct method calls instead of interface dispatch</li>
+ * </ul>
+ *
+ * @see EmitterVisitor
+ * @see RuntimeContextType
  */
 public class EmitLiteral {
 
     /**
-     * Emits bytecode for an array literal.
+     * Emits bytecode for a Perl array literal (e.g., [1, 2, 3]).
      *
-     * @param emitterVisitor The visitor for emitting bytecode
-     * @param node           The ArrayLiteralNode to be processed
+     * <p>Array literals in Perl always evaluate their elements in LIST context,
+     * regardless of the context in which the array literal itself appears.
+     * This method handles the following contexts:</p>
+     * <ul>
+     *   <li>VOID: Elements are evaluated for side effects only, no array is created</li>
+     *   <li>SCALAR/LIST: A RuntimeArray is created and populated, then converted to a reference</li>
+     * </ul>
+     *
+     * @param emitterVisitor The visitor context for emitting bytecode
+     * @param node The ArrayLiteralNode representing the array literal in the AST
      */
     public static void emitArrayLiteral(EmitterVisitor emitterVisitor, ArrayLiteralNode node) {
         emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
-        // Elements in array literals are always evaluated in LIST context
+        // Perl semantics: array literal elements are always evaluated in LIST context
         EmitterVisitor elementContext = emitterVisitor.with(RuntimeContextType.LIST);
 
-        // In VOID context, evaluate elements for side effects and pop the results
+        // Optimization: In VOID context, evaluate elements for side effects only
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             for (Node element : node.elements) {
                 element.accept(elementContext);
-                // Pop the list result
+                // Pop the list result since we don't need it
                 mv.visitInsn(Opcodes.POP);
             }
             emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) end");
             return;
         }
 
-        // Create a new instance of RuntimeArray
+        // Create a new RuntimeArray instance
         mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeArray");
         mv.visitInsn(Opcodes.DUP);
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeArray", "<init>", "()V", false);
+        // Stack: [RuntimeArray]
 
-        // The stack now has the new RuntimeArray instance
-
+        // Populate the array with elements
         for (Node element : node.elements) {
-            // Visit each element to generate code for it
-
-            // Duplicate the RuntimeArray instance to keep it on the stack
+            // Duplicate the RuntimeArray reference for the add operation
             mv.visitInsn(Opcodes.DUP);
-            // stack: [RuntimeArray] [RuntimeArray]
+            // Stack: [RuntimeArray] [RuntimeArray]
 
             emitterVisitor.ctx.javaClassInfo.incrementStackLevel(2);
 
-            // emit the array element
+            // Generate code for the element in LIST context
             element.accept(elementContext);
+            // Stack: [RuntimeArray] [RuntimeArray] [element]
 
             emitterVisitor.ctx.javaClassInfo.decrementStackLevel(2);
 
-            // Call the add method to add the element to the RuntimeArray
+            // Add the element to the array
             addElementToArray(mv, element);
-
-            // The stack now has the RuntimeArray instance again
+            // Stack: [RuntimeArray]
         }
 
-        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "createReference", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+        // Convert the array to a reference (array literals produce references)
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider",
+                "createReference", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
 
+        // Handle void context if needed (though we already returned early for VOID)
         EmitOperator.handleVoidContext(emitterVisitor);
         emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) end");
     }
 
     /**
-     * Emits bytecode for a hash literal.
+     * Emits bytecode for a Perl hash literal (e.g., {a => 1, b => 2}).
      *
-     * @param emitterVisitor The visitor for emitting bytecode
-     * @param node           The HashLiteralNode to be processed
+     * <p>Hash literals in Perl always evaluate their elements in LIST context,
+     * similar to array literals. The elements are collected into a list which
+     * is then used to construct the hash.</p>
+     *
+     * <p>Context handling:</p>
+     * <ul>
+     *   <li>VOID: Elements are evaluated for side effects only, no hash is created</li>
+     *   <li>SCALAR/LIST: Elements are collected into a RuntimeList, then converted to a hash reference</li>
+     * </ul>
+     *
+     * @param emitterVisitor The visitor context for emitting bytecode
+     * @param node The HashLiteralNode representing the hash literal in the AST
      */
     public static void emitHashLiteral(EmitterVisitor emitterVisitor, HashLiteralNode node) {
         emitterVisitor.ctx.logDebug("visit(HashLiteralNode) in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
-        // In VOID context, evaluate elements for side effects and pop the results
+        // Optimization: In VOID context, evaluate elements for side effects only
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             EmitterVisitor elementContext = emitterVisitor.with(RuntimeContextType.LIST);
             for (Node element : node.elements) {
                 element.accept(elementContext);
-                // Pop the list result
+                // Pop the list result since we don't need it
                 mv.visitInsn(Opcodes.POP);
             }
             emitterVisitor.ctx.logDebug("visit(HashLiteralNode) end");
             return;
         }
 
-        // Create a RuntimeList with elements in LIST context
+        // Create a RuntimeList from the hash elements
+        // This delegates to emitList which handles the LIST context properly
         ListNode listNode = new ListNode(node.elements, node.tokenIndex);
         listNode.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
+        // Convert the list to a hash reference
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/RuntimeHash",
                 "createHashRef",
@@ -113,49 +149,75 @@ public class EmitLiteral {
     /**
      * Emits bytecode for a string literal.
      *
-     * @param ctx  The emission context
-     * @param node The StringNode to be processed
+     * <p>Handles both regular strings and v-strings (version strings).
+     * The method supports both boxed (RuntimeScalar) and unboxed (Java String) contexts.</p>
+     *
+     * <p>Special handling:</p>
+     * <ul>
+     *   <li>VOID context: No code is generated</li>
+     *   <li>Boxed context: Creates a RuntimeScalar object</li>
+     *   <li>Unboxed context: Pushes the raw Java string</li>
+     *   <li>V-strings: Sets the appropriate type flag on the RuntimeScalar</li>
+     * </ul>
+     *
+     * @param ctx The emission context containing method visitor and context information
+     * @param node The StringNode containing the string value and metadata
      */
     public static void emitString(EmitterContext ctx, StringNode node) {
+        // Skip code generation in void context
         if (ctx.contextType == RuntimeContextType.VOID) {
             return;
         }
+
         MethodVisitor mv = ctx.mv;
-        if (ctx.isBoxed) { // expect a RuntimeScalar object
+
+        if (ctx.isBoxed) {
+            // Boxed context: create a RuntimeScalar object
             mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
             mv.visitInsn(Opcodes.DUP);
-            mv.visitLdcInsn(node.value); // emit string
+            mv.visitLdcInsn(node.value); // Push the string value
             mv.visitMethodInsn(
                     Opcodes.INVOKESPECIAL,
                     "org/perlonjava/runtime/RuntimeScalar",
                     "<init>",
                     "(Ljava/lang/String;)V",
-                    false); // Call new RuntimeScalar(String)
+                    false);
 
-            // Check if the StringNode is a v-string
+            // Handle v-strings (version strings like v1.2.3)
             if (node.isVString) {
-                // Set the RuntimeScalar type to VSTRING
                 mv.visitInsn(Opcodes.DUP); // Duplicate the RuntimeScalar reference
-                mv.visitLdcInsn(RuntimeScalarType.VSTRING); // emit "VSTRING" constant
+                mv.visitLdcInsn(RuntimeScalarType.VSTRING); // Push the VSTRING type constant
                 mv.visitFieldInsn(Opcodes.PUTFIELD, "org/perlonjava/runtime/RuntimeScalar", "type", "I");
             }
         } else {
-            mv.visitLdcInsn(node.value); // emit string
+            // Unboxed context: just push the raw string
+            mv.visitLdcInsn(node.value);
         }
     }
 
     /**
-     * Emits bytecode for a list literal.
+     * Emits bytecode for a list literal (e.g., (1, 2, 3)).
      *
-     * @param emitterVisitor The visitor for emitting bytecode
-     * @param node           The ListNode to be processed
+     * <p>Lists in Perl have unique context propagation rules: unlike array and hash
+     * literals, regular lists propagate their context to their elements. This means
+     * a list in void context evaluates its elements in void context.</p>
+     *
+     * <p>Context handling:</p>
+     * <ul>
+     *   <li>VOID: Elements are evaluated in VOID context (Perl-specific behavior)</li>
+     *   <li>SCALAR: Creates a RuntimeList, then converts to scalar (returns last element)</li>
+     *   <li>LIST: Creates and returns a RuntimeList</li>
+     * </ul>
+     *
+     * @param emitterVisitor The visitor context for emitting bytecode
+     * @param node The ListNode representing the list literal in the AST
      */
     public static void emitList(EmitterVisitor emitterVisitor, ListNode node) {
         emitterVisitor.ctx.logDebug("visit(ListNode) in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
         int contextType = emitterVisitor.ctx.contextType;
 
-        // In VOID context, just visit elements for side effects
+        // In VOID context, propagate VOID to elements (Perl-specific behavior)
         if (contextType == RuntimeContextType.VOID) {
             for (Node element : node.elements) {
                 element.accept(emitterVisitor);
@@ -164,128 +226,164 @@ public class EmitLiteral {
             return;
         }
 
-        // Create a new instance of RuntimeList
+        // Create a new RuntimeList instance
         mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeList");
         mv.visitInsn(Opcodes.DUP);
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeList", "<init>", "()V", false);
-        // stack: [RuntimeList]
+        // Stack: [RuntimeList]
 
+        // Populate the list with elements
         for (Node element : node.elements) {
-            // Visit each element to generate code for it
-
-            // Duplicate the RuntimeList instance to keep it on the stack
+            // Duplicate the RuntimeList reference for the add operation
             mv.visitInsn(Opcodes.DUP);
-            // stack: [RuntimeList] [RuntimeList]
+            // Stack: [RuntimeList] [RuntimeList]
 
             emitterVisitor.ctx.javaClassInfo.incrementStackLevel(2);
 
-            // emit the list element
-            // The context for list elements is the same as the list node context
+            // Generate code for the element, preserving the list's context
             element.accept(emitterVisitor);
+            // Stack: [RuntimeList] [RuntimeList] [element]
 
             emitterVisitor.ctx.javaClassInfo.decrementStackLevel(2);
 
-            // Call the add method to add the element to the RuntimeList
+            // Add the element to the list
             addElementToList(mv, element, contextType);
-
-            // The stack now has the RuntimeList instance again
+            // Stack: [RuntimeList]
         }
 
-        // At this point, the stack has the fully populated RuntimeList instance
+        // In scalar context, convert the list to a scalar (returns the last element)
         if (contextType == RuntimeContextType.SCALAR) {
-            // Transform the value in the stack to RuntimeScalar
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList",
+                    "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
         }
+
         emitterVisitor.ctx.logDebug("visit(ListNode) end");
     }
 
     /**
-     * Emits bytecode for a number literal.
+     * Emits bytecode for a numeric literal.
      *
-     * @param ctx  The emission context
-     * @param node The NumberNode to be processed
+     * <p>Handles both integer and floating-point numbers, with support for
+     * underscores as digit separators (e.g., 1_000_000). The method optimizes
+     * integer handling by using a cache for common values.</p>
+     *
+     * <p>Optimizations:</p>
+     * <ul>
+     *   <li>VOID context: No code is generated</li>
+     *   <li>Cached integers: Uses RuntimeScalarCache for common integer values</li>
+     *   <li>Unboxed context: Pushes primitive int or double values</li>
+     * </ul>
+     *
+     * @param ctx The emission context containing method visitor and context information
+     * @param node The NumberNode containing the numeric value as a string
      */
     public static void emitNumber(EmitterContext ctx, NumberNode node) {
         ctx.logDebug("visit(NumberNode) in context " + ctx.contextType);
+
+        // Skip code generation in void context
         if (ctx.contextType == RuntimeContextType.VOID) {
             return;
         }
+
         MethodVisitor mv = ctx.mv;
+        // Remove underscores which Perl allows as digit separators
         String value = node.value.replace("_", "");
         boolean isInteger = isInteger(value);
-        if (ctx.isBoxed) { // expect a RuntimeScalar object
+
+        if (ctx.isBoxed) {
+            // Boxed context: create a RuntimeScalar object
             if (isInteger) {
                 ctx.logDebug("visit(NumberNode) emit boxed integer");
-                mv.visitLdcInsn(
-                        Integer.valueOf(value)); // Push the integer argument onto the stack
+                // Use cached RuntimeScalar for common integer values
+                mv.visitLdcInsn(Integer.valueOf(value));
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/RuntimeScalarCache",
                         "getScalarInt",
-                        "(I)Lorg/perlonjava/runtime/RuntimeScalar;", false); // Call new getScalarInt(int)
+                        "(I)Lorg/perlonjava/runtime/RuntimeScalar;", false);
             } else {
+                // Create new RuntimeScalar for floating-point values
                 mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
                 mv.visitInsn(Opcodes.DUP);
-                mv.visitLdcInsn(Double.valueOf(value)); // Push the double argument onto the stack
+                mv.visitLdcInsn(Double.valueOf(value));
                 mv.visitMethodInsn(
-                        Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeScalar", "<init>", "(D)V", false); // Call new RuntimeScalar(double)
+                        Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/RuntimeScalar",
+                        "<init>", "(D)V", false);
             }
         } else {
+            // Unboxed context: push primitive values
             if (isInteger) {
-                mv.visitLdcInsn(Integer.parseInt(value)); // emit native integer
+                mv.visitLdcInsn(Integer.parseInt(value));
             } else {
-                mv.visitLdcInsn(Double.parseDouble(value)); // emit native double
+                mv.visitLdcInsn(Double.parseDouble(value));
             }
         }
     }
 
     /**
-     * Emits bytecode for an identifier.
+     * Emits bytecode for a bareword identifier.
      *
-     * @param visitor The emitter visitor
-     * @param ctx     The emission context
-     * @param node    The IdentifierNode to be processed
-     * @throws PerlCompilerException if the bare word is not implemented
+     * <p>Barewords in Perl are unquoted strings that can be used as string literals
+     * when strict subs is not enabled. When strict subs is enabled, barewords
+     * trigger a compilation error.</p>
+     *
+     * <p>Behavior:</p>
+     * <ul>
+     *   <li>VOID context: No code is generated (barewords have no side effects)</li>
+     *   <li>Strict subs enabled: Throws compilation error</li>
+     *   <li>Otherwise: Treats the bareword as a string literal</li>
+     * </ul>
+     *
+     * @param visitor The emitter visitor for context
+     * @param ctx The emission context
+     * @param node The IdentifierNode containing the bareword
+     * @throws PerlCompilerException if strict subs is enabled
      */
     public static void emitIdentifier(EmitterVisitor visitor, EmitterContext ctx, IdentifierNode node) {
-        // In VOID context, barewords have no side effects
+        // Barewords have no side effects in void context
         if (ctx.contextType == RuntimeContextType.VOID) {
             return;
         }
 
         if (ctx.symbolTable.isStrictOptionEnabled(STRICT_SUBS)) {
             throw new PerlCompilerException(
-                    node.tokenIndex, "Bareword \"" + node.name + "\" not allowed while \"strict subs\" in use", ctx.errorUtil);
+                    node.tokenIndex,
+                    "Bareword \"" + node.name + "\" not allowed while \"strict subs\" in use",
+                    ctx.errorUtil);
         } else {
-            // Emit identifier as string
+            // Treat bareword as a string literal
             new StringNode(node.name, node.tokenIndex).accept(visitor);
         }
     }
 
     /**
-     * Optimized method to add an element to a RuntimeList.
-     * Uses specific method calls based on the element's return type to avoid interface dispatch.
-     * Stack before: [RuntimeList] [element]
-     * Stack after: [RuntimeList]
+     * Adds an element to a RuntimeList with type-specific optimizations.
      *
-     * @param mv      The method visitor
-     * @param element The element node being added
+     * <p>This method uses compile-time type information to generate optimized
+     * bytecode that calls the specific addToList method for known types, avoiding
+     * the overhead of interface dispatch when possible.</p>
+     *
+     * <p>Stack transformation: [RuntimeList] [element] → [RuntimeList]</p>
+     *
+     * @param mv The method visitor for bytecode generation
+     * @param element The AST node representing the element being added
+     * @param contextType The context type (used for scalar context optimization)
      */
     private static void addElementToList(MethodVisitor mv, Node element, int contextType) {
         String returnType;
 
-        // Stack is currently: [RuntimeList] [element]
-        // We need to swap to get: [element] [RuntimeList]
+        // Swap stack to prepare for method call: [element] [RuntimeList]
         mv.visitInsn(Opcodes.SWAP);
 
+        // Determine the element's return type for optimization
         if (contextType == RuntimeContextType.SCALAR) {
-            // Special case for list in scalar context
+            // In scalar context, all elements are treated as scalars
             returnType = "RuntimeScalar;";
         } else {
-            // Use ReturnTypeVisitor to determine the element's return type
+            // Use static analysis to determine the element's return type
             returnType = ReturnTypeVisitor.getReturnType(element);
         }
 
-        // Optimize based on return type
+        // Generate type-specific method call for better performance
         switch (returnType) {
             case "RuntimeScalar;" -> {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
@@ -304,7 +402,7 @@ public class EmitLiteral {
                         "addToList", "(Lorg/perlonjava/runtime/RuntimeList;)V", false);
             }
             case null, default -> {
-                // Default case: use the interface for unknown types
+                // Fall back to interface call for unknown types
                 mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider",
                         "addToList", "(Lorg/perlonjava/runtime/RuntimeList;)V", true);
             }
@@ -312,23 +410,25 @@ public class EmitLiteral {
     }
 
     /**
-     * Optimized method to add an element to a RuntimeArray.
-     * Uses specific method calls based on the element's return type to avoid interface dispatch.
-     * Stack before: [RuntimeArray] [element]
-     * Stack after: [RuntimeArray]
+     * Adds an element to a RuntimeArray with type-specific optimizations.
      *
-     * @param mv      The method visitor
-     * @param element The element node being added
+     * <p>Similar to {@link #addElementToList}, this method uses compile-time type
+     * information to generate optimized bytecode for known types, improving performance
+     * by avoiding interface dispatch when possible.</p>
+     *
+     * <p>Stack transformation: [RuntimeArray] [element] → [RuntimeArray]</p>
+     *
+     * @param mv The method visitor for bytecode generation
+     * @param element The AST node representing the element being added
      */
     private static void addElementToArray(MethodVisitor mv, Node element) {
-        // Use ReturnTypeVisitor to determine the element's return type
+        // Use static analysis to determine the element's return type
         String returnType = ReturnTypeVisitor.getReturnType(element);
 
-        // Stack is currently: [RuntimeArray] [element]
-        // We need to swap to get: [element] [RuntimeArray]
+        // Swap stack to prepare for method call: [element] [RuntimeArray]
         mv.visitInsn(Opcodes.SWAP);
 
-        // Optimize based on return type
+        // Generate type-specific method call for better performance
         switch (returnType) {
             case "RuntimeScalar;" -> {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
@@ -347,7 +447,7 @@ public class EmitLiteral {
                         "addToArray", "(Lorg/perlonjava/runtime/RuntimeArray;)V", false);
             }
             case null, default -> {
-                // Default case: use the interface for unknown types
+                // Fall back to interface call for unknown types
                 mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider",
                         "addToArray", "(Lorg/perlonjava/runtime/RuntimeArray;)V", true);
             }
