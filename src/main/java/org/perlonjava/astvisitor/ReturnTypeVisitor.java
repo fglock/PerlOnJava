@@ -2,20 +2,23 @@ package org.perlonjava.astvisitor;
 
 import org.perlonjava.astnode.*;
 import org.perlonjava.operators.OperatorHandler;
+import org.perlonjava.runtime.RuntimeTypeConstants;
 
 /**
  * A visitor that determines the return type descriptor of AST nodes.
- * Returns type descriptors like "RuntimeScalar;", "RuntimeList;", etc.
- * Returns null if the type cannot be determined.
+ * Returns JVM type descriptors like "Lorg/perlonjava/runtime/RuntimeScalar;",
+ * "Lorg/perlonjava/runtime/RuntimeList;", etc.
+ * Returns null if the type cannot be determined statically.
  */
 public class ReturnTypeVisitor implements Visitor {
+
     private String returnType = null;
 
     /**
      * Static factory method to get the return type descriptor of a node.
      *
      * @param node The AST node to analyze
-     * @return The return type descriptor (e.g., "RuntimeScalar;"), or null if unknown
+     * @return The JVM type descriptor (e.g., "Lorg/perlonjava/runtime/RuntimeScalar;"), or null if unknown
      */
     public static String getReturnType(Node node) {
         ReturnTypeVisitor visitor = new ReturnTypeVisitor();
@@ -25,12 +28,12 @@ public class ReturnTypeVisitor implements Visitor {
 
     @Override
     public void visit(NumberNode node) {
-        returnType = "RuntimeScalar;";
+        returnType = RuntimeTypeConstants.SCALAR_TYPE;
     }
 
     @Override
     public void visit(StringNode node) {
-        returnType = "RuntimeScalar;";
+        returnType = RuntimeTypeConstants.SCALAR_TYPE;
     }
 
     @Override
@@ -41,32 +44,42 @@ public class ReturnTypeVisitor implements Visitor {
 
     @Override
     public void visit(BinaryOperatorNode node) {
+        // Most binary operators return scalar, but some might return list
+        // For now, we can't determine this statically without more context
         returnType = null;
+
         // XXX - some operators have special cases that are not handled by OperatorHandler
-//        OperatorHandler handler = OperatorHandler.get(node.operator);
-//        returnType = (handler != null) ? handler.getReturnTypeDescriptor() : null;
+        // Once OperatorHandler is updated, we could do:
+        // OperatorHandler handler = OperatorHandler.get(node.operator);
+        // if (handler != null) {
+        //     returnType = handler.getReturnTypeDescriptor();
+        // }
     }
 
     @Override
     public void visit(OperatorNode node) {
+        // Default to null for most operators
         returnType = null;
+
         // XXX - some operators have special cases that are not handled by OperatorHandler
-//        OperatorHandler handler = OperatorHandler.get(node.operator);
-//        returnType = (handler != null) ? handler.getReturnTypeDescriptor() : null;
+        // OperatorHandler handler = OperatorHandler.get(node.operator);
+        // if (handler != null) {
+        //     returnType = handler.getReturnTypeDescriptor();
+        // }
 
         // Handle special cases not in OperatorHandler
         if (returnType == null) {
             switch (node.operator) {
-                case "$":
-                case "*":
-                case "$#":
-                    returnType = "RuntimeScalar;";
+                case "$":      // scalar dereference
+                case "*":      // glob dereference
+                case "$#":     // array last index
+                    returnType = RuntimeTypeConstants.SCALAR_TYPE;
                     break;
-                case "@":
-                    returnType = "RuntimeArray;";
+                case "@":      // array dereference
+                    returnType = RuntimeTypeConstants.ARRAY_TYPE;
                     break;
-                case "%":
-                    returnType = "RuntimeHash;";
+                case "%":      // hash dereference
+                    returnType = RuntimeTypeConstants.HASH_TYPE;
                     break;
             }
         }
@@ -74,17 +87,19 @@ public class ReturnTypeVisitor implements Visitor {
 
     @Override
     public void visit(ListNode node) {
-        returnType = "RuntimeList;";
+        returnType = RuntimeTypeConstants.LIST_TYPE;
     }
 
     @Override
     public void visit(ArrayLiteralNode node) {
-        returnType = "RuntimeScalar;";
+        // Array literals produce array references (which are scalars)
+        returnType = RuntimeTypeConstants.SCALAR_TYPE;
     }
 
     @Override
     public void visit(HashLiteralNode node) {
-        returnType = "RuntimeScalar;";
+        // Hash literals produce hash references (which are scalars)
+        returnType = RuntimeTypeConstants.SCALAR_TYPE;
     }
 
     @Override
@@ -119,24 +134,26 @@ public class ReturnTypeVisitor implements Visitor {
     @Override
     public void visit(SubroutineNode node) {
         // Subroutine definition itself doesn't have a return type
+        // (The subroutine call would return RuntimeList in list context or RuntimeScalar in scalar context)
         returnType = null;
     }
 
     @Override
     public void visit(IfNode node) {
         // Cannot statically determine return type of if statement
+        // Would need to analyze all branches
         returnType = null;
     }
 
     @Override
     public void visit(For1Node node) {
-        // For loops don't have a meaningful return type
+        // For loops don't have a meaningful return type in Perl
         returnType = null;
     }
 
     @Override
     public void visit(For3Node node) {
-        // For loops don't have a meaningful return type
+        // For loops don't have a meaningful return type in Perl
         returnType = null;
     }
 

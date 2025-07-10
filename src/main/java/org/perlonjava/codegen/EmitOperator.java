@@ -11,6 +11,7 @@ import org.perlonjava.operators.ScalarGlobOperator;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
+import org.perlonjava.runtime.RuntimeTypeConstants;
 
 /**
  * The EmitOperator class is responsible for handling various operators
@@ -410,32 +411,25 @@ public class EmitOperator {
             return; // Not in scalar context, nothing to do
         }
 
-        String returnType = ReturnTypeVisitor.getReturnType(node);
-        if (returnType != null && returnType.equals("RuntimeScalar;")) {
+        String rawType = ReturnTypeVisitor.getReturnType(node);
+        String returnType = rawType != null ? RuntimeTypeConstants.internalNameToDescriptor(rawType) : null;
+
+        if (RuntimeTypeConstants.SCALAR_TYPE.equals(returnType)) {
             return; // Already a scalar
         }
 
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
         // Convert to scalar based on return type
-        switch (returnType) {
-            case "RuntimeArray;" -> {
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
-                        "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
-            }
-            case "RuntimeHash;" -> {
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
-                        "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
-            }
-            case "RuntimeList;" -> {
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList",
-                        "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
-            }
-            case null, default -> {
-                // For unknown types or any other RuntimeDataProvider implementations
-                mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider",
-                        "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
-            }
+        if (RuntimeTypeConstants.isKnownRuntimeType(returnType)) {
+            // Extract the internal class name from the type descriptor
+            String className = RuntimeTypeConstants.descriptorToInternalName(returnType);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, className,
+                    "scalar", "()" + RuntimeTypeConstants.SCALAR_TYPE, false);
+        } else {
+            // For unknown types or any other RuntimeDataProvider implementations
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, RuntimeTypeConstants.DATA_PROVIDER_INTERFACE,
+                    "scalar", "()" + RuntimeTypeConstants.SCALAR_TYPE, true);
         }
     }
 

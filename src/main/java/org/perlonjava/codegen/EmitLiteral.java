@@ -8,6 +8,7 @@ import org.perlonjava.astvisitor.ReturnTypeVisitor;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 import org.perlonjava.runtime.RuntimeScalarType;
+import org.perlonjava.runtime.RuntimeTypeConstants;
 
 import static org.perlonjava.perlmodule.Strict.STRICT_SUBS;
 import static org.perlonjava.runtime.ScalarUtils.isInteger;
@@ -377,35 +378,23 @@ public class EmitLiteral {
         // Determine the element's return type for optimization
         if (contextType == RuntimeContextType.SCALAR) {
             // In scalar context, all elements are treated as scalars
-            returnType = "RuntimeScalar;";
+            returnType = RuntimeTypeConstants.SCALAR_TYPE;
         } else {
             // Use static analysis to determine the element's return type
-            returnType = ReturnTypeVisitor.getReturnType(element);
+            String rawType = ReturnTypeVisitor.getReturnType(element);
+            returnType = rawType != null ? RuntimeTypeConstants.internalNameToDescriptor(rawType) : null;
         }
 
         // Generate type-specific method call for better performance
-        switch (returnType) {
-            case "RuntimeScalar;" -> {
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
-                        "addToList", "(Lorg/perlonjava/runtime/RuntimeList;)V", false);
-            }
-            case "RuntimeArray;" -> {
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
-                        "addToList", "(Lorg/perlonjava/runtime/RuntimeList;)V", false);
-            }
-            case "RuntimeHash;" -> {
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
-                        "addToList", "(Lorg/perlonjava/runtime/RuntimeList;)V", false);
-            }
-            case "RuntimeList;" -> {
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList",
-                        "addToList", "(Lorg/perlonjava/runtime/RuntimeList;)V", false);
-            }
-            case null, default -> {
-                // Fall back to interface call for unknown types
-                mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider",
-                        "addToList", "(Lorg/perlonjava/runtime/RuntimeList;)V", true);
-            }
+        if (RuntimeTypeConstants.isKnownRuntimeType(returnType)) {
+            // Extract the internal class name from the type descriptor
+            String className = RuntimeTypeConstants.descriptorToInternalName(returnType);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, className,
+                    "addToList", "(" + RuntimeTypeConstants.LIST_TYPE + ")V", false);
+        } else {
+            // Fall back to interface call for unknown types
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, RuntimeTypeConstants.DATA_PROVIDER_INTERFACE,
+                    "addToList", "(" + RuntimeTypeConstants.LIST_TYPE + ")V", true);
         }
     }
 
@@ -423,34 +412,22 @@ public class EmitLiteral {
      */
     private static void addElementToArray(MethodVisitor mv, Node element) {
         // Use static analysis to determine the element's return type
-        String returnType = ReturnTypeVisitor.getReturnType(element);
+        String rawType = ReturnTypeVisitor.getReturnType(element);
+        String returnType = rawType != null ? RuntimeTypeConstants.internalNameToDescriptor(rawType) : null;
 
         // Swap stack to prepare for method call: [element] [RuntimeArray]
         mv.visitInsn(Opcodes.SWAP);
 
         // Generate type-specific method call for better performance
-        switch (returnType) {
-            case "RuntimeScalar;" -> {
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar",
-                        "addToArray", "(Lorg/perlonjava/runtime/RuntimeArray;)V", false);
-            }
-            case "RuntimeArray;" -> {
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeArray",
-                        "addToArray", "(Lorg/perlonjava/runtime/RuntimeArray;)V", false);
-            }
-            case "RuntimeHash;" -> {
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
-                        "addToArray", "(Lorg/perlonjava/runtime/RuntimeArray;)V", false);
-            }
-            case "RuntimeList;" -> {
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeList",
-                        "addToArray", "(Lorg/perlonjava/runtime/RuntimeArray;)V", false);
-            }
-            case null, default -> {
-                // Fall back to interface call for unknown types
-                mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider",
-                        "addToArray", "(Lorg/perlonjava/runtime/RuntimeArray;)V", true);
-            }
+        if (RuntimeTypeConstants.isKnownRuntimeType(returnType)) {
+            // Extract the internal class name from the type descriptor
+            String className = RuntimeTypeConstants.descriptorToInternalName(returnType);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, className,
+                    "addToArray", "(" + RuntimeTypeConstants.ARRAY_TYPE + ")V", false);
+        } else {
+            // Fall back to interface call for unknown types
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, RuntimeTypeConstants.DATA_PROVIDER_INTERFACE,
+                    "addToArray", "(" + RuntimeTypeConstants.ARRAY_TYPE + ")V", true);
         }
     }
 }
