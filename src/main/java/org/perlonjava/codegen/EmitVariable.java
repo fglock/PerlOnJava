@@ -163,7 +163,7 @@ public class EmitVariable {
                 } else {
                     // no strict refs
                     node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-                    emitterVisitor.ctx.mv.visitLdcInsn(emitterVisitor.ctx.symbolTable.getCurrentPackage());
+                    emitterVisitor.pushCurrentPackage();
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "scalarDerefNonStrict", "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                 }
                 return;
@@ -176,7 +176,7 @@ public class EmitVariable {
                 } else {
                     // no strict refs
                     node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-                    emitterVisitor.ctx.mv.visitLdcInsn(emitterVisitor.ctx.symbolTable.getCurrentPackage());
+                    emitterVisitor.pushCurrentPackage();
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "globDerefNonStrict", "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeGlob;", false);
                 }
                 return;

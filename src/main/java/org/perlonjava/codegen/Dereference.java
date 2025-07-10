@@ -255,7 +255,7 @@ public class Dereference {
 
             object.accept(scalarVisitor);
             method.accept(scalarVisitor);
-            emitterVisitor.ctx.mv.visitLdcInsn(emitterVisitor.ctx.symbolTable.getCurrentPackage());
+            emitterVisitor.pushCurrentPackage();
 
             arguments.accept(emitterVisitor.with(RuntimeContextType.LIST)); // right parameter: parameter list
 
