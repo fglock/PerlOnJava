@@ -376,14 +376,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
     public String toString() {
         return switch (type) {
             case INTEGER -> Integer.toString((int) value);
-            case DOUBLE -> {
-                String doubleString = Double.toString((double) value);
-                // Remove trailing ".0" if present
-                if (doubleString.endsWith(".0")) {
-                    doubleString = doubleString.substring(0, doubleString.length() - 2);
-                }
-                yield doubleString;
-            }
+            case DOUBLE -> formatLikePerl((double) value);
             case STRING -> (String) value;
             case UNDEF -> "";
             case GLOB -> value == null ? "" : value.toString();
@@ -395,6 +388,33 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case JAVAOBJECT -> value.toString();
             default -> ((RuntimeScalarReference) value).toStringRef();
         };
+    }
+
+    private String formatLikePerl(double value) {
+        if (Double.isInfinite(value)) {
+            return value > 0 ? "Inf" : "-Inf";
+        }
+        if (Double.isNaN(value)) {
+            return "NaN";
+        }
+
+        double absValue = Math.abs(value);
+
+        if (absValue >= 1e15 || (absValue < 1e-4 && absValue != 0.0)) {
+            // Use scientific notation like Perl
+            String result = String.format("%.14e", value);
+            // Clean up the scientific notation to match Perl's format
+            result = result.replaceAll("e\\+0*", "e+").replaceAll("e-0*", "e-");
+            // Remove trailing zeros in the mantissa
+            result = result.replaceAll("(\\d)\\.?0+e", "$1e");
+            return result;
+        } else {
+            // Use fixed-point notation
+            String result = String.format("%.15f", value);
+            // Remove trailing zeros and decimal point if not needed
+            result = result.replaceAll("0+$", "").replaceAll("\\.$", "");
+            return result;
+        }
     }
 
     public String toStringRef() {
@@ -455,7 +475,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
         }
 
         return switch (type) {
-            case UNDEF ->  {
+            case UNDEF -> {
                 // hash autovivification
                 type = RuntimeScalarType.HASHREFERENCE;
                 value = new RuntimeHash();
@@ -577,7 +597,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
      *
      * @return The dereferenced RuntimeHash object
      * @throws PerlCompilerException if the scalar contains a string (when strict refs
-     *         is in use) or any other non-hash-reference value
+     *                               is in use) or any other non-hash-reference value
      */
     public RuntimeHash hashDeref() {
         // Check if object is eligible for overloading (blessed objects)
