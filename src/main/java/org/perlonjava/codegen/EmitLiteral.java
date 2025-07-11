@@ -416,8 +416,7 @@ public class EmitLiteral {
             returnType = RuntimeTypeConstants.SCALAR_TYPE;
         } else {
             // Use static analysis to determine the element's return type
-            String rawType = ReturnTypeVisitor.getReturnType(element);
-            returnType = rawType != null ? RuntimeTypeConstants.internalNameToDescriptor(rawType) : null;
+            returnType = ReturnTypeVisitor.getReturnType(element);
         }
 
         // Generate type-specific method call for better performance
@@ -447,8 +446,7 @@ public class EmitLiteral {
      */
     private static void addElementToArray(MethodVisitor mv, Node element) {
         // Use static analysis to determine the element's return type
-        String rawType = ReturnTypeVisitor.getReturnType(element);
-        String returnType = rawType != null ? RuntimeTypeConstants.internalNameToDescriptor(rawType) : null;
+        String returnType = ReturnTypeVisitor.getReturnType(element);
 
         // Swap stack to prepare for method call: [element] [RuntimeArray]
         mv.visitInsn(Opcodes.SWAP);

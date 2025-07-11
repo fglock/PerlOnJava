@@ -5,6 +5,7 @@ import org.objectweb.asm.util.TraceClassVisitor;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.runtime.ErrorMessageUtil;
+import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
 
@@ -340,7 +341,7 @@ public class EmitterMethodCreator implements Opcodes {
         // number of anonymous subroutines, as it helps manage memory usage by
         // allowing unused classes to be collected by the garbage collector.
         //
-        CustomClassLoader loader = new CustomClassLoader(EmitterMethodCreator.class.getClassLoader());
+        CustomClassLoader loader = GlobalVariable.globalClassLoader;
 
         // Create a "Java" class name with dots instead of slashes
         String javaClassNameDot = ctx.javaClassInfo.javaClassName.replace('/', '.');
