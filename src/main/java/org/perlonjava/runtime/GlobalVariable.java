@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.codegen.CustomClassLoader;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -23,6 +25,10 @@ public class GlobalVariable {
     static final Map<String, RuntimeScalar> globalCodeRefs = new HashMap<>();
     static final Map<String, RuntimeGlob> globalIORefs = new HashMap<>();
 
+    // Global class loader for all generated classes - not final so we can replace it
+    public static CustomClassLoader globalClassLoader =
+            new CustomClassLoader(GlobalVariable.class.getClassLoader());
+
     // Flags used by operator override
 
     // globalGlobs: Tracks typeglob assignments (e.g., *CORE::GLOBAL::hex = sub {...})
@@ -39,6 +45,7 @@ public class GlobalVariable {
 
     /**
      * Resets all global variables, arrays, hashes, code references, and IO references.
+     * Also destroys and recreates the global class loader to allow GC of old classes.
      */
     public static void resetAllGlobals() {
         globalVariables.clear();
@@ -48,6 +55,12 @@ public class GlobalVariable {
         globalIORefs.clear();
         globalGlobs.clear();
         isSubs.clear();
+
+        RuntimeCode.clearCaches();
+
+        // Destroy the old classloader and create a new one
+        // This allows the old generated classes to be garbage collected
+        globalClassLoader = new CustomClassLoader(GlobalVariable.class.getClassLoader());
     }
 
     /**

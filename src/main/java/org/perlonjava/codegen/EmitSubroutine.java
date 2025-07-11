@@ -68,100 +68,58 @@ public class EmitSubroutine {
         ctx.logDebug("Generated class env:  " + Arrays.toString(newEnv));
         RuntimeCode.anonSubs.put(subCtx.javaClassInfo.javaClassName, generatedClass); // Cache the class
 
-        /* The following ASM code is equivalent to:
-         *  // Get the class:
-         *  Class<?> generatedClass = RuntimeCode.anonSubs.get("java.Class.Name");
-         *  // Find the constructor:
-         *  Constructor<?> constructor = generatedClass.getConstructor(RuntimeScalar.class, RuntimeScalar.class);
-         *  // Instantiate the class:
-         *  Object instance = constructor.newInstance();
-         *  // Find the apply method:
-         *  Method applyMethod = generatedClass.getMethod("apply", RuntimeArray.class, int.class);
-         *  // Construct a CODE variable:
-         *  RuntimeScalar.new(applyMethod);
-         */
-
         int skipVariables = EmitterMethodCreator.skipVariables; // Skip (this, @_, wantarray)
 
-        // 1. Get the class from RuntimeCode.anonSubs
-        mv.visitFieldInsn(Opcodes.GETSTATIC, "org/perlonjava/runtime/RuntimeCode", "anonSubs", "Ljava/util/HashMap;");
-        mv.visitLdcInsn(subCtx.javaClassInfo.javaClassName);
-        mv.visitMethodInsn(
-                Opcodes.INVOKEVIRTUAL,
-                "java/util/HashMap",
-                "get",
-                "(Ljava/lang/Object;)Ljava/lang/Object;",
-                false);
-        mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Class");
+        // Direct instantiation approach - no reflection needed!
 
-        // Stack after this step: [Class]
-
-        // 2. Find the constructor (RuntimeScalar, RuntimeScalar, ...)
+        // 1. NEW - Create new instance
+        mv.visitTypeInsn(Opcodes.NEW, subCtx.javaClassInfo.javaClassName);
         mv.visitInsn(Opcodes.DUP);
-        mv.visitIntInsn(
-                Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
-        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class"); // Create a new array of Class
-        for (int i = 0; i < newEnv.length - skipVariables; i++) {
-            mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
-            mv.visitIntInsn(Opcodes.BIPUSH, i); // Push the index
 
-            // Select Array/Hash/Scalar depending on env value
-            String descriptor = EmitterMethodCreator.getVariableDescriptor(newEnv[i + skipVariables]);
-
-            mv.visitLdcInsn(Type.getType(descriptor)); // Push the Class object for RuntimeScalar
-            mv.visitInsn(Opcodes.AASTORE); // Store the Class object in the array
-        }
-        mv.visitMethodInsn(
-                Opcodes.INVOKEVIRTUAL,
-                "java/lang/Class",
-                "getConstructor",
-                "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;",
-                false);
-
-        // Stack after this step: [Class, Constructor]
-
-        // 3. Instantiate the class
-        mv.visitIntInsn(
-                Opcodes.BIPUSH, newEnv.length - skipVariables); // Push the length of the array
-        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object"); // Create a new array of Object
-
-        // Load the closure variables.
-        // Here we translate the "local variable" index from the current symbol table to the new symbol table
-        int newIndex = 0;  // New variable index
+        // 2. Load all captured variables for the constructor
+        int newIndex = 0;
         for (Integer currentIndex : visibleVariables.keySet()) {
             if (newIndex >= skipVariables) {
-                mv.visitInsn(Opcodes.DUP); // Duplicate the array reference
-                mv.visitIntInsn(Opcodes.BIPUSH, newIndex - skipVariables); // Push the new index
-                mv.visitVarInsn(Opcodes.ALOAD, currentIndex); // Load the constructor argument
-                mv.visitInsn(Opcodes.AASTORE); // Store the argument in the array
+                mv.visitVarInsn(Opcodes.ALOAD, currentIndex); // Load the captured variable
             }
             newIndex++;
         }
+
+        // 3. Build the constructor descriptor
+        StringBuilder constructorDescriptor = new StringBuilder("(");
+        for (int i = skipVariables; i < newEnv.length; i++) {
+            String descriptor = EmitterMethodCreator.getVariableDescriptor(newEnv[i]);
+            constructorDescriptor.append(descriptor);
+        }
+        constructorDescriptor.append(")V");
+
+        // 4. INVOKESPECIAL - Call the constructor
         mv.visitMethodInsn(
-                Opcodes.INVOKEVIRTUAL,
-                "java/lang/reflect/Constructor",
-                "newInstance",
-                "([Ljava/lang/Object;)Ljava/lang/Object;",
+                Opcodes.INVOKESPECIAL,
+                subCtx.javaClassInfo.javaClassName,
+                "<init>",
+                constructorDescriptor.toString(),
                 false);
-        mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Object");
 
-        // Stack after this step: [Class, Constructor, Object]
-
-        // 4. Create a CODE variable using RuntimeCode.makeCodeObject
+        // 5. Create a CODE variable using RuntimeCode.makeCodeObject
         if (node.prototype != null) {
             mv.visitLdcInsn(node.prototype);
             mv.visitMethodInsn(
-                    Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeCode", "makeCodeObject", "(Ljava/lang/Object;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/RuntimeCode",
+                    "makeCodeObject",
+                    "(Ljava/lang/Object;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
         } else {
             mv.visitMethodInsn(
-                    Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeCode", "makeCodeObject", "(Ljava/lang/Object;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/RuntimeCode",
+                    "makeCodeObject",
+                    "(Ljava/lang/Object;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
         }
 
-        // Stack after this step: [Class, Constructor, RuntimeScalar]
-        mv.visitInsn(Opcodes.SWAP); // Move the RuntimeScalar object up
-        mv.visitInsn(Opcodes.POP); // Remove the Constructor
-
-        // 5. Clean up the stack if context is VOID
+        // 6. Clean up the stack if context is VOID
         if (ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP); // Remove the RuntimeScalar object from the stack
         }

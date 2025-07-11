@@ -70,6 +70,13 @@ public class RuntimeCode extends RuntimeBaseEntity implements RuntimeScalarRefer
     // Field to hold the thread compiling this code
     public Supplier<Void> compilerSupplier;
 
+    // Add a method to clear caches when globals are reset
+    public static void clearCaches() {
+        evalCache.clear();
+        methodHandleCache.clear();
+        anonSubs.clear();
+    }
+
     /**
      * Constructs a RuntimeCode instance with the specified prototype and attributes.
      *
