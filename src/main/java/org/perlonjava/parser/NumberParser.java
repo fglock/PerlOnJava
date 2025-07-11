@@ -255,13 +255,18 @@ public class NumberParser {
             boolean hasExponent = false;
             boolean isNegative = false;
             int exponentPos = -1;
-            int numberEnd = start;
 
-            char firstChar = str.charAt(start);
-            if (firstChar == '-' || firstChar == '+') {
-                isNegative = (firstChar == '-');
-                start++;
+            // Check for sign BEFORE initializing numberEnd
+            if (start < end) {
+                char firstChar = str.charAt(start);
+                if (firstChar == '-' || firstChar == '+') {
+                    isNegative = (firstChar == '-');
+                    start++;
+                }
             }
+
+            // Initialize numberEnd AFTER handling the sign
+            int numberEnd = start;
 
             if (end - start >= 3) {
                 if (str.regionMatches(true, start, "NaN", 0, 3)) {

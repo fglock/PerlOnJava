@@ -5,10 +5,7 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.astvisitor.ReturnTypeVisitor;
-import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.RuntimeContextType;
-import org.perlonjava.runtime.RuntimeScalarType;
-import org.perlonjava.runtime.RuntimeTypeConstants;
+import org.perlonjava.runtime.*;
 
 import static org.perlonjava.perlmodule.Strict.STRICT_SUBS;
 import static org.perlonjava.runtime.ScalarUtils.isInteger;
@@ -170,25 +167,49 @@ public class EmitLiteral {
         MethodVisitor mv = ctx.mv;
 
         if (ctx.isBoxed) {
-            // Boxed context: create a RuntimeScalar object
-            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
-            mv.visitInsn(Opcodes.DUP);
-            mv.visitLdcInsn(node.value); // Push the string value
-            mv.visitMethodInsn(
-                    Opcodes.INVOKESPECIAL,
-                    "org/perlonjava/runtime/RuntimeScalar",
-                    "<init>",
-                    "(Ljava/lang/String;)V",
-                    false);
-
-            // Handle v-strings (version strings like v1.2.3)
             if (node.isVString) {
-                mv.visitInsn(Opcodes.DUP); // Duplicate the RuntimeScalar reference
-                mv.visitLdcInsn(RuntimeScalarType.VSTRING); // Push the VSTRING type constant
+                // V-strings: no caching (they are rare)
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitLdcInsn(node.value);
+                mv.visitMethodInsn(
+                        Opcodes.INVOKESPECIAL,
+                        "org/perlonjava/runtime/RuntimeScalar",
+                        "<init>",
+                        "(Ljava/lang/String;)V",
+                        false);
+
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitLdcInsn(RuntimeScalarType.VSTRING);
                 mv.visitFieldInsn(Opcodes.PUTFIELD, "org/perlonjava/runtime/RuntimeScalar", "type", "I");
+            } else {
+                // Use cache for regular strings
+                int stringIndex = RuntimeScalarCache.getOrCreateStringIndex(node.value);
+
+                if (stringIndex >= 0) {
+                    // Use cached RuntimeScalar
+                    mv.visitLdcInsn(stringIndex);
+                    mv.visitMethodInsn(
+                            Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/RuntimeScalarCache",
+                            "getScalarString",
+                            "(I)Lorg/perlonjava/runtime/RuntimeScalar;",
+                            false);
+                } else {
+                    // String is too long or null, create new object
+                    mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
+                    mv.visitInsn(Opcodes.DUP);
+                    mv.visitLdcInsn(node.value);
+                    mv.visitMethodInsn(
+                            Opcodes.INVOKESPECIAL,
+                            "org/perlonjava/runtime/RuntimeScalar",
+                            "<init>",
+                            "(Ljava/lang/String;)V",
+                            false);
+                }
             }
         } else {
-            // Unboxed context: just push the raw string
+            // Unboxed context: just push the string value
             mv.visitLdcInsn(node.value);
         }
     }
