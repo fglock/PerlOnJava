@@ -1,12 +1,22 @@
 package org.perlonjava.runtime;
 
+import java.util.Arrays;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+
 /**
  * The RuntimeScalarCache class provides a caching mechanism for frequently used
- * RuntimeScalar objects, such as small integers and common boolean values.
+ * RuntimeScalar objects, such as small integers, common boolean values, and strings.
  * This helps improve performance by reusing immutable scalar instances.
  */
 public class RuntimeScalarCache {
 
+    // Dynamic string cache
+    private static final int INITIAL_STRING_CACHE_SIZE = 256;
+    private static final int MAX_CACHED_STRING_LENGTH = 100;
+    private static final AtomicInteger nextStringIndex = new AtomicInteger(0);
+    private static final ConcurrentHashMap<String, Integer> stringToIndex = new ConcurrentHashMap<>();
+    private static final Object stringCacheLock = new Object();
     // Cached RuntimeScalarReadOnly objects for common boolean and undefined values
     public static RuntimeScalarReadOnly scalarTrue;
     public static RuntimeScalarReadOnly scalarFalse;
@@ -14,12 +24,12 @@ public class RuntimeScalarCache {
     public static RuntimeScalarReadOnly scalarEmptyString;
     public static RuntimeScalarReadOnly scalarZero;
     public static RuntimeScalarReadOnly scalarOne;
-
     // Range of integers to cache
     static int minInt = -100;
     static int maxInt = 100;
     // Array to store cached RuntimeScalarReadOnly objects for integers
     static RuntimeScalarReadOnly[] scalarInt = new RuntimeScalarReadOnly[maxInt - minInt + 1];
+    private static volatile RuntimeScalarReadOnly[] scalarString = new RuntimeScalarReadOnly[INITIAL_STRING_CACHE_SIZE];
 
     // Static block to initialize the cache
     static {
@@ -34,6 +44,51 @@ public class RuntimeScalarCache {
         scalarEmptyString = new RuntimeScalarReadOnly("");
         scalarZero = new RuntimeScalarReadOnly(0);
         scalarOne = new RuntimeScalarReadOnly(1);
+
+        // Don't pre-register strings - let them be added naturally
+    }
+
+    /**
+     * Gets or creates a cache index for the specified string.
+     * Returns -1 if the string should not be cached (too long or null).
+     *
+     * @param s the string to cache
+     * @return the cache index, or -1 if not cacheable
+     */
+    public static int getOrCreateStringIndex(String s) {
+        if (s == null || s.length() > MAX_CACHED_STRING_LENGTH) {
+            return -1;
+        }
+
+        // Check if already cached
+        Integer existingIndex = stringToIndex.get(s);
+        if (existingIndex != null) {
+            return existingIndex;
+        }
+
+        // Need to add new string
+        synchronized (stringCacheLock) {
+            // Double-check after acquiring lock
+            existingIndex = stringToIndex.get(s);
+            if (existingIndex != null) {
+                return existingIndex;
+            }
+
+            int index = nextStringIndex.getAndIncrement();
+
+            // Grow array if needed
+            if (index >= scalarString.length) {
+                int newSize = scalarString.length * 2;
+                RuntimeScalarReadOnly[] newArray = Arrays.copyOf(scalarString, newSize);
+                scalarString = newArray;
+            }
+
+            RuntimeScalarReadOnly cached = new RuntimeScalarReadOnly(s);
+            scalarString[index] = cached;
+            stringToIndex.put(s, index);
+
+            return index;
+        }
     }
 
     /**
@@ -74,5 +129,16 @@ public class RuntimeScalarCache {
             return scalarInt[(int) i - minInt];
         }
         return new RuntimeScalar(i);
+    }
+
+    /**
+     * Retrieves a cached RuntimeScalar for the string at the specified index.
+     * This method assumes the index is valid and within bounds.
+     *
+     * @param index the index of the string in the cache
+     * @return the cached RuntimeScalar representing the string value
+     */
+    public static RuntimeScalar getScalarString(int index) {
+        return scalarString[index];
     }
 }
