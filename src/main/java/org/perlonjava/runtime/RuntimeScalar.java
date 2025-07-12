@@ -238,12 +238,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case GLOB -> 1;  // Assuming globs are truthy, so 1
             case REGEX -> 1; // Assuming regexes are truthy, so 1
             case JAVAOBJECT -> value != null ? 1 : 0;
-            default -> {
-                if ((type & REFERENCE_BIT) != 0) {
-                    yield Overload.numify(this).getInt();
-                }
-                yield ((RuntimeScalarReference) value).getIntRef();
-            }
+            default -> Overload.numify(this).getInt();
         };
     }
 
@@ -259,12 +254,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case GLOB -> 1L;
             case REGEX -> 1L;
             case JAVAOBJECT -> value != null ? 1L : 0L;
-            default -> {
-                if ((type & REFERENCE_BIT) != 0) {
-                    yield Overload.numify(this).getLong();
-                }
-                yield ((RuntimeScalarReference) value).getIntRef();
-            }
+            default -> Overload.numify(this).getLong();
         };
     }
 
@@ -280,12 +270,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case GLOB -> 1.0;
             case REGEX -> 1.0;
             case JAVAOBJECT -> value != null ? 1.0 : 0.0;
-            default -> {
-                if ((type & REFERENCE_BIT) != 0) {
-                    yield Overload.numify(this).getDouble();
-                }
-                yield ((RuntimeScalarReference) value).getDoubleRef();
-            }
+            default -> Overload.numify(this).getDouble();
         };
     }
 
@@ -304,13 +289,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case GLOB -> true;
             case REGEX -> true;
             case JAVAOBJECT -> value != null;
-            default -> {
-                // All reference types
-                if ((type & REFERENCE_BIT) != 0) {
-                    yield Overload.boolify(this).getBoolean();
-                }
-                yield ((RuntimeScalarReference) value).getBooleanRef();
-            }
+            default -> Overload.boolify(this).getBoolean();
         };
     }
 
@@ -418,12 +397,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case GLOB -> value == null ? "" : value.toString();
             case REGEX -> value.toString();
             case JAVAOBJECT -> value.toString();
-            default -> {
-                if ((type & REFERENCE_BIT) != 0) {
-                    yield Overload.stringify(this).toString();
-                }
-                yield ((RuntimeScalarReference) value).toStringRef();
-            }
+            default -> Overload.stringify(this).toString();
         };
     }
 
