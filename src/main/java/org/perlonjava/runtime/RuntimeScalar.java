@@ -227,6 +227,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Getters
     public int getInt() {
+        // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
             case INTEGER -> (int) value;
             case DOUBLE -> (int) ((double) value);
@@ -234,12 +235,20 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case UNDEF -> 0;
             case VSTRING -> 0;
             case BOOLEAN -> (boolean) value ? 1 : 0;
-            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE -> Overload.numify(this).getInt();
-            default -> ((RuntimeScalarReference) value).getIntRef();
+            case GLOB -> 1;  // Assuming globs are truthy, so 1
+            case REGEX -> 1; // Assuming regexes are truthy, so 1
+            case JAVAOBJECT -> value != null ? 1 : 0;
+            default -> {
+                if ((type & REFERENCE_BIT) != 0) {
+                    yield Overload.numify(this).getInt();
+                }
+                yield ((RuntimeScalarReference) value).getIntRef();
+            }
         };
     }
 
     public long getLong() {
+        // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
             case INTEGER -> (int) value;
             case DOUBLE -> (long) ((double) value);
@@ -247,25 +256,41 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case UNDEF -> 0L;
             case VSTRING -> 0L;
             case BOOLEAN -> (boolean) value ? 1L : 0L;
-            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE -> Overload.numify(this).getLong();
-            default -> ((RuntimeScalarReference) value).getIntRef();
+            case GLOB -> 1L;
+            case REGEX -> 1L;
+            case JAVAOBJECT -> value != null ? 1L : 0L;
+            default -> {
+                if ((type & REFERENCE_BIT) != 0) {
+                    yield Overload.numify(this).getLong();
+                }
+                yield ((RuntimeScalarReference) value).getIntRef();
+            }
         };
     }
 
     public double getDouble() {
-        return switch (this.type) {
-            case INTEGER -> (int) this.value;
-            case DOUBLE -> (double) this.value;
+        // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch
+        return switch (type) {
+            case INTEGER -> (int) value;
+            case DOUBLE -> (double) value;
             case STRING -> NumberParser.parseNumber(this).getDouble();
             case UNDEF -> 0.0;
             case VSTRING -> 0.0;
-            case BOOLEAN -> (boolean) value ? 1.0D : 0.0D;
-            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE -> Overload.numify(this).getDouble();
-            default -> ((RuntimeScalarReference) value).getDoubleRef();
+            case BOOLEAN -> (boolean) value ? 1.0 : 0.0;
+            case GLOB -> 1.0;
+            case REGEX -> 1.0;
+            case JAVAOBJECT -> value != null ? 1.0 : 0.0;
+            default -> {
+                if ((type & REFERENCE_BIT) != 0) {
+                    yield Overload.numify(this).getDouble();
+                }
+                yield ((RuntimeScalarReference) value).getDoubleRef();
+            }
         };
     }
 
     public boolean getBoolean() {
+        // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
             case INTEGER -> (int) value != 0;
             case DOUBLE -> (double) value != 0.0;
@@ -276,8 +301,16 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
             case UNDEF -> false;
             case VSTRING -> true;
             case BOOLEAN -> (boolean) value;
-            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE -> Overload.boolify(this).getBoolean();
-            default -> ((RuntimeScalarReference) value).getBooleanRef();
+            case GLOB -> true;
+            case REGEX -> true;
+            case JAVAOBJECT -> value != null;
+            default -> {
+                // All reference types
+                if ((type & REFERENCE_BIT) != 0) {
+                    yield Overload.boolify(this).getBoolean();
+                }
+                yield ((RuntimeScalarReference) value).getBooleanRef();
+            }
         };
     }
 
@@ -374,19 +407,23 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     @Override
     public String toString() {
+        // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
             case INTEGER -> Integer.toString((int) value);
             case DOUBLE -> formatLikePerl((double) value);
             case STRING -> (String) value;
             case UNDEF -> "";
-            case GLOB -> value == null ? "" : value.toString();
-            case REGEX -> value.toString();
             case VSTRING -> (String) value;
             case BOOLEAN -> (boolean) value ? "1" : "";
-            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE -> Overload.stringify(this).toString();
-            case CODE -> this.toStringRef();
+            case GLOB -> value == null ? "" : value.toString();
+            case REGEX -> value.toString();
             case JAVAOBJECT -> value.toString();
-            default -> ((RuntimeScalarReference) value).toStringRef();
+            default -> {
+                if ((type & REFERENCE_BIT) != 0) {
+                    yield Overload.stringify(this).toString();
+                }
+                yield ((RuntimeScalarReference) value).toStringRef();
+            }
         };
     }
 
