@@ -410,9 +410,8 @@ public class EmitOperator {
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, className,
                     "scalar", "()" + RuntimeTypeConstants.SCALAR_TYPE, false);
         } else {
-            // For unknown types or any other RuntimeDataProvider implementations
-            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, RuntimeTypeConstants.DATA_PROVIDER_INTERFACE,
-                    "scalar", "()" + RuntimeTypeConstants.SCALAR_TYPE, true);
+            // For unknown types
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBaseEntity", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
         }
     }
 

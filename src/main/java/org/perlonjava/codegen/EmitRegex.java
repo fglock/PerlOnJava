@@ -196,7 +196,7 @@ public class EmitRegex {
         // Handle the result based on context type
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             // Convert result to Scalar if in scalar context
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBaseEntity", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             // Discard result if in void context
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
