@@ -190,24 +190,24 @@ public class OperatorHandler {
                 "(Lorg/perlonjava/runtime/RuntimeList;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeList;");
 
         operatorHandlers.put("scalar",
-                new OperatorHandler("org/perlonjava/runtime/RuntimeDataProvider",
+                new OperatorHandler("org/perlonjava/runtime/RuntimeBaseEntity",
                         "scalar",
-                        Opcodes.INVOKEINTERFACE,
+                        Opcodes.INVOKEVIRTUAL,
                         "()Lorg/perlonjava/runtime/RuntimeScalar;"));
         operatorHandlers.put("each",
-                new OperatorHandler("org/perlonjava/runtime/RuntimeDataProvider",
+                new OperatorHandler("org/perlonjava/runtime/RuntimeBaseEntity",
                         "each",
-                        Opcodes.INVOKEINTERFACE,
+                        Opcodes.INVOKEVIRTUAL,
                         "()Lorg/perlonjava/runtime/RuntimeList;"));
         operatorHandlers.put("keys",
-                new OperatorHandler("org/perlonjava/runtime/RuntimeDataProvider",
+                new OperatorHandler("org/perlonjava/runtime/RuntimeBaseEntity",
                         "keys",
-                        Opcodes.INVOKEINTERFACE,
+                        Opcodes.INVOKEVIRTUAL,
                         "()Lorg/perlonjava/runtime/RuntimeArray;"));
         operatorHandlers.put("values",
-                new OperatorHandler("org/perlonjava/runtime/RuntimeDataProvider",
+                new OperatorHandler("org/perlonjava/runtime/RuntimeBaseEntity",
                         "values",
-                        Opcodes.INVOKEINTERFACE,
+                        Opcodes.INVOKEVIRTUAL,
                         "()Lorg/perlonjava/runtime/RuntimeArray;"));
 
 

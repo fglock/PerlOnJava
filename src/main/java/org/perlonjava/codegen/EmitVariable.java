@@ -133,7 +133,7 @@ public class EmitVariable {
             }
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR && !sigil.equals("$")) {
                 // scalar context: transform the value in the stack to scalar
-                mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBaseEntity", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
             }
             emitterVisitor.ctx.logDebug("GETVAR end " + varIndex);
             return;
@@ -469,7 +469,7 @@ public class EmitVariable {
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
                     if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR && !sigil.equals("$")) {
                         // scalar context: transform the value in the stack to scalar
-                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBaseEntity", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
                     }
                     return;
                 }
