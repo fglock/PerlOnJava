@@ -38,6 +38,8 @@ public final class RuntimeTypeConstants {
     /** JVM type descriptor for RuntimeCode */
     public static final String CODE_TYPE = "Lorg/perlonjava/runtime/RuntimeCode;";
 
+    public static final String BASE_TYPE = "Lorg/perlonjava/runtime/RuntimeBaseEntity;";
+
     // ===== Internal Class Names =====
     // These are used in bytecode instructions (without L prefix and ; suffix)
 
