@@ -742,7 +742,7 @@ public class Operator {
      * @param value The list of files to be deleted.
      * @return A RuntimeScalar indicating the result of the unlink operation.
      */
-    public static RuntimeDataProvider unlink(RuntimeDataProvider value, int ctx) {
+    public static RuntimeBaseEntity unlink(RuntimeDataProvider value, int ctx) {
 
         boolean allDeleted = true;
         RuntimeList fileList = value.getList();
@@ -765,7 +765,7 @@ public class Operator {
         return getScalarBoolean(allDeleted);
     }
 
-    public static RuntimeDataProvider reverse(RuntimeDataProvider value, int ctx) {
+    public static RuntimeBaseEntity reverse(RuntimeDataProvider value, int ctx) {
         if (ctx == RuntimeContextType.SCALAR) {
             StringBuilder sb = new StringBuilder();
 
@@ -801,7 +801,7 @@ public class Operator {
         }
     }
 
-    public static RuntimeDataProvider repeat(RuntimeDataProvider value, RuntimeScalar timesScalar, int ctx) {
+    public static RuntimeBaseEntity repeat(RuntimeDataProvider value, RuntimeScalar timesScalar, int ctx) {
         int times = timesScalar.getInt();
         if (ctx == RuntimeContextType.SCALAR || value instanceof RuntimeScalar) {
             StringBuilder sb = new StringBuilder();

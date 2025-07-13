@@ -140,7 +140,7 @@ public class Directory {
         return permissions;
     }
 
-    public static RuntimeDataProvider readdir(RuntimeScalar dirHandle, int ctx) {
+    public static RuntimeBaseEntity readdir(RuntimeScalar dirHandle, int ctx) {
         RuntimeIO runtimeIO = dirHandle.getRuntimeIO();
         if (runtimeIO.directoryIO != null) {
             return runtimeIO.directoryIO.readdir(ctx);

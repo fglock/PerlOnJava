@@ -70,13 +70,6 @@ public interface RuntimeDataProvider {
     void addToArray(RuntimeArray array);
 
     /**
-     * Adds itself to a RuntimeList.
-     *
-     * @param list the RuntimeList object to which this entity will be added
-     */
-    void addToList(RuntimeList list);
-
-    /**
      * Counts the number of RuntimeScalar elements.
      *
      * @return the number of elements as an integer

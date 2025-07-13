@@ -133,7 +133,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
      * @param ctx         The context LIST, SCALAR, VOID.
      * @return A RuntimeScalar or RuntimeList.
      */
-    public static RuntimeDataProvider matchRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
+    public static RuntimeBaseEntity matchRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
         RuntimeRegex regex;
         if (quotedRegex.type != RuntimeScalarType.REGEX) {
             // not a regex:  $var =~ "Test"

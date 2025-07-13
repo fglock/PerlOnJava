@@ -93,7 +93,7 @@ public class EmitOperator {
             // Push call context for SCALAR or LIST context.
             emitterVisitor.pushCallContext();
             // Invoke the static method for the operator.
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Readline", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Readline", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBaseEntity;", false);
         } else {
             // Invoke the static method for the operator without context.
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
@@ -253,7 +253,7 @@ public class EmitOperator {
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/DiamondIO",
                     "readline",
-                    "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBaseEntity;", false);
             // If the context is VOID, pop the result from the stack.
             handleVoidContext(emitterVisitor);
         } else {
@@ -284,7 +284,7 @@ public class EmitOperator {
         // Generate unique IDs for this glob instance
         int globId = ScalarGlobOperator.currentId++;
 
-        // public static RuntimeDataProvider evaluate(id, patternArg, ctx)
+        // public static RuntimeBaseEntity evaluate(id, patternArg, ctx)
         mv.visitLdcInsn(globId);
         // Accept the operand in SCALAR context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
@@ -322,7 +322,7 @@ public class EmitOperator {
         // Invoke the static method for the 'repeat' operator.
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Operator",
                 "repeat",
-                "(Lorg/perlonjava/runtime/RuntimeDataProvider;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
+                "(Lorg/perlonjava/runtime/RuntimeDataProvider;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBaseEntity;", false);
 
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             emitterVisitor.ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeScalar");
