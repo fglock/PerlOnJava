@@ -116,6 +116,15 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
     public void add(RuntimeBaseEntity value) {
         this.elements.add(value);
     }
+    public void add(RuntimeScalar value) {
+        this.elements.add(value);
+    }
+    public void add(RuntimeArray value) {
+        this.elements.add(value);
+    }
+    public void add(RuntimeHash value) {
+        this.elements.add(value);
+    }
 
     /**
      * Adds an integer value to the list.

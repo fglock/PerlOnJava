@@ -406,9 +406,7 @@ public class EmitLiteral {
      */
     private static void addElementToList(MethodVisitor mv, Node element, int contextType) {
         String returnType;
-
-        // Swap stack to prepare for method call: [element] [RuntimeList]
-        mv.visitInsn(Opcodes.SWAP);
+        // Stack: [RuntimeList] [element]
 
         // Determine the element's return type for optimization
         if (contextType == RuntimeContextType.SCALAR) {
@@ -421,14 +419,12 @@ public class EmitLiteral {
 
         // Generate type-specific method call for better performance
         if (RuntimeTypeConstants.isKnownRuntimeType(returnType)) {
-            // Extract the internal class name from the type descriptor
-            String className = RuntimeTypeConstants.descriptorToInternalName(returnType);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, className,
-                    "addToList", "(" + RuntimeTypeConstants.LIST_TYPE + ")V", false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeTypeConstants.LIST_CLASS,
+                    "add", "(" + returnType + ")V", false);
         } else {
-            // Fall back to interface call for unknown types
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeTypeConstants.BASE_CLASS,
-                    "addToList", "(" + RuntimeTypeConstants.LIST_TYPE + ")V", false);
+            // Fall back for unknown types
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeTypeConstants.LIST_CLASS,
+                    "add", "(" + RuntimeTypeConstants.BASE_TYPE + ")V", false);
         }
     }
 
