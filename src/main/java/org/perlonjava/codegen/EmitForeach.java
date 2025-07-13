@@ -65,7 +65,7 @@ public class EmitForeach {
 
         // Obtain the iterator for the list
         node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "iterator", "()Ljava/util/Iterator;", true);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBaseEntity", "iterator", "()Ljava/util/Iterator;", false);
 
         Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv);
 

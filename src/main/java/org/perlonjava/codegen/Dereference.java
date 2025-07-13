@@ -260,7 +260,7 @@ public class Dereference {
             arguments.accept(emitterVisitor.with(RuntimeContextType.LIST)); // right parameter: parameter list
 
             // Transform the value in the stack to RuntimeArray
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", true);
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBaseEntity", "getArrayOfAlias", "()Lorg/perlonjava/runtime/RuntimeArray;", false);
             emitterVisitor.ctx.mv.visitLdcInsn(emitterVisitor.ctx.contextType);   // push call context to stack
             emitterVisitor.ctx.mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
