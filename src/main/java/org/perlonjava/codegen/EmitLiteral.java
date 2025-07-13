@@ -459,8 +459,8 @@ public class EmitLiteral {
                     "addToArray", "(" + RuntimeTypeConstants.ARRAY_TYPE + ")V", false);
         } else {
             // Fall back to interface call for unknown types
-            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, RuntimeTypeConstants.DATA_PROVIDER_INTERFACE,
-                    "addToArray", "(" + RuntimeTypeConstants.ARRAY_TYPE + ")V", true);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeTypeConstants.BASE_CLASS,
+                    "addToArray", "(" + RuntimeTypeConstants.ARRAY_TYPE + ")V", false);
         }
     }
 }
