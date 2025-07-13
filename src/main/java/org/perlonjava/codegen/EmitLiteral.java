@@ -444,19 +444,14 @@ public class EmitLiteral {
         // Use static analysis to determine the element's return type
         String returnType = ReturnTypeVisitor.getReturnType(element);
 
-        // Swap stack to prepare for method call: [element] [RuntimeArray]
-        mv.visitInsn(Opcodes.SWAP);
-
         // Generate type-specific method call for better performance
         if (RuntimeTypeConstants.isKnownRuntimeType(returnType)) {
-            // Extract the internal class name from the type descriptor
-            String className = RuntimeTypeConstants.descriptorToInternalName(returnType);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, className,
-                    "addToArray", "(" + RuntimeTypeConstants.ARRAY_TYPE + ")V", false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeTypeConstants.ARRAY_CLASS,
+                    "add", "(" + returnType + ")V", false);
         } else {
-            // Fall back to interface call for unknown types
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeTypeConstants.BASE_CLASS,
-                    "addToArray", "(" + RuntimeTypeConstants.ARRAY_TYPE + ")V", false);
+            // Fall back for unknown types
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeTypeConstants.ARRAY_CLASS,
+                    "add", "(" + RuntimeTypeConstants.BASE_TYPE + ")V", false);
         }
     }
 }
