@@ -89,8 +89,8 @@ public class EmitLiteral {
         }
 
         // Convert the array to a reference (array literals produce references)
-        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider",
-                "createReference", "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBaseEntity",
+                "createReference", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
         emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) end");
     }

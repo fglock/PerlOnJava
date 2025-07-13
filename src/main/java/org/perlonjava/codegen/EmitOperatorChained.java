@@ -70,11 +70,11 @@ public class EmitOperatorChained {
             for (int i = 1; i < operators.size(); i++) {
                 // Check previous result
                 emitterVisitor.ctx.mv.visitInsn(Opcodes.DUP);
-                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE,
-                        "org/perlonjava/runtime/RuntimeDataProvider",
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/RuntimeBaseEntity",
                         "getBoolean",
                         "()Z",
-                        true);
+                        false);
                 emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.IFEQ, falseLabel);
 
                 // Previous was true, do next comparison

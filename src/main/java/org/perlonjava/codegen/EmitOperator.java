@@ -40,7 +40,7 @@ public class EmitOperator {
                 operatorHandler.getClassName(),
                 operatorHandler.getMethodName(),
                 operatorHandler.getDescriptor(),
-                operatorHandler.getMethodType() == Opcodes.INVOKEINTERFACE
+                false
         );
 
         // Handle context
@@ -269,10 +269,10 @@ public class EmitOperator {
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         // Invoke the interface method for the operator.
-        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE,
-                "org/perlonjava/runtime/RuntimeDataProvider",
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/RuntimeBaseEntity",
                 node.operator,
-                "()Lorg/perlonjava/runtime/RuntimeScalar;", true);
+                "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
         // If the context is VOID, pop the result from the stack.
         handleVoidContext(emitterVisitor);
     }
@@ -660,11 +660,11 @@ public class EmitOperator {
                 }
             } else {
                 node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
-                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE,
-                        "org/perlonjava/runtime/RuntimeDataProvider",
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        "org/perlonjava/runtime/RuntimeBaseEntity",
                         "createReference",
                         "()Lorg/perlonjava/runtime/RuntimeScalar;",
-                        true);
+                        false);
             }
             handleVoidContext(emitterVisitor);
         }

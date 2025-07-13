@@ -65,7 +65,7 @@ public class EmitLogicalOperator {
         // Stack is [left, left]
 
         // Convert the result to a boolean
-        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", getBoolean, "()Z", true);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBaseEntity", getBoolean, "()Z", false);
         // Stack is [left, boolean]
 
         // If the boolean value is true, jump to endLabel (we keep the left operand)
@@ -121,7 +121,7 @@ public class EmitLogicalOperator {
         // Stack is [left, left]
 
         // Convert the result to a boolean
-        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", getBoolean, "()Z", true);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBaseEntity", getBoolean, "()Z", false);
         // Stack is [left, boolean]
 
         // If the left operand boolean value is true, return left operand
