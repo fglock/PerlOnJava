@@ -77,7 +77,7 @@ public class EmitLogicalOperator {
         mv.visitInsn(Opcodes.SWAP);   // Stack becomes [right, left]
 
         // Assign right to left
-        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "addToScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", true);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBaseEntity", "addToScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         // Stack is [right]
 
         // At this point, the stack either has the left (if it was true) or the right (if left was false)
@@ -152,7 +152,7 @@ public class EmitLogicalOperator {
         node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
 
         // Convert the result to a boolean
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "org/perlonjava/runtime/RuntimeDataProvider", "getBoolean", "()Z", true);
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBaseEntity", "getBoolean", "()Z", false);
 
         // Jump to the else label if the condition is false
         emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.IFEQ, elseLabel);
