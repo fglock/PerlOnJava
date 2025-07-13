@@ -177,6 +177,23 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         }
     }
 
+    // Methods used by array literal constructor
+    public void add(RuntimeBaseEntity value) {
+        value.addToArray(this);
+    }
+    public void add(RuntimeScalar value) {
+        elements.add(new RuntimeScalar(value));
+    }
+    public void add(RuntimeArray value) {
+        value.addToArray(this);
+    }
+    public void add(RuntimeHash value) {
+        value.addToArray(this);
+    }
+    public void add(RuntimeList value) {
+        value.addToArray(this);
+    }
+
     /**
      * Adds this array to a RuntimeList.
      *
