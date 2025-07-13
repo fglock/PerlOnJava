@@ -65,6 +65,8 @@ public final class RuntimeTypeConstants {
     /** Internal class name for RuntimeScalarCache */
     public static final String SCALAR_CACHE_CLASS = "org/perlonjava/runtime/RuntimeScalarCache";
 
+    public static final String BASE_CLASS = "org/perlonjava/runtime/RuntimeBaseEntity";
+
     // ===== Utility Methods =====
 
     /**

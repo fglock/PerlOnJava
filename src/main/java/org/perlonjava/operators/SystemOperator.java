@@ -34,7 +34,7 @@ public class SystemOperator {
      * @return The output of the command as a RuntimeDataProvider.
      * @throws PerlCompilerException if an error occurs during command execution or stream handling.
      */
-    public static RuntimeDataProvider systemCommand(RuntimeScalar command, int ctx) {
+    public static RuntimeBaseEntity systemCommand(RuntimeScalar command, int ctx) {
         CommandResult result = executeCommand(command.toString(), true);
 
         // Set $? to the exit status
@@ -234,7 +234,7 @@ public class SystemOperator {
      * @param ctx    The context type, determining the return type (list or scalar).
      * @return The processed output as a RuntimeDataProvider.
      */
-    private static RuntimeDataProvider processOutput(String output, int ctx) {
+    private static RuntimeBaseEntity processOutput(String output, int ctx) {
         if (ctx == RuntimeContextType.LIST) {
             RuntimeList list = new RuntimeList();
             List<RuntimeBaseEntity> result = list.elements;

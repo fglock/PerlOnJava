@@ -191,7 +191,7 @@ public class EmitRegex {
         // Invoke the regex matching operation
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/regex/RuntimeRegex", "matchRegex",
-                "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeDataProvider;", false);
+                "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBaseEntity;", false);
 
         // Handle the result based on context type
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {

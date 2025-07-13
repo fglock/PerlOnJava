@@ -1,9 +1,6 @@
 package org.perlonjava.operators;
 
-import org.perlonjava.runtime.RuntimeContextType;
-import org.perlonjava.runtime.RuntimeDataProvider;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.*;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -70,7 +67,7 @@ public class ScalarGlobOperator {
      * @param ctx the runtime context (scalar or list)
      * @return RuntimeDataProvider containing the results
      */
-    public static RuntimeDataProvider evaluate(int id, RuntimeScalar patternArg, int ctx) {
+    public static RuntimeBaseEntity evaluate(int id, RuntimeScalar patternArg, int ctx) {
         String pattern = patternArg.toString();
 
         if (ctx == RuntimeContextType.SCALAR) {
@@ -83,7 +80,7 @@ public class ScalarGlobOperator {
     /**
      * Evaluates glob in scalar context, returning one result per call.
      */
-    private static RuntimeDataProvider evaluateInScalarContext(int id, String pattern) {
+    private static RuntimeBaseEntity evaluateInScalarContext(int id, String pattern) {
         ScalarGlobOperator globOperator = globOperators.get(id);
 
         if (globOperator == null) {

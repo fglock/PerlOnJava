@@ -14,7 +14,7 @@ public class Readline {
      * @param ctx        The context (SCALAR or LIST).
      * @return A RuntimeDataProvider with the line(s).
      */
-    public static RuntimeDataProvider readline(RuntimeScalar fileHandle, int ctx) {
+    public static RuntimeBaseEntity readline(RuntimeScalar fileHandle, int ctx) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
         if (ctx == RuntimeContextType.LIST) {
             // Handle LIST context
