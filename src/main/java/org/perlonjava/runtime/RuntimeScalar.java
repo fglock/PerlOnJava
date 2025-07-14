@@ -430,10 +430,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     public String toStringRef() {
         String ref = switch (type) {
-            case UNDEF -> "SCALAR(0x14500834042)";
+            case UNDEF -> "SCALAR(0x" + scalarUndef.hashCode() + ")";
             case CODE, GLOB -> {
                 if (value == null) {
-                    yield "CODE(0x14500834042)";
+                    yield "CODE(0x" + scalarUndef.hashCode() + ")";
                 }
                 yield ((RuntimeCode) value).toStringRef();
             }
