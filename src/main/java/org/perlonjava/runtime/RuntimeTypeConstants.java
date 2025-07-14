@@ -38,7 +38,7 @@ public final class RuntimeTypeConstants {
     /** JVM type descriptor for RuntimeCode */
     public static final String CODE_TYPE = "Lorg/perlonjava/runtime/RuntimeCode;";
 
-    public static final String BASE_TYPE = "Lorg/perlonjava/runtime/RuntimeBaseEntity;";
+    public static final String BASE_TYPE = "Lorg/perlonjava/runtime/RuntimeBase;";
 
     // ===== Internal Class Names =====
     // These are used in bytecode instructions (without L prefix and ; suffix)
@@ -67,7 +67,7 @@ public final class RuntimeTypeConstants {
     /** Internal class name for RuntimeScalarCache */
     public static final String SCALAR_CACHE_CLASS = "org/perlonjava/runtime/RuntimeScalarCache";
 
-    public static final String BASE_CLASS = "org/perlonjava/runtime/RuntimeBaseEntity";
+    public static final String BASE_CLASS = "org/perlonjava/runtime/RuntimeBase";
 
     // ===== Utility Methods =====
 

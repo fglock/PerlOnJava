@@ -71,7 +71,7 @@ public class EmitOperatorChained {
                 // Check previous result
                 emitterVisitor.ctx.mv.visitInsn(Opcodes.DUP);
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/RuntimeBaseEntity",
+                        "org/perlonjava/runtime/RuntimeBase",
                         "getBoolean",
                         "()Z",
                         false);

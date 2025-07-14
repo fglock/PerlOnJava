@@ -36,7 +36,7 @@ public class ModuleOperators {
         } else {
             // Otherwise, search in INC directories
             List<RuntimeScalar> inc = GlobalVariable.getGlobalArray("main::INC").elements;
-            for (RuntimeBaseEntity dir : inc) {
+            for (RuntimeBase dir : inc) {
                 String dirName = dir.toString();
                 if (dirName.equals(GlobalContext.JAR_PERLLIB)) {
                     // Try to find in jar at "src/main/perl/lib"

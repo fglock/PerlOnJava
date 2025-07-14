@@ -1,6 +1,6 @@
 package org.perlonjava.runtime;
 
-public abstract class RuntimeBaseEntity implements RuntimeDataProvider, DynamicState {
+public abstract class RuntimeBase implements RuntimeDataProvider, DynamicState {
     public int blessId;
 
     // Mask for the highest bit of an int (assuming 32-bit integer)

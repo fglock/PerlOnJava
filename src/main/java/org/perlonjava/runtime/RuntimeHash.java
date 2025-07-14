@@ -11,7 +11,7 @@ import static org.perlonjava.runtime.RuntimeScalarType.HASHREFERENCE;
  * class tries to mimic this behavior using a map of string keys to RuntimeScalar objects, which can hold
  * any type of Perl scalar value.
  */
-public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarReference, DynamicState {
+public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, DynamicState {
     // Static stack to store saved "local" states of RuntimeHash instances
     private static final Stack<RuntimeHash> dynamicStateStack = new Stack<>();
     // Map to store the elements of the hash
@@ -283,7 +283,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
         }
 
         RuntimeList result = new RuntimeList();
-        List<RuntimeBaseEntity> outElements = result.elements;
+        List<RuntimeBase> outElements = result.elements;
         Iterator<RuntimeScalar> iterator = value.iterator();
         while (iterator.hasNext()) {
             outElements.add(this.get(iterator.next()));
@@ -299,7 +299,7 @@ public class RuntimeHash extends RuntimeBaseEntity implements RuntimeScalarRefer
      */
     public RuntimeList deleteSlice(RuntimeList value) {
         RuntimeList result = new RuntimeList();
-        List<RuntimeBaseEntity> outElements = result.elements;
+        List<RuntimeBase> outElements = result.elements;
         Iterator<RuntimeScalar> iterator = value.iterator();
         while (iterator.hasNext()) {
             outElements.add(this.delete(iterator.next()));

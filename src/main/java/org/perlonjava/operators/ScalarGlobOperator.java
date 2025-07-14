@@ -67,7 +67,7 @@ public class ScalarGlobOperator {
      * @param ctx the runtime context (scalar or list)
      * @return RuntimeDataProvider containing the results
      */
-    public static RuntimeBaseEntity evaluate(int id, RuntimeScalar patternArg, int ctx) {
+    public static RuntimeBase evaluate(int id, RuntimeScalar patternArg, int ctx) {
         String pattern = patternArg.toString();
 
         if (ctx == RuntimeContextType.SCALAR) {
@@ -80,7 +80,7 @@ public class ScalarGlobOperator {
     /**
      * Evaluates glob in scalar context, returning one result per call.
      */
-    private static RuntimeBaseEntity evaluateInScalarContext(int id, String pattern) {
+    private static RuntimeBase evaluateInScalarContext(int id, String pattern) {
         ScalarGlobOperator globOperator = globOperators.get(id);
 
         if (globOperator == null) {

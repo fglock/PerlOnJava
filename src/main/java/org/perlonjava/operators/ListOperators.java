@@ -22,7 +22,7 @@ public class ListOperators {
     public static RuntimeList map(RuntimeList runtimeList, RuntimeScalar perlMapClosure, int ctx) {
 
         // Create a new list to hold the transformed elements
-        List<RuntimeBaseEntity> transformedElements = new ArrayList<>();
+        List<RuntimeBase> transformedElements = new ArrayList<>();
 
         RuntimeScalar var_ = getGlobalVariable("main::_");
         RuntimeArray mapArgs = new RuntimeArray();
@@ -119,7 +119,7 @@ public class ListOperators {
      */
     public static RuntimeList grep(RuntimeList runtimeList, RuntimeScalar perlFilterClosure, int ctx) {
         // Create a new list to hold the filtered elements
-        List<RuntimeBaseEntity> filteredElements = new ArrayList<>();
+        List<RuntimeBase> filteredElements = new ArrayList<>();
 
         RuntimeScalar var_ = getGlobalVariable("main::_");
         RuntimeArray filterArgs = new RuntimeArray();

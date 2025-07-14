@@ -76,7 +76,7 @@ public class InheritanceResolver {
         // Retrieve @ISA array for the given class
         RuntimeArray isaArray = GlobalVariable.getGlobalArray(className + "::ISA");
         List<String> parents = new ArrayList<>();
-        for (RuntimeBaseEntity entity : isaArray.elements) {
+        for (RuntimeBase entity : isaArray.elements) {
             parents.add(entity.toString());
         }
 

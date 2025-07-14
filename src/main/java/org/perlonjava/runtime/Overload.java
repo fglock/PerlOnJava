@@ -53,7 +53,7 @@ public class Overload {
         }
 
         // Default string conversion for non-blessed or non-overloaded objects
-        return new RuntimeScalar(((RuntimeBaseEntity) runtimeScalar.value).toStringRef());
+        return new RuntimeScalar(((RuntimeBase) runtimeScalar.value).toStringRef());
     }
 
     /**
@@ -82,7 +82,7 @@ public class Overload {
         }
 
         // Default number conversion for non-blessed or non-overloaded objects
-        return new RuntimeScalar(((RuntimeBaseEntity) runtimeScalar.value).getDoubleRef());
+        return new RuntimeScalar(((RuntimeBase) runtimeScalar.value).getDoubleRef());
     }
 
     /**

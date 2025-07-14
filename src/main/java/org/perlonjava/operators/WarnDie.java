@@ -21,7 +21,7 @@ public class WarnDie {
      * @param where   Additional context or location information to append to the message.
      * @return A RuntimeDataProvider representing the result of the warning operation.
      */
-    public static RuntimeBaseEntity warn(RuntimeDataProvider message, RuntimeScalar where) {
+    public static RuntimeBase warn(RuntimeDataProvider message, RuntimeScalar where) {
         String out = message.toString();
         if (out.isEmpty()) {
             RuntimeScalar err = getGlobalVariable("main::@");
@@ -71,7 +71,7 @@ public class WarnDie {
      * @return A RuntimeDataProvider representing the result of the die operation.
      * @throws PerlCompilerException if no custom die handler is defined.
      */
-    public static RuntimeBaseEntity die(RuntimeDataProvider value, RuntimeScalar message) {
+    public static RuntimeBase die(RuntimeDataProvider value, RuntimeScalar message) {
         String out = value.toString();
         if (out.isEmpty()) {
             RuntimeScalar err = getGlobalVariable("main::@");

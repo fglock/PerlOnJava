@@ -39,7 +39,7 @@ In ModuleLoader.java, you can modify the findFile method to look inside the jar 
         // Otherwise, search in INC directories
         List<RuntimeScalar> inc = GlobalContext.getGlobalArray("main::INC").elements;
     
-        for (RuntimeBaseEntity dir : inc) {
+        for (RuntimeBase dir : inc) {
             Path fullPath = Paths.get(dir.toString(), filename);
             if (Files.exists(fullPath)) {
                 return fullPath;

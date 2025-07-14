@@ -1,6 +1,6 @@
 package org.perlonjava.operators;
 
-import org.perlonjava.runtime.RuntimeBaseEntity;
+import org.perlonjava.runtime.RuntimeBase;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
 
@@ -35,7 +35,7 @@ public class Unpack {
         ByteBuffer buffer = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN); // Ensure consistent byte order
 
         RuntimeList out = new RuntimeList();
-        List<RuntimeBaseEntity> values = out.elements;
+        List<RuntimeBase> values = out.elements;
 
         for (int i = 0; i < template.length(); i++) {
             char format = template.charAt(i);

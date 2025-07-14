@@ -3,8 +3,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 
-public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvider {
-    private List<RuntimeBaseEntity> elements;
+public class RuntimeList extends RuntimeBase implements RuntimeDataProvider {
+    private List<RuntimeBase> elements;
     private boolean isLazy = false;
     private Iterator<RuntimeScalar> lazyIterator; // Store the iterator for lazy generation
 
@@ -77,12 +77,12 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         return elements.size();
     }
 
-    public RuntimeBaseEntity get(int index) {
+    public RuntimeBase get(int index) {
         materializeIfNeeded();
         return elements.get(index);
     }
 
-    public void add(RuntimeBaseEntity value) {
+    public void add(RuntimeBase value) {
         materializeIfNeeded();
         this.elements.add(value);
     }

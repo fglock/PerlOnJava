@@ -238,7 +238,7 @@ public class Operator {
         boolean first = true;
 
         // Iterate through elements and append them with the separator
-        for (RuntimeBaseEntity element : runtimeList.elements) {
+        for (RuntimeBase element : runtimeList.elements) {
             if (!first) {
                 sb.append(separator);
             }
@@ -272,7 +272,7 @@ public class Operator {
         boolean first = true;
 
         // Iterate through elements and append them with the separator
-        for (RuntimeBaseEntity element : runtimeList.elements) {
+        for (RuntimeBase element : runtimeList.elements) {
             if (!first) {
                 sb.append(separator);
             }
@@ -517,7 +517,7 @@ public class Operator {
         int limit = limitArg.getInt();
         String inputStr = string.toString();
         RuntimeList result = new RuntimeList();
-        List<RuntimeBaseEntity> splitElements = result.elements;
+        List<RuntimeBase> splitElements = result.elements;
 
         // Special case: if the pattern is a single space character, treat it as /\s+/
         if (quotedRegex.type != RuntimeScalarType.REGEX && quotedRegex.toString().equals(" ")) {
@@ -742,7 +742,7 @@ public class Operator {
      * @param value The list of files to be deleted.
      * @return A RuntimeScalar indicating the result of the unlink operation.
      */
-    public static RuntimeBaseEntity unlink(RuntimeDataProvider value, int ctx) {
+    public static RuntimeBase unlink(RuntimeDataProvider value, int ctx) {
 
         boolean allDeleted = true;
         RuntimeList fileList = value.getList();
@@ -765,7 +765,7 @@ public class Operator {
         return getScalarBoolean(allDeleted);
     }
 
-    public static RuntimeBaseEntity reverse(RuntimeDataProvider value, int ctx) {
+    public static RuntimeBase reverse(RuntimeDataProvider value, int ctx) {
         if (ctx == RuntimeContextType.SCALAR) {
             StringBuilder sb = new StringBuilder();
 
@@ -801,7 +801,7 @@ public class Operator {
         }
     }
 
-    public static RuntimeBaseEntity repeat(RuntimeDataProvider value, RuntimeScalar timesScalar, int ctx) {
+    public static RuntimeBase repeat(RuntimeDataProvider value, RuntimeScalar timesScalar, int ctx) {
         int times = timesScalar.getInt();
         if (ctx == RuntimeContextType.SCALAR || value instanceof RuntimeScalar) {
             StringBuilder sb = new StringBuilder();
@@ -812,7 +812,7 @@ public class Operator {
             return new RuntimeScalar(sb.toString().repeat(Math.max(0, times)));
         } else {
             RuntimeList result = new RuntimeList();
-            List<RuntimeBaseEntity> outElements = result.elements;
+            List<RuntimeBase> outElements = result.elements;
             for (int i = 0; i < times; i++) {
                 Iterator<RuntimeScalar> iterator = value.iterator();
                 while (iterator.hasNext()) {

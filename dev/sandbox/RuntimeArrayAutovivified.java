@@ -332,7 +332,7 @@ public class RuntimeArrayAutovivified extends RuntimeArray {
         }
 
         RuntimeList result = new RuntimeList();
-        List<RuntimeBaseEntity> outElements = result.elements;
+        List<RuntimeBase> outElements = result.elements;
         Iterator<RuntimeScalar> iterator = value.iterator();
         while (iterator.hasNext()) {
             outElements.add(this.get(iterator.next()));
@@ -462,7 +462,7 @@ public class RuntimeArrayAutovivified extends RuntimeArray {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        for (RuntimeBaseEntity element : elements) {
+        for (RuntimeBase element : elements) {
             sb.append(element.toString());
         }
         return sb.toString();
