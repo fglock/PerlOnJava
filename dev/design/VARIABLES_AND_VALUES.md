@@ -11,16 +11,30 @@ PerlOnJava implements Perl's dynamic type system in Java, supporting Perl's thre
 ```
 RuntimeBase (abstract)
 ├── RuntimeScalar
-│   ├── RuntimeScalarReadOnly (cached immutable values)
-│   └── RuntimeBaseProxy (abstract - for lvalues)
+│   ├── RuntimeGlob
+│   │   ├── [contains] RuntimeScalar(RuntimeIO)
+│   │   └── RuntimeStashEntry
+│   └── RuntimeBaseProxy (abstract - for lvalues and special variables)
+│       ├── RuntimeScalarReadOnly (cacheable immutable values)
 │       ├── RuntimeArrayProxyEntry
 │       ├── RuntimeHashProxyEntry
 │       ├── RuntimeArraySizeLvalue
 │       ├── RuntimePosLvalue
-│       └── RuntimeVecLvalue
+│       ├── RuntimeSubstrLvalue
+│       ├── RuntimeVecLvalue
+│       └── ScalarSpecialVariable (variables such as $`, $&, $', or $1)
+├── PerlRange
+├── RuntimeCode
+├── RuntimeList
 ├── RuntimeArray
+│   ├── [contains] ArraySpecialVariable
+│   └── [contains] AutovivificationArray
 └── RuntimeHash
+    ├── [contains] HashSpecialVariable
+    ├── [contains] AutovivificationHash
+    └── RuntimeStash
 ```
+
 
 ### Scalar Type System
 
@@ -165,6 +179,7 @@ Abstract base class for all lvalue proxies:
 3. **RuntimeArraySizeLvalue**: `$#array` (last index of array)
 4. **RuntimePosLvalue**: `pos()` function lvalue
 5. **RuntimeVecLvalue**: `vec()` function lvalue
+6. **RuntimeSubstrLvalue**: `substr()` function lvalue
 
 ## Reference and Dereferencing
 
