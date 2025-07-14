@@ -107,9 +107,30 @@ public class ErrorMessageUtil {
             sb.append("\n");
         }
 
-        for (ArrayList<String> line : ExceptionFormatter.formatException(t)) {
-            sb.append("        ").append(line.get(0)).append(" at ").append(line.get(1)).append(" line ").append(line.get(2)).append("\n");
+        ArrayList<ArrayList<String>> formattedLines = ExceptionFormatter.formatException(t);
+
+        // If no Perl stack trace information is available, include JVM stack trace
+        if (formattedLines.isEmpty()) {
+            sb.append("JVM Stack Trace:\n");
+            StackTraceElement[] stackTrace = t.getStackTrace();
+            for (int i = 0; i < Math.min(stackTrace.length, 5); i++) {
+                StackTraceElement element = stackTrace[i];
+                sb.append("        ")
+                        .append(element.getClassName())
+                        .append(".")
+                        .append(element.getMethodName())
+                        .append(" at ")
+                        .append(element.getFileName())
+                        .append(" line ")
+                        .append(element.getLineNumber())
+                        .append("\n");
+            }
+        } else {
+            for (ArrayList<String> line : formattedLines) {
+                sb.append("        ").append(line.get(0)).append(" at ").append(line.get(1)).append(" line ").append(line.get(2)).append("\n");
+            }
         }
+
         return sb.toString();
     }
 
