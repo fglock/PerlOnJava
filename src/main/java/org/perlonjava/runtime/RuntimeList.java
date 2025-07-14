@@ -11,7 +11,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
  * The RuntimeList class simulates a Perl list.
  * It provides methods to manipulate and access a dynamic list of Perl values.
  */
-public class RuntimeList extends RuntimeBase implements RuntimeDataProvider {
+public class RuntimeList extends RuntimeBase {
     // List to hold the elements of the list.
     public List<RuntimeBase> elements;
 

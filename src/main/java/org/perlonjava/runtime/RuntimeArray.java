@@ -127,7 +127,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @param value        The values to add.
      * @return A scalar representing the new size of the array.
      */
-    public static RuntimeScalar push(RuntimeArray runtimeArray, RuntimeDataProvider value) {
+    public static RuntimeScalar push(RuntimeArray runtimeArray, RuntimeBase value) {
 
         if (runtimeArray.elements instanceof AutovivificationArray arrayProxy) {
             arrayProxy.vivify(runtimeArray);
@@ -144,7 +144,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @param value        The values to add.
      * @return A scalar representing the new size of the array.
      */
-    public static RuntimeScalar unshift(RuntimeArray runtimeArray, RuntimeDataProvider value) {
+    public static RuntimeScalar unshift(RuntimeArray runtimeArray, RuntimeBase value) {
 
         if (runtimeArray.elements instanceof AutovivificationArray arrayProxy) {
             arrayProxy.vivify(runtimeArray);

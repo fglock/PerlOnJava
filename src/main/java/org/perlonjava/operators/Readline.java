@@ -12,7 +12,7 @@ public class Readline {
      *
      * @param fileHandle The file handle.
      * @param ctx        The context (SCALAR or LIST).
-     * @return A RuntimeDataProvider with the line(s).
+     * @return A RuntimeBase with the line(s).
      */
     public static RuntimeBase readline(RuntimeScalar fileHandle, int ctx) {
         RuntimeIO fh = fileHandle.getRuntimeIO();

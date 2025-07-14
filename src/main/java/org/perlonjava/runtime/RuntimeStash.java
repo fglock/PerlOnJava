@@ -26,10 +26,10 @@ public class RuntimeStash extends RuntimeHash {
     /**
      * Creates a hash reference with the elements of a list.
      *
-     * @param value The RuntimeDataProvider containing the elements to populate the hash.
+     * @param value The RuntimeBase containing the elements to populate the hash.
      * @return A RuntimeScalar representing the hash reference.
      */
-    public static RuntimeScalar createHashRef(RuntimeDataProvider value) {
+    public static RuntimeScalar createHashRef(RuntimeBase value) {
         return createHash(value).createReference();
     }
 

@@ -19,9 +19,9 @@ public class WarnDie {
      *
      * @param message The warning message to be issued.
      * @param where   Additional context or location information to append to the message.
-     * @return A RuntimeDataProvider representing the result of the warning operation.
+     * @return A RuntimeBase representing the result of the warning operation.
      */
-    public static RuntimeBase warn(RuntimeDataProvider message, RuntimeScalar where) {
+    public static RuntimeBase warn(RuntimeBase message, RuntimeScalar where) {
         String out = message.toString();
         if (out.isEmpty()) {
             RuntimeScalar err = getGlobalVariable("main::@");
@@ -68,10 +68,10 @@ public class WarnDie {
      *
      * @param value   The error message to be issued.
      * @param message Additional context or location information to append to the message.
-     * @return A RuntimeDataProvider representing the result of the die operation.
+     * @return A RuntimeBase representing the result of the die operation.
      * @throws PerlCompilerException if no custom die handler is defined.
      */
-    public static RuntimeBase die(RuntimeDataProvider value, RuntimeScalar message) {
+    public static RuntimeBase die(RuntimeBase value, RuntimeScalar message) {
         String out = value.toString();
         if (out.isEmpty()) {
             RuntimeScalar err = getGlobalVariable("main::@");

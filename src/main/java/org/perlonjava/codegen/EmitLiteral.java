@@ -136,7 +136,7 @@ public class EmitLiteral {
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/RuntimeHash",
                 "createHashRef",
-                "(Lorg/perlonjava/runtime/RuntimeDataProvider;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                "(Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
         emitterVisitor.ctx.logDebug("visit(HashLiteralNode) end");
     }

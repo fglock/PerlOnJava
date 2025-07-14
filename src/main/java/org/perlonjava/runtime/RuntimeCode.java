@@ -388,7 +388,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     // Method to apply (execute) a subroutine reference
-    public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeDataProvider list, int callContext) {
+    public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase list, int callContext) {
         // Check if the type of this RuntimeScalar is CODE
         if (runtimeScalar.type == RuntimeScalarType.CODE) {
 

@@ -22,7 +22,7 @@ public class Operator {
         return getScalarBoolean(left.getBoolean() ^ right.getBoolean());
     }
 
-    public static RuntimeScalar join(RuntimeScalar runtimeScalar, RuntimeDataProvider list) {
+    public static RuntimeScalar join(RuntimeScalar runtimeScalar, RuntimeBase list) {
         String delimiter = runtimeScalar.toString();
         // Join the list into a string
         StringBuilder sb = new StringBuilder();
@@ -689,7 +689,7 @@ public class Operator {
 
         int offset;
         if (!list.isEmpty()) {
-            RuntimeDataProvider value = list.elements.removeFirst();
+            RuntimeBase value = list.elements.removeFirst();
             offset = value.scalar().getInt();
         } else {
             offset = 0;
@@ -697,7 +697,7 @@ public class Operator {
 
         int length;
         if (!list.elements.isEmpty()) {
-            RuntimeDataProvider value = list.elements.removeFirst();
+            RuntimeBase value = list.elements.removeFirst();
             length = value.scalar().getInt();
         } else {
             length = size;
@@ -742,7 +742,7 @@ public class Operator {
      * @param value The list of files to be deleted.
      * @return A RuntimeScalar indicating the result of the unlink operation.
      */
-    public static RuntimeBase unlink(RuntimeDataProvider value, int ctx) {
+    public static RuntimeBase unlink(RuntimeBase value, int ctx) {
 
         boolean allDeleted = true;
         RuntimeList fileList = value.getList();
@@ -765,7 +765,7 @@ public class Operator {
         return getScalarBoolean(allDeleted);
     }
 
-    public static RuntimeBase reverse(RuntimeDataProvider value, int ctx) {
+    public static RuntimeBase reverse(RuntimeBase value, int ctx) {
         if (ctx == RuntimeContextType.SCALAR) {
             StringBuilder sb = new StringBuilder();
 
@@ -801,7 +801,7 @@ public class Operator {
         }
     }
 
-    public static RuntimeBase repeat(RuntimeDataProvider value, RuntimeScalar timesScalar, int ctx) {
+    public static RuntimeBase repeat(RuntimeBase value, RuntimeScalar timesScalar, int ctx) {
         int times = timesScalar.getInt();
         if (ctx == RuntimeContextType.SCALAR || value instanceof RuntimeScalar) {
             StringBuilder sb = new StringBuilder();

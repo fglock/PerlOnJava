@@ -182,7 +182,7 @@ public class EmitOperator {
     // Handles the 'die' built-in function, which throws an exception.
     static void handleDieBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Handle:  die LIST
-        //   static RuntimeDataProvider die(RuntimeDataProvider value, int ctx)
+        //   static RuntimeBase die(RuntimeBase value, int ctx)
         emitterVisitor.ctx.logDebug("handleDieBuiltin " + node);
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
@@ -196,7 +196,7 @@ public class EmitOperator {
     // Handles the 'reverse' built-in function, which reverses a list.
     static void handleReverseBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Handle:  reverse LIST
-        //   static RuntimeDataProvider reverse(RuntimeDataProvider value, int ctx)
+        //   static RuntimeBase reverse(RuntimeBase value, int ctx)
         emitterVisitor.ctx.logDebug("handleReverseBuiltin " + node);
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
@@ -322,7 +322,7 @@ public class EmitOperator {
         // Invoke the static method for the 'repeat' operator.
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Operator",
                 "repeat",
-                "(Lorg/perlonjava/runtime/RuntimeDataProvider;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBase;", false);
+                "(Lorg/perlonjava/runtime/RuntimeBase;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBase;", false);
 
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             emitterVisitor.ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeScalar");
