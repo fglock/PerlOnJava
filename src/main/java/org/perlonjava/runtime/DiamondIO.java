@@ -54,7 +54,7 @@ public class DiamondIO {
      * @return A RuntimeScalar representing the line read from the file, or an
      * undefined scalar if EOF is reached for all files.
      */
-    public static RuntimeBaseEntity readline(RuntimeScalar arg, int ctx) {
+    public static RuntimeBase readline(RuntimeScalar arg, int ctx) {
         if (ctx == RuntimeContextType.LIST) {
             // Handle LIST context
             RuntimeList lines = new RuntimeList();

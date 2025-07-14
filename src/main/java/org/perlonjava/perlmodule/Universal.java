@@ -60,7 +60,7 @@ public class Universal extends PerlModuleBase {
             case REFERENCE:
             case ARRAYREFERENCE:
             case HASHREFERENCE:
-                int blessId = ((RuntimeBaseEntity) object.value).blessId;
+                int blessId = ((RuntimeBase) object.value).blessId;
                 if (blessId == 0) {
                     return new RuntimeScalar(false).getList();
                 }
@@ -107,7 +107,7 @@ public class Universal extends PerlModuleBase {
             case REFERENCE:
             case ARRAYREFERENCE:
             case HASHREFERENCE:
-                int blessId = ((RuntimeBaseEntity) object.value).blessId;
+                int blessId = ((RuntimeBase) object.value).blessId;
                 if (blessId == 0) {
                     return getScalarBoolean(
                             type == ARRAYREFERENCE && argString.equals("ARRAY")
@@ -169,7 +169,7 @@ public class Universal extends PerlModuleBase {
             case REFERENCE:
             case ARRAYREFERENCE:
             case HASHREFERENCE:
-                int blessId = ((RuntimeBaseEntity) object.value).blessId;
+                int blessId = ((RuntimeBase) object.value).blessId;
                 if (blessId == 0) {
                     throw new PerlCompilerException("Object is not blessed into a package");
                 }

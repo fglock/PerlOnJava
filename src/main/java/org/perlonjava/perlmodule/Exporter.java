@@ -112,7 +112,7 @@ public class Exporter extends PerlModuleBase {
         }
 
         // Import the requested symbols into the caller's namespace
-        for (RuntimeBaseEntity symbolObj : tagArray.elements) {
+        for (RuntimeBase symbolObj : tagArray.elements) {
             String symbolString = symbolObj.toString();
 
             boolean isExported = export.elements.stream()
@@ -162,7 +162,7 @@ public class Exporter extends PerlModuleBase {
         // Retrieve the export lists and tags from the package
         RuntimeArray export = GlobalVariable.getGlobalArray(packageScalar + "::EXPORT");
         RuntimeHash exportTags = GlobalVariable.getGlobalHash(packageScalar + "::EXPORT_TAGS");
-        for (RuntimeBaseEntity elem : args.elements) {
+        for (RuntimeBase elem : args.elements) {
             RuntimeArray tags = exportTags.get(elem.toString()).arrayDeref();
             for (RuntimeScalar tag : tags.elements) {
                 RuntimeArray.push(export, tag);
@@ -179,7 +179,7 @@ public class Exporter extends PerlModuleBase {
         // Retrieve the export lists and tags from the package
         RuntimeArray exportOk = GlobalVariable.getGlobalArray(packageScalar + "::EXPORT_OK");
         RuntimeHash exportTags = GlobalVariable.getGlobalHash(packageScalar + "::EXPORT_TAGS");
-        for (RuntimeBaseEntity elem : args.elements) {
+        for (RuntimeBase elem : args.elements) {
             RuntimeArray tags = exportTags.get(elem.toString()).arrayDeref();
             for (RuntimeScalar tag : tags.elements) {
                 RuntimeArray.push(exportOk, tag);

@@ -28,7 +28,7 @@ import static org.perlonjava.runtime.SpecialBlock.runUnitcheckBlocks;
  * The RuntimeCode class represents a compiled code object in the runtime environment.
  * It provides functionality to compile, store, and execute Perl subroutines and eval strings.
  */
-public class RuntimeCode extends RuntimeBaseEntity implements RuntimeScalarReference {
+public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     // Lookup object for performing method handle operations
     public static final MethodHandles.Lookup lookup = MethodHandles.lookup();
@@ -268,7 +268,7 @@ public class RuntimeCode extends RuntimeBaseEntity implements RuntimeScalarRefer
             case REFERENCE:
             case ARRAYREFERENCE:
             case HASHREFERENCE:
-                int blessId = ((RuntimeBaseEntity) runtimeScalar.value).blessId;
+                int blessId = ((RuntimeBase) runtimeScalar.value).blessId;
                 if (blessId == 0) {
                     throw new PerlCompilerException("Can't call method \"" + methodName + "\" on unblessed reference");
                 }

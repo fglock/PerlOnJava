@@ -29,7 +29,7 @@ public class ReferenceOperators {
                 if (str.isEmpty()) {
                     str = "main";
                 }
-                ((RuntimeBaseEntity) runtimeScalar.value).setBlessId(NameNormalizer.getBlessId(str));
+                ((RuntimeBase) runtimeScalar.value).setBlessId(NameNormalizer.getBlessId(str));
                 break;
             default:
                 throw new PerlCompilerException("Can't bless non-reference value");
@@ -71,15 +71,15 @@ public class ReferenceOperators {
                         default -> "SCALAR";
                     };
                 }
-                blessId = ((RuntimeBaseEntity) runtimeScalar.value).blessId;
+                blessId = ((RuntimeBase) runtimeScalar.value).blessId;
                 str = blessId == 0 ? ref : NameNormalizer.getBlessStr(blessId);
                 break;
             case ARRAYREFERENCE:
-                blessId = ((RuntimeBaseEntity) runtimeScalar.value).blessId;
+                blessId = ((RuntimeBase) runtimeScalar.value).blessId;
                 str = blessId == 0 ? "ARRAY" : NameNormalizer.getBlessStr(blessId);
                 break;
             case HASHREFERENCE:
-                blessId = ((RuntimeBaseEntity) runtimeScalar.value).blessId;
+                blessId = ((RuntimeBase) runtimeScalar.value).blessId;
                 str = blessId == 0 ? "HASH" : NameNormalizer.getBlessStr(blessId);
                 break;
             case GLOBREFERENCE:

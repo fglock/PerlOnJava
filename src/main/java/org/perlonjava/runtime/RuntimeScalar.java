@@ -22,7 +22,7 @@ import static org.perlonjava.runtime.RuntimeScalarType.*;
  * to mimic this behavior by using an enum `RuntimeScalarType` to track the type of the value stored in the
  * scalar.
  */
-public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarReference, DynamicState {
+public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference, DynamicState {
 
     // Static stack to store saved "local" states of RuntimeScalar instances
     private static final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
@@ -295,7 +295,7 @@ public class RuntimeScalar extends RuntimeBaseEntity implements RuntimeScalarRef
 
     // Get blessing ID as an integer
     public int blessedId() {
-        return (type & REFERENCE_BIT) != 0 ? ((RuntimeBaseEntity) value).blessId : 0;
+        return (type & REFERENCE_BIT) != 0 ? ((RuntimeBase) value).blessId : 0;
     }
 
     // Get the Scalar alias into an Array

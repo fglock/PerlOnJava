@@ -93,7 +93,7 @@ public class EmitOperator {
             // Push call context for SCALAR or LIST context.
             emitterVisitor.pushCallContext();
             // Invoke the static method for the operator.
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Readline", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBaseEntity;", false);
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Readline", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBase;", false);
         } else {
             // Invoke the static method for the operator without context.
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
@@ -253,7 +253,7 @@ public class EmitOperator {
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/DiamondIO",
                     "readline",
-                    "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBaseEntity;", false);
+                    "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBase;", false);
             // If the context is VOID, pop the result from the stack.
             handleVoidContext(emitterVisitor);
         } else {
@@ -270,7 +270,7 @@ public class EmitOperator {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
         // Invoke the interface method for the operator.
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                "org/perlonjava/runtime/RuntimeBaseEntity",
+                "org/perlonjava/runtime/RuntimeBase",
                 node.operator,
                 "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
         // If the context is VOID, pop the result from the stack.
@@ -284,7 +284,7 @@ public class EmitOperator {
         // Generate unique IDs for this glob instance
         int globId = ScalarGlobOperator.currentId++;
 
-        // public static RuntimeBaseEntity evaluate(id, patternArg, ctx)
+        // public static RuntimeBase evaluate(id, patternArg, ctx)
         mv.visitLdcInsn(globId);
         // Accept the operand in SCALAR context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
@@ -322,7 +322,7 @@ public class EmitOperator {
         // Invoke the static method for the 'repeat' operator.
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Operator",
                 "repeat",
-                "(Lorg/perlonjava/runtime/RuntimeDataProvider;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBaseEntity;", false);
+                "(Lorg/perlonjava/runtime/RuntimeDataProvider;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBase;", false);
 
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             emitterVisitor.ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeScalar");
@@ -365,7 +365,7 @@ public class EmitOperator {
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/DynamicVariableManager",
                     "pushLocalVariable",
-                    "(Lorg/perlonjava/runtime/RuntimeBaseEntity;)Lorg/perlonjava/runtime/RuntimeBaseEntity;",
+                    "(Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeBase;",
                     false);
         } else {
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -411,7 +411,7 @@ public class EmitOperator {
                     "scalar", "()" + RuntimeTypeConstants.SCALAR_TYPE, false);
         } else {
             // For unknown types
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBaseEntity", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
         }
     }
 
@@ -661,7 +661,7 @@ public class EmitOperator {
             } else {
                 node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/RuntimeBaseEntity",
+                        "org/perlonjava/runtime/RuntimeBase",
                         "createReference",
                         "()Lorg/perlonjava/runtime/RuntimeScalar;",
                         false);

@@ -65,7 +65,7 @@ public class EmitLogicalOperator {
         // Stack is [left, left]
 
         // Convert the result to a boolean
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBaseEntity", getBoolean, "()Z", false);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", getBoolean, "()Z", false);
         // Stack is [left, boolean]
 
         // If the boolean value is true, jump to endLabel (we keep the left operand)
@@ -77,7 +77,7 @@ public class EmitLogicalOperator {
         mv.visitInsn(Opcodes.SWAP);   // Stack becomes [right, left]
 
         // Assign right to left
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBaseEntity", "addToScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "addToScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         // Stack is [right]
 
         // At this point, the stack either has the left (if it was true) or the right (if left was false)
@@ -121,7 +121,7 @@ public class EmitLogicalOperator {
         // Stack is [left, left]
 
         // Convert the result to a boolean
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBaseEntity", getBoolean, "()Z", false);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", getBoolean, "()Z", false);
         // Stack is [left, boolean]
 
         // If the left operand boolean value is true, return left operand
@@ -152,7 +152,7 @@ public class EmitLogicalOperator {
         node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
 
         // Convert the result to a boolean
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBaseEntity", "getBoolean", "()Z", false);
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "getBoolean", "()Z", false);
 
         // Jump to the else label if the condition is false
         emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.IFEQ, elseLabel);

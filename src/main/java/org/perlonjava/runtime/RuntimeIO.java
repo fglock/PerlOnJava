@@ -365,7 +365,7 @@ public class RuntimeIO implements RuntimeScalarReference {
         RuntimeIO fh = new RuntimeIO();
         try {
             List<String> strings = new ArrayList<>();
-            for (RuntimeBaseEntity entity : runtimeList.elements) {
+            for (RuntimeBase entity : runtimeList.elements) {
                 strings.add(entity.toString());
             }
             String arg = strings.getFirst();

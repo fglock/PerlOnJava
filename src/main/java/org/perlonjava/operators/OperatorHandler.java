@@ -105,12 +105,12 @@ public class OperatorHandler {
         put("closedir", "closedir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("rewinddir", "rewinddir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("telldir", "telldir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
-        put("readdir", "readdir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBaseEntity;");
+        put("readdir", "readdir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBase;");
         put("mkdir", "mkdir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("seekdir", "seekdir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("chdir", "chdir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("opendir", "opendir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
-        put("glob", "evaluate", "org/perlonjava/operators/ScalarGlobOperator", "(ILorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBaseEntity;");
+        put("glob", "evaluate", "org/perlonjava/operators/ScalarGlobOperator", "(ILorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBase;");
 
         // Modules
         put("doFile", "doFile", "org/perlonjava/operators/ModuleOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
@@ -124,12 +124,12 @@ public class OperatorHandler {
         put("select", "select", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("caller", "caller", "org/perlonjava/runtime/RuntimeCode", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
         put("reset", "reset", "org/perlonjava/runtime/RuntimeScalar", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
-        put("warn", "warn", "org/perlonjava/operators/WarnDie", "(Lorg/perlonjava/runtime/RuntimeDataProvider;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeBaseEntity;");
-        put("die", "die", "org/perlonjava/operators/WarnDie", "(Lorg/perlonjava/runtime/RuntimeDataProvider;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeBaseEntity;");
+        put("warn", "warn", "org/perlonjava/operators/WarnDie", "(Lorg/perlonjava/runtime/RuntimeDataProvider;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeBase;");
+        put("die", "die", "org/perlonjava/operators/WarnDie", "(Lorg/perlonjava/runtime/RuntimeDataProvider;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeBase;");
         put("exit", "exit", "org/perlonjava/operators/WarnDie", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
-        put("reverse", "reverse", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeDataProvider;I)Lorg/perlonjava/runtime/RuntimeBaseEntity;");
+        put("reverse", "reverse", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeDataProvider;I)Lorg/perlonjava/runtime/RuntimeBase;");
         put("crypt", "crypt", "org/perlonjava/operators/Crypt", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
-        put("unlink", "unlink", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeDataProvider;I)Lorg/perlonjava/runtime/RuntimeBaseEntity;");
+        put("unlink", "unlink", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeDataProvider;I)Lorg/perlonjava/runtime/RuntimeBase;");
         put("stat", "stat", "org/perlonjava/operators/Stat", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeList;");
         put("lstat", "lstat", "org/perlonjava/operators/Stat", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeList;");
         put("vec", "vec", "org/perlonjava/operators/Vec", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
@@ -155,7 +155,7 @@ public class OperatorHandler {
         put("substr", "substr", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("sprintf", "sprintf", "org/perlonjava/operators/SprintfOperator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
-        put("systemCommand", "systemCommand", "org/perlonjava/operators/SystemOperator", "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBaseEntity;");
+        put("systemCommand", "systemCommand", "org/perlonjava/operators/SystemOperator", "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBase;");
         put("system", "system", "org/perlonjava/operators/SystemOperator", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("exec", "exec", "org/perlonjava/operators/SystemOperator", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("fork", "fork", "org/perlonjava/operators/SystemOperator", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeScalar;");
@@ -190,22 +190,22 @@ public class OperatorHandler {
                 "(Lorg/perlonjava/runtime/RuntimeList;Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeList;");
 
         operatorHandlers.put("scalar",
-                new OperatorHandler("org/perlonjava/runtime/RuntimeBaseEntity",
+                new OperatorHandler("org/perlonjava/runtime/RuntimeBase",
                         "scalar",
                         Opcodes.INVOKEVIRTUAL,
                         "()Lorg/perlonjava/runtime/RuntimeScalar;"));
         operatorHandlers.put("each",
-                new OperatorHandler("org/perlonjava/runtime/RuntimeBaseEntity",
+                new OperatorHandler("org/perlonjava/runtime/RuntimeBase",
                         "each",
                         Opcodes.INVOKEVIRTUAL,
                         "()Lorg/perlonjava/runtime/RuntimeList;"));
         operatorHandlers.put("keys",
-                new OperatorHandler("org/perlonjava/runtime/RuntimeBaseEntity",
+                new OperatorHandler("org/perlonjava/runtime/RuntimeBase",
                         "keys",
                         Opcodes.INVOKEVIRTUAL,
                         "()Lorg/perlonjava/runtime/RuntimeArray;"));
         operatorHandlers.put("values",
-                new OperatorHandler("org/perlonjava/runtime/RuntimeBaseEntity",
+                new OperatorHandler("org/perlonjava/runtime/RuntimeBase",
                         "values",
                         Opcodes.INVOKEVIRTUAL,
                         "()Lorg/perlonjava/runtime/RuntimeArray;"));

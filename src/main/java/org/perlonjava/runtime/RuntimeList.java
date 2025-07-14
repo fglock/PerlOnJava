@@ -11,9 +11,9 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
  * The RuntimeList class simulates a Perl list.
  * It provides methods to manipulate and access a dynamic list of Perl values.
  */
-public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvider {
+public class RuntimeList extends RuntimeBase implements RuntimeDataProvider {
     // List to hold the elements of the list.
-    public List<RuntimeBaseEntity> elements;
+    public List<RuntimeBase> elements;
 
     // Constructor
     public RuntimeList() {
@@ -24,9 +24,9 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         this.elements = new ArrayList<>(list);
     }
 
-    public RuntimeList(RuntimeBaseEntity... values) {
+    public RuntimeList(RuntimeBase... values) {
         this.elements = new ArrayList<>();
-        for (RuntimeBaseEntity value : values) {
+        for (RuntimeBase value : values) {
             Iterator<RuntimeScalar> iterator = value.iterator();
             while (iterator.hasNext()) {
                 this.elements.add(iterator.next());
@@ -79,7 +79,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
      * @param list The RuntimeList to which elements will be added.
      */
     public void addToList(RuntimeList list) {
-        for (RuntimeBaseEntity elem : elements) {
+        for (RuntimeBase elem : elements) {
             list.add(elem);
         }
         this.elements.clear(); // Consume the list
@@ -113,7 +113,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
      *
      * @param value The value to add.
      */
-    public void add(RuntimeBaseEntity value) {
+    public void add(RuntimeBase value) {
         this.elements.add(value);
     }
     public void add(RuntimeScalar value) {
@@ -185,7 +185,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
      */
     public int countElements() {
         int count = 0;
-        for (RuntimeBaseEntity elem : elements) {
+        for (RuntimeBase elem : elements) {
             count = count + elem.countElements();
         }
         return count;
@@ -198,7 +198,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
      * @return The updated array with aliases.
      */
     public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
-        for (RuntimeBaseEntity elem : elements) {
+        for (RuntimeBase elem : elements) {
             elem.setArrayOfAlias(arr);
         }
         return arr;
@@ -316,7 +316,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
      */
     public RuntimeList createListReference() {
         RuntimeList result = new RuntimeList();
-        List<RuntimeBaseEntity> resultList = result.elements;
+        List<RuntimeBase> resultList = result.elements;
         Iterator<RuntimeScalar> iterator = this.iterator();
         while (iterator.hasNext()) {
             resultList.add(iterator.next().createReference());
@@ -342,7 +342,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
         RuntimeArray arr = new RuntimeArray();
         original.addToArray(arr);
 
-        for (RuntimeBaseEntity elem : elements) {
+        for (RuntimeBase elem : elements) {
             if (elem instanceof RuntimeScalarReadOnly runtimeScalarReadOnly && !runtimeScalarReadOnly.getDefinedBoolean()) {
                 // assignment to `undef` is ignored
                 RuntimeArray.shift(arr);
@@ -368,7 +368,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        for (RuntimeBaseEntity element : elements) {
+        for (RuntimeBase element : elements) {
             sb.append(element.toString());
         }
         return sb.toString();
@@ -380,7 +380,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
      * @return The updated RuntimeList after undefining.
      */
     public RuntimeList undefine() {
-        for (RuntimeBaseEntity elem : elements) {
+        for (RuntimeBase elem : elements) {
             elem.undefine();
         }
         return this;
@@ -393,7 +393,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
      * @throws PerlCompilerException if any element contains an autovivification placeholder
      */
     public void validateNoAutovivification() {
-        for (RuntimeBaseEntity element : elements) {
+        for (RuntimeBase element : elements) {
             switch (element) {
                 case RuntimeArray array when array.elements instanceof AutovivificationArray ->
                         throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
@@ -417,7 +417,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
      */
     @Override
     public void dynamicSaveState() {
-        for (RuntimeBaseEntity elem : elements) {
+        for (RuntimeBase elem : elements) {
             elem.dynamicSaveState();
         }
     }
@@ -432,7 +432,7 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
     public void dynamicRestoreState() {
         // Note: this method is probably not needed,
         // because the elements are handled by their respective classes.
-        for (RuntimeBaseEntity elem : elements) {
+        for (RuntimeBase elem : elements) {
             elem.dynamicRestoreState();
         }
     }
@@ -450,11 +450,11 @@ public class RuntimeList extends RuntimeBaseEntity implements RuntimeDataProvide
      * Inner class implementing the Iterator interface for RuntimeList.
      */
     private static class RuntimeListIterator implements Iterator<RuntimeScalar> {
-        private final List<RuntimeBaseEntity> elements;
+        private final List<RuntimeBase> elements;
         private int currentIndex = 0;
         private Iterator<RuntimeScalar> currentIterator;
 
-        public RuntimeListIterator(List<RuntimeBaseEntity> elements) {
+        public RuntimeListIterator(List<RuntimeBase> elements) {
             this.elements = elements;
             if (!elements.isEmpty()) {
                 currentIterator = elements.getFirst().iterator();

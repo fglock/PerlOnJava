@@ -6,8 +6,6 @@ import java.util.List;
 import java.util.Stack;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
-import static org.perlonjava.runtime.RuntimeScalarType.ARRAYREFERENCE;
-import static org.perlonjava.runtime.RuntimeScalarType.HASHREFERENCE;
 
 /**
  * The RuntimeArray class simulates Perl arrays.
@@ -15,7 +13,7 @@ import static org.perlonjava.runtime.RuntimeScalarType.HASHREFERENCE;
  * <p>In Perl, an array is a dynamic list of scalar values. This class tries to mimic this behavior
  * using a list of RuntimeScalar objects, which can hold any type of Perl scalar value.
  */
-public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarReference, DynamicState {
+public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference, DynamicState {
     // Static stack to store saved "local" states of RuntimeArray instances
     private static final Stack<RuntimeArray> dynamicStateStack = new Stack<>();
     // List to hold the elements of the array.
@@ -38,9 +36,9 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         this.elements = new ArrayList<>(list);
     }
 
-    public RuntimeArray(RuntimeBaseEntity... values) {
+    public RuntimeArray(RuntimeBase... values) {
         this.elements = new ArrayList<>();
-        for (RuntimeBaseEntity value : values) {
+        for (RuntimeBase value : values) {
             Iterator<RuntimeScalar> iterator = value.iterator();
             while (iterator.hasNext()) {
                 this.elements.add(iterator.next());
@@ -178,7 +176,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     }
 
     // Methods used by array literal constructor
-    public void add(RuntimeBaseEntity value) {
+    public void add(RuntimeBase value) {
         value.addToArray(this);
     }
     public void add(RuntimeScalar value) {
@@ -425,7 +423,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
         }
 
         RuntimeList result = new RuntimeList();
-        List<RuntimeBaseEntity> outElements = result.elements;
+        List<RuntimeBase> outElements = result.elements;
         Iterator<RuntimeScalar> iterator = value.iterator();
         while (iterator.hasNext()) {
             outElements.add(this.get(iterator.next()));
@@ -565,7 +563,7 @@ public class RuntimeArray extends RuntimeBaseEntity implements RuntimeScalarRefe
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        for (RuntimeBaseEntity element : elements) {
+        for (RuntimeBase element : elements) {
             sb.append(element.toString());
         }
         return sb.toString();

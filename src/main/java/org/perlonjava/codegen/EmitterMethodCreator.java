@@ -278,7 +278,7 @@ public class EmitterMethodCreator implements Opcodes {
             Local.localTeardown(localRecord, mv);
 
             // Transform the value in the stack to RuntimeList
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBaseEntity", "getList", "()Lorg/perlonjava/runtime/RuntimeList;", false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "getList", "()Lorg/perlonjava/runtime/RuntimeList;", false);
 
             mv.visitInsn(Opcodes.ARETURN); // Returns an Object
             mv.visitMaxs(0, 0); // Automatically computed

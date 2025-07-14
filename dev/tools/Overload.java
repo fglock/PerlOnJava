@@ -38,7 +38,7 @@ public class Overload {
             String[] fallbackMethods,
             ConversionFunction defaultConversion
     ) {
-        if (!(runtimeScalar.value instanceof RuntimeBaseEntity baseEntity)) {
+        if (!(runtimeScalar.value instanceof RuntimeBase baseEntity)) {
             return defaultConversion.apply(runtimeScalar);
         }
 

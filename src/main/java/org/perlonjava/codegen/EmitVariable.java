@@ -133,7 +133,7 @@ public class EmitVariable {
             }
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR && !sigil.equals("$")) {
                 // scalar context: transform the value in the stack to scalar
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBaseEntity", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
             }
             emitterVisitor.ctx.logDebug("GETVAR end " + varIndex);
             return;
@@ -248,7 +248,7 @@ public class EmitVariable {
                     mv.visitInsn(Opcodes.SWAP); // move the target first
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, leftDescriptor, "set", rightDescriptor, false);
                 } else {
-                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBaseEntity", "addToScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "addToScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
                 }
                 break;
             case RuntimeContextType.LIST:
@@ -269,7 +269,7 @@ public class EmitVariable {
                 nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));   // emit the value
                 node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));   // emit the variable
                 mv.visitInsn(Opcodes.SWAP); // move the target first
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBaseEntity", "setFromList", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeArray;", false);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "setFromList", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeArray;", false);
                 break;
             default:
                 throw new PerlCompilerException(node.tokenIndex, "Unsupported assignment context: " + lvalueContext, ctx.errorUtil);
@@ -469,7 +469,7 @@ public class EmitVariable {
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
                     if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR && !sigil.equals("$")) {
                         // scalar context: transform the value in the stack to scalar
-                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBaseEntity", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
                     }
                     return;
                 }

@@ -28,7 +28,7 @@ public class DynamicVariableManager {
      *
      * @param variable the dynamic state to be pushed onto the stack.
      */
-    public static RuntimeBaseEntity pushLocalVariable(RuntimeBaseEntity variable) {
+    public static RuntimeBase pushLocalVariable(RuntimeBase variable) {
         // Save the current state of the variable and push it onto the stack.
         variable.dynamicSaveState();
         variableStack.push(variable);

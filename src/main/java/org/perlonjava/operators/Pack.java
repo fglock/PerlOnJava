@@ -1,7 +1,7 @@
 package org.perlonjava.operators;
 
 import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeBaseEntity;
+import org.perlonjava.runtime.RuntimeBase;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
 
@@ -31,8 +31,8 @@ public class Pack {
         String template = templateScalar.toString();
 
         // Flatten the remaining arguments into a RuntimeArray
-        List<RuntimeBaseEntity> remainingArgs = args.elements.subList(1, args.elements.size());
-        RuntimeArray flattened = new RuntimeArray(remainingArgs.toArray(new RuntimeBaseEntity[0]));
+        List<RuntimeBase> remainingArgs = args.elements.subList(1, args.elements.size());
+        RuntimeArray flattened = new RuntimeArray(remainingArgs.toArray(new RuntimeBase[0]));
         List<RuntimeScalar> values = flattened.elements;
 
         ByteArrayOutputStream output = new ByteArrayOutputStream();

@@ -157,7 +157,7 @@ public class RuntimeStash extends RuntimeHash {
      */
     public RuntimeList getSlice(RuntimeList value) {
         RuntimeList result = new RuntimeList();
-        List<RuntimeBaseEntity> outElements = result.elements;
+        List<RuntimeBase> outElements = result.elements;
         Iterator<RuntimeScalar> iterator = value.iterator();
         while (iterator.hasNext()) {
             outElements.add(this.get(iterator.next()));
@@ -173,7 +173,7 @@ public class RuntimeStash extends RuntimeHash {
      */
     public RuntimeList deleteSlice(RuntimeList value) {
         RuntimeList result = new RuntimeList();
-        List<RuntimeBaseEntity> outElements = result.elements;
+        List<RuntimeBase> outElements = result.elements;
         Iterator<RuntimeScalar> iterator = value.iterator();
         while (iterator.hasNext()) {
             outElements.add(this.delete(iterator.next()));

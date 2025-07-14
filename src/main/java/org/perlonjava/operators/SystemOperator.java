@@ -34,7 +34,7 @@ public class SystemOperator {
      * @return The output of the command as a RuntimeDataProvider.
      * @throws PerlCompilerException if an error occurs during command execution or stream handling.
      */
-    public static RuntimeBaseEntity systemCommand(RuntimeScalar command, int ctx) {
+    public static RuntimeBase systemCommand(RuntimeScalar command, int ctx) {
         CommandResult result = executeCommand(command.toString(), true);
 
         // Set $? to the exit status
@@ -52,7 +52,7 @@ public class SystemOperator {
      * @throws PerlCompilerException if an error occurs during command execution.
      */
     public static RuntimeScalar system(RuntimeList args, int ctx) {
-        List<RuntimeBaseEntity> elements = args.elements;
+        List<RuntimeBase> elements = args.elements;
         if (elements.isEmpty()) {
             throw new PerlCompilerException("system: no command specified");
         }
@@ -73,7 +73,7 @@ public class SystemOperator {
         } else {
             // Multiple arguments - execute directly without shell
             List<String> commandArgs = new ArrayList<>();
-            for (RuntimeBaseEntity element : elements) {
+            for (RuntimeBase element : elements) {
                 commandArgs.add(element.toString());
             }
             result = executeCommandDirect(commandArgs);
@@ -234,10 +234,10 @@ public class SystemOperator {
      * @param ctx    The context type, determining the return type (list or scalar).
      * @return The processed output as a RuntimeDataProvider.
      */
-    private static RuntimeBaseEntity processOutput(String output, int ctx) {
+    private static RuntimeBase processOutput(String output, int ctx) {
         if (ctx == RuntimeContextType.LIST) {
             RuntimeList list = new RuntimeList();
-            List<RuntimeBaseEntity> result = list.elements;
+            List<RuntimeBase> result = list.elements;
             int index = 0;
             String separator = getGlobalVariable("main::/").toString();
             int separatorLength = separator.length();
@@ -286,7 +286,7 @@ public class SystemOperator {
      * @throws PerlCompilerException if an error occurs during command execution.
      */
     public static RuntimeScalar exec(RuntimeList args, int ctx) {
-        List<RuntimeBaseEntity> elements = args.elements;
+        List<RuntimeBase> elements = args.elements;
         if (elements.isEmpty()) {
             throw new PerlCompilerException("exec: no command specified");
         }
@@ -310,7 +310,7 @@ public class SystemOperator {
             } else {
                 // Multiple arguments - execute directly without shell
                 List<String> commandArgs = new ArrayList<>();
-                for (RuntimeBaseEntity element : elements) {
+                for (RuntimeBase element : elements) {
                     commandArgs.add(element.toString());
                 }
                 exitCode = execCommandDirect(commandArgs);

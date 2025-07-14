@@ -133,7 +133,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
      * @param ctx         The context LIST, SCALAR, VOID.
      * @return A RuntimeScalar or RuntimeList.
      */
-    public static RuntimeBaseEntity matchRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
+    public static RuntimeBase matchRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
         RuntimeRegex regex;
         if (quotedRegex.type != RuntimeScalarType.REGEX) {
             // not a regex:  $var =~ "Test"
@@ -174,7 +174,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
 
         boolean found = false;
         RuntimeList result = new RuntimeList();
-        List<RuntimeBaseEntity> matchedGroups = result.elements;
+        List<RuntimeBase> matchedGroups = result.elements;
 
         int capture = 1;
         int previousPos = startPos; // Track the previous position
@@ -252,7 +252,7 @@ public class RuntimeRegex implements RuntimeScalarReference {
      * @param ctx         The context LIST, SCALAR, VOID.
      * @return A RuntimeScalar or RuntimeList.
      */
-    public static RuntimeBaseEntity replaceRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
+    public static RuntimeBase replaceRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
         // Convert the input string to a Java string
         String inputStr = string.toString();
 
