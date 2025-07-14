@@ -65,7 +65,7 @@ public class ScalarGlobOperator {
      * @param id the unique identifier for this glob operator instance
      * @param patternArg the glob pattern as a RuntimeScalar
      * @param ctx the runtime context (scalar or list)
-     * @return RuntimeDataProvider containing the results
+     * @return RuntimeBase containing the results
      */
     public static RuntimeBase evaluate(int id, RuntimeScalar patternArg, int ctx) {
         String pattern = patternArg.toString();

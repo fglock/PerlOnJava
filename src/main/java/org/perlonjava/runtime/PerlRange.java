@@ -11,7 +11,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarEmptyString;
  * This class supports both integer and string ranges, providing
  * an iterator to traverse through the range.
  */
-public class PerlRange extends RuntimeBase implements RuntimeDataProvider, Iterable<RuntimeScalar> {
+public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
     private final RuntimeScalar start;
     private final RuntimeScalar end;
 
@@ -76,10 +76,10 @@ public class PerlRange extends RuntimeBase implements RuntimeDataProvider, Itera
     /**
      * Converts the range to an undefined state.
      *
-     * @return A RuntimeDataProvider representing the undefined state.
+     * @return A RuntimeBase representing the undefined state.
      */
     @Override
-    public RuntimeDataProvider undefine() {
+    public RuntimeBase undefine() {
         return toList().undefine();
     }
 

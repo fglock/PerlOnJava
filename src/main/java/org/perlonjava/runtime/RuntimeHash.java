@@ -30,10 +30,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     /**
      * Creates a hash with the elements of a list.
      *
-     * @param value The RuntimeDataProvider containing the elements to populate the hash.
+     * @param value The RuntimeBase containing the elements to populate the hash.
      * @return A new RuntimeHash populated with the elements from the list.
      */
-    public static RuntimeHash createHash(RuntimeDataProvider value) {
+    public static RuntimeHash createHash(RuntimeBase value) {
         RuntimeHash result = new RuntimeHash();
         Map<String, RuntimeScalar> resultHash = result.elements;
         Iterator<RuntimeScalar> iterator = value.iterator();
@@ -48,10 +48,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     /**
      * Creates a hash reference with the elements of a list.
      *
-     * @param value The RuntimeDataProvider containing the elements to populate the hash.
+     * @param value The RuntimeBase containing the elements to populate the hash.
      * @return A RuntimeScalar representing the hash reference.
      */
-    public static RuntimeScalar createHashRef(RuntimeDataProvider value) {
+    public static RuntimeScalar createHashRef(RuntimeBase value) {
         return createHash(value).createReference();
     }
 

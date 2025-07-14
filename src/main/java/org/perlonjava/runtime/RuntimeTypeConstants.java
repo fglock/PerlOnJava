@@ -61,8 +61,8 @@ public final class RuntimeTypeConstants {
     /** Internal class name for RuntimeCode */
     public static final String CODE_CLASS = "org/perlonjava/runtime/RuntimeCode";
 
-    /** Internal class name for RuntimeDataProvider interface */
-    public static final String DATA_PROVIDER_INTERFACE = "org/perlonjava/runtime/RuntimeDataProvider";
+    /** Internal class name for RuntimeBase interface */
+    public static final String DATA_PROVIDER_INTERFACE = "org/perlonjava/runtime/RuntimeBase";
 
     /** Internal class name for RuntimeScalarCache */
     public static final String SCALAR_CACHE_CLASS = "org/perlonjava/runtime/RuntimeScalarCache";

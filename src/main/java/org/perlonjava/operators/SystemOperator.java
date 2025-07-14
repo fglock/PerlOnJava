@@ -26,12 +26,12 @@ public class SystemOperator {
     private static final Pattern SHELL_METACHARACTERS = Pattern.compile("[*?\\[\\]{}()<>|&;`'\"\\\\$\\s]");
 
     /**
-     * Executes a system command and returns the output as a RuntimeDataProvider.
+     * Executes a system command and returns the output as a RuntimeBase.
      * This implements Perl's backtick operator (`command`).
      *
      * @param command The command to execute as a RuntimeScalar.
      * @param ctx     The context type, determining the return type (list or scalar).
-     * @return The output of the command as a RuntimeDataProvider.
+     * @return The output of the command as a RuntimeBase.
      * @throws PerlCompilerException if an error occurs during command execution or stream handling.
      */
     public static RuntimeBase systemCommand(RuntimeScalar command, int ctx) {
@@ -232,7 +232,7 @@ public class SystemOperator {
      *
      * @param output The command output as a String.
      * @param ctx    The context type, determining the return type (list or scalar).
-     * @return The processed output as a RuntimeDataProvider.
+     * @return The processed output as a RuntimeBase.
      */
     private static RuntimeBase processOutput(String output, int ctx) {
         if (ctx == RuntimeContextType.LIST) {
