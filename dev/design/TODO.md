@@ -9,12 +9,6 @@
 ## Cleanup
 - Cleanup the closure code to only add the lexical variables mentioned in the AST
 
-## Runtime Format Error Messages and Warnings
-- catch and reformat errors like division by zero
-
-## Test Different Perl Data Types
-- Experiment with `Perlito` style of JVM integration
-
 ## Local Variables
 - Set up localization in for-loop
 
