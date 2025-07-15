@@ -18,6 +18,18 @@ import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 public class Operator {
 
+    public static RuntimeScalar tie(RuntimeScalar... scalars) {
+        throw new PerlCompilerException("tie operator not yet implemented");
+    }
+
+    public static RuntimeScalar untie(RuntimeScalar... scalars) {
+        throw new PerlCompilerException("untie operator not yet implemented");
+    }
+
+    public static RuntimeScalar tied(RuntimeScalar... scalars) {
+        throw new PerlCompilerException("tied operator not yet implemented");
+    }
+
     public static RuntimeScalar xor(RuntimeScalar left, RuntimeScalar right) {
         return getScalarBoolean(left.getBoolean() ^ right.getBoolean());
     }
