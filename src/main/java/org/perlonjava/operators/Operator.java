@@ -29,12 +29,8 @@ public class Operator {
             case ARRAYREFERENCE -> "::TIEARRAY";
             case HASHREFERENCE -> "::TIEHASH";
             case GLOBREFERENCE -> "::TIEHANDLE";
-            default -> null;
+            default -> throw new PerlCompilerException("Unknown variable type for tie()");
         };
-
-        if (tieType == null) {
-            throw new PerlCompilerException("Unknown variable type for tie()");
-        }
 
         // Call the Perl method
         return RuntimeCode.apply(
