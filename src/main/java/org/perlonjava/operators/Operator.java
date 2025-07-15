@@ -15,11 +15,34 @@ import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 public class Operator {
 
     public static RuntimeScalar tie(RuntimeScalar... scalars) {
-        throw new PerlCompilerException("tie operator not yet implemented");
+        RuntimeScalar variable = scalars[0];
+        RuntimeScalar className = scalars[1];
+        RuntimeArray args = new RuntimeArray(Arrays.copyOfRange(scalars, 2, scalars.length));
+
+        String tieType = switch (variable.type) {
+            case REFERENCE -> "::TIESCALAR";
+            case ARRAYREFERENCE -> "::TIEARRAY";
+            case HASHREFERENCE -> "::TIEHASH";
+            case GLOBREFERENCE -> "::TIEHANDLE";
+            default -> null;
+        };
+
+        if (tieType == null) {
+            throw new PerlCompilerException("Unknown variable type for tie()");
+        }
+
+        // Call the Perl method
+        return RuntimeCode.apply(
+                GlobalVariable.getGlobalCodeRef(className + tieType),
+                className + tieType,
+                args,
+                RuntimeContextType.SCALAR
+        ).getFirst();
     }
 
     public static RuntimeScalar untie(RuntimeScalar... scalars) {
