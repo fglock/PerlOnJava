@@ -179,6 +179,31 @@ public class EmitOperator {
         }
     }
 
+    // Handle an operator that was parsed using a Perl prototype.
+    static void handleOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
+        EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
+        if (node.operand instanceof ListNode operand) {
+            // Create array for varargs operators
+            MethodVisitor mv = emitterVisitor.ctx.mv;
+
+            // Create array of RuntimeScalar with size equal to number of arguments
+            mv.visitIntInsn(Opcodes.SIPUSH, operand.elements.size());
+            mv.visitTypeInsn(Opcodes.ANEWARRAY, "org/perlonjava/runtime/RuntimeScalar");
+
+            // Populate the array with arguments
+            int index = 0;
+            for (Node arg : operand.elements) {
+                mv.visitInsn(Opcodes.DUP); // Duplicate array reference
+                mv.visitIntInsn(Opcodes.SIPUSH, index);
+                arg.accept(scalarVisitor); // Generate code for argument
+                mv.visitInsn(Opcodes.AASTORE); // Store in array
+                index++;
+            }
+
+            emitOperator(node, emitterVisitor);
+        }
+    }
+
     // Handles the 'die' built-in function, which throws an exception.
     static void handleDieBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Handle:  die LIST

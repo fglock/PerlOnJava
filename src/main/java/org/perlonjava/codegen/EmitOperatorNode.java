@@ -114,9 +114,7 @@ public class EmitOperatorNode {
                  "-T", "-B",
                  "-M", "-A", "-C" -> EmitOperatorFileTest.handleFileTestBuiltin(emitterVisitor, node);
 
-            default -> throw new PerlCompilerException(node.tokenIndex,
-                        "Not implemented: operator: " + node.operator,
-                        emitterVisitor.ctx.errorUtil);
+            default -> EmitOperator.handleOperator(emitterVisitor, node);
         }
     }
 }
