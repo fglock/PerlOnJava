@@ -238,7 +238,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB -> 1;  // Assuming globs are truthy, so 1
             case REGEX -> 1; // Assuming regexes are truthy, so 1
             case JAVAOBJECT -> value != null ? 1 : 0;
-            case TIED_SCALAR -> tiedFetch().getInt();
+            case TIED_SCALAR -> TieScalar.tiedFetch(this).getInt();
             default -> Overload.numify(this).getInt();
         };
     }
@@ -255,7 +255,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB -> 1L;
             case REGEX -> 1L;
             case JAVAOBJECT -> value != null ? 1L : 0L;
-            case TIED_SCALAR -> tiedFetch().getLong();
+            case TIED_SCALAR -> TieScalar.tiedFetch(this).getLong();
             default -> Overload.numify(this).getLong();
         };
     }
@@ -272,7 +272,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB -> 1.0;
             case REGEX -> 1.0;
             case JAVAOBJECT -> value != null ? 1.0 : 0.0;
-            case TIED_SCALAR -> tiedFetch().getDouble();
+            case TIED_SCALAR -> TieScalar.tiedFetch(this).getDouble();
             default -> Overload.numify(this).getDouble();
         };
     }
@@ -292,7 +292,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB -> true;
             case REGEX -> true;
             case JAVAOBJECT -> value != null;
-            case TIED_SCALAR -> tiedFetch().getBoolean();
+            case TIED_SCALAR -> TieScalar.tiedFetch(this).getBoolean();
             default -> Overload.boolify(this).getBoolean();
         };
     }
@@ -332,18 +332,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return scalar.set(this);
     }
 
-    public RuntimeScalar tiedFetch() {
-        throw new PerlCompilerException("not implemented: tied FETCH on scalar");
-    }
-
-    public RuntimeScalar tiedStore() {
-        throw new PerlCompilerException("not implemented: tied STORE on scalar");
-    }
-
     // Setters
     public RuntimeScalar set(RuntimeScalar value) {
         if (this.type == TIED_SCALAR) {
-            return tiedStore();
+            return TieScalar.tiedStore(this);
         }
         this.type = value.type;
         this.value = value.value;
@@ -412,7 +404,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB -> value == null ? "" : value.toString();
             case REGEX -> value.toString();
             case JAVAOBJECT -> value.toString();
-            case TIED_SCALAR -> tiedFetch().toString();
+            case TIED_SCALAR -> TieScalar.tiedFetch(this).toString();
             default -> Overload.stringify(this).toString();
         };
     }
