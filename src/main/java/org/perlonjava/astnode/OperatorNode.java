@@ -26,9 +26,6 @@ public class OperatorNode extends AbstractNode {
      */
     public int id = 0;
 
-    // Lazy initialization - only created when first annotation is set
-    public Map<String, Object> annotations;
-
     /**
      * Constructs a new OperatorNode with the specified operator and operand.
      *
@@ -39,22 +36,6 @@ public class OperatorNode extends AbstractNode {
         this.operator = operator;
         this.operand = operand;
         this.tokenIndex = tokenIndex;
-    }
-
-    public void setAnnotation(String key, Object value) {
-        if (annotations == null) {
-            annotations = new HashMap<>();
-        }
-        annotations.put(key, value);
-    }
-
-    public Object getAnnotation(String key) {
-        return annotations == null ? null : annotations.get(key);
-    }
-
-    public boolean getBooleanAnnotation(String key) {
-        Object value = getAnnotation(key);
-        return value instanceof Boolean && (Boolean) value;
     }
 
     /**
