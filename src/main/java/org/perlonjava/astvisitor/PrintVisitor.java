@@ -29,18 +29,21 @@ public class PrintVisitor implements Visitor {
     public void visit(NumberNode node) {
         appendIndent();
         sb.append("NumberNode: ").append(node.value).append("\n");
+        printAnnotations(node);
     }
 
     @Override
     public void visit(IdentifierNode node) {
         appendIndent();
         sb.append("IdentifierNode: ").append(printable(node.name)).append("\n");
+        printAnnotations(node);
     }
 
     @Override
     public void visit(BinaryOperatorNode node) {
         appendIndent();
         sb.append("BinaryOperatorNode: ").append(node.operator).append("  pos:").append(node.tokenIndex).append("\n");
+        printAnnotations(node);
         indentLevel++;
         if (node.left == null) {
             appendIndent();
@@ -62,23 +65,12 @@ public class PrintVisitor implements Visitor {
         appendIndent();
         sb.append("OperatorNode: ").append(node.operator)
                 .append("  pos:").append(node.tokenIndex).append("\n");
+        printAnnotations(node);
         indentLevel++;
 
         if (node.id != 0) {
             appendIndent();
             sb.append("id: ").append(node.id).append("\n");
-        }
-
-        // Print annotations if present
-        if (node.annotations != null && !node.annotations.isEmpty()) {
-            appendIndent();
-            sb.append("annotations:\n");
-            indentLevel++;
-            node.annotations.forEach((key, value) -> {
-                appendIndent();
-                sb.append(key).append(": ").append(value).append("\n");
-            });
-            indentLevel--;
         }
 
         if (node.operand != null) {
@@ -91,6 +83,7 @@ public class PrintVisitor implements Visitor {
     public void visit(For1Node node) {
         appendIndent();
         sb.append("For1Node:\n");
+        printAnnotations(node);
         indentLevel++;
 
         if (node.labelName != null) {
@@ -144,6 +137,7 @@ public class PrintVisitor implements Visitor {
     public void visit(For3Node node) {
         appendIndent();
         sb.append("For3Node:\n");
+        printAnnotations(node);
         indentLevel++;
 
         if (node.labelName != null) {
@@ -206,6 +200,7 @@ public class PrintVisitor implements Visitor {
     public void visit(IfNode node) {
         appendIndent();
         sb.append("IfNode: ").append(node.operator).append("\n");
+        printAnnotations(node);
         indentLevel++;
         node.condition.accept(this);
         node.thenBranch.accept(this);
@@ -219,6 +214,7 @@ public class PrintVisitor implements Visitor {
     public void visit(SubroutineNode node) {
         appendIndent();
         sb.append("SubroutineNode:  pos:").append(node.tokenIndex).append("\n");
+        printAnnotations(node);
         indentLevel++;
 
         appendIndent();
@@ -251,6 +247,7 @@ public class PrintVisitor implements Visitor {
     public void visit(TernaryOperatorNode node) {
         appendIndent();
         sb.append("TernaryOperatorNode: ").append(node.operator).append("\n");
+        printAnnotations(node);
         indentLevel++;
         node.condition.accept(this);
         node.trueExpr.accept(this);
@@ -261,17 +258,21 @@ public class PrintVisitor implements Visitor {
     @Override
     public void visit(StringNode node) {
         appendIndent();
-        sb.append("StringNode: '").append(printable(node.value)).append("'");
+        sb.append("StringNode: '").append(printable(node.value)).append("'\n");
+        printAnnotations(node);
+        indentLevel++;
         if (node.isVString) {
-            sb.append(", isVString=true");
+            appendIndent();
+            sb.append("isVString=true\n");
         }
-        sb.append("\n");
+        indentLevel--;
     }
 
     @Override
     public void visit(BlockNode node) {
         appendIndent();
         sb.append("BlockNode:\n");
+        printAnnotations(node);
         indentLevel++;
         if (node.isLoop) {
             appendIndent();
@@ -299,6 +300,7 @@ public class PrintVisitor implements Visitor {
     public void visit(ListNode node) {
         appendIndent();
         sb.append("ListNode:\n");
+        printAnnotations(node);
         indentLevel++;
         if (node.handle != null) {
             appendIndent();
@@ -317,6 +319,7 @@ public class PrintVisitor implements Visitor {
     public void visit(ArrayLiteralNode node) {
         appendIndent();
         sb.append("ArrayLiteralNode:\n");
+        printAnnotations(node);
         indentLevel++;
         for (Node element : node.elements) {
             element.accept(this);
@@ -328,6 +331,7 @@ public class PrintVisitor implements Visitor {
     public void visit(HashLiteralNode node) {
         appendIndent();
         sb.append("HashLiteralNode:\n");
+        printAnnotations(node);
         indentLevel++;
         for (Node element : node.elements) {
             element.accept(this);
@@ -339,6 +343,7 @@ public class PrintVisitor implements Visitor {
     public void visit(TryNode node) {
         appendIndent();
         sb.append("TryNode:\n");
+        printAnnotations(node);
         indentLevel++;
 
         // Visit the try block
@@ -384,12 +389,14 @@ public class PrintVisitor implements Visitor {
     public void visit(LabelNode node) {
         appendIndent();
         sb.append("LabelNode: ").append(node.label).append(":\n");
+        printAnnotations(node);
     }
 
     @Override
     public void visit(CompilerFlagNode node) {
         appendIndent();
         sb.append("CompilerFlagNode:\n");
+        printAnnotations(node);
         indentLevel++;
 
         appendIndent();
@@ -402,6 +409,22 @@ public class PrintVisitor implements Visitor {
         sb.append("Strict Options: ").append(stringifyStrictOptions(node.getStrictOptions())).append("\n");
 
         indentLevel--;
+    }
+
+    private void printAnnotations(AbstractNode node) {
+        // Print annotations if present
+        if (node.annotations != null && !node.annotations.isEmpty()) {
+            indentLevel++;
+            appendIndent();
+            sb.append("annotations:\n");
+            indentLevel++;
+            node.annotations.forEach((key, value) -> {
+                appendIndent();
+                sb.append(key).append(": ").append(value).append("\n");
+            });
+            indentLevel--;
+            indentLevel--;
+        }
     }
 }
 

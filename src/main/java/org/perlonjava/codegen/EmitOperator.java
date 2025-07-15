@@ -182,6 +182,7 @@ public class EmitOperator {
     // Handle an operator that was parsed using a Perl prototype.
     static void handleOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
+        EmitterVisitor listVisitor = emitterVisitor.with(RuntimeContextType.LIST);
         if (node.operand instanceof ListNode operand) {
             // Create array for varargs operators
             MethodVisitor mv = emitterVisitor.ctx.mv;
@@ -195,7 +196,15 @@ public class EmitOperator {
             for (Node arg : operand.elements) {
                 mv.visitInsn(Opcodes.DUP); // Duplicate array reference
                 mv.visitIntInsn(Opcodes.SIPUSH, index);
-                arg.accept(scalarVisitor); // Generate code for argument
+
+                // Generate code for argument
+                String argContext = (String) arg.getAnnotation("context");
+                if (argContext.equals("SCALAR")) {
+                    arg.accept(scalarVisitor);
+                } else {
+                    arg.accept(listVisitor);
+                }
+
                 mv.visitInsn(Opcodes.AASTORE); // Store in array
                 index++;
             }
