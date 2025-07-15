@@ -37,5 +37,9 @@ public interface Node {
      * @param index the index to set
      */
     void setIndex(int index);
+
+    void setAnnotation(String key, Object value);
+
+    Object getAnnotation(String key);
 }
 

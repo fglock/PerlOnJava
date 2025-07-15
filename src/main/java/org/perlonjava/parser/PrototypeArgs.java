@@ -75,6 +75,10 @@ public class PrototypeArgs {
 
         if (prototype == null) {
             args = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
+            // When no prototype is given, arguments are evaluated in LIST context
+            for (Node element : args.elements) {
+                element.setAnnotation("context", "LIST");
+            }
         } else {
             parsePrototypeArguments(parser, args, prototype);
 
@@ -241,17 +245,23 @@ public class PrototypeArgs {
     private static void handleScalarArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
         Node arg = parseArgumentWithComma(parser, isOptional, needComma, "scalar argument");
         if (arg != null) {
-            args.elements.add(ParserNodeUtils.toScalarContext(arg));
+            Node scalarArg = ParserNodeUtils.toScalarContext(arg);
+            scalarArg.setAnnotation("context", "SCALAR");
+            args.elements.add(scalarArg);
         }
     }
 
     private static void handleUnderscoreArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
         Node arg = parseArgumentWithComma(parser, true, needComma, "scalar argument");
         if (arg == null) {
-            args.elements.add(scalarUnderscore(parser));
+            Node underscoreArg = scalarUnderscore(parser);
+            underscoreArg.setAnnotation("context", "SCALAR");
+            args.elements.add(underscoreArg);
             return;
         }
-        args.elements.add(ParserNodeUtils.toScalarContext(arg));
+        Node scalarArg = ParserNodeUtils.toScalarContext(arg);
+        scalarArg.setAnnotation("context", "SCALAR");
+        args.elements.add(scalarArg);
     }
 
     private static void handleTypeGlobArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
@@ -279,10 +289,14 @@ public class PrototypeArgs {
         // Handle different types
         if (expr instanceof OperatorNode opNode && opNode.operator.equals("*")) {
             // Typeglob - create a typeglob reference
-            args.elements.add(new OperatorNode("\\", expr, expr.getIndex()));
+            Node typeglobRef = new OperatorNode("\\", expr, expr.getIndex());
+            typeglobRef.setAnnotation("context", "SCALAR");
+            args.elements.add(typeglobRef);
         } else {
             // Bare scalars
-            args.elements.add(ParserNodeUtils.toScalarContext(expr));
+            Node scalarArg = ParserNodeUtils.toScalarContext(expr);
+            scalarArg.setAnnotation("context", "SCALAR");
+            args.elements.add(scalarArg);
         }
     }
 
@@ -294,6 +308,10 @@ public class PrototypeArgs {
             consumeCommas(parser);
         }
         ListNode argList = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
+        // @ and % consume remaining arguments in LIST context
+        for (Node element : argList.elements) {
+            element.setAnnotation("context", "LIST");
+        }
         args.elements.addAll(argList.elements);
     }
 
@@ -306,12 +324,16 @@ public class PrototypeArgs {
             TokenUtils.consume(parser);
             Node block = new SubroutineNode(null, null, null, ParseBlock.parseBlock(parser), false, parser.tokenIndex);
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+            // Code references/blocks are evaluated in SCALAR context
+            block.setAnnotation("context", "SCALAR");
             args.elements.add(block);
             return false;
         }
 
         Node codeRef = parseRequiredArgument(parser, isOptional, "code reference or block");
         if (codeRef != null) {
+            // Code references are evaluated in SCALAR context
+            codeRef.setAnnotation("context", "SCALAR");
             args.elements.add(codeRef);
             return true;
         }
@@ -325,9 +347,13 @@ public class PrototypeArgs {
         }
 
         if (arg instanceof OperatorNode opNode && (opNode.operator.equals("@") || opNode.operator.equals("%"))) {
-            args.elements.add(new OperatorNode("\\", arg, arg.getIndex()));
+            Node refArg = new OperatorNode("\\", arg, arg.getIndex());
+            refArg.setAnnotation("context", "SCALAR");
+            args.elements.add(refArg);
         } else {
-            args.elements.add(ParserNodeUtils.toScalarContext(arg));
+            Node scalarArg = ParserNodeUtils.toScalarContext(arg);
+            scalarArg.setAnnotation("context", "SCALAR");
+            args.elements.add(scalarArg);
         }
     }
 
@@ -353,7 +379,10 @@ public class PrototypeArgs {
                         subNamePart +
                         " must be scalar (not single ref constructor)");
             }
-            args.elements.add(new OperatorNode("\\", referenceArg, referenceArg.getIndex()));
+            Node refNode = new OperatorNode("\\", referenceArg, referenceArg.getIndex());
+            // References are evaluated in SCALAR context
+            refNode.setAnnotation("context", "SCALAR");
+            args.elements.add(refNode);
         }
 
         if (!isGroup) {
