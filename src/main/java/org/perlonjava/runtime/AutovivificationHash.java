@@ -42,6 +42,7 @@ public class AutovivificationHash extends HashMap<String, RuntimeScalar> {
         // dereferenced as a hash, and now we complete the autovivification by
         // setting the scalar's type to HASHREFERENCE and its value to this hash.
 
+        hash.type = RuntimeHash.PLAIN_HASH;
         hash.elements = new HashMap<>();
 
         scalarToAutovivify.value = hash;

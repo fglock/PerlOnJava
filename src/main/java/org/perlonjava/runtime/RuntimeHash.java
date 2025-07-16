@@ -12,6 +12,12 @@ import static org.perlonjava.runtime.RuntimeScalarType.HASHREFERENCE;
  * any type of Perl scalar value.
  */
 public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, DynamicState {
+    public static final int PLAIN_HASH = 0;
+    public static final int AUTOVIVIFY_HASH = 1;
+    public static final int TIED_HASH = 2;
+    // Internal type of array - PLAIN_HASH, AUTOVIVIFY_HASH, or TIED_HASH
+    public int type;
+
     // Static stack to store saved "local" states of RuntimeHash instances
     private static final Stack<RuntimeHash> dynamicStateStack = new Stack<>();
     // Map to store the elements of the hash
@@ -24,7 +30,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * Initializes an empty hash map to store elements.
      */
     public RuntimeHash() {
-        this.elements = new HashMap<>();
+        type = PLAIN_HASH;
+        elements = new HashMap<>();
     }
 
     /**
@@ -71,7 +78,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public void addToArray(RuntimeArray array) {
 
-        if (this.elements instanceof AutovivificationHash) {
+        if (this.type == AUTOVIVIFY_HASH) {
             throw new PerlCompilerException("Can't use an undefined value as an HASH reference");
         }
 
@@ -101,7 +108,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeArray setFromList(RuntimeList value) {
 
-        if (this.elements instanceof AutovivificationHash hashProxy) {
+        if (this.type == AUTOVIVIFY_HASH && this.elements instanceof AutovivificationHash hashProxy) {
             hashProxy.vivify(this);
         }
 
@@ -160,7 +167,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeScalar exists(RuntimeScalar key) {
 
-        if (this.elements instanceof AutovivificationHash hashProxy) {
+        if (this.type == AUTOVIVIFY_HASH && this.elements instanceof AutovivificationHash hashProxy) {
             hashProxy.vivify(this);
         }
 
@@ -169,7 +176,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
     public RuntimeScalar exists(String key) {
 
-        if (this.elements instanceof AutovivificationHash hashProxy) {
+        if (this.type == AUTOVIVIFY_HASH && this.elements instanceof AutovivificationHash hashProxy) {
             hashProxy.vivify(this);
         }
 
@@ -188,7 +195,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeScalar delete(RuntimeScalar key) {
 
-        if (this.elements instanceof AutovivificationHash hashProxy) {
+        if (this.type == AUTOVIVIFY_HASH && this.elements instanceof AutovivificationHash hashProxy) {
             hashProxy.vivify(this);
         }
 
@@ -202,7 +209,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
     public RuntimeScalar delete(String key) {
 
-        if (this.elements instanceof AutovivificationHash hashProxy) {
+        if (this.type == AUTOVIVIFY_HASH && this.elements instanceof AutovivificationHash hashProxy) {
             hashProxy.vivify(this);
         }
 
@@ -278,7 +285,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeList getSlice(RuntimeList value) {
 
-        if (this.elements instanceof AutovivificationHash hashProxy) {
+        if (this.type == AUTOVIVIFY_HASH && this.elements instanceof AutovivificationHash hashProxy) {
             hashProxy.vivify(this);
         }
 
@@ -314,7 +321,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeArray keys() {
 
-        if (this.elements instanceof AutovivificationHash hashProxy) {
+        if (this.type == AUTOVIVIFY_HASH && this.elements instanceof AutovivificationHash hashProxy) {
             hashProxy.vivify(this);
         }
 
@@ -333,7 +340,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeArray values() {
 
-        if (this.elements instanceof AutovivificationHash hashProxy) {
+        if (this.type == AUTOVIVIFY_HASH && this.elements instanceof AutovivificationHash hashProxy) {
             hashProxy.vivify(this);
         }
 
@@ -352,7 +359,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeList each() {
 
-        if (this.elements instanceof AutovivificationHash hashProxy) {
+        if (this.type == AUTOVIVIFY_HASH && this.elements instanceof AutovivificationHash hashProxy) {
             hashProxy.vivify(this);
         }
 
