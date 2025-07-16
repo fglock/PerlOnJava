@@ -64,6 +64,10 @@ public class TieScalar {
         return self;
     }
 
+    public String getTiedPackage () {
+        return tiedPackage;
+    }
+
     /**
      * Fetches the value from a tied scalar variable.
      *
@@ -90,7 +94,9 @@ public class TieScalar {
      */
     public static RuntimeScalar tiedFetch(RuntimeScalar runtimeScalar) {
         RuntimeScalar self = ((TieScalar) runtimeScalar.value).getSelf();
-        String className = self.toString();
+        String className = ((TieScalar) runtimeScalar.value).getTiedPackage();
+
+        // System.out.println("tiedFetch: " + className + "::FETCH");
 
         // Call the Perl method
         return RuntimeCode.apply(
@@ -131,7 +137,9 @@ public class TieScalar {
      */
     public static RuntimeScalar tiedStore(RuntimeScalar runtimeScalar, RuntimeScalar value) {
         RuntimeScalar self = ((TieScalar) runtimeScalar.value).getSelf();
-        String className = self.toString();
+        String className = ((TieScalar) runtimeScalar.value).getTiedPackage();
+
+        // System.out.println("tiedStore: " + className + "::STORE");
 
         // Call the Perl method
         return RuntimeCode.apply(
