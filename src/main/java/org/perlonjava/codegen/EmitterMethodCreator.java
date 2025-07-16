@@ -4,7 +4,6 @@ import org.objectweb.asm.*;
 import org.objectweb.asm.util.TraceClassVisitor;
 import org.perlonjava.astnode.Node;
 import org.perlonjava.astvisitor.EmitterVisitor;
-import org.perlonjava.runtime.ErrorMessageUtil;
 import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
@@ -253,10 +252,7 @@ public class EmitterMethodCreator implements Opcodes {
 
                 // Restore the stack state to match the end of the try block if needed
                 // Return "undef"
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/RuntimeScalar",
-                        "undef",
-                        "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                EmitOperator.emitUndef(mv);
 
                 // End of the catch block
                 mv.visitLabel(endCatch);

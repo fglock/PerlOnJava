@@ -91,7 +91,7 @@ public class EmitForeach {
 
                 // No more elements - assign undef
                 mv.visitInsn(Opcodes.POP); // Pop the iterator copy
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", "undef", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                EmitOperator.emitUndef(mv);
                 mv.visitJumpInsn(Opcodes.GOTO, endValueLabel);
 
                 // Has more elements - get next value
@@ -155,7 +155,7 @@ public class EmitForeach {
         mv.visitInsn(Opcodes.POP);
 
         if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", "undef", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            EmitOperator.emitUndef(mv);
         }
 
         if (node.useNewScope) {

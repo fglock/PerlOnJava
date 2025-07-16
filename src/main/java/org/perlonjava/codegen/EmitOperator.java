@@ -573,7 +573,9 @@ public class EmitOperator {
 
     static void handleUndefOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         if (node.operand == null) {
-            emitOperator(node, emitterVisitor);
+            if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+                emitUndef(emitterVisitor.ctx.mv);
+            }
             return;
         }
         node.operand.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
@@ -702,5 +704,9 @@ public class EmitOperator {
             }
             handleVoidContext(emitterVisitor);
         }
+    }
+
+    static void emitUndef(MethodVisitor mv) {
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Operator", "undef", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
     }
 }

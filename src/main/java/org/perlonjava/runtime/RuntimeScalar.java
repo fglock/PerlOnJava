@@ -1,6 +1,5 @@
 package org.perlonjava.runtime;
 
-import org.perlonjava.operators.Operator;
 import org.perlonjava.operators.StringOperators;
 import org.perlonjava.parser.NumberParser;
 import org.perlonjava.regex.RuntimeRegex;
@@ -186,27 +185,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             newScalar.value = value.toString();
         }
         return newScalar;
-    }
-
-    public static RuntimeScalar undef() {
-        return scalarUndef;
-    }
-
-    public static RuntimeScalar wantarray(int ctx) {
-        return ctx == RuntimeContextType.VOID ? scalarUndef : new RuntimeScalar(ctx == RuntimeContextType.LIST ? scalarOne : scalarZero);
-    }
-
-    public static RuntimeList reset(RuntimeList args, int ctx) {
-        if (args.isEmpty()) {
-            RuntimeRegex.reset();
-        } else {
-            throw new PerlCompilerException("not implemented: reset(args)");
-        }
-        return getScalarInt(1).getList();
-    }
-
-    public static RuntimeScalar repeat(RuntimeScalar runtimeScalar, RuntimeScalar arg) {
-        return (RuntimeScalar) Operator.repeat(runtimeScalar, arg, RuntimeContextType.SCALAR);
     }
 
     private void initializeWithLong(Long value) {

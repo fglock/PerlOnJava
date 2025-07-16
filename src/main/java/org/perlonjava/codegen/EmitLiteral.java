@@ -250,8 +250,7 @@ public class EmitLiteral {
         if (contextType == RuntimeContextType.SCALAR) {
             if (node.elements.isEmpty()) {
                 // Empty list in scalar context returns undef
-                mv.visitFieldInsn(Opcodes.GETSTATIC, "org/perlonjava/runtime/RuntimeScalar",
-                        "undef", "Lorg/perlonjava/runtime/RuntimeScalar;");
+                EmitOperator.emitUndef(emitterVisitor.ctx.mv);
             } else {
                 // Evaluate all elements except the last in scalar context for side effects
                 for (int i = 0; i < node.elements.size() - 1; i++) {
