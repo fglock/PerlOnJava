@@ -9,16 +9,11 @@ package org.perlonjava.runtime;
  * in the tie handler object.</p>
  *
  * <p>This class provides static methods that are called when operations are
- * performed on tied scalars. The actual tie handler implementation should
- * implement the {@code TieHandler} interface (to be implemented).</p>
+ * performed on tied scalars.</p>
  *
- * <p><b>Implementation Status:</b> This is currently a stub implementation.
- * The full tie mechanism requires:
+ * <p><b>TODO: Additional methods to implement:</b>
  * <ul>
- *   <li>Adding a TIED type constant to RuntimeScalarType</li>
- *   <li>Creating a TieHandler interface with FETCH, STORE, UNTIE methods</li>
- *   <li>Updating all RuntimeScalar operations to check for TIED type</li>
- *   <li>Implementing tie(), untie(), and tied() methods on RuntimeScalar</li>
+ *   <li>tiedDestroy(RuntimeScalar runtimeScalar) - called when scalar goes out of scope</li>
  * </ul>
  * </p>
  *
@@ -47,8 +42,9 @@ public class TieScalar {
     /**
      * Creates a new TieScalar instance.
      *
-     * @param tiedPackage the package name this scalar is tied to
+     * @param tiedPackage   the package name this scalar is tied to
      * @param previousValue the value of the scalar before it was tied (may be null/undef)
+     * @param self          the blessed object returned by TIESCALAR that handles tied operations
      */
     public TieScalar(String tiedPackage, RuntimeScalar previousValue, RuntimeScalar self) {
         this.tiedPackage = tiedPackage;
@@ -56,23 +52,11 @@ public class TieScalar {
         this.self = self;
     }
 
-    public RuntimeScalar getPreviousValue () {
-        return previousValue;
-    }
-
-    public RuntimeScalar getSelf () {
-        return self;
-    }
-
-    public String getTiedPackage () {
-        return tiedPackage;
-    }
-
     /**
      * Fetches the value from a tied scalar variable.
      *
      * <p>This method is called whenever the value of a tied scalar is accessed.
-     * It should delegate to the FETCH method of the tie handler object associated
+     * It delegates to the FETCH method of the tie handler object associated
      * with the scalar.</p>
      *
      * <p>In Perl, this corresponds to operations like:
@@ -85,18 +69,10 @@ public class TieScalar {
      *
      * @param runtimeScalar the tied scalar whose value is being fetched
      * @return the value returned by the tie handler's FETCH method
-     * @throws PerlCompilerException currently throws as not yet implemented
-     *
-     * TODO: Implement by:
-     * 1. Extract the TieHandler from runtimeScalar.value
-     * 2. Call handler.FETCH()
-     * 3. Return the result
      */
     public static RuntimeScalar tiedFetch(RuntimeScalar runtimeScalar) {
         RuntimeScalar self = ((TieScalar) runtimeScalar.value).getSelf();
         String className = ((TieScalar) runtimeScalar.value).getTiedPackage();
-
-        // System.out.println("tiedFetch: " + className + "::FETCH");
 
         // Call the Perl method
         return RuntimeCode.call(
@@ -112,7 +88,7 @@ public class TieScalar {
      * Stores a value into a tied scalar variable.
      *
      * <p>This method is called whenever a value is assigned to a tied scalar.
-     * It should delegate to the STORE method of the tie handler object associated
+     * It delegates to the STORE method of the tie handler object associated
      * with the scalar.</p>
      *
      * <p>In Perl, this corresponds to operations like:
@@ -124,23 +100,12 @@ public class TieScalar {
      * </p>
      *
      * @param runtimeScalar the tied scalar being assigned to
-     * @return the scalar after the store operation (typically returns runtimeScalar)
-     * @throws PerlCompilerException currently throws as not yet implemented
-     *
-     * TODO: Implement by:
-     * 1. Extract the TieHandler from runtimeScalar.value
-     * 2. Extract the new value (needs to be passed as parameter)
-     * 3. Call handler.STORE(newValue)
-     * 4. Return runtimeScalar
-     *
-     * Note: The method signature will likely need to change to accept the value
-     * being stored: tiedStore(RuntimeScalar runtimeScalar, RuntimeScalar newValue)
+     * @param value         the value to store in the tied scalar
+     * @return the value returned by the tie handler's STORE method
      */
     public static RuntimeScalar tiedStore(RuntimeScalar runtimeScalar, RuntimeScalar value) {
         RuntimeScalar self = ((TieScalar) runtimeScalar.value).getSelf();
         String className = ((TieScalar) runtimeScalar.value).getTiedPackage();
-
-        // System.out.println("tiedStore: " + className + "::STORE");
 
         // Call the Perl method
         return RuntimeCode.call(
@@ -152,10 +117,15 @@ public class TieScalar {
         ).getFirst();
     }
 
-    // TODO: Additional methods to implement:
-    // - tiedUntie(RuntimeScalar runtimeScalar) - called by untie()
-    // - tiedDestroy(RuntimeScalar runtimeScalar) - called when scalar goes out of scope
-    //
-    // For special operations that modify the scalar (chomp, chop, auto-increment):
-    // - These will need to FETCH the value, modify it, then STORE it back
+    public RuntimeScalar getPreviousValue() {
+        return previousValue;
+    }
+
+    public RuntimeScalar getSelf() {
+        return self;
+    }
+
+    public String getTiedPackage() {
+        return tiedPackage;
+    }
 }
