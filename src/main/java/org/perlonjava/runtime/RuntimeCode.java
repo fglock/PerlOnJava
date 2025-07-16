@@ -249,7 +249,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                    RuntimeScalar method,
                                    String currentPackage,
                                    RuntimeArray args,
-                                   int callContext) throws Exception {
+                                   int callContext) {
         // insert `this` into the parameter list
         args.elements.addFirst(runtimeScalar);
 
