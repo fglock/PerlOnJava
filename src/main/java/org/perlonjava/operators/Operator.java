@@ -40,25 +40,34 @@ public class Operator {
                 RuntimeContextType.SCALAR
         ).getFirst();
 
-        variable.type = TIED_SCALAR;
-        variable.value = new TieScalar(className, variable, self);
-        return variable;
+        RuntimeScalar scalar = variable.scalarDeref();
+        RuntimeScalar previousValue = new RuntimeScalar(scalar);
+        scalar.type = TIED_SCALAR;
+        scalar.value = new TieScalar(className, previousValue, self);
+        return self;
     }
 
     public static RuntimeScalar untie(RuntimeBase... scalars) {
         RuntimeScalar variable = (RuntimeScalar) scalars[0];
-        if (variable.type == TIED_SCALAR) {
-            RuntimeScalar previousValue = ((TieScalar) variable.value).getPreviousValue();
-            variable.type = previousValue.type;
-            variable.value = previousValue.value;
+        if (variable.type == REFERENCE) {
+            RuntimeScalar scalar = variable.scalarDeref();
+            if (scalar.type == TIED_SCALAR) {
+                RuntimeScalar previousValue = ((TieScalar) scalar.value).getPreviousValue();
+                scalar.type = previousValue.type;
+                scalar.value = previousValue.value;
+            }
+            return scalar;
         }
-        return variable;
+        return scalarUndef;
     }
 
     public static RuntimeScalar tied(RuntimeBase... scalars) {
         RuntimeScalar variable = (RuntimeScalar) scalars[0];
-        if (variable.type == TIED_SCALAR) {
-            return ((TieScalar) variable.value).getSelf();
+        if (variable.type == REFERENCE) {
+            RuntimeScalar scalar = variable.scalarDeref();
+            if (scalar.type == TIED_SCALAR) {
+                return ((TieScalar) variable.value).getSelf();
+            }
         }
         return scalarUndef;
     }
