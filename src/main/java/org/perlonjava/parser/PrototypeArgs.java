@@ -76,9 +76,9 @@ public class PrototypeArgs {
         if (prototype == null) {
             args = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
             // When no prototype is given, arguments are evaluated in LIST context
-            for (Node element : args.elements) {
-                element.setAnnotation("context", "LIST");
-            }
+//            for (Node element : args.elements) {
+//                element.setAnnotation("context", "LIST");
+//            }
         } else {
             parsePrototypeArguments(parser, args, prototype);
 
@@ -309,9 +309,9 @@ public class PrototypeArgs {
         }
         ListNode argList = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
         // @ and % consume remaining arguments in LIST context
-        for (Node element : argList.elements) {
-            element.setAnnotation("context", "LIST");
-        }
+//        for (Node element : argList.elements) {
+//            element.setAnnotation("context", "LIST");
+//        }
         args.elements.addAll(argList.elements);
     }
 
