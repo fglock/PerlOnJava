@@ -29,7 +29,7 @@ public class Operator {
             case ARRAYREFERENCE -> "TIEARRAY";
             case HASHREFERENCE -> "TIEHASH";
             case GLOBREFERENCE -> "TIEHANDLE";
-            default -> throw new PerlCompilerException("Unknown variable type for tie()");
+            default -> throw new PerlCompilerException("Unsupported variable type for tie()");
         };
 
         // Call the Perl method
@@ -41,34 +41,60 @@ public class Operator {
                 RuntimeContextType.SCALAR
         ).getFirst();
 
-        RuntimeScalar scalar = variable.scalarDeref();
-        RuntimeScalar previousValue = new RuntimeScalar(scalar);
-        scalar.type = TIED_SCALAR;
-        scalar.value = new TieScalar(className, previousValue, self);
+        switch (variable.type) {
+            case REFERENCE -> {
+                RuntimeScalar scalar = variable.scalarDeref();
+                RuntimeScalar previousValue = new RuntimeScalar(scalar);
+                scalar.type = TIED_SCALAR;
+                scalar.value = new TieScalar(className, previousValue, self);
+            }
+            case ARRAYREFERENCE -> throw new PerlCompilerException("tie(ARRAY) not implemented");
+            case HASHREFERENCE -> throw new PerlCompilerException("tie(HASH) not implemented");
+            case GLOBREFERENCE -> throw new PerlCompilerException("tie(GLOB) not implemented");
+            default -> {
+                return scalarUndef;
+            }
+        }
         return self;
     }
 
     public static RuntimeScalar untie(RuntimeBase... scalars) {
         RuntimeScalar variable = (RuntimeScalar) scalars[0];
-        if (variable.type == REFERENCE) {
-            RuntimeScalar scalar = variable.scalarDeref();
-            if (scalar.type == TIED_SCALAR) {
-                RuntimeScalar previousValue = ((TieScalar) scalar.value).getPreviousValue();
-                scalar.type = previousValue.type;
-                scalar.value = previousValue.value;
+
+        switch (variable.type) {
+            case REFERENCE -> {
+                RuntimeScalar scalar = variable.scalarDeref();
+                if (scalar.type == TIED_SCALAR) {
+                    RuntimeScalar previousValue = ((TieScalar) scalar.value).getPreviousValue();
+                    scalar.type = previousValue.type;
+                    scalar.value = previousValue.value;
+                }
+                // return scalar;
+                return scalarTrue;
             }
-            // return scalar;
-            return scalarTrue;
+            case ARRAYREFERENCE -> throw new PerlCompilerException("untie(ARRAY) not implemented");
+            case HASHREFERENCE -> throw new PerlCompilerException("untie(HASH) not implemented");
+            case GLOBREFERENCE -> throw new PerlCompilerException("untie(GLOB) not implemented");
+            default -> {
+                return scalarUndef;
+            }
         }
-        return scalarUndef;
     }
 
     public static RuntimeScalar tied(RuntimeBase... scalars) {
         RuntimeScalar variable = (RuntimeScalar) scalars[0];
-        if (variable.type == REFERENCE) {
-            RuntimeScalar scalar = variable.scalarDeref();
-            if (scalar.type == TIED_SCALAR) {
-                return ((TieScalar) scalar.value).getSelf();
+        switch (variable.type) {
+            case REFERENCE -> {
+                RuntimeScalar scalar = variable.scalarDeref();
+                if (scalar.type == TIED_SCALAR) {
+                    return ((TieScalar) scalar.value).getSelf();
+                }
+            }
+            case ARRAYREFERENCE -> throw new PerlCompilerException("tied(ARRAY) not implemented");
+            case HASHREFERENCE -> throw new PerlCompilerException("tied(HASH) not implemented");
+            case GLOBREFERENCE -> throw new PerlCompilerException("tied(GLOB) not implemented");
+            default -> {
+                return scalarUndef;
             }
         }
         return scalarUndef;
