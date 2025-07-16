@@ -199,7 +199,7 @@ public class EmitOperator {
 
                 // Generate code for argument
                 String argContext = (String) arg.getAnnotation("context");
-                if (argContext.equals("SCALAR")) {
+                if (argContext != null && argContext.equals("SCALAR")) {
                     arg.accept(scalarVisitor);
                 } else {
                     arg.accept(listVisitor);
