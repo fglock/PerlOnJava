@@ -56,7 +56,8 @@ public class Operator {
                 scalar.type = previousValue.type;
                 scalar.value = previousValue.value;
             }
-            return scalar;
+            // return scalar;
+            return scalarTrue;
         }
         return scalarUndef;
     }
@@ -66,7 +67,7 @@ public class Operator {
         if (variable.type == REFERENCE) {
             RuntimeScalar scalar = variable.scalarDeref();
             if (scalar.type == TIED_SCALAR) {
-                return ((TieScalar) variable.value).getSelf();
+                return ((TieScalar) scalar.value).getSelf();
             }
         }
         return scalarUndef;
