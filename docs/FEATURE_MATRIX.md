@@ -41,11 +41,12 @@ PerlOnJava implements most core Perl features with some key differences:
 - Some core modules and pragmas
 - Method Resolution Order (C3 only)
 - File operations and I/O
+- tied variables
 
 ❌ Not Supported:
 - XS modules and C integration
 - Threading
-- Some Perl features (formats, tied variables)
+- Some Perl features (formats)
 - Some system-level operations (fork)
 
 ## Compiler Usability
@@ -142,7 +143,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`local` special cases**: `local` works for typeglobs and filehandles.
 - ✅  **Typeglob as hash**: `*$val{$k}` for `SCALAR`, `ARRAY`, `HASH`, `CODE`, `IO` is implemented.
 - ✅  **Use string as a scalar reference**: Support for scalar references from strings is implemented.
-- ❌  **Tied Scalars**: Support for tying scalars to classes is missing.
+- ✅  **Tied Scalars**: Support for tying scalars to classes is implemented.
 - ❌  **Taint checks**: Support for taint checks is not implemented.
 - ❌  **`local` special cases**: `local *HANDLE = *HANDLE` doesn't create a new typeglob.
 - ❌  **Variable attributes**: Variable attributes are not yet supported.
@@ -578,6 +579,7 @@ The DBI module provides seamless integration with JDBC drivers:
 - ❌  **`DESTROY`**: Handling of object destruction may be incompatible with JVM garbage collection.
   - For more details see: `dev/design/auto_close.md`.
   - Some modules that depend on `DESTROY`: `SelectSaver`, `File::Temp`.
+  - `DESTROY` method in tied variables is also not implemented.
 - ❌  **Perl `XS` code**: XS code interfacing with C is not supported on the JVM.
 - ❌  **Auto-close files**: File auto-close depends on handling of object destruction, may be incompatible with JVM garbage collection.
 - ❌  **Low-level socket functions**: accept, bind, connect, getpeername, getsockname, getsockopt, listen, recv, send, setsockopt, shutdown, socket, socketpair
