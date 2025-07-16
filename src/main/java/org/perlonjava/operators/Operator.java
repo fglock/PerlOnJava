@@ -19,6 +19,21 @@ import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 public class Operator {
 
+    /**
+     * Implements Perl's tie() builtin function.
+     *
+     * <p>Binds a variable to a package class that provides the implementation for that variable.
+     * The variable's normal behavior is replaced by method calls to the tied object.</p>
+     *
+     * <p>In Perl: {@code tie $scalar, 'ClassName', @args}</p>
+     *
+     * @param scalars varargs where:
+     *                - scalars[0] is the variable to tie (must be a reference to scalar, array, hash, or glob)
+     *                - scalars[1] is the class name to tie to
+     *                - scalars[2..n] are optional arguments passed to the TIE* constructor
+     * @return the object returned by the TIE* constructor method
+     * @throws PerlCompilerException if the variable type is not supported or not yet implemented
+     */
     public static RuntimeScalar tie(RuntimeBase... scalars) {
         RuntimeScalar variable = (RuntimeScalar) scalars[0];
         String className = scalars[1].toString();
@@ -58,6 +73,18 @@ public class Operator {
         return self;
     }
 
+    /**
+     * Implements Perl's untie() builtin function.
+     *
+     * <p>Breaks the binding between a variable and the package class it was tied to.
+     * The variable returns to its normal behavior.</p>
+     *
+     * <p>In Perl: {@code untie $scalar}</p>
+     *
+     * @param scalars varargs where scalars[0] is the tied variable (must be a reference)
+     * @return true on success, undef if the variable wasn't tied
+     * @throws PerlCompilerException if the variable type is not yet implemented
+     */
     public static RuntimeScalar untie(RuntimeBase... scalars) {
         RuntimeScalar variable = (RuntimeScalar) scalars[0];
 
@@ -81,6 +108,18 @@ public class Operator {
         }
     }
 
+    /**
+     * Implements Perl's tied() builtin function.
+     *
+     * <p>Returns a reference to the object underlying a tied variable.
+     * If the variable is not tied, returns undef.</p>
+     *
+     * <p>In Perl: {@code my $obj = tied $scalar}</p>
+     *
+     * @param scalars varargs where scalars[0] is the potentially tied variable (must be a reference)
+     * @return the object that the variable is tied to, or undef if not tied
+     * @throws PerlCompilerException if the variable type is not yet implemented
+     */
     public static RuntimeScalar tied(RuntimeBase... scalars) {
         RuntimeScalar variable = (RuntimeScalar) scalars[0];
         switch (variable.type) {

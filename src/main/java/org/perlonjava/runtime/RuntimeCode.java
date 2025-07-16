@@ -282,7 +282,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 perlClassName = perlClassName.substring(0, perlClassName.length() - 2);
             }
         }
-        
+
         // Method name can be:
         // - A short name (e.g., "new")
         // - Fully qualified name
