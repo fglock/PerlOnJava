@@ -264,28 +264,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         // Retrieve Perl class name
         String perlClassName;
-        switch (runtimeScalar.type) {
-            case REFERENCE:
-            case ARRAYREFERENCE:
-            case HASHREFERENCE:
-                int blessId = ((RuntimeBase) runtimeScalar.value).blessId;
-                if (blessId == 0) {
-                    throw new PerlCompilerException("Can't call method \"" + methodName + "\" on unblessed reference");
-                }
-                perlClassName = NameNormalizer.getBlessStr(blessId);
-                break;
-            case UNDEF:
+        if ((runtimeScalar.type & REFERENCE_BIT) != 0) {
+            // Handle all reference types (REFERENCE, ARRAYREFERENCE, HASHREFERENCE, etc.)
+            int blessId = ((RuntimeBase) runtimeScalar.value).blessId;
+            if (blessId == 0) {
+                throw new PerlCompilerException("Can't call method \"" + methodName + "\" on unblessed reference");
+            }
+            perlClassName = NameNormalizer.getBlessStr(blessId);
+        } else if (runtimeScalar.type == UNDEF) {
+            throw new PerlCompilerException("Can't call method \"" + methodName + "\" on an undefined value");
+        } else {
+            perlClassName = runtimeScalar.toString();
+            if (perlClassName.isEmpty()) {
                 throw new PerlCompilerException("Can't call method \"" + methodName + "\" on an undefined value");
-            default:
-                perlClassName = runtimeScalar.toString();
-                if (perlClassName.isEmpty()) {
-                    throw new PerlCompilerException("Can't call method \"" + methodName + "\" on an undefined value");
-                }
-                if (perlClassName.endsWith("::")) {
-                    perlClassName = perlClassName.substring(0, perlClassName.length() - 2);
-                }
+            }
+            if (perlClassName.endsWith("::")) {
+                perlClassName = perlClassName.substring(0, perlClassName.length() - 2);
+            }
         }
-
+        
         // Method name can be:
         // - A short name (e.g., "new")
         // - Fully qualified name
