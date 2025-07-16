@@ -92,10 +92,7 @@ public class Operator {
             case REFERENCE -> {
                 RuntimeScalar scalar = variable.scalarDeref();
                 if (scalar.type == TIED_SCALAR) {
-
-                    // TODO
-                    // TieScalar.tieDestroy(scalar);
-
+                    TieScalar.tiedDestroy(scalar);
                     RuntimeScalar previousValue = ((TieScalar) scalar.value).getPreviousValue();
                     scalar.type = previousValue.type;
                     scalar.value = previousValue.value;
