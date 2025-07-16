@@ -11,12 +11,6 @@ package org.perlonjava.runtime;
  * <p>This class provides static methods that are called when operations are
  * performed on tied scalars.</p>
  *
- * <p><b>TODO: Additional methods to implement:</b>
- * <ul>
- *   <li>tiedDestroy(RuntimeScalar runtimeScalar) - called when scalar goes out of scope</li>
- * </ul>
- * </p>
- *
  * @see RuntimeScalar
  */
 public class TieScalar {
@@ -115,6 +109,47 @@ public class TieScalar {
                 new RuntimeArray(value),
                 RuntimeContextType.SCALAR
         ).getFirst();
+    }
+
+    /**
+     * Destroys a tied scalar variable.
+     *
+     * <p>This method is called when a tied scalar goes out of scope or is being
+     * garbage collected. It delegates to the DESTROY method of the tie handler
+     * object associated with the scalar, if such a method exists.</p>
+     *
+     * <p>In Perl, this corresponds to:
+     * <pre>{@code
+     * {
+     *     my $tied_scalar;
+     *     tie $tied_scalar, 'MyClass';
+     *     # ... use $tied_scalar ...
+     * } # DESTROY called here when $tied_scalar goes out of scope
+     * }</pre>
+     * </p>
+     *
+     * @param runtimeScalar the tied scalar being destroyed
+     * @return the value returned by the tie handler's DESTROY method, or undef if no DESTROY method exists
+     */
+    public static RuntimeScalar tiedDestroy(RuntimeScalar runtimeScalar) {
+        RuntimeScalar self = ((TieScalar) runtimeScalar.value).getSelf();
+        String className = ((TieScalar) runtimeScalar.value).getTiedPackage();
+
+        // Check if DESTROY method exists before calling it
+        // In Perl, DESTROY is optional for tied variables
+        try {
+            return RuntimeCode.call(
+                    self,
+                    new RuntimeScalar("DESTROY"),
+                    className,
+                    new RuntimeArray(),
+                    RuntimeContextType.SCALAR
+            ).getFirst();
+        } catch (Exception e) {
+            // If DESTROY method doesn't exist or fails, return undef
+            // This matches Perl's behavior
+            return RuntimeScalarCache.scalarUndef;
+        }
     }
 
     public RuntimeScalar getPreviousValue() {
