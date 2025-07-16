@@ -97,8 +97,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar(RuntimeScalar scalar) {
-        this.type = scalar.type;
-        this.value = scalar.value;
+        if (scalar.type == TIED_SCALAR) {
+            RuntimeScalar temp = TieScalar.tiedFetch(scalar);
+            this.type = temp.type;
+            this.value = temp.value;
+        } else {
+            this.type = scalar.type;
+            this.value = scalar.value;
+        }
     }
 
     public RuntimeScalar(RuntimeCode value) {
@@ -805,11 +811,35 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case DOUBLE -> this.value = (double) this.value + 1;
             case STRING -> {
                 this.value = ScalarUtils.stringIncrement(this);
-                return this;
+            }
+            case UNDEF -> {
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = 1;
+            }
+            case VSTRING -> {
+                this.value = ScalarUtils.stringIncrement(this);
             }
             case BOOLEAN -> {
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = this.getInt() + 1;
+            }
+            case GLOB -> {
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = 1;
+            }
+            case REGEX -> {
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = 1;
+            }
+            case JAVAOBJECT -> {
+                this.type = RuntimeScalarType.INTEGER;
+                this.value = 1;
+            }
+            case TIED_SCALAR -> {
+                RuntimeScalar variable = TieScalar.tiedFetch(this);
+                variable.preAutoIncrement();
+                TieScalar.tiedStore(this, variable);
+                return variable;
             }
             default -> {
                 this.type = RuntimeScalarType.INTEGER;
@@ -828,6 +858,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case BOOLEAN -> {
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = this.getInt() + 1;
+            }
+            case TIED_SCALAR -> {
+                RuntimeScalar variable = new RuntimeScalar(old);
+                variable.preAutoIncrement();
+                TieScalar.tiedStore(this, variable);
             }
             default -> {
                 this.type = RuntimeScalarType.INTEGER;
@@ -850,6 +885,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = this.getInt() - 1;
             }
+            case TIED_SCALAR -> {
+                RuntimeScalar variable = TieScalar.tiedFetch(this);
+                variable.preAutoDecrement();
+                TieScalar.tiedStore(this, variable);
+                return variable;
+            }
             default -> {
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = -1;
@@ -871,6 +912,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case BOOLEAN -> {
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = this.getInt() - 1;
+            }
+            case TIED_SCALAR -> {
+                RuntimeScalar variable = new RuntimeScalar(old);
+                variable.preAutoDecrement();
+                TieScalar.tiedStore(this, variable);
             }
             default -> {
                 this.type = RuntimeScalarType.INTEGER;

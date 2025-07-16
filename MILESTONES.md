@@ -273,6 +273,8 @@ The following areas are currently under active development to enhance the functi
 ## Upcoming Milestones
 
 - **v3.2.0**: Next minor version
+  - Add `tie` scalar operation.
+  - Add `tie`, `tied`, `untie` operators.
   - Planned release date: 2025-12-10.
 
 - Work in Progress
@@ -282,7 +284,7 @@ The following areas are currently under active development to enhance the functi
   - File::Path
   - IO::Handle
   - XSLoader or Dynaloader for JVM
-  - Add `tie` operation
+  - Add `tie` operations
 
 ### v4.0.0 Milestone (Planned Release Date: 2026-05-10)
 
