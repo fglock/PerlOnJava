@@ -46,6 +46,20 @@ public class TieScalar {
         this.self = self;
     }
 
+    public static RuntimeScalar tieCall(RuntimeScalar runtimeScalar, String method, RuntimeBase... args) {
+        RuntimeScalar self = ((TieScalar) runtimeScalar.value).getSelf();
+        String className = ((TieScalar) runtimeScalar.value).getTiedPackage();
+
+        // Call the Perl method
+        return RuntimeCode.call(
+                self,
+                new RuntimeScalar(method),
+                className,
+                new RuntimeArray(args),
+                RuntimeContextType.SCALAR
+        ).getFirst();
+    }
+
     /**
      * Fetches the value from a tied scalar variable.
      *
@@ -65,17 +79,7 @@ public class TieScalar {
      * @return the value returned by the tie handler's FETCH method
      */
     public static RuntimeScalar tiedFetch(RuntimeScalar runtimeScalar) {
-        RuntimeScalar self = ((TieScalar) runtimeScalar.value).getSelf();
-        String className = ((TieScalar) runtimeScalar.value).getTiedPackage();
-
-        // Call the Perl method
-        return RuntimeCode.call(
-                self,
-                new RuntimeScalar("FETCH"),
-                className,
-                new RuntimeArray(),
-                RuntimeContextType.SCALAR
-        ).getFirst();
+        return tieCall(runtimeScalar, "FETCH");
     }
 
     /**
@@ -98,17 +102,7 @@ public class TieScalar {
      * @return the value returned by the tie handler's STORE method
      */
     public static RuntimeScalar tiedStore(RuntimeScalar runtimeScalar, RuntimeScalar value) {
-        RuntimeScalar self = ((TieScalar) runtimeScalar.value).getSelf();
-        String className = ((TieScalar) runtimeScalar.value).getTiedPackage();
-
-        // Call the Perl method
-        return RuntimeCode.call(
-                self,
-                new RuntimeScalar("STORE"),
-                className,
-                new RuntimeArray(value),
-                RuntimeContextType.SCALAR
-        ).getFirst();
+        return tieCall(runtimeScalar, "STORE", value);
     }
 
     /**
@@ -132,22 +126,12 @@ public class TieScalar {
      * @return the value returned by the tie handler's DESTROY method, or undef if no DESTROY method exists
      */
     public static RuntimeScalar tiedDestroy(RuntimeScalar runtimeScalar) {
-        RuntimeScalar self = ((TieScalar) runtimeScalar.value).getSelf();
-        String className = ((TieScalar) runtimeScalar.value).getTiedPackage();
-
         // Check if DESTROY method exists before calling it
         // In Perl, DESTROY is optional for tied variables
         try {
-            return RuntimeCode.call(
-                    self,
-                    new RuntimeScalar("DESTROY"),
-                    className,
-                    new RuntimeArray(),
-                    RuntimeContextType.SCALAR
-            ).getFirst();
+            return tieCall(runtimeScalar, "DESTROY");
         } catch (Exception e) {
             // If DESTROY method doesn't exist or fails, return undef
-            // This matches Perl's behavior
             return RuntimeScalarCache.scalarUndef;
         }
     }

@@ -579,7 +579,7 @@ The DBI module provides seamless integration with JDBC drivers:
 - ❌  **`DESTROY`**: Handling of object destruction may be incompatible with JVM garbage collection.
   - For more details see: `dev/design/auto_close.md`.
   - Some modules that depend on `DESTROY`: `SelectSaver`, `File::Temp`.
-  - `DESTROY` method in tied variables is also not implemented.
+  - `DESTROY` method in tied variables is also not implemented. DESTROY is called when the variable is `untie`.
 - ❌  **Perl `XS` code**: XS code interfacing with C is not supported on the JVM.
 - ❌  **Auto-close files**: File auto-close depends on handling of object destruction, may be incompatible with JVM garbage collection.
 - ❌  **Low-level socket functions**: accept, bind, connect, getpeername, getsockname, getsockopt, listen, recv, send, setsockopt, shutdown, socket, socketpair
