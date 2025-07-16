@@ -19,9 +19,9 @@ import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 public class Operator {
 
-    public static RuntimeScalar tie(RuntimeScalar... scalars) {
-        RuntimeScalar variable = scalars[0];
-        RuntimeScalar className = scalars[1];
+    public static RuntimeScalar tie(RuntimeBase... scalars) {
+        RuntimeScalar variable = (RuntimeScalar) scalars[0];
+        RuntimeScalar className = (RuntimeScalar) scalars[1];
         RuntimeArray args = new RuntimeArray(Arrays.copyOfRange(scalars, 2, scalars.length));
 
         String tieType = switch (variable.type) {
@@ -41,11 +41,11 @@ public class Operator {
         ).getFirst();
     }
 
-    public static RuntimeScalar untie(RuntimeScalar... scalars) {
+    public static RuntimeScalar untie(RuntimeBase... scalars) {
         throw new PerlCompilerException("untie operator not yet implemented");
     }
 
-    public static RuntimeScalar tied(RuntimeScalar... scalars) {
+    public static RuntimeScalar tied(RuntimeBase... scalars) {
         throw new PerlCompilerException("tied operator not yet implemented");
     }
 

@@ -189,7 +189,7 @@ public class EmitOperator {
 
             // Create array of RuntimeScalar with size equal to number of arguments
             mv.visitIntInsn(Opcodes.SIPUSH, operand.elements.size());
-            mv.visitTypeInsn(Opcodes.ANEWARRAY, "org/perlonjava/runtime/RuntimeScalar");
+            mv.visitTypeInsn(Opcodes.ANEWARRAY, "org/perlonjava/runtime/RuntimeBase");
 
             // Populate the array with arguments
             int index = 0;

@@ -173,9 +173,9 @@ public class OperatorHandler {
         put("prototype", "prototype", "org/perlonjava/runtime/RuntimeCode", "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         // Tie
-        put("tie", "tie", "org/perlonjava/operators/Operator", "([Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
-        put("untie", "untie", "org/perlonjava/operators/Operator", "([Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
-        put("tied", "tied", "org/perlonjava/operators/Operator", "([Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("tie", "tie", "org/perlonjava/operators/Operator", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("untie", "untie", "org/perlonjava/operators/Operator", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("tied", "tied", "org/perlonjava/operators/Operator", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         // List operators
         put("map", "map",
