@@ -56,7 +56,7 @@ public class EmitStatement {
         } else {
             // If the context is not VOID, push "undef" to the stack
             if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
-                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", "undef", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                EmitOperator.emitUndef(emitterVisitor.ctx.mv);
             }
         }
 
@@ -165,7 +165,7 @@ public class EmitStatement {
 
             // If the context is not VOID, push "undef" to the stack
             if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", "undef", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                EmitOperator.emitUndef(emitterVisitor.ctx.mv);
             }
 
             emitterVisitor.ctx.logDebug("FOR end");
@@ -216,7 +216,7 @@ public class EmitStatement {
 
         // If the context is not VOID, push "undef" to the stack
         if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", "undef", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+            EmitOperator.emitUndef(emitterVisitor.ctx.mv);
         }
 
         emitterVisitor.ctx.logDebug("DO-WHILE end");

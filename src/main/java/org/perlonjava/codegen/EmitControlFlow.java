@@ -59,7 +59,7 @@ public class EmitControlFlow {
         if (loopLabels.context != RuntimeContextType.VOID) {
             if (operator.equals("next") || operator.equals("last")) {
                 // For non-void contexts, ensure an 'undef' value is pushed to maintain stack consistency
-                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/RuntimeScalar", "undef", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
+                EmitOperator.emitUndef(ctx.mv);
             }
         }
 

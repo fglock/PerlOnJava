@@ -123,7 +123,7 @@ public class OperatorHandler {
 
         put("select", "select", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("caller", "caller", "org/perlonjava/runtime/RuntimeCode", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
-        put("reset", "reset", "org/perlonjava/runtime/RuntimeScalar", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
+        put("reset", "reset", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
         put("warn", "warn", "org/perlonjava/operators/WarnDie", "(Lorg/perlonjava/runtime/RuntimeBase;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeBase;");
         put("die", "die", "org/perlonjava/operators/WarnDie", "(Lorg/perlonjava/runtime/RuntimeBase;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeBase;");
         put("exit", "exit", "org/perlonjava/operators/WarnDie", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
@@ -140,7 +140,7 @@ public class OperatorHandler {
         put("pack", "pack", "org/perlonjava/operators/Pack", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("read", "read", "org/perlonjava/operators/Readline", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
-        put("x", "repeat", "org/perlonjava/runtime/RuntimeScalar", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("x", "repeat", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("join", "join", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("split", "split", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;");
 
@@ -167,8 +167,8 @@ public class OperatorHandler {
         put("push", "push", "org/perlonjava/runtime/RuntimeArray", "(Lorg/perlonjava/runtime/RuntimeArray;Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("unshift", "unshift", "org/perlonjava/runtime/RuntimeArray", "(Lorg/perlonjava/runtime/RuntimeArray;Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
-        put("undef", "undef", "org/perlonjava/runtime/RuntimeScalar", "()Lorg/perlonjava/runtime/RuntimeScalar;");
-        put("wantarray", "wantarray", "org/perlonjava/runtime/RuntimeScalar", "(I)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("undef", "undef", "org/perlonjava/operators/Operator", "()Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("wantarray", "wantarray", "org/perlonjava/operators/Operator", "(I)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         put("prototype", "prototype", "org/perlonjava/runtime/RuntimeCode", "(Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
