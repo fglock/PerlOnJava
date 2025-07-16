@@ -352,12 +352,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar set(int value) {
+        if (this.type == TIED_SCALAR) {
+            return TieScalar.tiedStore(this, new RuntimeScalar(value));
+        }
         this.type = RuntimeScalarType.INTEGER;
         this.value = value;
         return this;
     }
 
     public RuntimeScalar set(long value) {
+        if (this.type == TIED_SCALAR) {
+            return TieScalar.tiedStore(this, new RuntimeScalar(value));
+        }
         if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
             this.type = DOUBLE;
             this.value = (double) value;
@@ -369,12 +375,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar set(boolean value) {
+        if (this.type == TIED_SCALAR) {
+            return TieScalar.tiedStore(this, new RuntimeScalar(value));
+        }
         this.type = RuntimeScalarType.BOOLEAN;
         this.value = value;
         return this;
     }
 
     public RuntimeScalar set(String value) {
+        if (this.type == TIED_SCALAR) {
+            return TieScalar.tiedStore(this, new RuntimeScalar(value));
+        }
         if (value == null) {
             this.type = UNDEF;
         } else {

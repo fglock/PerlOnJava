@@ -214,8 +214,7 @@ public class StringOperators {
         // Note: In slurp mode ($/ = undef) or fixed-length record mode, we don't remove anything
 
         if (charsRemoved > 0) {
-            runtimeScalar.type = RuntimeScalarType.STRING;
-            runtimeScalar.value = str;
+            runtimeScalar.set(str);
         }
         return getScalarInt(charsRemoved);
     }
@@ -226,8 +225,7 @@ public class StringOperators {
             return new RuntimeScalar();
         }
         String lastChar = str.substring(str.length() - 1);
-        runtimeScalar.type = RuntimeScalarType.STRING;
-        runtimeScalar.value = str.substring(0, str.length() - 1);
+        runtimeScalar.set(str.substring(0, str.length() - 1));
         return new RuntimeScalar(lastChar);
     }
 
