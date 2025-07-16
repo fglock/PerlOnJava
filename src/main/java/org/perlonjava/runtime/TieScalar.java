@@ -27,6 +27,12 @@ package org.perlonjava.runtime;
 public class TieScalar {
 
     /**
+     * The tied object (handler) that implements the tie interface methods.
+     * This is the blessed object returned by TIESCALAR.
+     */
+    private final RuntimeScalar self;
+
+    /**
      * The package name that this scalar is tied to.
      * Used for method dispatch and error reporting.
      */
@@ -44,9 +50,10 @@ public class TieScalar {
      * @param tiedPackage the package name this scalar is tied to
      * @param previousValue the value of the scalar before it was tied (may be null/undef)
      */
-    public TieScalar(String tiedPackage, RuntimeScalar previousValue) {
+    public TieScalar(String tiedPackage, RuntimeScalar previousValue, RuntimeScalar self) {
         this.tiedPackage = tiedPackage;
         this.previousValue = new RuntimeScalar(previousValue);
+        this.self = self;
     }
 
     public RuntimeScalar getPreviousValue () {

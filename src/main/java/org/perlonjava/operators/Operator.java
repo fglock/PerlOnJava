@@ -32,16 +32,17 @@ public class Operator {
             default -> throw new PerlCompilerException("Unknown variable type for tie()");
         };
 
-        variable.type = TIED_SCALAR;
-        variable.value = new TieScalar(className, variable);
-
         // Call the Perl method
-        return RuntimeCode.apply(
+        RuntimeScalar self = RuntimeCode.apply(
                 GlobalVariable.getGlobalCodeRef(className + tieType),
                 className + tieType,
                 args,
                 RuntimeContextType.SCALAR
         ).getFirst();
+
+        variable.type = TIED_SCALAR;
+        variable.value = new TieScalar(className, variable, self);
+        return variable;
     }
 
     public static RuntimeScalar untie(RuntimeBase... scalars) {
