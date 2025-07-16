@@ -14,6 +14,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.RuntimeArray.TIED_ARRAY;
+import static org.perlonjava.runtime.RuntimeHash.TIED_HASH;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.RuntimeScalarType.*;
 
@@ -63,9 +65,24 @@ public class Operator {
                 scalar.type = TIED_SCALAR;
                 scalar.value = new TieScalar(className, previousValue, self);
             }
-            case ARRAYREFERENCE -> throw new PerlCompilerException("tie(ARRAY) not implemented");
-            case HASHREFERENCE -> throw new PerlCompilerException("tie(HASH) not implemented");
-            case GLOBREFERENCE -> throw new PerlCompilerException("tie(GLOB) not implemented");
+            case ARRAYREFERENCE -> {
+                RuntimeArray array = variable.arrayDeref();
+                RuntimeArray previousValue = new RuntimeArray(array);
+                array.type = TIED_ARRAY;
+                // ...
+                throw new PerlCompilerException("tie(ARRAY) not implemented");
+            }
+            case HASHREFERENCE -> {
+                RuntimeHash hash = variable.hashDeref();
+                // RuntimeHash previousValue = new RuntimeHash(hash);
+                hash.type = TIED_HASH;
+                // ...
+                throw new PerlCompilerException("tie(HASH) not implemented");
+            }
+            case GLOBREFERENCE -> {
+                // ...
+                throw new PerlCompilerException("tie(GLOB) not implemented");
+            }
             default -> {
                 return scalarUndef;
             }
