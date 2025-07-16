@@ -21,7 +21,7 @@ public class Operator {
 
     public static RuntimeScalar tie(RuntimeBase... scalars) {
         RuntimeScalar variable = (RuntimeScalar) scalars[0];
-        RuntimeScalar className = (RuntimeScalar) scalars[1];
+        String className = scalars[1].toString();
         RuntimeArray args = new RuntimeArray(Arrays.copyOfRange(scalars, 2, scalars.length));
 
         String tieType = switch (variable.type) {
@@ -31,6 +31,9 @@ public class Operator {
             case GLOBREFERENCE -> "::TIEHANDLE";
             default -> throw new PerlCompilerException("Unknown variable type for tie()");
         };
+
+        variable.type = TIED_SCALAR;
+        variable.value = new TieScalar(className, variable);
 
         // Call the Perl method
         return RuntimeCode.apply(
@@ -42,7 +45,15 @@ public class Operator {
     }
 
     public static RuntimeScalar untie(RuntimeBase... scalars) {
-        throw new PerlCompilerException("untie operator not yet implemented");
+        RuntimeScalar variable = (RuntimeScalar) scalars[0];
+
+        if (variable.type == TIED_SCALAR) {
+            RuntimeScalar previousValue = ((TieScalar) variable.value).getPreviousValue();
+            variable.type = previousValue.type;
+            variable.value = previousValue.value;
+        }
+
+        return variable;
     }
 
     public static RuntimeScalar tied(RuntimeBase... scalars) {
