@@ -89,10 +89,16 @@ public class TieScalar {
      * 3. Return the result
      */
     public static RuntimeScalar tiedFetch(RuntimeScalar runtimeScalar) {
-        // TODO: Implementation pattern:
-        // TieHandler handler = (TieHandler) runtimeScalar.value;
-        // return handler.FETCH();
-        throw new PerlCompilerException("not implemented: tied FETCH on scalar");
+        RuntimeScalar self = ((TieScalar) runtimeScalar.value).getSelf();
+        String className = self.toString();
+
+        // Call the Perl method
+        return RuntimeCode.apply(
+                GlobalVariable.getGlobalCodeRef(className + "::FETCH"),
+                className + "::FETCH",
+                self,
+                RuntimeContextType.SCALAR
+        ).getFirst();
     }
 
     /**
@@ -123,12 +129,17 @@ public class TieScalar {
      * Note: The method signature will likely need to change to accept the value
      * being stored: tiedStore(RuntimeScalar runtimeScalar, RuntimeScalar newValue)
      */
-    public static RuntimeScalar tiedStore(RuntimeScalar runtimeScalar) {
-        // TODO: Implementation pattern:
-        // TieHandler handler = (TieHandler) runtimeScalar.value;
-        // handler.STORE(newValue);
-        // return runtimeScalar;
-        throw new PerlCompilerException("not implemented: tied STORE on scalar");
+    public static RuntimeScalar tiedStore(RuntimeScalar runtimeScalar, RuntimeScalar value) {
+        RuntimeScalar self = ((TieScalar) runtimeScalar.value).getSelf();
+        String className = self.toString();
+
+        // Call the Perl method
+        return RuntimeCode.apply(
+                GlobalVariable.getGlobalCodeRef(className + "::STORE"),
+                className + "::STORE",
+                new RuntimeArray(self, value),
+                RuntimeContextType.SCALAR
+        ).getFirst();
     }
 
     // TODO: Additional methods to implement:

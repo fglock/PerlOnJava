@@ -335,7 +335,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Setters
     public RuntimeScalar set(RuntimeScalar value) {
         if (this.type == TIED_SCALAR) {
-            return TieScalar.tiedStore(this);
+            return TieScalar.tiedStore(this, value);
         }
         this.type = value.type;
         this.value = value.value;
