@@ -99,10 +99,11 @@ public class TieScalar {
         // System.out.println("tiedFetch: " + className + "::FETCH");
 
         // Call the Perl method
-        return RuntimeCode.apply(
-                GlobalVariable.getGlobalCodeRef(className + "::FETCH"),
-                className + "::FETCH",
+        return RuntimeCode.call(
                 self,
+                new RuntimeScalar("FETCH"),
+                className,
+                new RuntimeArray(),
                 RuntimeContextType.SCALAR
         ).getFirst();
     }
@@ -142,10 +143,11 @@ public class TieScalar {
         // System.out.println("tiedStore: " + className + "::STORE");
 
         // Call the Perl method
-        return RuntimeCode.apply(
-                GlobalVariable.getGlobalCodeRef(className + "::STORE"),
-                className + "::STORE",
-                new RuntimeArray(self, value),
+        return RuntimeCode.call(
+                self,
+                new RuntimeScalar("STORE"),
+                className,
+                new RuntimeArray(value),
                 RuntimeContextType.SCALAR
         ).getFirst();
     }
