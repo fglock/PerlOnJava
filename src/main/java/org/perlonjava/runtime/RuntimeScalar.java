@@ -334,6 +334,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Setters
     public RuntimeScalar set(RuntimeScalar value) {
+        if (value.type == TIED_SCALAR) {
+            return set(TieScalar.tiedFetch(value));
+        }
         if (this.type == TIED_SCALAR) {
             return TieScalar.tiedStore(this, value);
         }
@@ -789,8 +792,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     public boolean getDefinedBoolean() {
         return switch (type) {
-            case CODE -> ((RuntimeCode) value).defined();
             case BOOLEAN -> (boolean) value;
+            case CODE -> ((RuntimeCode) value).defined();
+            case TIED_SCALAR -> TieScalar.tiedFetch(this).getDefinedBoolean();
             default -> type != UNDEF;
         };
     }
