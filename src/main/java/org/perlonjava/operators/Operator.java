@@ -47,18 +47,20 @@ public class Operator {
 
     public static RuntimeScalar untie(RuntimeBase... scalars) {
         RuntimeScalar variable = (RuntimeScalar) scalars[0];
-
         if (variable.type == TIED_SCALAR) {
             RuntimeScalar previousValue = ((TieScalar) variable.value).getPreviousValue();
             variable.type = previousValue.type;
             variable.value = previousValue.value;
         }
-
         return variable;
     }
 
     public static RuntimeScalar tied(RuntimeBase... scalars) {
-        throw new PerlCompilerException("tied operator not yet implemented");
+        RuntimeScalar variable = (RuntimeScalar) scalars[0];
+        if (variable.type == TIED_SCALAR) {
+            return ((TieScalar) variable.value).getSelf();
+        }
+        return scalarUndef;
     }
 
     public static RuntimeScalar xor(RuntimeScalar left, RuntimeScalar right) {
