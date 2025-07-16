@@ -2,6 +2,7 @@
 use strict;
 use warnings;
 use Test::More;
+use 5.38.0;
 
 # Test implementation of a tied scalar class
 package TiedScalar;
