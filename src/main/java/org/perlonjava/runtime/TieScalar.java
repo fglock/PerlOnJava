@@ -60,6 +60,10 @@ public class TieScalar {
         return previousValue;
     }
 
+    public RuntimeScalar getSelf () {
+        return self;
+    }
+
     /**
      * Fetches the value from a tied scalar variable.
      *
