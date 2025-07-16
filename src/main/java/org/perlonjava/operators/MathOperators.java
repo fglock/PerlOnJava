@@ -425,8 +425,11 @@ public class MathOperators {
             case UNDEF -> scalarTrue;
             case VSTRING -> scalarFalse;
             case BOOLEAN -> getScalarBoolean(!(boolean) runtimeScalar.value);
-            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE -> Overload.bool_not(runtimeScalar);
-            default -> getScalarBoolean(!((RuntimeScalarReference) runtimeScalar.value).getBooleanRef());
+            case GLOB -> scalarFalse;
+            case REGEX -> scalarFalse;
+            case JAVAOBJECT -> scalarFalse;
+            case TIED_SCALAR -> not(TieScalar.tiedFetch(runtimeScalar));
+            default -> Overload.bool_not(runtimeScalar);
         };
     }
 }
