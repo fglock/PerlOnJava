@@ -584,6 +584,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // automatically convert this scalar from UNDEF to a proper array reference.
                 // This implements Perl's autovivification behavior where undefined
                 // scalars become references when used as such.
+                newArray.type = RuntimeArray.AUTOVIVIFY_ARRAY;
                 newArray.elements = new AutovivificationArray(this);
 
                 // Return the newly created array. At this point, the scalar is still UNDEF,

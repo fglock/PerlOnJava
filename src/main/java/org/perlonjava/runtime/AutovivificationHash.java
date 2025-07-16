@@ -1,6 +1,7 @@
 package org.perlonjava.runtime;
 
 import java.util.HashMap;
+import java.util.Map;
 
 import static org.perlonjava.runtime.RuntimeScalarType.HASHREFERENCE;
 
@@ -40,6 +41,9 @@ public class AutovivificationHash extends HashMap<String, RuntimeScalar> {
         // The AutovivificationHash was created when the undefined scalar was first
         // dereferenced as a hash, and now we complete the autovivification by
         // setting the scalar's type to HASHREFERENCE and its value to this hash.
+
+        hash.elements = new HashMap<>();
+
         scalarToAutovivify.value = hash;
         scalarToAutovivify.type = HASHREFERENCE;
     }
