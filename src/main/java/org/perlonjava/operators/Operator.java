@@ -22,7 +22,7 @@ public class Operator {
     public static RuntimeScalar tie(RuntimeBase... scalars) {
         RuntimeScalar variable = (RuntimeScalar) scalars[0];
         String className = scalars[1].toString();
-        RuntimeArray args = new RuntimeArray(Arrays.copyOfRange(scalars, 2, scalars.length));
+        RuntimeArray args = new RuntimeArray(Arrays.copyOfRange(scalars, 1, scalars.length));
 
         String tieType = switch (variable.type) {
             case REFERENCE -> "::TIESCALAR";
