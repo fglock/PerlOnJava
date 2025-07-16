@@ -38,6 +38,10 @@ public class AutovivificationArray extends ArrayList<RuntimeScalar> {
         // The AutovivificationArray was created when the undefined scalar was first
         // dereferenced as an array, and now we complete the autovivification by
         // setting the scalar's type to ARRAYREFERENCE and its value to this array.
+
+        array.type = RuntimeArray.PLAIN_ARRAY;
+        array.elements = new ArrayList<>();
+
         scalarToAutovivify.value = array;
         scalarToAutovivify.type = RuntimeScalarType.ARRAYREFERENCE;
     }
