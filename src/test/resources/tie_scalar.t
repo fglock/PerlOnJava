@@ -58,6 +58,12 @@ sub STORE {
     return $self->SUPER::STORE($value);
 }
 
+sub DESTROY {
+    my ($self) = @_;
+    push @method_calls, ['DESTROY'];
+    return $self->SUPER::DESTROY() if $self->can('SUPER::DESTROY');
+}
+
 # Main test package
 package main;
 
@@ -233,6 +239,53 @@ subtest 'References to tied scalars' => sub {
     
     $$ref = "new value";
     is($scalar, "new value", 'assignment through reference works');
+};
+
+subtest 'DESTROY called on untie' => sub {
+    # Test with TrackedTiedScalar to verify DESTROY is called
+    {
+        @TrackedTiedScalar::method_calls = ();  # Clear method calls
+
+        my $scalar;
+        tie $scalar, 'TrackedTiedScalar';  # Don't keep a reference to the tied object
+        $scalar = "test value";
+
+        # Verify tie and store were called
+        is($TrackedTiedScalar::method_calls[0][0], 'TIESCALAR', 'TIESCALAR called');
+        is($TrackedTiedScalar::method_calls[1][0], 'STORE', 'STORE called');
+
+        # Clear method calls before untie
+        @TrackedTiedScalar::method_calls = ();
+
+        # Untie should trigger DESTROY
+        untie $scalar;
+
+        # Check that DESTROY was called
+        is(scalar(@TrackedTiedScalar::method_calls), 1, 'One method called on untie');
+        is($TrackedTiedScalar::method_calls[0][0], 'DESTROY', 'DESTROY called on untie');
+    }
+
+    # Test with a class that doesn't implement DESTROY
+    {
+        package NoDestroyTiedScalar;
+
+        sub TIESCALAR {
+            my ($class) = @_;
+            return bless {}, $class;
+        }
+
+        sub FETCH { return "dummy" }
+        sub STORE { }
+
+        package main;
+
+        my $scalar;
+        tie $scalar, 'NoDestroyTiedScalar';
+
+        # This should not throw an error even though DESTROY doesn't exist
+        eval { untie $scalar; };
+        ok(!$@, 'untie works even when DESTROY is not implemented');
+    }
 };
 
 done_testing();
