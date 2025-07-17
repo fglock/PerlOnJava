@@ -72,11 +72,9 @@ public class TieOperators {
             }
             case GLOBREFERENCE -> {
                 RuntimeGlob glob = variable.globDeref();
-                RuntimeScalar IO = glob.IO;
-                IO.type = TIED_SCALAR;
-                // IO.value = new TieFile(className, IO.value, self);
-                // ...
-                throw new PerlCompilerException("tie(GLOB) not implemented");
+                RuntimeIO previousValue = (RuntimeIO) glob.IO.value;
+                glob.IO.type = TIED_SCALAR;
+                glob.IO.value = new TieHandle(className, previousValue, self);
             }
             default -> {
                 return scalarUndef;
@@ -135,9 +133,10 @@ public class TieOperators {
                 RuntimeGlob glob = variable.globDeref();
                 RuntimeScalar IO = glob.IO;
                 if (IO.type == TIED_SCALAR) {
-                    // TieFile.tiedUntie((TieFile) IO.value);
-                    // ...
-                    throw new PerlCompilerException("untie(GLOB) not implemented");
+                    TieHandle.tiedUntie((TieHandle) IO.value);
+                    RuntimeIO previousValue = ((TieHandle) IO.value).getPreviousValue();
+                    IO.type = 0;    // XXX there is no type defined for IO handles
+                    IO.value = previousValue;
                 }
                 return scalarTrue;
             }
@@ -184,9 +183,7 @@ public class TieOperators {
                 RuntimeGlob glob = variable.globDeref();
                 RuntimeScalar IO = glob.IO;
                 if (IO.type == TIED_SCALAR) {
-                    // TieFile.tiedUntie((TieFile) IO.value);
-                    // ...
-                    throw new PerlCompilerException("tied(GLOB) not implemented");
+                    return ((TieHandle) IO.value).getSelf();
                 }
             }
             default -> {
