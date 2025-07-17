@@ -35,17 +35,18 @@ public class AutovivificationHash extends HashMap<String, RuntimeScalar> {
         this.scalarToAutovivify = scalarToAutovivify;
     }
 
-    public void vivify(RuntimeHash hash) {
+    public static void vivify(RuntimeHash hash) {
         // Trigger autovivification: Convert the undefined scalar to a hash reference.
         // This happens when code like %$undef_scalar = (...) is executed.
         // The AutovivificationHash was created when the undefined scalar was first
         // dereferenced as a hash, and now we complete the autovivification by
         // setting the scalar's type to HASHREFERENCE and its value to this hash.
+        if (hash.elements instanceof AutovivificationHash hashProxy) {
+            hash.type = RuntimeHash.PLAIN_HASH;
+            hash.elements = new HashMap<>();
 
-        hash.type = RuntimeHash.PLAIN_HASH;
-        hash.elements = new HashMap<>();
-
-        scalarToAutovivify.value = hash;
-        scalarToAutovivify.type = HASHREFERENCE;
+            hashProxy.scalarToAutovivify.value = hash;
+            hashProxy.scalarToAutovivify.type = HASHREFERENCE;
+        }
     }
 }

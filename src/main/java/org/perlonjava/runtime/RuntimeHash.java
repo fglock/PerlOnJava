@@ -108,8 +108,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeArray setFromList(RuntimeList value) {
 
-        if (this.type == AUTOVIVIFY_HASH && this.elements instanceof AutovivificationHash hashProxy) {
-            hashProxy.vivify(this);
+        if (this.type == AUTOVIVIFY_HASH) {
+            AutovivificationHash.vivify(this);
         }
 
         // Create a new hash from the provided list and replace our elements
@@ -167,8 +167,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeScalar exists(RuntimeScalar key) {
 
-        if (this.type == AUTOVIVIFY_HASH && this.elements instanceof AutovivificationHash hashProxy) {
-            hashProxy.vivify(this);
+        if (this.type == AUTOVIVIFY_HASH) {
+            AutovivificationHash.vivify(this);
         }
 
         return new RuntimeScalar(elements.containsKey(key.toString()));
@@ -176,8 +176,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
     public RuntimeScalar exists(String key) {
 
-        if (this.type == AUTOVIVIFY_HASH && this.elements instanceof AutovivificationHash hashProxy) {
-            hashProxy.vivify(this);
+        if (this.type == AUTOVIVIFY_HASH) {
+            AutovivificationHash.vivify(this);
         }
 
         return new RuntimeScalar(elements.containsKey(key));
@@ -195,8 +195,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeScalar delete(RuntimeScalar key) {
 
-        if (this.type == AUTOVIVIFY_HASH && this.elements instanceof AutovivificationHash hashProxy) {
-            hashProxy.vivify(this);
+        if (this.type == AUTOVIVIFY_HASH) {
+            AutovivificationHash.vivify(this);
         }
 
         String k = key.toString();
@@ -209,8 +209,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
     public RuntimeScalar delete(String key) {
 
-        if (this.type == AUTOVIVIFY_HASH && this.elements instanceof AutovivificationHash hashProxy) {
-            hashProxy.vivify(this);
+        if (this.type == AUTOVIVIFY_HASH) {
+            AutovivificationHash.vivify(this);
         }
 
         var value = elements.remove(key);
@@ -285,15 +285,14 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeList getSlice(RuntimeList value) {
 
-        if (this.type == AUTOVIVIFY_HASH && this.elements instanceof AutovivificationHash hashProxy) {
-            hashProxy.vivify(this);
+        if (this.type == AUTOVIVIFY_HASH) {
+            AutovivificationHash.vivify(this);
         }
 
         RuntimeList result = new RuntimeList();
         List<RuntimeBase> outElements = result.elements;
-        Iterator<RuntimeScalar> iterator = value.iterator();
-        while (iterator.hasNext()) {
-            outElements.add(this.get(iterator.next()));
+        for (RuntimeScalar runtimeScalar : value) {
+            outElements.add(this.get(runtimeScalar));
         }
         return result;
     }
@@ -307,9 +306,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public RuntimeList deleteSlice(RuntimeList value) {
         RuntimeList result = new RuntimeList();
         List<RuntimeBase> outElements = result.elements;
-        Iterator<RuntimeScalar> iterator = value.iterator();
-        while (iterator.hasNext()) {
-            outElements.add(this.delete(iterator.next()));
+        for (RuntimeScalar runtimeScalar : value) {
+            outElements.add(this.delete(runtimeScalar));
         }
         return result;
     }
@@ -321,8 +319,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeArray keys() {
 
-        if (this.type == AUTOVIVIFY_HASH && this.elements instanceof AutovivificationHash hashProxy) {
-            hashProxy.vivify(this);
+        if (this.type == AUTOVIVIFY_HASH) {
+            AutovivificationHash.vivify(this);
         }
 
         RuntimeArray list = new RuntimeArray();
@@ -340,8 +338,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeArray values() {
 
-        if (this.type == AUTOVIVIFY_HASH && this.elements instanceof AutovivificationHash hashProxy) {
-            hashProxy.vivify(this);
+        if (this.type == AUTOVIVIFY_HASH) {
+            AutovivificationHash.vivify(this);
         }
 
         RuntimeArray list = new RuntimeArray();
@@ -359,8 +357,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeList each() {
 
-        if (this.type == AUTOVIVIFY_HASH && this.elements instanceof AutovivificationHash hashProxy) {
-            hashProxy.vivify(this);
+        if (this.type == AUTOVIVIFY_HASH) {
+            AutovivificationHash.vivify(this);
         }
 
         if (hashIterator == null) {
