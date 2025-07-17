@@ -109,11 +109,28 @@ public class TieOperators {
                     scalar.type = previousValue.type;
                     scalar.value = previousValue.value;
                 }
-                // return scalar;
                 return scalarTrue;
             }
-            case ARRAYREFERENCE -> throw new PerlCompilerException("untie(ARRAY) not implemented");
-            case HASHREFERENCE -> throw new PerlCompilerException("untie(HASH) not implemented");
+            case ARRAYREFERENCE -> {
+                RuntimeArray array = variable.arrayDeref();
+                if (array.type == TIED_ARRAY) {
+                    TieArray.tiedUntie((TieArray) array.elements);
+                    RuntimeArray previousValue = ((TieArray) array.elements).getPreviousValue();
+                    array.type = previousValue.type;
+                    array.elements = previousValue.elements;
+                }
+                return scalarTrue;
+            }
+            case HASHREFERENCE -> {
+                RuntimeHash hash = variable.hashDeref();
+                if (hash.type == TIED_HASH) {
+                    TieHash.tiedUntie((TieHash) hash.elements);
+                    RuntimeHash previousValue = ((TieHash) hash.elements).getPreviousValue();
+                    hash.type = previousValue.type;
+                    hash.elements = previousValue.elements;
+                }
+                return scalarTrue;
+            }
             case GLOBREFERENCE -> throw new PerlCompilerException("untie(GLOB) not implemented");
             default -> {
                 return scalarUndef;
