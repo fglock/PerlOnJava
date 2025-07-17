@@ -56,12 +56,13 @@ public class TieArray extends ArrayList<RuntimeScalar> {
     /**
      * Helper method to call methods on the tied object.
      *
-     * @param tieArray the TieArray instance
+     * @param array    the RuntimeArray that is tied
      * @param method   the method name to call
      * @param args     the arguments to pass to the method
      * @return the result of the method call
      */
-    private static RuntimeScalar tieCall(TieArray tieArray, String method, RuntimeBase... args) {
+    private static RuntimeScalar tieCall(RuntimeArray array, String method, RuntimeBase... args) {
+        TieArray tieArray = (TieArray) array.elements;
         RuntimeScalar self = tieArray.getSelf();
         String className = tieArray.getTiedPackage();
 
@@ -81,11 +82,12 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * <p>This is a helper method used by tiedDestroy() and tiedUntie() to check
      * if a specific method exists in the tied object's class and call it if present.</p>
      *
-     * @param tieArray      the TieArray instance
+     * @param array         the RuntimeArray that is tied
      * @param methodName    the name of the method to call (e.g., "DESTROY", "UNTIE")
      * @return the value returned by the method, or undef if the method doesn't exist
      */
-    private static RuntimeScalar tieCallIfExists(TieArray tieArray, String methodName) {
+    private static RuntimeScalar tieCallIfExists(RuntimeArray array, String methodName) {
+        TieArray tieArray = (TieArray) array.elements;
         RuntimeScalar self = tieArray.getSelf();
         String className = tieArray.getTiedPackage();
 
@@ -115,12 +117,12 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param tieArray the tied array whose element is being fetched
+     * @param array    the tied array whose element is being fetched
      * @param index    the index to fetch
      * @return the value returned by the tie handler's FETCH method
      */
-    public static RuntimeScalar tiedFetch(TieArray tieArray, RuntimeScalar index) {
-        return tieCall(tieArray, "FETCH", index);
+    public static RuntimeScalar tiedFetch(RuntimeArray array, RuntimeScalar index) {
+        return tieCall(array, "FETCH", index);
     }
 
     /**
@@ -138,13 +140,13 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param tieArray the tied array being assigned to
+     * @param array    the tied array being assigned to
      * @param index    the index to store at
      * @param value    the value to store in the tied array
      * @return the value returned by the tie handler's STORE method
      */
-    public static RuntimeScalar tiedStore(TieArray tieArray, RuntimeScalar index, RuntimeScalar value) {
-        return tieCall(tieArray, "STORE", index, value);
+    public static RuntimeScalar tiedStore(RuntimeArray array, RuntimeScalar index, RuntimeScalar value) {
+        return tieCall(array, "STORE", index, value);
     }
 
     /**
@@ -160,11 +162,11 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param tieArray the tied array
+     * @param array the tied array
      * @return the size returned by the tie handler's FETCHSIZE method
      */
-    public static RuntimeScalar tiedFetchSize(TieArray tieArray) {
-        return tieCall(tieArray, "FETCHSIZE");
+    public static RuntimeScalar tiedFetchSize(RuntimeArray array) {
+        return tieCall(array, "FETCHSIZE");
     }
 
     /**
@@ -180,12 +182,12 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param tieArray the tied array
+     * @param array    the tied array
      * @param size     the new size for the array
      * @return the value returned by the tie handler's STORESIZE method
      */
-    public static RuntimeScalar tiedStoreSize(TieArray tieArray, RuntimeScalar size) {
-        return tieCall(tieArray, "STORESIZE", size);
+    public static RuntimeScalar tiedStoreSize(RuntimeArray array, RuntimeScalar size) {
+        return tieCall(array, "STORESIZE", size);
     }
 
     /**
@@ -197,12 +199,12 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * <p>In Perl, this is typically called internally when an array
      * needs to grow to accommodate new elements.</p>
      *
-     * @param tieArray the tied array
+     * @param array    the tied array
      * @param size     the size to extend to
      * @return the value returned by the tie handler's EXTEND method
      */
-    public static RuntimeScalar tiedExtend(TieArray tieArray, RuntimeScalar size) {
-        return tieCall(tieArray, "EXTEND", size);
+    public static RuntimeScalar tiedExtend(RuntimeArray array, RuntimeScalar size) {
+        return tieCall(array, "EXTEND", size);
     }
 
     /**
@@ -217,12 +219,12 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param tieArray the tied array
+     * @param array    the tied array
      * @param index    the index to check
      * @return the value returned by the tie handler's EXISTS method
      */
-    public static RuntimeScalar tiedExists(TieArray tieArray, RuntimeScalar index) {
-        return tieCall(tieArray, "EXISTS", index);
+    public static RuntimeScalar tiedExists(RuntimeArray array, RuntimeScalar index) {
+        return tieCall(array, "EXISTS", index);
     }
 
     /**
@@ -237,12 +239,12 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param tieArray the tied array
+     * @param array    the tied array
      * @param index    the index to delete
      * @return the value returned by the tie handler's DELETE method
      */
-    public static RuntimeScalar tiedDelete(TieArray tieArray, RuntimeScalar index) {
-        return tieCall(tieArray, "DELETE", index);
+    public static RuntimeScalar tiedDelete(RuntimeArray array, RuntimeScalar index) {
+        return tieCall(array, "DELETE", index);
     }
 
     /**
@@ -258,11 +260,11 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param tieArray the tied array to clear
+     * @param array the tied array to clear
      * @return the value returned by the tie handler's CLEAR method
      */
-    public static RuntimeScalar tiedClear(TieArray tieArray) {
-        return tieCall(tieArray, "CLEAR");
+    public static RuntimeScalar tiedClear(RuntimeArray array) {
+        return tieCall(array, "CLEAR");
     }
 
     /**
@@ -277,11 +279,12 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param tieArray the tied array
+     * @param array    the tied array
      * @param elements the elements to push
      * @return the value returned by the tie handler's PUSH method
      */
-    public static RuntimeScalar tiedPush(TieArray tieArray, RuntimeArray elements) {
+    public static RuntimeScalar tiedPush(RuntimeArray array, RuntimeArray elements) {
+        TieArray tieArray = (TieArray) array.elements;
         RuntimeBase[] args = new RuntimeBase[elements.size() + 1];
         args[0] = tieArray.getSelf();
         for (int i = 0; i < elements.size(); i++) {
@@ -310,11 +313,11 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param tieArray the tied array
+     * @param array the tied array
      * @return the value returned by the tie handler's POP method
      */
-    public static RuntimeScalar tiedPop(TieArray tieArray) {
-        return tieCall(tieArray, "POP");
+    public static RuntimeScalar tiedPop(RuntimeArray array) {
+        return tieCall(array, "POP");
     }
 
     /**
@@ -329,11 +332,11 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param tieArray the tied array
+     * @param array the tied array
      * @return the value returned by the tie handler's SHIFT method
      */
-    public static RuntimeScalar tiedShift(TieArray tieArray) {
-        return tieCall(tieArray, "SHIFT");
+    public static RuntimeScalar tiedShift(RuntimeArray array) {
+        return tieCall(array, "SHIFT");
     }
 
     /**
@@ -348,11 +351,12 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param tieArray the tied array
+     * @param array    the tied array
      * @param elements the elements to unshift
      * @return the value returned by the tie handler's UNSHIFT method
      */
-    public static RuntimeScalar tiedUnshift(TieArray tieArray, RuntimeArray elements) {
+    public static RuntimeScalar tiedUnshift(RuntimeArray array, RuntimeArray elements) {
+        TieArray tieArray = (TieArray) array.elements;
         RuntimeBase[] args = new RuntimeBase[elements.size() + 1];
         args[0] = tieArray.getSelf();
         for (int i = 0; i < elements.size(); i++) {
@@ -381,14 +385,15 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param tieArray    the tied array
+     * @param array       the tied array
      * @param offset      the offset at which to start
      * @param length      the number of elements to remove
      * @param replacement the elements to insert
      * @return the value returned by the tie handler's SPLICE method
      */
-    public static RuntimeScalar tiedSplice(TieArray tieArray, RuntimeScalar offset,
-                                          RuntimeScalar length, RuntimeArray replacement) {
+    public static RuntimeScalar tiedSplice(RuntimeArray array, RuntimeScalar offset,
+                                           RuntimeScalar length, RuntimeArray replacement) {
+        TieArray tieArray = (TieArray) array.elements;
         RuntimeBase[] args = new RuntimeBase[replacement.size() + 3];
         args[0] = tieArray.getSelf();
         args[1] = offset;
@@ -424,15 +429,32 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param tieArray the tied array being destroyed
+     * @param array the tied array being destroyed
      * @return the value returned by the tie handler's DESTROY method, or undef if no DESTROY method exists
      */
-    public static RuntimeScalar tiedDestroy(TieArray tieArray) {
-        return tieCallIfExists(tieArray, "DESTROY");
+    public static RuntimeScalar tiedDestroy(RuntimeArray array) {
+        return tieCallIfExists(array, "DESTROY");
     }
 
-    public static RuntimeScalar tiedUntie(TieArray tieArray) {
-        return tieCallIfExists(tieArray, "UNTIE");
+    /**
+     * Unties an array variable.
+     *
+     * <p>This method is called when untying an array. It delegates to the UNTIE method
+     * of the tie handler object associated with the array, if such a method exists.</p>
+     *
+     * <p>In Perl, this corresponds to:
+     * <pre>{@code
+     * tie @array, 'MyClass';
+     * # ... use @array ...
+     * untie @array;  # Calls UNTIE if it exists
+     * }</pre>
+     * </p>
+     *
+     * @param array the tied array being untied
+     * @return the value returned by the tie handler's UNTIE method, or undef if no UNTIE method exists
+     */
+    public static RuntimeScalar tiedUntie(RuntimeArray array) {
+        return tieCallIfExists(array, "UNTIE");
     }
 
     public RuntimeArray getPreviousValue() {

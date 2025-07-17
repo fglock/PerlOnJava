@@ -111,7 +111,7 @@ public class TieOperators {
             case ARRAYREFERENCE -> {
                 RuntimeArray array = variable.arrayDeref();
                 if (array.type == TIED_ARRAY) {
-                    TieArray.tiedUntie((TieArray) array.elements);
+                    TieArray.tiedUntie(array);
                     RuntimeArray previousValue = ((TieArray) array.elements).getPreviousValue();
                     array.type = previousValue.type;
                     array.elements = previousValue.elements;
@@ -121,7 +121,7 @@ public class TieOperators {
             case HASHREFERENCE -> {
                 RuntimeHash hash = variable.hashDeref();
                 if (hash.type == TIED_HASH) {
-                    TieHash.tiedUntie((TieHash) hash.elements);
+                    TieHash.tiedUntie(hash);
                     RuntimeHash previousValue = ((TieHash) hash.elements).getPreviousValue();
                     hash.type = previousValue.type;
                     hash.elements = previousValue.elements;

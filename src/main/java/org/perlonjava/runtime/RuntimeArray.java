@@ -81,15 +81,23 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return The last value of the array, or undefined if empty.
      */
     public static RuntimeScalar pop(RuntimeArray runtimeArray) {
+        return switch (runtimeArray.type) {
+            case PLAIN_ARRAY -> {
+                if (runtimeArray.isEmpty()) {
+                    yield new RuntimeScalar(); // Return undefined if empty
+                }
+                yield runtimeArray.elements.removeLast();
+            }
 
-        if (runtimeArray.type == AUTOVIVIFY_ARRAY) {
-            AutovivificationArray.vivify(runtimeArray);
-        }
+            case AUTOVIVIFY_ARRAY -> {
+                AutovivificationArray.vivify(runtimeArray);
+                yield pop(runtimeArray); // Recursive call after vivification
+            }
 
-        if (runtimeArray.isEmpty()) {
-            return new RuntimeScalar(); // Return undefined if empty
-        }
-        return runtimeArray.elements.removeLast();
+            case TIED_ARRAY -> TieArray.tiedPop(runtimeArray);
+
+            default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
+        };
     }
 
     /**
@@ -99,15 +107,23 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return The first value of the array, or undefined if empty.
      */
     public static RuntimeScalar shift(RuntimeArray runtimeArray) {
+        return switch (runtimeArray.type) {
+            case PLAIN_ARRAY -> {
+                if (runtimeArray.isEmpty()) {
+                    yield new RuntimeScalar(); // Return undefined if empty
+                }
+                yield runtimeArray.elements.removeFirst();
+            }
 
-        if (runtimeArray.type == AUTOVIVIFY_ARRAY) {
-            AutovivificationArray.vivify(runtimeArray);
-        }
+            case AUTOVIVIFY_ARRAY -> {
+                AutovivificationArray.vivify(runtimeArray);
+                yield shift(runtimeArray); // Recursive call after vivification
+            }
 
-        if (runtimeArray.isEmpty()) {
-            return new RuntimeScalar(); // Return undefined if empty
-        }
-        return runtimeArray.elements.removeFirst();
+            case TIED_ARRAY -> TieArray.tiedShift(runtimeArray);
+
+            default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
+        };
     }
 
     /**

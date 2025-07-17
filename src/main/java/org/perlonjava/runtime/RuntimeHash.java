@@ -150,13 +150,22 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return The value associated with the key, or a proxy for lazy autovivification if the key does not exist.
      */
     public RuntimeScalar get(RuntimeScalar keyScalar) {
-        String key = keyScalar.toString();
-        var value = elements.get(key);
-        if (value != null) {
-            return value;
-        }
-        // Lazy autovivification
-        return new RuntimeHashProxyEntry(this, key);
+        return switch (this.type) {
+            case PLAIN_HASH, AUTOVIVIFY_HASH -> {
+                // Note: get() does not autovivify the hash, so we don't call AutovivificationHash.vivify()
+                String key = keyScalar.toString();
+                var value = elements.get(key);
+                if (value != null) {
+                    yield value;
+                }
+                // Lazy element autovivification
+                yield new RuntimeHashProxyEntry(this, key);
+            }
+
+            case TIED_HASH -> TieHash.tiedFetch(this, keyScalar);
+
+            default -> throw new IllegalStateException("Unknown hash type: " + this.type);
+        };
     }
 
     /**
