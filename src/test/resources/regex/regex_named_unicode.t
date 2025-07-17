@@ -3,6 +3,8 @@ use warnings;
 use feature 'say';
 use utf8;
 
+print "1..9\n";
+
 # Test for \N{name} constructs
 
 # Simple match with a named Unicode character

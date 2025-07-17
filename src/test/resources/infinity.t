@@ -1,6 +1,8 @@
 use strict;
 use feature 'say';
 
+print "1..8\n";
+
 # Test positive infinity
 my $x = "Inf";
 print "not " if (0 + $x) != "Inf"; say "ok # Positive infinity";

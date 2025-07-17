@@ -4,6 +4,8 @@ use 5.38.0;
 use utf8;
 use open ':std', ':encoding(UTF-8)';
 
+print "1..10\n";
+
 ###################
 # Perl Unicode Property Tests
 

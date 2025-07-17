@@ -1,6 +1,8 @@
 use 5.32.0;
 use feature 'say';
 
+print "1..15\n";
+
 # Test multiple variables in for loop with pairs
 my @pairs = (1,2, 3,4, 5,6);
 my $test_num = 1;

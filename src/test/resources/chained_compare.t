@@ -3,6 +3,8 @@
 
 use 5.40.0;
 
+say "1..13";
+
 # Chained numeric comparisons
 my $result = 3 < 6 < 5;
 print "not " if $result;

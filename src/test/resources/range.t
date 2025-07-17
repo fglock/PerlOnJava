@@ -1,6 +1,8 @@
 use strict;
 use feature 'say';
 
+print "1..16\n";
+
 # Test 1: Simple numeric range
 my @array = (1 .. 5);
 my $length = scalar @array;

@@ -2,6 +2,8 @@ use strict;
 use feature 'say';
 use constant;
 
+print "1..10\n";
+
 # Define a small epsilon for floating-point comparison
 my $epsilon = 1e-9;
 

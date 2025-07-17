@@ -1,6 +1,8 @@
 use strict;
 use feature 'say';
 
+print "1..7\n";
+
 my $str = "aaa bbb aaa";
 
 # Test 1: Normal capturing without /n

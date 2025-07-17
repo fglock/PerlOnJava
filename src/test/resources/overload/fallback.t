@@ -2,6 +2,8 @@ use feature 'say';
 use strict;
 use warnings;
 
+print "1..6\n";
+
 {
     package StringOnly;
     use overload

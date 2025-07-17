@@ -1,6 +1,8 @@
 use strict;
 use feature 'say';
 
+print "1..6\n";
+
 ###################
 # Perl Character Class Tests
 

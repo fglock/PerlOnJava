@@ -1,6 +1,8 @@
 use strict;
 use feature 'say';
 
+print "1..10\n";
+
 ###################
 # Perl @- and @+ Operator Tests
 

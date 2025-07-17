@@ -17,6 +17,8 @@
 use strict;
 use feature "say";
 
+print "1..16\n";
+
 ###################
 # Compound Assignment Operators
 

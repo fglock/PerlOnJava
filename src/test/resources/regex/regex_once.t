@@ -2,6 +2,8 @@ use strict;
 use warnings;
 use feature 'say';
 
+print "1..2\n";
+
 ###################
 # Perl m?PAT? Operator Tests
 
