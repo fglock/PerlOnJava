@@ -31,9 +31,6 @@ public class TieOperators {
         String className = scalars[1].toString();
         RuntimeArray args = new RuntimeArray(Arrays.copyOfRange(scalars, 2, scalars.length));
 
-        // untie() if the variable is already tied
-        untie(variable);
-
         String method = switch (variable.type) {
             case REFERENCE -> "TIESCALAR";
             case ARRAYREFERENCE -> "TIEARRAY";
@@ -41,6 +38,9 @@ public class TieOperators {
             case GLOBREFERENCE -> "TIEHANDLE";
             default -> throw new PerlCompilerException("Unsupported variable type for tie()");
         };
+
+        // untie() if the variable is already tied
+        untie(variable);
 
         // Call the Perl method
         RuntimeScalar self = RuntimeCode.call(
@@ -93,7 +93,6 @@ public class TieOperators {
      *
      * @param scalars varargs where scalars[0] is the tied variable (must be a reference)
      * @return true on success, undef if the variable wasn't tied
-     * @throws PerlCompilerException if the variable type is not yet implemented
      */
     public static RuntimeScalar untie(RuntimeBase... scalars) {
         RuntimeScalar variable = (RuntimeScalar) scalars[0];
@@ -156,7 +155,6 @@ public class TieOperators {
      *
      * @param scalars varargs where scalars[0] is the potentially tied variable (must be a reference)
      * @return the object that the variable is tied to, or undef if not tied
-     * @throws PerlCompilerException if the variable type is not yet implemented
      */
     public static RuntimeScalar tied(RuntimeBase... scalars) {
         RuntimeScalar variable = (RuntimeScalar) scalars[0];
