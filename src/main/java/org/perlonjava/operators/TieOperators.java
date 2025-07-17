@@ -102,6 +102,7 @@ public class TieOperators {
                 RuntimeScalar scalar = variable.scalarDeref();
                 if (scalar.type == TIED_SCALAR) {
                     TieScalar.tiedUntie(scalar);
+                    TieScalar.tiedDestroy(scalar);
                     RuntimeScalar previousValue = ((TieScalar) scalar.value).getPreviousValue();
                     scalar.type = previousValue.type;
                     scalar.value = previousValue.value;
@@ -112,6 +113,7 @@ public class TieOperators {
                 RuntimeArray array = variable.arrayDeref();
                 if (array.type == TIED_ARRAY) {
                     TieArray.tiedUntie(array);
+                    TieArray.tiedDestroy(array);
                     RuntimeArray previousValue = ((TieArray) array.elements).getPreviousValue();
                     array.type = previousValue.type;
                     array.elements = previousValue.elements;
@@ -122,6 +124,7 @@ public class TieOperators {
                 RuntimeHash hash = variable.hashDeref();
                 if (hash.type == TIED_HASH) {
                     TieHash.tiedUntie(hash);
+                    TieHash.tiedDestroy(hash);
                     RuntimeHash previousValue = ((TieHash) hash.elements).getPreviousValue();
                     hash.type = previousValue.type;
                     hash.elements = previousValue.elements;
@@ -133,6 +136,7 @@ public class TieOperators {
                 RuntimeScalar IO = glob.IO;
                 if (IO.type == TIED_SCALAR) {
                     TieHandle.tiedUntie((TieHandle) IO.value);
+                    TieHandle.tiedDestroy((TieHandle) IO.value);
                     RuntimeIO previousValue = ((TieHandle) IO.value).getPreviousValue();
                     IO.type = 0;    // XXX there is no type defined for IO handles
                     IO.value = previousValue;
