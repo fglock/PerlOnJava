@@ -73,6 +73,31 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
     }
 
     /**
+     * Calls a tie method if it exists in the tied object's class hierarchy.
+     *
+     * <p>This is a helper method used by tiedDestroy() and tiedUntie() to check
+     * if a specific method exists in the tied object's class and call it if present.</p>
+     *
+     * @param tieHash the TieHash instance
+     * @param methodName    the name of the method to call (e.g., "DESTROY", "UNTIE")
+     * @return the value returned by the method, or undef if the method doesn't exist
+     */
+    private static RuntimeScalar tieCallIfExists(TieHash tieHash, String methodName) {
+        RuntimeScalar self = tieHash.getSelf();
+        String className = tieHash.getTiedPackage();
+
+        // Check if method exists in the class hierarchy
+        RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(methodName, className, null, 0);
+        if (method == null) {
+            // Method doesn't exist, return undef
+            return RuntimeScalarCache.scalarUndef;
+        }
+
+        // Method exists, call it
+        return RuntimeCode.apply(method, new RuntimeArray(self), RuntimeContextType.SCALAR).getFirst();
+    }
+
+    /**
      * Fetches a value from a tied hash by key.
      *
      * <p>This method is called whenever a value is accessed from a tied hash.
@@ -252,33 +277,15 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param runtimeHash the tied hash being destroyed
+     * @param tieHash the tied hash to destroy
      * @return the value returned by the tie handler's DESTROY method, or undef if no DESTROY method exists
      */
-    public static RuntimeScalar tiedDestroy(RuntimeHash runtimeHash) {
-        // Get the tied object using the tied() operator
-        RuntimeScalar tiedObject = TieOperators.tied(runtimeHash.createReference());
-        if (!tiedObject.getDefinedBoolean()) {
-            return RuntimeScalarCache.scalarUndef;
-        }
+    public static RuntimeScalar tiedDestroy(TieHash tieHash) {
+        return tieCallIfExists(tieHash, "DESTROY");
+    }
 
-        // Get the class name from the tied object
-        int blessId = tiedObject.blessedId();
-        if (blessId == 0) {
-            return RuntimeScalarCache.scalarUndef;
-        }
-        String perlClassName = NameNormalizer.getBlessStr(blessId);
-
-        // Check if DESTROY method exists in the class hierarchy
-        RuntimeScalar destroyMethod = InheritanceResolver.findMethodInHierarchy("DESTROY", perlClassName, null, 0);
-        if (destroyMethod == null) {
-            // DESTROY method doesn't exist, return undef
-            return RuntimeScalarCache.scalarUndef;
-        }
-
-        // DESTROY method exists, call it
-        RuntimeArray args = new RuntimeArray(tiedObject);
-        return RuntimeCode.apply(destroyMethod, args, RuntimeContextType.SCALAR).getFirst();
+    public static RuntimeScalar tiedUntie(TieHash tieHash) {
+        return tieCallIfExists(tieHash, "UNTIE");
     }
 
     public RuntimeHash getPreviousValue() {
