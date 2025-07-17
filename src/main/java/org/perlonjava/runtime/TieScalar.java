@@ -1,6 +1,6 @@
 package org.perlonjava.runtime;
 
-import org.perlonjava.operators.Operator;
+import org.perlonjava.operators.TieOperators;
 
 /**
  * TieScalar provides support for Perl's tie mechanism for scalar variables.
@@ -129,7 +129,7 @@ public class TieScalar {
      */
     public static RuntimeScalar tiedDestroy(RuntimeScalar runtimeScalar) {
         // Get the tied object using the tied() operator
-        RuntimeScalar tiedObject = Operator.tied(runtimeScalar.createReference());
+        RuntimeScalar tiedObject = TieOperators.tied(runtimeScalar.createReference());
         if (!tiedObject.getDefinedBoolean()) {
             return RuntimeScalarCache.scalarUndef;
         }

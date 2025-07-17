@@ -1,6 +1,6 @@
 package org.perlonjava.runtime;
 
-import org.perlonjava.operators.Operator;
+import org.perlonjava.operators.TieOperators;
 
 import java.util.HashMap;
 
@@ -257,7 +257,7 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
      */
     public static RuntimeScalar tiedDestroy(RuntimeHash runtimeHash) {
         // Get the tied object using the tied() operator
-        RuntimeScalar tiedObject = Operator.tied(runtimeHash.createReference());
+        RuntimeScalar tiedObject = TieOperators.tied(runtimeHash.createReference());
         if (!tiedObject.getDefinedBoolean()) {
             return RuntimeScalarCache.scalarUndef;
         }

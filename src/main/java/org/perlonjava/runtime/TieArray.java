@@ -1,10 +1,8 @@
 package org.perlonjava.runtime;
 
-import org.perlonjava.operators.Operator;
+import org.perlonjava.operators.TieOperators;
 
-import java.util.AbstractList;
 import java.util.ArrayList;
-import java.util.List;
 
 /**
  * TieArray provides support for Perl's tie mechanism for array variables.
@@ -406,7 +404,7 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      */
     public static RuntimeScalar tiedDestroy(RuntimeArray runtimeArray) {
         // Get the tied object using the tied() operator
-        RuntimeScalar tiedObject = Operator.tied(runtimeArray.createReference());
+        RuntimeScalar tiedObject = TieOperators.tied(runtimeArray.createReference());
         if (!tiedObject.getDefinedBoolean()) {
             return RuntimeScalarCache.scalarUndef;
         }
