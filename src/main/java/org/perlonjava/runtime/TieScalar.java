@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.operators.Operator;
+
 /**
  * TieScalar provides support for Perl's tie mechanism for scalar variables.
  *
@@ -126,14 +128,29 @@ public class TieScalar {
      * @return the value returned by the tie handler's DESTROY method, or undef if no DESTROY method exists
      */
     public static RuntimeScalar tiedDestroy(RuntimeScalar runtimeScalar) {
-        // Check if DESTROY method exists before calling it
-        // In Perl, DESTROY is optional for tied variables
-        try {
-            return tieCall(runtimeScalar, "DESTROY");
-        } catch (Exception e) {
-            // If DESTROY method doesn't exist or fails, return undef
+        // Get the tied object using the tied() operator
+        RuntimeScalar tiedObject = Operator.tied(runtimeScalar.createReference());
+        if (!tiedObject.getDefinedBoolean()) {
             return RuntimeScalarCache.scalarUndef;
         }
+
+        // Get the class name from the tied object
+        int blessId = tiedObject.blessedId();
+        if (blessId == 0) {
+            return RuntimeScalarCache.scalarUndef;
+        }
+        String perlClassName = NameNormalizer.getBlessStr(blessId);
+
+        // Check if DESTROY method exists in the class hierarchy
+        RuntimeScalar destroyMethod = InheritanceResolver.findMethodInHierarchy("DESTROY", perlClassName, null, 0);
+        if (destroyMethod == null) {
+            // DESTROY method doesn't exist, return undef
+            return RuntimeScalarCache.scalarUndef;
+        }
+
+        // DESTROY method exists, call it
+        RuntimeArray args = new RuntimeArray(tiedObject);
+        return RuntimeCode.apply(destroyMethod, args, RuntimeContextType.SCALAR).getFirst();
     }
 
     public RuntimeScalar getPreviousValue() {
