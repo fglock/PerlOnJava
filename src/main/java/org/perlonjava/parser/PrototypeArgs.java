@@ -379,6 +379,26 @@ public class PrototypeArgs {
                         subNamePart +
                         " must be scalar (not single ref constructor)");
             }
+
+            // For groups like \[$@%*], check if SubroutineNode is allowed
+            if (isGroup && referenceArg instanceof SubroutineNode) {
+                // Extract the allowed types from the group
+                int groupStart = prototypeIndex + 1;
+                int groupEnd = prototype.indexOf(']', groupStart);
+                if (groupEnd != -1) {
+                    String allowedTypes = prototype.substring(groupStart, groupEnd);
+                    if (!allowedTypes.contains("&")) {
+                        // Match Perl's error message format
+                        String subName = parser.ctx.symbolTable.getCurrentSubroutine();
+                        if (subName != null && !subName.isEmpty()) {
+                            parser.throwError("Can't modify anonymous subroutine in " + subName);
+                        } else {
+                            parser.throwError("Can't modify anonymous subroutine");
+                        }
+                    }
+                }
+            }
+
             Node refNode = new OperatorNode("\\", referenceArg, referenceArg.getIndex());
             // References are evaluated in SCALAR context
             refNode.setAnnotation("context", "SCALAR");
@@ -389,6 +409,7 @@ public class PrototypeArgs {
             return prototypeIndex;  // Return the index of the character after '\X', not one beyond it
         }
 
+        // Skip to the end of the group [...]
         while (prototypeIndex < prototype.length() && prototype.charAt(prototypeIndex) != ']') {
             prototypeIndex++;
         }
