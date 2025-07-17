@@ -100,7 +100,14 @@ public class OperatorHandler {
         put("localtime", "localtime", "org/perlonjava/operators/Time", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
         put("sleep", "sleep", "org/perlonjava/operators/Time", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
-        // Directory
+        // File
+        put("readline", "readline", "org/perlonjava/operators/Readline", "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBase;");
+        put("close", "close", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("tell", "tell", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("fileno", "fileno", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("getc", "getc", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+
+            // Directory
         put("rmdir", "rmdir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("closedir", "closedir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("rewinddir", "rewinddir", "org/perlonjava/operators/Directory", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
