@@ -45,4 +45,22 @@ public class AutovivificationArray extends ArrayList<RuntimeScalar> {
             arrayProxy.scalarToAutovivify.type = RuntimeScalarType.ARRAYREFERENCE;
         }
     }
+
+    static RuntimeArray createAutovivifiedArray(RuntimeScalar runtimeScalar) {
+        // Autovivification: When dereferencing an undefined scalar as an array,
+        // Perl automatically creates a new array reference.
+        var newArray = new RuntimeArray();
+
+        // Create a special array that knows about this scalar. When the array
+        // receives its first assignment (e.g., @$ref = (...)), it will
+        // automatically convert this scalar from UNDEF to a proper array reference.
+        // This implements Perl's autovivification behavior where undefined
+        // scalars become references when used as such.
+        newArray.type = RuntimeArray.AUTOVIVIFY_ARRAY;
+        newArray.elements = new AutovivificationArray(runtimeScalar);
+
+        // Return the newly created array. At this point, the scalar is still UNDEF,
+        // but will be autovivified to an array reference on first write operation.
+        return newArray;
+    }
 }

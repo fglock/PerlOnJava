@@ -49,4 +49,22 @@ public class AutovivificationHash extends HashMap<String, RuntimeScalar> {
             hashProxy.scalarToAutovivify.type = HASHREFERENCE;
         }
     }
+
+    static RuntimeHash createAutovivifiedHash(RuntimeScalar runtimeScalar) {
+        // Autovivification: When dereferencing an undefined scalar as a hash,
+        // Perl automatically creates a new hash reference.
+        var newHash = new RuntimeHash();
+
+        // Create a special hash that knows about this scalar. When the hash
+        // receives its first assignment (e.g., %$ref = (...)), it will
+        // automatically convert this scalar from UNDEF to a proper hash reference.
+        // This implements Perl's autovivification behavior where undefined
+        // scalars become references when used as such.
+        newHash.type = RuntimeHash.AUTOVIVIFY_HASH;
+        newHash.elements = new AutovivificationHash(runtimeScalar);
+
+        // Return the newly created hash. At this point, the scalar is still UNDEF,
+        // but will be autovivified to a hash reference on first write operation.
+        return newHash;
+    }
 }

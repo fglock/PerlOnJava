@@ -547,23 +547,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return switch (type) {
-            case UNDEF -> {
-                // Autovivification: When dereferencing an undefined scalar as an array,
-                // Perl automatically creates a new array reference.
-                var newArray = new RuntimeArray();
-
-                // Create a special array that knows about this scalar. When the array
-                // receives its first assignment (e.g., @$ref = (...)), it will
-                // automatically convert this scalar from UNDEF to a proper array reference.
-                // This implements Perl's autovivification behavior where undefined
-                // scalars become references when used as such.
-                newArray.type = RuntimeArray.AUTOVIVIFY_ARRAY;
-                newArray.elements = new AutovivificationArray(this);
-
-                // Return the newly created array. At this point, the scalar is still UNDEF,
-                // but will be autovivified to an array reference on first write operation.
-                yield newArray;
-            }
+            case UNDEF -> AutovivificationArray.createAutovivifiedArray(this);
             case ARRAYREFERENCE -> (RuntimeArray) value;
             case STRING ->
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as an ARRAY ref while \"strict refs\" in use");
@@ -610,23 +594,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return switch (type) {
-            case UNDEF -> {
-                // Autovivification: When dereferencing an undefined scalar as a hash,
-                // Perl automatically creates a new hash reference.
-                var newHash = new RuntimeHash();
-
-                // Create a special hash that knows about this scalar. When the hash
-                // receives its first assignment (e.g., %$ref = (...)), it will
-                // automatically convert this scalar from UNDEF to a proper hash reference.
-                // This implements Perl's autovivification behavior where undefined
-                // scalars become references when used as such.
-                newHash.type = RuntimeHash.AUTOVIVIFY_HASH;
-                newHash.elements = new AutovivificationHash(this);
-
-                // Return the newly created hash. At this point, the scalar is still UNDEF,
-                // but will be autovivified to a hash reference on first write operation.
-                yield newHash;
-            }
+            case UNDEF -> AutovivificationHash.createAutovivifiedHash(this);
             case HASHREFERENCE ->
                 // Simple case: already a hash reference, just return the hash
                     (RuntimeHash) value;
