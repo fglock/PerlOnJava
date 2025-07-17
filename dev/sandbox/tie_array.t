@@ -695,4 +695,236 @@ subtest 'Edge cases' => sub {
     is($array[2], 'C', 'assignment to negative index works');
 };
 
+subtest 'Autoincrement and autodecrement operations' => sub {
+    my @array;
+    my $obj = tie @array, 'TiedArray';
+
+    # Set up initial values
+    @array = (5, 10, 15);
+
+    # Pre-increment
+    my $result = ++$array[0];
+    is($result, 6, 'pre-increment returns new value');
+    is($array[0], 6, 'pre-increment modifies array element');
+
+    # Post-increment
+    $result = $array[1]++;
+    is($result, 10, 'post-increment returns old value');
+    is($array[1], 11, 'post-increment modifies array element');
+
+    # Pre-decrement
+    $result = --$array[2];
+    is($result, 14, 'pre-decrement returns new value');
+    is($array[2], 14, 'pre-decrement modifies array element');
+
+    # Post-decrement
+    $result = $array[2]--;
+    is($result, 14, 'post-decrement returns old value');
+    is($array[2], 13, 'post-decrement modifies array element');
+
+    # Increment undefined element
+    $array[5]++;
+    is($array[5], 1, 'increment of undefined element starts at 1');
+
+    # Decrement undefined element
+    $array[6]--;
+    is($array[6], -1, 'decrement of undefined element starts at -1');
+
+    # String increment
+    $array[10] = 'aa';
+    $array[10]++;
+    is($array[10], 'ab', 'string increment works');
+
+    # Verify FETCH and STORE are called appropriately
+    ok($obj->{fetch_count} > 0, 'FETCH called during increment operations');
+    ok($obj->{store_count} > 0, 'STORE called during increment operations');
+};
+
+subtest 'Aliased variable operations (lvalue context)' => sub {
+    my @array;
+    tie @array, 'TiedArray';
+
+    @array = (1, 2, 3, 4, 5);
+
+    # Test subroutine that modifies aliased parameters
+    sub modify_aliases {
+        $_[0]++;           # Increment first parameter
+        $_[1] = 99;        # Assign to second parameter
+        my $x = $_[2];     # Read third parameter
+        $_[3] *= 2;        # Multiply fourth parameter
+        return $x;
+    }
+
+    my $returned = modify_aliases(@array[0..3]);
+
+    is($array[0], 2, 'first element incremented via alias');
+    is($array[1], 99, 'second element assigned via alias');
+    is($returned, 3, 'third element read correctly via alias');
+    is($array[3], 8, 'fourth element multiplied via alias');
+
+    # Test with array slice as parameters
+    sub slice_modifier {
+        $_[0] = 'A';
+        $_[1] = 'B';
+        $_[2] = 'C';
+    }
+
+    slice_modifier(@array[1,3,4]);
+    is($array[1], 'A', 'slice element 1 modified via alias');
+    is($array[3], 'B', 'slice element 3 modified via alias');
+    is($array[4], 'C', 'slice element 4 modified via alias');
+
+    # Test reference to array element as lvalue
+    my $ref = \$array[0];
+    $$ref = 'modified';
+    is($array[0], 'modified', 'modification through reference to element');
+
+    # Test with for loop aliasing
+    my @values = (10, 20, 30);
+    for my $i (0..2) {
+        $array[$i] = $values[$i];
+    }
+
+    for (@array[0..2]) {
+        $_ *= 10;  # Modify through $_
+    }
+
+    is($array[0], 100, 'element modified through $_ alias');
+    is($array[1], 200, 'element modified through $_ alias');
+    is($array[2], 300, 'element modified through $_ alias');
+};
+
+subtest 'Complex lvalue operations' => sub {
+    my @array;
+    tie @array, 'TiedArray';
+
+    @array = (1, 2, 3, 4, 5);
+
+    # Compound assignment operations
+    $array[0] += 10;
+    is($array[0], 11, 'compound addition assignment');
+
+    $array[1] -= 1;
+    is($array[1], 1, 'compound subtraction assignment');
+
+    $array[2] *= 3;
+    is($array[2], 9, 'compound multiplication assignment');
+
+    $array[3] /= 2;
+    is($array[3], 2, 'compound division assignment');
+
+    $array[4] %= 3;
+    is($array[4], 2, 'compound modulo assignment');
+
+    # String compound assignments
+    $array[5] = 'hello';
+    $array[5] .= ' world';
+    is($array[5], 'hello world', 'string concatenation assignment');
+
+    # Bitwise compound assignments
+    $array[6] = 12;  # 1100 in binary
+    $array[6] &= 10; # 1010 in binary, result should be 8 (1000)
+    is($array[6], 8, 'bitwise AND assignment');
+
+    $array[7] = 12;  # 1100 in binary
+    $array[7] |= 3;  # 0011 in binary, result should be 15 (1111)
+    is($array[7], 15, 'bitwise OR assignment');
+
+    $array[8] = 12;  # 1100 in binary
+    $array[8] ^= 5;  # 0101 in binary, result should be 9 (1001)
+    is($array[8], 9, 'bitwise XOR assignment');
+
+    # Left and right shift assignments
+    $array[9] = 8;
+    $array[9] <<= 2;  # Shift left by 2
+    is($array[9], 32, 'left shift assignment');
+
+    $array[10] = 32;
+    $array[10] >>= 2;  # Shift right by 2
+    is($array[10], 8, 'right shift assignment');
+};
+
+subtest 'Array element as subroutine parameter with various contexts' => sub {
+    my @array;
+    tie @array, 'TiedArray';
+
+    @array = ('test', 42, 'hello');
+
+    # Test passing array elements to subroutines expecting references
+    sub takes_scalar_ref {
+        my $ref = shift;
+        $$ref = 'modified';
+    }
+
+    takes_scalar_ref(\$array[0]);
+    is($array[0], 'modified', 'array element modified via scalar reference');
+
+    # Test with map function (list context)
+    @array = (1, 2, 3, 4, 5);
+    my @doubled = map { $_ * 2 } @array;
+    is_deeply(\@doubled, [2, 4, 6, 8, 10], 'map reads tied array correctly');
+
+    # Test with grep function
+    my @evens = grep { $_ % 2 == 0 } @array;
+    is_deeply(\@evens, [2, 4], 'grep reads tied array correctly');
+
+    # Test with sort function
+    @array = (3, 1, 4, 1, 5, 9);
+    my @sorted = sort { $a <=> $b } @array;
+    is_deeply(\@sorted, [1, 1, 3, 4, 5, 9], 'sort reads tied array correctly');
+
+    # Test with reverse function
+    @array = (1, 2, 3);
+    my @reversed = reverse @array;
+    is_deeply(\@reversed, [3, 2, 1], 'reverse reads tied array correctly');
+};
+
+subtest 'Array element assignment in various contexts' => sub {
+    my @array;
+    tie @array, 'TiedArray';
+
+    # Assignment in conditional context
+    if ($array[0] = 'true_value') {
+        is($array[0], 'true_value', 'assignment in if condition works');
+    }
+
+    # Assignment in while loop condition
+    my $counter = 0;
+    while (($array[1] = ++$counter) < 3) {
+        # Loop body
+    }
+    is($array[1], 3, 'assignment in while condition works');
+
+    # Assignment in ternary operator
+    my $test = 1;
+    $test ? ($array[2] = 'ternary_true') : ($array[2] = 'ternary_false');
+    is($array[2], 'ternary_true', 'assignment in ternary operator works');
+
+    # Assignment with logical operators
+    $array[3] = 0;
+    $array[3] ||= 'default_value';
+    is($array[3], 'default_value', 'logical OR assignment works');
+
+    $array[4] = 'existing';
+    $array[4] ||= 'wont_be_used';
+    is($array[4], 'existing', 'logical OR assignment preserves existing value');
+
+    $array[5] = 'will_be_replaced';
+    $array[5] &&= 'new_value';
+    is($array[5], 'new_value', 'logical AND assignment works');
+
+    $array[6] = 0;
+    $array[6] &&= 'wont_be_used';
+    is($array[6], 0, 'logical AND assignment preserves false value');
+
+    # Defined-or assignment
+    $array[7] = undef;
+    $array[7] //= 'defined_or_value';
+    is($array[7], 'defined_or_value', 'defined-or assignment works');
+
+    $array[8] = 'existing';
+    $array[8] //= 'wont_be_used';
+    is($array[8], 'existing', 'defined-or assignment preserves defined value');
+};
+
 done_testing();
