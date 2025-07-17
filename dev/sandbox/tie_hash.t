@@ -310,7 +310,7 @@ subtest 'Hash in different contexts' => sub {
 
     # Scalar context
     my $scalar = %hash;
-    like($scalar, qr/^\d+\/\d+$/, 'hash in scalar context returns key/bucket ratio');
+    is($scalar, 3, 'hash in scalar context');
 
     # Boolean context
     ok(%hash, 'non-empty hash is true in boolean context');
@@ -499,7 +499,14 @@ subtest 'DESTROY called on untie' => sub {
         untie %hash;
 
         # Check that DESTROY was called
-        ok(grep { $_->[0] eq 'DESTROY' } @TrackedTiedHash::method_calls, 'DESTROY called on untie');
+        my $destroy_called = 0;
+        for my $call (@TrackedTiedHash::method_calls) {
+            if (ref($call) eq 'ARRAY' && $call->[0] eq 'DESTROY') {
+                $destroy_called = 1;
+                last;
+            }
+        }
+        ok($destroy_called, 'DESTROY called on untie');
     }
 
     # Test with a class that doesn't implement DESTROY
@@ -536,7 +543,7 @@ subtest 'SCALAR method' => sub {
     # Non-empty hash
     %hash = (a => 1, b => 2, c => 3);
     my $scalar = scalar %hash;
-    like($scalar, qr/^\d+\/\d+$/, 'scalar on non-empty hash returns key/bucket ratio');
+    is($scalar, 3, 'scalar on non-empty hash');
     is($obj->{scalar_count}, 2, 'SCALAR called twice');
 
     # Boolean context also calls SCALAR
@@ -688,7 +695,7 @@ subtest 'Integration with Perl built-ins' => sub {
     # map on values
     my @doubled = map { $_ * 2 } values %hash;
     is(scalar @doubled, 5, 'map on values works');
-    is_deeply([sort @doubled], [2, 4, 6, 8, 10], 'values doubled correctly');
+    is_deeply([sort { $a <=> $b } @doubled], [2, 4, 6, 8, 10], 'values doubled correctly');
 
     # sort keys
     my @sorted = sort keys %hash;
