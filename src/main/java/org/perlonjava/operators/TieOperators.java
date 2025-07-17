@@ -131,7 +131,16 @@ public class TieOperators {
                 }
                 return scalarTrue;
             }
-            case GLOBREFERENCE -> throw new PerlCompilerException("untie(GLOB) not implemented");
+            case GLOBREFERENCE -> {
+                RuntimeGlob glob = variable.globDeref();
+                RuntimeScalar IO = glob.IO;
+                if (IO.type == TIED_SCALAR) {
+                    // TieFile.tiedUntie((TieFile) IO.value);
+                    // ...
+                    throw new PerlCompilerException("untie(GLOB) not implemented");
+                }
+                return scalarTrue;
+            }
             default -> {
                 return scalarUndef;
             }
@@ -159,9 +168,27 @@ public class TieOperators {
                     return ((TieScalar) scalar.value).getSelf();
                 }
             }
-            case ARRAYREFERENCE -> throw new PerlCompilerException("tied(ARRAY) not implemented");
-            case HASHREFERENCE -> throw new PerlCompilerException("tied(HASH) not implemented");
-            case GLOBREFERENCE -> throw new PerlCompilerException("tied(GLOB) not implemented");
+            case ARRAYREFERENCE -> {
+                RuntimeArray array = variable.arrayDeref();
+                if (array.type == TIED_ARRAY) {
+                    return ((TieArray) array.elements).getSelf();
+                }
+            }
+            case HASHREFERENCE -> {
+                RuntimeHash hash = variable.hashDeref();
+                if (hash.type == TIED_HASH) {
+                    return ((TieHash) hash.elements).getSelf();
+                }
+            }
+            case GLOBREFERENCE -> {
+                RuntimeGlob glob = variable.globDeref();
+                RuntimeScalar IO = glob.IO;
+                if (IO.type == TIED_SCALAR) {
+                    // TieFile.tiedUntie((TieFile) IO.value);
+                    // ...
+                    throw new PerlCompilerException("tied(GLOB) not implemented");
+                }
+            }
             default -> {
                 return scalarUndef;
             }
