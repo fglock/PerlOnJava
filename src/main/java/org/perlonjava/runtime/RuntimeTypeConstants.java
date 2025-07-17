@@ -62,11 +62,6 @@ public final class RuntimeTypeConstants {
     public static final String CODE_CLASS = "org/perlonjava/runtime/RuntimeCode";
 
     /** Internal class name for RuntimeBase interface */
-    public static final String DATA_PROVIDER_INTERFACE = "org/perlonjava/runtime/RuntimeBase";
-
-    /** Internal class name for RuntimeScalarCache */
-    public static final String SCALAR_CACHE_CLASS = "org/perlonjava/runtime/RuntimeScalarCache";
-
     public static final String BASE_CLASS = "org/perlonjava/runtime/RuntimeBase";
 
     // ===== Utility Methods =====
@@ -100,16 +95,5 @@ public final class RuntimeTypeConstants {
             return typeDescriptor.substring(1, typeDescriptor.length() - 1);
         }
         return null;
-    }
-
-    /**
-     * Converts an internal class name to a JVM type descriptor.
-     * For example: "org/perlonjava/runtime/RuntimeScalar" → "Lorg/perlonjava/runtime/RuntimeScalar;"
-     *
-     * @param internalName The internal class name
-     * @return The JVM type descriptor
-     */
-    public static String internalNameToDescriptor(String internalName) {
-        return "L" + internalName + ";";
     }
 }
