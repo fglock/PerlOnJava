@@ -7,45 +7,47 @@ import java.util.ArrayList;
 /**
  * TieArray provides support for Perl's tie mechanism for array variables.
  *
- * <p>In Perl, the tie mechanism allows array variables to have their operations
- * intercepted and handled by custom classes. When an array is tied, all operations
- * on that array (fetching elements, storing elements, push, pop, etc.) are delegated
- * to methods in the tie handler object.</p>
- *
- * <p>This class provides static methods that are called when operations are
- * performed on tied arrays.</p>
- *
- *  <p>This class extends ArrayList so it can be stored in RuntimeArray's elements field,
- *  similar to how AutovivificationHash extends HashMap for RuntimeHash.</p>
+ * <p>When an array is tied, all operations are delegated to methods in the tie handler object.
+ * This class extends ArrayList so it can be stored in RuntimeArray's elements field.
+ * Example usage:
+ * <pre>{@code
+ * tie @array, 'MyClass';          # Creates handler via TIEARRAY
+ * $array[0] = 42;                 # Calls STORE
+ * my $val = $array[0];            # Calls FETCH
+ * push @array, 1, 2, 3;           # Calls PUSH
+ * my $elem = pop @array;          # Calls POP
+ * shift @array;                   # Calls SHIFT
+ * unshift @array, 1, 2;           # Calls UNSHIFT
+ * splice @array, 0, 1, 'x';       # Calls SPLICE
+ * delete $array[0];               # Calls DELETE
+ * exists $array[0];               # Calls EXISTS
+ * my $size = @array;              # Calls FETCHSIZE
+ * $#array = 10;                   # Calls STORESIZE
+ * @array = ();                    # Calls CLEAR
+ * untie @array;                   # Calls UNTIE (if exists)
+ * # DESTROY called when handler goes out of scope
+ * }</pre>
+ * </p>
  *
  * @see RuntimeArray
  */
 public class TieArray extends ArrayList<RuntimeScalar> {
 
-    /**
-     * The tied object (handler) that implements the tie interface methods.
-     * This is the blessed object returned by TIEARRAY.
-     */
+    /** The tied object (handler) that implements the tie interface methods. */
     private final RuntimeScalar self;
 
-    /**
-     * The package name that this array is tied to.
-     * Used for method dispatch and error reporting.
-     */
+    /** The package name that this array is tied to. */
     private final String tiedPackage;
 
-    /**
-     * The original value of the array before it was tied.
-     * This value might be needed for untie operations or debugging.
-     */
+    /** The original value of the array before it was tied. */
     private final RuntimeArray previousValue;
 
     /**
      * Creates a new TieArray instance.
      *
      * @param tiedPackage   the package name this array is tied to
-     * @param previousValue the value of the array before it was tied (may be null/empty)
-     * @param self          the blessed object returned by TIEARRAY that handles tied operations
+     * @param previousValue the value of the array before it was tied
+     * @param self          the blessed object returned by TIEARRAY
      */
     public TieArray(String tiedPackage, RuntimeArray previousValue, RuntimeScalar self) {
         this.tiedPackage = tiedPackage;
@@ -55,11 +57,6 @@ public class TieArray extends ArrayList<RuntimeScalar> {
 
     /**
      * Helper method to call methods on the tied object.
-     *
-     * @param array    the RuntimeArray that is tied
-     * @param method   the method name to call
-     * @param args     the arguments to pass to the method
-     * @return the result of the method call
      */
     private static RuntimeScalar tieCall(RuntimeArray array, String method, RuntimeBase... args) {
         TieArray tieArray = (TieArray) array.elements;
@@ -78,13 +75,7 @@ public class TieArray extends ArrayList<RuntimeScalar> {
 
     /**
      * Calls a tie method if it exists in the tied object's class hierarchy.
-     *
-     * <p>This is a helper method used by tiedDestroy() and tiedUntie() to check
-     * if a specific method exists in the tied object's class and call it if present.</p>
-     *
-     * @param array         the RuntimeArray that is tied
-     * @param methodName    the name of the method to call (e.g., "DESTROY", "UNTIE")
-     * @return the value returned by the method, or undef if the method doesn't exist
+     * Used by tiedDestroy() and tiedUntie() for optional methods.
      */
     private static RuntimeScalar tieCallIfExists(RuntimeArray array, String methodName) {
         TieArray tieArray = (TieArray) array.elements;
@@ -103,185 +94,63 @@ public class TieArray extends ArrayList<RuntimeScalar> {
     }
 
     /**
-     * Fetches an element from a tied array by index.
-     *
-     * <p>This method is called whenever an element is accessed from a tied array.
-     * It delegates to the FETCH method of the tie handler object associated
-     * with the array.</p>
-     *
-     * <p>In Perl, this corresponds to operations like:
-     * <pre>{@code
-     * my $value = $tied_array[$index];  # Calls FETCH with $index
-     * print $tied_array[$index];        # Calls FETCH with $index
-     * if ($tied_array[$index]) { ... }  # Calls FETCH with $index
-     * }</pre>
-     * </p>
-     *
-     * @param array    the tied array whose element is being fetched
-     * @param index    the index to fetch
-     * @return the value returned by the tie handler's FETCH method
+     * Fetches an element from a tied array by index (delegates to FETCH).
      */
     public static RuntimeScalar tiedFetch(RuntimeArray array, RuntimeScalar index) {
         return tieCall(array, "FETCH", index);
     }
 
     /**
-     * Stores an element into a tied array.
-     *
-     * <p>This method is called whenever an element is assigned to a tied array.
-     * It delegates to the STORE method of the tie handler object associated
-     * with the array.</p>
-     *
-     * <p>In Perl, this corresponds to operations like:
-     * <pre>{@code
-     * $tied_array[$index] = 42;           # Calls STORE with $index and 42
-     * $tied_array[$index] = "hello";      # Calls STORE with $index and "hello"
-     * $tied_array[$index]++;              # Calls FETCH, then STORE
-     * }</pre>
-     * </p>
-     *
-     * @param array    the tied array being assigned to
-     * @param index    the index to store at
-     * @param value    the value to store in the tied array
-     * @return the value returned by the tie handler's STORE method
+     * Stores an element into a tied array (delegates to STORE).
      */
     public static RuntimeScalar tiedStore(RuntimeArray array, RuntimeScalar index, RuntimeScalar value) {
         return tieCall(array, "STORE", index, value);
     }
 
     /**
-     * Gets the size of a tied array.
-     *
-     * <p>This method is called when the size of a tied array is queried.
-     * It delegates to the FETCHSIZE method of the tie handler object.</p>
-     *
-     * <p>In Perl, this corresponds to operations like:
-     * <pre>{@code
-     * my $size = @tied_array;     # Calls FETCHSIZE
-     * my $last = $#tied_array;    # Calls FETCHSIZE (returns size - 1)
-     * }</pre>
-     * </p>
-     *
-     * @param array the tied array
-     * @return the size returned by the tie handler's FETCHSIZE method
+     * Gets the size of a tied array (delegates to FETCHSIZE).
      */
     public static RuntimeScalar tiedFetchSize(RuntimeArray array) {
         return tieCall(array, "FETCHSIZE");
     }
 
     /**
-     * Sets the size of a tied array.
-     *
-     * <p>This method is called when the size of a tied array is set.
-     * It delegates to the STORESIZE method of the tie handler object.</p>
-     *
-     * <p>In Perl, this corresponds to operations like:
-     * <pre>{@code
-     * $#tied_array = 10;    # Calls STORESIZE with 11
-     * @tied_array = ();     # Calls STORESIZE with 0
-     * }</pre>
-     * </p>
-     *
-     * @param array    the tied array
-     * @param size     the new size for the array
-     * @return the value returned by the tie handler's STORESIZE method
+     * Sets the size of a tied array (delegates to STORESIZE).
      */
     public static RuntimeScalar tiedStoreSize(RuntimeArray array, RuntimeScalar size) {
         return tieCall(array, "STORESIZE", size);
     }
 
     /**
-     * Extends a tied array to a specified size.
-     *
-     * <p>This method is called when a tied array needs to be extended.
-     * It delegates to the EXTEND method of the tie handler object.</p>
-     *
-     * <p>In Perl, this is typically called internally when an array
-     * needs to grow to accommodate new elements.</p>
-     *
-     * @param array    the tied array
-     * @param size     the size to extend to
-     * @return the value returned by the tie handler's EXTEND method
+     * Extends a tied array to a specified size (delegates to EXTEND).
      */
     public static RuntimeScalar tiedExtend(RuntimeArray array, RuntimeScalar size) {
         return tieCall(array, "EXTEND", size);
     }
 
     /**
-     * Checks if an index exists in a tied array.
-     *
-     * <p>This method is called when checking for element existence in a tied array.
-     * It delegates to the EXISTS method of the tie handler object.</p>
-     *
-     * <p>In Perl, this corresponds to:
-     * <pre>{@code
-     * if (exists $tied_array[$index]) { ... }  # Calls EXISTS with $index
-     * }</pre>
-     * </p>
-     *
-     * @param array    the tied array
-     * @param index    the index to check
-     * @return the value returned by the tie handler's EXISTS method
+     * Checks if an index exists in a tied array (delegates to EXISTS).
      */
     public static RuntimeScalar tiedExists(RuntimeArray array, RuntimeScalar index) {
         return tieCall(array, "EXISTS", index);
     }
 
     /**
-     * Deletes an element from a tied array.
-     *
-     * <p>This method is called when an element is deleted from a tied array.
-     * It delegates to the DELETE method of the tie handler object.</p>
-     *
-     * <p>In Perl, this corresponds to:
-     * <pre>{@code
-     * delete $tied_array[$index];  # Calls DELETE with $index
-     * }</pre>
-     * </p>
-     *
-     * @param array    the tied array
-     * @param index    the index to delete
-     * @return the value returned by the tie handler's DELETE method
+     * Deletes an element from a tied array (delegates to DELETE).
      */
     public static RuntimeScalar tiedDelete(RuntimeArray array, RuntimeScalar index) {
         return tieCall(array, "DELETE", index);
     }
 
     /**
-     * Clears all elements from a tied array.
-     *
-     * <p>This method is called when clearing a tied array.
-     * It delegates to the CLEAR method of the tie handler object.</p>
-     *
-     * <p>In Perl, this corresponds to:
-     * <pre>{@code
-     * @tied_array = ();   # Calls CLEAR
-     * undef @tied_array;  # Calls CLEAR
-     * }</pre>
-     * </p>
-     *
-     * @param array the tied array to clear
-     * @return the value returned by the tie handler's CLEAR method
+     * Clears all elements from a tied array (delegates to CLEAR).
      */
     public static RuntimeScalar tiedClear(RuntimeArray array) {
         return tieCall(array, "CLEAR");
     }
 
     /**
-     * Pushes elements onto the end of a tied array.
-     *
-     * <p>This method is called when pushing elements onto a tied array.
-     * It delegates to the PUSH method of the tie handler object.</p>
-     *
-     * <p>In Perl, this corresponds to:
-     * <pre>{@code
-     * push @tied_array, $elem1, $elem2;  # Calls PUSH with elements
-     * }</pre>
-     * </p>
-     *
-     * @param array    the tied array
-     * @param elements the elements to push
-     * @return the value returned by the tie handler's PUSH method
+     * Pushes elements onto the end of a tied array (delegates to PUSH).
      */
     public static RuntimeScalar tiedPush(RuntimeArray array, RuntimeArray elements) {
         TieArray tieArray = (TieArray) array.elements;
@@ -302,58 +171,21 @@ public class TieArray extends ArrayList<RuntimeScalar> {
     }
 
     /**
-     * Pops an element from the end of a tied array.
-     *
-     * <p>This method is called when popping from a tied array.
-     * It delegates to the POP method of the tie handler object.</p>
-     *
-     * <p>In Perl, this corresponds to:
-     * <pre>{@code
-     * my $elem = pop @tied_array;  # Calls POP
-     * }</pre>
-     * </p>
-     *
-     * @param array the tied array
-     * @return the value returned by the tie handler's POP method
+     * Pops an element from the end of a tied array (delegates to POP).
      */
     public static RuntimeScalar tiedPop(RuntimeArray array) {
         return tieCall(array, "POP");
     }
 
     /**
-     * Shifts an element from the beginning of a tied array.
-     *
-     * <p>This method is called when shifting from a tied array.
-     * It delegates to the SHIFT method of the tie handler object.</p>
-     *
-     * <p>In Perl, this corresponds to:
-     * <pre>{@code
-     * my $elem = shift @tied_array;  # Calls SHIFT
-     * }</pre>
-     * </p>
-     *
-     * @param array the tied array
-     * @return the value returned by the tie handler's SHIFT method
+     * Shifts an element from the beginning of a tied array (delegates to SHIFT).
      */
     public static RuntimeScalar tiedShift(RuntimeArray array) {
         return tieCall(array, "SHIFT");
     }
 
     /**
-     * Unshifts elements onto the beginning of a tied array.
-     *
-     * <p>This method is called when unshifting elements onto a tied array.
-     * It delegates to the UNSHIFT method of the tie handler object.</p>
-     *
-     * <p>In Perl, this corresponds to:
-     * <pre>{@code
-     * unshift @tied_array, $elem1, $elem2;  # Calls UNSHIFT with elements
-     * }</pre>
-     * </p>
-     *
-     * @param array    the tied array
-     * @param elements the elements to unshift
-     * @return the value returned by the tie handler's UNSHIFT method
+     * Unshifts elements onto the beginning of a tied array (delegates to UNSHIFT).
      */
     public static RuntimeScalar tiedUnshift(RuntimeArray array, RuntimeArray elements) {
         TieArray tieArray = (TieArray) array.elements;
@@ -374,22 +206,7 @@ public class TieArray extends ArrayList<RuntimeScalar> {
     }
 
     /**
-     * Performs a splice operation on a tied array.
-     *
-     * <p>This method is called when splicing a tied array.
-     * It delegates to the SPLICE method of the tie handler object.</p>
-     *
-     * <p>In Perl, this corresponds to:
-     * <pre>{@code
-     * splice @tied_array, $offset, $length, @replacement;  # Calls SPLICE
-     * }</pre>
-     * </p>
-     *
-     * @param array       the tied array
-     * @param offset      the offset at which to start
-     * @param length      the number of elements to remove
-     * @param replacement the elements to insert
-     * @return the value returned by the tie handler's SPLICE method
+     * Performs a splice operation on a tied array (delegates to SPLICE).
      */
     public static RuntimeScalar tiedSplice(RuntimeArray array, RuntimeScalar offset,
                                            RuntimeScalar length, RuntimeArray replacement) {
@@ -413,45 +230,14 @@ public class TieArray extends ArrayList<RuntimeScalar> {
     }
 
     /**
-     * Destroys a tied array variable.
-     *
-     * <p>This method is called when a tied array goes out of scope or is being
-     * garbage collected. It delegates to the DESTROY method of the tie handler
-     * object associated with the array, if such a method exists.</p>
-     *
-     * <p>In Perl, this corresponds to:
-     * <pre>{@code
-     * {
-     *     my @tied_array;
-     *     tie @tied_array, 'MyClass';
-     *     # ... use @tied_array ...
-     * } # DESTROY called here when @tied_array goes out of scope
-     * }</pre>
-     * </p>
-     *
-     * @param array the tied array being destroyed
-     * @return the value returned by the tie handler's DESTROY method, or undef if no DESTROY method exists
+     * Called when a tied array goes out of scope (delegates to DESTROY if exists).
      */
     public static RuntimeScalar tiedDestroy(RuntimeArray array) {
         return tieCallIfExists(array, "DESTROY");
     }
 
     /**
-     * Unties an array variable.
-     *
-     * <p>This method is called when untying an array. It delegates to the UNTIE method
-     * of the tie handler object associated with the array, if such a method exists.</p>
-     *
-     * <p>In Perl, this corresponds to:
-     * <pre>{@code
-     * tie @array, 'MyClass';
-     * # ... use @array ...
-     * untie @array;  # Calls UNTIE if it exists
-     * }</pre>
-     * </p>
-     *
-     * @param array the tied array being untied
-     * @return the value returned by the tie handler's UNTIE method, or undef if no UNTIE method exists
+     * Unties an array variable (delegates to UNTIE if exists).
      */
     public static RuntimeScalar tiedUntie(RuntimeArray array) {
         return tieCallIfExists(array, "UNTIE");
