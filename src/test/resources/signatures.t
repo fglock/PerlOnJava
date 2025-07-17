@@ -1,5 +1,7 @@
 use v5.36;
 
+print "1..13\n";
+
 ###################
 # Perl 5 Signatures Tests
 

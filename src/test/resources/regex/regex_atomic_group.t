@@ -2,6 +2,8 @@ use strict;
 use warnings;
 use feature 'say';
 
+print "1..13\n";
+
 ###################
 # Perl Atomic Group Tests
 

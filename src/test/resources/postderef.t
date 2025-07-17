@@ -2,6 +2,8 @@ use strict;
 use feature 'say';
 use feature 'postderef';
 
+print "1..6\n";
+
 # Test postderef feature
 {
     my $array_ref = [ 11, 22, 33 ];

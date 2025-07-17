@@ -2,6 +2,8 @@ use feature 'say';
 use strict;
 use warnings;
 
+print "1..9\n";
+
 # Test classes for overload
 {
     package NumberHolder;

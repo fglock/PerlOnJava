@@ -1,6 +1,8 @@
 use strict;
 use feature 'say';
 
+print "1..4\n";
+
 my $str = "hello hello hello";
 
 # Test where /c makes a difference

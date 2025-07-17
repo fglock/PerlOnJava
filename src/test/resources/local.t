@@ -2,6 +2,8 @@ use strict;
 use warnings;
 use feature 'say';
 
+print "1..45\n";
+
 #######################
 # Tests for Perl `local` operator
 

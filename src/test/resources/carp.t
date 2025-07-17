@@ -3,6 +3,8 @@ use warnings;
 use Carp qw( carp cluck croak confess longmess shortmess );
 use feature 'say';
 
+print "1..6\n";
+
 sub printable {
     my $str = join("", @_);
     $str =~ s/\n/\n# /g;

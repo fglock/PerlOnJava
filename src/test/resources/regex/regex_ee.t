@@ -1,6 +1,8 @@
 use strict;
 use feature 'say';
 
+print "1..4\n";
+
 ###################
 # Perl s///e vs s///ee Operator Tests
 

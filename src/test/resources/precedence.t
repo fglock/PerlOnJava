@@ -1,6 +1,8 @@
 use strict;
 use feature 'say';
 
+print "1..15\n";
+
 # Test precedence of ++ vs ->
 my ($flush_mro, $pkg);
 $flush_mro = {a => 2};

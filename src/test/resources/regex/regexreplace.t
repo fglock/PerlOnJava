@@ -1,6 +1,8 @@
 use feature 'say';
 use strict;
 
+print "1..7\n";
+
 ###################
 # Perl s/// Operator Tests
 

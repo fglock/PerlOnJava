@@ -2,6 +2,8 @@ use feature 'say';
 use strict;
 use warnings;
 
+print "1..14\n";
+
 # Test classes for overload
 {
     package BoolHolder;

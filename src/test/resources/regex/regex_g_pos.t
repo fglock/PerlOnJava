@@ -1,6 +1,8 @@
 use strict;
 use feature 'say';
 
+print "1..13\n";
+
 ###################
 # Perl `pos` Function and `\G` Assertion Tests
 
