@@ -104,7 +104,7 @@ public class TieOperators {
             case REFERENCE -> {
                 RuntimeScalar scalar = variable.scalarDeref();
                 if (scalar.type == TIED_SCALAR) {
-                    TieScalar.tiedDestroy(scalar);
+                    TieScalar.tiedUntie(scalar);
                     RuntimeScalar previousValue = ((TieScalar) scalar.value).getPreviousValue();
                     scalar.type = previousValue.type;
                     scalar.value = previousValue.value;
