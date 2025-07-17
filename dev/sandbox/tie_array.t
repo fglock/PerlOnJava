@@ -87,7 +87,11 @@ sub UNSHIFT {
 
 sub SPLICE {
     my ($self, $offset, $length, @values) = @_;
-    return splice @{$self->{array}}, $offset, $length, @values;
+    if (defined $length) {
+        return splice @{$self->{array}}, $offset, $length, @values;
+    } else {
+        return splice @{$self->{array}}, $offset;
+    }
 }
 
 sub DESTROY {
@@ -637,7 +641,14 @@ subtest 'DESTROY called on untie' => sub {
         untie @array;
 
         # Check that DESTROY was called
-        ok(grep { $_->[0] eq 'DESTROY' } @TrackedTiedArray::method_calls, 'DESTROY called on untie');
+        my $destroy_called = 0;
+        for my $call (@TrackedTiedArray::method_calls) {
+            if (ref($call) eq 'ARRAY' && $call->[0] eq 'DESTROY') {
+                $destroy_called = 1;
+                last;
+            }
+        }
+        ok($destroy_called, 'DESTROY called on untie');
     }
 
     # Test with a class that doesn't implement DESTROY
