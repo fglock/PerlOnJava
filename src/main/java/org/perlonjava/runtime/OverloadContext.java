@@ -44,6 +44,12 @@ public class OverloadContext {
      * @return OverloadContext instance if overloading is enabled, null otherwise
      */
     public static OverloadContext prepare(int blessId) {
+        // Check cache first
+        OverloadContext cachedContext = InheritanceResolver.getCachedOverloadContext(blessId);
+        if (cachedContext != null) {
+            return cachedContext;
+        }
+
         // Resolve Perl class name from blessing ID
         String perlClassName = NameNormalizer.getBlessStr(blessId);
 
@@ -51,12 +57,15 @@ public class OverloadContext {
         RuntimeScalar methodOverloaded = InheritanceResolver.findMethodInHierarchy("((", perlClassName, null, 0);
         RuntimeScalar methodFallback = InheritanceResolver.findMethodInHierarchy("()", perlClassName, null, 0);
 
-        // Return context only if overloading is enabled
-        if (methodOverloaded == null && methodFallback == null) {
-            return null;
+        // Create context if overloading is enabled
+        OverloadContext context = null;
+        if (methodOverloaded != null || methodFallback != null) {
+            context = new OverloadContext(perlClassName, methodOverloaded, methodFallback);
+            // Cache the result
+            InheritanceResolver.cacheOverloadContext(blessId, context);
         }
 
-        return new OverloadContext(perlClassName, methodOverloaded, methodFallback);
+        return context;
     }
 
     public static RuntimeScalar tryOneArgumentOverload(RuntimeScalar runtimeScalar, int blessId, String operator, String methodName, Function<RuntimeScalar, RuntimeScalar> fallbackFunction) {

@@ -12,6 +12,8 @@ public class InheritanceResolver {
     private static final Map<String, RuntimeScalar> methodCache = new HashMap<>();
     // Cache for linearized class hierarchies
     private static final Map<String, List<String>> linearizedClassesCache = new HashMap<>();
+    // Cache for OverloadContext instances by blessing ID
+    private static final Map<Integer, OverloadContext> overloadContextCache = new HashMap<>();
 
     /**
      * Invalidates the caches for method resolution and linearized class hierarchies.
@@ -20,6 +22,27 @@ public class InheritanceResolver {
     public static void invalidateCache() {
         methodCache.clear();
         linearizedClassesCache.clear();
+        overloadContextCache.clear();
+    }
+
+    /**
+     * Retrieves a cached OverloadContext for the given blessing ID.
+     *
+     * @param blessId The blessing ID of the class.
+     * @return The cached OverloadContext, or null if not found.
+     */
+    public static OverloadContext getCachedOverloadContext(int blessId) {
+        return overloadContextCache.get(blessId);
+    }
+
+    /**
+     * Caches an OverloadContext for the given blessing ID.
+     *
+     * @param blessId The blessing ID of the class.
+     * @param context The OverloadContext to cache (can be null to indicate no overloading).
+     */
+    public static void cacheOverloadContext(int blessId, OverloadContext context) {
+        overloadContextCache.put(blessId, context);
     }
 
     /**
