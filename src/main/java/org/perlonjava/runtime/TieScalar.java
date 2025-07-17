@@ -153,6 +153,41 @@ public class TieScalar {
         return RuntimeCode.apply(destroyMethod, args, RuntimeContextType.SCALAR).getFirst();
     }
 
+    /**
+     * Unties a tied scalar variable.
+     *
+     * <p>This method is called when a tied scalar is untied. It delegates to the UNTIE method of the tie handler
+     * object associated with the scalar, if such a method exists.</p>
+     *
+     * @param runtimeScalar the tied scalar being untied
+     * @return the value returned by the tie handler's UNTIE method, or undef if no UNTIE method exists
+     */
+    public static RuntimeScalar tiedUntie(RuntimeScalar runtimeScalar) {
+        // Get the tied object using the tied() operator
+        RuntimeScalar tiedObject = TieOperators.tied(runtimeScalar.createReference());
+        if (!tiedObject.getDefinedBoolean()) {
+            return RuntimeScalarCache.scalarUndef;
+        }
+
+        // Get the class name from the tied object
+        int blessId = tiedObject.blessedId();
+        if (blessId == 0) {
+            return RuntimeScalarCache.scalarUndef;
+        }
+        String perlClassName = NameNormalizer.getBlessStr(blessId);
+
+        // Check if DESTROY method exists in the class hierarchy
+        RuntimeScalar destroyMethod = InheritanceResolver.findMethodInHierarchy("UNTIE", perlClassName, null, 0);
+        if (destroyMethod == null) {
+            // DESTROY method doesn't exist, return undef
+            return RuntimeScalarCache.scalarUndef;
+        }
+
+        // DESTROY method exists, call it
+        RuntimeArray args = new RuntimeArray(tiedObject);
+        return RuntimeCode.apply(destroyMethod, args, RuntimeContextType.SCALAR).getFirst();
+    }
+
     public RuntimeScalar getPreviousValue() {
         return previousValue;
     }
