@@ -44,7 +44,7 @@ public class TieScalar {
      */
     public TieScalar(String tiedPackage, RuntimeScalar previousValue, RuntimeScalar self) {
         this.tiedPackage = tiedPackage;
-        this.previousValue = new RuntimeScalar(previousValue);
+        this.previousValue = previousValue;
         this.self = self;
     }
 

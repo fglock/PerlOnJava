@@ -69,15 +69,13 @@ public class Operator {
                 RuntimeArray array = variable.arrayDeref();
                 RuntimeArray previousValue = new RuntimeArray(array);
                 array.type = TIED_ARRAY;
-                // ...
-                throw new PerlCompilerException("tie(ARRAY) not implemented");
+                array.elements = new TieArray(className, previousValue, self);
             }
             case HASHREFERENCE -> {
                 RuntimeHash hash = variable.hashDeref();
-                // RuntimeHash previousValue = new RuntimeHash(hash);
+                RuntimeHash previousValue = RuntimeHash.createHash(hash);
                 hash.type = TIED_HASH;
-                // ...
-                throw new PerlCompilerException("tie(HASH) not implemented");
+                hash.elements = new TieHash(className, previousValue, self);
             }
             case GLOBREFERENCE -> {
                 // ...
