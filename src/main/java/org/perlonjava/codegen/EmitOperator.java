@@ -90,17 +90,9 @@ public class EmitOperator {
         emitFileHandle(emitterVisitor.with(RuntimeContextType.SCALAR), node.left);
 
         if (operator.equals("readline")) {
-            // Push call context for SCALAR or LIST context.
             emitterVisitor.pushCallContext();
-            // Invoke the static method for the operator.
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Readline", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBase;", false);
-        } else {
-            // Invoke the static method for the operator without context.
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         }
-
-        // If the context is VOID, pop the result from the stack.
-        handleVoidContext(emitterVisitor);
+        emitOperator(node, emitterVisitor);
     }
 
     static void handleBinmodeOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
