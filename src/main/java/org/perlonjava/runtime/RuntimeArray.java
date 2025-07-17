@@ -46,9 +46,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public RuntimeArray(RuntimeBase... values) {
         this.elements = new ArrayList<>();
         for (RuntimeBase value : values) {
-            Iterator<RuntimeScalar> iterator = value.iterator();
-            while (iterator.hasNext()) {
-                this.elements.add(iterator.next());
+            for (RuntimeScalar runtimeScalar : value) {
+                this.elements.add(runtimeScalar);
             }
         }
     }
@@ -60,9 +59,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     public RuntimeArray(RuntimeList a) {
         this.elements = new ArrayList<>();
-        Iterator<RuntimeScalar> iterator = a.iterator();
-        while (iterator.hasNext()) {
-            this.elements.add(iterator.next());
+        for (RuntimeScalar runtimeScalar : a) {
+            this.elements.add(runtimeScalar);
         }
     }
 
@@ -84,8 +82,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     public static RuntimeScalar pop(RuntimeArray runtimeArray) {
 
-        if (runtimeArray.type == AUTOVIVIFY_ARRAY && runtimeArray.elements instanceof AutovivificationArray arrayProxy) {
-            arrayProxy.vivify(runtimeArray);
+        if (runtimeArray.type == AUTOVIVIFY_ARRAY) {
+            AutovivificationArray.vivify(runtimeArray);
         }
 
         if (runtimeArray.isEmpty()) {
@@ -102,8 +100,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     public static RuntimeScalar shift(RuntimeArray runtimeArray) {
 
-        if (runtimeArray.type == AUTOVIVIFY_ARRAY && runtimeArray.elements instanceof AutovivificationArray arrayProxy) {
-            arrayProxy.vivify(runtimeArray);
+        if (runtimeArray.type == AUTOVIVIFY_ARRAY) {
+            AutovivificationArray.vivify(runtimeArray);
         }
 
         if (runtimeArray.isEmpty()) {
@@ -120,12 +118,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     public static RuntimeScalar indexLastElem(RuntimeArray runtimeArray) {
 
-        if (runtimeArray.type == AUTOVIVIFY_ARRAY && runtimeArray.elements instanceof AutovivificationArray arrayProxy) {
-            arrayProxy.vivify(runtimeArray);
+        if (runtimeArray.type == AUTOVIVIFY_ARRAY) {
+            AutovivificationArray.vivify(runtimeArray);
         }
 
         return new RuntimeArraySizeLvalue(runtimeArray);
     }
+
 
     /**
      * Adds values to the end of the array.
@@ -136,8 +135,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     public static RuntimeScalar push(RuntimeArray runtimeArray, RuntimeBase value) {
 
-        if (runtimeArray.type == AUTOVIVIFY_ARRAY && runtimeArray.elements instanceof AutovivificationArray arrayProxy) {
-            arrayProxy.vivify(runtimeArray);
+        if (runtimeArray.type == AUTOVIVIFY_ARRAY) {
+            AutovivificationArray.vivify(runtimeArray);
         }
 
         value.addToArray(runtimeArray);
@@ -153,8 +152,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     public static RuntimeScalar unshift(RuntimeArray runtimeArray, RuntimeBase value) {
 
-        if (runtimeArray.type == AUTOVIVIFY_ARRAY && runtimeArray.elements instanceof AutovivificationArray arrayProxy) {
-            arrayProxy.vivify(runtimeArray);
+        if (runtimeArray.type == AUTOVIVIFY_ARRAY) {
+            AutovivificationArray.vivify(runtimeArray);
         }
 
         RuntimeArray arr = new RuntimeArray();
@@ -169,7 +168,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @param array The RuntimeArray to which elements will be added.
      */
     public void addToArray(RuntimeArray array) {
-        if (this.type == AUTOVIVIFY_ARRAY && this.elements instanceof AutovivificationArray) {
+        if (this.type == AUTOVIVIFY_ARRAY) {
             throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
         }
 
@@ -332,8 +331,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     public RuntimeArray setFromList(RuntimeList value) {
 
-        if (this.type == AUTOVIVIFY_ARRAY && this.elements instanceof AutovivificationArray arrayProxy) {
-            arrayProxy.vivify(this);
+        if (this.type == AUTOVIVIFY_ARRAY) {
+            AutovivificationArray.vivify(this);
         }
 
         this.elements = new ArrayList<>();
@@ -414,7 +413,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     public RuntimeScalar scalar() {
 
-        if (this.type == AUTOVIVIFY_ARRAY && this.elements instanceof AutovivificationArray) {
+        if (this.type == AUTOVIVIFY_ARRAY) {
             throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
         }
 
@@ -429,15 +428,14 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     public RuntimeList getSlice(RuntimeList value) {
 
-        if (this.type == AUTOVIVIFY_ARRAY && this.elements instanceof AutovivificationArray arrayProxy) {
-            arrayProxy.vivify(this);
+        if (this.type == AUTOVIVIFY_ARRAY) {
+            AutovivificationArray.vivify(this);
         }
 
         RuntimeList result = new RuntimeList();
         List<RuntimeBase> outElements = result.elements;
-        Iterator<RuntimeScalar> iterator = value.iterator();
-        while (iterator.hasNext()) {
-            outElements.add(this.get(iterator.next()));
+        for (RuntimeScalar runtimeScalar : value) {
+            outElements.add(this.get(runtimeScalar));
         }
         return result;
     }
@@ -477,8 +475,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
 
-        if (this.type == AUTOVIVIFY_ARRAY && this.elements instanceof AutovivificationArray arrayProxy) {
-            arrayProxy.vivify(this);
+        if (this.type == AUTOVIVIFY_ARRAY) {
+            AutovivificationArray.vivify(this);
         }
 
         arr.elements.addAll(this.elements);
@@ -492,8 +490,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     public Iterator<RuntimeScalar> iterator() {
 
-        if (this.type == AUTOVIVIFY_ARRAY && this.elements instanceof AutovivificationArray arrayProxy) {
-            arrayProxy.vivify(this);
+        if (this.type == AUTOVIVIFY_ARRAY) {
+            AutovivificationArray.vivify(this);
         }
 
         return new RuntimeArrayIterator();

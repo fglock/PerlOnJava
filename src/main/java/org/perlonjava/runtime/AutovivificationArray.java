@@ -12,7 +12,6 @@ import java.util.ArrayList;
  * <p>For example, in Perl code like {@code @$array = ()}, if $array
  * doesn't exist, it will be automatically created. This class
  * facilitates such behavior by holding the scalar that needs to be autovivified.
- *
  */
 public class AutovivificationArray extends ArrayList<RuntimeScalar> {
 
@@ -26,23 +25,24 @@ public class AutovivificationArray extends ArrayList<RuntimeScalar> {
      * Constructs an AutovivificationArray with a reference to the scalar that needs autovivification.
      *
      * @param scalarToAutovivify The RuntimeScalar that should be autovivified when the array
-     *                          is assigned a list, typically the scalar holding the array reference.
+     *                           is assigned a list, typically the scalar holding the array reference.
      */
     public AutovivificationArray(RuntimeScalar scalarToAutovivify) {
         this.scalarToAutovivify = scalarToAutovivify;
     }
 
-    public void vivify(RuntimeArray array) {
+    public static void vivify(RuntimeArray array) {
         // Trigger autovivification: Convert the undefined scalar to an array reference.
         // This happens when code like @$undef_scalar = (...) is executed.
         // The AutovivificationArray was created when the undefined scalar was first
         // dereferenced as an array, and now we complete the autovivification by
         // setting the scalar's type to ARRAYREFERENCE and its value to this array.
+        if (array.elements instanceof AutovivificationArray arrayProxy) {
+            array.type = RuntimeArray.PLAIN_ARRAY;
+            array.elements = new ArrayList<>();
 
-        array.type = RuntimeArray.PLAIN_ARRAY;
-        array.elements = new ArrayList<>();
-
-        scalarToAutovivify.value = array;
-        scalarToAutovivify.type = RuntimeScalarType.ARRAYREFERENCE;
+            arrayProxy.scalarToAutovivify.value = array;
+            arrayProxy.scalarToAutovivify.type = RuntimeScalarType.ARRAYREFERENCE;
+        }
     }
 }
