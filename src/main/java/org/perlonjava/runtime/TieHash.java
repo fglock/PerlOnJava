@@ -53,12 +53,13 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
     /**
      * Helper method to call methods on the tied object.
      *
-     * @param tieHash the TieHash instance
-     * @param method  the method name to call
-     * @param args    the arguments to pass to the method
+     * @param hash   the RuntimeHash that is tied
+     * @param method the method name to call
+     * @param args   the arguments to pass to the method
      * @return the result of the method call
      */
-    private static RuntimeScalar tieCall(TieHash tieHash, String method, RuntimeBase... args) {
+    private static RuntimeScalar tieCall(RuntimeHash hash, String method, RuntimeBase... args) {
+        TieHash tieHash = (TieHash) hash.elements;
         RuntimeScalar self = tieHash.getSelf();
         String className = tieHash.getTiedPackage();
 
@@ -78,11 +79,12 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
      * <p>This is a helper method used by tiedDestroy() and tiedUntie() to check
      * if a specific method exists in the tied object's class and call it if present.</p>
      *
-     * @param tieHash the TieHash instance
-     * @param methodName    the name of the method to call (e.g., "DESTROY", "UNTIE")
+     * @param hash       the RuntimeHash that is tied
+     * @param methodName the name of the method to call (e.g., "DESTROY", "UNTIE")
      * @return the value returned by the method, or undef if the method doesn't exist
      */
-    private static RuntimeScalar tieCallIfExists(TieHash tieHash, String methodName) {
+    private static RuntimeScalar tieCallIfExists(RuntimeHash hash, String methodName) {
+        TieHash tieHash = (TieHash) hash.elements;
         RuntimeScalar self = tieHash.getSelf();
         String className = tieHash.getTiedPackage();
 
@@ -112,12 +114,12 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param tieHash the tied hash whose value is being fetched
-     * @param key     the key to fetch
+     * @param hash the tied hash whose value is being fetched
+     * @param key  the key to fetch
      * @return the value returned by the tie handler's FETCH method
      */
-    public static RuntimeScalar tiedFetch(TieHash tieHash, RuntimeScalar key) {
-        return tieCall(tieHash, "FETCH", key);
+    public static RuntimeScalar tiedFetch(RuntimeHash hash, RuntimeScalar key) {
+        return tieCall(hash, "FETCH", key);
     }
 
     /**
@@ -135,13 +137,13 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param tieHash the tied hash being assigned to
-     * @param key     the key to store at
-     * @param value   the value to store in the tied hash
+     * @param hash  the tied hash being assigned to
+     * @param key   the key to store at
+     * @param value the value to store in the tied hash
      * @return the value returned by the tie handler's STORE method
      */
-    public static RuntimeScalar tiedStore(TieHash tieHash, RuntimeScalar key, RuntimeScalar value) {
-        return tieCall(tieHash, "STORE", key, value);
+    public static RuntimeScalar tiedStore(RuntimeHash hash, RuntimeScalar key, RuntimeScalar value) {
+        return tieCall(hash, "STORE", key, value);
     }
 
     /**
@@ -156,12 +158,12 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param tieHash the tied hash
-     * @param key     the key to delete
+     * @param hash the tied hash
+     * @param key  the key to delete
      * @return the value returned by the tie handler's DELETE method
      */
-    public static RuntimeScalar tiedDelete(TieHash tieHash, RuntimeScalar key) {
-        return tieCall(tieHash, "DELETE", key);
+    public static RuntimeScalar tiedDelete(RuntimeHash hash, RuntimeScalar key) {
+        return tieCall(hash, "DELETE", key);
     }
 
     /**
@@ -176,12 +178,12 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param tieHash the tied hash
-     * @param key     the key to check
+     * @param hash the tied hash
+     * @param key  the key to check
      * @return the value returned by the tie handler's EXISTS method
      */
-    public static RuntimeScalar tiedExists(TieHash tieHash, RuntimeScalar key) {
-        return tieCall(tieHash, "EXISTS", key);
+    public static RuntimeScalar tiedExists(RuntimeHash hash, RuntimeScalar key) {
+        return tieCall(hash, "EXISTS", key);
     }
 
     /**
@@ -197,11 +199,11 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param tieHash the tied hash
+     * @param hash the tied hash
      * @return the first key returned by the tie handler's FIRSTKEY method
      */
-    public static RuntimeScalar tiedFirstKey(TieHash tieHash) {
-        return tieCall(tieHash, "FIRSTKEY");
+    public static RuntimeScalar tiedFirstKey(RuntimeHash hash) {
+        return tieCall(hash, "FIRSTKEY");
     }
 
     /**
@@ -212,12 +214,12 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
      *
      * <p>In Perl, this corresponds to continued iteration after FIRSTKEY.</p>
      *
-     * @param tieHash    the tied hash
+     * @param hash        the tied hash
      * @param previousKey the previous key in the iteration
      * @return the next key returned by the tie handler's NEXTKEY method
      */
-    public static RuntimeScalar tiedNextKey(TieHash tieHash, RuntimeScalar previousKey) {
-        return tieCall(tieHash, "NEXTKEY", previousKey);
+    public static RuntimeScalar tiedNextKey(RuntimeHash hash, RuntimeScalar previousKey) {
+        return tieCall(hash, "NEXTKEY", previousKey);
     }
 
     /**
@@ -233,11 +235,11 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param tieHash the tied hash
+     * @param hash the tied hash
      * @return the value returned by the tie handler's SCALAR method
      */
-    public static RuntimeScalar tiedScalar(TieHash tieHash) {
-        return tieCall(tieHash, "SCALAR");
+    public static RuntimeScalar tiedScalar(RuntimeHash hash) {
+        return tieCall(hash, "SCALAR");
     }
 
     /**
@@ -253,11 +255,11 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param tieHash the tied hash to clear
+     * @param hash the tied hash to clear
      * @return the value returned by the tie handler's CLEAR method
      */
-    public static RuntimeScalar tiedClear(TieHash tieHash) {
-        return tieCall(tieHash, "CLEAR");
+    public static RuntimeScalar tiedClear(RuntimeHash hash) {
+        return tieCall(hash, "CLEAR");
     }
 
     /**
@@ -277,15 +279,32 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
      * }</pre>
      * </p>
      *
-     * @param tieHash the tied hash to destroy
+     * @param hash the tied hash to destroy
      * @return the value returned by the tie handler's DESTROY method, or undef if no DESTROY method exists
      */
-    public static RuntimeScalar tiedDestroy(TieHash tieHash) {
-        return tieCallIfExists(tieHash, "DESTROY");
+    public static RuntimeScalar tiedDestroy(RuntimeHash hash) {
+        return tieCallIfExists(hash, "DESTROY");
     }
 
-    public static RuntimeScalar tiedUntie(TieHash tieHash) {
-        return tieCallIfExists(tieHash, "UNTIE");
+    /**
+     * Unties a hash variable.
+     *
+     * <p>This method is called when untying a hash. It delegates to the UNTIE method
+     * of the tie handler object associated with the hash, if such a method exists.</p>
+     *
+     * <p>In Perl, this corresponds to:
+     * <pre>{@code
+     * tie %hash, 'MyClass';
+     * # ... use %hash ...
+     * untie %hash;  # Calls UNTIE if it exists
+     * }</pre>
+     * </p>
+     *
+     * @param hash the tied hash being untied
+     * @return the value returned by the tie handler's UNTIE method, or undef if no UNTIE method exists
+     */
+    public static RuntimeScalar tiedUntie(RuntimeHash hash) {
+        return tieCallIfExists(hash, "UNTIE");
     }
 
     public RuntimeHash getPreviousValue() {
