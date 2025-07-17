@@ -41,6 +41,9 @@ public class Operator {
         String className = scalars[1].toString();
         RuntimeArray args = new RuntimeArray(Arrays.copyOfRange(scalars, 2, scalars.length));
 
+        // untie() if the variable is already tied
+        untie(variable);
+
         String method = switch (variable.type) {
             case REFERENCE -> "TIESCALAR";
             case ARRAYREFERENCE -> "TIEARRAY";
@@ -78,6 +81,10 @@ public class Operator {
                 hash.elements = new TieHash(className, previousValue, self);
             }
             case GLOBREFERENCE -> {
+                RuntimeGlob glob = variable.globDeref();
+                RuntimeScalar IO = glob.IO;
+                IO.type = TIED_SCALAR;
+                // IO.value = new TieFile(className, IO.value, self);
                 // ...
                 throw new PerlCompilerException("tie(GLOB) not implemented");
             }
