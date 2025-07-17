@@ -64,6 +64,11 @@ sub DESTROY {
     return $self->SUPER::DESTROY() if $self->can('SUPER::DESTROY');
 }
 
+sub UNTIE {
+    my ($self, $count) = @_;
+    push @method_calls, ['UNTIE', $count];
+}
+
 # Main test package
 package main;
 
@@ -257,12 +262,13 @@ subtest 'DESTROY called on untie' => sub {
         # Clear method calls before untie
         @TrackedTiedScalar::method_calls = ();
 
-        # Untie should trigger DESTROY
+        # Untie should trigger UNTIE then DESTROY
         untie $scalar;
 
-        # Check that DESTROY was called
-        is(scalar(@TrackedTiedScalar::method_calls), 1, 'One method called on untie');
-        is($TrackedTiedScalar::method_calls[0][0], 'DESTROY', 'DESTROY called on untie');
+        # Check that both UNTIE and DESTROY were called
+        is(scalar(@TrackedTiedScalar::method_calls), 2, 'Two methods called on untie');
+        is($TrackedTiedScalar::method_calls[0][0], 'UNTIE', 'UNTIE called first');
+        is($TrackedTiedScalar::method_calls[1][0], 'DESTROY', 'DESTROY called second');
     }
 
     # Test with a class that doesn't implement DESTROY
@@ -286,6 +292,26 @@ subtest 'DESTROY called on untie' => sub {
         eval { untie $scalar; };
         ok(!$@, 'untie works even when DESTROY is not implemented');
     }
+};
+
+subtest 'UNTIE called before DESTROY' => sub {
+    # Test that UNTIE is called before DESTROY
+        @TrackedTiedScalar::method_calls = ();  # Clear method calls
+
+        my $scalar;
+        tie $scalar, 'TrackedTiedScalar';
+        $scalar = "test value";
+
+        # Clear method calls before untie
+        @TrackedTiedScalar::method_calls = ();
+
+        # Untie should trigger UNTIE then DESTROY
+        untie $scalar;
+
+        # Check that both methods were called in the correct order
+        is(scalar(@TrackedTiedScalar::method_calls), 2, 'Two methods called on untie');
+        is($TrackedTiedScalar::method_calls[0][0], 'UNTIE', 'UNTIE called first');
+        is($TrackedTiedScalar::method_calls[1][0], 'DESTROY', 'DESTROY called second');
 };
 
 done_testing();
