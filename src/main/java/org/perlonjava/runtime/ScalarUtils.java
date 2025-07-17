@@ -212,4 +212,31 @@ public class ScalarUtils {
             }
         }
     }
+
+    public static String formatLikePerl(double value) {
+        if (Double.isInfinite(value)) {
+            return value > 0 ? "Inf" : "-Inf";
+        }
+        if (Double.isNaN(value)) {
+            return "NaN";
+        }
+
+        double absValue = Math.abs(value);
+
+        if (absValue >= 1e15 || (absValue < 1e-4 && absValue != 0.0)) {
+            // Use scientific notation like Perl
+            String result = String.format("%.14e", value);
+            // Clean up the scientific notation to match Perl's format
+            result = result.replaceAll("e\\+0*", "e+").replaceAll("e-0*", "e-");
+            // Remove trailing zeros in the mantissa
+            result = result.replaceAll("(\\d)\\.?0+e", "$1e");
+            return result;
+        } else {
+            // Use fixed-point notation
+            String result = String.format("%.15f", value);
+            // Remove trailing zeros and decimal point if not needed
+            result = result.replaceAll("0+$", "").replaceAll("\\.$", "");
+            return result;
+        }
+    }
 }
