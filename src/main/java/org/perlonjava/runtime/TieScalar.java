@@ -73,29 +73,18 @@ public class TieScalar {
      * @return the value returned by the method, or undef if the method doesn't exist
      */
     private static RuntimeScalar tieCallIfExists(RuntimeScalar runtimeScalar, String methodName) {
-        // Get the tied object using the tied() operator
-        RuntimeScalar tiedObject = TieOperators.tied(runtimeScalar.createReference());
-        if (!tiedObject.getDefinedBoolean()) {
-            return RuntimeScalarCache.scalarUndef;
-        }
-
-        // Get the class name from the tied object
-        int blessId = tiedObject.blessedId();
-        if (blessId == 0) {
-            return RuntimeScalarCache.scalarUndef;
-        }
-        String perlClassName = NameNormalizer.getBlessStr(blessId);
+        RuntimeScalar self = ((TieScalar) runtimeScalar.value).getSelf();
+        String className = ((TieScalar) runtimeScalar.value).getTiedPackage();
 
         // Check if method exists in the class hierarchy
-        RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, null, 0);
+        RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(methodName, className, null, 0);
         if (method == null) {
             // Method doesn't exist, return undef
             return RuntimeScalarCache.scalarUndef;
         }
 
         // Method exists, call it
-        RuntimeArray args = new RuntimeArray(tiedObject);
-        return RuntimeCode.apply(method, args, RuntimeContextType.SCALAR).getFirst();
+        return RuntimeCode.apply(method, new RuntimeArray(self), RuntimeContextType.SCALAR).getFirst();
     }
 
     /**
