@@ -15,7 +15,7 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
     public RuntimeArraySizeLvalue(RuntimeArray parent) {
         this.lvalue = parent.createReference();
         this.type = RuntimeScalarType.INTEGER;
-        this.value = parent.elements.size() - 1;
+        this.value = parent.lastElementIndex();
     }
 
     /**
@@ -34,22 +34,7 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
     @Override
     public RuntimeScalar set(RuntimeScalar value) {
         RuntimeArray parent = lvalue.arrayDeref();
-        int newSize = value.getInt();
-        if (newSize < -1) newSize = -1;
-        int currentSize = parent.elements.size() - 1;
-
-        // Update the parent with the new size
-        if (newSize > currentSize) {
-            parent.set(newSize, scalarUndef);
-        } else {
-            while (newSize < currentSize) {
-                currentSize--;
-                parent.elements.removeLast();
-            }
-        }
-
-        // Update the local value
-        this.value = newSize;
+        parent.setLastElementIndex(value);
         return this;
     }
 }

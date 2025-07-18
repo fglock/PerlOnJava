@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.operators.MathOperators;
+
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -441,12 +443,48 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return A scalar representing the size of the array.
      */
     public RuntimeScalar scalar() {
+        return switch (type) {
+            case PLAIN_ARRAY -> getScalarInt(elements.size());
+            case AUTOVIVIFY_ARRAY -> throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
+            case TIED_ARRAY -> TieArray.tiedFetchSize(this);
+            default -> throw new IllegalStateException("Unknown array type: " + type);
+        };
+    }
 
-        if (this.type == AUTOVIVIFY_ARRAY) {
-            throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
+    // implement `$#array`
+    public int lastElementIndex() {
+        return switch (type) {
+            case PLAIN_ARRAY -> elements.size() - 1;
+            case AUTOVIVIFY_ARRAY -> throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
+            case TIED_ARRAY -> TieArray.tiedFetchSize(this).getInt() - 1;
+            default -> throw new IllegalStateException("Unknown array type: " + type);
+        };
+    }
+
+    public void setLastElementIndex(RuntimeScalar value) {
+        switch (type) {
+            case PLAIN_ARRAY -> {
+                int newSize = value.getInt();
+                if (newSize < -1) newSize = -1;
+                int currentSize = elements.size() - 1;
+
+                // Update the parent with the new size
+                if (newSize > currentSize) {
+                    set(newSize, scalarUndef);
+                } else {
+                    while (newSize < currentSize) {
+                        currentSize--;
+                        elements.removeLast();
+                    }
+                }
+            }
+            case AUTOVIVIFY_ARRAY -> {
+                AutovivificationArray.vivify(this);
+                setLastElementIndex(value);
+            }
+            case TIED_ARRAY -> TieArray.tiedStoreSize(this,  new RuntimeScalar(value.getInt() + 1));
+            default -> throw new IllegalStateException("Unknown array type: " + type);
         }
-
-        return getScalarInt(elements.size());
     }
 
     /**
