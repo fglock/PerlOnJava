@@ -193,7 +193,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         List<RuntimeScalar> targetElements = array.elements;
 
         for (RuntimeScalar arrElem : elementsCopy) {
-            targetElements.add(new RuntimeScalar(arrElem));
+            // targetElements.add(new RuntimeScalar(arrElem));
+            RuntimeScalar v = new RuntimeScalar();
+            arrElem.addToScalar(v);
+            targetElements.add(v);
         }
     }
 

@@ -2,6 +2,8 @@ package org.perlonjava.runtime;
 
 import java.util.Stack;
 
+import static org.perlonjava.runtime.RuntimeScalarCache.getScalarBoolean;
+
 /**
  * RuntimeTiedArrayProxyEntry acts as a proxy for accessing elements within a tied RuntimeArray.
  * It delegates all operations to the tied object's FETCH and STORE methods.
@@ -33,15 +35,11 @@ public class RuntimeTiedArrayProxyEntry extends RuntimeBaseProxy {
      */
     @Override
     void vivify() {
-        if (lvalue == null) {
-            // Create a new scalar to hold the fetched value
-            lvalue = new RuntimeScalar();
-        }
         // Always fetch the current value from the tied object
+        // System.out.println("vivify");
         RuntimeScalar fetchedValue = TieArray.tiedFetch(parent, key);
-        lvalue.set(fetchedValue);
-        this.type = lvalue.type;
-        this.value = lvalue.value;
+        this.type = fetchedValue.type;
+        this.value = fetchedValue.value;
     }
 
     /**
@@ -53,25 +51,43 @@ public class RuntimeTiedArrayProxyEntry extends RuntimeBaseProxy {
     @Override
     public RuntimeScalar set(RuntimeScalar value) {
         // Call STORE on the tied object
-        TieArray.tiedStore(parent, key, value);
+        return TieArray.tiedStore(parent, key, value);
+    }
 
-        lvalue = null;
+    public RuntimeScalar defined() {
+        vivify();
+        return super.defined();
+    }
+
+    public boolean getDefinedBoolean() {
+        vivify();
+        return super.getDefinedBoolean();
+    }
+
+    public String toString() {
+        vivify();
+        return super.toString();
+    }
+
+    public RuntimeScalar scalar() {
+        vivify();
         return this;
-//        // Update our local copy
-//        if (lvalue == null) {
-//            lvalue = new RuntimeScalar();
-//        }
-//        lvalue.set(value);
-//        this.type = lvalue.type;
-//        this.value = lvalue.value;
-//
-//        return lvalue;
+    }
+
+    public void addToArray(RuntimeArray array) {
+        vivify();
+        super.addToArray(array);
+    }
+
+    public RuntimeScalar addToScalar(RuntimeScalar v) {
+        vivify();
+        return super.addToScalar(v);
     }
 
     /**
-     * Saves the current state of the tied array element.
-     * This fetches the current value from the tied object and saves it.
-     */
+         * Saves the current state of the tied array element.
+         * This fetches the current value from the tied object and saves it.
+         */
     @Override
     public void dynamicSaveState() {
         // Fetch current value from tied object
