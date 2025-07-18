@@ -299,6 +299,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return The value at the specified index, or a proxy if out of bounds.
      */
     public RuntimeScalar get(int index) {
+
+        if (this.type == TIED_ARRAY) {
+            return new RuntimeTiedArrayProxyEntry(this, new RuntimeScalar(index));
+        }
+
         if (index < 0) {
             index = elements.size() + index; // Handle negative indices
         }
@@ -316,6 +321,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return The value at the specified index, or a proxy if out of bounds.
      */
     public RuntimeScalar get(RuntimeScalar value) {
+
+        if (this.type == TIED_ARRAY) {
+            return new RuntimeTiedArrayProxyEntry(this, value);
+        }
+
         int index = value.getInt();
         if (index < 0) {
             index = elements.size() + index; // Handle negative indices
