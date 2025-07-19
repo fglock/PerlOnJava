@@ -6,6 +6,7 @@ import org.perlonjava.regex.RuntimeRegex;
 
 import java.util.*;
 
+import static org.perlonjava.runtime.RuntimeArray.*;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.RuntimeScalarType.*;
 
@@ -307,8 +308,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     // Add itself to a RuntimeArray.
-    public void addToArray(RuntimeArray array) {
-        array.elements.add(new RuntimeScalar(this));
+    public void addToArray(RuntimeArray runtimeArray) {
+        switch (runtimeArray.type) {
+            case PLAIN_ARRAY -> {
+                runtimeArray.elements.add(new RuntimeScalar(this));
+            }
+            case AUTOVIVIFY_ARRAY -> {
+                AutovivificationArray.vivify(runtimeArray);
+                RuntimeArray.push(runtimeArray, this);
+            }
+            case TIED_ARRAY -> TieArray.tiedPush(runtimeArray, this);
+            default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
+        };
     }
 
     /**
