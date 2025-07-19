@@ -72,6 +72,12 @@ public class RuntimeTiedArrayProxyEntry extends RuntimeBaseProxy {
         return super.toString();
     }
 
+    @Override
+    public boolean getBoolean() {
+        vivify();
+        return super.getBoolean();
+    }
+
     public RuntimeScalar scalar() {
         vivify();
         return this;
