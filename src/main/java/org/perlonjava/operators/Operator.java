@@ -14,6 +14,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.RuntimeArray.*;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 public class Operator {
@@ -678,62 +679,70 @@ public class Operator {
      * @return a RuntimeList containing the elements that were removed
      */
     public static RuntimeList splice(RuntimeArray runtimeArray, RuntimeList list) {
+        return switch (runtimeArray.type) {
+            case PLAIN_ARRAY -> {
+                RuntimeList removedElements = new RuntimeList();
 
-        if (runtimeArray.elements instanceof AutovivificationArray arrayProxy) {
-            arrayProxy.vivify(runtimeArray);
-        }
+                int size = runtimeArray.elements.size();
 
-        RuntimeList removedElements = new RuntimeList();
+                int offset;
+                if (!list.isEmpty()) {
+                    RuntimeBase value = list.elements.removeFirst();
+                    offset = value.scalar().getInt();
+                } else {
+                    offset = 0;
+                }
 
-        int size = runtimeArray.elements.size();
+                int length;
+                if (!list.elements.isEmpty()) {
+                    RuntimeBase value = list.elements.removeFirst();
+                    length = value.scalar().getInt();
+                } else {
+                    length = size;
+                }
 
-        int offset;
-        if (!list.isEmpty()) {
-            RuntimeBase value = list.elements.removeFirst();
-            offset = value.scalar().getInt();
-        } else {
-            offset = 0;
-        }
+                // Handle negative offset
+                if (offset < 0) {
+                    offset = size + offset;
+                }
 
-        int length;
-        if (!list.elements.isEmpty()) {
-            RuntimeBase value = list.elements.removeFirst();
-            length = value.scalar().getInt();
-        } else {
-            length = size;
-        }
+                // Ensure offset is within bounds
+                if (offset > size) {
+                    offset = size;
+                }
 
-        // Handle negative offset
-        if (offset < 0) {
-            offset = size + offset;
-        }
+                // Handle negative length
+                if (length < 0) {
+                    length = size - offset + length;
+                }
 
-        // Ensure offset is within bounds
-        if (offset > size) {
-            offset = size;
-        }
+                // Ensure length is within bounds
+                length = Math.min(length, size - offset);
 
-        // Handle negative length
-        if (length < 0) {
-            length = size - offset + length;
-        }
+                // Remove elements
+                for (int i = 0; i < length && offset < runtimeArray.size(); i++) {
+                    removedElements.elements.add(runtimeArray.elements.remove(offset));
+                }
 
-        // Ensure length is within bounds
-        length = Math.min(length, size - offset);
+                // Add new elements
+                if (!list.elements.isEmpty()) {
+                    RuntimeArray arr = new RuntimeArray();
+                    RuntimeArray.push(arr, list);
+                    runtimeArray.elements.addAll(offset, arr.elements);
+                }
 
-        // Remove elements
-        for (int i = 0; i < length && offset < runtimeArray.size(); i++) {
-            removedElements.elements.add(runtimeArray.elements.remove(offset));
-        }
+                yield  removedElements;
+            }
+            case AUTOVIVIFY_ARRAY -> {
+                AutovivificationArray.vivify(runtimeArray);
+                yield splice(runtimeArray, list); // Recursive call after vivification
+            }
+            case TIED_ARRAY -> TieArray.tiedSplice(runtimeArray, list);
+            default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
+        };
 
-        // Add new elements
-        if (!list.elements.isEmpty()) {
-            RuntimeArray arr = new RuntimeArray();
-            RuntimeArray.push(arr, list);
-            runtimeArray.elements.addAll(offset, arr.elements);
-        }
 
-        return removedElements;
+
     }
 
     /**
