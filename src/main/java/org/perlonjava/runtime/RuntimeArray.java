@@ -90,14 +90,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 }
                 yield runtimeArray.elements.removeLast();
             }
-
             case AUTOVIVIFY_ARRAY -> {
                 AutovivificationArray.vivify(runtimeArray);
                 yield pop(runtimeArray); // Recursive call after vivification
             }
-
             case TIED_ARRAY -> TieArray.tiedPop(runtimeArray);
-
             default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
         };
     }
@@ -116,14 +113,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 }
                 yield runtimeArray.elements.removeFirst();
             }
-
             case AUTOVIVIFY_ARRAY -> {
                 AutovivificationArray.vivify(runtimeArray);
                 yield shift(runtimeArray); // Recursive call after vivification
             }
-
             case TIED_ARRAY -> TieArray.tiedShift(runtimeArray);
-
             default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
         };
     }
@@ -135,14 +129,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return A RuntimeScalar lvalue containing the integer index of the last element, or -1 if the array is empty
      */
     public static RuntimeScalar indexLastElem(RuntimeArray runtimeArray) {
-
         if (runtimeArray.type == AUTOVIVIFY_ARRAY) {
             AutovivificationArray.vivify(runtimeArray);
         }
-
         return new RuntimeArraySizeLvalue(runtimeArray);
     }
-
 
     /**
      * Adds values to the end of the array.
