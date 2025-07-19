@@ -152,22 +152,8 @@ public class TieArray extends ArrayList<RuntimeScalar> {
     /**
      * Pushes elements onto the end of a tied array (delegates to PUSH).
      */
-    public static RuntimeScalar tiedPush(RuntimeArray array, RuntimeArray elements) {
-        TieArray tieArray = (TieArray) array.elements;
-        RuntimeBase[] args = new RuntimeBase[elements.size() + 1];
-        args[0] = tieArray.getSelf();
-        for (int i = 0; i < elements.size(); i++) {
-            args[i + 1] = elements.get(i);
-        }
-
-        String className = tieArray.getTiedPackage();
-        return RuntimeCode.call(
-                tieArray.getSelf(),
-                new RuntimeScalar("PUSH"),
-                className,
-                new RuntimeArray(args),
-                RuntimeContextType.SCALAR
-        ).getFirst();
+    public static RuntimeScalar tiedPush(RuntimeArray array, RuntimeBase elements) {
+        return tieCall(array, "PUSH", elements);
     }
 
     /**
@@ -187,22 +173,8 @@ public class TieArray extends ArrayList<RuntimeScalar> {
     /**
      * Unshifts elements onto the beginning of a tied array (delegates to UNSHIFT).
      */
-    public static RuntimeScalar tiedUnshift(RuntimeArray array, RuntimeArray elements) {
-        TieArray tieArray = (TieArray) array.elements;
-        RuntimeBase[] args = new RuntimeBase[elements.size() + 1];
-        args[0] = tieArray.getSelf();
-        for (int i = 0; i < elements.size(); i++) {
-            args[i + 1] = elements.get(i);
-        }
-
-        String className = tieArray.getTiedPackage();
-        return RuntimeCode.call(
-                tieArray.getSelf(),
-                new RuntimeScalar("UNSHIFT"),
-                className,
-                new RuntimeArray(args),
-                RuntimeContextType.SCALAR
-        ).getFirst();
+    public static RuntimeScalar tiedUnshift(RuntimeArray array, RuntimeBase elements) {
+        return tieCall(array, "UNSHIFT", elements);
     }
 
     /**

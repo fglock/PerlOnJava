@@ -152,13 +152,18 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return A scalar representing the new size of the array.
      */
     public static RuntimeScalar push(RuntimeArray runtimeArray, RuntimeBase value) {
-
-        if (runtimeArray.type == AUTOVIVIFY_ARRAY) {
-            AutovivificationArray.vivify(runtimeArray);
-        }
-
-        value.addToArray(runtimeArray);
-        return getScalarInt(runtimeArray.elements.size());
+        return switch (runtimeArray.type) {
+            case PLAIN_ARRAY -> {
+                value.addToArray(runtimeArray);
+                yield getScalarInt(runtimeArray.elements.size());
+            }
+            case AUTOVIVIFY_ARRAY -> {
+                AutovivificationArray.vivify(runtimeArray);
+                yield push(runtimeArray, value);
+            }
+            case TIED_ARRAY -> TieArray.tiedPush(runtimeArray, value);
+            default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
+        };
     }
 
     /**
@@ -169,15 +174,20 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return A scalar representing the new size of the array.
      */
     public static RuntimeScalar unshift(RuntimeArray runtimeArray, RuntimeBase value) {
-
-        if (runtimeArray.type == AUTOVIVIFY_ARRAY) {
-            AutovivificationArray.vivify(runtimeArray);
-        }
-
-        RuntimeArray arr = new RuntimeArray();
-        RuntimeArray.push(arr, value);
-        runtimeArray.elements.addAll(0, arr.elements);
-        return getScalarInt(runtimeArray.elements.size());
+        return switch (runtimeArray.type) {
+            case PLAIN_ARRAY -> {
+                RuntimeArray arr = new RuntimeArray();
+                RuntimeArray.push(arr, value);
+                runtimeArray.elements.addAll(0, arr.elements);
+                yield  getScalarInt(runtimeArray.elements.size());
+            }
+            case AUTOVIVIFY_ARRAY -> {
+                AutovivificationArray.vivify(runtimeArray);
+                yield unshift(runtimeArray, value);
+            }
+            case TIED_ARRAY -> TieArray.tiedUnshift(runtimeArray, value);
+            default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
+        };
     }
 
     /**
