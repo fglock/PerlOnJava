@@ -715,7 +715,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     private class RuntimeArrayIterator implements Iterator<RuntimeScalar> {
         private int currentIndex = 0;
-        private int size = elements.size();
+        private final int size = elements.size();
 
         @Override
         public boolean hasNext() {
