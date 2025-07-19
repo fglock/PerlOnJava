@@ -262,10 +262,17 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return Perl value True or False.
      */
     public RuntimeScalar exists(int index) {
-        if (index < 0) {
-            index = elements.size() + index; // Handle negative indices
-        }
-        return (index < 0 || index >= elements.size()) ? scalarFalse : scalarTrue;
+        return switch (type) {
+            case PLAIN_ARRAY -> {
+                if (index < 0) {
+                    index = elements.size() + index; // Handle negative indices
+                }
+                yield  (index < 0 || index >= elements.size()) ? scalarFalse : scalarTrue;
+            }
+            case AUTOVIVIFY_ARRAY -> scalarFalse;
+            case TIED_ARRAY -> TieArray.tiedExists(this, getScalarInt(index));
+            default -> throw new IllegalStateException("Unknown array type: " + type);
+        };
     }
 
     public RuntimeScalar exists(RuntimeScalar index) {
@@ -279,18 +286,25 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return The value deleted.
      */
     public RuntimeScalar delete(int index) {
-        if (index < 0) {
-            index = elements.size() + index; // Handle negative indices
-        }
-        if (index < 0 || index >= elements.size()) {
-            return scalarUndef;
-        }
-        if (index == elements.size() - 1) {
-            return pop(this);
-        }
-        RuntimeScalar previous = this.get(index);
-        this.set(index, scalarUndef);
-        return previous;
+        return switch (type) {
+            case PLAIN_ARRAY -> {
+                if (index < 0) {
+                    index = elements.size() + index; // Handle negative indices
+                }
+                if (index < 0 || index >= elements.size()) {
+                    yield  scalarUndef;
+                }
+                if (index == elements.size() - 1) {
+                    yield  pop(this);
+                }
+                RuntimeScalar previous = this.get(index);
+                this.set(index, scalarUndef);
+                yield  previous;
+            }
+            case AUTOVIVIFY_ARRAY -> scalarUndef;
+            case TIED_ARRAY -> TieArray.tiedDelete(this, getScalarInt(index));
+            default -> throw new IllegalStateException("Unknown array type: " + type);
+        };
     }
 
     public RuntimeScalar delete(RuntimeScalar index) {
