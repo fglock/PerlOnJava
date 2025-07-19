@@ -69,7 +69,7 @@ public class TieArray extends ArrayList<RuntimeScalar> {
     /**
      * Helper method to call methods on the tied object.
      */
-    private static RuntimeScalar tieCall(RuntimeArray array, String method, RuntimeBase... args) {
+    private static RuntimeList tieCall(RuntimeArray array, String method, RuntimeBase... args) {
         TieArray tieArray = (TieArray) array.elements;
         RuntimeScalar self = tieArray.getSelf();
         String className = tieArray.getTiedPackage();
@@ -81,7 +81,7 @@ public class TieArray extends ArrayList<RuntimeScalar> {
                 className,
                 new RuntimeArray(args),
                 RuntimeContextType.SCALAR
-        ).getFirst();
+        );
     }
 
     /**
@@ -108,122 +108,105 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * Fetches an element from a tied array by index (delegates to FETCH).
      */
     public static RuntimeScalar tiedFetch(RuntimeArray array, RuntimeScalar index) {
-        return tieCall(array, "FETCH", index);
+        return tieCall(array, "FETCH", index).getFirst();
     }
 
     /**
      * Stores an element into a tied array (delegates to STORE).
      */
     public static RuntimeScalar tiedStore(RuntimeArray array, RuntimeScalar index, RuntimeScalar value) {
-        return tieCall(array, "STORE", index, value);
+        return tieCall(array, "STORE", index, value).getFirst();
     }
 
     /**
      * Gets the size of a tied array (delegates to FETCHSIZE).
      */
     public static RuntimeScalar tiedFetchSize(RuntimeArray array) {
-        return tieCall(array, "FETCHSIZE");
+        return tieCall(array, "FETCHSIZE").getFirst();
     }
 
     /**
      * Sets the size of a tied array (delegates to STORESIZE).
      */
     public static RuntimeScalar tiedStoreSize(RuntimeArray array, RuntimeScalar size) {
-        return tieCall(array, "STORESIZE", size);
+        return tieCall(array, "STORESIZE", size).getFirst();
     }
 
     /**
      * Extends a tied array to a specified size (delegates to EXTEND).
      */
     public static RuntimeScalar tiedExtend(RuntimeArray array, RuntimeScalar size) {
-        return tieCall(array, "EXTEND", size);
+        return tieCall(array, "EXTEND", size).getFirst();
     }
 
     /**
      * Checks if an index exists in a tied array (delegates to EXISTS).
      */
     public static RuntimeScalar tiedExists(RuntimeArray array, RuntimeScalar index) {
-        return tieCall(array, "EXISTS", index);
+        return tieCall(array, "EXISTS", index).getFirst();
     }
 
     /**
      * Deletes an element from a tied array (delegates to DELETE).
      */
     public static RuntimeScalar tiedDelete(RuntimeArray array, RuntimeScalar index) {
-        return tieCall(array, "DELETE", index);
+        return tieCall(array, "DELETE", index).getFirst();
     }
 
     /**
      * Clears all elements from a tied array (delegates to CLEAR).
      */
     public static RuntimeScalar tiedClear(RuntimeArray array) {
-        return tieCall(array, "CLEAR");
+        return tieCall(array, "CLEAR").getFirst();
     }
 
     /**
      * Pushes elements onto the end of a tied array (delegates to PUSH).
      */
     public static RuntimeScalar tiedPush(RuntimeArray array, RuntimeBase elements) {
-        return tieCall(array, "PUSH", elements);
+        return tieCall(array, "PUSH", elements).getFirst();
     }
 
     /**
      * Pops an element from the end of a tied array (delegates to POP).
      */
     public static RuntimeScalar tiedPop(RuntimeArray array) {
-        return tieCall(array, "POP");
+        return tieCall(array, "POP").getFirst();
     }
 
     /**
      * Shifts an element from the beginning of a tied array (delegates to SHIFT).
      */
     public static RuntimeScalar tiedShift(RuntimeArray array) {
-        return tieCall(array, "SHIFT");
+        return tieCall(array, "SHIFT").getFirst();
     }
 
     /**
      * Unshifts elements onto the beginning of a tied array (delegates to UNSHIFT).
      */
     public static RuntimeScalar tiedUnshift(RuntimeArray array, RuntimeBase elements) {
-        return tieCall(array, "UNSHIFT", elements);
+        return tieCall(array, "UNSHIFT", elements).getFirst();
     }
 
     /**
      * Performs a splice operation on a tied array (delegates to SPLICE).
      */
-    public static RuntimeScalar tiedSplice(RuntimeArray array, RuntimeScalar offset,
-                                           RuntimeScalar length, RuntimeArray replacement) {
-        TieArray tieArray = (TieArray) array.elements;
-        RuntimeBase[] args = new RuntimeBase[replacement.size() + 3];
-        args[0] = tieArray.getSelf();
-        args[1] = offset;
-        args[2] = length;
-        for (int i = 0; i < replacement.size(); i++) {
-            args[i + 3] = replacement.get(i);
-        }
-
-        String className = tieArray.getTiedPackage();
-        return RuntimeCode.call(
-                tieArray.getSelf(),
-                new RuntimeScalar("SPLICE"),
-                className,
-                new RuntimeArray(args),
-                RuntimeContextType.SCALAR
-        ).getFirst();
+    public static RuntimeList tiedSplice(RuntimeArray array, RuntimeList list) {
+        return tieCall(array, "SPLICE", list).getList();
     }
 
     /**
      * Called when a tied array goes out of scope (delegates to DESTROY if exists).
      */
     public static RuntimeScalar tiedDestroy(RuntimeArray array) {
-        return tieCallIfExists(array, "DESTROY");
+        return tieCallIfExists(array, "DESTROY").getFirst();
     }
 
     /**
      * Unties an array variable (delegates to UNTIE if exists).
      */
     public static RuntimeScalar tiedUntie(RuntimeArray array) {
-        return tieCallIfExists(array, "UNTIE");
+        return tieCallIfExists(array, "UNTIE").getFirst();
     }
 
     public RuntimeArray getPreviousValue() {
