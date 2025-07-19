@@ -1,8 +1,11 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.operators.MathOperators;
+
 import java.util.Stack;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarBoolean;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarOne;
 
 /**
  * RuntimeTiedArrayProxyEntry acts as a proxy for accessing elements within a tied RuntimeArray.
@@ -72,6 +75,35 @@ public class RuntimeTiedArrayProxyEntry extends RuntimeBaseProxy {
     public RuntimeScalar scalar() {
         vivify();
         return this;
+    }
+
+    RuntimeScalar fetch() {
+        vivify();
+        return new RuntimeScalar(this);
+    }
+
+    @Override
+    public RuntimeScalar preAutoIncrement() {
+        return this.set(this.fetch().preAutoIncrement());
+    }
+
+    @Override
+    public RuntimeScalar postAutoIncrement() {
+        RuntimeScalar old = this.fetch().postAutoIncrement();
+        this.set(this);
+        return old;
+    }
+
+    @Override
+    public RuntimeScalar preAutoDecrement() {
+        return this.set(this.fetch().preAutoDecrement());
+    }
+
+    @Override
+    public RuntimeScalar postAutoDecrement() {
+        RuntimeScalar old = this.fetch().postAutoDecrement();
+        this.set(this);
+        return old;
     }
 
     public void addToArray(RuntimeArray array) {
