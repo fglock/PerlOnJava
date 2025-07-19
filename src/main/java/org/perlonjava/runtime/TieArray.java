@@ -4,6 +4,8 @@ import org.perlonjava.operators.TieOperators;
 
 import java.util.ArrayList;
 
+import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
+
 /**
  * TieArray provides support for Perl's tie mechanism for array variables.
  *
@@ -33,14 +35,22 @@ import java.util.ArrayList;
  */
 public class TieArray extends ArrayList<RuntimeScalar> {
 
-    /** The tied object (handler) that implements the tie interface methods. */
+    /**
+     * The tied object (handler) that implements the tie interface methods.
+     */
     private final RuntimeScalar self;
 
-    /** The package name that this array is tied to. */
+    /**
+     * The package name that this array is tied to.
+     */
     private final String tiedPackage;
 
-    /** The original value of the array before it was tied. */
+    /**
+     * The original value of the array before it was tied.
+     */
     private final RuntimeArray previousValue;
+
+    private final RuntimeArray parent;
 
     /**
      * Creates a new TieArray instance.
@@ -49,10 +59,11 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * @param previousValue the value of the array before it was tied
      * @param self          the blessed object returned by TIEARRAY
      */
-    public TieArray(String tiedPackage, RuntimeArray previousValue, RuntimeScalar self) {
+    public TieArray(String tiedPackage, RuntimeArray previousValue, RuntimeScalar self, RuntimeArray parent) {
         this.tiedPackage = tiedPackage;
         this.previousValue = previousValue;
         this.self = self;
+        this.parent = parent;
     }
 
     /**
@@ -226,4 +237,8 @@ public class TieArray extends ArrayList<RuntimeScalar> {
     public String getTiedPackage() {
         return tiedPackage;
     }
+
+    public int size() { return tiedFetchSize(parent).getInt(); }
+
+    public RuntimeScalar get(int i) { return tiedFetch(parent, getScalarInt(i)); }
 }

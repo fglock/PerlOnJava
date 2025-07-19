@@ -62,7 +62,7 @@ public class TieOperators {
                 RuntimeArray array = variable.arrayDeref();
                 RuntimeArray previousValue = new RuntimeArray(array);
                 array.type = TIED_ARRAY;
-                array.elements = new TieArray(className, previousValue, self);
+                array.elements = new TieArray(className, previousValue, self, array);
             }
             case HASHREFERENCE -> {
                 RuntimeHash hash = variable.hashDeref();
