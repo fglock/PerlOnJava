@@ -57,16 +57,31 @@ public class RuntimeTiedArrayProxyEntry extends RuntimeBaseProxy {
         return TieArray.tiedStore(parent, key, value);
     }
 
+    @Override
     public RuntimeScalar defined() {
         vivify();
         return super.defined();
     }
 
+    @Override
     public boolean getDefinedBoolean() {
         vivify();
         return super.getDefinedBoolean();
     }
 
+    @Override
+    public int getInt() {
+        vivify();
+        return super.getInt();
+    }
+
+    @Override
+    public double getDouble() {
+        vivify();
+        return super.getDouble();
+    }
+
+    @Override
     public String toString() {
         vivify();
         return super.toString();
