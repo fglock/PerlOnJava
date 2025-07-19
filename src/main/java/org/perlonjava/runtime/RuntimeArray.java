@@ -375,14 +375,23 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return The updated RuntimeArray.
      */
     public RuntimeArray setFromList(RuntimeList value) {
-
-        if (this.type == AUTOVIVIFY_ARRAY) {
-            AutovivificationArray.vivify(this);
-        }
-
-        this.elements = new ArrayList<>();
-        value.addToArray(this);
-        return this;
+        return switch (type) {
+            case PLAIN_ARRAY -> {
+                this.elements.clear();
+                value.addToArray(this);
+                yield  this;
+            }
+            case AUTOVIVIFY_ARRAY -> {
+                AutovivificationArray.vivify(this);
+                yield  this.setFromList(value);
+            }
+            case TIED_ARRAY -> {
+                TieArray.tiedClear(this);
+                value.addToArray(this);
+                yield  this;
+            }
+            default -> throw new IllegalStateException("Unknown array type: " + type);
+        };
     }
 
     /**
