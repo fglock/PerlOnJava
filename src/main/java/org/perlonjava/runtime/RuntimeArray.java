@@ -392,7 +392,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             }
             case TIED_ARRAY -> {
                 TieArray.tiedClear(this);
-                value.addToArray(this);
+                for (RuntimeScalar runtimeScalar : value) {
+                    TieArray.tiedPush(this, runtimeScalar);
+                }
                 yield  this;
             }
             default -> throw new IllegalStateException("Unknown array type: " + type);
