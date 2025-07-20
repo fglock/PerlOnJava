@@ -15,8 +15,6 @@ import java.util.Stack;
  * </ul>
  */
 public abstract class TiedVariableBase extends RuntimeBaseProxy {
-    private static final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
-    
     /** The tied object (handler) that implements the tie interface methods. */
     protected final RuntimeScalar self;
     
@@ -204,52 +202,6 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
         vivify();
         return super.addToScalar(v);
     }
-
-    // Dynamic state management for local() operations
-    
-    /**
-     * Saves the current state of the tied variable.
-     * This fetches the current value from the tied object and saves it.
-     */
-    @Override
-    public void dynamicSaveState() {
-        // Fetch current value from tied object
-        RuntimeScalar currentValue = tiedFetch();
-
-        // Create a new RuntimeScalar to save the current state
-        RuntimeScalar currentState = new RuntimeScalar();
-        currentState.type = currentValue.type;
-        currentState.value = currentValue.value;
-        currentState.blessId = currentValue.blessId;
-
-        dynamicStateStack.push(currentState);
-    }
-
-    /**
-     * Restores the most recently saved state of the tied variable.
-     * This stores the saved value back to the tied object.
-     */
-    @Override
-    public void dynamicRestoreState() {
-        if (!dynamicStateStack.isEmpty()) {
-            // Pop the most recent saved state from the stack
-            RuntimeScalar previousState = dynamicStateStack.pop();
-
-            // Store the previous value back to the tied object
-            this.tiedStore(previousState);
-
-            // Update our local copy if it exists
-            if (lvalue != null) {
-                lvalue.set(previousState);
-                lvalue.blessId = previousState.blessId;
-                this.type = lvalue.type;
-                this.value = lvalue.value;
-                this.blessId = previousState.blessId;
-            }
-        }
-    }
-
-    // Getters
     
     public RuntimeScalar getSelf() {
         return self;
