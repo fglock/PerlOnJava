@@ -18,7 +18,7 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
     private static final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
     
     /** The tied object (handler) that implements the tie interface methods. */
-    protected final RuntimeScalar tiedObject;
+    protected final RuntimeScalar self;
     
     /** The package name that this variable is tied to. */
     protected final String tiedPackage;
@@ -31,7 +31,7 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
      */
     public TiedVariableBase(RuntimeScalar tiedObject, String tiedPackage) {
         super();
-        this.tiedObject = tiedObject;
+        this.self = tiedObject;
         this.tiedPackage = tiedPackage;
     }
 
@@ -43,17 +43,12 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
      * @return the result of the method call
      */
     protected RuntimeScalar tieCall(String method, RuntimeBase... args) {
-        // Prepare arguments: self + method-specific args
-        RuntimeBase[] allArgs = new RuntimeBase[args.length + 1];
-        allArgs[0] = tiedObject;
-        System.arraycopy(args, 0, allArgs, 1, args.length);
-
         // Call the Perl method
         return RuntimeCode.call(
-                tiedObject,
+                self,
                 new RuntimeScalar(method),
                 tiedPackage,
-                new RuntimeArray(allArgs),
+                new RuntimeArray(args),
                 RuntimeContextType.SCALAR
         ).getFirst();
     }
@@ -74,27 +69,8 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
         }
 
         // Method exists, call it
-        return RuntimeCode.apply(method, new RuntimeArray(tiedObject), RuntimeContextType.SCALAR).getFirst();
+        return RuntimeCode.apply(method, new RuntimeArray(self), RuntimeContextType.SCALAR).getFirst();
     }
-
-    /**
-     * Fetches the current value from the tied variable.
-     * This method must be implemented by subclasses to provide the appropriate
-     * arguments to the FETCH method.
-     * 
-     * @return the fetched value
-     */
-    public abstract RuntimeScalar tiedFetch();
-
-    /**
-     * Stores a value into the tied variable.
-     * This method must be implemented by subclasses to provide the appropriate
-     * arguments to the STORE method.
-     * 
-     * @param value the value to store
-     * @return the result of the STORE operation
-     */
-    public abstract RuntimeScalar tiedStore(RuntimeScalar value);
 
     /**
      * Vivifies the variable by fetching its current value from the tied object.
@@ -116,21 +92,7 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
      */
     @Override
     public RuntimeScalar set(RuntimeScalar value) {
-        return tiedStore(value);
-    }
-
-    /**
-     * Called when the tied variable goes out of scope (delegates to DESTROY if exists).
-     */
-    public RuntimeScalar tiedDestroy() {
-        return tieCallIfExists("DESTROY");
-    }
-
-    /**
-     * Unties the variable (delegates to UNTIE if exists).
-     */
-    public RuntimeScalar tiedUntie() {
-        return tieCallIfExists("UNTIE");
+        return this.tiedStore(value);
     }
 
     // Common delegated operations that require vivification
@@ -274,7 +236,7 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
             RuntimeScalar previousState = dynamicStateStack.pop();
 
             // Store the previous value back to the tied object
-            tiedStore(previousState);
+            this.tiedStore(previousState);
 
             // Update our local copy if it exists
             if (lvalue != null) {
@@ -289,8 +251,8 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
 
     // Getters
     
-    public RuntimeScalar getTiedObject() {
-        return tiedObject;
+    public RuntimeScalar getSelf() {
+        return self;
     }
 
     public String getTiedPackage() {

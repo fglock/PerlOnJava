@@ -102,7 +102,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 //            new Exception("Stack trace").printStackTrace(System.out);
 //        }
         if (scalar.type == TIED_SCALAR) {
-            RuntimeScalar temp = TieScalar.tiedFetch(scalar);
+            RuntimeScalar temp = scalar.tiedFetch();
             this.type = temp.type;
             this.value = temp.value;
         } else {
@@ -192,6 +192,29 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return newScalar;
     }
 
+    /**
+     * Stores a value into the tied variable.
+     * This method must be implemented by subclasses to provide the appropriate
+     * arguments to the STORE method.
+     *
+     * @param v the value to store
+     * @return the result of the STORE operation
+     */
+    public RuntimeScalar tiedStore(RuntimeScalar v) {
+        return ((TiedVariableBase) value).tiedStore(v);
+    };
+
+    /**
+     * Fetches the current value from the tied variable.
+     * This method must be implemented by subclasses to provide the appropriate
+     * arguments to the FETCH method.
+     *
+     * @return the fetched value
+     */
+    public RuntimeScalar tiedFetch() {
+        return ((TiedVariableBase) value).fetch();
+    }
+
     public boolean isString() {
         return type == STRING;
     }
@@ -238,7 +261,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB -> 1;  // Assuming globs are truthy, so 1
             case REGEX -> 1; // Assuming regexes are truthy, so 1
             case JAVAOBJECT -> value != null ? 1 : 0;
-            case TIED_SCALAR -> TieScalar.tiedFetch(this).getInt();
+            case TIED_SCALAR -> this.tiedFetch().getInt();
             default -> Overload.numify(this).getInt();
         };
     }
@@ -255,7 +278,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB -> 1L;
             case REGEX -> 1L;
             case JAVAOBJECT -> value != null ? 1L : 0L;
-            case TIED_SCALAR -> TieScalar.tiedFetch(this).getLong();
+            case TIED_SCALAR -> this.tiedFetch().getLong();
             default -> Overload.numify(this).getLong();
         };
     }
@@ -272,7 +295,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB -> 1.0;
             case REGEX -> 1.0;
             case JAVAOBJECT -> value != null ? 1.0 : 0.0;
-            case TIED_SCALAR -> TieScalar.tiedFetch(this).getDouble();
+            case TIED_SCALAR -> this.tiedFetch().getDouble();
             default -> Overload.numify(this).getDouble();
         };
     }
@@ -292,7 +315,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB -> true;
             case REGEX -> true;
             case JAVAOBJECT -> value != null;
-            case TIED_SCALAR -> TieScalar.tiedFetch(this).getBoolean();
+            case TIED_SCALAR -> this.tiedFetch().getBoolean();
             default -> Overload.boolify(this).getBoolean();
         };
     }
@@ -349,10 +372,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 //            new Exception("Stack trace").printStackTrace(System.out);
 //        }
         if (value.type == TIED_SCALAR) {
-            return set(TieScalar.tiedFetch(value));
+            return set(value.tiedFetch());
         }
         if (this.type == TIED_SCALAR) {
-            return TieScalar.tiedStore(this, value);
+            return this.tiedStore(value);
         }
         this.type = value.type;
         this.value = value.value;
@@ -368,7 +391,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     public RuntimeScalar set(int value) {
         if (this.type == TIED_SCALAR) {
-            return TieScalar.tiedStore(this, new RuntimeScalar(value));
+            return this.tiedStore(new RuntimeScalar(value));
         }
         this.type = RuntimeScalarType.INTEGER;
         this.value = value;
@@ -377,7 +400,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     public RuntimeScalar set(long value) {
         if (this.type == TIED_SCALAR) {
-            return TieScalar.tiedStore(this, new RuntimeScalar(value));
+            return this.tiedStore(new RuntimeScalar(value));
         }
         if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
             this.type = DOUBLE;
@@ -391,7 +414,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     public RuntimeScalar set(boolean value) {
         if (this.type == TIED_SCALAR) {
-            return TieScalar.tiedStore(this, new RuntimeScalar(value));
+            return this.tiedStore(new RuntimeScalar(value));
         }
         this.type = RuntimeScalarType.BOOLEAN;
         this.value = value;
@@ -400,7 +423,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     public RuntimeScalar set(String value) {
         if (this.type == TIED_SCALAR) {
-            return TieScalar.tiedStore(this, new RuntimeScalar(value));
+            return this.tiedStore(new RuntimeScalar(value));
         }
         if (value == null) {
             this.type = UNDEF;
@@ -440,7 +463,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB -> value == null ? "" : value.toString();
             case REGEX -> value.toString();
             case JAVAOBJECT -> value.toString();
-            case TIED_SCALAR -> TieScalar.tiedFetch(this).toString();
+            case TIED_SCALAR -> this.tiedFetch().toString();
             default -> Overload.stringify(this).toString();
         };
     }
@@ -770,7 +793,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             case BOOLEAN -> (boolean) value;
             case CODE -> ((RuntimeCode) value).defined();
-            case TIED_SCALAR -> TieScalar.tiedFetch(this).getDefinedBoolean();
+            case TIED_SCALAR -> this.tiedFetch().getDefinedBoolean();
             default -> type != UNDEF;
         };
     }
@@ -806,9 +829,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.value = 1;
             }
             case TIED_SCALAR -> {
-                RuntimeScalar variable = TieScalar.tiedFetch(this);
+                RuntimeScalar variable = this.tiedFetch();
                 variable.preAutoIncrement();
-                TieScalar.tiedStore(this, variable);
+                this.tiedStore(variable);
                 return variable;
             }
             default -> {
@@ -832,7 +855,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case TIED_SCALAR -> {
                 RuntimeScalar variable = new RuntimeScalar(old);
                 variable.preAutoIncrement();
-                TieScalar.tiedStore(this, variable);
+                this.tiedStore(variable);
             }
             default -> {
                 this.type = RuntimeScalarType.INTEGER;
@@ -856,9 +879,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.value = this.getInt() - 1;
             }
             case TIED_SCALAR -> {
-                RuntimeScalar variable = TieScalar.tiedFetch(this);
+                RuntimeScalar variable = this.tiedFetch();
                 variable.preAutoDecrement();
-                TieScalar.tiedStore(this, variable);
+                this.tiedStore(variable);
                 return variable;
             }
             default -> {
@@ -886,7 +909,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case TIED_SCALAR -> {
                 RuntimeScalar variable = new RuntimeScalar(old);
                 variable.preAutoDecrement();
-                TieScalar.tiedStore(this, variable);
+                this.tiedStore(variable);
             }
             default -> {
                 this.type = RuntimeScalarType.INTEGER;

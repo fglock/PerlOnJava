@@ -16,13 +16,7 @@ package org.perlonjava.runtime;
  *
  * @see RuntimeScalar
  */
-public class TieScalar {
-
-    /** The tied object (handler) that implements the tie interface methods. */
-    private final RuntimeScalar self;
-
-    /** The package name that this scalar is tied to. */
-    private final String tiedPackage;
+public class TieScalar extends TiedVariableBase {
 
     /** The original value of the scalar before it was tied. */
     private final RuntimeScalar previousValue;
@@ -35,81 +29,39 @@ public class TieScalar {
      * @param self          the blessed object returned by TIESCALAR
      */
     public TieScalar(String tiedPackage, RuntimeScalar previousValue, RuntimeScalar self) {
-        this.tiedPackage = tiedPackage;
+        super(self, tiedPackage);
         this.previousValue = previousValue;
-        this.self = self;
-    }
-
-    public static RuntimeScalar tieCall(RuntimeScalar runtimeScalar, String method, RuntimeBase... args) {
-        RuntimeScalar self = ((TieScalar) runtimeScalar.value).getSelf();
-        String className = ((TieScalar) runtimeScalar.value).getTiedPackage();
-
-        // Call the Perl method
-        return RuntimeCode.call(
-                self,
-                new RuntimeScalar(method),
-                className,
-                new RuntimeArray(args),
-                RuntimeContextType.SCALAR
-        ).getFirst();
-    }
-
-    /**
-     * Calls a tie method if it exists in the tied object's class hierarchy.
-     * Used by tiedDestroy() and tiedUntie() for optional methods.
-     */
-    private static RuntimeScalar tieCallIfExists(RuntimeScalar runtimeScalar, String methodName) {
-        RuntimeScalar self = ((TieScalar) runtimeScalar.value).getSelf();
-        String className = ((TieScalar) runtimeScalar.value).getTiedPackage();
-
-        // Check if method exists in the class hierarchy
-        RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(methodName, className, null, 0);
-        if (method == null) {
-            // Method doesn't exist, return undef
-            return RuntimeScalarCache.scalarUndef;
-        }
-
-        // Method exists, call it
-        return RuntimeCode.apply(method, new RuntimeArray(self), RuntimeContextType.SCALAR).getFirst();
     }
 
     /**
      * Fetches the value from a tied scalar (delegates to FETCH).
      */
-    public static RuntimeScalar tiedFetch(RuntimeScalar runtimeScalar) {
-        return tieCall(runtimeScalar, "FETCH");
+    public RuntimeScalar tiedFetch() {
+        return tieCall("FETCH");
     }
 
     /**
      * Stores a value into a tied scalar (delegates to STORE).
      */
-    public static RuntimeScalar tiedStore(RuntimeScalar runtimeScalar, RuntimeScalar value) {
-        return tieCall(runtimeScalar, "STORE", value);
+    public RuntimeScalar tiedStore(RuntimeScalar v) {
+        return tieCall( "STORE", v);
     }
 
     /**
      * Called when a tied scalar goes out of scope (delegates to DESTROY if exists).
      */
     public static RuntimeScalar tiedDestroy(RuntimeScalar runtimeScalar) {
-        return tieCallIfExists(runtimeScalar, "DESTROY");
+        return ((TieScalar) runtimeScalar.value).tieCallIfExists("DESTROY");
     }
 
     /**
      * Unties a tied scalar (delegates to UNTIE if exists).
      */
     public static RuntimeScalar tiedUntie(RuntimeScalar runtimeScalar) {
-        return tieCallIfExists(runtimeScalar, "UNTIE");
+        return ((TieScalar) runtimeScalar.value).tieCallIfExists("UNTIE");
     }
 
     public RuntimeScalar getPreviousValue() {
         return previousValue;
-    }
-
-    public RuntimeScalar getSelf() {
-        return self;
-    }
-
-    public String getTiedPackage() {
-        return tiedPackage;
     }
 }
