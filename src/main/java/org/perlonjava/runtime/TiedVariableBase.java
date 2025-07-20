@@ -173,7 +173,7 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
     public RuntimeScalar postAutoIncrement() {
         RuntimeScalar old = this.fetch();
         RuntimeScalar incremented = old.postAutoIncrement();
-        this.set(this); // Store the incremented value
+        this.set(incremented); // Store the incremented value
         return old; // Return the old value
     }
 
@@ -187,7 +187,7 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
     public RuntimeScalar postAutoDecrement() {
         RuntimeScalar old = this.fetch();
         RuntimeScalar decremented = old.postAutoDecrement();
-        this.set(this); // Store the decremented value
+        this.set(decremented); // Store the decremented value
         return old; // Return the old value
     }
 
