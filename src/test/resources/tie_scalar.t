@@ -73,7 +73,7 @@ sub UNTIE {
 package main;
 
 subtest 'Basic tie operations' => sub {
-    my $scalar;
+    my $scalar = 13;
     
     # Test tie with no arguments
     my $obj = tie $scalar, 'TiedScalar';
@@ -90,6 +90,7 @@ subtest 'Basic tie operations' => sub {
     
     # Verify scalar is no longer tied
     is(tied $scalar, undef, 'tied() returns undef after untie');
+    is($scalar, 13, 'scalar returns to previous value');
 };
 
 subtest 'Tie with arguments' => sub {

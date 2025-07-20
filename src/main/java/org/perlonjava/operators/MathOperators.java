@@ -428,7 +428,7 @@ public class MathOperators {
             case GLOB -> scalarFalse;
             case REGEX -> scalarFalse;
             case JAVAOBJECT -> scalarFalse;
-            case TIED_SCALAR -> not(TieScalar.tiedFetch(runtimeScalar));
+            case TIED_SCALAR -> not(runtimeScalar.tiedFetch());
             default -> Overload.bool_not(runtimeScalar);
         };
     }
