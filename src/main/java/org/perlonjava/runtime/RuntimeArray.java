@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Stack;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.RuntimeScalarType.TIED_SCALAR;
 
 /**
  * The RuntimeArray class simulates Perl arrays.
@@ -321,7 +322,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public RuntimeScalar get(int index) {
 
         if (this.type == TIED_ARRAY) {
-            return new RuntimeTiedArrayProxyEntry(this, new RuntimeScalar(index));
+            return get(new RuntimeScalar(index));
         }
 
         if (index < 0) {
@@ -343,7 +344,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public RuntimeScalar get(RuntimeScalar value) {
 
         if (this.type == TIED_ARRAY) {
-            return new RuntimeTiedArrayProxyEntry(this, value);
+            RuntimeScalar v = new RuntimeScalar();
+            v.type = TIED_SCALAR;
+            v.value = new RuntimeTiedArrayProxyEntry(this, value);
+            return v;
         }
 
         int index = value.getInt();
