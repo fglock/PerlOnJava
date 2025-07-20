@@ -1,6 +1,5 @@
 package org.perlonjava.operators;
 
-import org.perlonjava.parser.NumberParser;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarType;
 
@@ -22,12 +21,8 @@ public class CompareOperators {
      */
     public static RuntimeScalar lessThan(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Convert strings to numbers if necessary
-        if (arg1.type == RuntimeScalarType.STRING) {
-            arg1 = NumberParser.parseNumber(arg1);
-        }
-        if (arg2.type == RuntimeScalarType.STRING) {
-            arg2 = NumberParser.parseNumber(arg2);
-        }
+        arg1 = arg1.getNumber();
+        arg2 = arg2.getNumber();
         // Perform comparison based on type
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return getScalarBoolean(arg1.getDouble() < arg2.getDouble());
@@ -45,12 +40,8 @@ public class CompareOperators {
      */
     public static RuntimeScalar lessThanOrEqual(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Convert strings to numbers if necessary
-        if (arg1.type == RuntimeScalarType.STRING) {
-            arg1 = NumberParser.parseNumber(arg1);
-        }
-        if (arg2.type == RuntimeScalarType.STRING) {
-            arg2 = NumberParser.parseNumber(arg2);
-        }
+        arg1 = arg1.getNumber();
+        arg2 = arg2.getNumber();
         // Perform comparison based on type
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return getScalarBoolean(arg1.getDouble() <= arg2.getDouble());
@@ -68,12 +59,8 @@ public class CompareOperators {
      */
     public static RuntimeScalar greaterThan(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Convert strings to numbers if necessary
-        if (arg1.type == RuntimeScalarType.STRING) {
-            arg1 = NumberParser.parseNumber(arg1);
-        }
-        if (arg2.type == RuntimeScalarType.STRING) {
-            arg2 = NumberParser.parseNumber(arg2);
-        }
+        arg1 = arg1.getNumber();
+        arg2 = arg2.getNumber();
         // Perform comparison based on type
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return getScalarBoolean(arg1.getDouble() > arg2.getDouble());
@@ -91,12 +78,8 @@ public class CompareOperators {
      */
     public static RuntimeScalar greaterThanOrEqual(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Convert strings to numbers if necessary
-        if (arg1.type == RuntimeScalarType.STRING) {
-            arg1 = NumberParser.parseNumber(arg1);
-        }
-        if (arg2.type == RuntimeScalarType.STRING) {
-            arg2 = NumberParser.parseNumber(arg2);
-        }
+        arg1 = arg1.getNumber();
+        arg2 = arg2.getNumber();
         // Perform comparison based on type
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return getScalarBoolean(arg1.getDouble() >= arg2.getDouble());
@@ -114,9 +97,7 @@ public class CompareOperators {
      */
     public static RuntimeScalar equalTo(RuntimeScalar arg1, int arg2) {
         // Convert strings to numbers if necessary
-        if (arg1.type == RuntimeScalarType.STRING) {
-            arg1 = NumberParser.parseNumber(arg1);
-        }
+        arg1 = arg1.getNumber();
         // Perform comparison based on type
         if (arg1.type == RuntimeScalarType.DOUBLE) {
             return getScalarBoolean(arg1.getDouble() == (double) arg2);
@@ -134,12 +115,8 @@ public class CompareOperators {
      */
     public static RuntimeScalar equalTo(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Convert strings to numbers if necessary
-        if (arg1.type == RuntimeScalarType.STRING) {
-            arg1 = NumberParser.parseNumber(arg1);
-        }
-        if (arg2.type == RuntimeScalarType.STRING) {
-            arg2 = NumberParser.parseNumber(arg2);
-        }
+        arg1 = arg1.getNumber();
+        arg2 = arg2.getNumber();
         // Perform comparison based on type
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return getScalarBoolean(arg1.getDouble() == arg2.getDouble());
@@ -157,12 +134,8 @@ public class CompareOperators {
      */
     public static RuntimeScalar notEqualTo(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Convert strings to numbers if necessary
-        if (arg1.type == RuntimeScalarType.STRING) {
-            arg1 = NumberParser.parseNumber(arg1);
-        }
-        if (arg2.type == RuntimeScalarType.STRING) {
-            arg2 = NumberParser.parseNumber(arg2);
-        }
+        arg1 = arg1.getNumber();
+        arg2 = arg2.getNumber();
         // Perform comparison based on type
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return getScalarBoolean(arg1.getDouble() != arg2.getDouble());
@@ -180,12 +153,8 @@ public class CompareOperators {
      */
     public static RuntimeScalar spaceship(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Convert strings to numbers if necessary
-        if (arg1.type == RuntimeScalarType.STRING) {
-            arg1 = NumberParser.parseNumber(arg1);
-        }
-        if (arg2.type == RuntimeScalarType.STRING) {
-            arg2 = NumberParser.parseNumber(arg2);
-        }
+        arg1 = arg1.getNumber();
+        arg2 = arg2.getNumber();
         // Perform comparison based on type
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return getScalarInt(Double.compare(arg1.getDouble(), arg2.getDouble()));
