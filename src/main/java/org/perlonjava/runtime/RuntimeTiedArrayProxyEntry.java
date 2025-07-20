@@ -6,6 +6,7 @@ import java.util.Stack;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarBoolean;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarOne;
+import static org.perlonjava.runtime.RuntimeScalarType.STRING;
 
 /**
  * RuntimeTiedArrayProxyEntry acts as a proxy for accessing elements within a tied RuntimeArray.
@@ -82,6 +83,12 @@ public class RuntimeTiedArrayProxyEntry extends RuntimeBaseProxy {
     }
 
     @Override
+    public RuntimeScalar getNumber() {
+        vivify();
+        return super.getNumber();
+    }
+
+    @Override
     public String toString() {
         vivify();
         return super.toString();
@@ -96,6 +103,11 @@ public class RuntimeTiedArrayProxyEntry extends RuntimeBaseProxy {
     public RuntimeScalar scalar() {
         vivify();
         return this;
+    }
+
+    public boolean isString() {
+        vivify();
+        return type == STRING;
     }
 
     RuntimeScalar fetch() {

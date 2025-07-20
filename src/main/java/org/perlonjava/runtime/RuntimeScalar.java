@@ -192,6 +192,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return newScalar;
     }
 
+    public boolean isString() {
+        return type == STRING;
+    }
+
+    public RuntimeScalar getNumber() {
+        if (type == STRING) {
+            return NumberParser.parseNumber(this);
+        }
+        return this;
+    }
+
     private void initializeWithLong(Long value) {
         if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
             this.type = DOUBLE;

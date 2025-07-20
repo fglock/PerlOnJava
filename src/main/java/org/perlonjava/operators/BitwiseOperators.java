@@ -20,7 +20,7 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise AND operation.
      */
     public static RuntimeScalar bitwiseAnd(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        if (runtimeScalar.type == RuntimeScalarType.STRING && arg2.type == RuntimeScalarType.STRING) {
+        if (runtimeScalar.isString() && arg2.isString()) {
             return bitwiseAndDot(runtimeScalar, arg2);
         }
         return bitwiseAndBinary(runtimeScalar, arg2);
@@ -46,7 +46,7 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise OR operation.
      */
     public static RuntimeScalar bitwiseOr(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        if (runtimeScalar.type == RuntimeScalarType.STRING && arg2.type == RuntimeScalarType.STRING) {
+        if (runtimeScalar.isString() && arg2.isString()) {
             return bitwiseOrDot(runtimeScalar, arg2);
         }
         return bitwiseOrBinary(runtimeScalar, arg2);
@@ -72,7 +72,7 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise XOR operation.
      */
     public static RuntimeScalar bitwiseXor(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        if (runtimeScalar.type == RuntimeScalarType.STRING && arg2.type == RuntimeScalarType.STRING) {
+        if (runtimeScalar.isString() && arg2.isString()) {
             return bitwiseXorDot(runtimeScalar, arg2);
         }
         return bitwiseXorBinary(runtimeScalar, arg2);
@@ -97,7 +97,7 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise NOT operation.
      */
     public static RuntimeScalar bitwiseNot(RuntimeScalar runtimeScalar) {
-        if (runtimeScalar.type == RuntimeScalarType.STRING) {
+        if (runtimeScalar.isString()) {
             return bitwiseNotDot(runtimeScalar);
         }
         return bitwiseNotBinary(runtimeScalar);
