@@ -471,7 +471,42 @@ public class EmitOperator {
                             return;
                         }
                         case "[" -> {
-                            // Handle array element operator.
+                            // Check if this is a compound expression like $hash->{key}[index]
+                            if (binop.left instanceof BinaryOperatorNode leftBinop && leftBinop.operator.equals("->")) {
+                                // Handle compound hash->array dereference for exists/delete
+                                // First evaluate the hash dereference to get the array
+                                leftBinop.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+                                // Now emit the index
+                                if (binop.right instanceof ArrayLiteralNode arrayLiteral &&
+                                        arrayLiteral.elements.size() == 1) {
+                                    arrayLiteral.elements.get(0).accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                                } else {
+                                    throw new PerlCompilerException(node.tokenIndex,
+                                            "Invalid array index in " + operator + " operator",
+                                            emitterVisitor.ctx.errorUtil);
+                                }
+
+                                // Call the appropriate method
+                                if (operator.equals("exists")) {
+                                    emitterVisitor.ctx.mv.visitMethodInsn(
+                                            Opcodes.INVOKEVIRTUAL,
+                                            "org/perlonjava/runtime/RuntimeScalar",
+                                            "arrayDerefExists",
+                                            "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                                            false);
+                                } else if (operator.equals("delete")) {
+                                    emitterVisitor.ctx.mv.visitMethodInsn(
+                                            Opcodes.INVOKEVIRTUAL,
+                                            "org/perlonjava/runtime/RuntimeScalar",
+                                            "arrayDerefDelete",
+                                            "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                                            false);
+                                }
+                                return;
+                            }
+
+                            // Handle simple array element operator.
                             Dereference.handleArrayElementOperator(emitterVisitor, binop, operator);
                             return;
                         }
