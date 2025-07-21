@@ -3,6 +3,7 @@ package org.perlonjava.runtime;
 import java.util.*;
 
 import static org.perlonjava.runtime.RuntimeScalarType.HASHREFERENCE;
+import static org.perlonjava.runtime.RuntimeScalarType.TIED_SCALAR;
 
 /**
  * The RuntimeHash class simulates Perl hashes.
@@ -162,7 +163,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 yield new RuntimeHashProxyEntry(this, key);
             }
 
-            case TIED_HASH -> TieHash.tiedFetch(this, keyScalar);
+            case TIED_HASH -> {
+                    RuntimeScalar v = new RuntimeScalar();
+                    v.type = TIED_SCALAR;
+                    v.value = new RuntimeTiedHashProxyEntry(this, keyScalar);
+                    yield  v;
+            }
 
             default -> throw new IllegalStateException("Unknown hash type: " + this.type);
         };
