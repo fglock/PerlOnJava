@@ -348,18 +348,6 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return result;
     }
 
-//    /**
-//     * Deletes multiple array elements using a RuntimeBase (converts to list first).
-//     *
-//     * @param indices The indices to delete (as RuntimeBase).
-//     * @return A RuntimeList containing the deleted values.
-//     */
-//    public RuntimeList deleteSlice(RuntimeBase indices) {
-//        RuntimeList indexList = new RuntimeList();
-//        indices.addToList(indexList);
-//        return deleteSlice(indexList);
-//    }
-
     public RuntimeScalar delete(RuntimeScalar index) {
         return this.delete(index.getInt());
     }
