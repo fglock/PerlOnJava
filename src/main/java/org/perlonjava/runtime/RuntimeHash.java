@@ -110,15 +110,32 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeArray containing this hash (for method chaining or further operations).
      */
     public RuntimeArray setFromList(RuntimeList value) {
-
-        if (this.type == AUTOVIVIFY_HASH) {
-            AutovivificationHash.vivify(this);
-        }
-
-        // Create a new hash from the provided list and replace our elements
-        RuntimeHash hash = createHash(value);
-        this.elements = hash.elements;
-        return new RuntimeArray(this);
+        return switch (type) {
+            case PLAIN_HASH -> {
+                // Create a new hash from the provided list and replace our elements
+                RuntimeHash hash = createHash(value);
+                this.elements = hash.elements;
+                yield new RuntimeArray(this);
+            }
+            case AUTOVIVIFY_HASH -> {
+                AutovivificationHash.vivify(this);
+                yield  this.setFromList(value);
+            }
+            case TIED_HASH -> {
+                TieHash.tiedClear(this);
+                Iterator<RuntimeScalar> iterator = value.iterator();
+                RuntimeArray result = new RuntimeArray();
+                while (iterator.hasNext()) {
+                    RuntimeScalar key = iterator.next();
+                    RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
+                    TieHash.tiedStore(this, key, val);
+                    RuntimeArray.push(result, key);
+                    RuntimeArray.push(result, val);
+                }
+                yield result;
+            }
+            default -> throw new IllegalStateException("Unknown array type: " + type);
+        };
     }
 
     /**
