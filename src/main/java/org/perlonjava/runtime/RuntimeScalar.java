@@ -513,6 +513,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case HASHREFERENCE -> ((RuntimeHash) value).get(index.toString());
             case STRING -> throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref");
             case GLOB -> ((RuntimeGlob) value).hashDerefGet(index);
+            case TIED_SCALAR -> tiedFetch().hashDerefGet(index);
             default -> throw new PerlCompilerException("Not a HASH reference");
         };
     }
@@ -534,6 +535,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             case HASHREFERENCE -> ((RuntimeHash) value).delete(index);
             case STRING -> throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref");
+            case TIED_SCALAR -> tiedFetch().hashDerefDelete(index);
             default -> throw new PerlCompilerException("Not a HASH reference");
         };
     }
@@ -555,6 +557,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             case HASHREFERENCE -> ((RuntimeHash) value).exists(index);
             case STRING -> throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref");
+            case TIED_SCALAR -> tiedFetch().hashDerefExists(index);
             default -> throw new PerlCompilerException("Not a HASH reference");
         };
     }
@@ -574,6 +577,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 value = new RuntimeArray();
             case ARRAYREFERENCE:
                 return ((RuntimeArray) value).get(index.getInt());
+            case TIED_SCALAR:
+                return tiedFetch().arrayDerefGet(index);
             default:
                 throw new PerlCompilerException("Not an ARRAY reference");
         }
@@ -611,6 +616,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case ARRAYREFERENCE -> (RuntimeArray) value;
             case STRING ->
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as an ARRAY ref while \"strict refs\" in use");
+            case TIED_SCALAR -> tiedFetch().arrayDeref();
             default -> throw new PerlCompilerException("Not an ARRAY reference");
         };
     }
@@ -661,6 +667,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case STRING ->
                 // Strict refs violation: attempting to use a string as a hash ref
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref while \"strict refs\" in use");
+            case TIED_SCALAR -> tiedFetch().hashDeref();
             default ->
                 // All other types (INTEGER, DOUBLE, etc.) cannot be dereferenced as hashes
                     throw new PerlCompilerException("Variable does not contain a hash reference");
@@ -689,6 +696,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case REFERENCE -> (RuntimeScalar) value;
             case STRING ->
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as a SCALAR ref while \"strict refs\" in use");
+            case TIED_SCALAR -> tiedFetch().scalarDeref();
             default -> throw new PerlCompilerException("Variable does not contain a scalar reference");
         };
     }
@@ -712,6 +720,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         return switch (type) {
             case REFERENCE -> (RuntimeScalar) value;
+            case TIED_SCALAR -> tiedFetch().scalarDerefNonStrict(packageName);
             default -> {
                 String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
                 yield GlobalVariable.getGlobalVariable(varName);
