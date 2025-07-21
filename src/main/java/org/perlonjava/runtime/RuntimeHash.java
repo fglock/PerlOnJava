@@ -2,6 +2,8 @@ package org.perlonjava.runtime;
 
 import java.util.*;
 
+import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.RuntimeScalarType.HASHREFERENCE;
 import static org.perlonjava.runtime.RuntimeScalarType.TIED_SCALAR;
 
@@ -136,6 +138,11 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return The value associated with the key, or a proxy for lazy autovivification if the key does not exist.
      */
     public RuntimeScalar get(String key) {
+
+        if (type == TIED_HASH) {
+            return get(new RuntimeScalar(key));
+        }
+
         var value = elements.get(key);
         if (value != null) {
             return value;
@@ -181,21 +188,21 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeScalar indicating whether the key exists.
      */
     public RuntimeScalar exists(RuntimeScalar key) {
-
-        if (this.type == AUTOVIVIFY_HASH) {
-            AutovivificationHash.vivify(this);
-        }
-
-        return new RuntimeScalar(elements.containsKey(key.toString()));
+        return switch (type) {
+            case PLAIN_HASH -> new RuntimeScalar(elements.containsKey(key.toString()));
+            case AUTOVIVIFY_HASH -> scalarFalse;
+            case TIED_HASH -> TieHash.tiedExists(this, key);
+            default -> throw new IllegalStateException("Unknown array type: " + type);
+        };
     }
 
     public RuntimeScalar exists(String key) {
-
-        if (this.type == AUTOVIVIFY_HASH) {
-            AutovivificationHash.vivify(this);
-        }
-
-        return new RuntimeScalar(elements.containsKey(key));
+        return switch (type) {
+            case PLAIN_HASH -> new RuntimeScalar(elements.containsKey(key));
+            case AUTOVIVIFY_HASH -> scalarFalse;
+            case TIED_HASH -> TieHash.tiedExists(this, new RuntimeScalar(key));
+            default -> throw new IllegalStateException("Unknown array type: " + type);
+        };
     }
 
     public boolean containsKey(String key) {
@@ -209,30 +216,40 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return The value associated with the deleted key, or an empty RuntimeScalar if the key did not exist.
      */
     public RuntimeScalar delete(RuntimeScalar key) {
-
-        if (this.type == AUTOVIVIFY_HASH) {
-            AutovivificationHash.vivify(this);
-        }
-
-        String k = key.toString();
-        var value = elements.remove(k);
-        if (value != null) {
-            return new RuntimeScalar(value);
-        }
-        return new RuntimeScalar();
+        return switch (type) {
+            case PLAIN_HASH ->  {
+                String k = key.toString();
+                var value = elements.remove(k);
+                if (value != null) {
+                    yield new RuntimeScalar(value);
+                }
+                yield new RuntimeScalar();
+            }
+            case AUTOVIVIFY_HASH -> {
+                AutovivificationHash.vivify(this);
+                yield delete(key);
+            }
+            case TIED_HASH -> TieHash.tiedDelete(this, key);
+            default -> throw new IllegalStateException("Unknown array type: " + type);
+        };
     }
 
     public RuntimeScalar delete(String key) {
-
-        if (this.type == AUTOVIVIFY_HASH) {
-            AutovivificationHash.vivify(this);
-        }
-
-        var value = elements.remove(key);
-        if (value != null) {
-            return new RuntimeScalar(value);
-        }
-        return new RuntimeScalar();
+        return switch (type) {
+            case PLAIN_HASH ->  {
+                var value = elements.remove(key);
+                if (value != null) {
+                    yield new RuntimeScalar(value);
+                }
+                yield new RuntimeScalar();
+            }
+            case AUTOVIVIFY_HASH -> {
+                AutovivificationHash.vivify(this);
+                yield delete(key);
+            }
+            case TIED_HASH -> TieHash.tiedDelete(this, new RuntimeScalar(key));
+            default -> throw new IllegalStateException("Unknown array type: " + type);
+        };
     }
 
     /**
