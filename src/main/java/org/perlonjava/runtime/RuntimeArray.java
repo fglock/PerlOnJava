@@ -314,6 +314,52 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         };
     }
 
+    /**
+     * Deletes multiple array elements at the specified indices.
+     *
+     * @param indices The list of indices to delete.
+     * @return A RuntimeList containing the deleted values.
+     */
+    public RuntimeList deleteSlice(RuntimeList indices) {
+        // Collect all indices and their values first (to preserve order)
+        List<Integer> indexList = new ArrayList<>();
+        for (RuntimeScalar indexScalar : indices) {
+            indexList.add(indexScalar.getInt());
+        }
+
+        // Create result list to store deleted values in original order
+        RuntimeList result = new RuntimeList();
+
+        // First pass: collect values in original order
+        for (Integer index : indexList) {
+            RuntimeScalar value = this.get(index);
+            result.elements.add(value.getDefinedBoolean() ? new RuntimeScalar(value) : scalarUndef);
+        }
+
+        // Sort indices in descending order for deletion
+        List<Integer> sortedIndices = new ArrayList<>(indexList);
+        sortedIndices.sort((a, b) -> b.compareTo(a)); // Sort descending
+
+        // Second pass: delete elements starting from highest index
+        for (Integer index : sortedIndices) {
+            this.delete(index);
+        }
+
+        return result;
+    }
+
+//    /**
+//     * Deletes multiple array elements using a RuntimeBase (converts to list first).
+//     *
+//     * @param indices The indices to delete (as RuntimeBase).
+//     * @return A RuntimeList containing the deleted values.
+//     */
+//    public RuntimeList deleteSlice(RuntimeBase indices) {
+//        RuntimeList indexList = new RuntimeList();
+//        indices.addToList(indexList);
+//        return deleteSlice(indexList);
+//    }
+
     public RuntimeScalar delete(RuntimeScalar index) {
         return this.delete(index.getInt());
     }
