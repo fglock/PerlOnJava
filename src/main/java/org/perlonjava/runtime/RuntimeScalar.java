@@ -803,14 +803,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case INTEGER -> this.value = (int) this.value + 1;
             case DOUBLE -> this.value = (double) this.value + 1;
             case STRING -> {
-                this.value = ScalarUtils.stringIncrement(this);
+                ScalarUtils.stringIncrement(this);
             }
             case UNDEF -> {
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
             }
             case VSTRING -> {
-                this.value = ScalarUtils.stringIncrement(this);
+                ScalarUtils.stringIncrement(this);
             }
             case BOOLEAN -> {
                 this.type = RuntimeScalarType.INTEGER;
