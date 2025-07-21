@@ -145,7 +145,19 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @param value The value for the hash entry.
      */
     public void put(String key, RuntimeScalar value) {
-        elements.put(key, value);
+        switch (type) {
+            case PLAIN_HASH -> {
+                elements.put(key, value);
+            }
+            case AUTOVIVIFY_HASH -> {
+                AutovivificationHash.vivify(this);
+                elements.put(key, value);
+            }
+            case TIED_HASH -> {
+                TieHash.tiedStore(this, new RuntimeScalar(key), value);
+            }
+            default -> throw new IllegalStateException("Unknown array type: " + type);
+        };
     }
 
     /**
