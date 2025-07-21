@@ -299,7 +299,18 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return The number of key-value pairs in the hash.
      */
     public int size() {
-        return elements.size();
+        return switch (type) {
+            case PLAIN_HASH -> {
+                yield elements.size();
+            }
+            case AUTOVIVIFY_HASH -> {
+                yield 0;
+            }
+            case TIED_HASH -> {
+                yield TieHash.tiedScalar(this).getInt();
+            }
+            default -> throw new IllegalStateException("Unknown array type: " + type);
+        };
     }
 
     /**
