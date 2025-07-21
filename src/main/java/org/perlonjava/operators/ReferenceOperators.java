@@ -22,16 +22,14 @@ public class ReferenceOperators {
      * @throws PerlCompilerException if attempting to bless a non-reference value
      */
     public static RuntimeScalar bless(RuntimeScalar runtimeScalar, RuntimeScalar className) {
-        switch (runtimeScalar.type) {
-            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE:
+        if ((runtimeScalar.type & REFERENCE_BIT) != 0 ) {
                 // Default to "main" if className is empty
                 String str = className.toString();
                 if (str.isEmpty()) {
                     str = "main";
                 }
                 ((RuntimeBase) runtimeScalar.value).setBlessId(NameNormalizer.getBlessId(str));
-                break;
-            default:
+        } else {
                 throw new PerlCompilerException("Can't bless non-reference value");
         }
         return runtimeScalar;
@@ -51,6 +49,9 @@ public class ReferenceOperators {
         String str;
         int blessId;
         switch (runtimeScalar.type) {
+            case TIED_SCALAR:
+                str = ref(runtimeScalar.tiedFetch()).toString();
+                break;
             case CODE:
                 str = "CODE";
                 break;
