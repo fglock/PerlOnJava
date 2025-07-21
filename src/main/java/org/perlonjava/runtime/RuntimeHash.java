@@ -86,9 +86,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         }
 
         List<RuntimeScalar> elements = array.elements;
-        for (Map.Entry<String, RuntimeScalar> entry : this.elements.entrySet()) {
-            elements.add(new RuntimeScalar(entry.getKey()));
-            elements.add(new RuntimeScalar(entry.getValue()));
+        Iterator<RuntimeScalar> iterator = iterator();
+        while (iterator.hasNext()) {
+            RuntimeScalar key = iterator.next();
+            RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
+            elements.add(key);
+            elements.add(val);
         }
     }
 
@@ -346,6 +349,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeScalar representing the size of the hash.
      */
     public RuntimeScalar scalar() {
+        System.out.println("RuntimeHash scalar " + this.size());
         return new RuntimeScalar(this.size());
     }
 
@@ -493,12 +497,15 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public String dump() {
         StringBuilder sb = new StringBuilder("{");
         boolean first = true;
-        for (Map.Entry<String, RuntimeScalar> entry : elements.entrySet()) {
+        Iterator<RuntimeScalar> iterator = iterator();
+        while (iterator.hasNext()) {
+            RuntimeScalar key = iterator.next();
+            RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
             if (!first) {
                 sb.append(", ");
             }
             first = false;
-            sb.append(entry.getKey()).append(": ").append(entry.getValue().toString());
+            sb.append(key).append(": ").append(val);
         }
         sb.append("}");
         return sb.toString();
@@ -562,8 +569,11 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        for (Map.Entry<String, RuntimeScalar> entry : elements.entrySet()) {
-            sb.append(entry.getKey()).append(entry.getValue());
+        Iterator<RuntimeScalar> iterator = iterator();
+        while (iterator.hasNext()) {
+            RuntimeScalar key = iterator.next();
+            RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
+            sb.append(key).append(val);
         }
         return sb.toString();
     }
@@ -576,9 +586,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
         List<RuntimeScalar> arrElements = arr.elements;
-        for (Map.Entry<String, RuntimeScalar> entry : this.elements.entrySet()) {
-            arrElements.add(new RuntimeScalar(entry.getKey()));
-            arrElements.add(entry.getValue());
+        Iterator<RuntimeScalar> iterator = iterator();
+        while (iterator.hasNext()) {
+            RuntimeScalar key = iterator.next();
+            RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
+            arrElements.add(key);
+            arrElements.add(val);
         }
         return arr;
     }
