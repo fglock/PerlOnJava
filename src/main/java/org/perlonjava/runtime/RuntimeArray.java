@@ -571,6 +571,15 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return The updated array with aliases.
      */
     public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
+        if (this.type == TIED_ARRAY) {
+            // For tied arrays, we need to fetch each element through the tied interface
+            int size = this.size();  // This will call FETCHSIZE
+            for (int i = 0; i < size; i++) {
+                RuntimeScalar element = this.get(i);  // This will call FETCH
+                arr.elements.add(element);
+            }
+            return arr;
+        }
 
         if (this.type == AUTOVIVIFY_ARRAY) {
             AutovivificationArray.vivify(this);
