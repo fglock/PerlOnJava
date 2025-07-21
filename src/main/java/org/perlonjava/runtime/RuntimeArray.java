@@ -269,7 +269,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 if (index < 0) {
                     index = elements.size() + index; // Handle negative indices
                 }
-                yield  (index < 0 || index >= elements.size()) ? scalarFalse : scalarTrue;
+                if (index < 0 || index >= elements.size()) {
+                    yield scalarFalse;
+                }
+                // Check if the element at index is null
+                RuntimeScalar element = elements.get(index);
+                yield (element == null) ? scalarFalse : scalarTrue;
             }
             case AUTOVIVIFY_ARRAY -> scalarFalse;
             case TIED_ARRAY -> TieArray.tiedExists(this, getScalarInt(index));
@@ -332,7 +337,15 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             // Lazy autovivification
             return new RuntimeArrayProxyEntry(this, index);
         }
-        return elements.get(index);
+
+        // Check if the element is null and return proxy if it is
+        RuntimeScalar element = elements.get(index);
+        if (element == null) {
+            // Lazy autovivification for null elements
+            return new RuntimeArrayProxyEntry(this, index);
+        }
+
+        return element;
     }
 
     /**
@@ -358,7 +371,15 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             // Lazy autovivification
             return new RuntimeArrayProxyEntry(this, index);
         }
-        return elements.get(index);
+
+        // Check if the element is null and return proxy if it is
+        RuntimeScalar element = elements.get(index);
+        if (element == null) {
+            // Lazy autovivification for null elements
+            return new RuntimeArrayProxyEntry(this, index);
+        }
+
+        return element;
     }
 
     /**
@@ -742,7 +763,15 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             if (!hasNext()) {
                 throw new IllegalStateException("No such element in iterator.next()");
             }
-            return elements.get(currentIndex++);
+            RuntimeScalar element = elements.get(currentIndex);
+            currentIndex++;
+
+            // Return a proxy entry if the element is null
+            if (element == null) {
+                return new RuntimeArrayProxyEntry(RuntimeArray.this, currentIndex - 1);
+            }
+
+            return element;
         }
 
         @Override
