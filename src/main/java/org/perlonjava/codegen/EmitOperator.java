@@ -370,6 +370,13 @@ public class EmitOperator {
 
     // Handles the 'scalar' operator, which forces a list into scalar context.
     static void handleScalar(EmitterVisitor emitterVisitor, OperatorNode node) {
+        if (node.operand instanceof OperatorNode operatorNode && operatorNode.operator.equals("%")) {
+            // `scalar %a` needs an explicit call because tied hashes have a SCALAR method
+            node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            emitOperator(node, emitterVisitor);
+            return;
+        }
+
         // Accept the operand in SCALAR context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
     }
