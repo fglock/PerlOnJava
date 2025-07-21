@@ -41,7 +41,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - Some core modules and pragmas
 - Method Resolution Order (C3 only)
 - File operations and I/O
-- tied variables
+- tied variables (tie handle not supported)
 
 ❌ Not Supported:
 - XS modules and C integration
@@ -218,8 +218,8 @@ my @copy = @{$z};         # ERROR
 - ✅  **`$#array`**: Lvalue array count is implemented: `$#{$sl} = 10`.
 - ✅  **Array exists**: `exists` for array indexes is implemented.
 - ✅  **Array delete**: `delete` for array indexes is implemented.
-- ❌  **Tied Arrays**: Tied arrays are not yet implemented.
-- ❌  **Tied Hashes**: Tied hashes are not yet implemented.
+- ✅  **Tied Arrays**: Tied arrays are implemented.
+- ✅  **Tied Hashes**: Tied hashes are implemented.
 
 ## Subroutines
 - ✅  **Subroutine hoisting**: Invoking subroutines before their actual declaration in the code.
