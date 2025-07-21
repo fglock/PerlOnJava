@@ -2,6 +2,8 @@ package org.perlonjava.runtime;
 
 import java.util.HashMap;
 
+import static org.perlonjava.runtime.RuntimeIO.flushFileHandles;
+
 /**
  * TieHash provides support for Perl's tie mechanism for hash variables.
  *
