@@ -394,6 +394,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`select`**: `select(undef,undef,undef,$time)` for sleep function
 - ✅  **`seek`**: File position manipulation.
 - ✅  **`chmod`**: File permissions.
+- ❌  **Tied Handles**: Tied file handles are not implemented.
 
 ### Unimplemented I/O Operators
 - ❌  **`socket`**: Socket creation
