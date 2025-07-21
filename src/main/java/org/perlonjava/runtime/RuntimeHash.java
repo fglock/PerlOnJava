@@ -349,7 +349,6 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeScalar representing the size of the hash.
      */
     public RuntimeScalar scalar() {
-        System.out.println("RuntimeHash scalar " + this.size());
         return new RuntimeScalar(this.size());
     }
 
