@@ -390,6 +390,18 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeArray containing the keys of the hash.
      */
     public RuntimeArray keys() {
+        if (this.type == TIED_HASH) {
+            RuntimeArray list = new RuntimeArray();
+            boolean isKey = true;
+            for (RuntimeScalar item : this) {
+                if (isKey) {
+                    RuntimeArray.push(list, item);
+                }
+                isKey = !isKey;
+            }
+            hashIterator = null; // keys resets the iterator
+            return list;
+        }
 
         if (this.type == AUTOVIVIFY_HASH) {
             AutovivificationHash.vivify(this);
@@ -409,6 +421,18 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeArray containing the values of the hash.
      */
     public RuntimeArray values() {
+        if (this.type == TIED_HASH) {
+            RuntimeArray list = new RuntimeArray();
+            boolean isKey = false;
+            for (RuntimeScalar item : this) {
+                if (isKey) {
+                    RuntimeArray.push(list, item);
+                }
+                isKey = !isKey;
+            }
+            hashIterator = null; // keys resets the iterator
+            return list;
+        }
 
         if (this.type == AUTOVIVIFY_HASH) {
             AutovivificationHash.vivify(this);
@@ -459,15 +483,6 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeScalar chomp() {
         return this.values().chop();
-    }
-
-    /**
-     * Returns an iterator over the elements of type RuntimeScalar.
-     *
-     * @return An Iterator<RuntimeScalar> for iterating over the elements.
-     */
-    public Iterator<RuntimeScalar> iterator() {
-        return new RuntimeHashIterator();
     }
 
     /**
@@ -599,6 +614,19 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     /**
+     * Returns an iterator over the elements of type RuntimeScalar.
+     *
+     * @return An Iterator<RuntimeScalar> for iterating over the elements.
+     */
+    public Iterator<RuntimeScalar> iterator() {
+        return switch (type) {
+            case PLAIN_HASH, AUTOVIVIFY_HASH -> new RuntimeHashIterator();
+            case TIED_HASH -> new RuntimeTiedHashIterator();
+            default -> throw new IllegalStateException("Unknown hash type: " + type);
+        };
+    }
+
+    /**
      * Inner class implementing the Iterator interface for iterating over hash elements.
      */
     private class RuntimeHashIterator implements Iterator<RuntimeScalar> {
@@ -649,6 +677,97 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         @Override
         public void remove() {
             throw new UnsupportedOperationException("Remove not supported");
+        }
+    }
+
+    /**
+     * Inner class implementing the Iterator interface for iterating over tied hash elements.
+     * Uses Perl tie methods FIRSTKEY and NEXTKEY for iteration.
+     */
+    private class RuntimeTiedHashIterator implements Iterator<RuntimeScalar> {
+        private RuntimeScalar currentKey;
+        private RuntimeScalar nextKey;
+        private boolean returnKey;
+        private boolean initialized;
+
+        /**
+         * Constructs a RuntimeTiedHashIterator for iterating over tied hash elements.
+         */
+        public RuntimeTiedHashIterator() {
+            this.returnKey = true;
+            this.initialized = false;
+            this.currentKey = null;
+            this.nextKey = null;
+        }
+
+        /**
+         * Initializes the iterator by calling FIRSTKEY if not already initialized.
+         */
+        private void initialize() {
+            if (!initialized) {
+                nextKey = TieHash.tiedFirstKey(RuntimeHash.this);
+                initialized = true;
+            }
+        }
+
+        /**
+         * Checks if there are more elements to iterate over.
+         *
+         * @return True if there are more elements, false otherwise.
+         */
+        @Override
+        public boolean hasNext() {
+            initialize();
+
+            // If we're about to return a value and have a current key, we have a next element
+            if (currentKey != null && !returnKey) {
+                return true;
+            }
+
+            // If we're about to return a key, check if nextKey is defined (not undef)
+            if (returnKey && nextKey != null && nextKey.getDefinedBoolean()) {
+                return true;
+            }
+
+            return false;
+        }
+
+        /**
+         * Retrieves the next element in the iteration.
+         *
+         * @return The next RuntimeScalar element (key or value).
+         */
+        @Override
+        public RuntimeScalar next() {
+            if (!hasNext()) {
+                throw new NoSuchElementException("No more elements in tied hash iteration");
+            }
+
+            if (returnKey) {
+                // Return the key and prepare to return its value next
+                currentKey = nextKey;
+                returnKey = false;
+                return new RuntimeScalar(currentKey);
+            } else {
+                // Return the value and prepare for the next key
+                RuntimeScalar value = RuntimeHash.this.get(currentKey);
+
+                // Get the next key for the next iteration
+                nextKey = TieHash.tiedNextKey(RuntimeHash.this, currentKey);
+                returnKey = true;
+
+                return value;
+            }
+        }
+
+        /**
+         * Remove operation is not supported for this iterator.
+         *
+         * @throws UnsupportedOperationException if called
+         */
+        @Override
+        public void remove() {
+            throw new UnsupportedOperationException("Remove not supported for tied hash iterator");
         }
     }
 }
