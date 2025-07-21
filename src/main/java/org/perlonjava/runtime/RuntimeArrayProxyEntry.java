@@ -1,5 +1,6 @@
 package org.perlonjava.runtime;
 
+import java.util.List;
 import java.util.Stack;
 
 /**
@@ -36,15 +37,16 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
      */
     void vivify() {
         if (lvalue == null) {
-            // Check if the index is beyond the current size of the array
-            if (key >= parent.elements.size()) {
-                // Add new RuntimeScalar instances up to the specified index
-                for (int i = parent.elements.size(); i <= key; i++) {
-                    parent.elements.add(i, new RuntimeScalar());
-                }
+            lvalue = new RuntimeScalar();
+            List<RuntimeScalar> elements = parent.elements;
+
+            // Expand the array if needed
+            while (key >= elements.size()) {
+                elements.add(null); // Add null placeholders
             }
-            // Retrieve the element at the specified index
-            lvalue = parent.elements.get(key);
+
+            // Set the element at the index
+            elements.set(key, lvalue);
         }
     }
 

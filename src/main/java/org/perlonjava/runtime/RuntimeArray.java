@@ -305,7 +305,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     yield  pop(this);
                 }
                 RuntimeScalar previous = this.get(index);
-                this.set(index, scalarUndef);
+                this.elements.set(index, null);
                 yield  previous;
             }
             case AUTOVIVIFY_ARRAY -> scalarUndef;
@@ -423,24 +423,6 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     /**
-     * Sets a value at a specific index.
-     *
-     * @param index The index to set the value at.
-     * @param value The value to set.
-     */
-    public void set(int index, RuntimeScalar value) {
-        if (index < 0) {
-            index = elements.size() + index; // Handle negative indices
-        }
-        if (index < 0 || index >= elements.size()) {
-            for (int i = elements.size(); i <= index; i++) {
-                elements.add(new RuntimeScalar()); // Fill with undefined values if necessary
-            }
-        }
-        elements.set(index, value);
-    }
-
-    /**
      * Creates a reference to the array.
      *
      * @return A scalar representing the array reference.
@@ -521,7 +503,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
                 // Update the parent with the new size
                 if (newSize > currentSize) {
-                    set(newSize, scalarUndef);
+                    for (int i = currentSize; i < newSize; i++) {
+                        elements.add(null); // Fill with undefined values if necessary
+                    }
                 } else {
                     while (newSize < currentSize) {
                         currentSize--;
