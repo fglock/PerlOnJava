@@ -67,6 +67,24 @@ public class TieHandle extends RuntimeIO {
     }
 
     /**
+     * Calls a tie method if it exists in the tied object's class hierarchy.
+     * Used by tiedDestroy() and tiedUntie() for optional methods.
+     */
+    private RuntimeScalar tieCallIfExists(String methodName) {
+        String className = getTiedPackage();
+
+        // Check if method exists in the class hierarchy
+        RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(methodName, className, null, 0);
+        if (method == null) {
+            // Method doesn't exist, return undef
+            return RuntimeScalarCache.scalarUndef;
+        }
+
+        // Method exists, call it
+        return RuntimeCode.apply(method, new RuntimeArray(self), RuntimeContextType.SCALAR).getFirst();
+    }
+
+    /**
      * Prints data to a tied filehandle (delegates to PRINT).
      */
     public static RuntimeScalar tiedPrint(TieHandle tieHandle, RuntimeList args) {
@@ -158,30 +176,8 @@ public class TieHandle extends RuntimeIO {
     /**
      * Called when a tied filehandle goes out of scope (delegates to DESTROY if exists).
      */
-    public static RuntimeScalar tiedDestroy(RuntimeIO runtimeIO) {
-        // Get the tied object using the tied() operator
-        RuntimeScalar tiedObject = TieOperators.tied(new RuntimeScalar(runtimeIO));
-        if (!tiedObject.getDefinedBoolean()) {
-            return RuntimeScalarCache.scalarUndef;
-        }
-
-        // Get the class name from the tied object
-        int blessId = tiedObject.blessedId();
-        if (blessId == 0) {
-            return RuntimeScalarCache.scalarUndef;
-        }
-        String perlClassName = NameNormalizer.getBlessStr(blessId);
-
-        // Check if DESTROY method exists in the class hierarchy
-        RuntimeScalar destroyMethod = InheritanceResolver.findMethodInHierarchy("DESTROY", perlClassName, null, 0);
-        if (destroyMethod == null) {
-            // DESTROY method doesn't exist, return undef
-            return RuntimeScalarCache.scalarUndef;
-        }
-
-        // DESTROY method exists, call it
-        RuntimeArray args = new RuntimeArray(tiedObject);
-        return RuntimeCode.apply(destroyMethod, args, RuntimeContextType.SCALAR).getFirst();
+    public static RuntimeScalar tiedDestroy(TieHandle tieHandle) {
+        return tieHandle.tieCallIfExists("DESTROY");
     }
 
     /**
@@ -195,18 +191,7 @@ public class TieHandle extends RuntimeIO {
      * Unties a filehandle (delegates to UNTIE if exists).
      */
     public static RuntimeScalar tiedUntie(TieHandle tieHandle) {
-        // Check if UNTIE method exists in the class hierarchy
-        String perlClassName = tieHandle.getTiedPackage();
-        RuntimeScalar untieMethod = InheritanceResolver.findMethodInHierarchy("UNTIE", perlClassName, null, 0);
-
-        if (untieMethod == null) {
-            // UNTIE method doesn't exist, return undef
-            return RuntimeScalarCache.scalarUndef;
-        }
-
-        // UNTIE method exists, call it
-        RuntimeArray args = new RuntimeArray(tieHandle.self);
-        return RuntimeCode.apply(untieMethod, args, RuntimeContextType.SCALAR).getFirst();
+        return tieHandle.tieCallIfExists("UNTIE");
     }
 
     public RuntimeIO getPreviousValue() {
