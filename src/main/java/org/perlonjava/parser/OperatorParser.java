@@ -10,6 +10,7 @@ import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.List;
 
+import static org.perlonjava.lexer.LexerTokenType.IDENTIFIER;
 import static org.perlonjava.lexer.LexerTokenType.OPERATOR;
 import static org.perlonjava.parser.NumberParser.parseNumber;
 import static org.perlonjava.parser.ParserNodeUtils.atUnderscore;
@@ -229,7 +230,22 @@ public class OperatorParser {
         // Save the current token index to restore later if needed
         int currentTokenIndex = parser.tokenIndex;
         if (token.text.equals("<")) {
-            String tokenText = parser.tokens.get(parser.tokenIndex).text;
+            LexerToken operand = parser.tokens.get(parser.tokenIndex);
+            String tokenText = operand.text;
+
+            // Check if the token looks like a Bareword file handle
+            if (operand.type == IDENTIFIER) {
+                Node fileHandle = FileHandle.parseFileHandle(parser);
+                if (fileHandle != null) {
+                    if (parser.tokens.get(parser.tokenIndex).text.equals(">")) {
+                        TokenUtils.consume(parser); // Consume the '>' token
+                        // Return a BinaryOperatorNode representing a readline operation
+                        return new BinaryOperatorNode("readline",
+                                fileHandle,
+                                new ListNode(parser.tokenIndex), parser.tokenIndex);
+                    }
+                }
+            }
 
             // Check if the token is a dollar sign, indicating a variable
             if (tokenText.equals("$")) {
@@ -436,15 +452,14 @@ public class OperatorParser {
                 }
             }
             return new OperatorNode(token.text, listNode1, currentIndex);
-        }
-        else if (argCount == 0 || argCount == 4) {
+        } else if (argCount == 0 || argCount == 4) {
             // select or
             // select RBITS,WBITS,EBITS,TIMEOUT (syscall version)
             return new OperatorNode(token.text, listNode1, currentIndex);
         } else {
             throw new PerlCompilerException(parser.tokenIndex,
-                "Wrong number of arguments for select: expected 0, 1, or 4, got " + argCount,
-                parser.ctx.errorUtil);
+                    "Wrong number of arguments for select: expected 0, 1, or 4, got " + argCount,
+                    parser.ctx.errorUtil);
         }
     }
 }
