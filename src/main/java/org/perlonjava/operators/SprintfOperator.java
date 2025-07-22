@@ -1,5 +1,6 @@
 package org.perlonjava.operators;
 
+import org.perlonjava.runtime.RuntimeBase;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
 
@@ -16,6 +17,9 @@ public class SprintfOperator {
      * @return A RuntimeScalar containing the formatted string.
      */
     public static RuntimeScalar sprintf(RuntimeScalar runtimeScalar, RuntimeList list) {
+        // Expand the list
+        list = new RuntimeList((RuntimeBase) list);
+
         // The format string that specifies how the elements should be formatted
         String format = runtimeScalar.toString();
 
