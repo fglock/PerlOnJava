@@ -116,8 +116,8 @@ public class TieHandle extends RuntimeIO {
     /**
      * Seeks to a position in a tied filehandle (delegates to SEEK).
      */
-    public static RuntimeScalar tiedSeek(TieHandle tieHandle, RuntimeScalar position, RuntimeScalar whence) {
-        return tieHandle.tieCall("SEEK", position, whence);
+    public static RuntimeScalar tiedSeek(TieHandle tieHandle, RuntimeList args) {
+        return tieHandle.tieCall("SEEK", args);
     }
 
     /**
@@ -130,8 +130,8 @@ public class TieHandle extends RuntimeIO {
     /**
      * Checks if a tied filehandle is at end-of-file (delegates to EOF).
      */
-    public static RuntimeScalar tiedEof(TieHandle tieHandle) {
-        return tieHandle.tieCall("EOF");
+    public static RuntimeScalar tiedEof(TieHandle tieHandle, RuntimeList args) {
+        return tieHandle.tieCall("EOF", args);
     }
 
     /**
