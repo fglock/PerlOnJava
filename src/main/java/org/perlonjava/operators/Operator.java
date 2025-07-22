@@ -138,24 +138,15 @@ public class Operator {
     }
 
     public static RuntimeScalar binmode(RuntimeScalar fileHandle, RuntimeList runtimeList) {
-        String ioLayer = runtimeList.getFirst().toString();
-        if (fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
-            // File handle
-            RuntimeIO runtimeIO = fileHandle.getRuntimeIO();
-            if (runtimeIO.ioHandle != null) {
+        RuntimeIO fh = fileHandle.getRuntimeIO();
 
-                if (runtimeIO.ioHandle instanceof TieHandle tieHandle) {
-                    return TieHandle.tiedBinmode(tieHandle, runtimeList);
-                }
-
-                runtimeIO.binmode(ioLayer);
-                return fileHandle;
-            } else {
-                return RuntimeIO.handleIOError("No file handle available for binmode");
-            }
-        } else {
-            return RuntimeIO.handleIOError("Unsupported scalar type for binmode");
+        if (fh instanceof TieHandle tieHandle) {
+            return TieHandle.tiedBinmode(tieHandle, runtimeList);
         }
+
+        String ioLayer = runtimeList.getFirst().toString();
+        fh.binmode(ioLayer);
+        return fileHandle;
     }
 
     public static RuntimeScalar seek(RuntimeScalar fileHandle, RuntimeList runtimeList) {
