@@ -419,4 +419,32 @@ public class OperatorParser {
         }
         return new OperatorNode(text, operand, parser.tokenIndex);
     }
+
+    public static OperatorNode parseSelect(Parser parser, LexerToken token, int currentIndex) {
+        // Handle 'select' operator with two different syntaxes:
+        // 1. select FILEHANDLE or select (returns/sets current filehandle)
+        // 2. select RBITS,WBITS,EBITS,TIMEOUT (syscall)
+        ListNode listNode1 = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
+        int argCount = listNode1.elements.size();
+        if (argCount == 1) {
+            // select FILEHANDLE
+            if (listNode1.elements.getFirst() instanceof IdentifierNode identifierNode) {
+                Node handle = FileHandle.parseBarewordHandle(parser, identifierNode.name);
+                if (handle != null) {
+                    // handle is Bareword
+                    listNode1.elements.set(0, handle);
+                }
+            }
+            return new OperatorNode(token.text, listNode1, currentIndex);
+        }
+        else if (argCount == 0 || argCount == 4) {
+            // select or
+            // select RBITS,WBITS,EBITS,TIMEOUT (syscall version)
+            return new OperatorNode(token.text, listNode1, currentIndex);
+        } else {
+            throw new PerlCompilerException(parser.tokenIndex,
+                "Wrong number of arguments for select: expected 0, 1, or 4, got " + argCount,
+                parser.ctx.errorUtil);
+        }
+    }
 }

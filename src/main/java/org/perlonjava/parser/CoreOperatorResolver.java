@@ -65,21 +65,8 @@ public class CoreOperatorResolver {
                  // Handle operators with one optional argument
                  return OperatorParser.parseOperatorWithOneOptionalArgument(parser, token);
              case "select":
-                 // Handle 'select' operator with two different syntaxes:
-                 // 1. select FILEHANDLE or select (returns/sets current filehandle)
-                 // 2. select RBITS,WBITS,EBITS,TIMEOUT (syscall)
-                 operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
-                 int argCount = ((ListNode) operand).elements.size();
-                 if (argCount == 0 || argCount == 1 || argCount == 4) {
-                     // select or select FILEHANDLE
-                     // select RBITS,WBITS,EBITS,TIMEOUT (syscall version)
-                     return new OperatorNode(token.text, operand, currentIndex);
-                 } else {
-                     throw new PerlCompilerException(parser.tokenIndex,
-                         "Wrong number of arguments for select: expected 0, 1, or 4, got " + argCount,
-                         parser.ctx.errorUtil);
-                 }
-             case "stat", "lstat":
+                 return OperatorParser.parseSelect(parser, token, currentIndex);
+            case "stat", "lstat":
                 // Handle 'stat' and 'lstat' operators with special handling for `stat _`
                 LexerToken nextToken = peek(parser);
                 boolean paren = false;
