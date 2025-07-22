@@ -3,6 +3,8 @@ package org.perlonjava.parser;
 import org.perlonjava.astnode.*;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.runtime.GlobalVariable;
+import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 
 import static org.perlonjava.parser.ParserNodeUtils.atUnderscore;
@@ -30,6 +32,13 @@ public class Variable {
                 // - `&name(...`
                 // - `obj->$name(...`
                 parser.throwError("syntax error");
+            }
+
+            if (sigil.equals("*")) {
+                // Vivify the GLOB if it doesn't exist yet
+                // This helps distinguish between file handles and other barewords
+                String fullName = NameNormalizer.normalizeVariableName(varName, parser.ctx.symbolTable.getCurrentPackage());
+                GlobalVariable.getGlobalIO(fullName);
             }
 
             // Create a Variable node
