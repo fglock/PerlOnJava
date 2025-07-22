@@ -99,6 +99,11 @@ public class Operator {
 
     public static RuntimeScalar fileno(RuntimeScalar fileHandle) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
+
+        if (fh instanceof TieHandle tieHandle) {
+            return TieHandle.tiedFileno(tieHandle);
+        }
+
         return fh.fileno();
     }
 
@@ -144,18 +149,22 @@ public class Operator {
     }
 
     public static RuntimeScalar seek(RuntimeScalar fileHandle, RuntimeList runtimeList) {
-        long position = runtimeList.getFirst().getLong();
-        int whence = IOHandle.SEEK_SET; // Default to SEEK_SET
-
-        // Check if whence parameter is provided
-        if (runtimeList.size() > 1) {
-            whence = runtimeList.elements.get(1).scalar().getInt();
-        }
-
         if (fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
             // File handle
             RuntimeIO runtimeIO = fileHandle.getRuntimeIO();
             if (runtimeIO.ioHandle != null) {
+                if (runtimeIO instanceof TieHandle tieHandle) {
+                    return TieHandle.tiedSeek(tieHandle, runtimeList);
+                }
+
+                long position = runtimeList.getFirst().getLong();
+                int whence = IOHandle.SEEK_SET; // Default to SEEK_SET
+
+                // Check if whence parameter is provided
+                if (runtimeList.size() > 1) {
+                    whence = runtimeList.elements.get(1).scalar().getInt();
+                }
+
                 return runtimeIO.ioHandle.seek(position, whence);
             } else {
                 return RuntimeIO.handleIOError("No file handle available for seek");
@@ -340,7 +349,7 @@ public class Operator {
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
         if (fh instanceof TieHandle tieHandle) {
-            return TieHandle.tiedEof(tieHandle);
+            return TieHandle.tiedEof(tieHandle, new RuntimeList());
         }
 
         return fh.eof();
@@ -348,6 +357,11 @@ public class Operator {
 
     public static RuntimeScalar eof(RuntimeList runtimeList, RuntimeScalar fileHandle) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
+
+        if (fh instanceof TieHandle tieHandle) {
+            return TieHandle.tiedEof(tieHandle, runtimeList);
+        }
+
         return fh.eof();
     }
 
