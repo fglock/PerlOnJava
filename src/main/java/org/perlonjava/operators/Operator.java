@@ -173,6 +173,20 @@ public class Operator {
      * @return A RuntimeScalar indicating the result of the write operation.
      */
     public static RuntimeScalar printf(RuntimeList runtimeList, RuntimeScalar fileHandle) {
+
+        if (fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
+            // System.out.println("printf type: " + fileHandle.type);
+            RuntimeGlob glob = fileHandle.globDeref();
+            // System.out.println("glob type: " + glob.type);
+            if (glob.IO.type == RuntimeScalarType.TIED_SCALAR) {
+                // System.out.println("is tied to " + glob.IO.value);
+                if (glob.IO.value instanceof TieHandle tieHandle) {
+                    // System.out.println("tied to scalar: " + glob.IO.value);
+                    return TieHandle.tiedPrintf(tieHandle, runtimeList);
+                }
+            }
+        }
+
         RuntimeScalar format = (RuntimeScalar) runtimeList.elements.removeFirst(); // Extract the format string from elements
 
         // Use sprintf to get the formatted string
