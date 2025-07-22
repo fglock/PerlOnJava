@@ -87,9 +87,6 @@ public class ErrorMessageUtil {
     }
 
     public static String stringifyException(Throwable t) {
-
-        // t.printStackTrace();
-
         // Use the custom formatter to print the Perl message and stack trace
         StringBuilder sb = new StringBuilder();
 
@@ -98,6 +95,14 @@ public class ErrorMessageUtil {
 
         // Use this for debugging
         // t.printStackTrace();
+
+        String message1 = t.getMessage();
+        if (message1 != null && !message1.equals(message)) {
+            sb.append(message1);
+            if (!message1.endsWith("\n")) {
+                sb.append("\n");
+            }
+        }
 
         // Handle null or empty messages
         if (message == null || message.isEmpty()) {

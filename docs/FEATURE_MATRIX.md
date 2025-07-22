@@ -35,13 +35,13 @@ PerlOnJava implements most core Perl features with some key differences:
 - Regular expressions (most features)
 - DBI with JDBC integration
 - Subroutine prototypes
+- Tied variables
 
 🚧 Partially Supported:
 - Warnings and strict pragma
 - Some core modules and pragmas
 - Method Resolution Order (C3 only)
 - File operations and I/O
-- tied variables (tie handle not supported)
 
 ❌ Not Supported:
 - XS modules and C integration
@@ -394,7 +394,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`select`**: `select(undef,undef,undef,$time)` for sleep function
 - ✅  **`seek`**: File position manipulation.
 - ✅  **`chmod`**: File permissions.
-- ❌  **Tied Handles**: Tied file handles are not implemented.
+- ✅  **Tied Handles**: Tied file handles are not implemented.
 
 ### Unimplemented I/O Operators
 - ❌  **`socket`**: Socket creation

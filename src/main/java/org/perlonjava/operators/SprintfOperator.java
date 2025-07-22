@@ -1,9 +1,11 @@
 package org.perlonjava.operators;
 
+import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeBase;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
 
+import java.util.Arrays;
 import java.util.IllegalFormatException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -23,79 +25,86 @@ public class SprintfOperator {
         // The format string that specifies how the elements should be formatted
         String format = runtimeScalar.toString();
 
-        // Create an array to hold the arguments for the format string
-        Object[] args = new Object[list.size()];
+        StringBuilder result = new StringBuilder();
+        int argIndex = 0;
 
-        // Regular expression to find format specifiers in the format string
-        // Example of format specifiers: %d, %f, %s, etc.
-        Pattern pattern = Pattern.compile("%[\\-\\+\\d\\s]*\\.?\\d*[a-zA-Z]");
-        Matcher matcher = pattern.matcher(format);
+        for (int i = 0; i < format.length(); i++) {
+            char c = format.charAt(i);
 
-        int index = 0;
+            if (c == '%' && i + 1 < format.length()) {
+                char next = format.charAt(i + 1);
 
-        // Iterate through the format string and map each format specifier
-        // to the corresponding element in the list
-        while (matcher.find() && index < list.size()) {
-            // Get the current format specifier (e.g., %d, %f, %s)
-            String specifier = matcher.group();
-            // Get the corresponding element from the list
-            RuntimeScalar element = (RuntimeScalar) list.elements.get(index);
-            Object arg;
+                if (next == '%') {
+                    // %% -> literal %
+                    result.append('%');
+                    i++; // Skip the second %
+                } else {
+                    // Find the complete format specifier
+                    Pattern pattern = Pattern.compile("%[\\-\\+\\d\\s]*\\.?\\d*[a-zA-Z]");
+                    Matcher matcher = pattern.matcher(format.substring(i));
 
-            // Determine the type of argument based on the format specifier
-            char formatChar = specifier.charAt(specifier.length() - 1);
+                    if (matcher.find() && matcher.start() == 0 && argIndex < list.size()) {
+                        String specifier = matcher.group();
+                        RuntimeScalar element = (RuntimeScalar) list.elements.get(argIndex);
+
+                        // Format this single element
+                        String formatted = formatSingleElement(specifier, element);
+                        result.append(formatted);
+
+                        argIndex++;
+                        i += specifier.length() - 1; // Move past the entire specifier
+                    } else {
+                        // Not a valid format specifier or no more arguments
+                        result.append(c);
+                    }
+                }
+            } else {
+                // Regular character
+                result.append(c);
+            }
+        }
+
+        return new RuntimeScalar(result.toString());
+    }
+
+    private static String formatSingleElement(String specifier, RuntimeScalar element) {
+        char formatChar = specifier.charAt(specifier.length() - 1);
+
+        try {
             switch (Character.toLowerCase(formatChar)) {
                 case 'd':
                 case 'i':
                 case 'u':
+                    return String.format(specifier, element.getInt());
                 case 'x':
+                    return String.format(specifier, element.getInt());
                 case 'o':
-                    arg = element.getInt();
-                    break;
+                    return String.format(specifier, element.getInt());
                 case 'b':
                     // Special handling for binary format
                     int intValue = element.getInt();
-                    // Use 8 bits for values that fit in a byte, 32 bits otherwise
-                    arg = (intValue >= 0 && intValue <= 255)
+                    String binary = (intValue >= 0 && intValue <= 255)
                             ? String.format("%8s", Integer.toBinaryString(intValue)).replace(' ', '0')
                             : String.format("%32s", Integer.toBinaryString(intValue)).replace(' ', '0');
-                    // Modify the format string to use %s instead of %b
-                    format = format.replace(specifier, "%s");
-                    break;
+                    return binary;
                 case 'f':
                 case 'e':
                 case 'g':
                 case 'a':
-                    arg = element.getDouble();
-                    break;
+                    return String.format(specifier, element.getDouble());
                 case 'c':
-                    arg = (char) element.getInt();
-                    break;
+                    return String.format(specifier, (char) element.getInt());
                 case 'p':
-                    arg = String.format("%x", element.getInt());
-                    break;
+                    return String.format("%x", element.getInt());
                 case 'n':
-                    // Special case: need to handle this separately
-                    throw new UnsupportedOperationException("%n specifier not supported");
-                default:
-                    arg = element.toString();
+                    throw new PerlCompilerException("%n specifier not supported");
+                default: // 's' and others
+                    return String.format(specifier, element.toString());
             }
-
-            // Store the converted argument in the args array
-            args[index] = arg;
-            index++;
+        } catch (Exception e) {
+            // If formatting fails, fall back to string representation
+            // return element.toString();
+            throw new PerlCompilerException("sprintf() error: " + e.getMessage());
         }
-
-        // Format the string using the format string and the arguments array
-        String formattedString;
-        try {
-            formattedString = String.format(format, args);
-        } catch (IllegalFormatException e) {
-            // If the format string is invalid, throw a runtime exception
-            throw new RuntimeException("Invalid format string: " + format, e);
-        }
-
-        // Return the formatted string wrapped in a RuntimeScalar
-        return new RuntimeScalar(formattedString);
     }
 }
