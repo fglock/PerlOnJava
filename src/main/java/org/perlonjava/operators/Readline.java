@@ -83,14 +83,19 @@ public class Readline {
      */
     public static RuntimeScalar read(RuntimeList args) {
         // Extract arguments from the list
-        RuntimeScalar fileHandle = (RuntimeScalar) args.elements.get(0);
+        RuntimeScalar fileHandle = (RuntimeScalar) args.elements.getFirst();
+        RuntimeIO fh = fileHandle.getRuntimeIO();
+
+        if (fh instanceof TieHandle tieHandle) {
+            args.elements.removeFirst();
+            return TieHandle.tiedRead(tieHandle, args);
+        }
+
         RuntimeScalar scalar = ((RuntimeScalar) args.elements.get(1)).scalarDeref();
         RuntimeScalar length = (RuntimeScalar) args.elements.get(2);
         RuntimeScalar offset = args.elements.size() > 3
                 ? (RuntimeScalar) args.elements.get(3)
                 : new RuntimeScalar(0);
-
-        RuntimeIO fh = fileHandle.getRuntimeIO();
 
         if (fh == null) {
             getGlobalVariable("main::!").set("read file handle is closed");
