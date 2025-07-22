@@ -87,6 +87,9 @@ public class ErrorMessageUtil {
     }
 
     public static String stringifyException(Throwable t) {
+
+        // t.printStackTrace();
+
         // Use the custom formatter to print the Perl message and stack trace
         StringBuilder sb = new StringBuilder();
 

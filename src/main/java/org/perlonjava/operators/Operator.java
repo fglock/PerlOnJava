@@ -173,18 +173,10 @@ public class Operator {
      * @return A RuntimeScalar indicating the result of the write operation.
      */
     public static RuntimeScalar printf(RuntimeList runtimeList, RuntimeScalar fileHandle) {
+        RuntimeIO fh = fileHandle.getRuntimeIO();
 
-        if (fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
-            // System.out.println("printf type: " + fileHandle.type);
-            RuntimeGlob glob = fileHandle.globDeref();
-            // System.out.println("glob type: " + glob.type);
-            if (glob.IO.type == RuntimeScalarType.TIED_SCALAR) {
-                // System.out.println("is tied to " + glob.IO.value);
-                if (glob.IO.value instanceof TieHandle tieHandle) {
-                    // System.out.println("tied to scalar: " + glob.IO.value);
-                    return TieHandle.tiedPrintf(tieHandle, runtimeList);
-                }
-            }
+        if (fh instanceof TieHandle tieHandle) {
+            return TieHandle.tiedPrintf(tieHandle, runtimeList);
         }
 
         RuntimeScalar format = (RuntimeScalar) runtimeList.elements.removeFirst(); // Extract the format string from elements
@@ -193,7 +185,6 @@ public class Operator {
         String formattedString = SprintfOperator.sprintf(format, runtimeList).toString();
 
         // Write the formatted content to the file handle
-        RuntimeIO fh = fileHandle.getRuntimeIO();
         return fh.write(formattedString);
     }
 
@@ -247,6 +238,12 @@ public class Operator {
      * @return A RuntimeScalar indicating the result of the write operation.
      */
     public static RuntimeScalar print(RuntimeList runtimeList, RuntimeScalar fileHandle) {
+        RuntimeIO fh = fileHandle.getRuntimeIO();
+
+        if (fh instanceof TieHandle tieHandle) {
+            return TieHandle.tiedPrint(tieHandle, runtimeList);
+        }
+
         StringBuilder sb = new StringBuilder();
         String separator = getGlobalVariable("main::,").toString(); // fetch $,
         String newline = getGlobalVariable("main::\\").toString();  // fetch $\
@@ -266,7 +263,6 @@ public class Operator {
 
         try {
             // Write the content to the file handle
-            RuntimeIO fh = fileHandle.getRuntimeIO();
             return fh.write(sb.toString());
         } catch (Exception e) {
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
