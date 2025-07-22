@@ -94,6 +94,11 @@ public class Operator {
      */
     public static RuntimeScalar close(RuntimeScalar fileHandle) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
+
+        if (fh instanceof TieHandle tieHandle) {
+            return TieHandle.tiedClose(tieHandle);
+        }
+
         return fh.close();
     }
 
@@ -138,6 +143,11 @@ public class Operator {
             // File handle
             RuntimeIO runtimeIO = fileHandle.getRuntimeIO();
             if (runtimeIO.ioHandle != null) {
+
+                if (runtimeIO.ioHandle instanceof TieHandle tieHandle) {
+                    return TieHandle.tiedBinmode(tieHandle, runtimeList);
+                }
+
                 runtimeIO.binmode(ioLayer);
                 return fileHandle;
             } else {
