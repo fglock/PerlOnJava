@@ -292,6 +292,10 @@ public class PrototypeArgs {
             Node typeglobRef = new OperatorNode("\\", expr, expr.getIndex());
             typeglobRef.setAnnotation("context", "SCALAR");
             args.elements.add(typeglobRef);
+        } else if (expr instanceof IdentifierNode idNode) {
+            // Bareword - create a typeglob reference
+            Node typeglobRef = FileHandle.parseBarewordHandle(parser, idNode.name);
+            args.elements.add(typeglobRef == null ? expr : typeglobRef);
         } else {
             // Bare scalars
             Node scalarArg = ParserNodeUtils.toScalarContext(expr);

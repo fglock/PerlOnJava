@@ -2,6 +2,7 @@ package org.perlonjava.parser;
 
 import org.perlonjava.astnode.IdentifierNode;
 import org.perlonjava.astnode.Node;
+import org.perlonjava.astnode.OperatorNode;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.GlobalVariable;
@@ -11,7 +12,7 @@ import static org.perlonjava.parser.TokenUtils.peek;
 
 /**
  * FileHandle parser for PerlOnJava.
- *
+ * <p>
  * This class is responsible for parsing Perl file handle expressions in various contexts,
  * particularly in print/printf statements and other I/O operations. Perl has several ways
  * to specify file handles:
@@ -22,7 +23,7 @@ import static org.perlonjava.parser.TokenUtils.peek;
  *   <li>Scalar variables containing file handles: {@code print $fh "hello"}</li>
  *   <li>Bracketed forms: {@code print {STDOUT} "hello"} or {@code print {$fh} "hello"}</li>
  * </ul>
- *
+ * <p>
  * The parser must distinguish between file handle expressions and regular expressions,
  * which is particularly tricky for scalar variables that could be either a file handle
  * or part of an arithmetic expression.
@@ -34,7 +35,7 @@ public class FileHandle {
 
     /**
      * Parses a file handle expression from the token stream.
-     *
+     * <p>
      * This method attempts to parse various forms of Perl file handle syntax:
      *
      * <h3>Bareword File Handles</h3>
@@ -103,25 +104,7 @@ public class FileHandle {
             // parseSubroutineIdentifier handles qualified names like Some::Package::HANDLE
             String name = IdentifierParser.parseSubroutineIdentifier(parser);
             if (name != null) {
-                // Determine the package context for the file handle
-                String packageName = parser.ctx.symbolTable.getCurrentPackage();
-
-                // Standard file handles (STDOUT, STDERR, STDIN) always belong to main::
-                // regardless of the current package context
-                if (name.equals("STDOUT") || name.equals("STDERR") || name.equals("STDIN")) {
-                    packageName = "main";
-                }
-
-                // Normalize the name to include the package qualifier
-                // This converts "HANDLE" to "Package::HANDLE" format
-                name = NameNormalizer.normalizeVariableName(name, packageName);
-
-                // Check if this is a known file handle in the global I/O table
-                // This helps distinguish between file handles and other barewords
-                if (GlobalVariable.existsGlobalIO(name)) {
-                    // Create an identifier node for the file handle
-                    fileHandle = new IdentifierNode(name, parser.tokenIndex);
-                }
+                fileHandle = parseBarewordHandle(parser, name);
             }
         }
         // Handle scalar variable file handles
@@ -163,5 +146,30 @@ public class FileHandle {
         }
 
         return fileHandle;
+    }
+
+    public static Node parseBarewordHandle(Parser parser, String name) {
+        // Determine the package context for the file handle
+        String packageName = parser.ctx.symbolTable.getCurrentPackage();
+
+        // Standard file handles (STDOUT, STDERR, STDIN) always belong to main::
+        // regardless of the current package context
+        if (name.equals("STDOUT") || name.equals("STDERR") || name.equals("STDIN")) {
+            packageName = "main";
+        }
+
+        // Normalize the name to include the package qualifier
+        // This converts "HANDLE" to "Package::HANDLE" format
+        name = NameNormalizer.normalizeVariableName(name, packageName);
+
+        // Check if this is a known file handle in the global I/O table
+        // This helps distinguish between file handles and other barewords
+        if (GlobalVariable.existsGlobalIO(name)) {
+            // Create a GLOB reference for the file handle, like `\*FH`
+            return new OperatorNode("\\",
+                    new OperatorNode("*",
+                            new IdentifierNode(name, parser.tokenIndex), parser.tokenIndex), parser.tokenIndex);
+        }
+        return null;
     }
 }
