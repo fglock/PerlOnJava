@@ -70,36 +70,14 @@ public class TieHandle extends RuntimeIO {
      * Prints data to a tied filehandle (delegates to PRINT).
      */
     public static RuntimeScalar tiedPrint(TieHandle tieHandle, RuntimeList args) {
-        // Convert RuntimeList to RuntimeArray for the method call
-        RuntimeArray argsArray = new RuntimeArray();
-        argsArray.elements.add(tieHandle.self);
-        // argsArray.elements.addAll(args.elements); XXX
-
-        return RuntimeCode.call(
-                tieHandle.self,
-                new RuntimeScalar("PRINT"),
-                tieHandle.tiedPackage,
-                argsArray,
-                RuntimeContextType.SCALAR
-        ).getFirst();
+        return tieHandle.tieCall("PRINT", args);
     }
 
     /**
      * Prints formatted data to a tied filehandle (delegates to PRINTF).
      */
     public static RuntimeScalar tiedPrintf(TieHandle tieHandle, RuntimeScalar format, RuntimeList args) {
-        RuntimeArray argsArray = new RuntimeArray();
-        argsArray.elements.add(tieHandle.self);
-        argsArray.elements.add(format);
-        // argsArray.elements.addAll(args.elements); XXX
-
-        return RuntimeCode.call(
-                tieHandle.self,
-                new RuntimeScalar("PRINTF"),
-                tieHandle.tiedPackage,
-                argsArray,
-                RuntimeContextType.SCALAR
-        ).getFirst();
+        return tieHandle.tieCall("PRINTF", format, args);
     }
 
     /**
