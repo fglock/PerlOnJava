@@ -306,6 +306,11 @@ public class Operator {
 
     public static RuntimeScalar getc(RuntimeScalar fileHandle) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
+
+        if (fh instanceof TieHandle tieHandle) {
+            return TieHandle.tiedGetc(tieHandle);
+        }
+
         if (fh.ioHandle != null) {
             return fh.ioHandle.read(1);
         }
@@ -314,6 +319,11 @@ public class Operator {
 
     public static RuntimeScalar tell(RuntimeScalar fileHandle) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
+
+        if (fh instanceof TieHandle tieHandle) {
+            return TieHandle.tiedTell(tieHandle);
+        }
+
         if (fh.ioHandle != null) {
             return fh.ioHandle.tell();
         }
@@ -328,6 +338,11 @@ public class Operator {
      */
     public static RuntimeScalar eof(RuntimeScalar fileHandle) {
         RuntimeIO fh = fileHandle.getRuntimeIO();
+
+        if (fh instanceof TieHandle tieHandle) {
+            return TieHandle.tiedEof(tieHandle);
+        }
+
         return fh.eof();
     }
 

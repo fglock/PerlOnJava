@@ -109,8 +109,8 @@ public class TieHandle extends RuntimeIO {
     /**
      * Reads data from a tied filehandle (delegates to READ).
      */
-    public static RuntimeScalar tiedRead(TieHandle tieHandle, RuntimeScalar buffer, RuntimeScalar length, RuntimeScalar offset) {
-        return tieHandle.tieCall("READ", buffer, length, offset);
+    public static RuntimeScalar tiedRead(TieHandle tieHandle, RuntimeList args) {
+        return tieHandle.tieCall("READ", args);
     }
 
     /**
@@ -207,86 +207,6 @@ public class TieHandle extends RuntimeIO {
         // UNTIE method exists, call it
         RuntimeArray args = new RuntimeArray(tieHandle.self);
         return RuntimeCode.apply(untieMethod, args, RuntimeContextType.SCALAR).getFirst();
-    }
-
-    // IOHandle interface implementation
-
-    public RuntimeScalar readline() {
-        return (RuntimeScalar) tiedReadline(this, RuntimeContextType.SCALAR);
-    }
-
-    public RuntimeScalar read(int length) {
-        RuntimeScalar buffer = new RuntimeScalar();
-        return tiedRead(this, buffer, new RuntimeScalar(length), RuntimeScalarCache.scalarZero);
-    }
-
-    @Override
-    public RuntimeScalar write(String data) {
-        RuntimeList args = new RuntimeList(new RuntimeScalar(data));
-        return tiedPrint(this, args);
-    }
-
-    @Override
-    public RuntimeScalar eof() {
-        return tiedEof(this);
-    }
-
-    @Override
-    public RuntimeScalar tell() {
-        return tiedTell(this);
-    }
-
-    @Override
-    public RuntimeScalar seek(long position) {
-        return tiedSeek(this, new RuntimeScalar(position), RuntimeScalarCache.scalarZero);
-    }
-
-    @Override
-    public RuntimeScalar close() {
-        return tiedClose(this);
-    }
-
-    @Override
-    public RuntimeScalar flush() {
-        // Default implementation - can be overridden by FLUSH method if it exists
-        return RuntimeScalarCache.scalarTrue;
-    }
-
-    @Override
-    public void binmode(String layer) {
-        tiedBinmode(this, new RuntimeScalar(layer));
-    }
-
-    @Override
-    public RuntimeScalar fileno() {
-        return tiedFileno(this);
-    }
-
-    public RuntimeScalar truncate(long length) {
-        // Truncate is not a standard tie method, but we can try to call it
-        return tieCall("TRUNCATE", new RuntimeScalar(length));
-    }
-
-    // Socket methods - may not be implemented by all tied handles
-
-    @Override
-    public RuntimeScalar bind(String address, int port) {
-        return tieCall("BIND", new RuntimeScalar(address), new RuntimeScalar(port));
-    }
-
-    @Override
-    public RuntimeScalar connect(String address, int port) {
-        return tieCall("CONNECT", new RuntimeScalar(address), new RuntimeScalar(port));
-    }
-
-    @Override
-    public RuntimeScalar listen(int backlog) {
-        return tieCall("LISTEN", new RuntimeScalar(backlog));
-    }
-
-    @Override
-    public RuntimeScalar accept() {
-        return tieCall("ACCEPT");
     }
 
     public RuntimeIO getPreviousValue() {
