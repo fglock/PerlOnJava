@@ -144,8 +144,8 @@ public class TieHandle extends RuntimeIO {
     /**
      * Sets binary mode on a tied filehandle (delegates to BINMODE).
      */
-    public static RuntimeScalar tiedBinmode(TieHandle tieHandle, RuntimeScalar layer) {
-        return tieHandle.tieCall("BINMODE", layer);
+    public static RuntimeScalar tiedBinmode(TieHandle tieHandle, RuntimeList args) {
+        return tieHandle.tieCall("BINMODE", args);
     }
 
     /**
