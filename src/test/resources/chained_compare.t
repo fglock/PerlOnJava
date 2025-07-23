@@ -1,7 +1,7 @@
 ###################
 # Chained Operators
 
-use 5.40.0;
+use 5.38.0;
 
 say "1..13";
 
