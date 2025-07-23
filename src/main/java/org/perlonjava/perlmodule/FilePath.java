@@ -1,6 +1,6 @@
 package org.perlonjava.perlmodule;
 
-import org.perlonjava.operators.Operator;
+import org.perlonjava.operators.IOOperator;
 import org.perlonjava.runtime.*;
 
 import java.io.File;
@@ -112,7 +112,7 @@ public class FilePath extends PerlModuleBase {
                             count++;
                             removed.add(path.toString());
                             if (verbose) {
-                                Operator.say(
+                                IOOperator.say(
                                         new RuntimeList(new RuntimeScalar("unlink " + path )),
                                         getGlobalIO("main::STDERR"));
                             }
@@ -326,7 +326,7 @@ public class FilePath extends PerlModuleBase {
                 created.add(path.toString());
 
                 if (verbose) {
-                    Operator.say(
+                    IOOperator.say(
                             new RuntimeList(new RuntimeScalar("mkdir " + path )),
                             getGlobalIO("main::STDERR"));
 
@@ -352,7 +352,7 @@ public class FilePath extends PerlModuleBase {
                             count++;
                             removed.add(entry.toString());
                             if (verbose) {
-                                Operator.say(
+                                IOOperator.say(
                                         new RuntimeList(new RuntimeScalar("unlink " + path )),
                                         getGlobalIO("main::STDERR"));
                             }
@@ -371,7 +371,7 @@ public class FilePath extends PerlModuleBase {
                 count++;
                 removed.add(path.toString());
                 if (verbose) {
-                    Operator.say(
+                    IOOperator.say(
                             new RuntimeList(new RuntimeScalar("rmdir " + path )),
                             getGlobalIO("main::STDERR"));
                 }
