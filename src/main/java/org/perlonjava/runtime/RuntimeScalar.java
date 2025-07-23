@@ -97,10 +97,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar(RuntimeScalar scalar) {
-//        if (scalar.getClass().equals(RuntimeTiedArrayProxyEntry.class)) {
-//            System.out.println("new RuntimeScalar with " + scalar.getClass());
-//            new Exception("Stack trace").printStackTrace(System.out);
-//        }
         if (scalar.type == TIED_SCALAR) {
             RuntimeScalar temp = scalar.tiedFetch();
             this.type = temp.type;
@@ -367,10 +363,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Setters
     public RuntimeScalar set(RuntimeScalar value) {
-//        if (value.getClass().equals(RuntimeTiedArrayProxyEntry.class)) {
-//            System.out.println("new RuntimeScalar set  " + value.getClass());
-//            new Exception("Stack trace").printStackTrace(System.out);
-//        }
         if (value.type == TIED_SCALAR) {
             return set(value.tiedFetch());
         }
@@ -381,13 +373,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.value = value.value;
         return this;
     }
-
-//    public RuntimeScalar set(RuntimeTiedArrayProxyEntry value) {
-//        value.vivify();
-//        this.type = value.type;
-//        this.value = value.value;
-//        return this;
-//    }
 
     public RuntimeScalar set(int value) {
         if (this.type == TIED_SCALAR) {
