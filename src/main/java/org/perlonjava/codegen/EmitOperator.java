@@ -130,7 +130,7 @@ public class EmitOperator {
         emitFileHandle(emitterVisitor.with(RuntimeContextType.SCALAR), node.left);
 
         // Call the operator, return Scalar
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/Operator", operator, "(Lorg/perlonjava/runtime/RuntimeList;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/operators/IOOperator", operator, "(Lorg/perlonjava/runtime/RuntimeList;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
         // If the context is VOID, pop the result from the stack.
         handleVoidContext(emitterVisitor);
     }
