@@ -388,13 +388,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (this.type == TIED_SCALAR) {
             return this.tiedStore(new RuntimeScalar(value));
         }
-        if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
-            this.type = DOUBLE;
-            this.value = (double) value;
-        } else {
-            this.type = RuntimeScalarType.INTEGER;
-            this.value = (int) value;
-        }
+        this.initializeWithLong(value);
         return this;
     }
 
