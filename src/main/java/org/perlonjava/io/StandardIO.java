@@ -1,5 +1,6 @@
 package org.perlonjava.io;
 
+import org.perlonjava.runtime.RuntimeIO;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarCache;
 
@@ -13,6 +14,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeIO.handleIOException;
 
 /**
@@ -247,5 +249,56 @@ public class StandardIO implements IOHandle {
             this.data = data;
             this.seq = seq;
         }
+    }
+
+    @Override
+    public RuntimeScalar sysread(int length) {
+        if (inputStream != null) {
+            try {
+                byte[] buffer = new byte[length];
+                int bytesRead = inputStream.read(buffer);
+
+                if (bytesRead == -1) {
+                    // EOF
+                    return new RuntimeScalar("");
+                }
+
+                // Convert bytes to string representation
+                StringBuilder result = new StringBuilder(bytesRead);
+                for (int i = 0; i < bytesRead; i++) {
+                    result.append((char) (buffer[i] & 0xFF));
+                }
+
+                return new RuntimeScalar(result.toString());
+            } catch (IOException e) {
+                getGlobalVariable("main::!").set(e.getMessage());
+                return new RuntimeScalar(); // undef
+            }
+        }
+        return RuntimeIO.handleIOError("sysread operation not supported on output stream");
+    }
+
+    @Override
+    public RuntimeScalar syswrite(String data) {
+        if (outputStream != null) {
+            try {
+                // Convert string to bytes
+                byte[] bytes = new byte[data.length()];
+                for (int i = 0; i < data.length(); i++) {
+                    bytes[i] = (byte) (data.charAt(i) & 0xFF);
+                }
+
+                outputStream.write(bytes);
+//                if (autoflush) {
+//                    outputStream.flush();
+//                }
+
+                return new RuntimeScalar(bytes.length);
+            } catch (IOException e) {
+                getGlobalVariable("main::!").set(e.getMessage());
+                return new RuntimeScalar(); // undef
+            }
+        }
+        return RuntimeIO.handleIOError("syswrite operation not supported on input stream");
     }
 }

@@ -349,4 +349,23 @@ public class PipeOutputChannel implements IOHandle {
     public boolean isClosed() {
         return isClosed;
     }
+
+    @Override
+    public RuntimeScalar syswrite(String data) {
+        try {
+            // Convert string to bytes
+            byte[] bytes = new byte[data.length()];
+            for (int i = 0; i < data.length(); i++) {
+                bytes[i] = (byte) (data.charAt(i) & 0xFF);
+            }
+
+            process.getOutputStream().write(bytes);
+            process.getOutputStream().flush();
+
+            return new RuntimeScalar(bytes.length);
+        } catch (IOException e) {
+            getGlobalVariable("main::!").set(e.getMessage());
+            return new RuntimeScalar(); // undef
+        }
+    }
 }

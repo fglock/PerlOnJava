@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Set;
 
+import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeIO.handleIOException;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
@@ -301,6 +302,49 @@ public class CustomFileChannel implements IOHandle {
             return scalarTrue;
         } catch (IOException e) {
             return handleIOException(e, "truncate failed");
+        }
+    }
+
+    @Override
+    public RuntimeScalar sysread(int length) {
+        try {
+            ByteBuffer buffer = ByteBuffer.allocate(length);
+            int bytesRead = fileChannel.read(buffer);  // Changed from 'channel' to 'fileChannel'
+
+            if (bytesRead == -1) {
+                // EOF - return empty string
+                return new RuntimeScalar("");
+            }
+
+            // Convert bytes to string representation
+            buffer.flip();
+            StringBuilder result = new StringBuilder(bytesRead);
+            while (buffer.hasRemaining()) {
+                result.append((char) (buffer.get() & 0xFF));
+            }
+
+            return new RuntimeScalar(result.toString());
+        } catch (IOException e) {
+            getGlobalVariable("main::!").set(e.getMessage());
+            return new RuntimeScalar(); // undef
+        }
+    }
+
+    @Override
+    public RuntimeScalar syswrite(String data) {
+        try {
+            // Convert string to bytes (each char is a byte 0-255)
+            ByteBuffer buffer = ByteBuffer.allocate(data.length());
+            for (int i = 0; i < data.length(); i++) {
+                buffer.put((byte) (data.charAt(i) & 0xFF));
+            }
+            buffer.flip();
+
+            int bytesWritten = fileChannel.write(buffer);  // Changed from 'channel' to 'fileChannel'
+            return new RuntimeScalar(bytesWritten);
+        } catch (IOException e) {
+            getGlobalVariable("main::!").set(e.getMessage());
+            return new RuntimeScalar(); // undef
         }
     }
 }

@@ -11,7 +11,7 @@ public interface IOHandle {
     int SEEK_SET = 0;  // Seek from beginning of file
     int SEEK_CUR = 1;  // Seek from current position
     int SEEK_END = 2;  // Seek from end of file
-    
+
     RuntimeScalar write(String string);
 
     RuntimeScalar close();
@@ -65,5 +65,14 @@ public interface IOHandle {
 
     default RuntimeScalar truncate(long length) {
         return RuntimeIO.handleIOError("Truncate operation is not supported.");
+    }
+
+    // System-level I/O operations
+    default RuntimeScalar sysread(int length) {
+        return RuntimeIO.handleIOError("sysread operation is not supported.");
+    }
+
+    default RuntimeScalar syswrite(String data) {
+        return RuntimeIO.handleIOError("syswrite operation is not supported.");
     }
 }

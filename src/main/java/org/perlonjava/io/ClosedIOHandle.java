@@ -69,4 +69,14 @@ public class ClosedIOHandle implements IOHandle {
     public RuntimeScalar truncate(long length) {
         return RuntimeIO.handleIOError("Cannot truncate a closed handle.");
     }
+
+    @Override
+    public RuntimeScalar sysread(int length) {
+        return RuntimeIO.handleIOError("Cannot sysread from a closed handle.");
+    }
+
+    @Override
+    public RuntimeScalar syswrite(String data) {
+        return RuntimeIO.handleIOError("Cannot syswrite to a closed handle.");
+    }
 }

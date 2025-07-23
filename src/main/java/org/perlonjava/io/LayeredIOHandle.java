@@ -471,4 +471,19 @@ public class LayeredIOHandle implements IOHandle {
     public RuntimeScalar truncate(long length) {
         return delegate.truncate(length);
     }
+
+    public String getCurrentLayers() {
+        // Return the currently applied layers as a string
+        StringBuilder layers = new StringBuilder();
+        for (IOLayer layer : this.activeLayers) {
+            if (layer instanceof CrlfLayer) {
+                layers.append(":crlf");
+            } else if (layer instanceof EncodingLayer) {
+                // You might need to store the encoding name
+                layers.append(":encoding");
+            }
+            // Add other layer types as needed
+        }
+        return layers.toString();
+    }
 }

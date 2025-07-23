@@ -286,6 +286,7 @@ The following areas are currently under active development to enhance the functi
   - File::Path
   - IO::Handle
   - XSLoader or Dynaloader for JVM
+  - Add operators: `sysread`, `syswrite`.
 
 ### v4.0.0 Milestone (Planned Release Date: 2026-05-10)
 

@@ -1,6 +1,9 @@
 package org.perlonjava.operators;
 
+import org.perlonjava.io.ClosedIOHandle;
 import org.perlonjava.io.IOHandle;
+import org.perlonjava.io.LayeredIOHandle;
+import org.perlonjava.io.ScalarBackedIO;
 import org.perlonjava.runtime.*;
 
 import java.io.IOException;
@@ -8,10 +11,10 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.util.Iterator;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
+import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 public class IOOperator {
     public static RuntimeScalar select(RuntimeList runtimeList, int ctx) {
@@ -337,5 +340,311 @@ public class IOOperator {
         }
 
         return fh.eof();
+    }
+
+    /**
+     * System-level read operation that bypasses PerlIO layers.
+     * sysread FILEHANDLE,SCALAR,LENGTH[,OFFSET]
+     *
+     * @param args Contains FILEHANDLE, TARGET, LENGTH and optional OFFSET
+     * @return Number of bytes read, 0 at EOF, or undef on error
+     */
+    public static RuntimeScalar sysread(RuntimeBase... args) {
+        if (args.length < 3) {
+            throw new PerlCompilerException("Not enough arguments for sysread");
+        }
+
+        RuntimeScalar fileHandle = args[0].scalar();
+
+        RuntimeIO fh = fileHandle.getRuntimeIO();
+
+        // Check if fh is null (invalid filehandle)
+        if (fh == null) {
+            getGlobalVariable("main::!").set("Bad file descriptor");
+            WarnDie.warn(
+                    new RuntimeScalar("sysread() on unopened filehandle"),
+                    new RuntimeScalar("\n")
+            );
+            return new RuntimeScalar(); // undef
+        }
+
+        if (fh instanceof TieHandle) {
+            throw new PerlCompilerException("sysread() is not supported on tied handles");
+        }
+
+        // Check for closed handle
+        if (fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
+            getGlobalVariable("main::!").set("Bad file descriptor");
+            WarnDie.warn(
+                    new RuntimeScalar("sysread() on closed filehandle"),
+                    new RuntimeScalar("\n")
+            );
+            return new RuntimeScalar(); // undef
+        }
+
+        // Check for :utf8 layer
+        if (hasUtf8Layer(fh)) {
+            throw new PerlCompilerException("sysread() is not supported on handles with :utf8 layer");
+        }
+
+        RuntimeScalar target = args[1].scalar().scalarDeref();
+        int length = args[2].scalar().getInt();
+        int offset = 0;
+
+        if (args.length > 3) {
+            offset = args[3].scalar().getInt();
+        }
+
+        // Check for in-memory handles (ScalarBackedIO)
+        IOHandle baseHandle = getBaseHandle(fh.ioHandle);
+
+        if (baseHandle instanceof ScalarBackedIO) {
+            getGlobalVariable("main::!").set("Invalid argument");
+            return new RuntimeScalar(); // undef
+        }
+
+        // Try to perform the system read
+        RuntimeScalar result;
+        try {
+            result = baseHandle.sysread(length);
+        } catch (Exception e) {
+            e.printStackTrace();
+            // This might happen with write-only handles
+            getGlobalVariable("main::!").set("Bad file descriptor");
+            WarnDie.warn(
+                    new RuntimeScalar("Filehandle opened only for output"),
+                    new RuntimeScalar("\n")
+            );
+            return new RuntimeScalar(); // undef
+        }
+
+        // Check if the result indicates an error (like from ClosedIOHandle)
+        if (!result.getDefinedBoolean()) {
+            String errorMsg = getGlobalVariable("main::!").toString();
+
+            if (errorMsg.toLowerCase().contains("closed")) {
+                WarnDie.warn(
+                        new RuntimeScalar("sysread() on closed filehandle"),
+                        new RuntimeScalar("\n")
+                );
+            } else if (errorMsg.toLowerCase().contains("output") || errorMsg.toLowerCase().contains("write")) {
+                WarnDie.warn(
+                        new RuntimeScalar("Filehandle opened only for output"),
+                        new RuntimeScalar("\n")
+                );
+            }
+            return new RuntimeScalar(); // undef
+        }
+
+        String data = result.toString();
+        int bytesRead = data.length();
+
+        if (bytesRead == 0) {
+            // EOF or zero-byte read - always clear the buffer when reading 0 bytes
+            target.set("");
+            return new RuntimeScalar(0);
+        }
+
+        // Handle offset
+        String currentValue = target.toString();
+        int currentLength = currentValue.length();
+
+        if (offset < 0) {
+            // Negative offset counts from end
+            offset = currentLength + offset;
+            if (offset < 0) {
+                offset = 0;
+            }
+        }
+
+        // Pad with nulls if needed
+        if (offset > currentLength) {
+            StringBuilder padded = new StringBuilder(currentValue);
+            while (padded.length() < offset) {
+                padded.append('\0');
+            }
+            currentValue = padded.toString();
+        }
+
+        // Place the data at the specified offset
+        StringBuilder newValue = new StringBuilder();
+        if (offset > 0) {
+            newValue.append(currentValue, 0, Math.min(offset, currentValue.length()));
+        }
+        newValue.append(data);
+
+        target.set(newValue.toString());
+        return new RuntimeScalar(bytesRead);
+    }
+
+    /**
+     * System-level write operation that bypasses PerlIO layers.
+     * syswrite FILEHANDLE,SCALAR[,LENGTH[,OFFSET]]
+     *
+     * @param args Contains FILEHANDLE, SCALAR, optional LENGTH and OFFSET
+     * @return Number of bytes written, or undef on error
+     */
+    public static RuntimeScalar syswrite(RuntimeBase... args) {
+        if (args.length < 2) {
+            throw new PerlCompilerException("Not enough arguments for syswrite");
+        }
+
+        RuntimeScalar fileHandle = args[0].scalar();
+        RuntimeIO fh = fileHandle.getRuntimeIO();
+
+        // Check if fh is null (invalid filehandle)
+        if (fh == null) {
+            getGlobalVariable("main::!").set("Bad file descriptor");
+            WarnDie.warn(
+                    new RuntimeScalar("syswrite() on unopened filehandle"),
+                    new RuntimeScalar("\n")
+            );
+            return new RuntimeScalar(); // undef
+        }
+
+        if (fh instanceof TieHandle) {
+            throw new PerlCompilerException("syswrite() is not supported on tied handles");
+        }
+
+        // Check for closed handle - but based on the debug output,
+        // closed handles still have their original ioHandle, not ClosedIOHandle
+        if (fh.ioHandle == null) {
+            getGlobalVariable("main::!").set("Bad file descriptor");
+            WarnDie.warn(
+                    new RuntimeScalar("syswrite() on closed filehandle"),
+                    new RuntimeScalar("\n")
+            );
+            return new RuntimeScalar(); // undef
+        }
+
+        // Check for :utf8 layer
+        if (hasUtf8Layer(fh)) {
+            throw new PerlCompilerException("syswrite() is not supported on handles with :utf8 layer");
+        }
+
+        String data = args[1].scalar().toString();
+        int length = data.length();
+        int offset = 0;
+
+        // Handle optional LENGTH parameter
+        if (args.length > 2) {
+            length = args[2].scalar().getInt();
+        }
+
+        // Handle optional OFFSET parameter
+        if (args.length > 3) {
+            offset = args[3].scalar().getInt();
+        }
+
+        // Handle negative offset
+        if (offset < 0) {
+            offset = data.length() + offset;
+            if (offset < 0) {
+                return RuntimeIO.handleIOError("Offset outside string");
+            }
+        }
+
+        // Check offset bounds
+        if (offset > data.length()) {
+            return RuntimeIO.handleIOError("Offset outside string");
+        }
+
+        // Calculate actual length to write
+        int availableLength = data.length() - offset;
+        if (length > availableLength) {
+            length = availableLength;
+        }
+
+        // Check for characters > 255
+        String toWrite = data.substring(offset, offset + length);
+        for (int i = 0; i < toWrite.length(); i++) {
+            if (toWrite.charAt(i) > 255) {
+                throw new PerlCompilerException("Wide character in syswrite");
+            }
+        }
+
+        // Check for in-memory handles (ScalarBackedIO)
+        IOHandle baseHandle = getBaseHandle(fh.ioHandle);
+        if (baseHandle instanceof ScalarBackedIO) {
+            getGlobalVariable("main::!").set("Invalid argument");
+            return new RuntimeScalar(); // undef
+        }
+
+        // Try to perform the system write
+        RuntimeScalar result;
+        try {
+            result = baseHandle.syswrite(toWrite);
+        } catch (Exception e) {
+            // Handle various exceptions
+            String exceptionType = e.getClass().getSimpleName();
+            String msg = e.getMessage();
+
+            if (e instanceof java.nio.channels.ClosedChannelException ||
+                    (msg != null && msg.contains("closed"))) {
+                // Closed channel
+                getGlobalVariable("main::!").set("Bad file descriptor");
+                WarnDie.warn(
+                        new RuntimeScalar("syswrite() on closed filehandle"),
+                        new RuntimeScalar("\n")
+                );
+                return new RuntimeScalar(); // undef
+            } else if (e instanceof java.nio.channels.NonWritableChannelException ||
+                    exceptionType.contains("NonWritableChannel")) {
+                // Read-only handle
+                getGlobalVariable("main::!").set("Bad file descriptor");
+                WarnDie.warn(
+                        new RuntimeScalar("Filehandle opened only for input"),
+                        new RuntimeScalar("\n")
+                );
+                return new RuntimeScalar(); // undef
+            } else {
+                // Other errors
+                getGlobalVariable("main::!").set(msg != null ? msg : "I/O error");
+                return new RuntimeScalar(); // undef
+            }
+        }
+
+        // Check if the result indicates an error
+        if (!result.getDefinedBoolean()) {
+            String errorMsg = getGlobalVariable("main::!").toString().toLowerCase();
+            if (errorMsg.contains("closed")) {
+                WarnDie.warn(
+                        new RuntimeScalar("syswrite() on closed filehandle"),
+                        new RuntimeScalar("\n")
+                );
+            } else if (errorMsg.contains("input") || errorMsg.contains("read")) {
+                WarnDie.warn(
+                        new RuntimeScalar("Filehandle opened only for input"),
+                        new RuntimeScalar("\n")
+                );
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Checks if the handle has a :utf8 layer.
+     */
+    private static boolean hasUtf8Layer(RuntimeIO fh) {
+        IOHandle handle = fh.ioHandle;
+        while (handle instanceof LayeredIOHandle layered) {
+            String layers = layered.getCurrentLayers();
+            if (layers.contains(":utf8") || layers.contains(":encoding")) {
+                return true;
+            }
+            handle = layered.getDelegate();
+        }
+        return false;
+    }
+
+    /**
+     * Gets the base handle by unwrapping all layers.
+     */
+    private static IOHandle getBaseHandle(IOHandle handle) {
+        while (handle instanceof LayeredIOHandle layered) {
+            handle = layered.getDelegate();
+        }
+        return handle;
     }
 }
