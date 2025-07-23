@@ -74,6 +74,26 @@ public class SubroutineParser {
         boolean hasParentheses = TokenUtils.peek(parser).text.equals("(");
         if (!subExists && !hasParentheses) {
             // If the subroutine does not exist and there are no parentheses, it is not a subroutine call
+
+            /*  It can be a call to a subroutine that is not defined yet:
+
+                `File::Path::rmtree` is a bareword (string) or a file handle
+
+                    $ perl -e ' print File::Path::rmtree '
+                    (no output)
+                
+                    $ perl -e ' print STDOUT File::Path::rmtree '
+                    File::Path::rmtree
+
+                `File::Path::rmtree $_` is a method call `$_->method`:
+
+                    $ perl -e ' File::Path::rmtree $_ '
+                    Can't call method "rmtree" on an undefined value at -e line 1.
+
+                    $ perl -e ' File::Path::rmtree this '
+                    Can't locate object method "rmtree" via package "File::Path" (perhaps you forgot to load "File::Path"?)
+             */
+
             return nameNode;
         }
 
