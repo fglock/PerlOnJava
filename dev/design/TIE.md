@@ -1,275 +1,331 @@
-# PerlOnJava Tie Implementation Specification
+# PerlOnJava Tie Implementation Documentation
 
 ## Overview
 
-This document specifies the implementation of Perl's `tie` mechanism in PerlOnJava, which allows variables to have their operations intercepted and handled by custom classes.
+PerlOnJava implements Perl's `tie` mechanism, which allows variables to have their operations intercepted and handled by custom Perl classes. The implementation supports tied scalars, arrays, hashes, and filehandles.
 
 ## Architecture
 
-### Scalar Type System
+### Type Constants
 
-The `PlScalar` class uses a type-based dispatch system where tied scalars are handled as a distinct type:
+The tie mechanism uses type constants to identify tied variables:
 
 ```java
-public static final int TIED = 7;  // New type constant
+// In RuntimeScalarType
+public static final int TIED_SCALAR = 9;  // Tied scalar variable
+
+// Internal array types in RuntimeArray
+public static final int PLAIN_ARRAY = 0;
+public static final int AUTOVIVIFY_ARRAY = 1;
+public static final int TIED_ARRAY = 2;
+
+// Internal hash types in RuntimeHash
+public static final int PLAIN_HASH = 0;
+public static final int AUTOVIVIFY_HASH = 1;
+public static final int TIED_HASH = 2;
 ```
 
-When a scalar is tied, its `type` field is set to `TIED` and its `value` field contains the tie handler object.
+### Implementation Strategy
 
-### Tie Handler Interface
+1. **Scalars**: Type field set to `TIED_SCALAR`, value contains `TiedVariableBase` instance
+2. **Arrays/Hashes**: Internal type field tracks tied state, use helper classes for delegation
+3. **Element Access**: Proxy objects (`RuntimeTiedArrayProxyEntry`, `RuntimeTiedHashProxyEntry`) provide lazy FETCH/STORE
+4. **Filehandles**: `TieHandle` wraps the tied handler object
 
-All tie handlers must implement the `TieHandler` interface:
+## Scalar Ties
+
+### TiedVariableBase
+
+Abstract base class for all tied scalar proxies:
 
 ```java
-public interface TieHandler {
-    PlObject FETCH();
-    void STORE(PlObject value);
-    void UNTIE();
-    boolean EXISTS();
-    void DELETE();
-    // Additional methods as needed
+public abstract class TiedVariableBase extends RuntimeScalar {
+    abstract void vivify();  // Populate lvalue with current value
+    abstract RuntimeScalar tiedStore(RuntimeScalar value);
+    abstract RuntimeScalar tiedFetch();
 }
 ```
 
-## Implementation Pattern
+### Implementation Pattern
 
-### Operation Delegation
-
-All scalar operations must include a `TIED` case in their type switch statements. The pattern is:
-
-1. **Read operations**: Call `FETCH()` on the tie handler, then delegate to the returned value
-2. **Write operations**: Call `STORE()` on the tie handler with the new value
-3. **Test operations**: May use `EXISTS()` or `FETCH()` depending on semantics
-
-### Example Implementation
+All scalar operations check for `TIED_SCALAR` type:
 
 ```java
-public boolean getBoolean() {
+public int getInt() {
     return switch (type) {
-        case INTEGER -> (int) value != 0;
-        case DOUBLE -> (double) value != 0.0;
-        case STRING -> {
-            String s = (String) value;
-            yield !s.isEmpty() && !s.equals("0");
-        }
-        case UNDEF -> false;
-        case VSTRING -> true;
-        case BOOLEAN -> (boolean) value;
-        case TIED -> ((TieHandler) value).FETCH().getBoolean();
-        case REFERENCE, ARRAYREFERENCE, HASHREFERENCE -> Overload.boolify(this).getBoolean();
-        default -> ((RuntimeScalarReference) value).getBooleanRef();
+        case INTEGER -> (int) value;
+        case DOUBLE -> (int) ((double) value);
+        case STRING -> NumberParser.parseNumber(this).getInt();
+        // ... other cases ...
+        case TIED_SCALAR -> this.tiedFetch().getInt();
+        default -> Overload.numify(this).getInt();
     };
 }
 
-public void set(PlObject newValue) {
+public RuntimeScalar set(RuntimeScalar value) {
+    if (this.type == TIED_SCALAR) {
+        return this.tiedStore(value);
+    }
+    // Normal assignment
+}
+```
+
+### Tied Scalar Proxies
+
+- **RuntimeTiedScalar**: Direct tied scalar implementation
+- **RuntimeTiedArrayProxyEntry**: Element access in tied arrays (`$tied_array[0]`)
+- **RuntimeTiedHashProxyEntry**: Element access in tied hashes (`$tied_hash{key}`)
+
+## Array Ties
+
+### TieArray Helper Class
+
+Static methods delegate to Perl tie handler methods:
+
+```java
+// Core operations
+tiedFetch(array, index)      // FETCH
+tiedStore(array, index, val)  // STORE
+tiedFetchSize(array)          // FETCHSIZE
+tiedStoreSize(array, size)    // STORESIZE
+tiedExists(array, index)      // EXISTS
+tiedDelete(array, index)      // DELETE
+tiedClear(array)              // CLEAR
+
+// Stack operations
+tiedPush(array, values)       // PUSH
+tiedPop(array)                // POP
+tiedShift(array)              // SHIFT
+tiedUnshift(array, values)    // UNSHIFT
+
+// Optional operations
+tiedExtend(array, size)       // EXTEND (if exists)
+tiedDestroy(array)            // DESTROY (if exists)
+tiedUntie(array)              // UNTIE (if exists)
+```
+
+### Array Type Dispatch
+
+All array operations check the internal type field:
+
+```java
+public static RuntimeScalar pop(RuntimeArray runtimeArray) {
+    return switch (runtimeArray.type) {
+        case PLAIN_ARRAY -> // normal pop operation
+        case AUTOVIVIFY_ARRAY -> // vivify then pop
+        case TIED_ARRAY -> TieArray.tiedPop(runtimeArray);
+    };
+}
+```
+
+### Element Access
+
+Array element access returns a proxy for tied arrays:
+
+```java
+public RuntimeScalar get(RuntimeScalar value) {
+    if (this.type == TIED_ARRAY) {
+        RuntimeScalar v = new RuntimeScalar();
+        v.type = TIED_SCALAR;
+        v.value = new RuntimeTiedArrayProxyEntry(this, value);
+        return v;
+    }
+    // Normal element access
+}
+```
+
+## Hash Ties
+
+### TieHash Helper Class
+
+Static methods delegate to Perl tie handler methods:
+
+```java
+// Core operations
+tiedFetch(hash, key)          // FETCH
+tiedStore(hash, key, value)   // STORE
+tiedExists(hash, key)         // EXISTS
+tiedDelete(hash, key)         // DELETE
+tiedClear(hash)               // CLEAR
+
+// Iteration
+tiedFirstKey(hash)            // FIRSTKEY
+tiedNextKey(hash, lastKey)    // NEXTKEY
+
+// Scalar context
+tiedScalar(hash)              // SCALAR
+
+// Optional operations
+tiedDestroy(hash)             // DESTROY (if exists)
+tiedUntie(hash)               // UNTIE (if exists)
+```
+
+### Hash Type Dispatch
+
+All hash operations check the internal type field:
+
+```java
+public void put(String key, RuntimeScalar value) {
     switch (type) {
-        case TIED -> ((TieHandler) value).STORE(newValue);
-        default -> {
-            // Regular assignment logic
-            this.value = newValue.value;
-            this.type = newValue.type;
-        }
+        case PLAIN_HASH -> elements.put(key, value);
+        case AUTOVIVIFY_HASH -> // vivify then put
+        case TIED_HASH -> TieHash.tiedStore(this, new RuntimeScalar(key), value);
+    };
+}
+```
+
+### Tied Hash Iteration
+
+Special iterator using FIRSTKEY/NEXTKEY protocol:
+
+```java
+private class RuntimeTiedHashIterator implements Iterator<RuntimeScalar> {
+    // Uses FIRSTKEY to start iteration
+    // Uses NEXTKEY to continue
+    // Alternates between returning keys and values
+}
+```
+
+## Filehandle Ties
+
+### TieHandle Class
+
+Implements tied filehandles with method delegation:
+
+```java
+public class TieHandle extends RuntimeIO {
+    private final RuntimeScalar self;  // The tied handler object
+    private final String tiedPackage;  // Package name for method lookup
+    
+    // Delegated operations
+    tiedPrint(handle, args)       // PRINT
+    tiedPrintf(handle, args)      // PRINTF
+    tiedReadline(handle, ctx)     // READLINE
+    tiedGetc(handle)              // GETC
+    tiedRead(handle, args)        // READ
+    tiedSeek(handle, args)        // SEEK
+    tiedTell(handle)              // TELL
+    tiedEof(handle, args)         // EOF
+    tiedClose(handle)             // CLOSE
+    tiedBinmode(handle, args)     // BINMODE
+    tiedFileno(handle)            // FILENO
+    tiedWrite(handle, ...)        // WRITE
+    tiedDestroy(handle)           // DESTROY (if exists)
+    tiedUntie(handle)             // UNTIE (if exists)
+}
+```
+
+## Method Resolution
+
+### Required vs Optional Methods
+
+Some tie methods are optional and only called if they exist:
+
+```java
+private RuntimeScalar tieCallIfExists(String methodName) {
+    // Check if method exists in class hierarchy
+    RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(
+        methodName, className, null, 0);
+    if (method == null) {
+        return RuntimeScalarCache.scalarUndef;
     }
+    // Method exists, call it
+    return RuntimeCode.apply(method, new RuntimeArray(self), SCALAR);
 }
 ```
 
-## Required Method Updates
+### Method Lookup
 
-All the following `PlScalar` methods must be updated to handle the `TIED` case:
+The system uses `InheritanceResolver.findMethodInHierarchy()` to locate tie handler methods in the Perl class hierarchy.
 
-### Read Operations
-- `getString()` → `((TieHandler) value).FETCH().getString()`
-- `getInt()` → `((TieHandler) value).FETCH().getInt()`
-- `getDouble()` → `((TieHandler) value).FETCH().getDouble()`
-- `getBoolean()` → `((TieHandler) value).FETCH().getBoolean()`
-- `getBlessId()` → `((TieHandler) value).FETCH().getBlessId()`
-- `getDefinedBoolean()` → `((TieHandler) value).FETCH().getDefinedBoolean()`
+## Performance Optimizations
 
-### Write Operations
-- `set(PlObject)` → `((TieHandler) value).STORE(newValue)`
-- `setInt(int)` → `((TieHandler) value).STORE(new PlInt(newValue))`
-- `setDouble(double)` → `((TieHandler) value).STORE(new PlDouble(newValue))`
-- `setString(String)` → `((TieHandler) value).STORE(new PlString(newValue))`
-- `setBoolean(boolean)` → `((TieHandler) value).STORE(new PlBoolean(newValue))`
+### Type-Based Dispatch
 
-### Special Operations
-- `length()` → `((TieHandler) value).FETCH().length()`
-- `chomp()` → Fetch, modify, then store back
-- `chop()` → Fetch, modify, then store back
-- Auto-increment/decrement operations → Fetch, modify, then store back
+- Switch statements compile to efficient tableswitches
+- Common types (INTEGER, DOUBLE, STRING) checked first
+- TIED_SCALAR case placed after common types
 
-## Tie/Untie Implementation
+### Lazy Element Access
 
-### tie() Method
+- Array/hash element access returns proxy objects
+- FETCH only called when value is actually read
+- STORE only called when value is actually written
+
+### Cached Method Resolution
+
+- `OverloadContext` caches overload state per blessed package
+- Method lookups cached in `InheritanceResolver`
+
+## Implementation Examples
+
+### Tied Scalar Usage
 
 ```java
-public void tie(TieHandler handler) {
-    this.type = TIED;
-    this.value = handler;
-    this.blessId = 0;  // Reset blessing
+// When Perl code does: tie $scalar, 'MyTieClass', @args
+RuntimeScalar scalar = new RuntimeScalar();
+scalar.type = TIED_SCALAR;
+scalar.value = new RuntimeTiedScalar(handler, "MyTieClass");
+
+// Operations are intercepted
+int value = scalar.getInt();        // Calls FETCH then getInt()
+scalar.set("hello");                // Calls STORE
+```
+
+### Tied Array Usage
+
+```java
+// When Perl code does: tie @array, 'MyTieClass', @args
+RuntimeArray array = new RuntimeArray();
+array.type = TIED_ARRAY;
+// Handler stored separately by TieOperators
+
+// Operations are delegated
+RuntimeScalar elem = array.get(0);  // Returns proxy
+elem.set("value");                  // Proxy calls STORE
+```
+
+### Tied Hash Usage
+
+```java
+// When Perl code does: tie %hash, 'MyTieClass', @args
+RuntimeHash hash = new RuntimeHash();
+hash.type = TIED_HASH;
+// Handler stored separately by TieOperators
+
+// Iteration uses FIRSTKEY/NEXTKEY
+for (RuntimeScalar item : hash) {
+    // Alternates between keys and values
 }
 ```
 
-### untie() Method
+## Thread Safety
 
-```java
-public void untie() {
-    if (this.type == TIED) {
-        TieHandler handler = (TieHandler) this.value;
-        handler.UNTIE();
-        
-        // Convert back to regular scalar with current value
-        PlObject currentValue = handler.FETCH();
-        this.type = currentValue.type;
-        this.value = currentValue.value;
-        this.blessId = currentValue.blessId;
-    }
-}
-```
-
-### tied() Method
-
-```java
-public TieHandler tied() {
-    return (this.type == TIED) ? (TieHandler) this.value : null;
-}
-```
-
-## Performance Considerations
-
-### Design Principles
-
-1. **Optimize for the common case**: Untied scalars should have zero performance overhead
-2. **Branch prediction friendly**: The `TIED` case will be rare, so place it appropriately in switch statements
-3. **Avoid virtual dispatch**: Use type-based switching rather than polymorphism for the fast path
-4. **Method splitting**: Keep tied scalar logic in separate methods when complex
-
-### Switch Statement Ordering
-
-Place the `TIED` case after common types but before expensive operations:
-
-```java
-return switch (type) {
-    case INTEGER -> /* fast path */;
-    case DOUBLE -> /* fast path */;
-    case STRING -> /* fast path */;
-    case UNDEF -> /* fast path */;
-    case BOOLEAN -> /* fast path */;
-    case TIED -> /* tied path */;
-    case REFERENCE -> /* expensive path */;
-    // ...
-};
-```
-
-## Array and Hash Tie Support
-
-### Array Tie Interface
-
-```java
-public interface ArrayTieHandler {
-    PlObject FETCH(int index);
-    void STORE(int index, PlObject value);
-    int FETCHSIZE();
-    void STORESIZE(int size);
-    boolean EXISTS(int index);
-    void DELETE(int index);
-    void CLEAR();
-    void PUSH(PlObject... values);
-    PlObject POP();
-    PlObject SHIFT();
-    void UNSHIFT(PlObject... values);
-    void UNTIE();
-}
-```
-
-### Hash Tie Interface
-
-```java
-public interface HashTieHandler {
-    PlObject FETCH(String key);
-    void STORE(String key, PlObject value);
-    boolean EXISTS(String key);
-    void DELETE(String key);
-    void CLEAR();
-    String FIRSTKEY();
-    String NEXTKEY(String key);
-    int SCALAR();
-    void UNTIE();
-}
-```
+- Tie operations are not thread-safe (matching Perl's model)
+- Each thread maintains separate tied variable state
+- Dynamic state save/restore uses thread-local stacks
 
 ## Error Handling
 
-### Tie Handler Exceptions
+- Invalid tie operations throw `PerlCompilerException`
+- Tie handler exceptions propagate to caller
+- Missing required methods cause runtime errors
+- Optional methods (UNTIE, DESTROY) fail silently if missing
 
-- Tie handler method calls should propagate exceptions to the caller
-- Invalid tie handler objects should throw `PlDieException`
-- Attempting to tie an already tied variable should untie first, then retie
+## Testing Considerations
 
-### Runtime Checks
+### Functional Tests
 
-```java
-public void tie(TieHandler handler) {
-    if (handler == null) {
-        throw new PlDieException("Tie handler cannot be null");
-    }
-    if (this.type == TIED) {
-        this.untie();  // Untie existing handler first
-    }
-    this.type = TIED;
-    this.value = handler;
-    this.blessId = 0;
-}
-```
-
-## Testing Requirements
-
-### Unit Tests
-
-1. **Basic tie/untie operations**
-2. **All scalar operations with tied scalars**
-3. **Performance regression tests**
-4. **Exception handling**
-5. **Multiple tie/untie cycles**
-6. **Interaction with blessing system**
+1. All scalar operations with tied scalars
+2. Array operations with tied arrays
+3. Hash operations and iteration with tied hashes
+4. Filehandle operations with tied handles
+5. Nested ties (tied element of tied container)
+6. Optional method presence/absence
 
 ### Performance Tests
 
-1. **Benchmark untied scalar operations** (should show no regression)
-2. **Benchmark tied scalar operations** (establish baseline)
-3. **Memory usage tests** (tied scalars should not leak)
-
-## Migration Notes
-
-### Backward Compatibility
-
-- All existing scalar operations continue to work unchanged
-- No performance impact on existing code
-- New tie functionality is purely additive
-
-### Implementation Phases
-
-1. **Phase 1**: Add `TIED` type constant and basic tie/untie methods
-2. **Phase 2**: Update all scalar read operations
-3. **Phase 3**: Update all scalar write operations  
-4. **Phase 4**: Add array and hash tie support
-5. **Phase 5**: Add comprehensive test suite
-
-## Example Usage
-
-```java
-// Create a tie handler
-TieHandler handler = new MyTieHandler();
-
-// Tie a scalar
-PlScalar scalar = new PlScalar();
-scalar.tie(handler);
-
-// Operations are now intercepted
-scalar.set(new PlString("hello"));  // Calls handler.STORE()
-String value = scalar.getString();  // Calls handler.FETCH().getString()
-
-// Untie the scalar
-scalar.untie();  // Back to normal scalar behavior
-```
-
+1. Untied variable operations (no regression)
+2. Tied variable operation overhead
+3. Method resolution caching effectiveness
+4. Memory usage with many tied variables
