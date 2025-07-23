@@ -509,6 +509,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **UNIVERSAL**: `isa`, `can`, `DOES`, `VERSION` are implemented. `isa` operator is implemented.
 - ✅  **Symbol**: `qualify` and `qualify_to_ref` are implemented.
 - ✅  **Data::Dumper**: use the same version as Perl.
+- ✅  **Encode** module.
 - ✅  **Exporter**: `@EXPORT_OK`, `@EXPORT`, `%EXPORT_TAGS` are implemented.
 - ✅  **Scalar::Util**: `blessed`, `reftype`, `set_prototype` are implemented.
 - ✅  **Internals**: `Internals::SvREADONLY` is implemented as a no-op.
