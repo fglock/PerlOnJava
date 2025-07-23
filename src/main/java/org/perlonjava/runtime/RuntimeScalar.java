@@ -555,18 +555,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return this.arrayDeref().get(index);
         }
 
-        switch (type) {
-            case UNDEF:
+        return switch (type) {
+            case UNDEF -> {
                 // array autovivification
                 type = RuntimeScalarType.ARRAYREFERENCE;
                 value = new RuntimeArray();
-            case ARRAYREFERENCE:
-                return ((RuntimeArray) value).get(index.getInt());
-            case TIED_SCALAR:
-                return tiedFetch().arrayDerefGet(index);
-            default:
-                throw new PerlCompilerException("Not an ARRAY reference");
-        }
+                yield ((RuntimeArray) value).get(index.getInt());
+            }
+            case ARRAYREFERENCE -> ((RuntimeArray) value).get(index.getInt());
+            case TIED_SCALAR -> tiedFetch().arrayDerefGet(index);
+            default -> throw new PerlCompilerException("Not an ARRAY reference");
+        };
     }
 
     // Method to implement `delete $v->[10]`
