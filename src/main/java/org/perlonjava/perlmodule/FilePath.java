@@ -26,10 +26,10 @@ public class FilePath extends PerlModuleBase {
         FilePath filePath = new FilePath();
         filePath.initializeExporter();
         try {
-            filePath.registerMethod("make_path", "@");
-            filePath.registerMethod("remove_tree", "@");
-            filePath.registerMethod("mkpath", "@");
-            filePath.registerMethod("rmtree", "@");
+            filePath.registerMethod("make_path", null);
+            filePath.registerMethod("remove_tree", null);
+            filePath.registerMethod("mkpath", null);
+            filePath.registerMethod("rmtree", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing File::Path method: " + e.getMessage());
         }
