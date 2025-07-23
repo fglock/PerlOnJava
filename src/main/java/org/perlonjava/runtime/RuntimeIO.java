@@ -334,6 +334,20 @@ public class RuntimeIO implements RuntimeScalarReference {
         // Get the referenced scalar
         RuntimeScalar targetScalar = (RuntimeScalar) scalarRef.value;
 
+        // Parse I/O layers from mode string
+        String ioLayers = "";
+        int colonIndex = mode.indexOf(':');
+        if (colonIndex != -1) {
+            // Extract I/O layers from mode string
+            ioLayers = mode.substring(colonIndex);
+            mode = mode.substring(0, colonIndex);
+
+            // If empty fileMode, default to read mode
+            if (mode.isEmpty()) {
+                mode = "<";
+            }
+        }
+
         // Create ScalarBackedIO
         ScalarBackedIO scalarIO = new ScalarBackedIO(targetScalar);
 
@@ -351,6 +365,9 @@ public class RuntimeIO implements RuntimeScalarReference {
 
         fh.ioHandle = scalarIO;
         addHandle(fh.ioHandle);
+
+        // Apply any I/O layers
+        fh.binmode(ioLayers);
 
         return fh;
     }

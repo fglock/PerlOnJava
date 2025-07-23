@@ -143,5 +143,111 @@ subtest 'Read-write mode' => sub {
     is($all, "OriXXXal", "Read-write mode works correctly");
 };
 
+subtest 'UTF-8 encoding layer' => sub {
+    my $var = '';
+    open(my $memory, ">:utf8", \$var) or die "Can't open memory file with utf8 layer: $!";
+    print $memory "Hello ";
+    print $memory "\x{263A}"; # Unicode smiley face
+    print $memory " World";
+    close $memory;
+
+    # Check that UTF-8 encoding was applied
+    ok(length($var) > length("Hello  World"), "UTF-8 encoded string is longer than character count");
+
+    # Read it back with UTF-8 layer
+    open(my $read, "<:utf8", \$var) or die "Can't open for reading with utf8: $!";
+    my $content = <$read>;
+    close $read;
+
+    like($content, qr/Hello .* World/, "Content contains expected pattern");
+};
+
+subtest 'CRLF layer for writing' => sub {
+    my $var = '';
+    open(my $memory, ">:crlf", \$var) or die "Can't open memory file with crlf layer: $!";
+    print $memory "Line 1\n";
+    print $memory "Line 2\n";
+    close $memory;
+
+    # On Windows or with :crlf, \n should become \r\n
+    like($var, qr/Line 1\r\n/, "First line has CRLF ending");
+    like($var, qr/Line 2\r\n/, "Second line has CRLF ending");
+};
+
+subtest 'CRLF layer for reading' => sub {
+    my $var = "Line 1\r\nLine 2\r\n";
+    open(my $memory, "<:crlf", \$var) or die "Can't open memory file for reading with crlf: $!";
+
+    my $line1 = <$memory>;
+    is($line1, "Line 1\n", "CRLF converted to LF on read");
+
+    my $line2 = <$memory>;
+    is($line2, "Line 2\n", "Second line CRLF converted to LF");
+
+    close $memory;
+};
+
+subtest 'Raw/bytes layer' => sub {
+    my $var = '';
+    open(my $memory, ">:raw", \$var) or die "Can't open memory file with raw layer: $!";
+
+    # Write raw bytes
+    print $memory "\x00\x01\x02\xFF\n";
+    close $memory;
+
+    is(length($var), 5, "Raw mode preserves all bytes including newline");
+    is(ord(substr($var, 4, 1)), 10, "Newline is LF (10) not CRLF");
+};
+
+subtest 'Stacked layers' => sub {
+    my $var = '';
+    open(my $memory, ">:utf8:crlf", \$var) or die "Can't open with stacked layers: $!";
+
+    print $memory "Unicode: \x{263A}\n";
+    close $memory;
+
+    # Should have both UTF-8 encoding and CRLF conversion
+    ok(length($var) > length("Unicode: X\r\n"), "UTF-8 encoding applied");
+    like($var, qr/\r\n$/, "CRLF ending applied");
+};
+
+subtest 'Layer with read-write mode' => sub {
+    # Start with ASCII content to avoid Unicode string issues
+    my $var = "Original text\n";
+    open(my $memory, "+<", \$var) or die "Can't open for read/write: $!";
+
+    # Read the content
+    my $line = <$memory>;
+    is($line, "Original text\n", "Read content");
+
+    # Seek back and write
+    seek($memory, 0, 0);
+    print $memory "Modified text\n";
+    close $memory;
+
+    is($var, "Modified text\n", "Read-write mode works correctly");
+};
+
+subtest 'UTF-8 with read-write mode' => sub {
+    # For read-write with UTF-8, start with encoded bytes
+    use Encode;
+    my $var = encode('UTF-8', "Original \x{263A}\n");
+
+    open(my $memory, "+<:utf8", \$var) or die "Can't open for read/write with utf8: $!";
+
+    # Read should decode UTF-8
+    my $line = <$memory>;
+    like($line, qr/Original.*\n/, "Read UTF-8 content");
+
+    # Seek back and write
+    seek($memory, 0, 0);
+    print $memory "Modified \x{2665}\n"; # Heart symbol
+    close $memory;
+
+    # Verify UTF-8 encoding was applied to write
+    my $decoded = decode('UTF-8', $var);
+    like($decoded, qr/Modified.*\n/, "UTF-8 content written correctly");
+};
+
 done_testing();
 
