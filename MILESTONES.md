@@ -275,6 +275,7 @@ The following areas are currently under active development to enhance the functi
 - **v3.2.0**: Next minor version
   - Add `tie`, `tied`, `untie` operators.
   - Add all `tie` types: scalar, array, hash, and handle.
+  - Add operators: `sysread`, `syswrite`.
   - Bugfix: methods can be called in all blessed reference types.
   - Bugfix: more robust `sprintf` formatting.
   - Planned release date: 2025-12-10.
@@ -286,7 +287,6 @@ The following areas are currently under active development to enhance the functi
   - File::Path
   - IO::Handle
   - XSLoader or Dynaloader for JVM
-  - Add operators: `sysread`, `syswrite`.
 
 ### v4.0.0 Milestone (Planned Release Date: 2026-05-10)
 
