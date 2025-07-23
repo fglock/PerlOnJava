@@ -743,6 +743,11 @@ public class RuntimeIO implements RuntimeScalarReference {
      */
     public RuntimeScalar write(String data) {
         needFlush = true;
+        if (lastAccesseddHandle != this && lastAccesseddHandle.needFlush) {
+            // Synchronize terminal output for stdout and stderr
+            lastAccesseddHandle.flush();
+        }
+        lastAccesseddHandle = this;
         return ioHandle.write(data);
     }
 
