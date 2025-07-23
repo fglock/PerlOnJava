@@ -7,7 +7,8 @@ import org.perlonjava.regex.RuntimeRegex;
 import java.util.*;
 
 import static org.perlonjava.runtime.RuntimeArray.*;
-import static org.perlonjava.runtime.RuntimeScalarCache.*;
+import static org.perlonjava.runtime.RuntimeScalarCache.getScalarBoolean;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 /**
@@ -198,7 +199,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public RuntimeScalar tiedStore(RuntimeScalar v) {
         return ((TiedVariableBase) value).tiedStore(v);
-    };
+    }
 
     /**
      * Fetches the current value from the tied variable.
@@ -349,7 +350,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             case TIED_ARRAY -> TieArray.tiedPush(runtimeArray, this);
             default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
-        };
+        }
     }
 
     /**
@@ -482,90 +483,22 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Method to implement `$v->{key}`
     public RuntimeScalar hashDerefGet(RuntimeScalar index) {
-        // Check if object is eligible for overloading
-        int blessId = this.blessedId();
-        if (blessId != 0) {
-            return this.hashDeref().get(index);
-        }
-
-        return switch (type) {
-            case UNDEF -> {
-                // hash autovivification
-                type = RuntimeScalarType.HASHREFERENCE;
-                value = new RuntimeHash();
-                yield ((RuntimeHash) value).get(index.toString());
-            }
-            case HASHREFERENCE -> ((RuntimeHash) value).get(index.toString());
-            case STRING -> throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref");
-            case GLOB -> ((RuntimeGlob) value).hashDerefGet(index);
-            case TIED_SCALAR -> tiedFetch().hashDerefGet(index);
-            default -> throw new PerlCompilerException("Not a HASH reference");
-        };
+        return this.hashDeref().get(index);
     }
 
     // Method to implement `delete $v->{key}`
     public RuntimeScalar hashDerefDelete(RuntimeScalar index) {
-        // Check if object is eligible for overloading
-        int blessId = this.blessedId();
-        if (blessId != 0) {
-            return this.hashDeref().delete(index);
-        }
-
-        return switch (type) {
-            case UNDEF -> {
-                // hash autovivification
-                type = RuntimeScalarType.HASHREFERENCE;
-                value = new RuntimeHash();
-                yield ((RuntimeHash) value).delete(index);
-            }
-            case HASHREFERENCE -> ((RuntimeHash) value).delete(index);
-            case STRING -> throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref");
-            case TIED_SCALAR -> tiedFetch().hashDerefDelete(index);
-            default -> throw new PerlCompilerException("Not a HASH reference");
-        };
+        return this.hashDeref().delete(index);
     }
 
     // Method to implement `exists $v->{key}`
     public RuntimeScalar hashDerefExists(RuntimeScalar index) {
-        // Check if object is eligible for overloading
-        int blessId = this.blessedId();
-        if (blessId != 0) {
-            return this.hashDeref().exists(index);
-        }
-
-        return switch (type) {
-            case UNDEF -> {
-                // hash autovivification
-                type = RuntimeScalarType.HASHREFERENCE;
-                value = new RuntimeHash();
-                yield ((RuntimeHash) value).exists(index);
-            }
-            case HASHREFERENCE -> ((RuntimeHash) value).exists(index);
-            case STRING -> throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref");
-            case TIED_SCALAR -> tiedFetch().hashDerefExists(index);
-            default -> throw new PerlCompilerException("Not a HASH reference");
-        };
+        return this.hashDeref().exists(index);
     }
 
     // Method to implement `$v->[10]`
     public RuntimeScalar arrayDerefGet(RuntimeScalar index) {
-        // Check if object is eligible for overloading
-        int blessId = this.blessedId();
-        if (blessId != 0) {
-            return this.arrayDeref().get(index);
-        }
-
-        return switch (type) {
-            case UNDEF -> {
-                // array autovivification
-                type = RuntimeScalarType.ARRAYREFERENCE;
-                value = new RuntimeArray();
-                yield ((RuntimeArray) value).get(index.getInt());
-            }
-            case ARRAYREFERENCE -> ((RuntimeArray) value).get(index.getInt());
-            case TIED_SCALAR -> tiedFetch().arrayDerefGet(index);
-            default -> throw new PerlCompilerException("Not an ARRAY reference");
-        };
+        return this.arrayDeref().get(index);
     }
 
     // Method to implement `delete $v->[10]`
