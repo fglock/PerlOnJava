@@ -194,4 +194,60 @@ public class ScalarBackedIO implements IOHandle {
     public RuntimeScalar accept() {
         throw new PerlCompilerException("Can't accept on in-memory scalar handle");
     }
+
+    @Override
+    public RuntimeScalar sysread(int length) {
+        String content = backingScalar.toString();
+        byte[] bytes = content.getBytes(StandardCharsets.ISO_8859_1);
+
+        int available = bytes.length - position;
+        if (available <= 0) {
+            // EOF
+            return new RuntimeScalar("");
+        }
+
+        int toRead = Math.min(length, available);
+
+        // Convert bytes to string representation
+        StringBuilder result = new StringBuilder(toRead);
+        for (int i = 0; i < toRead; i++) {
+            result.append((char) (bytes[position + i] & 0xFF));
+        }
+
+        position += toRead;
+        return new RuntimeScalar(result.toString());
+    }
+
+    @Override
+    public RuntimeScalar syswrite(String data) {
+        // Get current content as bytes
+        String content = backingScalar.toString();
+        byte[] currentBytes = content.getBytes(StandardCharsets.ISO_8859_1);
+
+        // Convert data to bytes
+        byte[] dataBytes = new byte[data.length()];
+        for (int i = 0; i < data.length(); i++) {
+            dataBytes[i] = (byte) (data.charAt(i) & 0xFF);
+        }
+
+        // Calculate new size
+        int newSize = Math.max(currentBytes.length, position + dataBytes.length);
+        byte[] newBytes = new byte[newSize];
+
+        // Copy existing data
+        System.arraycopy(currentBytes, 0, newBytes, 0, currentBytes.length);
+
+        // Write new data at position
+        System.arraycopy(dataBytes, 0, newBytes, position, dataBytes.length);
+
+        // Convert back to string and update scalar
+        StringBuilder newContent = new StringBuilder(newSize);
+        for (byte b : newBytes) {
+            newContent.append((char) (b & 0xFF));
+        }
+        backingScalar.set(newContent.toString());
+
+        position += dataBytes.length;
+        return new RuntimeScalar(dataBytes.length);
+    }
 }

@@ -312,4 +312,28 @@ public class PipeInputChannel implements IOHandle {
     public boolean isProcessAlive() {
         return process != null && process.isAlive();
     }
+
+    @Override
+    public RuntimeScalar sysread(int length) {
+        try {
+            byte[] buffer = new byte[length];
+            int bytesRead = inputStream.read(buffer);
+
+            if (bytesRead == -1) {
+                // EOF
+                return new RuntimeScalar("");
+            }
+
+            // Convert bytes to string representation
+            StringBuilder result = new StringBuilder(bytesRead);
+            for (int i = 0; i < bytesRead; i++) {
+                result.append((char) (buffer[i] & 0xFF));
+            }
+
+            return new RuntimeScalar(result.toString());
+        } catch (IOException e) {
+            getGlobalVariable("main::!").set(e.getMessage());
+            return new RuntimeScalar(); // undef
+        }
+    }
 }
