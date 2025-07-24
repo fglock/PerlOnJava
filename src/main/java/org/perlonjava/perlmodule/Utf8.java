@@ -37,7 +37,7 @@ public class Utf8 extends PerlModuleBase {
             utf8.registerMethod("import", "useUtf8", ";$");
             utf8.registerMethod("unimport", "noUtf8", ";$");
             utf8.registerMethod("upgrade", "$");
-            utf8.registerMethod("downgrade", "$$");
+            utf8.registerMethod("downgrade", "$;$");
             utf8.registerMethod("encode", "$");
             utf8.registerMethod("decode", "$");
             utf8.registerMethod("native_to_unicode", "nativeToUnicode", "$");
