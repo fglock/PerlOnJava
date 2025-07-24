@@ -73,6 +73,7 @@
                 <directory>src/main/perl</directory>
                 <includes>
                     <include>**/*.pm</include>
+                    <include>**/*.pl</include>
                 </includes>
             </resource>
             <resource>
