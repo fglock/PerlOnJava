@@ -93,8 +93,8 @@ public class OperatorParser {
                 paren = true;
             }
 
-            parser.parsingForLoopVariable = true;
-            Node var = ParsePrimary.parsePrimary(parser);
+            parser.parsingForLoopVariable = true;  // Parentheses are allowed after a variable
+            Node var = parser.parseExpression(parser.getPrecedence(","));
             parser.parsingForLoopVariable = false;
             TokenUtils.consume(parser, OPERATOR, ",");
             operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
