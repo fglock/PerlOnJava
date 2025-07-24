@@ -89,12 +89,13 @@ public class EmitOperatorNode {
             case "$#" -> EmitOperator.handleArrayUnaryBuiltin(emitterVisitor,
                     new OperatorNode("$#", new OperatorNode("@", node.operand, node.tokenIndex), node.tokenIndex),
                     "indexLastElem");
+            case "system", "exec" -> EmitOperator.handleSystemBuiltin(emitterVisitor, node);
 
             // Error handling
             case "die", "warn" -> EmitOperator.handleDieBuiltin(emitterVisitor, node);
 
             // Array operations
-            case "reverse", "unlink", "system", "exec", "fork" -> EmitOperator.handleReverseBuiltin(emitterVisitor, node);
+            case "reverse", "unlink", "fork" -> EmitOperator.handleReverseBuiltin(emitterVisitor, node);
             case "splice" -> EmitOperator.handleSpliceBuiltin(emitterVisitor, node);
             case "pop", "shift" -> EmitOperator.handleArrayUnaryBuiltin(emitterVisitor, node, node.operator);
 

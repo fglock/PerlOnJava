@@ -47,11 +47,12 @@ public class SystemOperator {
      * Executes a system command and returns the exit status.
      * This implements Perl's system() function.
      *
-     * @param args The command and arguments as RuntimeList.
+     * @param args      The command and arguments as RuntimeList.
+     * @param hasHandle
      * @return The exit status as a RuntimeScalar.
      * @throws PerlCompilerException if an error occurs during command execution.
      */
-    public static RuntimeScalar system(RuntimeList args, int ctx) {
+    public static RuntimeScalar system(RuntimeList args, boolean hasHandle, int ctx) {
         List<RuntimeBase> elements = args.elements;
         if (elements.isEmpty()) {
             throw new PerlCompilerException("system: no command specified");
@@ -59,7 +60,7 @@ public class SystemOperator {
 
         CommandResult result;
 
-        if (elements.size() == 1) {
+        if (!hasHandle && elements.size() == 1) {
             // Single argument - check for shell metacharacters
             String command = elements.getFirst().toString();
             if (SHELL_METACHARACTERS.matcher(command).find()) {
@@ -285,7 +286,7 @@ public class SystemOperator {
      * @param args The command and arguments as RuntimeList.
      * @throws PerlCompilerException if an error occurs during command execution.
      */
-    public static RuntimeScalar exec(RuntimeList args, int ctx) {
+    public static RuntimeScalar exec(RuntimeList args, boolean hasHandle, int ctx) {
         List<RuntimeBase> elements = args.elements;
         if (elements.isEmpty()) {
             throw new PerlCompilerException("exec: no command specified");
@@ -296,7 +297,7 @@ public class SystemOperator {
 
             int exitCode;
 
-            if (elements.size() == 1) {
+            if (!hasHandle && elements.size() == 1) {
                 // Single argument - check for shell metacharacters
                 String command = elements.getFirst().toString();
                 if (SHELL_METACHARACTERS.matcher(command).find()) {
