@@ -35,6 +35,17 @@ public class StatementResolver {
                 case "CHECK", "INIT", "UNITCHECK", "BEGIN", "END" ->
                         SpecialBlockParser.parseSpecialBlock(parser);
 
+                case "AUTOLOAD", "DESTROY" -> {
+                    parser.tokenIndex++;
+                    if (peek(parser).text.equals("{")) {
+                        parser.tokenIndex = currentIndex;  // point to the subroutine name
+                        yield SubroutineParser.parseSubroutineDefinition(parser, true, "our");
+                    }
+                    // Otherwise backtrack
+                    parser.tokenIndex = currentIndex;
+                    yield null;
+                }
+
                 case "if", "unless" ->
                         StatementParser.parseIfStatement(parser);
 
