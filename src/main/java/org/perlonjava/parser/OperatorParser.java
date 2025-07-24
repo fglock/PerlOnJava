@@ -10,10 +10,10 @@ import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.List;
 
-import static org.perlonjava.lexer.LexerTokenType.IDENTIFIER;
-import static org.perlonjava.lexer.LexerTokenType.OPERATOR;
+import static org.perlonjava.lexer.LexerTokenType.*;
 import static org.perlonjava.parser.NumberParser.parseNumber;
 import static org.perlonjava.parser.ParserNodeUtils.atUnderscore;
+import static org.perlonjava.parser.TokenUtils.consume;
 import static org.perlonjava.parser.TokenUtils.peek;
 
 /**
@@ -461,5 +461,185 @@ public class OperatorParser {
                     "Wrong number of arguments for select: expected 0, 1, or 4, got " + argCount,
                     parser.ctx.errorUtil);
         }
+    }
+
+    static OperatorNode parseKeys(Parser parser, LexerToken token, int currentIndex) {
+        Node operand;
+        // Handle operators with a single operand
+        operand = ParsePrimary.parsePrimary(parser);
+        if (operand instanceof ListNode listNode) {
+            if (listNode.elements.size() != 1) {
+                throw new PerlCompilerException(parser.tokenIndex, "Too many arguments for " + token.text, parser.ctx.errorUtil);
+            }
+            operand = listNode.elements.getFirst();
+        }
+        return new OperatorNode(token.text, operand, currentIndex);
+    }
+
+    static OperatorNode parseDelete(Parser parser, LexerToken token, int currentIndex) {
+        Node operand;
+        // Handle 'delete' and 'exists' operators with special parsing context
+        parser.parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
+        operand = ListParser.parseZeroOrOneList(parser, 1);
+        parser.parsingTakeReference = false;
+        return new OperatorNode(token.text, operand, currentIndex);
+    }
+
+    static OperatorNode parseUnpack(Parser parser, LexerToken token) {
+        Node operand;
+        // Handle 'unpack' operator with one mandatory and one optional argument
+        operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
+        if (((ListNode) operand).elements.size() == 1) {
+            // Create `$_` variable if only one argument is provided
+            ((ListNode) operand).elements.add(
+                    ParserNodeUtils.scalarUnderscore(parser)
+            );
+        }
+        return new OperatorNode(token.text, operand, parser.tokenIndex);
+    }
+
+    static BinaryOperatorNode parseBless(Parser parser, int currentIndex) {
+        // Handle 'bless' operator with special handling for class name
+        ListNode operand1 = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
+        Node ref = operand1.elements.get(0);
+        Node className;
+        if (operand1.elements.size() > 1) {
+            className = operand1.elements.get(1);
+            if (className instanceof StringNode && ((StringNode) className).value.isEmpty()) {
+                // default to main package if empty class name is provided
+                className = new StringNode("main", currentIndex);
+            }
+        } else {
+            // default to current package if no class name is provided
+            className = new StringNode(parser.ctx.symbolTable.getCurrentPackage(), currentIndex);
+        }
+        return new BinaryOperatorNode("bless", ref, className, currentIndex);
+    }
+
+    static OperatorNode parseDefined(Parser parser, LexerToken token, int currentIndex) {
+        Node operand;
+        // Handle 'defined' operator with special parsing context
+        parser.parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
+        operand = ListParser.parseZeroOrOneList(parser, 0);
+        parser.parsingTakeReference = false;
+        if (((ListNode) operand).elements.isEmpty()) {
+            // `defined` without arguments means `defined $_`
+            ((ListNode) operand).elements.add(
+                    ParserNodeUtils.scalarUnderscore(parser)
+            );
+        }
+        return new OperatorNode(token.text, operand, currentIndex);
+    }
+
+    static Node parseSpecialQuoted(Parser parser, LexerToken token, int startIndex) {
+        // Handle special-quoted domain-specific arguments
+        String operator = token.text;
+        // Skip whitespace, but not `#`
+        parser.tokenIndex = startIndex;
+        consume(parser);
+        while (parser.tokenIndex < parser.tokens.size()) {
+            LexerToken token1 = parser.tokens.get(parser.tokenIndex);
+            if (token1.type == WHITESPACE || token1.type == NEWLINE) {
+                parser.tokenIndex++;
+            } else {
+                break;
+            }
+        }
+        return StringParser.parseRawString(parser, token.text);
+    }
+
+    static OperatorNode parseNot(Parser parser, LexerToken token, int currentIndex) {
+        Node operand;
+        // Handle 'not' keyword as a unary operator with an operand
+        if (TokenUtils.peek(parser).text.equals("(")) {
+            TokenUtils.consume(parser);
+            if (TokenUtils.peek(parser).text.equals(")")) {
+                operand = new OperatorNode("undef", null, currentIndex);
+            } else {
+                operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
+            }
+            TokenUtils.consume(parser, OPERATOR, ")");
+            return new OperatorNode(token.text, operand, currentIndex);
+        }
+        operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
+        return new OperatorNode(token.text, operand, currentIndex);
+    }
+
+    static OperatorNode parseStat(Parser parser, LexerToken token, int currentIndex) {
+        // Handle 'stat' and 'lstat' operators with special handling for `stat _`
+        LexerToken nextToken = peek(parser);
+        boolean paren = false;
+        if (nextToken.text.equals("(")) {
+            TokenUtils.consume(parser);
+            nextToken = peek(parser);
+            paren = true;
+        }
+        if (nextToken.text.equals("_")) {
+            // Handle `stat _`
+            TokenUtils.consume(parser);
+            if (paren) {
+                TokenUtils.consume(parser, OPERATOR, ")");
+            }
+            return new OperatorNode(token.text,
+                    new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
+        }
+        parser.tokenIndex = currentIndex;
+        return parseOperatorWithOneOptionalArgument(parser, token);
+    }
+
+    static BinaryOperatorNode parseReadline(Parser parser, LexerToken token, int currentIndex) {
+        Node operand;
+        // Handle file-related operators with special handling for default handles
+        operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
+        Node handle;
+        if (((ListNode) operand).elements.isEmpty()) {
+            String defaultHandle = switch (token.text) {
+                case "readline" -> "main::ARGV";
+                case "eof" -> "main::STDIN";
+                case "tell" -> "main::^LAST_FH";
+                case "getc" -> "main::STDIN";
+                case "open", "fileno" ->
+                        throw new PerlCompilerException(parser.tokenIndex, "Not enough arguments for " + token.text, parser.ctx.errorUtil);
+                case "close" -> "main::STDIN";    // XXX TODO use currently selected file handle
+                default -> throw new PerlCompilerException(parser.tokenIndex, "Unexpected value: " + token.text, parser.ctx.errorUtil);
+            };
+            handle = new IdentifierNode(defaultHandle, currentIndex);
+        } else {
+            handle = ((ListNode) operand).elements.removeFirst();
+        }
+        return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
+    }
+
+    static BinaryOperatorNode parseSplit(Parser parser, LexerToken token, int currentIndex) {
+        Node operand;
+        // Handle 'split' operator with special handling for separator
+        operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, true);
+        Node separator =
+                ((ListNode) operand).elements.isEmpty()
+                        ? new StringNode(" ", currentIndex)
+                        : ((ListNode) operand).elements.removeFirst();
+        if (separator instanceof OperatorNode) {
+            if (((OperatorNode) separator).operator.equals("matchRegex")) {
+                ((OperatorNode) separator).operator = "quoteRegex";
+            }
+        }
+        return new BinaryOperatorNode(token.text, separator, operand, currentIndex);
+    }
+
+    static BinaryOperatorNode parseJoin(Parser parser, LexerToken token, String operatorName, int currentIndex) {
+        Node separator;
+        Node operand;
+        // Handle operators with a RuntimeList operand
+        operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
+        separator = ((ListNode) operand).elements.removeFirst();
+
+        if (token.text.equals("push") || token.text.equals("unshift")) {
+            // assert that separator is an array
+            if (!(separator instanceof OperatorNode operatorNode && operatorNode.operator.equals("@"))) {
+                parser.throwError("Type of arg 1 to " + operatorName + " must be array (not constant item)");
+            }
+        }
+
+        return new BinaryOperatorNode(token.text, separator, operand, currentIndex);
     }
 }
