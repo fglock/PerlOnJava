@@ -57,7 +57,11 @@ public class CoreOperatorResolver {
                 // Handle 'not' keyword as a unary operator with an operand
                 if (TokenUtils.peek(parser).text.equals("(")) {
                     TokenUtils.consume(parser);
-                    operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
+                    if (TokenUtils.peek(parser).text.equals(")")) {
+                        operand = new OperatorNode("undef", null, currentIndex);
+                    } else {
+                        operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
+                    }
                     TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
                     return new OperatorNode(token.text, operand, currentIndex);
                 }
