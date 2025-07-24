@@ -8,6 +8,7 @@ import org.perlonjava.runtime.PerlCompilerException;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.perlonjava.parser.TokenUtils.consume;
 import static org.perlonjava.parser.TokenUtils.peek;
 
 /**
@@ -90,7 +91,7 @@ public class ParseInfix {
                         return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
                     case "[":
                         TokenUtils.consume(parser);
-                        right = new ArrayLiteralNode(ListParser.parseList(parser, "]", 1), parser.tokenIndex);
+                        right = new ArrayLiteralNode(parseArraySubscript(parser), parser.tokenIndex);
                         return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
                     case "@*":
                         TokenUtils.consume(parser);
@@ -155,7 +156,7 @@ public class ParseInfix {
                 return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
             case "[":
                 // Handle array subscripts
-                right = new ArrayLiteralNode(ListParser.parseList(parser, "]", 1), parser.tokenIndex);
+                right = new ArrayLiteralNode(parseArraySubscript(parser), parser.tokenIndex);
                 return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
             case "--":
             case "++":
@@ -164,6 +165,26 @@ public class ParseInfix {
             default:
                 throw new PerlCompilerException(parser.tokenIndex, "Unexpected infix operator: " + token, parser.ctx.errorUtil);
         }
+    }
+
+    private static List<Node> parseArraySubscript(Parser parser) {
+        int currentIndex = parser.tokenIndex;
+
+        // Handle optional empty parentheses
+        LexerToken nextToken = peek(parser);
+        if (nextToken.text.equals("(")) {
+            consume(parser);
+            consume(parser, LexerTokenType.OPERATOR, ")");
+            if (peek(parser).text.equals("]")) {
+                consume(parser);
+                return new ArrayList<>();
+            }
+        }
+
+        // backtrack
+        parser.tokenIndex = currentIndex;
+        return ListParser.parseList(parser, "]", 1);
+
     }
 
     static List<Node> parseHashSubscript(Parser parser) {
