@@ -2,6 +2,7 @@ package org.perlonjava.runtime;
 
 import org.perlonjava.astnode.Node;
 import org.perlonjava.astnode.OperatorNode;
+import org.perlonjava.astvisitor.ConstantFoldingVisitor;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.codegen.JavaClassInfo;
@@ -151,6 +152,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             evalCtx.errorUtil = new ErrorMessageUtil(evalCtx.compilerOptions.fileName, tokens);
             Parser parser = new Parser(evalCtx, tokens); // Parse the tokens
             ast = parser.parse(); // Generate the abstract syntax tree (AST)
+
+            // ast = ConstantFoldingVisitor.foldConstants(ast);
 
             // Create a new instance of ErrorMessageUtil, resetting the line counter
             evalCtx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);

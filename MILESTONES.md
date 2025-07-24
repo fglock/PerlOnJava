@@ -289,6 +289,7 @@ The following areas are currently under active development to enhance the functi
   - IO::Handle
   - XSLoader or Dynaloader for JVM
   - Indirect method call
+  - Constant folding - in ConstantFoldingVisitor.java
 
 ### v4.0.0 Milestone (Planned Release Date: 2026-05-10)
 
