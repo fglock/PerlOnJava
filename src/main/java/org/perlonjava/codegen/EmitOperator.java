@@ -35,6 +35,12 @@ public class EmitOperator {
         if (operatorHandler == null) {
             throw new PerlCompilerException(node.getIndex(), "Operator \"" + operator + "\" doesn't have a defined JVM descriptor", emitterVisitor.ctx.errorUtil);
         }
+        emitterVisitor.ctx.logDebug("emitOperator " +
+                operatorHandler.getMethodType() + " " +
+                operatorHandler.getClassName() + " " +
+                operatorHandler.getMethodName() + " " +
+                operatorHandler.getDescriptor()
+        );
         emitterVisitor.ctx.mv.visitMethodInsn(
                 operatorHandler.getMethodType(),
                 operatorHandler.getClassName(),
