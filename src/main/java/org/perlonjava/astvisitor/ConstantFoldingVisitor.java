@@ -26,7 +26,7 @@ public class ConstantFoldingVisitor implements Visitor {
      * @param node The AST node to optimize
      * @return The optimized node (either folded or original)
      */
-    public static Node fold(Node node) {
+    public static Node foldConstants(Node node) {
         if (node == null) {
             return null;
         }
@@ -60,8 +60,8 @@ public class ConstantFoldingVisitor implements Visitor {
         }
 
         // First, recursively fold the operands
-        Node foldedLeft = fold(node.left);
-        Node foldedRight = fold(node.right);
+        Node foldedLeft = foldConstants(node.left);
+        Node foldedRight = foldConstants(node.right);
 
         // Check if both operands are constants
         if (isConstantNode(foldedLeft) && isConstantNode(foldedRight)) {
@@ -90,7 +90,7 @@ public class ConstantFoldingVisitor implements Visitor {
             return;
         }
 
-        Node foldedOperand = fold(node.operand);
+        Node foldedOperand = foldConstants(node.operand);
 
         // Handle unary operators on constants
         if (isConstantNode(foldedOperand)) {
@@ -115,9 +115,9 @@ public class ConstantFoldingVisitor implements Visitor {
 
     @Override
     public void visit(TernaryOperatorNode node) {
-        Node foldedCondition = fold(node.condition);
-        Node foldedTrue = fold(node.trueExpr);
-        Node foldedFalse = fold(node.falseExpr);
+        Node foldedCondition = foldConstants(node.condition);
+        Node foldedTrue = foldConstants(node.trueExpr);
+        Node foldedFalse = foldConstants(node.falseExpr);
 
         // If condition is constant, we can eliminate the ternary
         if (isConstantNode(foldedCondition)) {
@@ -147,7 +147,7 @@ public class ConstantFoldingVisitor implements Visitor {
         boolean changed = false;
 
         for (Node element : node.elements) {
-            Node folded = fold(element);
+            Node folded = foldConstants(element);
             if (folded != element) {
                 changed = true;
             }
@@ -169,7 +169,7 @@ public class ConstantFoldingVisitor implements Visitor {
         boolean allConstant = true;
 
         for (Node element : node.elements) {
-            Node folded = fold(element);
+            Node folded = foldConstants(element);
             if (folded != element) {
                 changed = true;
             }
@@ -193,7 +193,7 @@ public class ConstantFoldingVisitor implements Visitor {
         boolean changed = false;
 
         for (Node element : node.elements) {
-            Node folded = fold(element);
+            Node folded = foldConstants(element);
             if (folded != element) {
                 changed = true;
             }
@@ -214,7 +214,7 @@ public class ConstantFoldingVisitor implements Visitor {
         boolean changed = false;
 
         for (Node element : node.elements) {
-            Node folded = fold(element);
+            Node folded = foldConstants(element);
             if (folded != element) {
                 changed = true;
             }
@@ -262,7 +262,7 @@ public class ConstantFoldingVisitor implements Visitor {
         // First fold all arguments
         List<Node> foldedArgs = new ArrayList<>();
         for (Node arg : argList.elements) {
-            Node folded = fold(arg);
+            Node folded = foldConstants(arg);
             if (!isConstantNode(folded)) {
                 return null; // Can't fold if any argument is not constant
             }
@@ -457,13 +457,23 @@ public class ConstantFoldingVisitor implements Visitor {
                         return new NumberNode(result.toString(), tokenIndex);
                     }
 
-                case "^":
-                    result = BitwiseOperators.bitwiseXor(leftValue, rightValue);
-                    if (result.type == RuntimeScalarType.STRING) {
-                        return new StringNode(result.toString(), tokenIndex);
-                    } else {
-                        return new NumberNode(result.toString(), tokenIndex);
-                    }
+//                case "^":
+//                    result = BitwiseOperators.bitwiseXor(leftValue, rightValue);
+//                    if (result.type == RuntimeScalarType.STRING) {
+//                        return new StringNode(result.toString(), tokenIndex);
+//                    } else {
+//                        // Format the number properly
+//                        if (result.type == RuntimeScalarType.INTEGER) {
+//                            return new NumberNode(String.valueOf(result.getInt()), tokenIndex);
+//                        } else {
+//                            double d = result.getDouble();
+//                            if (d == Math.floor(d) && !Double.isInfinite(d)) {
+//                                return new NumberNode(String.valueOf((long)d), tokenIndex);
+//                            } else {
+//                                return new NumberNode(String.valueOf(d), tokenIndex);
+//                            }
+//                        }
+//                    }
 
                 case "<<":
                     result = BitwiseOperators.shiftLeft(leftValue, rightValue);
@@ -473,63 +483,65 @@ public class ConstantFoldingVisitor implements Visitor {
                     result = BitwiseOperators.shiftRight(leftValue, rightValue);
                     return new NumberNode(result.toString(), tokenIndex);
 
-                // Numeric comparison operators using CompareOperators
-                case "<":
-                    result = CompareOperators.lessThan(leftValue, rightValue);
-                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
+                    // XXX TODO: This must account for Chained operators like `4 < 5 < 3`
 
-                case ">":
-                    result = CompareOperators.greaterThan(leftValue, rightValue);
-                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
-
-                case "<=":
-                    result = CompareOperators.lessThanOrEqual(leftValue, rightValue);
-                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
-
-                case ">=":
-                    result = CompareOperators.greaterThanOrEqual(leftValue, rightValue);
-                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
-
-                case "==":
-                    result = CompareOperators.equalTo(leftValue, rightValue);
-                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
-
-                case "!=":
-                    result = CompareOperators.notEqualTo(leftValue, rightValue);
-                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
-
-                case "<=>":
-                    result = CompareOperators.spaceship(leftValue, rightValue);
-                    return new NumberNode(result.toString(), tokenIndex);
-
-                // String comparison operators using CompareOperators
-                case "lt":
-                    result = CompareOperators.lt(leftValue, rightValue);
-                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
-
-                case "gt":
-                    result = CompareOperators.gt(leftValue, rightValue);
-                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
-
-                case "le":
-                    result = CompareOperators.le(leftValue, rightValue);
-                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
-
-                case "ge":
-                    result = CompareOperators.ge(leftValue, rightValue);
-                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
-
-                case "eq":
-                    result = CompareOperators.eq(leftValue, rightValue);
-                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
-
-                case "ne":
-                    result = CompareOperators.ne(leftValue, rightValue);
-                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
-
-                case "cmp":
-                    result = CompareOperators.cmp(leftValue, rightValue);
-                    return new NumberNode(result.toString(), tokenIndex);
+//                // Numeric comparison operators using CompareOperators
+//                case "<":
+//                    result = CompareOperators.lessThan(leftValue, rightValue);
+//                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
+//
+//                case ">":
+//                    result = CompareOperators.greaterThan(leftValue, rightValue);
+//                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
+//
+//                case "<=":
+//                    result = CompareOperators.lessThanOrEqual(leftValue, rightValue);
+//                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
+//
+//                case ">=":
+//                    result = CompareOperators.greaterThanOrEqual(leftValue, rightValue);
+//                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
+//
+//                case "==":
+//                    result = CompareOperators.equalTo(leftValue, rightValue);
+//                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
+//
+//                case "!=":
+//                    result = CompareOperators.notEqualTo(leftValue, rightValue);
+//                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
+//
+//                case "<=>":
+//                    result = CompareOperators.spaceship(leftValue, rightValue);
+//                    return new NumberNode(result.toString(), tokenIndex);
+//
+//                // String comparison operators using CompareOperators
+//                case "lt":
+//                    result = CompareOperators.lt(leftValue, rightValue);
+//                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
+//
+//                case "gt":
+//                    result = CompareOperators.gt(leftValue, rightValue);
+//                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
+//
+//                case "le":
+//                    result = CompareOperators.le(leftValue, rightValue);
+//                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
+//
+//                case "ge":
+//                    result = CompareOperators.ge(leftValue, rightValue);
+//                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
+//
+//                case "eq":
+//                    result = CompareOperators.eq(leftValue, rightValue);
+//                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
+//
+//                case "ne":
+//                    result = CompareOperators.ne(leftValue, rightValue);
+//                    return new NumberNode(result.getBoolean() ? "1" : "", tokenIndex);
+//
+//                case "cmp":
+//                    result = CompareOperators.cmp(leftValue, rightValue);
+//                    return new NumberNode(result.toString(), tokenIndex);
 
                 default:
                     return null;
@@ -557,14 +569,24 @@ public class ConstantFoldingVisitor implements Visitor {
                     // Logical not
                     return new NumberNode(value.getBoolean() ? "" : "1", tokenIndex);
 
-                case "~":
-                    // Bitwise not using BitwiseOperators
-                    RuntimeScalar bitwiseNot = BitwiseOperators.bitwiseNot(value);
-                    if (bitwiseNot.type == RuntimeScalarType.STRING) {
-                        return new StringNode(bitwiseNot.toString(), tokenIndex);
-                    } else {
-                        return new NumberNode(bitwiseNot.toString(), tokenIndex);
-                    }
+//                case "~":
+//                    // Bitwise not using BitwiseOperators
+//                    RuntimeScalar bitwiseNot = BitwiseOperators.bitwiseNot(value);
+//                    if (bitwiseNot.type == RuntimeScalarType.STRING) {
+//                        return new StringNode(bitwiseNot.toString(), tokenIndex);
+//                    } else {
+//                        // Format the number properly
+//                        if (bitwiseNot.type == RuntimeScalarType.INTEGER) {
+//                            return new NumberNode(String.valueOf(bitwiseNot.getInt()), tokenIndex);
+//                        } else {
+//                            double d = bitwiseNot.getDouble();
+//                            if (d == Math.floor(d) && !Double.isInfinite(d)) {
+//                                return new NumberNode(String.valueOf((long)d), tokenIndex);
+//                            } else {
+//                                return new NumberNode(String.valueOf(d), tokenIndex);
+//                            }
+//                        }
+//                    }
 
                 default:
                     return null;

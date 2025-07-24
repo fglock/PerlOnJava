@@ -2,6 +2,7 @@ package org.perlonjava.scriptengine;
 
 import org.perlonjava.ArgumentParser;
 import org.perlonjava.astnode.Node;
+import org.perlonjava.astvisitor.ConstantFoldingVisitor;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.codegen.JavaClassInfo;
@@ -102,6 +103,9 @@ public class PerlLanguageProvider {
         ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
         Parser parser = new Parser(ctx, tokens); // Parse the tokens
         Node ast = parser.parse(); // Generate the abstract syntax tree (AST)
+
+        // ast = ConstantFoldingVisitor.foldConstants(ast);
+
         if (ctx.compilerOptions.parseOnly) {
             // Printing the ast
             System.out.println(ast);
