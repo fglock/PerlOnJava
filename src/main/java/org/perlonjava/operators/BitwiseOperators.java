@@ -110,9 +110,25 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise NOT operation.
      */
     public static RuntimeScalar bitwiseNotBinary(RuntimeScalar runtimeScalar) {
-        // Use getLong() to get the full value, then perform NOT operation
-        // Perl's ~ operator on integers produces negative values for positive inputs
-        return new RuntimeScalar(~runtimeScalar.getLong());
+        long value = runtimeScalar.getLong();
+
+        // Perl's ~ operator works with unsigned semantics
+        // Java's ~ gives us the bit pattern, but interprets it as signed
+        long result = ~value;
+
+        // If the result would be interpreted as negative in Java but should be
+        // a large positive number in Perl, convert to double to preserve the value
+        if (result < 0) {
+            // Convert to unsigned representation
+            // This is equivalent to treating the bit pattern as unsigned
+            double unsignedResult = result & 0xFFFFFFFFFFFFFFFFL;
+            if (unsignedResult < 0) {
+                unsignedResult += 18446744073709551616.0; // Add 2^64
+            }
+            return new RuntimeScalar(unsignedResult);
+        }
+
+        return new RuntimeScalar(result);
     }
 
     /**
@@ -223,13 +239,33 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the left shift operation.
      */
     public static RuntimeScalar shiftLeft(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        // Use long to avoid overflow issues with large shifts
         long value = runtimeScalar.getLong();
         int shift = arg2.getInt();
 
-        // Handle shifts >= 64 (long size in bits)
-        if (shift >= 64) {
-            return new RuntimeScalar(0L);
+        // For shifts that would overflow long, use double to match pow() behavior
+        if (shift >= 63) {
+            if (shift >= 1024) {
+                // Prevent infinity for extremely large shifts
+                return new RuntimeScalar(0.0);
+            }
+            if (value == 0) {
+                return new RuntimeScalar(0L);
+            }
+            // Use double arithmetic for large shifts to match pow() behavior
+            double result = value * Math.pow(2.0, shift);
+            return new RuntimeScalar(result);
+        }
+
+        // For smaller shifts, check if the result would overflow
+        if (shift > 0) {
+            // Check if the shift would cause overflow
+            long result = value << shift;
+            // If sign changed unexpectedly (overflow), use double
+            if ((value > 0 && result < 0) || (value < 0 && result > 0)) {
+                double doubleResult = value * Math.pow(2.0, shift);
+                return new RuntimeScalar(doubleResult);
+            }
+            return new RuntimeScalar(result);
         }
 
         return new RuntimeScalar(value << shift);
