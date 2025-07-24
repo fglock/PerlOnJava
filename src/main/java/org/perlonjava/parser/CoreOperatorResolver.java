@@ -148,9 +148,13 @@ public class CoreOperatorResolver {
                 // Handle 'pack' operator with one or more arguments
                 operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
                 return new OperatorNode(token.text, operand, currentIndex);
-            case "reverse", "splice", "unlink", "mkdir", "die", "warn", "system", "exec":
+            case "reverse", "splice", "unlink", "mkdir", "die", "warn":
                 // Handle operators with any number of arguments
                 operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
+                return new OperatorNode(token.text, operand, currentIndex);
+            case  "system", "exec":
+                // Handle `system {$program} @args`
+                operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, true, false);
                 return new OperatorNode(token.text, operand, currentIndex);
             case "readline", "eof", "tell", "getc", "open", "close", "fileno", "truncate":
                 // Handle file-related operators with special handling for default handles

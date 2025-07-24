@@ -230,6 +230,31 @@ public class EmitOperator {
         emitOperator(node, emitterVisitor);
     }
 
+    // Handles the 'system' and 'exec' built-in functions.
+    static void handleSystemBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
+        // Handle:  reverse LIST
+        //   static RuntimeBase reverse(RuntimeBase value, int ctx)
+        emitterVisitor.ctx.logDebug("handleSystemBuiltin " + node);
+
+        ListNode operand = (ListNode) node.operand;
+        boolean hasHandle = false;
+        if (operand.handle != null) {
+            //  `system {handle} LIST`
+            hasHandle = true;
+            operand.elements.addFirst(operand.handle);
+        }
+
+        // Accept the operand in LIST context.
+        operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+        // Push the boolean value of hasHandle to the stack
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        mv.visitInsn(hasHandle ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+
+        emitterVisitor.pushCallContext();
+        emitOperator(node, emitterVisitor);
+    }
+
     // Handles the 'splice' built-in function, which modifies an array.
     static void handleSpliceBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         // Handle:  splice @array, LIST

@@ -89,13 +89,11 @@ public class FileHandle {
 
         // Handle glob expressions when we have brackets
         // In Perl, {*STDOUT} and {\*STDOUT} are valid file handle expressions
-        if (hasBracket && token.type == LexerTokenType.OPERATOR) {
-            if (token.text.equals("*") || token.text.equals("\\")) {
+        if (hasBracket && token.type == LexerTokenType.OPERATOR && (token.text.equals("*") || token.text.equals("\\"))) {
                 // Parse glob expression: {*STDOUT}, {\*STDOUT}, etc.
                 // ParsePrimary.parsePrimary() has logic to handle both * and \* cases
                 // and will create the appropriate glob or reference node
                 fileHandle = ParsePrimary.parsePrimary(parser);
-            }
         }
         // Handle bareword file handles (most common case)
         // Examples: STDOUT, STDERR, STDIN, or user-defined handles like LOG, FILE, etc.
