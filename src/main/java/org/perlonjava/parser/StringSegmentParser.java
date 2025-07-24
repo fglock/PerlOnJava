@@ -459,7 +459,7 @@ public abstract class StringSegmentParser {
      * </ul></p>
      *
      * <p>The hex value is converted to the corresponding Unicode character.
-     * If the hex value is invalid or missing, the literal 'x' is used instead.</p>
+     * If the hex value is invalid or missing, the literal '\0' is used instead.</p>
      */
     void handleHexEscape() {
         var hexStr = new StringBuilder();
@@ -526,6 +526,77 @@ public abstract class StringSegmentParser {
             }
         } else {
             // No hex digits found, treat as literal
+            appendToCurrentSegment("\0");
+        }
+    }
+
+    /**
+     * Handles octal escape sequences like \x{100}.
+     *
+     * <p>The octal value is converted to the corresponding Unicode character.
+     * If the octal value is invalid or missing, the literal '\0' is used instead.</p>
+     */
+    void handleOctalEscape() {
+        var octStr = new StringBuilder();
+        var chr = TokenUtils.peekChar(parser);
+
+        if ("{".equals(chr)) {
+            // Variable length hex escape: \x{...}
+            TokenUtils.consumeChar(parser);
+            chr = TokenUtils.peekChar(parser);
+
+            // Skip leading whitespace
+            while (Character.isWhitespace(chr.charAt(0)) && !"}".equals(chr)) {
+                TokenUtils.consumeChar(parser);
+                chr = TokenUtils.peekChar(parser);
+            }
+
+            boolean lastWasUnderscore = false;
+            while (!"}".equals(chr) && !chr.isEmpty()) {
+                if (chr.compareTo("0") >= 0 && chr.compareTo("7") <= 0) {
+                    octStr.append(TokenUtils.consumeChar(parser));
+                    lastWasUnderscore = false;
+                    chr = TokenUtils.peekChar(parser);
+                } else if ("_".equals(chr)) {
+                    if (lastWasUnderscore) {
+                        // Double underscore not allowed
+                        break;
+                    }
+                    TokenUtils.consumeChar(parser); // Consume but don't add to octStr
+                    lastWasUnderscore = true;
+                    chr = TokenUtils.peekChar(parser);
+                } else if (Character.isWhitespace(chr.charAt(0))) {
+                    // Spaces not allowed between digits - break parsing
+                    break;
+                } else {
+                    break;
+                }
+            }
+
+            // Skip trailing non-digits
+            while (!"}".equals(chr)) {
+                TokenUtils.consumeChar(parser);
+                chr = TokenUtils.peekChar(parser);
+            }
+
+            TokenUtils.consumeChar(parser);
+        } else {
+            parser.throwError("Missing braces on \\o{}");
+        }
+
+        if (!octStr.isEmpty()) {
+            try {
+                var octValue = Integer.parseInt(octStr.toString(), 8);
+                var result = octValue <= 0xFFFF
+                        ? String.valueOf((char) octValue)
+                        : new String(Character.toChars(octValue));
+                appendToCurrentSegment(result);
+            } catch (NumberFormatException e) {
+                // Invalid hex sequence, treat as literal
+                appendToCurrentSegment("\0");
+            }
+        } else {
+            // No octal digits found, treat as literal
             appendToCurrentSegment("\0");
         }
     }
