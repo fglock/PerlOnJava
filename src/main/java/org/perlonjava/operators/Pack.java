@@ -120,6 +120,19 @@ public class Pack {
                         case 'V':
                             writeIntLittleEndian(output, (long) value.getDouble());
                             break;
+                        case 'U':
+                            // Pack a Unicode character number
+                            int codePoint;
+                            String strValue = value.toString();
+                            if (strValue.length() > 0 && !Character.isDigit(strValue.charAt(0))) {
+                                // If it's a character, get its code point
+                                codePoint = strValue.codePointAt(0);
+                            } else {
+                                // If it's a number, use it directly
+                                codePoint = value.getInt();
+                            }
+                            writeInt(output, codePoint);
+                            break;
                         case 'n':
                             writeShortBigEndian(output, value.getInt());
                             break;

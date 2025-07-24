@@ -109,6 +109,16 @@ public class Unpack {
                     case 'v':
                         values.add(new RuntimeScalar(readShortLittleEndian(buffer)));
                         break;
+                    case 'U':
+                        // Read a Unicode character number (code point)
+                        int codePoint = buffer.getInt();
+                        if (Character.isValidCodePoint(codePoint)) {
+                            values.add(new RuntimeScalar(new String(Character.toChars(codePoint))));
+                        } else {
+                            // For invalid code points, add the numeric value
+                            values.add(new RuntimeScalar(codePoint));
+                        }
+                        break;
                     case 'f':
                         float floatValue = buffer.getFloat();
                         values.add(new RuntimeScalar(floatValue));
@@ -154,6 +164,7 @@ public class Unpack {
             case 'L':
             case 'N':
             case 'V':
+            case 'U':
             case 'f':
                 return 4;
             case 'd':
