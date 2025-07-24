@@ -1,5 +1,8 @@
 package org.perlonjava;
 
+import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.RuntimeScalarType;
+
 /**
  * Central configuration class for the Perl-to-Java compiler.
  * Contains constants that control compiler behavior and runtime settings.
@@ -48,5 +51,27 @@ public final class Configuration {
         }
 
         return formattedVersion.toString();
+    }
+
+    /**
+     * Returns the Perl version as a vstring RuntimeScalar.
+     * For example, v5.42.0 becomes a vstring with bytes \u0005*\u0000
+     * where each version component is represented as a character.
+     *
+     * @return RuntimeScalar with type VSTRING containing the version
+     */
+    public static RuntimeScalar getPerlVersionVString() {
+        String versionNoV = getPerlVersionNoV();
+        String[] parts = versionNoV.split("\\.");
+
+        StringBuilder vstring = new StringBuilder();
+        for (String part : parts) {
+            int value = Integer.parseInt(part);
+            vstring.append((char) value);
+        }
+
+        RuntimeScalar result = new RuntimeScalar(vstring.toString());
+        result.type = RuntimeScalarType.VSTRING;
+        return result;
     }
 }
