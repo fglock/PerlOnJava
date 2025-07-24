@@ -230,7 +230,11 @@ public class MathOperators {
             if (result != null) return result;
         }
 
-        return new RuntimeScalar(Math.log(runtimeScalar.getDouble()));
+        double v = runtimeScalar.getDouble();
+        if (v == 0) {
+            throw new PerlCompilerException("Can't take log of 0");
+        }
+        return new RuntimeScalar(Math.log(v));
     }
 
     /**
