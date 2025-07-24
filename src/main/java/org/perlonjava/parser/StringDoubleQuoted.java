@@ -412,6 +412,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
 
             // Other escape sequences
             case "x" -> handleHexEscape();           // \x41 or \x{263A}
+            case "o" -> handleOctalEscape();         // \o{100}
             case "N" -> handleUnicodeNameEscape();   // \N{UNICODE NAME}
 
             // Unknown escape - treat as literal character
