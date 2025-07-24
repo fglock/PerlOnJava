@@ -55,6 +55,12 @@ public class CoreOperatorResolver {
                 return new OperatorNode(token.text, new ListNode(currentIndex), currentIndex);
             case "not":
                 // Handle 'not' keyword as a unary operator with an operand
+                if (TokenUtils.peek(parser).text.equals("(")) {
+                    TokenUtils.consume(parser);
+                    operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
+                    TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+                    return new OperatorNode(token.text, operand, currentIndex);
+                }
                 operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
                 return new OperatorNode(token.text, operand, currentIndex);
              case "abs", "caller", "chdir", "chomp", "chop", "chr", "cos", "exit", "exp", "fc",
