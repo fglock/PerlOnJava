@@ -274,7 +274,7 @@ public class ArgumentParser {
                     return index;
                 default:
                     System.err.println("Unrecognized switch: -" + switchChar + "  (-h will show valid options)");
-                    System.exit(0);
+                    // System.exit(0);
                     break;
             }
         }
