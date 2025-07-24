@@ -473,6 +473,10 @@ public abstract class StringSegmentParser {
                 if (isHexDigit(chr)) {
                     hexStr.append(TokenUtils.consumeChar(parser));
                     chr = TokenUtils.peekChar(parser);
+                } else if (Character.isWhitespace(chr.charAt(0)) || chr.equals("_")) {
+                    // Skip whitespace characters inside braces
+                    TokenUtils.consumeChar(parser);
+                    chr = TokenUtils.peekChar(parser);
                 } else {
                     break;
                 }
@@ -497,11 +501,11 @@ public abstract class StringSegmentParser {
                 appendToCurrentSegment(result);
             } catch (NumberFormatException e) {
                 // Invalid hex sequence, treat as literal
-                appendToCurrentSegment("x");
+                appendToCurrentSegment("\0");
             }
         } else {
             // No hex digits found, treat as literal
-            appendToCurrentSegment("x");
+            appendToCurrentSegment("\0");
         }
     }
 
