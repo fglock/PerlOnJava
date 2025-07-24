@@ -469,21 +469,42 @@ public abstract class StringSegmentParser {
             // Variable length hex escape: \x{...}
             TokenUtils.consumeChar(parser);
             chr = TokenUtils.peekChar(parser);
+
+            // Skip leading whitespace
+            while (Character.isWhitespace(chr.charAt(0)) && !"}".equals(chr)) {
+                TokenUtils.consumeChar(parser);
+                chr = TokenUtils.peekChar(parser);
+            }
+
+            boolean lastWasUnderscore = false;
             while (!"}".equals(chr) && !chr.isEmpty()) {
                 if (isHexDigit(chr)) {
                     hexStr.append(TokenUtils.consumeChar(parser));
+                    lastWasUnderscore = false;
                     chr = TokenUtils.peekChar(parser);
-                } else if (Character.isWhitespace(chr.charAt(0)) || chr.equals("_")) {
-                    // Skip whitespace characters inside braces
-                    TokenUtils.consumeChar(parser);
+                } else if ("_".equals(chr)) {
+                    if (lastWasUnderscore) {
+                        // Double underscore not allowed
+                        break;
+                    }
+                    TokenUtils.consumeChar(parser); // Consume but don't add to hexStr
+                    lastWasUnderscore = true;
                     chr = TokenUtils.peekChar(parser);
+                } else if (Character.isWhitespace(chr.charAt(0))) {
+                    // Spaces not allowed between digits - break parsing
+                    break;
                 } else {
                     break;
                 }
             }
-            if ("}".equals(chr)) {
+
+            // Skip trailing non-digits
+            while (!"}".equals(chr)) {
                 TokenUtils.consumeChar(parser);
+                chr = TokenUtils.peekChar(parser);
             }
+
+            TokenUtils.consumeChar(parser);
         } else {
             // Fixed length hex escape: \x..
             while (hexStr.length() < 2 && isHexDigit(chr)) {
