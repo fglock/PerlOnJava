@@ -198,6 +198,7 @@ public class Operator {
         int offset = Integer.parseInt(list.getFirst().toString());
         // If length is not provided, use the rest of the string
         int length = (size > 1) ? Integer.parseInt(list.elements.get(1).toString()) : strLength - offset;
+        String replacement = (size > 2) ? list.elements.get(2).toString() : null;
 
         // Store original offset and length for LValue creation
         int originalOffset = offset;
@@ -224,7 +225,13 @@ public class Operator {
 
         // Return an LValue "RuntimeSubstrLvalue" that can be used to assign to the original string
         // This allows for in-place modification of the original string if needed
-        return new RuntimeSubstrLvalue(runtimeScalar, result, originalOffset, originalLength);
+        var lvalue = new RuntimeSubstrLvalue(runtimeScalar, result, originalOffset, originalLength);
+
+        if (replacement != null) {
+            lvalue.set(replacement);
+        }
+
+        return lvalue;
     }
 
     /**
