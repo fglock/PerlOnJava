@@ -38,7 +38,7 @@ public class GlobalContext {
             GlobalVariable.getGlobalVariable(varName);
         }
         GlobalVariable.getGlobalVariable("main::" + Character.toString('O' - 'A' + 1)).set(SystemUtils.getPerlOsName());    // initialize $^O
-        GlobalVariable.getGlobalVariable("main::" + Character.toString('V' - 'A' + 1)).set(Configuration.perlVersion);    // initialize $^V
+        GlobalVariable.getGlobalVariable("main::" + Character.toString('V' - 'A' + 1)).set(Configuration.getPerlVersionVString());    // initialize $^V
 
         GlobalVariable.getGlobalVariable("main::]").set(Configuration.getPerlVersionOld());    // initialize $] to Perl version
         GlobalVariable.getGlobalVariable("main::@").set("");    // initialize $@ to ""
@@ -138,6 +138,7 @@ public class GlobalContext {
         FileTemp.initialize();
         IOHandleModule.initialize();
         Encode.initialize();
+        JavaSystem.initialize();
 
         // Reset method cache after initializing UNIVERSAL
         InheritanceResolver.invalidateCache();

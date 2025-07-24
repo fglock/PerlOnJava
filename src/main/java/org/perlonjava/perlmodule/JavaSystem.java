@@ -26,22 +26,22 @@ public class JavaSystem extends PerlModuleBase {
 
         // Export commonly used functions by default
         javaSystem.defineExport("EXPORT",
-            "getProperty",
-            "getProperties",
-            "getenv",
-            "getEnvMap",
-            "currentTimeMillis",
-            "nanoTime",
-            "gc",
-            "exit"
+                "getProperty",
+                "getProperties",
+                "getenv",
+                "getEnvMap",
+                "currentTimeMillis",
+                "nanoTime",
+                "gc",
+                "exit"
         );
 
         // Additional functions available on request
         javaSystem.defineExport("EXPORT_OK",
-            "getSecurityManager",
-            "identityHashCode",
-            "lineSeparator",
-            "arraycopy"
+                "getSecurityManager",
+                "identityHashCode",
+                "lineSeparator",
+                "arraycopy"
         );
 
         try {
@@ -54,7 +54,6 @@ public class JavaSystem extends PerlModuleBase {
             javaSystem.registerMethod("nanoTime", null);
             javaSystem.registerMethod("gc", null);
             javaSystem.registerMethod("exit", null);
-            javaSystem.registerMethod("getSecurityManager", null);
             javaSystem.registerMethod("identityHashCode", null);
             javaSystem.registerMethod("lineSeparator", null);
             javaSystem.registerMethod("arraycopy", null);
@@ -97,10 +96,10 @@ public class JavaSystem extends PerlModuleBase {
             hash.put(key, new RuntimeScalar(props.getProperty(key)));
         }
 
-        if (RuntimeContext.wantList(ctx)) {
+        if (ctx == RuntimeContextType.LIST) {
             return hash.getList();
         } else {
-            return RuntimeList.wrapScalar(hash.createReference());
+            return hash.createReference().getList();
         }
     }
 
@@ -117,10 +116,10 @@ public class JavaSystem extends PerlModuleBase {
         String value = System.getenv(key);
 
         if (value == null) {
-            return RuntimeList.wrapScalar(RuntimeScalar.undef);
+            return scalarUndef.getList();
         }
 
-        return RuntimeList.wrapScalar(new RuntimeScalar(value));
+        return new RuntimeScalar(value).getList();
     }
 
     /**
@@ -135,10 +134,10 @@ public class JavaSystem extends PerlModuleBase {
             hash.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
         }
 
-        if (RuntimeContext.wantList(ctx)) {
+        if (ctx == RuntimeContextType.LIST) {
             return hash.getList();
         } else {
-            return RuntimeList.wrapScalar(hash.createReference());
+            return hash.createReference().getList();
         }
     }
 
@@ -147,7 +146,7 @@ public class JavaSystem extends PerlModuleBase {
      * Usage: my $time = currentTimeMillis();
      */
     public static RuntimeList currentTimeMillis(RuntimeArray args, int ctx) {
-        return RuntimeList.wrapScalar(new RuntimeScalar(System.currentTimeMillis()));
+        return new RuntimeScalar(System.currentTimeMillis()).getList();
     }
 
     /**
@@ -155,7 +154,7 @@ public class JavaSystem extends PerlModuleBase {
      * Usage: my $time = nanoTime();
      */
     public static RuntimeList nanoTime(RuntimeArray args, int ctx) {
-        return RuntimeList.wrapScalar(new RuntimeScalar(System.nanoTime()));
+        return new RuntimeScalar(System.nanoTime()).getList();
     }
 
     /**
@@ -164,7 +163,7 @@ public class JavaSystem extends PerlModuleBase {
      */
     public static RuntimeList gc(RuntimeArray args, int ctx) {
         System.gc();
-        return RuntimeList.wrapScalar(RuntimeScalar.undef);
+        return scalarUndef.getList();
     }
 
     /**
@@ -174,20 +173,7 @@ public class JavaSystem extends PerlModuleBase {
     public static RuntimeList exit(RuntimeArray args, int ctx) {
         int status = args.size() > 0 ? (int) args.get(0).getLong() : 0;
         System.exit(status);
-        return RuntimeList.wrapScalar(RuntimeScalar.undef); // Never reached
-    }
-
-    /**
-     * Get the security manager (if any)
-     * Usage: my $sm = getSecurityManager();
-     */
-    public static RuntimeList getSecurityManager(RuntimeArray args, int ctx) {
-        SecurityManager sm = System.getSecurityManager();
-        if (sm == null) {
-            return RuntimeList.wrapScalar(RuntimeScalar.undef);
-        }
-        // Return string representation since we can't easily wrap Java objects
-        return RuntimeList.wrapScalar(new RuntimeScalar(sm.toString()));
+        return scalarUndef.getList(); // Never reached
     }
 
     /**
@@ -195,14 +181,14 @@ public class JavaSystem extends PerlModuleBase {
      * Usage: my $hash = identityHashCode($ref);
      */
     public static RuntimeList identityHashCode(RuntimeArray args, int ctx) {
-        if (args.size() < 1) {
+        if (args.isEmpty()) {
             throw new IllegalArgumentException("identityHashCode requires 1 argument");
         }
 
         Object obj = args.get(0);
         int hashCode = System.identityHashCode(obj);
 
-        return RuntimeList.wrapScalar(new RuntimeScalar(hashCode));
+        return new RuntimeScalar(hashCode).getList();
     }
 
     /**
@@ -210,7 +196,7 @@ public class JavaSystem extends PerlModuleBase {
      * Usage: my $sep = lineSeparator();
      */
     public static RuntimeList lineSeparator(RuntimeArray args, int ctx) {
-        return RuntimeList.wrapScalar(new RuntimeScalar(System.lineSeparator()));
+        return new RuntimeScalar(System.lineSeparator()).getList();
     }
 
     /**
@@ -230,9 +216,9 @@ public class JavaSystem extends PerlModuleBase {
 
         // Perform the copy
         for (int i = 0; i < length; i++) {
-            dest.set(destPos + i, src.get(srcPos + i));
+            dest.get(destPos + i).set(src.get(srcPos + i));
         }
 
-        return RuntimeList.wrapScalar(RuntimeScalar.undef);
+        return scalarUndef.getList();
     }
 }
