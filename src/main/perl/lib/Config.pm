@@ -18,19 +18,6 @@ my %Export_Cache = (myconfig => 1, config_sh => 1, config_vars => 1,
 @Config::EXPORT = qw(%Config);
 @Config::EXPORT_OK = keys %Export_Cache;
 
-# Need to stub all the functions to make code such as print Config::config_sh
-# keep working
-
-sub bincompat_options;
-sub compile_date;
-sub config_re;
-sub config_sh;
-sub config_vars;
-sub header_files;
-sub local_patches;
-sub myconfig;
-sub non_bincompat_options;
-
 # Define our own import method to avoid pulling in the full Exporter:
 sub import {
     shift;
@@ -58,25 +45,6 @@ $^V eq 5.42.0
     or die sprintf "%s: Perl lib version (5.42.0) doesn't match executable '$^X' version (%vd)", $0, $^V;
 
 
-sub FETCH {
-    my($self, $key) = @_;
-
-    # check for cached value (which may be undef so we use exists not defined)
-    return exists $self->{$key} ? $self->{$key} : $self->fetch_string($key);
-}
-
-sub TIEHASH {
-    bless $_[1], $_[0];
-}
-
-sub DESTROY { }
-
-sub AUTOLOAD {
-    require 'Config_heavy.pl';
-    goto \&launcher unless $Config::AUTOLOAD =~ /launcher$/;
-    die "&Config::AUTOLOAD failed on $Config::AUTOLOAD";
-}
-
 # Get Java system properties using Java::System module
 my $java_version = getProperty('java.version') || '21';
 my $java_vendor = getProperty('java.vendor') || 'Unknown';
@@ -94,7 +62,7 @@ $os_name = lc($os_name);
 $os_name =~ s/\s+/_/g;
 
 # tie returns the object, so the value returned to require will be true.
-tie %Config, 'Config', {
+%Config = (
     archname => "java-$java_version-$os_arch",
     osname => $os_name,
     osvers => $os_version,
@@ -188,7 +156,7 @@ tie %Config, 'Config', {
     prefixexp => '/usr/local',
     installprefix => '/usr/local',
     installprefixexp => '/usr/local',
-};
+);
 
 # Helper functions
 sub _determine_byteorder {
