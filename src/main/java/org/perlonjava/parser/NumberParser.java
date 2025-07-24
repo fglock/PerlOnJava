@@ -51,16 +51,25 @@ public class NumberParser {
                 char secondChar = letter.charAt(0);
                 if (secondChar == 'b' || secondChar == 'B') {
                     // Binary number: 0b...
+                    letter = letter.replaceAll("_", "");
                     TokenUtils.consume(parser);
                     return new NumberNode(Long.toString(Long.parseLong(letter.substring(1), 2)), parser.tokenIndex);
                 } else if (secondChar == 'x' || secondChar == 'X') {
                     // Hexadecimal number: 0x...
+                    letter = letter.replaceAll("_", "");
                     TokenUtils.consume(parser);
                     return parseHexadecimalNumber(parser, letter.substring(1));
+                } else if (secondChar == 'o' || secondChar == 'O') {
+                    // Octal number: 0o...
+                    letter = letter.replaceAll("_", "");
+                    TokenUtils.consume(parser);
+                    return new NumberNode(Long.toString(Long.parseLong(letter.substring(1), 8)), parser.tokenIndex);
                 }
             } else {
                 // Octal number: 0...
-                return new NumberNode(Long.toString(Long.parseLong(token.text, 8)), parser.tokenIndex);
+                String letter = token.text;
+                letter = letter.replaceAll("_", "");
+                return new NumberNode(Long.toString(Long.parseLong(letter, 8)), parser.tokenIndex);
             }
         }
 
