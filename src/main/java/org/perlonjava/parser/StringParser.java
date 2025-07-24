@@ -343,6 +343,14 @@ public class StringParser {
         return new StringNode(vStringBuilder.toString(), true, currentIndex);
     }
 
+    public static void assertNoWideCharacters(String toWrite, String message) {
+        for (int i = 0; i < toWrite.length(); i++) {
+            if (toWrite.charAt(i) > 255) {
+                throw new PerlCompilerException("Wide character in " + message);
+            }
+        }
+    }
+
     /**
      * Class to represent the parsed string and its position in the tokens list.
      */

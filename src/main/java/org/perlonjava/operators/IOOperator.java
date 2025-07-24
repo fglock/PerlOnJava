@@ -4,6 +4,7 @@ import org.perlonjava.io.ClosedIOHandle;
 import org.perlonjava.io.IOHandle;
 import org.perlonjava.io.LayeredIOHandle;
 import org.perlonjava.io.ScalarBackedIO;
+import org.perlonjava.parser.StringParser;
 import org.perlonjava.runtime.*;
 
 import java.io.File;
@@ -562,11 +563,7 @@ public class IOOperator {
 
         // Check for characters > 255
         String toWrite = data.substring(offset, offset + length);
-        for (int i = 0; i < toWrite.length(); i++) {
-            if (toWrite.charAt(i) > 255) {
-                throw new PerlCompilerException("Wide character in syswrite");
-            }
-        }
+        StringParser.assertNoWideCharacters(toWrite, "syswrite");
 
         // Check for in-memory handles (ScalarBackedIO)
         IOHandle baseHandle = getBaseHandle(fh.ioHandle);
