@@ -183,11 +183,14 @@ public class Dereference {
 
                 // emit the {x} as a RuntimeList
                 ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
+                emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) @var{} as listNode: " + nodeRight);
 
-                Node nodeZero = nodeRight.elements.getFirst();
-                if (nodeRight.elements.size() == 1 && nodeZero instanceof IdentifierNode) {
-                    // Convert IdentifierNode to StringNode:  {a} to {"a"}
-                    nodeRight.elements.set(0, new StringNode(((IdentifierNode) nodeZero).name, ((IdentifierNode) nodeZero).tokenIndex));
+                if (!nodeRight.elements.isEmpty()) {
+                    Node nodeZero = nodeRight.elements.getFirst();
+                    if (nodeRight.elements.size() == 1 && nodeZero instanceof IdentifierNode) {
+                        // Convert IdentifierNode to StringNode:  {a} to {"a"}
+                        nodeRight.elements.set(0, new StringNode(((IdentifierNode) nodeZero).name, ((IdentifierNode) nodeZero).tokenIndex));
+                    }
                 }
 
                 emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) $var{}  autoquote " + node.right);
@@ -318,10 +321,12 @@ public class Dereference {
         // emit the {0} as a RuntimeList
         ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
 
-        Node nodeZero = nodeRight.elements.getFirst();
-        if (nodeRight.elements.size() == 1 && nodeZero instanceof IdentifierNode) {
-            // Convert IdentifierNode to StringNode:  {a} to {"a"}
-            nodeRight.elements.set(0, new StringNode(((IdentifierNode) nodeZero).name, ((IdentifierNode) nodeZero).tokenIndex));
+        if (!nodeRight.elements.isEmpty()) {
+            Node nodeZero = nodeRight.elements.getFirst();
+            if (nodeRight.elements.size() == 1 && nodeZero instanceof IdentifierNode) {
+                // Convert IdentifierNode to StringNode:  {a} to {"a"}
+                nodeRight.elements.set(0, new StringNode(((IdentifierNode) nodeZero).name, ((IdentifierNode) nodeZero).tokenIndex));
+            }
         }
 
         emitterVisitor.ctx.logDebug("visit -> (HashLiteralNode) autoquote " + node.right);
