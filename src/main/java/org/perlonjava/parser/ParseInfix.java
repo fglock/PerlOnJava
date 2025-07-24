@@ -180,9 +180,9 @@ public class ParseInfix {
                 return new ArrayList<>();
             }
         }
-
         // backtrack
         parser.tokenIndex = currentIndex;
+
         return ListParser.parseList(parser, "]", 1);
 
     }
@@ -199,9 +199,22 @@ public class ParseInfix {
             list.add(new IdentifierNode(ident.text, currentIndex));
             return list;
         }
-
         // backtrack
         parser.tokenIndex = currentIndex;
+
+        // Handle optional empty parentheses
+        LexerToken nextToken = peek(parser);
+        if (nextToken.text.equals("(")) {
+            consume(parser);
+            consume(parser, LexerTokenType.OPERATOR, ")");
+            if (peek(parser).text.equals("}")) {
+                consume(parser);
+                return new ArrayList<>();
+            }
+        }
+        // backtrack
+        parser.tokenIndex = currentIndex;
+
         return ListParser.parseList(parser, "}", 1);
     }
 }
