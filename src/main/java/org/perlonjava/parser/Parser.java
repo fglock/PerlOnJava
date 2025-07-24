@@ -122,6 +122,24 @@ public class Parser {
                 tokens.remove(tokenIndex + 1);
             }
 
+            // Check for the special case of 'x3' style tokens
+            // This handles cases where 'x' is followed directly by a number without space
+            if (token.text.startsWith("x") && token.text.length() > 1) {
+                String remainder = token.text.substring(1);
+                // Check if the remainder is a valid integer
+                try {
+                    Integer.parseInt(remainder);
+                    // Split the token into 'x' operator and the number
+                    token.text = "x";
+                    token.type = LexerTokenType.OPERATOR;
+                    // Insert a new token for the number after the current position
+                    LexerToken numberToken = new LexerToken(LexerTokenType.NUMBER, remainder);
+                    tokens.add(tokenIndex + 1, numberToken);
+                } catch (NumberFormatException e) {
+                    // Not a valid integer, leave the token as is
+                }
+            }
+
             // If the operator is right associative (like exponentiation), parse it with lower precedence.
             if (ParserTables.RIGHT_ASSOC_OP.contains(token.text)) {
                 ctx.logDebug("parseExpression `" + token.text + "` precedence: " + tokenPrecedence + " right assoc");
