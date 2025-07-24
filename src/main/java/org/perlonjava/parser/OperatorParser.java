@@ -125,43 +125,6 @@ public class OperatorParser {
     }
 
     /**
-     * Parses the 'require' operator.
-     *
-     * @param parser The Parser instance.
-     * @return A Node representing the parsed 'require' operator.
-     * @throws PerlCompilerException If there's a syntax error.
-     */
-    static Node parseRequire(Parser parser) {
-        LexerToken token;
-        // Handle 'require' keyword which can be followed by a version, bareword or filename
-        token = TokenUtils.peek(parser);
-        Node operand;
-
-        // `require` version
-        if (token.type == LexerTokenType.NUMBER) {
-            TokenUtils.consume(parser);
-            operand = parseNumber(parser, token);
-        } else if (token.text.matches("^v\\d+$")) {
-            TokenUtils.consume(parser);
-            operand = StringParser.parseVstring(parser, token.text, parser.tokenIndex);
-        } else if (token.type == LexerTokenType.IDENTIFIER) {
-
-            // `require` module
-            String moduleName = IdentifierParser.parseSubroutineIdentifier(parser);
-            parser.ctx.logDebug("name `" + moduleName + "`");
-            if (moduleName == null) {
-                throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
-            }
-            String fileName = NameNormalizer.moduleToFilename(moduleName);
-            operand = ListNode.makeList(new StringNode(fileName, parser.tokenIndex));
-        } else {
-            // `require` file
-            operand = ListParser.parseZeroOrOneList(parser, 1);
-        }
-        return new OperatorNode("require", operand, parser.tokenIndex);
-    }
-
-    /**
      * Parses the 'do' operator.
      *
      * @param parser The Parser instance.
@@ -641,5 +604,129 @@ public class OperatorParser {
         }
 
         return new BinaryOperatorNode(token.text, separator, operand, currentIndex);
+    }
+
+    static OperatorNode parseLast(Parser parser, LexerToken token, int currentIndex) {
+        Node operand;
+        // Handle loop control operators
+        operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
+        return new OperatorNode(token.text, operand, currentIndex);
+    }
+
+    static OperatorNode parseReturn(Parser parser, int currentIndex) {
+        Node operand;
+        // Handle 'return' keyword as a unary operator with an operand
+        operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
+        return new OperatorNode("return", operand, currentIndex);
+    }
+
+    static OperatorNode parseGoto(Parser parser, int currentIndex) {
+        Node operand;
+        // Handle 'goto' keyword as a unary operator with an operand
+        boolean isSubroutine = peek(parser).text.equals("&");  // goto &subr
+        operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
+        if (isSubroutine) {
+            // goto &sub form
+            return new OperatorNode("return", operand, currentIndex);
+        }
+        // goto LABEL form
+        return new OperatorNode("goto", operand, currentIndex);
+    }
+
+    static OperatorNode parseLocal(Parser parser, LexerToken token, int currentIndex) {
+        Node operand;
+        // Handle 'local' keyword as a unary operator with an operand
+        if (peek(parser).text.equals("(")) {
+            operand = ParsePrimary.parsePrimary(parser);
+        } else {
+            operand = parser.parseExpression(parser.getPrecedence("++"));
+        }
+        return new OperatorNode(token.text, operand, currentIndex);
+    }
+
+    static OperatorNode parseReverse(Parser parser, LexerToken token, int currentIndex) {
+        Node operand;
+        // Handle operators with any number of arguments
+        operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
+        return new OperatorNode(token.text, operand, currentIndex);
+    }
+
+    static OperatorNode parseSystem(Parser parser, LexerToken token, int currentIndex) {
+        Node operand;
+        // Handle `system {$program} @args`
+        operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, true, false);
+        return new OperatorNode(token.text, operand, currentIndex);
+    }
+
+    static BinaryOperatorNode parseBinmodeOperator(Parser parser, LexerToken token, int currentIndex) {
+        Node operand;
+        // Handle 'binmode' operator with a FileHandle and List operands
+        Node handle;
+        operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
+        handle = ((ListNode) operand).elements.removeFirst();
+        return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
+    }
+
+    static BinaryOperatorNode parseSeek(Parser parser, LexerToken token, int currentIndex) {
+        Node operand;
+        Node handle;
+        // Handle 'seek' operator with a FileHandle and List operands
+        operand = ListParser.parseZeroOrMoreList(parser, 3, false, true, false, false);
+        handle = ((ListNode) operand).elements.removeFirst();
+        return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
+    }
+
+    static OperatorNode parseReadpipe(Parser parser) {
+        Node operand;
+        // Handle 'readpipe' operator with one optional argument
+        operand = ListParser.parseZeroOrOneList(parser, 0);
+        if (((ListNode) operand).elements.isEmpty()) {
+            // Create `$_` variable if no argument is provided
+            operand = ParserNodeUtils.scalarUnderscore(parser);
+        }
+        return new OperatorNode("qx", operand, parser.tokenIndex);
+    }
+
+    static OperatorNode parsePack(Parser parser, LexerToken token, int currentIndex) {
+        Node operand;
+        // Handle 'pack' operator with one or more arguments
+        operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
+        return new OperatorNode(token.text, operand, currentIndex);
+    }
+
+    static OperatorNode parseRequire(Parser parser) {
+        // Handle 'require' operator
+        LexerToken token;
+        // Handle 'require' keyword which can be followed by a version, bareword or filename
+        token = peek(parser);
+        Node operand;
+
+        // `require` version
+        if (token.type == NUMBER) {
+            consume(parser);
+            operand = parseNumber(parser, token);
+        } else if (token.text.matches("^v\\d+$")) {
+            consume(parser);
+            operand = StringParser.parseVstring(parser, token.text, parser.tokenIndex);
+        } else if (token.type == IDENTIFIER) {
+
+            // `require` module
+            String moduleName = IdentifierParser.parseSubroutineIdentifier(parser);
+            parser.ctx.logDebug("name `" + moduleName + "`");
+            if (moduleName == null) {
+                throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+            }
+            String fileName = NameNormalizer.moduleToFilename(moduleName);
+            operand = ListNode.makeList(new StringNode(fileName, parser.tokenIndex));
+        } else {
+            // `require` file
+            operand = ListParser.parseZeroOrOneList(parser, 1);
+        }
+        OperatorNode node = new OperatorNode("require", operand, parser.tokenIndex);
+        // Is `module_true` feature enabled?
+        if (parser.ctx.symbolTable.isFeatureCategoryEnabled("module_true")) {
+            node.setAnnotation("module_true", true);
+        }
+        return node;
     }
 }
