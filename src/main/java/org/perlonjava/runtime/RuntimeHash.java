@@ -373,6 +373,26 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     /**
+     * Key-value slice of the hash: %x{"a", "b"}
+     *
+     * @param value The RuntimeList containing the keys to slice.
+     * @return A RuntimeList containing alternating keys and values.
+     */
+    public RuntimeList getKeyValueSlice(RuntimeList value) {
+        if (this.type == AUTOVIVIFY_HASH) {
+            AutovivificationHash.vivify(this);
+        }
+
+        RuntimeList result = new RuntimeList();
+        List<RuntimeBase> outElements = result.elements;
+        for (RuntimeScalar keyScalar : value) {
+            outElements.add(keyScalar);                    // Add the key
+            outElements.add(this.get(keyScalar));         // Add the value
+        }
+        return result;
+    }
+
+    /**
      * Deletes a slice of the hash.
      *
      * @param value The RuntimeList containing the keys to delete.

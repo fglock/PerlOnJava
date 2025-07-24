@@ -209,7 +209,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Array dereference**: Dereferencing arrays using `@$x`.
 - ✅  **Hash dereference**: Dereferencing hashes using `%$x`.
 - ✅  **Basic Array Operations**: `push`, `unshift`, `pop`, `shift`, `splice`, `reverse` are implemented.
-- ✅  **Slices**: Array and Hash slices like `@array[2, 3]` and `@hash{"a", "b"}` are implemented.
+- ✅  **Slices**: Array and Hash slices like `@array[2, 3]`, `@hash{"a", "b"}` and `%hash{"a", "b"}` are implemented.
 - ✅  **Array literals**: Array literals are supported.
 - ✅  **Basic Hash Operations**: `keys`, `values`, `delete`, `exists`, `each` are implemented.
 - ✅  **Hash literals**: Hash literals are supported.

@@ -202,6 +202,42 @@ public class Dereference {
                 EmitOperator.handleVoidContext(emitterVisitor);
                 return;
             }
+            if (sigil.equals("%") && hashOperation.equals("get")) {
+                /*  %a{"a", "b"} - get key value slice
+                 *  BinaryOperatorNode: {
+                 *    OperatorNode: @
+                 *      IdentifierNode: a
+                 *    ArrayLiteralNode:
+                 *      StringNode: a
+                 *      StringNode: b
+                 */
+                // Rewrite the variable node from `@` to `%`
+                OperatorNode varNode = new OperatorNode("%", sigilNode.operand, sigilNode.tokenIndex);
+
+                emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) @var{} " + varNode);
+                varNode.accept(emitterVisitor.with(RuntimeContextType.LIST)); // target - left parameter
+
+                // emit the {x} as a RuntimeList
+                ListNode nodeRight = ((HashLiteralNode) node.right).asListNode();
+                emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) @var{} as listNode: " + nodeRight);
+
+                if (!nodeRight.elements.isEmpty()) {
+                    Node nodeZero = nodeRight.elements.getFirst();
+                    if (nodeRight.elements.size() == 1 && nodeZero instanceof IdentifierNode) {
+                        // Convert IdentifierNode to StringNode:  {a} to {"a"}
+                        nodeRight.elements.set(0, new StringNode(((IdentifierNode) nodeZero).name, ((IdentifierNode) nodeZero).tokenIndex));
+                    }
+                }
+
+                emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) $var{}  autoquote " + node.right);
+                nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeHash",
+                        "getKeyValueSlice", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;", false);
+
+                EmitOperator.handleVoidContext(emitterVisitor);
+                return;
+            }
         }
 
         // default: call `->{}`
@@ -312,7 +348,7 @@ public class Dereference {
     }
 
     public static void handleArrowHashDeref(EmitterVisitor emitterVisitor, BinaryOperatorNode node, String hashOperation) {
-        emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) ->{} ");
+        emitterVisitor.ctx.logDebug("visit(BinaryOperatorNode) ->{} " + node);
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
 
