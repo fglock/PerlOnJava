@@ -1,5 +1,6 @@
 package org.perlonjava.operators;
 
+import org.perlonjava.parser.StringParser;
 import org.perlonjava.runtime.RuntimeScalar;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
@@ -7,6 +8,9 @@ import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 public class ScalarOperators {
     public static RuntimeScalar oct(RuntimeScalar runtimeScalar) {
         String expr = runtimeScalar.toString();
+
+        StringParser.assertNoWideCharacters(expr, "oct");
+
         int result = 0;
 
         // Remove leading and trailing whitespace
@@ -74,6 +78,8 @@ public class ScalarOperators {
     public static RuntimeScalar hex(RuntimeScalar runtimeScalar) {
         String expr = runtimeScalar.toString();
         int result = 0;
+
+        StringParser.assertNoWideCharacters(expr, "hex");
 
         // Remove underscores as they are ignored in Perl's hex()
         expr = expr.replace("_", "");
