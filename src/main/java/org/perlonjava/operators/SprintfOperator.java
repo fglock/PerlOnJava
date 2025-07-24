@@ -40,7 +40,7 @@ public class SprintfOperator {
                     i++; // Skip the second %
                 } else {
                     // Find the complete format specifier
-                    Pattern pattern = Pattern.compile("%[\\-\\+\\d\\s]*\\.?\\d*[a-zA-Z]");
+                    Pattern pattern = Pattern.compile("%[\\-\\+\\d\\s#]*\\.?\\d*[a-zA-Z]");
                     Matcher matcher = pattern.matcher(format.substring(i));
 
                     if (matcher.find() && matcher.start() == 0 && argIndex < list.size()) {
@@ -96,6 +96,9 @@ public class SprintfOperator {
                     return String.format(specifier, (char) element.getInt());
                 case 'p':
                     return String.format("%x", element.getInt());
+                case 'v':
+                    // Version string format: treats string as vector of integers
+                    return formatVersionString(specifier, element);
                 case 'n':
                     throw new PerlCompilerException("%n specifier not supported");
                 default: // 's' and others
@@ -105,6 +108,58 @@ public class SprintfOperator {
             // If formatting fails, fall back to string representation
             // return element.toString();
             throw new PerlCompilerException("sprintf() error: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Format a version string according to %v specification
+     * %vd means use dots as separator and format as decimal
+     * %vx means use dots as separator and format as hex
+     * %v8b means use dots as separator and format as 8-bit binary
+     */
+    private static String formatVersionString(String specifier, RuntimeScalar element) {
+        String value = element.toString();
+        StringBuilder result = new StringBuilder();
+
+        // Extract the format character after v (default is 'd' for decimal)
+        char subFormat = 'd';
+        if (specifier.length() > 2) {
+            subFormat = specifier.charAt(specifier.length() - 1);
+        }
+
+        // For version objects (like v5.42.0), parse the numeric parts
+        if (value.startsWith("v") && value.matches("v[\\d.]+")) {
+            // Remove the 'v' prefix and split by dots
+            String[] parts = value.substring(1).split("\\.");
+            for (int i = 0; i < parts.length; i++) {
+                if (i > 0) result.append(".");
+                int num = Integer.parseInt(parts[i]);
+                result.append(formatVersionPart(num, subFormat));
+            }
+        } else {
+            // Treat each character as a byte value
+            byte[] bytes = value.getBytes();
+            for (int i = 0; i < bytes.length; i++) {
+                if (i > 0) result.append(".");
+                int num = bytes[i] & 0xFF;
+                result.append(formatVersionPart(num, subFormat));
+            }
+        }
+
+        return result.toString();
+    }
+
+    private static String formatVersionPart(int value, char format) {
+        switch (Character.toLowerCase(format)) {
+            case 'x':
+                return String.format("%x", value);
+            case 'o':
+                return String.format("%o", value);
+            case 'b':
+                return Integer.toBinaryString(value);
+            case 'd':
+            default:
+                return String.valueOf(value);
         }
     }
 }
