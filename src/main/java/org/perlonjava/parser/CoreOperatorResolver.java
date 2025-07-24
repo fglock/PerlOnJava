@@ -5,6 +5,7 @@ import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
 
+import static org.perlonjava.parser.NumberParser.parseNumber;
 import static org.perlonjava.parser.ParserTables.CORE_PROTOTYPES;
 import static org.perlonjava.parser.PrototypeArgs.consumeArgsWithPrototype;
 import static org.perlonjava.parser.TokenUtils.consume;
@@ -66,13 +67,7 @@ public class CoreOperatorResolver {
             case "stat", "lstat":
                 return OperatorParser.parseStat(parser, token, currentIndex);
             case "readpipe":
-                // Handle 'readpipe' operator with one optional argument
-                operand = ListParser.parseZeroOrOneList(parser, 0);
-                if (((ListNode) operand).elements.isEmpty()) {
-                    // Create `$_` variable if no argument is provided
-                    operand = ParserNodeUtils.scalarUnderscore(parser);
-                }
-                return new OperatorNode("qx", operand, parser.tokenIndex);
+                return OperatorParser.parseReadpipe(parser);
             case "unpack":
                 return OperatorParser.parseUnpack(parser, token);
             case "bless":
@@ -88,30 +83,17 @@ public class CoreOperatorResolver {
                 // Handle 'map' and 'grep' operators
                 return OperatorParser.parseMapGrep(parser, token);
             case "pack":
-                // Handle 'pack' operator with one or more arguments
-                operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
-                return new OperatorNode(token.text, operand, currentIndex);
+                return OperatorParser.parsePack(parser, token, currentIndex);
             case "reverse", "splice", "unlink", "mkdir", "die", "warn":
-                // Handle operators with any number of arguments
-                operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
-                return new OperatorNode(token.text, operand, currentIndex);
+                return OperatorParser.parseReverse(parser, token, currentIndex);
             case  "system", "exec":
-                // Handle `system {$program} @args`
-                operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, true, false);
-                return new OperatorNode(token.text, operand, currentIndex);
+                return OperatorParser.parseSystem(parser, token, currentIndex);
             case "readline", "eof", "tell", "getc", "open", "close", "fileno", "truncate":
                 return OperatorParser.parseReadline(parser, token, currentIndex);
             case "binmode":
-                // Handle 'binmode' operator with a FileHandle and List operands
-                Node handle;
-                operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
-                handle = ((ListNode) operand).elements.removeFirst();
-                return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
+                return OperatorParser.parseBinmodeOperator(parser, token, currentIndex);
             case "seek":
-                // Handle 'seek' operator with a FileHandle and List operands
-                operand = ListParser.parseZeroOrMoreList(parser, 3, false, true, false, false);
-                handle = ((ListNode) operand).elements.removeFirst();
-                return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
+                return OperatorParser.parseSeek(parser, token, currentIndex);
             case "printf", "print", "say":
                 // Handle print-related operators
                 return OperatorParser.parsePrint(parser, token, currentIndex);
@@ -125,31 +107,13 @@ public class CoreOperatorResolver {
                 // Handle variable declaration operators
                 return OperatorParser.parseVariableDeclaration(parser, token.text, currentIndex);
             case "local":
-                // Handle 'local' keyword as a unary operator with an operand
-                if (peek(parser).text.equals("(")) {
-                    operand = ParsePrimary.parsePrimary(parser);
-                } else {
-                    operand = parser.parseExpression(parser.getPrecedence("++"));
-                }
-                return new OperatorNode(token.text, operand, currentIndex);
+                return OperatorParser.parseLocal(parser, token, currentIndex);
             case "last", "next", "redo":
-                // Handle loop control operators
-                operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
-                return new OperatorNode(token.text, operand, currentIndex);
+                return OperatorParser.parseLast(parser, token, currentIndex);
             case "goto":
-                // Handle 'goto' keyword as a unary operator with an operand
-                boolean isSubroutine = peek(parser).text.equals("&");  // goto &subr
-                operand = ListParser.parseZeroOrMoreList(parser, 1, false, false, false, false);
-                if (isSubroutine) {
-                    // goto &sub form
-                    return new OperatorNode("return", operand, currentIndex);
-                }
-                // goto LABEL form
-                return new OperatorNode("goto", operand, currentIndex);
+                return OperatorParser.parseGoto(parser, currentIndex);
             case "return":
-                // Handle 'return' keyword as a unary operator with an operand
-                operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
-                return new OperatorNode("return", operand, currentIndex);
+                return OperatorParser.parseReturn(parser, currentIndex);
             case "eval", "evalbytes":
                 // Handle 'eval' and 'evalbytes' operators
                 return OperatorParser.parseEval(parser, token.text);
@@ -157,13 +121,7 @@ public class CoreOperatorResolver {
                 // Handle 'do' operator
                 return OperatorParser.parseDoOperator(parser);
             case "require":
-                // Handle 'require' operator
-                OperatorNode node = (OperatorNode) OperatorParser.parseRequire(parser);
-                // Is `module_true` feature enabled?
-                if (parser.ctx.symbolTable.isFeatureCategoryEnabled("module_true")) {
-                    node.setAnnotation("module_true", true);
-                }
-                return node;
+                return OperatorParser.parseRequire(parser);
             case "sub":
                 // Handle 'sub' keyword to parse an anonymous subroutine
                 return SubroutineParser.parseSubroutineDefinition(parser, false, null);
