@@ -136,6 +136,7 @@ sourceSets {
             srcDir 'src/main/perl'
             srcDir 'src/main/resources'
             include '**/*.pm'
+            include '**/*.pl'
             include 'META-INF/services/**'
         }
     }
