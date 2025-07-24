@@ -40,22 +40,52 @@ public class SprintfOperator {
                     i++; // Skip the second %
                 } else {
                     // Find the complete format specifier
-                    Pattern pattern = Pattern.compile("%[\\-\\+\\d\\s#]*\\.?\\d*[a-zA-Z]");
-                    Matcher matcher = pattern.matcher(format.substring(i));
+                    // For %v, we need to match the full pattern including the format char after v
+                    Pattern pattern = Pattern.compile("%([\\-\\+\\d\\s#]*)(\\*?)v(\\d*[a-zA-Z])");
+                    Matcher vMatcher = pattern.matcher(format.substring(i));
 
-                    if (matcher.find() && matcher.start() == 0 && argIndex < list.size()) {
-                        String specifier = matcher.group();
-                        RuntimeScalar element = (RuntimeScalar) list.elements.get(argIndex);
+                    if (vMatcher.find() && vMatcher.start() == 0) {
+                        // This is a %v format
+                        String fullSpecifier = vMatcher.group();
+                        String modifiers = vMatcher.group(1);
+                        boolean hasStar = !vMatcher.group(2).isEmpty();
+                        String subFormat = vMatcher.group(3);
 
-                        // Format this single element
-                        String formatted = formatSingleElement(specifier, element);
-                        result.append(formatted);
+                        // Get the separator if * is specified
+                        String separator = ".";
+                        if (hasStar && argIndex < list.size()) {
+                            separator = ((RuntimeScalar) list.elements.get(argIndex)).toString();
+                            argIndex++;
+                        }
 
-                        argIndex++;
-                        i += specifier.length() - 1; // Move past the entire specifier
+                        // Get the value to format
+                        if (argIndex < list.size()) {
+                            RuntimeScalar element = (RuntimeScalar) list.elements.get(argIndex);
+                            String formatted = formatVersionString(element, modifiers, subFormat, separator);
+                            result.append(formatted);
+                            argIndex++;
+                        }
+
+                        i += fullSpecifier.length() - 1;
                     } else {
-                        // Not a valid format specifier or no more arguments
-                        result.append(c);
+                        // Try regular format pattern
+                        pattern = Pattern.compile("%[\\-\\+\\d\\s#]*\\.?\\d*[a-zA-Z]");
+                        Matcher matcher = pattern.matcher(format.substring(i));
+
+                        if (matcher.find() && matcher.start() == 0 && argIndex < list.size()) {
+                            String specifier = matcher.group();
+                            RuntimeScalar element = (RuntimeScalar) list.elements.get(argIndex);
+
+                            // Format this single element
+                            String formatted = formatSingleElement(specifier, element);
+                            result.append(formatted);
+
+                            argIndex++;
+                            i += specifier.length() - 1; // Move past the entire specifier
+                        } else {
+                            // Not a valid format specifier or no more arguments
+                            result.append(c);
+                        }
                     }
                 }
             } else {
@@ -96,9 +126,6 @@ public class SprintfOperator {
                     return String.format(specifier, (char) element.getInt());
                 case 'p':
                     return String.format("%x", element.getInt());
-                case 'v':
-                    // Version string format: treats string as vector of integers
-                    return formatVersionString(specifier, element);
                 case 'n':
                     throw new PerlCompilerException("%n specifier not supported");
                 default: // 's' and others
@@ -113,53 +140,70 @@ public class SprintfOperator {
 
     /**
      * Format a version string according to %v specification
-     * %vd means use dots as separator and format as decimal
-     * %vx means use dots as separator and format as hex
-     * %v8b means use dots as separator and format as 8-bit binary
+     * @param element The value to format
+     * @param modifiers Format modifiers (like 0 for zero padding)
+     * @param subFormat The format to apply to each integer (like "d", "x", "8b")
+     * @param separator The separator between values
      */
-    private static String formatVersionString(String specifier, RuntimeScalar element) {
+    private static String formatVersionString(RuntimeScalar element, String modifiers,
+                                              String subFormat, String separator) {
         String value = element.toString();
         StringBuilder result = new StringBuilder();
 
-        // Extract the format character after v (default is 'd' for decimal)
-        char subFormat = 'd';
-        if (specifier.length() > 2) {
-            subFormat = specifier.charAt(specifier.length() - 1);
-        }
+        // Extract the format character and any width specification
+        char formatChar = subFormat.charAt(subFormat.length() - 1);
+        String widthStr = subFormat.substring(0, subFormat.length() - 1);
+
+        // Build the format string for each integer
+        String itemFormat = "%" + modifiers + widthStr + formatChar;
 
         // For version objects (like v5.42.0), parse the numeric parts
         if (value.startsWith("v") && value.matches("v[\\d.]+")) {
             // Remove the 'v' prefix and split by dots
             String[] parts = value.substring(1).split("\\.");
             for (int i = 0; i < parts.length; i++) {
-                if (i > 0) result.append(".");
+                if (i > 0) result.append(separator);
                 int num = Integer.parseInt(parts[i]);
-                result.append(formatVersionPart(num, subFormat));
+                result.append(formatSingleInteger(num, itemFormat, formatChar));
             }
         } else {
             // Treat each character as a byte value
             byte[] bytes = value.getBytes();
             for (int i = 0; i < bytes.length; i++) {
-                if (i > 0) result.append(".");
+                if (i > 0) result.append(separator);
                 int num = bytes[i] & 0xFF;
-                result.append(formatVersionPart(num, subFormat));
+                result.append(formatSingleInteger(num, itemFormat, formatChar));
             }
         }
 
         return result.toString();
     }
 
-    private static String formatVersionPart(int value, char format) {
-        switch (Character.toLowerCase(format)) {
-            case 'x':
-                return String.format("%x", value);
-            case 'o':
-                return String.format("%o", value);
-            case 'b':
-                return Integer.toBinaryString(value);
-            case 'd':
-            default:
-                return String.valueOf(value);
+    private static String formatSingleInteger(int value, String format, char formatChar) {
+        try {
+            switch (Character.toLowerCase(formatChar)) {
+                case 'd':
+                case 'i':
+                case 'u':
+                case 'x':
+                case 'o':
+                    return String.format(format, value);
+                case 'b':
+                    // Binary format - extract width if specified
+                    String binary = Integer.toBinaryString(value);
+                    // Check if there's a width specification
+                    Pattern p = Pattern.compile("%(\\d*)(\\d+)b");
+                    Matcher m = p.matcher(format);
+                    if (m.find() && !m.group(2).isEmpty()) {
+                        int width = Integer.parseInt(m.group(2));
+                        binary = String.format("%" + width + "s", binary).replace(' ', '0');
+                    }
+                    return binary;
+                default:
+                    return String.valueOf(value);
+            }
+        } catch (Exception e) {
+            return String.valueOf(value);
         }
     }
 }
