@@ -110,7 +110,9 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise NOT operation.
      */
     public static RuntimeScalar bitwiseNotBinary(RuntimeScalar runtimeScalar) {
-        return new RuntimeScalar(~runtimeScalar.getLong() & 0xFFFFFFFFL);
+        // Use getLong() to get the full value, then perform NOT operation
+        // Perl's ~ operator on integers produces negative values for positive inputs
+        return new RuntimeScalar(~runtimeScalar.getLong());
     }
 
     /**
@@ -221,7 +223,16 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the left shift operation.
      */
     public static RuntimeScalar shiftLeft(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        return new RuntimeScalar(runtimeScalar.getInt() << arg2.getInt());
+        // Use long to avoid overflow issues with large shifts
+        long value = runtimeScalar.getLong();
+        int shift = arg2.getInt();
+
+        // Handle shifts >= 64 (long size in bits)
+        if (shift >= 64) {
+            return new RuntimeScalar(0L);
+        }
+
+        return new RuntimeScalar(value << shift);
     }
 
     /**
@@ -232,6 +243,15 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the right shift operation.
      */
     public static RuntimeScalar shiftRight(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        return new RuntimeScalar(runtimeScalar.getInt() >> arg2.getInt());
+        // Use long for consistency
+        long value = runtimeScalar.getLong();
+        int shift = arg2.getInt();
+
+        // Handle shifts >= 64 (long size in bits)
+        if (shift >= 64) {
+            return new RuntimeScalar(value < 0 ? -1L : 0L);
+        }
+
+        return new RuntimeScalar(value >> shift);
     }
 }
