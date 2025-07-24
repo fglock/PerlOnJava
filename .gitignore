@@ -1,6 +1,7 @@
 *.class
 *.jar
 *.swp
+*.bak
 dependency-reduced-pom.xml
 asm-9.7.jar
 google-java-format-1.22.0-all-deps.jar
@@ -19,4 +20,4 @@ gradlew.bat
 *.ipr
 out/
 src/test/_Deparsed_XSubs.pm
-
+t/
