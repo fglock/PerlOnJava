@@ -38,6 +38,19 @@ public class ModuleOperators {
         } else {
             // Otherwise, search in INC directories
             List<RuntimeScalar> inc = GlobalVariable.getGlobalArray("main::INC").elements;
+
+            // Make sure the jar files are in @INC - the Perl test files can remove it
+            boolean seen = false;
+            for (RuntimeBase dir : inc) {
+                if (dir.toString().equals(GlobalContext.JAR_PERLLIB)) {
+                    seen = true;
+                    break;
+                }
+            }
+            if (!seen) {
+                inc.add(new RuntimeScalar(GlobalContext.JAR_PERLLIB));
+            }
+
             for (RuntimeBase dir : inc) {
                 String dirName = dir.toString();
                 if (dirName.equals(GlobalContext.JAR_PERLLIB)) {
