@@ -94,11 +94,11 @@ if ($output_file) {
 sub find_test_files {
     my ($dir) = @_;
     my @files;
-    
+
     find(sub {
         push @files, $File::Find::name if /\.t$/;
     }, $dir);
-    
+
     return sort @files;
 }
 
@@ -108,100 +108,70 @@ sub run_tests_parallel {
     my $completed = 0;
     my %children;
     my @test_queue = @$test_files;
-    
-    # Install signal handler for child processes
-    $SIG{CHLD} = sub {
-        while ((my $pid = waitpid(-1, WNOHANG)) > 0) {
-            if (exists $children{$pid}) {
-                my $test_info = delete $children{$pid};
-                process_test_result($test_info, $test_dir);
-                $completed++;
-            }
-        }
-    };
-    
+
+    # Don't use SIGCHLD handler - we'll poll instead
+    local $SIG{CHLD} = 'DEFAULT';
+
     # Start initial batch of jobs
     while (@test_queue && keys(%children) < $jobs) {
         start_test_job(\@test_queue, \%children, $total_files, $completed);
     }
-    
+
     # Wait for jobs to complete and start new ones
     while (%children || @test_queue) {
-        # Start new jobs if queue has items and we have capacity
-        while (@test_queue && keys(%children) < $jobs) {
-            start_test_job(\@test_queue, \%children, $total_files, $completed);
-        }
-        
-        # Sleep briefly to avoid busy waiting
-        select(undef, undef, undef, 0.1);
-    }
-    
-    # Clean up signal handler
-    $SIG{CHLD} = 'DEFAULT';
-}
+        # Check for completed children
+        my @pids = keys %children;
+        for my $pid (@pids) {
+            my $res = waitpid($pid, WNOHANG);
+            if ($res > 0) {
+                # Child has exited
+                my $test_info = delete $children{$pid};
+                process_test_result($test_info, $test_dir);
+                $completed++;
 
-sub start_test_job {
-    my ($test_queue, $children, $total_files, $completed) = @_;
-    
-    return unless @$test_queue;
-    
-    my $test_file = shift @$test_queue;
-    my $test_index = $total_files - @$test_queue;
-    
-    my $pid = fork();
-    if (!defined $pid) {
-        die "Cannot fork: $!";
-    } elsif ($pid == 0) {
-        # Child process
-        my $result = run_single_test($test_file);
-        
-        # Write result to temporary file for parent to read
-        my $temp_file = "/tmp/perl_test_$$" . "_" . time() . "_" . rand(1000);
-        if (open my $fh, '>', $temp_file) {
-            print $fh JSON::PP->new->encode({
-                test_file => $test_file,
-                test_index => $test_index,
-                result => $result
-            });
-            close $fh;
+                # Start a new job if queue has items
+                if (@test_queue && keys(%children) < $jobs) {
+                    start_test_job(\@test_queue, \%children, $total_files, $completed);
+                }
+            } elsif ($res < 0) {
+                # Error - child doesn't exist
+                warn "Warning: Lost track of child $pid\n";
+                delete $children{$pid};
+            }
         }
-        
-        exit(0);
-    } else {
-        # Parent process
-        $children->{$pid} = {
-            test_file => $test_file,
-            test_index => $test_index,
-            start_time => time(),
-        };
+
+        # Only sleep if we still have children running
+        if (%children) {
+            select(undef, undef, undef, 0.05);  # Short sleep
+        }
     }
 }
 
 sub process_test_result {
     my ($test_info, $test_dir) = @_;
-    
+
     # Look for result file from child
     my $temp_pattern = "/tmp/perl_test_*";
     my @temp_files = glob($temp_pattern);
-    
+
     my $result_data;
     for my $temp_file (@temp_files) {
-        if (open my $fh, '<', $temp_file) {
+        if (-f $temp_file && open my $fh, '<', $temp_file) {
             local $/;
             my $json_data = <$fh>;
             close $fh;
-            unlink $temp_file;
-            
+
             eval {
                 $result_data = JSON::PP->new->decode($json_data);
             };
-            
+
             if ($result_data && $result_data->{test_file} eq $test_info->{test_file}) {
+                unlink $temp_file;
                 last;
             }
         }
     }
-    
+
     # Fallback if we couldn't read the result
     unless ($result_data) {
         $result_data = {
@@ -215,18 +185,18 @@ sub process_test_result {
             }
         };
     }
-    
+
     my $test_file = $result_data->{test_file};
     my $test_index = $result_data->{test_index};
     my $result = $result_data->{result};
-    
+
     my $rel_path = File::Spec->abs2rel($test_file, $test_dir);
     my $duration = time() - $test_info->{start_time};
-    
+
     $result->{duration} = sprintf("%.2f", $duration);
     $result->{file} = $rel_path;
     $results{$rel_path} = $result;
-    
+
     # Update summary
     $summary{$result->{status}}++;
     $summary{total_ok} += $result->{ok_count};
@@ -234,101 +204,42 @@ sub process_test_result {
     $summary{total_tests} += $result->{total_tests};
     $summary{total_skipped} += $result->{skip_count} || 0;
     $summary{total_todo} += $result->{todo_count} || 0;
-    
+
     # Track feature impact
     for my $feature (@{$result->{missing_features}}) {
         push @{$feature_impact{$feature}}, $rel_path;
     }
-    
+
     # Print result
     my %status_chars = (
         pass => '✓', fail => '✗', error => '!', timeout => 'T'
     );
     my $char = $status_chars{$result->{status}} || '?';
-    
-    printf "[%3d/%d] %s", $test_index, scalar(@{[glob("$test_dir/**/*.t")]}), $rel_path;
-    print " " x (50 - length($rel_path)) if length($rel_path) < 50;
-    printf " ... %s %d/%d ok (%.2fs)\n", 
-           $char, $result->{ok_count}, $result->{total_tests}, $duration;
 
-    my ($test_file) = @_;
-    
-    # Use alarm for timeout
-    my $result;
-    eval {
-        local $SIG{ALRM} = sub { die "timeout\n" };
-        alarm($timeout);
-        
-        # Change to test directory for relative paths
-        my $test_dir = $test_file;
-        $test_dir =~ s{/[^/]+$}{};
-        my $old_dir = File::Spec->rel2abs('.');
-        
-        chdir($test_dir) if $test_dir;
-        
-        # Run the test - use absolute path for jperl to avoid issues
-        my $abs_jperl = File::Spec->rel2abs($jperl_path, $old_dir);
-        my $test_name = File::Spec->abs2rel($test_file, $test_dir || '.');
-        my $cmd = "$abs_jperl $test_name";
-        
-        # Capture output more reliably
-        my $output = '';
-        my $exit_code = 0;
-        
-        if (open(my $fh, '-|', $cmd . ' 2>&1')) {
-            local $/;
-            $output = <$fh> || '';  # Handle undef case
-            close($fh);
-            $exit_code = $? >> 8;
-        } else {
-            # Command failed to execute
-            $output = "Failed to execute command: $cmd\nError: $!";
-            $exit_code = -1;
-        }
-        
-        chdir($old_dir) if $test_dir;
-        alarm(0);
-        
-        $result = parse_tap_output($output, $exit_code);
-    };
-    
-    if ($@) {
-        alarm(0);
-        if ($@ =~ /timeout/) {
-            $result = {
-                status => 'timeout',
-                ok_count => 0, not_ok_count => 0, total_tests => 0,
-                skip_count => 0, todo_count => 0,
-                errors => ['Test timed out'], missing_features => []
-            };
-        } else {
-            $result = {
-                status => 'error',
-                ok_count => 0, not_ok_count => 0, total_tests => 0,
-                skip_count => 0, todo_count => 0,
-                errors => ["Error running test: $@"], missing_features => []
-            };
-        }
-    }
-    
-    return $result;
+    printf "[%3d/%d] %s", $test_index, $total_files, $rel_path;
+    print " " x (50 - length($rel_path)) if length($rel_path) < 50;
+    printf " ... %s %d/%d ok (%.2fs)\n",
+        $char, $result->{ok_count}, $result->{total_tests}, $duration;
 }
 
+# Single, clean run_single_test function
 sub run_single_test {
     my ($test_file) = @_;
-    
+
+    # Save current directory
+    my $old_dir = File::Spec->rel2abs('.');
+
     # Change to test directory for relative paths
     my $test_dir = $test_file;
     $test_dir =~ s{/[^/]+$}{};
-    my $old_dir = File::Spec->rel2abs('.');
-    
-    chdir($test_dir) if $test_dir;
-    
-    # Use system timeout command for reliability
+
+    chdir($test_dir) if $test_dir && -d $test_dir;
+
+    # Use absolute path for jperl
     my $abs_jperl = File::Spec->rel2abs($jperl_path, $old_dir);
     my $test_name = File::Spec->abs2rel($test_file, $test_dir || '.');
-    
-    # Check if timeout command is available
+
+    # Try to use system timeout command if available
     my $timeout_cmd = '';
     if (system('which timeout >/dev/null 2>&1') == 0) {
         $timeout_cmd = "timeout ${timeout}s ";
@@ -336,26 +247,35 @@ sub run_single_test {
         # macOS with coreutils
         $timeout_cmd = "gtimeout ${timeout}s ";
     }
-    
-    my $cmd = "${timeout_cmd}$abs_jperl $test_name";
-    
-    # Capture output
+
+    my $cmd = "${timeout_cmd}$abs_jperl $test_name 2>&1";
+
+    # Capture output with timeout
     my $output = '';
     my $exit_code = 0;
-    
-    if (open(my $fh, '-|', $cmd . ' 2>&1')) {
-        local $/;
-        $output = <$fh> || '';
-        close($fh);
+
+    if ($timeout_cmd) {
+        # Use external timeout
+        $output = `$cmd`;
         $exit_code = $? >> 8;
     } else {
-        $output = "Failed to execute command: $cmd\nError: $!";
-        $exit_code = -1;
+        # Fallback to alarm-based timeout
+        eval {
+            local $SIG{ALRM} = sub { die "timeout\n" };
+            alarm($timeout);
+            $output = `$abs_jperl $test_name 2>&1`;
+            $exit_code = $? >> 8;
+            alarm(0);
+        };
+        if ($@ && $@ =~ /timeout/) {
+            $exit_code = 124;  # Same as timeout command
+        }
     }
-    
-    chdir($old_dir) if $test_dir;
-    
-    # Check if it was a timeout (exit code 124 for timeout command)
+
+    # Restore directory
+    chdir($old_dir);
+
+    # Check if it was a timeout
     if ($exit_code == 124) {
         return {
             status => 'timeout',
@@ -364,32 +284,69 @@ sub run_single_test {
             errors => ['Test timed out'], missing_features => []
         };
     }
-    
+
     return parse_tap_output($output, $exit_code);
+}
+
+sub start_test_job {
+    my ($test_queue, $children, $total_files, $completed) = @_;
+
+    return unless @$test_queue;
+
+    my $test_file = shift @$test_queue;
+    my $test_index = $total_files - @$test_queue;
+
+    my $pid = fork();
+    if (!defined $pid) {
+        die "Cannot fork: $!";
+    } elsif ($pid == 0) {
+        # Child process
+        my $result = run_single_test($test_file);
+
+        # Write result to temporary file for parent to read
+        my $temp_file = "/tmp/perl_test_$$" . "_" . time() . "_" . rand(1000);
+        if (open my $fh, '>', $temp_file) {
+            print $fh JSON::PP->new->encode({
+                test_file => $test_file,
+                test_index => $test_index,
+                result => $result
+            });
+            close $fh;
+        }
+
+        exit(0);
+    } else {
+        # Parent process
+        $children->{$pid} = {
+            test_file => $test_file,
+            test_index => $test_index,
+            start_time => time(),
+        };
+    }
 }
 
 sub parse_tap_output {
     my ($output, $exit_code) = @_;
-    
+
     # Handle undefined output
     $output = '' unless defined $output;
-    
+
     my @lines = split /\n/, $output;
     my ($ok_count, $not_ok_count, $total_tests) = (0, 0, 0);
     my ($skip_count, $todo_count) = (0, 0);
     my (@errors, @missing_features);
-    
+
     # Parse TAP output
     for my $line (@lines) {
         $line =~ s/^\s+|\s+$//g;  # trim
         next unless $line;
-        
+
         # Test plan
         if ($line =~ /^1\.\.(\d+)/) {
             $total_tests = $1;
             next;
         }
-        
+
         # Test results
         if ($line =~ /^ok\s+\d+/) {
             $ok_count++;
@@ -397,17 +354,17 @@ sub parse_tap_output {
             $todo_count++ if $line =~ /#\s*todo/i;
             next;
         }
-        
+
         if ($line =~ /^not ok\s+\d+/) {
             $not_ok_count++;
             next;
         }
-        
+
         # Look for errors and missing features
         my $line_lower = lc($line);
         if ($line_lower =~ /error|fatal|died|exception|abort|not implemented|unimplemented|unsupported|syntax error|compilation failed|can't locate|undefined subroutine|bareword not allowed/) {
             push @errors, $line;
-            
+
             # Identify missing features
             for my $feature (keys %feature_patterns) {
                 for my $pattern (@{$feature_patterns{$feature}}) {
@@ -419,10 +376,10 @@ sub parse_tap_output {
             }
         }
     }
-    
+
     # If no test plan found, use count
     $total_tests = $ok_count + $not_ok_count if $total_tests == 0;
-    
+
     # Determine status
     my $status;
     if ($ok_count == 0 && $not_ok_count == 0) {
@@ -434,11 +391,11 @@ sub parse_tap_output {
     } else {
         $status = 'error';
     }
-    
+
     # Remove duplicates
     my %seen;
     @missing_features = grep !$seen{$_}++, @missing_features;
-    
+
     return {
         status => $status,
         ok_count => $ok_count,
@@ -465,7 +422,7 @@ sub print_summary {
     printf "  Not OK:      %d\n", $summary{total_not_ok};
     printf "  Skipped:     %d\n", $summary{total_skipped} if $summary{total_skipped};
     printf "  TODO:        %d\n", $summary{total_todo} if $summary{total_todo};
-    
+
     if ($summary{total_tests} > 0) {
         my $pass_rate = ($summary{total_ok} / $summary{total_tests}) * 100;
         printf "  Pass rate:   %.1f%%\n", $pass_rate;
@@ -474,21 +431,21 @@ sub print_summary {
 
 sub print_feature_impact {
     return unless %feature_impact;
-    
+
     print "\nFEATURE IMPACT ANALYSIS:\n";
     print "(Features that, if implemented, would likely improve the most tests)\n\n";
-    
+
     # Sort features by impact
-    my @sorted_features = sort { @{$feature_impact{$b}} <=> @{$feature_impact{$a}} } 
+    my @sorted_features = sort { @{$feature_impact{$b}} <=> @{$feature_impact{$a}} }
                           keys %feature_impact;
-    
+
     for my $i (0 .. 9) {  # Top 10
         last if $i >= @sorted_features;
         my $feature = $sorted_features[$i];
         my $count = @{$feature_impact{$feature}};
         printf "  %-15s - affects %3d test files\n", $feature, $count;
     }
-    
+
     print "\nTop 3 features to prioritize:\n";
     for my $i (0 .. 2) {
         last if $i >= @sorted_features;
@@ -500,7 +457,7 @@ sub print_feature_impact {
 
 sub save_results {
     my ($filename) = @_;
-    
+
     my $report = {
         timestamp => scalar(localtime),
         jperl_path => $jperl_path,
@@ -508,11 +465,11 @@ sub save_results {
         feature_impact => \%feature_impact,
         results => \%results,
     };
-    
+
     open my $fh, '>', $filename or die "Cannot write to $filename: $!\n";
     print $fh JSON::PP->new->pretty->encode($report);
     close $fh;
-    
+
     print "\nDetailed results saved to: $filename\n";
 }
 
