@@ -240,8 +240,8 @@ public class StringParser {
 
     public static OperatorNode parseSystemCommand(EmitterContext ctx, String operator, ParsedString rawStr) {
         operator = "qx";
-        // TODO when to interpolate variables?
-        Node parsed = new StringNode(rawStr.buffers.getFirst(), rawStr.index);
+        // Parse as interpolated string (like double quotes)
+        Node parsed = StringDoubleQuoted.parseDoubleQuotedString(ctx, rawStr, true);
         List<Node> elements = new ArrayList<>();
         elements.add(parsed);
         ListNode list = new ListNode(elements, rawStr.index);
