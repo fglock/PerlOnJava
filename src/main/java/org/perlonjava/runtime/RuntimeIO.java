@@ -594,6 +594,19 @@ public class RuntimeIO implements RuntimeScalarReference {
         // Handle: my $fh2 = \*STDOUT;
         // Handle: my $fh = *STDOUT;
 
+        if (runtimeScalar.type == RuntimeScalarType.STRING) {
+            String name = runtimeScalar.toString();
+            String packageName = "main";  // XXX TODO: get the current package name
+            if (name.equals("STDOUT") || name.equals("STDERR") || name.equals("STDIN")) {
+                packageName = "main";
+            }
+
+            // Normalize the name to include the package qualifier
+            // This converts "HANDLE" to "Package::HANDLE" format
+            name = NameNormalizer.normalizeVariableName(name, packageName);
+            runtimeScalar = GlobalVariable.getGlobalIO(name);
+        }
+
         if (runtimeScalar.value instanceof RuntimeGlob runtimeGlob) {
             fh = (RuntimeIO) runtimeGlob.getIO().value;
         } else if (runtimeScalar.value instanceof RuntimeIO runtimeIO) {
