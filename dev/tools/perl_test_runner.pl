@@ -229,9 +229,9 @@ sub run_single_test {
     # Save current directory
     my $old_dir = File::Spec->rel2abs('.');
 
-    # Change to test directory for relative paths
-    my $test_dir = $test_file;
-    $test_dir =~ s{/[^/]+$}{};
+    ## # Change to test directory for relative paths
+    ## my $test_dir = $test_file;
+    ## $test_dir =~ s{/[^/]+$}{};
 
     chdir($test_dir) if $test_dir && -d $test_dir;
 
