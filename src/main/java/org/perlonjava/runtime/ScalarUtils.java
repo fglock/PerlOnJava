@@ -5,7 +5,7 @@ import org.perlonjava.parser.NumberParser;
 import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 /**
- * Utility class for scalar operations in the Perlon Java runtime.
+ * Utility class for scalar operations in the PerlOnJava runtime.
  */
 public class ScalarUtils {
 
@@ -227,7 +227,10 @@ public class ScalarUtils {
             // Use scientific notation like Perl
             String result = String.format("%.14e", value);
             // Clean up the scientific notation to match Perl's format
-            result = result.replaceAll("e\\+0*", "e+").replaceAll("e-0*", "e-");
+            // For positive exponents, remove leading zeros but keep at least one digit
+            result = result.replaceAll("e\\+0*", "e+");
+            // For negative exponents, keep at least 2 digits (Perl's behavior)
+            result = result.replaceAll("e-0*(\\d{2,})", "e-$1");
             // Remove trailing zeros in the mantissa
             result = result.replaceAll("(\\d)\\.?0+e", "$1e");
             return result;
