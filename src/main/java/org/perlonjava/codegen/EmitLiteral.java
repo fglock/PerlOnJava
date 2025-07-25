@@ -410,20 +410,20 @@ public class EmitLiteral {
         // Determine the element's return type for optimization
         if (contextType == RuntimeContextType.SCALAR) {
             // In scalar context, all elements are treated as scalars
-            returnType = RuntimeTypeConstants.SCALAR_TYPE;
+            returnType = RuntimeDescriptorConstants.SCALAR_TYPE;
         } else {
             // Use static analysis to determine the element's return type
             returnType = ReturnTypeVisitor.getReturnType(element);
         }
 
         // Generate type-specific method call for better performance
-        if (RuntimeTypeConstants.isKnownRuntimeType(returnType)) {
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeTypeConstants.LIST_CLASS,
+        if (RuntimeDescriptorConstants.isKnownRuntimeType(returnType)) {
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.LIST_CLASS,
                     "add", "(" + returnType + ")V", false);
         } else {
             // Fall back for unknown types
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeTypeConstants.LIST_CLASS,
-                    "add", "(" + RuntimeTypeConstants.BASE_TYPE + ")V", false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.LIST_CLASS,
+                    "add", "(" + RuntimeDescriptorConstants.BASE_TYPE + ")V", false);
         }
     }
 
@@ -444,13 +444,13 @@ public class EmitLiteral {
         String returnType = ReturnTypeVisitor.getReturnType(element);
 
         // Generate type-specific method call for better performance
-        if (RuntimeTypeConstants.isKnownRuntimeType(returnType)) {
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeTypeConstants.ARRAY_CLASS,
+        if (RuntimeDescriptorConstants.isKnownRuntimeType(returnType)) {
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.ARRAY_CLASS,
                     "add", "(" + returnType + ")V", false);
         } else {
             // Fall back for unknown types
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeTypeConstants.ARRAY_CLASS,
-                    "add", "(" + RuntimeTypeConstants.BASE_TYPE + ")V", false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.ARRAY_CLASS,
+                    "add", "(" + RuntimeDescriptorConstants.BASE_TYPE + ")V", false);
         }
     }
 }

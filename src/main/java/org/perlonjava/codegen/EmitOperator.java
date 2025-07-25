@@ -11,7 +11,7 @@ import org.perlonjava.operators.ScalarGlobOperator;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeContextType;
-import org.perlonjava.runtime.RuntimeTypeConstants;
+import org.perlonjava.runtime.RuntimeDescriptorConstants;
 
 /**
  * The EmitOperator class is responsible for handling various operators
@@ -461,18 +461,18 @@ public class EmitOperator {
         }
 
         String rawType = ReturnTypeVisitor.getReturnType(node);
-        if (RuntimeTypeConstants.SCALAR_TYPE.equals(rawType)) {
+        if (RuntimeDescriptorConstants.SCALAR_TYPE.equals(rawType)) {
             return; // Already a scalar
         }
 
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
         // Convert to scalar based on return type
-        if (RuntimeTypeConstants.isKnownRuntimeType(rawType)) {
+        if (RuntimeDescriptorConstants.isKnownRuntimeType(rawType)) {
             // Extract the internal class name from the type descriptor
-            String className = RuntimeTypeConstants.descriptorToInternalName(rawType);
+            String className = RuntimeDescriptorConstants.descriptorToInternalName(rawType);
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, className,
-                    "scalar", "()" + RuntimeTypeConstants.SCALAR_TYPE, false);
+                    "scalar", "()" + RuntimeDescriptorConstants.SCALAR_TYPE, false);
         } else {
             // For unknown types
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
