@@ -200,8 +200,12 @@ public class IOOperator {
         if (fh == null) {
             return scalarFalse;
         }
-        fileHandle.type = RuntimeScalarType.GLOBREFERENCE;
-        fileHandle.value = new RuntimeGlob(null).setIO(fh);
+        if ((fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) && fileHandle.value instanceof RuntimeGlob glob) {
+            glob.setIO(fh);
+        } else {
+            fileHandle.type = RuntimeScalarType.GLOBREFERENCE;
+            fileHandle.value = new RuntimeGlob(null).setIO(fh);
+        }
         return scalarTrue; // success
     }
 
