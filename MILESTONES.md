@@ -275,7 +275,7 @@ The following areas are currently under active development to enhance the functi
 - **v3.2.0**: Next minor version
   - Add `tie`, `tied`, `untie` operators.
   - Add all `tie` types: scalar, array, hash, and handle.
-  - Add operators: `sysread`, `syswrite`, `kill`.
+  - Add operators: `sysread`, `syswrite`, `kill`, `utime`.
   - Add modules: `Encode`,`Config`.
   - Add key-value slices: `%c{"1", "3"}`.
   - Bugfix: methods can be called in all blessed reference types.
