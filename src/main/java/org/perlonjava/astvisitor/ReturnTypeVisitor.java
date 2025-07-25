@@ -1,8 +1,7 @@
 package org.perlonjava.astvisitor;
 
 import org.perlonjava.astnode.*;
-import org.perlonjava.operators.OperatorHandler;
-import org.perlonjava.runtime.RuntimeTypeConstants;
+import org.perlonjava.runtime.RuntimeDescriptorConstants;
 
 /**
  * A visitor that determines the return type descriptor of AST nodes.
@@ -28,12 +27,12 @@ public class ReturnTypeVisitor implements Visitor {
 
     @Override
     public void visit(NumberNode node) {
-        returnType = RuntimeTypeConstants.SCALAR_TYPE;
+        returnType = RuntimeDescriptorConstants.SCALAR_TYPE;
     }
 
     @Override
     public void visit(StringNode node) {
-        returnType = RuntimeTypeConstants.SCALAR_TYPE;
+        returnType = RuntimeDescriptorConstants.SCALAR_TYPE;
     }
 
     @Override
@@ -58,10 +57,10 @@ public class ReturnTypeVisitor implements Visitor {
         // Handle special cases not in OperatorHandler
         switch (node.operator) {
             case "(":      // subroutine call
-                returnType = RuntimeTypeConstants.LIST_TYPE;
+                returnType = RuntimeDescriptorConstants.LIST_TYPE;
                 break;
             case "+", "-", "/", "*", ".":
-                returnType = RuntimeTypeConstants.SCALAR_TYPE;
+                returnType = RuntimeDescriptorConstants.SCALAR_TYPE;
                 break;
         }
 
@@ -84,32 +83,32 @@ public class ReturnTypeVisitor implements Visitor {
             case "*":      // glob dereference
             case "$#":     // array last index
             case "scalar": // scalar context
-                returnType = RuntimeTypeConstants.SCALAR_TYPE;
+                returnType = RuntimeDescriptorConstants.SCALAR_TYPE;
                 break;
             case "@":      // array dereference
-                returnType = RuntimeTypeConstants.ARRAY_TYPE;
+                returnType = RuntimeDescriptorConstants.ARRAY_TYPE;
                 break;
             case "%":      // hash dereference
-                returnType = RuntimeTypeConstants.HASH_TYPE;
+                returnType = RuntimeDescriptorConstants.HASH_TYPE;
                 break;
         }
     }
 
     @Override
     public void visit(ListNode node) {
-        returnType = RuntimeTypeConstants.LIST_TYPE;
+        returnType = RuntimeDescriptorConstants.LIST_TYPE;
     }
 
     @Override
     public void visit(ArrayLiteralNode node) {
         // Array literals produce array references (which are scalars)
-        returnType = RuntimeTypeConstants.SCALAR_TYPE;
+        returnType = RuntimeDescriptorConstants.SCALAR_TYPE;
     }
 
     @Override
     public void visit(HashLiteralNode node) {
         // Hash literals produce hash references (which are scalars)
-        returnType = RuntimeTypeConstants.SCALAR_TYPE;
+        returnType = RuntimeDescriptorConstants.SCALAR_TYPE;
     }
 
     @Override

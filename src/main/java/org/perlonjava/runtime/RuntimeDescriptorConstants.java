@@ -12,10 +12,10 @@ package org.perlonjava.runtime;
  * <p>Internal class names (e.g., "org/perlonjava/runtime/RuntimeScalar") are used
  * when generating bytecode instructions that reference classes.</p>
  */
-public final class RuntimeTypeConstants {
+public final class RuntimeDescriptorConstants {
 
     // Prevent instantiation
-    private RuntimeTypeConstants() {}
+    private RuntimeDescriptorConstants() {}
 
     // ===== JVM Type Descriptors =====
     // These are used in method signatures and type checking
