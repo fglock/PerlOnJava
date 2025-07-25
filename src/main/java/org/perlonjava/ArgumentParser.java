@@ -719,6 +719,8 @@ public class ArgumentParser {
         for (ModuleUseStatement moduleStatement : parsedArgs.moduleUseStatements) {
             useStatements.append(moduleStatement.toString()).append("\n");
         }
+        // Perl tests require DynaLoader
+        useStatements.append("use DynaLoader;\n");
         // Prepend the use statements to the code
         if (!useStatements.isEmpty()) {
             parsedArgs.code = useStatements + parsedArgs.code;
