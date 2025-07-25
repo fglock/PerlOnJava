@@ -22,6 +22,7 @@ public class Variable {
     public static Node parseVariable(Parser parser, String sigil) {
         Node operand;
         String varName = IdentifierParser.parseComplexIdentifier(parser);
+        parser.ctx.logDebug("Parsing variable: " + varName);
 
         if (varName != null) {
             // Variable name is valid.

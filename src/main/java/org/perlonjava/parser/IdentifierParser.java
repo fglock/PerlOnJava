@@ -107,7 +107,7 @@ public class IdentifierParser {
                 if (token.text.equals("$") && (nextToken.text.equals("$")
                         || nextToken.type == LexerTokenType.IDENTIFIER
                         || nextToken.type == LexerTokenType.NUMBER)) {
-                    // `@$` `$$` can't be followed by `$` or name or number
+                    // `@$` can't be followed by `$` or name or number
                     return null;
                 }
                 if (token.text.equals("^") && nextToken.type == LexerTokenType.IDENTIFIER && Character.isUpperCase(nextToken.text.charAt(0))) {
@@ -130,24 +130,63 @@ public class IdentifierParser {
                     parser.tokenIndex++;
                     return variableName.toString();
                 }
-                if (!token.text.equals("::") && !(token.type == LexerTokenType.NUMBER)) {
-                    // `::` or number can continue the loop
-                    // XXX STRING token type needs more work (Unicode, control characters)
+                if (token.text.equals("::")) {
+                    // Handle :: specially
+                    variableName.append(token.text);
+                    parser.tokenIndex++;
+
+                    // Skip whitespace after ::
+                    parser.tokenIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+
+                    // Check what follows ::
+                    token = parser.tokens.get(parser.tokenIndex);
+                    nextToken = parser.tokens.get(parser.tokenIndex + 1);
+
+                    // After ::, only identifiers or another :: are allowed
+                    if (token.type != LexerTokenType.IDENTIFIER && !token.text.equals("::")) {
+                        // Nothing valid follows ::, so return what we have
+                        return variableName.toString();
+                    }
+                    // Continue the loop to process the next token
+                    continue;
+                }
+                if (!(token.type == LexerTokenType.NUMBER)) {
+                    // Not :: and not a number, so this is the end
                     variableName.append(token.text);
                     parser.tokenIndex++;
                     return variableName.toString();
                 }
+            } else if (token.type == LexerTokenType.IDENTIFIER) {
+                // Handle identifiers
+                variableName.append(token.text);
+
+                // Check if :: follows this identifier
+                if (!nextToken.text.equals("::")) {
+                    parser.tokenIndex++;
+                    return variableName.toString();
+                }
+
+                // :: follows, so continue parsing
+                parser.tokenIndex++;
+                token = parser.tokens.get(parser.tokenIndex);
+                nextToken = parser.tokens.get(parser.tokenIndex + 1);
+                continue;
             } else if (token.type == LexerTokenType.WHITESPACE || token.type == LexerTokenType.EOF || token.type == LexerTokenType.NEWLINE) {
                 return variableName.toString();
-            }
-            isFirstToken = false;
-            variableName.append(token.text);
-
-            if ((token.type == LexerTokenType.IDENTIFIER || token.type == LexerTokenType.NUMBER)
-                    && (!nextToken.text.equals("::"))
-            ) {
-                parser.tokenIndex++;
+            } else {
+                // Any other token type ends the identifier
                 return variableName.toString();
+            }
+
+            isFirstToken = false;
+
+            // For NUMBER tokens that aren't first token
+            if (token.type == LexerTokenType.NUMBER) {
+                variableName.append(token.text);
+                if (!nextToken.text.equals("::")) {
+                    parser.tokenIndex++;
+                    return variableName.toString();
+                }
             }
 
             parser.tokenIndex++;
