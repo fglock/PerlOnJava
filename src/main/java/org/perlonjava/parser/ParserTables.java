@@ -10,7 +10,7 @@ public class ParserTables {
             Set.of(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when");
     // Set of tokens that can terminate a list of expressions.
     public static final Set<String> LIST_TERMINATORS =
-            Set.of(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when", "and", "or");
+            Set.of(":", ";", ")", "}", "]", "if", "unless", "while", "until", "for", "foreach", "when", "and", "or", "||", "&&");
     // Set of infix operators recognized by the parser.
     public static final Set<String> INFIX_OP = Set.of(
             "or", "xor", "and", "||", "//", "&&", "|", "^", "^^", "&", "|.", "^.", "&.",
