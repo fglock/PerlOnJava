@@ -408,6 +408,7 @@ my @copy = @{$z};         # ERROR
 - ❌  **`connect`**: Socket connection
 - ❌  **`accept`**: Connection acceptance
 - ❌  **`listen`**: Socket listening
+- ❌  **`pipe`**: Unix pipes
 
 ### I/O Layers
 - ✅  **Layer support**: `open` and `binmode` support these I/O layers:
