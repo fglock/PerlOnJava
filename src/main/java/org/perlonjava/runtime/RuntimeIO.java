@@ -235,17 +235,55 @@ public class RuntimeIO implements RuntimeScalarReference {
      */
     public static RuntimeIO open(String fileName) {
         RuntimeIO fh = new RuntimeIO();
-        if ("-".equals(fileName) || "<-".equals(fileName)) {
-            // Handle standard input
-            fh.ioHandle = new StandardIO(System.in);
-        } else if (">-".equals(fileName)) {
-            // Handle standard output
-            fh.ioHandle = new CustomOutputStreamHandle(System.out);
-        } else {
-            // Default to read mode for regular files
-            return open(fileName, "<");
+
+        // Trim leading and trailing whitespace
+        fileName = fileName.trim();
+
+        // Parse mode from filename for 2-argument open
+        String mode = "<";  // default read mode
+        String actualFileName = fileName;
+        int modeEndIndex = 0;
+
+        // Check for mode at the beginning of the filename
+        if (fileName.startsWith(">>")) {
+            mode = ">>";
+            modeEndIndex = 2;
+        } else if (fileName.startsWith(">")) {
+            mode = ">";
+            modeEndIndex = 1;
+        } else if (fileName.startsWith("+>>")) {
+            mode = "+>>";
+            modeEndIndex = 3;
+        } else if (fileName.startsWith("+>")) {
+            mode = "+>";
+            modeEndIndex = 2;
+        } else if (fileName.startsWith("+<")) {
+            mode = "+<";
+            modeEndIndex = 2;
+        } else if (fileName.startsWith("<")) {
+            mode = "<";
+            modeEndIndex = 1;
         }
-        return fh;
+
+        // Extract filename, skipping any spaces after the mode
+        if (modeEndIndex > 0) {
+            actualFileName = fileName.substring(modeEndIndex).trim();
+        }
+
+        // Handle special filenames
+        if ("-".equals(actualFileName) || actualFileName.isEmpty()) {
+            if (mode.equals(">") || mode.equals(">>")) {
+                // ">-" or just ">" means stdout
+                fh.ioHandle = new CustomOutputStreamHandle(System.out);
+            } else {
+                // "<-" or just "<" means stdin
+                fh.ioHandle = new StandardIO(System.in);
+            }
+            return fh;
+        } else {
+            // Regular file open with parsed mode
+            return open(actualFileName, mode);
+        }
     }
 
     /**
