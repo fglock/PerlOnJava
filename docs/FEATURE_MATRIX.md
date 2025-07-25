@@ -514,6 +514,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Config** module.
 - ✅  **Data::Dumper**: use the same version as Perl.
 - ✅  **Encode** module.
+- ✅  **Errno** module.
 - ✅  **Exporter**: `@EXPORT_OK`, `@EXPORT`, `%EXPORT_TAGS` are implemented.
 - ✅  **Scalar::Util**: `blessed`, `reftype`, `set_prototype` are implemented.
 - ✅  **Internals**: `Internals::SvREADONLY` is implemented as a no-op.
