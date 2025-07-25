@@ -14,6 +14,7 @@ import java.util.List;
 import static org.perlonjava.lexer.LexerTokenType.*;
 import static org.perlonjava.parser.NumberParser.parseNumber;
 import static org.perlonjava.parser.ParserNodeUtils.atUnderscore;
+import static org.perlonjava.parser.ParserNodeUtils.scalarUnderscore;
 import static org.perlonjava.parser.TokenUtils.consume;
 import static org.perlonjava.parser.TokenUtils.peek;
 
@@ -719,19 +720,25 @@ public class OperatorParser {
         } else if (token.text.matches("^v\\d+$")) {
             consume(parser);
             operand = StringParser.parseVstring(parser, token.text, parser.tokenIndex);
-        } else if (token.type == IDENTIFIER) {
-
-            // `require` module
-            String moduleName = IdentifierParser.parseSubroutineIdentifier(parser);
-            parser.ctx.logDebug("name `" + moduleName + "`");
-            if (moduleName == null) {
-                throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
-            }
-            String fileName = NameNormalizer.moduleToFilename(moduleName);
-            operand = ListNode.makeList(new StringNode(fileName, parser.tokenIndex));
         } else {
-            // `require` file
-            operand = ListParser.parseZeroOrOneList(parser, 1);
+            ListNode op = ListParser.parseZeroOrOneList(parser, 0);
+            if (op.elements.isEmpty()) {
+                // `require $_`
+                op.elements.add(scalarUnderscore(parser));
+                operand = op;
+            } else if (op.elements.getFirst() instanceof IdentifierNode identifierNode) {
+                // `require` module
+                String moduleName = identifierNode.name;
+                parser.ctx.logDebug("name `" + moduleName + "`");
+                if (moduleName == null) {
+                    throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+                }
+                String fileName = NameNormalizer.moduleToFilename(moduleName);
+                operand = ListNode.makeList(new StringNode(fileName, parser.tokenIndex));
+            } else {
+                // `require` file
+                operand = op;
+            }
         }
         OperatorNode node = new OperatorNode("require", operand, parser.tokenIndex);
         // Is `module_true` feature enabled?
