@@ -51,25 +51,22 @@ public class NumberParser {
                 char secondChar = letter.charAt(0);
                 if (secondChar == 'b' || secondChar == 'B') {
                     // Binary number: 0b...
-                    letter = letter.replaceAll("_", "");
                     TokenUtils.consume(parser);
-                    return new NumberNode(Long.toString(Long.parseLong(letter.substring(1), 2)), parser.tokenIndex);
+                    return parseBinaryNumber(parser, letter.substring(1));
                 } else if (secondChar == 'x' || secondChar == 'X') {
                     // Hexadecimal number: 0x...
-                    letter = letter.replaceAll("_", "");
                     TokenUtils.consume(parser);
-                    return parseHexadecimalNumber(parser, letter.substring(1));
+                    // Remove the 'x' or 'X' prefix from the token
+                    String hexPart = letter.substring(1);
+                    return parseHexadecimalNumber(parser, hexPart);
                 } else if (secondChar == 'o' || secondChar == 'O') {
                     // Octal number: 0o...
-                    letter = letter.replaceAll("_", "");
                     TokenUtils.consume(parser);
-                    return new NumberNode(Long.toString(Long.parseLong(letter.substring(1), 8)), parser.tokenIndex);
+                    return parseOctalNumber(parser, letter.substring(1));
                 }
             } else {
-                // Octal number: 0...
-                String letter = token.text;
-                letter = letter.replaceAll("_", "");
-                return new NumberNode(Long.toString(Long.parseLong(letter, 8)), parser.tokenIndex);
+                // Traditional octal number: 0...
+                return parseOctalNumber(parser, token.text);
             }
         }
 
@@ -98,6 +95,204 @@ public class NumberParser {
     }
 
     /**
+     * Parses a binary number, including support for binary floating-point.
+     *
+     * @param parser    The Parser instance.
+     * @param binaryPart The initial part of the binary number.
+     * @return A NumberNode representing the parsed number.
+     */
+    private static Node parseBinaryNumber(Parser parser, String binaryPart) {
+        StringBuilder binaryStr = new StringBuilder();
+        boolean hasFractionalPart = false;
+        String exponentStr = "";
+
+        // Check if the binaryPart already contains 'p' (exponent)
+        int pIndex = binaryPart.toLowerCase().indexOf('p');
+        if (pIndex >= 0) {
+            // Split the binary part and exponent (e.g., "0p0" -> "0" + "0")
+            String actualBinaryPart = binaryPart.substring(0, pIndex);
+            exponentStr = binaryPart.substring(pIndex + 1);
+            binaryStr.append(cleanUnderscores(actualBinaryPart));
+        } else {
+            binaryStr.append(cleanUnderscores(binaryPart));
+        }
+
+        // Check for fractional part only if we haven't found an exponent yet
+        if (exponentStr.isEmpty() && parser.tokenIndex < parser.tokens.size() &&
+                parser.tokens.get(parser.tokenIndex).text.equals(".")) {
+            hasFractionalPart = true;
+            TokenUtils.consume(parser); // consume '.'
+
+            StringBuilder fractionalPart = new StringBuilder();
+            while (parser.tokenIndex < parser.tokens.size()) {
+                String currentToken = parser.tokens.get(parser.tokenIndex).text;
+
+                // Check if this is a NUMBER token (pure digits)
+                if (parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NUMBER) {
+                    String digitStr = cleanUnderscores(TokenUtils.consume(parser).text);
+                    if (!isBinaryString(digitStr)) {
+                        parser.throwError("Invalid binary digit in fractional part");
+                    }
+                    fractionalPart.append(digitStr);
+                }
+                // Check if this is an IDENTIFIER that might contain 'p'
+                else if (parser.tokens.get(parser.tokenIndex).type == LexerTokenType.IDENTIFIER) {
+                    int tokenPIndex = currentToken.toLowerCase().indexOf('p');
+                    if (tokenPIndex >= 0) {
+                        // This token has binary digits followed by 'p' and exponent
+                        String binaryDigits = currentToken.substring(0, tokenPIndex);
+                        if (!binaryDigits.isEmpty()) {
+                            binaryDigits = cleanUnderscores(binaryDigits);
+                            if (!isBinaryString(binaryDigits)) {
+                                parser.throwError("Invalid binary digit in fractional part");
+                            }
+                            fractionalPart.append(binaryDigits);
+                        }
+                        // Extract the exponent value
+                        exponentStr = currentToken.substring(tokenPIndex + 1);
+                        TokenUtils.consume(parser); // consume this token
+                        break;
+                    } else if (isBinaryString(currentToken.replaceAll("_", ""))) {
+                        // Pure binary digits
+                        String digitStr = cleanUnderscores(TokenUtils.consume(parser).text);
+                        fractionalPart.append(digitStr);
+                    } else {
+                        break;
+                    }
+                }
+                // Check if this is just 'p' (exponent marker)
+                else if (currentToken.toLowerCase().equals("p")) {
+                    TokenUtils.consume(parser); // consume 'p'
+                    break;
+                }
+                else {
+                    break;
+                }
+            }
+            binaryStr.append(".").append(fractionalPart.toString());
+        }
+
+        // Parse exponent if we haven't found it yet
+        if (exponentStr.isEmpty()) {
+            int exponent = checkBinaryExponent(parser);
+            if (exponent != 0) {
+                exponentStr = String.valueOf(exponent);
+            }
+        }
+
+        try {
+            int exponent = exponentStr.isEmpty() ? 0 : Integer.parseInt(exponentStr);
+            double value = parseBinaryToDouble(binaryStr.toString(), exponent);
+            return new NumberNode(Double.toString(value), parser.tokenIndex);
+        } catch (NumberFormatException e) {
+            parser.throwError("Invalid binary number");
+        }
+        return null;
+    }
+
+    /**
+     * Parses an octal number, including support for octal floating-point.
+     *
+     * @param parser   The Parser instance.
+     * @param octalPart The initial part of the octal number.
+     * @return A NumberNode representing the parsed number.
+     */
+    private static Node parseOctalNumber(Parser parser, String octalPart) {
+        StringBuilder octalStr = new StringBuilder();
+        boolean hasFractionalPart = false;
+        String exponentStr = "";
+
+        // Check if the octalPart already contains 'p' (exponent)
+        int pIndex = octalPart.toLowerCase().indexOf('p');
+        if (pIndex >= 0) {
+            // Split the octal part and exponent
+            String actualOctalPart = octalPart.substring(0, pIndex);
+            exponentStr = octalPart.substring(pIndex + 1);
+            octalStr.append(cleanUnderscores(actualOctalPart));
+        } else {
+            octalStr.append(cleanUnderscores(octalPart));
+        }
+
+        // Check for fractional part only if we haven't found an exponent yet
+        if (exponentStr.isEmpty() && parser.tokenIndex < parser.tokens.size() &&
+                parser.tokens.get(parser.tokenIndex).text.equals(".")) {
+            hasFractionalPart = true;
+            TokenUtils.consume(parser); // consume '.'
+
+            StringBuilder fractionalPart = new StringBuilder();
+            while (parser.tokenIndex < parser.tokens.size()) {
+                String currentToken = parser.tokens.get(parser.tokenIndex).text;
+
+                // Check if this is a NUMBER token (pure digits)
+                if (parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NUMBER) {
+                    String digitStr = cleanUnderscores(TokenUtils.consume(parser).text);
+                    if (!isOctalString(digitStr)) {
+                        parser.throwError("Invalid octal digit in fractional part");
+                    }
+                    fractionalPart.append(digitStr);
+                }
+                // Check if this is an IDENTIFIER that might contain 'p'
+                else if (parser.tokens.get(parser.tokenIndex).type == LexerTokenType.IDENTIFIER) {
+                    int tokenPIndex = currentToken.toLowerCase().indexOf('p');
+                    if (tokenPIndex >= 0) {
+                        // This token has octal digits followed by 'p' and exponent
+                        String octalDigits = currentToken.substring(0, tokenPIndex);
+                        if (!octalDigits.isEmpty()) {
+                            octalDigits = cleanUnderscores(octalDigits);
+                            if (!isOctalString(octalDigits)) {
+                                parser.throwError("Invalid octal digit in fractional part");
+                            }
+                            fractionalPart.append(octalDigits);
+                        }
+                        // Extract the exponent value
+                        exponentStr = currentToken.substring(tokenPIndex + 1);
+                        TokenUtils.consume(parser); // consume this token
+                        break;
+                    } else if (isOctalString(currentToken.replaceAll("_", ""))) {
+                        // Pure octal digits
+                        String digitStr = cleanUnderscores(TokenUtils.consume(parser).text);
+                        fractionalPart.append(digitStr);
+                    } else {
+                        break;
+                    }
+                }
+                // Check if this is just 'p' (exponent marker)
+                else if (currentToken.toLowerCase().equals("p")) {
+                    TokenUtils.consume(parser); // consume 'p'
+                    break;
+                }
+                else {
+                    break;
+                }
+            }
+            octalStr.append(".").append(fractionalPart.toString());
+        }
+
+        // Parse exponent if we haven't found it yet
+        if (exponentStr.isEmpty()) {
+            int exponent = checkBinaryExponent(parser); // Binary exponent (base 2) for octal floats too
+            if (exponent != 0) {
+                exponentStr = String.valueOf(exponent);
+            }
+        }
+
+        try {
+            int exponent = exponentStr.isEmpty() ? 0 : Integer.parseInt(exponentStr);
+            if (hasFractionalPart || exponent != 0) {
+                double value = parseOctalToDouble(octalStr.toString(), exponent);
+                return new NumberNode(Double.toString(value), parser.tokenIndex);
+            } else {
+                // Integer octal
+                long value = Long.parseLong(octalStr.toString(), 8);
+                return new NumberNode(Long.toString(value), parser.tokenIndex);
+            }
+        } catch (NumberFormatException e) {
+            parser.throwError("Invalid octal number");
+        }
+        return null;
+    }
+
+    /**
      * Parses a hexadecimal number, including support for hexadecimal floating-point.
      *
      * @param parser  The Parser instance.
@@ -105,76 +300,222 @@ public class NumberParser {
      * @return A NumberNode representing the parsed number.
      */
     private static Node parseHexadecimalNumber(Parser parser, String hexPart) {
-        StringBuilder number = new StringBuilder(hexPart);
+        StringBuilder hexStr = new StringBuilder();
+        boolean hasFractionalPart = false;
+        String exponentStr = "";
 
-        // Check for fractional part
-        if (parser.tokens.get(parser.tokenIndex).text.equals(".")) {
-            number.append(TokenUtils.consume(parser).text); // consume '.'
-            while (isHexDigit(parser.tokens.get(parser.tokenIndex).text) || parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NUMBER) {
-                number.append(TokenUtils.consume(parser).text); // consume hex digits after '.'
+        // Handle the initial hex part (might be just "x1" or "x1p0" etc.)
+        String actualHexPart = hexPart;
+        int pIndex = hexPart.toLowerCase().indexOf('p');
+        if (pIndex >= 0) {
+            // Split the hex part and exponent (e.g., "1p0" -> "1" + "0")
+            actualHexPart = hexPart.substring(0, pIndex);
+            exponentStr = hexPart.substring(pIndex + 1);
+        }
+
+        hexStr.append(cleanUnderscores(actualHexPart));
+
+        // Check for fractional part (dot followed by more hex digits)
+        if (exponentStr.isEmpty() && parser.tokenIndex < parser.tokens.size() &&
+                parser.tokens.get(parser.tokenIndex).text.equals(".")) {
+            hasFractionalPart = true;
+            hexStr.append(".");
+            TokenUtils.consume(parser); // consume '.'
+
+            // Consume hex digits after decimal point
+            while (parser.tokenIndex < parser.tokens.size()) {
+                String currentToken = parser.tokens.get(parser.tokenIndex).text;
+
+                // Check if this is a NUMBER token (pure digits)
+                if (parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NUMBER) {
+                    String digitStr = cleanUnderscores(TokenUtils.consume(parser).text);
+                    if (!isHexString(digitStr)) {
+                        parser.throwError("Invalid hex digit in fractional part");
+                    }
+                    hexStr.append(digitStr);
+                }
+                // Check if this is an IDENTIFIER that contains hex digits possibly followed by 'p'
+                else if (parser.tokens.get(parser.tokenIndex).type == LexerTokenType.IDENTIFIER) {
+                    int tokenPIndex = currentToken.toLowerCase().indexOf('p');
+                    if (tokenPIndex >= 0) {
+                        // This token has hex digits followed by 'p' (e.g., "ap" or "p0")
+                        String hexDigits = currentToken.substring(0, tokenPIndex);
+                        if (!hexDigits.isEmpty()) {
+                            hexDigits = cleanUnderscores(hexDigits);
+                            if (!isHexString(hexDigits)) {
+                                parser.throwError("Invalid hex digit in fractional part");
+                            }
+                            hexStr.append(hexDigits);
+                        }
+                        // Extract the exponent value that comes after 'p'
+                        exponentStr = currentToken.substring(tokenPIndex + 1);
+                        TokenUtils.consume(parser); // consume this token
+                        break;
+                    } else if (isHexString(currentToken.replaceAll("_", ""))) {
+                        // Pure hex digits
+                        String digitStr = cleanUnderscores(TokenUtils.consume(parser).text);
+                        hexStr.append(digitStr);
+                    } else {
+                        break;
+                    }
+                }
+                // Check if this is just 'p' (exponent marker)
+                else if (currentToken.toLowerCase().equals("p")) {
+                    TokenUtils.consume(parser); // consume 'p'
+                    break;
+                }
+                else {
+                    break;
+                }
             }
         }
 
-        // Check for 'p' exponent part, including cases like "ap"
-        String currentTokenText = parser.tokens.get(parser.tokenIndex).text;
-        if (currentTokenText.toLowerCase().endsWith("p")) {
-            int pIndex = currentTokenText.toLowerCase().indexOf('p');
-            number.append(currentTokenText, 0, pIndex); // append any preceding hex digits
-            TokenUtils.consume(parser); // consume the token containing 'p'
-            number.append("p"); // append 'p' to the number
-
-            // Check for optional sign
-            if (parser.tokens.get(parser.tokenIndex).text.equals("-") || parser.tokens.get(parser.tokenIndex).text.equals("+")) {
-                number.append(TokenUtils.consume(parser).text); // consume '-' or '+'
-            }
-
-            // Consume exponent digits
-            if (parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NUMBER) {
-                number.append(TokenUtils.consume(parser).text);
-            } else {
-                parser.throwError("Malformed hexadecimal floating-point number");
-            }
+        // Parse exponent if we haven't found it yet
+        if (exponentStr.isEmpty()) {
+            exponentStr = parseHexExponentTokens(parser);
         }
 
         try {
-            // Convert the hexadecimal number to a double
-            double value = parseHexToDouble(number.toString());
-            return new NumberNode(Double.toString(value), parser.tokenIndex);
+            if (hasFractionalPart || !exponentStr.isEmpty()) {
+                // Use Java's native hex float parsing
+                String hexFloat = "0x" + hexStr.toString();
+                if (!exponentStr.isEmpty()) {
+                    hexFloat += "p" + exponentStr;
+                }
+                double value = Double.parseDouble(hexFloat);
+                return new NumberNode(Double.toString(value), parser.tokenIndex);
+            } else {
+                // Integer hex
+                long value = Long.parseLong(hexStr.toString(), 16);
+                return new NumberNode(Long.toString(value), parser.tokenIndex);
+            }
         } catch (NumberFormatException e) {
-            System.err.println("NumberFormatException: " + e.getMessage());
+            System.err.println("Failed to parse hex float: 0x" + hexStr.toString() + (exponentStr.isEmpty() ? "" : "p" + exponentStr));
             parser.throwError("Invalid hexadecimal number");
         }
         return null;
     }
 
-    private static boolean isHexDigit(String text) {
-        return text.matches("[0-9a-fA-F]");
+    /**
+     * Parses the exponent part of a hex float from multiple tokens.
+     * Handles cases where the exponent is split across tokens like: '-', '4'
+     *
+     * @param parser The Parser instance.
+     * @return The exponent string, or empty string if no exponent.
+     */
+    private static String parseHexExponentTokens(Parser parser) {
+        if (parser.tokenIndex >= parser.tokens.size()) {
+            return "";
+        }
+
+        StringBuilder exponentStr = new StringBuilder();
+
+        // Check for optional sign
+        String currentToken = parser.tokens.get(parser.tokenIndex).text;
+        if (currentToken.equals("-") || currentToken.equals("+")) {
+            exponentStr.append(TokenUtils.consume(parser).text);
+        }
+
+        // Consume exponent digits
+        if (parser.tokenIndex < parser.tokens.size() &&
+                parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NUMBER) {
+            exponentStr.append(cleanUnderscores(TokenUtils.consume(parser).text));
+        } else if (exponentStr.length() > 0) {
+            // We found a sign but no number - this is an error
+            parser.throwError("Malformed hexadecimal floating-point exponent");
+        }
+
+        return exponentStr.toString();
     }
 
-    private static double parseHexToDouble(String hex) {
-        String[] parts = hex.split("\\.");
-        long integerPart = Long.parseLong(parts[0], 16);
-        double fractionalPart = 0.0;
+    /**
+     * Checks for and parses the hex exponent part (p/P followed by digits).
+     * Handles cases where hex digits and 'p' appear in the same token.
+     *
+     * @param parser The Parser instance.
+     * @return The exponent string, or empty string if no exponent is present.
+     */
+    private static String checkHexExponent(Parser parser) {
+        if (parser.tokenIndex >= parser.tokens.size()) {
+            return "";
+        }
 
-        if (parts.length > 1) {
-            String fraction = parts[1];
-            for (int i = 0; i < fraction.length(); i++) {
-                fractionalPart += Character.digit(fraction.charAt(i), 16) / Math.pow(16, i + 1);
+        String currentTokenText = parser.tokens.get(parser.tokenIndex).text;
+
+        // Check if current token contains 'p' or 'P'
+        int pIndex = currentTokenText.toLowerCase().indexOf('p');
+        if (pIndex >= 0) {
+            String exponentStr = currentTokenText.substring(pIndex + 1);
+            TokenUtils.consume(parser); // consume the token containing 'p'
+
+            // If there are no digits after 'p' in this token, check next tokens
+            if (exponentStr.isEmpty()) {
+                // Check for optional sign
+                if (parser.tokenIndex < parser.tokens.size() &&
+                        (parser.tokens.get(parser.tokenIndex).text.equals("-") ||
+                                parser.tokens.get(parser.tokenIndex).text.equals("+"))) {
+                    exponentStr += TokenUtils.consume(parser).text;
+                }
+
+                // Consume exponent digits
+                if (parser.tokenIndex < parser.tokens.size() &&
+                        parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NUMBER) {
+                    exponentStr += TokenUtils.consume(parser).text;
+                } else {
+                    parser.throwError("Malformed hexadecimal floating-point exponent");
+                }
             }
+
+            return cleanUnderscores(exponentStr);
+        }
+        // Also check if current token starts with 'p' or 'P' (from IDENTIFIER token)
+        else if (currentTokenText.toLowerCase().startsWith("p")) {
+            String exponentStr = currentTokenText.substring(1);
+            TokenUtils.consume(parser); // consume the 'p...' token
+
+            // If there are more digits after 'p', they should be in exponentStr
+            if (exponentStr.isEmpty()) {
+                // Check for optional sign
+                if (parser.tokenIndex < parser.tokens.size() &&
+                        (parser.tokens.get(parser.tokenIndex).text.equals("-") ||
+                                parser.tokens.get(parser.tokenIndex).text.equals("+"))) {
+                    exponentStr += TokenUtils.consume(parser).text;
+                }
+
+                // Consume exponent digits
+                if (parser.tokenIndex < parser.tokens.size() &&
+                        parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NUMBER) {
+                    exponentStr += TokenUtils.consume(parser).text;
+                } else {
+                    parser.throwError("Malformed floating-point exponent");
+                }
+            }
+
+            return cleanUnderscores(exponentStr);
         }
 
-        // Extract exponent part if present
-        int exponentIndex = hex.toLowerCase().indexOf('p');
-        int exponent = 0;
-        if (exponentIndex != -1) {
-            String exponentPart = hex.substring(exponentIndex + 1);
-            exponent = Integer.parseInt(exponentPart);
-        }
-
-        double value = integerPart + fractionalPart;
-        return value * Math.pow(2, exponent);
+        return ""; // No exponent
     }
 
+    /**
+     * Checks for and parses the binary exponent part (p/P followed by digits).
+     *
+     * @param parser The Parser instance.
+     * @return The exponent value, or 0 if no exponent is present.
+     */
+    private static int checkBinaryExponent(Parser parser) {
+        String exponentStr = checkHexExponent(parser);
+        if (exponentStr.isEmpty()) {
+            return 0;
+        }
+
+        try {
+            return Integer.parseInt(exponentStr);
+        } catch (NumberFormatException e) {
+            parser.throwError("Invalid exponent value");
+            return 0;
+        }
+    }
 
     /**
      * Parses a fractional number starting with a decimal point.
@@ -198,7 +539,7 @@ public class NumberParser {
     }
 
     /**
-     * Checks for and parses the exponent part of a number.
+     * Checks for and parses the exponent part of a decimal number.
      *
      * @param parser The Parser instance.
      * @param number The StringBuilder containing the number being parsed.
@@ -217,7 +558,7 @@ public class NumberParser {
                     parser.throwError("Malformed number");
                 }
             }
-            number.append(exponentPart);
+            number.append(cleanUnderscores(exponentPart));
 
             // If the exponent part was not fully consumed, check for separate tokens
             if (index == 1) {
@@ -227,9 +568,73 @@ public class NumberParser {
                 }
 
                 // Consume exponent digits
-                number.append(TokenUtils.consume(parser, LexerTokenType.NUMBER).text);
+                number.append(cleanUnderscores(TokenUtils.consume(parser, LexerTokenType.NUMBER).text));
             }
         }
+    }
+
+    // Helper methods
+    private static String cleanUnderscores(String str) {
+        return str.replaceAll("_", "");
+    }
+
+    private static boolean isBinaryDigit(String text) {
+        return text.matches("[01]");
+    }
+
+    private static boolean isBinaryString(String text) {
+        return text.matches("[01_]*");
+    }
+
+    private static boolean isOctalDigit(String text) {
+        return text.matches("[0-7]");
+    }
+
+    private static boolean isOctalString(String text) {
+        return text.matches("[0-7_]*");
+    }
+
+    private static boolean isHexDigit(String text) {
+        return text.matches("[0-9a-fA-F]");
+    }
+
+    private static boolean isHexString(String text) {
+        return text.matches("[0-9a-fA-F_]*");
+    }
+
+    private static double parseBinaryToDouble(String binary, int exponent) {
+        String[] parts = binary.split("\\.");
+        long integerPart = parts[0].isEmpty() ? 0 : Long.parseLong(parts[0], 2);
+        double fractionalPart = 0.0;
+
+        if (parts.length > 1) {
+            String fraction = parts[1];
+            for (int i = 0; i < fraction.length(); i++) {
+                if (fraction.charAt(i) == '1') {
+                    fractionalPart += Math.pow(2, -(i + 1));
+                }
+            }
+        }
+
+        double value = integerPart + fractionalPart;
+        return value * Math.pow(2, exponent);
+    }
+
+    private static double parseOctalToDouble(String octal, int exponent) {
+        String[] parts = octal.split("\\.");
+        long integerPart = parts[0].isEmpty() ? 0 : Long.parseLong(parts[0], 8);
+        double fractionalPart = 0.0;
+
+        if (parts.length > 1) {
+            String fraction = parts[1];
+            for (int i = 0; i < fraction.length(); i++) {
+                int digit = Character.digit(fraction.charAt(i), 8);
+                fractionalPart += digit * Math.pow(8, -(i + 1));
+            }
+        }
+
+        double value = integerPart + fractionalPart;
+        return value * Math.pow(2, exponent); // Binary exponent even for octal
     }
 
     /**
@@ -340,4 +745,3 @@ public class NumberParser {
         return result;
     }
 }
-
