@@ -147,6 +147,20 @@ public class FileHandle {
     }
 
     public static Node parseBarewordHandle(Parser parser, String name) {
+        name = normalizeBarewordHandle(parser, name);
+
+        // Check if this is a known file handle in the global I/O table
+        // This helps distinguish between file handles and other barewords
+        if (GlobalVariable.existsGlobalIO(name)) {
+            // Create a GLOB reference for the file handle, like `\*FH`
+            return new OperatorNode("\\",
+                    new OperatorNode("*",
+                            new IdentifierNode(name, parser.tokenIndex), parser.tokenIndex), parser.tokenIndex);
+        }
+        return null;
+    }
+
+    public static String normalizeBarewordHandle(Parser parser, String name) {
         // Determine the package context for the file handle
         String packageName = parser.ctx.symbolTable.getCurrentPackage();
 
@@ -159,15 +173,6 @@ public class FileHandle {
         // Normalize the name to include the package qualifier
         // This converts "HANDLE" to "Package::HANDLE" format
         name = NameNormalizer.normalizeVariableName(name, packageName);
-
-        // Check if this is a known file handle in the global I/O table
-        // This helps distinguish between file handles and other barewords
-        if (GlobalVariable.existsGlobalIO(name)) {
-            // Create a GLOB reference for the file handle, like `\*FH`
-            return new OperatorNode("\\",
-                    new OperatorNode("*",
-                            new IdentifierNode(name, parser.tokenIndex), parser.tokenIndex), parser.tokenIndex);
-        }
-        return null;
+        return name;
     }
 }

@@ -5,6 +5,7 @@ import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
 
@@ -552,11 +553,13 @@ public class OperatorParser {
 
     static BinaryOperatorNode parseReadline(Parser parser, LexerToken token, int currentIndex) {
         Node operand;
+        String operator = token.text;
+
         // Handle file-related operators with special handling for default handles
         operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
         Node handle;
         if (((ListNode) operand).elements.isEmpty()) {
-            String defaultHandle = switch (token.text) {
+            String defaultHandle = switch (operator) {
                 case "readline" -> "main::ARGV";
                 case "eof" -> "main::STDIN";
                 case "tell" -> "main::^LAST_FH";
@@ -570,7 +573,15 @@ public class OperatorParser {
         } else {
             handle = ((ListNode) operand).elements.removeFirst();
         }
-        return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
+
+        if (operator.equals("open") && handle instanceof IdentifierNode identifierNode) {
+            // autovivify the bareword handle
+            String name = identifierNode.name;
+            name = FileHandle.normalizeBarewordHandle(parser, name);
+            GlobalVariable.getGlobalIO(name);
+        }
+
+        return new BinaryOperatorNode(operator, handle, operand, currentIndex);
     }
 
     static BinaryOperatorNode parseSplit(Parser parser, LexerToken token, int currentIndex) {
