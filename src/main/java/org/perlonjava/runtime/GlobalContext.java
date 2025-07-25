@@ -40,6 +40,16 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::" + Character.toString('O' - 'A' + 1)).set(SystemUtils.getPerlOsName());    // initialize $^O
         GlobalVariable.getGlobalVariable("main::" + Character.toString('V' - 'A' + 1)).set(Configuration.getPerlVersionVString());    // initialize $^V
 
+        // Initialize $^X - the name used to execute the current copy of Perl
+        // PERLONJAVA_EXECUTABLE is set by the `jperl` or `jperl.bat` launcher
+        String perlExecutable = System.getenv("PERLONJAVA_EXECUTABLE");
+        if (perlExecutable != null && !perlExecutable.isEmpty()) {
+            GlobalVariable.getGlobalVariable("main::" + Character.toString('X' - 'A' + 1)).set(perlExecutable);
+        } else {
+            // Fallback to "jperl" if environment variable is not set
+            GlobalVariable.getGlobalVariable("main::" + Character.toString('X' - 'A' + 1)).set("jperl");
+        }
+
         GlobalVariable.getGlobalVariable("main::]").set(Configuration.getPerlVersionOld());    // initialize $] to Perl version
         GlobalVariable.getGlobalVariable("main::@").set("");    // initialize $@ to ""
         GlobalVariable.getGlobalVariable("main::_");    // initialize $_ to "undef"
