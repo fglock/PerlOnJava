@@ -13,4 +13,10 @@ sub bootstrap {
     # placeholder
 }
 
+# Perl tests use this:
+#    return !defined &DynaLoader::boot_DynaLoader;
+sub boot_DynaLoader {
+    # placeholder
+}
+
 1;
