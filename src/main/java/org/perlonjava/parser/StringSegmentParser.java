@@ -444,6 +444,9 @@ public abstract class StringSegmentParser {
             var c = controlChar.charAt(0);
             var result = (c >= 'A' && c <= 'Z') ? String.valueOf((char) (c - 'A' + 1))
                     : (c >= 'a' && c <= 'z') ? String.valueOf((char) (c - 'a' + 1))
+                    : c == '@' ?  String.valueOf((char) 0)
+                    : (c >= '[' && c <= '_') ? String.valueOf((char) (c - '[' + 27))
+                    : c == '?' ?  String.valueOf((char) 127)
                     : String.valueOf(c);
             appendToCurrentSegment(result);
         }
