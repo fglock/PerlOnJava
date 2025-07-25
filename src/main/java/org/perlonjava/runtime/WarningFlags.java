@@ -26,6 +26,12 @@ public class WarningFlags {
         warningHierarchy.put("syscalls", new String[]{});
         warningHierarchy.put("pipe", new String[]{});
         warningHierarchy.put("unopened", new String[]{});
+        warningHierarchy.put("FATAL", new String[]{});
+        warningHierarchy.put("illegalproto", new String[]{});
+        warningHierarchy.put("digit", new String[]{});
+        warningHierarchy.put("closed", new String[]{});
+        warningHierarchy.put("reserved", new String[]{});
+        warningHierarchy.put("prototype", new String[]{});
     }
 
     /**
