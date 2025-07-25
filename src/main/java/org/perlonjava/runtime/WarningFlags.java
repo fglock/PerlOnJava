@@ -24,6 +24,7 @@ public class WarningFlags {
         warningHierarchy.put("utf8", new String[]{"utf8::non_unicode", "utf8::nonchar", "utf8::surrogate"});
         warningHierarchy.put("layer", new String[]{});
         warningHierarchy.put("syscalls", new String[]{});
+        warningHierarchy.put("pipe", new String[]{});
     }
 
     /**
