@@ -25,6 +25,7 @@ public class WarningFlags {
         warningHierarchy.put("layer", new String[]{});
         warningHierarchy.put("syscalls", new String[]{});
         warningHierarchy.put("pipe", new String[]{});
+        warningHierarchy.put("unopened", new String[]{});
     }
 
     /**
