@@ -27,11 +27,13 @@ public class ModuleOperators {
         // `do` file
         String fileName = runtimeScalar.toString();
         Path fullName = null;
-        Path filePath = Paths.get(fileName);
         String code = null;
 
-        // If the filename is an absolute path or starts with ./ or ../, use it directly
+        // Check if the filename is an absolute path or starts with ./ or ../
+        Path filePath = Paths.get(fileName);
         if (filePath.isAbsolute() || fileName.startsWith("./") || fileName.startsWith("../")) {
+            // For absolute or explicit relative paths, resolve using RuntimeIO.getPath
+            filePath = RuntimeIO.getPath(fileName);
             fullName = Files.exists(filePath) ? filePath : null;
         } else {
             // Otherwise, search in INC directories
@@ -68,7 +70,9 @@ public class ModuleOperators {
                         }
                     }
                 } else {
-                    Path fullPath = Paths.get(dirName, fileName);
+                    // Use RuntimeIO.getPath to properly resolve the directory path first
+                    Path dirPath = RuntimeIO.getPath(dirName);
+                    Path fullPath = dirPath.resolve(fileName);
                     if (Files.exists(fullPath)) {
                         fullName = fullPath;
                         break;
