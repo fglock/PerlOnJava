@@ -102,7 +102,7 @@ public class OperatorHandler {
 
         // File
         put("readline", "readline", "org/perlonjava/operators/Readline", "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBase;");
-        put("close", "close", "org/perlonjava/operators/IOOperator", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("close", "close", "org/perlonjava/operators/IOOperator", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("tell", "tell", "org/perlonjava/operators/IOOperator", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("fileno", "fileno", "org/perlonjava/operators/IOOperator", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("getc", "getc", "org/perlonjava/operators/IOOperator", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");

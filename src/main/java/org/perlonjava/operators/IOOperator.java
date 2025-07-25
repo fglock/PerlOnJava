@@ -208,11 +208,12 @@ public class IOOperator {
     /**
      * Close a file handle.
      *
-     * @param fileHandle The file handle.
+     * @param args The file handle.
      * @return A RuntimeScalar with the result of the close operation.
      */
-    public static RuntimeScalar close(RuntimeScalar fileHandle) {
-        RuntimeIO fh = fileHandle.getRuntimeIO();
+    public static RuntimeScalar close(RuntimeBase... args) {
+        RuntimeScalar handle = args.length == 1 ? ((RuntimeScalar) args[0]) : select(new RuntimeList(), RuntimeContextType.SCALAR);
+        RuntimeIO fh = handle.getRuntimeIO();
 
         if (fh instanceof TieHandle tieHandle) {
             return TieHandle.tiedClose(tieHandle);
