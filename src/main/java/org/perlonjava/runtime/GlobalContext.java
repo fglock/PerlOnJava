@@ -116,7 +116,6 @@ public class GlobalContext {
         }
 
         // Initialize built-in Perl classes
-        // XSLoader.initialize();  // XXX need to add Data::Dumper XS placeholder
         DiamondIO.initialize(compilerOptions);
         Universal.initialize();
         Vars.initialize();
@@ -139,8 +138,6 @@ public class GlobalContext {
         FileSpec.initialize();
         Json.initialize();
         HttpTiny.initialize();
-        Dbi.initialize();
-        YamlPP.initialize();
         UnicodeNormalize.initialize();
         TimeHiRes.initialize();
         TermReadLine.initialize();
@@ -150,6 +147,7 @@ public class GlobalContext {
         IOHandleModule.initialize();
         Encode.initialize();
         JavaSystem.initialize();
+        XSLoader.initialize();  // XSLoader will load other classes on-demand
 
         // Reset method cache after initializing UNIVERSAL
         InheritanceResolver.invalidateCache();

@@ -25,14 +25,14 @@ import static org.perlonjava.runtime.RuntimeScalarType.*;
  * YAML::PP module implementation for PerlonJava.
  * Provides YAML parsing and generation functionality compatible with Perl's YAML::PP module.
  */
-public class YamlPP extends PerlModuleBase {
+public class YAMLPP extends PerlModuleBase {
 
     static RuntimeScalar perlClassName = new RuntimeScalar("YAML::PP");
 
     /**
-     * Constructor for YamlPP module.
+     * Constructor for YAMLPP module.
      */
-    public YamlPP() {
+    public YAMLPP() {
         super("YAML::PP", false);
     }
 
@@ -40,7 +40,7 @@ public class YamlPP extends PerlModuleBase {
      * Initializes the YAML::PP module by registering methods and exports.
      */
     public static void initialize() {
-        YamlPP yamlPP = new YamlPP();
+        YAMLPP yamlPP = new YAMLPP();
         try {
             yamlPP.registerMethod("new", "new_", null);
             yamlPP.registerMethod("load_string", null);

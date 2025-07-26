@@ -536,6 +536,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Text::Balanced** use the same version as Perl.
 - ✅  **Tie::Scalar** module.
 - ✅  **Benchmark** use the same version as Perl.
+- ✅  **XSLoader** module.
 - 🚧  **Test::More** some features missing: `skip`, `BAIL_OUT`.
 - 🚧  **HTTP::Tiny** some features untested: proxy settings.
 - 🚧  **DynaLoader** placeholder module.

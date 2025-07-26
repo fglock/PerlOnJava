@@ -6,6 +6,9 @@ import org.perlonjava.runtime.RuntimeScalar;
 
 import java.lang.reflect.Method;
 
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
+
 public class XSLoader extends PerlModuleBase {
 
     /**
@@ -38,7 +41,6 @@ public class XSLoader extends PerlModuleBase {
     public static RuntimeList load(RuntimeArray args, int ctx) {
         String moduleName = args.getFirst().toString();
 
-        boolean loaded;
         // Convert Perl::Module::Name to org.perlonjava.perlmodule.PerlModuleName
         String[] parts = moduleName.split("::");
         StringBuilder className1 = new StringBuilder("org.perlonjava.perlmodule.");
@@ -46,16 +48,16 @@ public class XSLoader extends PerlModuleBase {
             className1.append(part);
         }
         String className = className1.toString();
+
         try {
             Class<?> clazz = Class.forName(className);
             Method initialize = clazz.getMethod("initialize");
             initialize.invoke(null);
-            loaded = true;
+            return scalarTrue.getList();
         } catch (Exception e) {
             // System.err.println("Failed to load Java module: " + moduleName + " (class: " + className + ")");
             // e.printStackTrace();
-            loaded = false;
+            return scalarFalse.getList();
         }
-        return new RuntimeScalar(loaded).getList();
     }
 }

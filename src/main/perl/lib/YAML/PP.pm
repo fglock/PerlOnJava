@@ -3,9 +3,12 @@ package YAML::PP;
 use Exporter "import";
 use warnings;
 use strict;
+use XSLoader;
+
+XSLoader::load( 'YAML::PP' );
 
 # NOTE: The core implementation is in file:
-#       src/main/java/org/perlonjava/perlmodule/YamlPP.java
+#       src/main/java/org/perlonjava/perlmodule/YAMLPP.java
 
 our @EXPORT_OK = qw(Load Dump LoadFile DumpFile);
 

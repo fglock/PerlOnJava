@@ -5,8 +5,6 @@ import org.perlonjava.runtime.*;
 
 import java.sql.*;
 import java.util.Enumeration;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Properties;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
@@ -18,7 +16,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.*;
  * <p>
  * Note: Some methods are defined in src/main/perl/lib/DBI.pm
  */
-public class Dbi extends PerlModuleBase {
+public class DBI extends PerlModuleBase {
 
     private static final int DBI_ERROR_CODE = 2000000000;  // Default $DBI::stderr value
     private static final String GENERAL_ERROR_STATE = "S1000";
@@ -26,7 +24,7 @@ public class Dbi extends PerlModuleBase {
     /**
      * Constructor initializes the DBI module.
      */
-    public Dbi() {
+    public DBI() {
         super("DBI", false);
     }
 
@@ -36,7 +34,7 @@ public class Dbi extends PerlModuleBase {
      */
     public static void initialize() {
         // Create new DBI instance
-        Dbi dbi = new Dbi();
+        DBI dbi = new DBI();
         try {
             // Register all supported DBI methods
             dbi.registerMethod("connect", null);
