@@ -1,9 +1,12 @@
 package DBI;
 use strict;
 use warnings;
+use XSLoader;
+
+XSLoader::load( 'DBI' );
 
 # NOTE: The rest of the code is in file:
-#       src/main/java/org/perlonjava/perlmodule/Dbi.java
+#       src/main/java/org/perlonjava/perlmodule/DBI.java
 
 # Example:
 #

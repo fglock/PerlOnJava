@@ -122,7 +122,7 @@ public class JavaXSLoader extends PerlModuleBase {
             case "Cwd": return "org.perlonjava.perlmodule.Cwd";
             case "File::Basename": return "org.perlonjava.perlmodule.FileBasename";
             case "Data::Dumper": return "org.perlonjava.perlmodule.DataDumper";
-            case "DBI": return "org.perlonjava.perlmodule.Dbi";
+            case "DBI": return "org.perlonjava.perlmodule.DBI";
             // ... etc
             default: return null;
         }
