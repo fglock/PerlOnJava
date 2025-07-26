@@ -116,6 +116,7 @@ public class GlobalContext {
         }
 
         // Initialize built-in Perl classes
+        // XSLoader.initialize();  // XXX need to add Data::Dumper XS placeholder
         DiamondIO.initialize(compilerOptions);
         Universal.initialize();
         Vars.initialize();
