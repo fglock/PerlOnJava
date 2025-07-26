@@ -86,6 +86,11 @@ public class CoreOperatorResolver {
             case "do" -> OperatorParser.parseDoOperator(parser);
             case "require" -> OperatorParser.parseRequire(parser);
             case "sub" -> SubroutineParser.parseSubroutineDefinition(parser, false, null);
+            case "method" -> {
+                    Node node = SubroutineParser.parseSubroutineDefinition(parser, false, null);
+                    node.setAnnotation("isMethod", true);
+                    yield node;
+            }
             case "q", "qq", "qx", "qw", "qr", "tr", "y", "s", "m" -> OperatorParser.parseSpecialQuoted(parser, token, startIndex);
             case "dump", "format", "dbmclose", "dbmopen" ->
                     throw new PerlCompilerException(parser.tokenIndex, "Not implemented: operator: " + token.text, parser.ctx.errorUtil);

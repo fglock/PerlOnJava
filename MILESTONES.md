@@ -292,6 +292,7 @@ The following areas are currently under active development to enhance the functi
   - locale pragma
   - Indirect method call
   - Constant folding - in ConstantFoldingVisitor.java
+  - `method` keyword
 
 ### v4.0.0 Milestone (Planned Release Date: 2026-05-10)
 
