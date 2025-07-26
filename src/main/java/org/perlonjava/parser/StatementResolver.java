@@ -237,7 +237,7 @@ public class StatementResolver {
                         // Continue scanning for more evidence
                         parser.ctx.logDebug("isHashLiteral found comma, continuing scan");
                     }
-                    case "for", "while", "if", "unless", "until", "foreach" -> {
+                    case "for", "while", "if", "unless", "until", "foreach", "my", "our" -> {
                         // Check if this is a hash key (followed by =>) or statement modifier
                         LexerToken nextToken = TokenUtils.peek(parser);
                         if (!nextToken.text.equals("=>") && !nextToken.text.equals(",")) {
