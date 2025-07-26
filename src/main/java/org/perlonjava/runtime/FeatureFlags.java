@@ -40,6 +40,10 @@ public class FeatureFlags {
         featureBundles.put("postderef", new String[]{"postderef"});
         featureBundles.put("keyword_all", new String[]{"keyword_all"});
         featureBundles.put("keyword_any", new String[]{"keyword_any"});
+        featureBundles.put("lexical_subs", new String[]{"lexical_subs"});
+        featureBundles.put("refaliasing", new String[]{"refaliasing"});
+        featureBundles.put("declared_refs", new String[]{"declared_refs"});
+        featureBundles.put("defer", new String[]{"defer"});
     }
 
     /**
