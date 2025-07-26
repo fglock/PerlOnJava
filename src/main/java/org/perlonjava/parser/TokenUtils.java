@@ -69,6 +69,15 @@ public class TokenUtils {
             } else {
                 str = token.text.substring(0, 1);
                 token.text = token.text.substring(1);
+                parser.ctx.logDebug("consumeChar left: " + token);
+                if (token.text.equals("=")) {
+                    LexerToken next = parser.tokens.get(parser.tokenIndex + 1);
+                    if (next.text.equals("=")) {
+                        next.text = "==";
+                        parser.tokenIndex++;
+                        parser.ctx.logDebug("consumeChar resync: " + TokenUtils.peek(parser));
+                    }
+                }
             }
         }
         return str;
