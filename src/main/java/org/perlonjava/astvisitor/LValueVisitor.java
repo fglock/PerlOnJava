@@ -79,8 +79,10 @@ public class LValueVisitor implements Visitor {
 //                }
                 break;
             case "$":   // $a $$a
-            case "*":  // typeglob
+            case "*":   // typeglob
+            case "\\":  // requires "refaliasing"
             case "vec":
+            case "keys":
             case "pos":
             case "$#":
                 context = RuntimeContextType.SCALAR;
