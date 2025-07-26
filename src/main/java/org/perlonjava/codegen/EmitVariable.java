@@ -230,6 +230,18 @@ public class EmitVariable {
                     if (nodeLeft.operator.equals("local") && nodeLeft.operand instanceof OperatorNode localNode) {
                         nodeLeft = localNode;  // local *var = ...
                     }
+
+                    if (nodeLeft.operator.equals("keys")) {
+                        // `keys %x = 3`   lvalue keys is a no-op
+                        mv.visitInsn(Opcodes.SWAP); // move the target first
+                        mv.visitInsn(Opcodes.POP);
+                        break;
+                    }
+
+                    if (nodeLeft.operator.equals("\\")) {
+                        // `\$b = \$a` requires "refaliasing"
+                        throw new PerlCompilerException(node.tokenIndex, "Experimental aliasing via reference not enabled", ctx.errorUtil);
+                    }
                 }
 
                 boolean isGlob = false;
@@ -272,13 +284,6 @@ public class EmitVariable {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "setFromList", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeArray;", false);
                 break;
             default:
-
-                if (node.left instanceof OperatorNode leftOp && leftOp.operator.equals("keys")) {
-                    // `keys %x = 3`   lvalue keys is a no-op
-                    node.left.accept(emitterVisitor);
-                    break;
-                }
-
                 throw new PerlCompilerException(node.tokenIndex, "Unsupported assignment context: " + lvalueContext, ctx.errorUtil);
         }
         EmitOperator.handleVoidContext(emitterVisitor);
