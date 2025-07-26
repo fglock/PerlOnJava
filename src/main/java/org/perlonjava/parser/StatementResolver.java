@@ -79,6 +79,20 @@ public class StatementResolver {
                     yield null;
                 }
 
+                case "method" -> {
+                    if (parser.ctx.symbolTable.isFeatureCategoryEnabled("class")) {
+                        parser.tokenIndex++;
+                        if (peek(parser).type == LexerTokenType.IDENTIFIER) {
+                            Node node = SubroutineParser.parseSubroutineDefinition(parser, true, "our");
+                            node.setAnnotation("isMethod", true);
+                            yield node;
+                        }
+                        // Otherwise backtrack
+                        parser.tokenIndex = currentIndex;
+                    }
+                    yield null;
+                }
+
                 case "our", "my", "state" -> {
                     String declaration = consume(parser).text;
                     if (consume(parser).text.equals("sub") && peek(parser).type == LexerTokenType.IDENTIFIER) {
