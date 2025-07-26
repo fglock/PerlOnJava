@@ -208,7 +208,7 @@ public class ScalarUtils {
     public static void assertBytes(RuntimeScalar str) {
         for (char c : str.toString().toCharArray()) {
             if (c > 255) {
-                throw new IllegalArgumentException("evalbytes operand contains non-byte characters.");
+                throw new PerlCompilerException("Wide character in evalbytes.");
             }
         }
     }

@@ -144,7 +144,7 @@ public class EmitEval {
             ctx.mv.visitInsn(Opcodes.DUP);
             mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/RuntimeCode",
+                    "org/perlonjava/runtime/ScalarUtils",
                     "assertBytes",
                     "(Lorg/perlonjava/runtime/RuntimeScalar;)V",
                     false);
