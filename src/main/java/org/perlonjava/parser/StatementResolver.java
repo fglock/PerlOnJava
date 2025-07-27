@@ -195,7 +195,7 @@ public class StatementResolver {
                             false,
                             null, modifierExpression,
                             null, expression, null,
-                            isDoWhile,
+                            isDoWhile, false,
                             parser.tokenIndex);
                 }
 

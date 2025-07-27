@@ -70,7 +70,7 @@ public class StatementParser {
         parser.ctx.symbolTable.exitScope(scopeIndex);
 
         return new For3Node(label, true, null,
-                condition, null, body, continueNode, false, parser.tokenIndex);
+                condition, null, body, continueNode, false, false, parser.tokenIndex);
     }
 
     /**
@@ -180,7 +180,7 @@ public class StatementParser {
         // 3-argument for doesn't have a continue block
 
         return new For3Node(label, true, initialization,
-                condition, increment, body, null, false, parser.tokenIndex);
+                condition, increment, body, null, false, false, parser.tokenIndex);
     }
 
     /**

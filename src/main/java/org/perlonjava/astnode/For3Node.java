@@ -17,6 +17,11 @@ public class For3Node extends AbstractNode {
     public final boolean isDoWhile;
 
     /**
+     * isSimpleBlock indicates if this is a simple block, which means that the conditions are not checked.
+     */
+    public final boolean isSimpleBlock;
+
+    /**
      * This loop creates a new variable scope
      */
     public final boolean useNewScope;
@@ -51,10 +56,11 @@ public class For3Node extends AbstractNode {
      * @param body           the body of the for loop
      * @param tokenIndex     the index of the token in the source code
      */
-    public For3Node(String labelName, boolean useNewScope, Node initialization, Node condition, Node increment, Node body, Node continueBlock, boolean isDoWhile, int tokenIndex) {
+    public For3Node(String labelName, boolean useNewScope, Node initialization, Node condition, Node increment, Node body, Node continueBlock, boolean isDoWhile, boolean isSimpleBlock, int tokenIndex) {
         condition = whileConditionMagic(condition, tokenIndex);
 
         this.isDoWhile = isDoWhile;
+        this.isSimpleBlock = isSimpleBlock;
         this.labelName = labelName;
         this.useNewScope = useNewScope;
         this.initialization = initialization;
