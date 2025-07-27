@@ -321,6 +321,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`die` related features**: `$SIG{__DIE__}`, `$SIG{__WARN__}`
 - ✅  **`exit`**: `exit` is supported.
 - ✅  **`kill`**: `kill` is supported.
+- ✅  **`waitpid`**: `waitpid` is partially supported.
 - ✅  **`utime`**: `utime` is supported.
 - ✅  **`chown`**: `chown` is supported.
 - ❌  **`PROPAGATE`**: `PROPAGATE` method is not yet supported.
