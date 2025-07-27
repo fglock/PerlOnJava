@@ -152,8 +152,10 @@ public class EmitStatement {
                 node.increment.accept(voidVisitor);
             }
 
-            // Jump back to the start label to continue the loop
-            mv.visitJumpInsn(Opcodes.GOTO, startLabel);
+            if (!node.isSimpleBlock) {
+                // Jump back to the start label to continue the loop
+                mv.visitJumpInsn(Opcodes.GOTO, startLabel);
+            }
 
             // Visit the end label (this is where the loop ends)
             mv.visitLabel(endLabel);
