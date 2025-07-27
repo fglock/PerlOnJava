@@ -125,12 +125,30 @@ public class StatementResolver {
 
                 case "{" -> {
                     if (!isHashLiteral(parser)) {
+                        int scopeIndex = parser.ctx.symbolTable.enterScope();
+
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
                         BlockNode block = ParseBlock.parseBlock(parser);
                         block.isLoop = true;
                         block.labelName = label;
                         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
-                        yield block;
+
+                        Node continueNode = null;
+                        if (TokenUtils.peek(parser).text.equals("continue")) {
+                            TokenUtils.consume(parser);
+                            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+                            continueNode = ParseBlock.parseBlock(parser);
+                            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+                        }
+
+                        parser.ctx.symbolTable.exitScope(scopeIndex);
+
+                        yield new For3Node(label,
+                                true,
+                                null, null,
+                                null, block, continueNode,
+                                false, true,
+                                parser.tokenIndex);
                     }
                     yield null;
                 }
