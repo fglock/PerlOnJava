@@ -528,6 +528,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **File::Spec::Functions** module.
 - ✅  **Getopt::Long** module.
 - ✅  **Symbol**: `qualify` and `qualify_to_ref` are implemented.
+- ✅  **Perl::OSType** module.
 - ✅  **Term::ANSIColor** module.
 - ✅  **Time::Local** module.
 - ✅  **Time::HiRes** module.
