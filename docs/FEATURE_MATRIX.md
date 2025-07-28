@@ -343,7 +343,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`<$fh>`**: `<$fh>` and `<STDIN>` operators are implemented.
 - ✅  **`<ARGV>`**: `ARGV` and $ARGV are implemented.
 - ✅  **`<*.*>`**: `<*.*>` glob operator is implemented.
-- ✅  **End of file markers**: Source code control characters `^D` and `^Z`, and the tokens `__END__` and `__DATA__` are implemented. There is no `DATA` file handle yet.
+- ✅  **End of file markers**: Source code control characters `^D` and `^Z`, and the tokens `__END__` and `__DATA__` are implemented.
 - ❌  **Startup processing**: processing `$sitelib/sitecustomize.pl` at startup is not enabled.
 - ❌  **Smartmatch operator**: `~~` and `given`/`when` construct are not implemented.
 - ✅  **File test operators**: `-R`, `-W`, `-X`, `-O` (for real uid/gid), this implementation assumes that the real user ID corresponds to the current user running the Java application.
@@ -410,6 +410,7 @@ my @copy = @{$z};         # ERROR
 - ❌  **`accept`**: Connection acceptance
 - ❌  **`listen`**: Socket listening
 - ❌  **`pipe`**: Unix pipes
+- ❌  **`DATA`**: There is no `DATA` file handle yet.
 
 ### I/O Layers
 - ✅  **Layer support**: `open` and `binmode` support these I/O layers:
