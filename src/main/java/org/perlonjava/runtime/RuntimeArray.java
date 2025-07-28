@@ -27,6 +27,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public int type;
     // List to hold the elements of the array.
     public List<RuntimeScalar> elements;
+    // Iterator for traversing the hash elements
+    private Integer eachIteratorIndex;
+
 
     // Constructor
     public RuntimeArray() {
@@ -595,12 +598,40 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     /**
-     * Throws an exception as the 'each' operation is not implemented for arrays.
+     * The each() operator for arrays.
      *
-     * @throws RuntimeException Always thrown as 'each' is not implemented.
+     * @return A RuntimeList containing the next index-value pair, or an empty list if the iterator is exhausted.
      */
     public RuntimeList each() {
-        throw new RuntimeException("each not implemented for Array");
+        if (this.type == AUTOVIVIFY_ARRAY) {
+            AutovivificationArray.vivify(this);
+        }
+
+        // Initialize iterator if needed
+        if (eachIteratorIndex == null) {
+            eachIteratorIndex = 0;
+        }
+
+        // Check if we have more elements
+        if (eachIteratorIndex < elements.size()) {
+            int currentIndex = eachIteratorIndex;
+            RuntimeScalar indexScalar = getScalarInt(currentIndex);
+
+            // Get the value at current index
+            RuntimeScalar element = elements.get(currentIndex);
+            RuntimeScalar value = (element == null)
+                    ? new RuntimeArrayProxyEntry(this, currentIndex)
+                    : element;
+
+            // Move to next position
+            eachIteratorIndex++;
+
+            return new RuntimeList(indexScalar, value);
+        }
+
+        // Reset iterator when exhausted
+        eachIteratorIndex = null;
+        return new RuntimeList();
     }
 
     /**
