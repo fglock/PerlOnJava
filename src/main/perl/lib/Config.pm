@@ -158,6 +158,9 @@ $os_name =~ s/\s+/_/g;
     prefixexp => '/usr/local',
     installprefix => '/usr/local',
     installprefixexp => '/usr/local',
+
+    # Perl tests use this
+    useperlio => 'define',
 );
 
 # Helper functions
