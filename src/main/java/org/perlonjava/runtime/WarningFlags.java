@@ -32,6 +32,7 @@ public class WarningFlags {
         warningHierarchy.put("closed", new String[]{});
         warningHierarchy.put("reserved", new String[]{});
         warningHierarchy.put("prototype", new String[]{});
+        warningHierarchy.put("newline", new String[]{});
     }
 
     /**
