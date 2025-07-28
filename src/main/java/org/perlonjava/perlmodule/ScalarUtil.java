@@ -36,7 +36,7 @@ public class ScalarUtil extends PerlModuleBase {
             scalarUtil.registerMethod("weaken", "$");
             scalarUtil.registerMethod("unweaken", "$");
             scalarUtil.registerMethod("isweak", "$");
-            scalarUtil.registerMethod("dualvar", "$");
+            scalarUtil.registerMethod("dualvar", "$$");
             scalarUtil.registerMethod("isdual", "$");
             scalarUtil.registerMethod("isvstring", "$");
             scalarUtil.registerMethod("looks_like_number", "$");
@@ -149,7 +149,7 @@ public class ScalarUtil extends PerlModuleBase {
     }
 
     /**
-     * Placeholder for the dualvar functionality.
+     * Dualvar functionality.
      *
      * @param args The arguments passed to the method.
      * @param ctx  The context in which the method is called.
@@ -159,8 +159,10 @@ public class ScalarUtil extends PerlModuleBase {
         if (args.size() != 2) {
             throw new IllegalStateException("Bad number of arguments for dualvar() method");
         }
-        // Placeholder for dualvar functionality
-        return new RuntimeScalar().getList();
+        var scalar = new RuntimeScalar();
+        scalar.type = RuntimeScalarType.DUALVAR;
+        scalar.value = new DualVar(args.get(0), args.get(1));
+        return scalar.getList();
     }
 
     /**
@@ -174,8 +176,7 @@ public class ScalarUtil extends PerlModuleBase {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for isdual() method");
         }
-        // Placeholder for isdual functionality
-        return new RuntimeScalar(false).getList();
+        return new RuntimeScalar(args.get(0).type == DUALVAR).getList();
     }
 
     /**
