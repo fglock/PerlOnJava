@@ -735,7 +735,7 @@ public class EmitOperator {
      */
     static void handleCreateReference(EmitterVisitor emitterVisitor, OperatorNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        if (node.operand instanceof ListNode) {
+        if (resultIsList(node)) {
             node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                     "org/perlonjava/runtime/RuntimeList",
@@ -769,6 +769,25 @@ public class EmitOperator {
             }
             handleVoidContext(emitterVisitor);
         }
+    }
+
+    private static boolean resultIsList(OperatorNode node) {
+        if (node.operand instanceof ListNode) {
+            return true;
+        }
+
+        // Check for slice operations: %x{...}, @x{...}, @x[...]
+        if (node.operand instanceof BinaryOperatorNode binOp) {
+            // Check if it's a hash slice "{" or array slice "["
+            if ("{".equals(binOp.operator) || "[".equals(binOp.operator)) {
+                // Check if the left side is % or @ operator
+                if (binOp.left instanceof OperatorNode opNode) {
+                    return "%".equals(opNode.operator) || "@".equals(opNode.operator);
+                }
+            }
+        }
+
+        return false;
     }
 
     static void emitUndef(MethodVisitor mv) {
