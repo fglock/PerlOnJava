@@ -229,7 +229,8 @@ public class PrototypeArgs {
      */
     private static Node parseArgumentWithComma(Parser parser, boolean isOptional, boolean needComma, String expectedType) {
         // Check if we're at the end of arguments before checking for comma
-        if (Parser.isExpressionTerminator(TokenUtils.peek(parser))) {
+        var next = TokenUtils.peek(parser);
+        if (next.type == LexerTokenType.EOF || ParserTables.LIST_TERMINATORS.contains(next.text)) {
             if (!isOptional) {
                 throwNotEnoughArgumentsError(parser);
             }
