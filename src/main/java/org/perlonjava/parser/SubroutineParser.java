@@ -250,7 +250,13 @@ public class SubroutineParser {
     private static ListNode handleNamedSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block) {
         // - register the subroutine in the namespace
         String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
-        RuntimeCode code = (RuntimeCode) GlobalVariable.getGlobalCodeRef(fullName).value;
+        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+        if (codeRef.value == null) {
+            codeRef.type = RuntimeScalarType.CODE;
+            codeRef.value = new RuntimeCode(subName, attributes);
+        }
+        
+        RuntimeCode code = (RuntimeCode) codeRef.value;
         code.prototype = prototype;
         code.attributes = attributes;
 
