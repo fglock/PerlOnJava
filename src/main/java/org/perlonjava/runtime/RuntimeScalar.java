@@ -449,7 +449,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case REGEX -> value.toString();
             case JAVAOBJECT -> value.toString();
             case TIED_SCALAR -> this.tiedFetch().toString();
-            case DUALVAR -> ((DualVar) this.value).numericValue.toString();
+            case DUALVAR -> ((DualVar) this.value).stringValue.toString();
             default -> Overload.stringify(this).toString();
         };
     }
