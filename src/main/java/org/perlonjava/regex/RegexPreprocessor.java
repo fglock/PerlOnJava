@@ -482,11 +482,12 @@ public class RegexPreprocessor {
                         sb.append(Character.toChars(c2));
                     }
                     break;
-                case ' ':
+                case ' ', '\t':
                     if (flag_xx) {
                         sb.append(Character.toChars(c));
                     } else {
-                        sb.append("\\ ");   // make this space a "token", even inside /x
+                        // make this space a "token", even inside /x
+                        sb.append("\\").append(Character.toChars(c));
                     }
                     break;
                 case '(', ')', '*', '?', '<', '>', '\'', '"', '$', '@', '#', '=', '&':
