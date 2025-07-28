@@ -323,6 +323,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`kill`**: `kill` is supported.
 - ✅  **`waitpid`**: `waitpid` is partially supported.
 - ✅  **`utime`**: `utime` is supported.
+- ✅  **`umask`**: `umask` is supported.
 - ✅  **`chown`**: `chown` is supported.
 - ❌  **`PROPAGATE`**: `PROPAGATE` method is not yet supported.
 - ✅  **`require` operator**: The `require` operator implemented; version checks are implemented.
