@@ -69,7 +69,8 @@ public class Stat {
 
             statInternal(res, basicAttr, posixAttr);
         } catch (IOException e) {
-            e.printStackTrace();
+            // Returns the empty list if "stat" fails.
+            // e.printStackTrace();
         }
         return res;
     }
@@ -90,7 +91,8 @@ public class Stat {
 
             statInternal(res, basicAttr, posixAttr);
         } catch (IOException e) {
-            e.printStackTrace();
+            // Returns the empty list if "stat" fails.
+            // e.printStackTrace();
         }
         return res;
     }
