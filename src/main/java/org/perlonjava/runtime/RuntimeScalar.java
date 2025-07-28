@@ -720,7 +720,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case BOOLEAN -> (boolean) value;
             case CODE -> ((RuntimeCode) value).defined();
             case TIED_SCALAR -> this.tiedFetch().getDefinedBoolean();
-            case DUALVAR -> ((DualVar) this.value).numericValue.getDefinedBoolean();
+            case DUALVAR -> ((DualVar) this.value).stringValue.getDefinedBoolean();
             default -> type != UNDEF;
         };
     }
@@ -761,7 +761,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.tiedStore(variable);
                 return variable;
             }
-            case DUALVAR -> this.set(MathOperators.add(((DualVar) this.value).numericValue, 1));
+            case DUALVAR -> this.set(MathOperators.add(this, 1));
             default -> {
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
@@ -785,7 +785,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 variable.preAutoIncrement();
                 this.tiedStore(variable);
             }
-            case DUALVAR -> this.set(MathOperators.add(((DualVar) this.value).numericValue, 1));
+            case DUALVAR -> this.set(MathOperators.add(this, 1));
             default -> {
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
@@ -813,7 +813,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.tiedStore(variable);
                 return variable;
             }
-            case DUALVAR -> this.set(MathOperators.add(((DualVar) this.value).numericValue, -1));
+            case DUALVAR -> this.set(MathOperators.add(this, -1));
             default -> {
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = -1;
@@ -841,7 +841,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 variable.preAutoDecrement();
                 this.tiedStore(variable);
             }
-            case DUALVAR -> this.set(MathOperators.add(((DualVar) this.value).numericValue, -1));
+            case DUALVAR -> this.set(MathOperators.add(this, -1));
             default -> {
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
