@@ -518,7 +518,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Encode** module.
 - ✅  **Errno** module.
 - ✅  **Exporter**: `@EXPORT_OK`, `@EXPORT`, `%EXPORT_TAGS` are implemented.
-- ✅  **Scalar::Util**: `blessed`, `reftype`, `set_prototype` are implemented.
+- ✅  **Scalar::Util**: `blessed`, `reftype`, `set_prototype`, `dualvar` are implemented.
 - ✅  **Internals**: `Internals::SvREADONLY` is implemented as a no-op.
 - ✅  **Carp**: `carp`, `cluck`, `croak`, `confess`, `longmess`, `shortmess` are implemented.
 - ✅  **Cwd** module
@@ -615,7 +615,7 @@ This section is being worked on.
 
 ## Optimizations
 
-- ✅  **Cached string/numeric conversions; dualvars**: Caching is implemented, but it doesn't use the Perl "dual variable" implementation.
+- ✅  **Cached string/numeric conversions**: Numification caching is implemented.
 - ❌  **Inline "constant" subroutines optimization**: Optimization for inline constants is not yet implemented.
 - ❌  **Overload optimization**: Preprocessing in overload should be cached.
 - ❌  **I/O optimization**: Use low-level readline to optimize input.

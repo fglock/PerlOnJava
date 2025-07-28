@@ -1,5 +1,6 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.operators.MathOperators;
 import org.perlonjava.operators.StringOperators;
 import org.perlonjava.parser.NumberParser;
 import org.perlonjava.regex.RuntimeRegex;
@@ -259,6 +260,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case REGEX -> 1; // Assuming regexes are truthy, so 1
             case JAVAOBJECT -> value != null ? 1 : 0;
             case TIED_SCALAR -> this.tiedFetch().getInt();
+            case DUALVAR -> ((DualVar) this.value).numericValue.getInt();
             default -> Overload.numify(this).getInt();
         };
     }
@@ -276,6 +278,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case REGEX -> 1L;
             case JAVAOBJECT -> value != null ? 1L : 0L;
             case TIED_SCALAR -> this.tiedFetch().getLong();
+            case DUALVAR -> ((DualVar) this.value).numericValue.getLong();
             default -> Overload.numify(this).getLong();
         };
     }
@@ -293,6 +296,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case REGEX -> 1.0;
             case JAVAOBJECT -> value != null ? 1.0 : 0.0;
             case TIED_SCALAR -> this.tiedFetch().getDouble();
+            case DUALVAR -> ((DualVar) this.value).numericValue.getDouble();
             default -> Overload.numify(this).getDouble();
         };
     }
@@ -313,6 +317,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case REGEX -> true;
             case JAVAOBJECT -> value != null;
             case TIED_SCALAR -> this.tiedFetch().getBoolean();
+            case DUALVAR -> ((DualVar) this.value).stringValue.getBoolean();
             default -> Overload.boolify(this).getBoolean();
         };
     }
@@ -444,6 +449,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case REGEX -> value.toString();
             case JAVAOBJECT -> value.toString();
             case TIED_SCALAR -> this.tiedFetch().toString();
+            case DUALVAR -> ((DualVar) this.value).numericValue.toString();
             default -> Overload.stringify(this).toString();
         };
     }
@@ -714,6 +720,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case BOOLEAN -> (boolean) value;
             case CODE -> ((RuntimeCode) value).defined();
             case TIED_SCALAR -> this.tiedFetch().getDefinedBoolean();
+            case DUALVAR -> ((DualVar) this.value).numericValue.getDefinedBoolean();
             default -> type != UNDEF;
         };
     }
@@ -754,6 +761,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.tiedStore(variable);
                 return variable;
             }
+            case DUALVAR -> this.set(MathOperators.add(((DualVar) this.value).numericValue, 1));
             default -> {
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
@@ -777,6 +785,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 variable.preAutoIncrement();
                 this.tiedStore(variable);
             }
+            case DUALVAR -> this.set(MathOperators.add(((DualVar) this.value).numericValue, 1));
             default -> {
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;
@@ -804,6 +813,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.tiedStore(variable);
                 return variable;
             }
+            case DUALVAR -> this.set(MathOperators.add(((DualVar) this.value).numericValue, -1));
             default -> {
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = -1;
@@ -831,6 +841,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 variable.preAutoDecrement();
                 this.tiedStore(variable);
             }
+            case DUALVAR -> this.set(MathOperators.add(((DualVar) this.value).numericValue, -1));
             default -> {
                 this.type = RuntimeScalarType.INTEGER;
                 this.value = 1;

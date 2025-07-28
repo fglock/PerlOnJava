@@ -15,6 +15,7 @@ public class RuntimeScalarType {
     public static final int REGEX = 7;
     public static final int JAVAOBJECT = 8;
     public static final int TIED_SCALAR = 9;
+    public static final int DUALVAR = 10;
     // References with bit pattern
     public static final int CODE = 100 | REFERENCE_BIT;
     public static final int REFERENCE = 101 | REFERENCE_BIT;
