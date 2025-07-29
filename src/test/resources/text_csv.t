@@ -169,7 +169,7 @@ ok($csv_opts, 'Created Text::CSV object with options');
 {
     my $csv = Text::CSV->new({ eol => "\n" }); # Set EOL to make test predictable
     my $output = '';
-    open my $fh, '>', \$output or die "Cannot open string filehandle: $!";
+    open my $fh, '>:raw', \$output or die "Cannot open string filehandle: $!";
 
     ok($csv->print($fh, ['foo', 'bar', 'baz']), 'Print to filehandle');
     close $fh;
@@ -243,7 +243,7 @@ ok($csv_opts, 'Created Text::CSV object with options');
     # 1. print() with default eol (undef) should not add a newline
     my $csv_no_eol = Text::CSV->new();
     $output = '';
-    open $fh, '>', \$output;
+    open $fh, '>:raw', \$output;
     $csv_no_eol->print($fh, ['a', 'b']);
     close $fh;
     is($output, 'a,b', 'print() with eol=>undef adds no newline');
@@ -251,7 +251,7 @@ ok($csv_opts, 'Created Text::CSV object with options');
     # 2. print() with a defined eol should add exactly one EOL
     my $csv_eol = Text::CSV->new({ eol => "\r\n" });
     $output = '';
-    open $fh, '>', \$output;
+    open $fh, '>:raw', \$output;
     $csv_eol->print($fh, ['a', 'b']);
     close $fh;
     is($output, "a,b\r\n", 'print() with eol=>crlf adds exactly one crlf');
@@ -259,7 +259,7 @@ ok($csv_opts, 'Created Text::CSV object with options');
     # 3. say() with default eol (undef) should add $/
     my $csv_say = Text::CSV->new();
     $output = '';
-    open $fh, '>', \$output;
+    open $fh, '>:raw', \$output;
     $csv_say->say($fh, ['a', 'b']);
     close $fh;
     is($output, 'a,b' . $/, 'say() with eol=>undef adds $/');
@@ -267,7 +267,7 @@ ok($csv_opts, 'Created Text::CSV object with options');
     # 4. say() with a defined eol should use that eol and not add another
     my $csv_say_eol = Text::CSV->new({ eol => "!\n" });
     $output = '';
-    open $fh, '>', \$output;
+    open $fh, '>:raw', \$output;
     $csv_say_eol->say($fh, ['a', 'b']);
     close $fh;
     is($output, "a,b!\n", 'say() with a defined eol uses that eol');
@@ -386,14 +386,14 @@ ok($csv_opts, 'Created Text::CSV object with options');
 
     # First print
     my $output1 = '';
-    open my $fh1, '>', \$output1;
+    open my $fh1, '>:raw', \$output1;
     ok($csv->print($fh1, ['a', 'b', 'c']), 'First print operation');
     close $fh1;
     is($output1, "a,b,c\n", 'First print output correct');
 
     # Second print - should not accumulate
     my $output2 = '';
-    open my $fh2, '>', \$output2;
+    open my $fh2, '>:raw', \$output2;
     ok($csv->print($fh2, ['x', 'y', 'z']), 'Second print operation');
     close $fh2;
     is($output2, "x,y,z\n", 'Second print output correct (no accumulation)');
