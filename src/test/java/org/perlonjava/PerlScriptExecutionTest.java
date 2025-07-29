@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Locale;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -32,6 +33,12 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 public class PerlScriptExecutionTest {
 
+    static {
+        // Set default locale to US (uses dot as decimal separator)
+        // This ensures consistent number formatting across different environments
+        Locale.setDefault(Locale.US);
+    }
+    
     private PrintStream originalOut; // Stores the original System.out
     private ByteArrayOutputStream outputStream; // Captures the output of the Perl script execution
 
