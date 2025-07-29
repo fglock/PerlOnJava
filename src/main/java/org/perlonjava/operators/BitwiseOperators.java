@@ -112,20 +112,18 @@ public class BitwiseOperators {
     public static RuntimeScalar bitwiseNotBinary(RuntimeScalar runtimeScalar) {
         long value = runtimeScalar.getLong();
 
-        // Perl's ~ operator works with unsigned semantics
-        // Java's ~ gives us the bit pattern, but interprets it as signed
-        long result = ~value;
+        // Perl uses 32-bit semantics for bitwise operations by default
+        // First cast to int to get 32-bit value, then apply NOT
+        int intValue = (int) value;
+        int intResult = ~intValue;
 
-        // If the result would be interpreted as negative in Java but should be
-        // a large positive number in Perl, convert to double to preserve the value
+        // Convert back to long, preserving sign extension
+        long result = intResult;
+
+        // If the result is negative, convert to unsigned 32-bit representation
         if (result < 0) {
-            // Convert to unsigned representation
-            // This is equivalent to treating the bit pattern as unsigned
-            double unsignedResult = result & 0xFFFFFFFFFFFFFFFFL;
-            if (unsignedResult < 0) {
-                unsignedResult += 18446744073709551616.0; // Add 2^64
-            }
-            return new RuntimeScalar(unsignedResult);
+            // Add 2^32 to convert to unsigned 32-bit value
+            result = result + 4294967296L; // 2^32
         }
 
         return new RuntimeScalar(result);

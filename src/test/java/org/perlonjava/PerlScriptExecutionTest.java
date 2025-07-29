@@ -38,7 +38,7 @@ public class PerlScriptExecutionTest {
         // This ensures consistent number formatting across different environments
         Locale.setDefault(Locale.US);
     }
-    
+
     private PrintStream originalOut; // Stores the original System.out
     private ByteArrayOutputStream outputStream; // Captures the output of the Perl script execution
 
