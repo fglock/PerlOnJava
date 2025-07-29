@@ -2,10 +2,8 @@ package org.perlonjava.codegen;
 
 import org.objectweb.asm.Label;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Maps bytecode positions to their corresponding Perl source code locations.
@@ -102,7 +100,7 @@ public class ByteCodeSourceMapper {
      * @param element The stack trace element to parse
      * @return The corresponding source code location
      */
-    public static SourceLocation parseStackTraceElement(StackTraceElement element) {
+    public static SourceLocation parseStackTraceElement(StackTraceElement element, ConcurrentHashMap<ByteCodeSourceMapper.SourceLocation, String> locationToClassName) {
         int fileId = fileNameToId.getOrDefault(element.getFileName(), -1);
         int tokenIndex = element.getLineNumber();
 
@@ -118,11 +116,20 @@ public class ByteCodeSourceMapper {
         }
 
         LineInfo lineInfo = entry.getValue();
-        return new SourceLocation(
+        var location = new SourceLocation(
                 fileNamePool.get(fileId),
                 packageNamePool.get(lineInfo.packageNameId()),
                 lineInfo.lineNumber()
         );
+
+        // Check if this SourceLocation is already assigned to a different class
+        String existingClassName = locationToClassName.putIfAbsent(location, element.getClassName());
+        if (existingClassName != null && !existingClassName.equals(element.getClassName())) {
+            // Different class name already assigned to this location - return null to avoid duplicate
+            return null;
+        }
+
+        return location;
     }
 
     /**

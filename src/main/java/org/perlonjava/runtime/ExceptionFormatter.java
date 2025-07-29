@@ -4,6 +4,7 @@ import org.perlonjava.codegen.ByteCodeSourceMapper;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -48,6 +49,9 @@ public class ExceptionFormatter {
         ArrayList<ArrayList<String>> stackTrace = new ArrayList<>();
         AtomicInteger callerStackIndex = new AtomicInteger(); // Initialize the index for CallerStack
 
+        // Avoid duplicate stack entries
+        ConcurrentHashMap<ByteCodeSourceMapper.SourceLocation, String> locationToClassName = new ConcurrentHashMap<>();
+
         Arrays.stream(t.getStackTrace())
                 .forEach(element -> {
                     if (element.getClassName().equals("org.perlonjava.parser.StatementParser") &&
@@ -72,16 +76,18 @@ public class ExceptionFormatter {
                         //     org.perlonjava.anon1.apply(misc/snippets/CallerTest.pm @ CallerTest:36)
                         // - Perl-like Java methods like:
                         //     org.perlonjava.perlmodule.Exporter.exportOkTags(Exporter.java:159)
-                        ByteCodeSourceMapper.SourceLocation loc = ByteCodeSourceMapper.parseStackTraceElement(element);
-                        stackTrace.add(
-                                new ArrayList<>(
-                                        Arrays.asList(
-                                                loc.packageName(),
-                                                loc.sourceFileName(),
-                                                String.valueOf(loc.lineNumber())
-                                        )
-                                )
-                        );
+                        ByteCodeSourceMapper.SourceLocation loc = ByteCodeSourceMapper.parseStackTraceElement(element, locationToClassName);
+                        if (loc != null) {
+                            stackTrace.add(
+                                    new ArrayList<>(
+                                            Arrays.asList(
+                                                    loc.packageName(),
+                                                    loc.sourceFileName(),
+                                                    String.valueOf(loc.lineNumber())
+                                            )
+                                    )
+                            );
+                        }
                     }
                 });
 
