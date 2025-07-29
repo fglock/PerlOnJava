@@ -193,6 +193,7 @@ subtest 'Autovivification rules summary' => sub {
     my $h3;
     eval { keys %{$h3}; };
     is($@, '', 'keys autovivifies');
+    ok(defined $h3 && ref $h3 eq 'HASH', 'Hash was created by keys()');
     
     # Rule 3: Simple dereferencing in rvalue context does NOT autovivify
     my $h4;

@@ -483,36 +483,43 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Method to implement `$v->{key}`
     public RuntimeScalar hashDerefGet(RuntimeScalar index) {
-        return this.hashDeref().get(index);
+        return this.hashDeref(false).get(index);
     }
 
     // Method to implement `delete $v->{key}`
     public RuntimeScalar hashDerefDelete(RuntimeScalar index) {
-        return this.hashDeref().delete(index);
+        return this.hashDeref(false).delete(index);
     }
 
     // Method to implement `exists $v->{key}`
     public RuntimeScalar hashDerefExists(RuntimeScalar index) {
-        return this.hashDeref().exists(index);
+        return this.hashDeref(false).exists(index);
     }
 
     // Method to implement `$v->[10]`
     public RuntimeScalar arrayDerefGet(RuntimeScalar index) {
-        return this.arrayDeref().get(index);
+        return this.arrayDeref(false).get(index);
     }
 
     // Method to implement `delete $v->[10]`
     public RuntimeScalar arrayDerefDelete(RuntimeScalar index) {
-        return this.arrayDeref().delete(index);
+        return this.arrayDeref(false).delete(index);
     }
 
     // Method to implement `exists $v->[10]`
     public RuntimeScalar arrayDerefExists(RuntimeScalar index) {
-        return this.arrayDeref().exists(index);
+        return this.arrayDeref(false).exists(index);
     }
 
     // Method to implement `@$v`
     public RuntimeArray arrayDeref() {
+        if (this.type == RuntimeScalarType.UNDEF) {
+            throw new PerlCompilerException( "Can't use an undefined value as an ARRAY reference");
+        }
+        return arrayDeref(false);
+    }
+
+    public RuntimeArray arrayDeref(boolean autovivify) {
         // Check if object is eligible for overloading
         int blessId = this.blessedId();
         if (blessId != 0) {
@@ -529,7 +536,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return switch (type) {
-            case UNDEF -> AutovivificationArray.createAutovivifiedArray(this);
+            case UNDEF -> {
+                if (autovivify) {
+                    yield AutovivificationArray.createAutovivifiedArray(this);
+                } else {
+                    var array = new RuntimeArray();
+                    this.type = ARRAYREFERENCE;
+                    this.value = array;
+                    yield array;
+                }
+            }
             case ARRAYREFERENCE -> (RuntimeArray) value;
             case STRING ->
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as an ARRAY ref while \"strict refs\" in use");
@@ -559,6 +575,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      *                               is in use) or any other non-hash-reference value
      */
     public RuntimeHash hashDeref() {
+        if (this.type == RuntimeScalarType.UNDEF) {
+            throw new PerlCompilerException( "Can't use an undefined value as a HASH reference");
+        }
+        return hashDeref(false);
+    }
+
+    public RuntimeHash hashDeref(boolean autovivify) {
         // Check if object is eligible for overloading (blessed objects)
         int blessId = this.blessedId();
         if (blessId != 0) {
@@ -577,12 +600,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return switch (type) {
-            case UNDEF ->
-                //                var hash = new RuntimeHash();
-                //                this.type = RuntimeScalarType.HASHREFERENCE;
-                //                this.value = hash;
-                //                yield hash;
-                    AutovivificationHash.createAutovivifiedHash(this);
+            case UNDEF -> {
+                if (autovivify) {
+                    yield AutovivificationHash.createAutovivifiedHash(this);
+                } else {
+                    var hash = new RuntimeHash();
+                    this.type = RuntimeScalarType.HASHREFERENCE;
+                    this.value = hash;
+                    yield hash;
+                }
+            }
             case HASHREFERENCE ->
                 // Simple case: already a hash reference, just return the hash
                     (RuntimeHash) value;
