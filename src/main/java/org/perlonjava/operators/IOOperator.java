@@ -121,6 +121,9 @@ public class IOOperator {
         }
 
         String ioLayer = runtimeList.getFirst().toString();
+        if (ioLayer.isEmpty()) {
+            ioLayer = ":raw";
+        }
         fh.binmode(ioLayer);
         return fileHandle;
     }

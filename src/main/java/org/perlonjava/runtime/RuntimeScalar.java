@@ -577,7 +577,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return switch (type) {
-            case UNDEF -> AutovivificationHash.createAutovivifiedHash(this);
+            case UNDEF ->
+                //                var hash = new RuntimeHash();
+                //                this.type = RuntimeScalarType.HASHREFERENCE;
+                //                this.value = hash;
+                //                yield hash;
+                    AutovivificationHash.createAutovivifiedHash(this);
             case HASHREFERENCE ->
                 // Simple case: already a hash reference, just return the hash
                     (RuntimeHash) value;
@@ -587,7 +592,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case TIED_SCALAR -> tiedFetch().hashDeref();
             default ->
                 // All other types (INTEGER, DOUBLE, etc.) cannot be dereferenced as hashes
-                    throw new PerlCompilerException("Variable does not contain a hash reference");
+                    throw new PerlCompilerException("Not a HASH reference");
         };
     }
 
