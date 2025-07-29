@@ -160,6 +160,7 @@ public class OperatorParser {
         LexerToken token;
         // Handle 'eval' keyword which can be followed by a block or an expression
         token = TokenUtils.peek(parser);
+        var index = parser.tokenIndex;
         if (token.type == LexerTokenType.OPERATOR && token.text.equals("{")) {
             // If the next token is '{', parse a block
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
@@ -168,7 +169,7 @@ public class OperatorParser {
             // transform:  eval { 123 }
             // into:  sub { 123 }->()  with useTryCatch flag
             return new BinaryOperatorNode("->",
-                    new SubroutineNode(null, null, null, block, true, parser.tokenIndex), new ListNode(parser.tokenIndex), parser.tokenIndex);
+                    new SubroutineNode(null, null, null, block, true, parser.tokenIndex), new ListNode(parser.tokenIndex), index);
         } else {
             // Otherwise, parse an expression, and default to $_
             operand = ListParser.parseZeroOrOneList(parser, 0);
@@ -181,7 +182,7 @@ public class OperatorParser {
                 operator,
                 operand,
                 parser.ctx.symbolTable.snapShot(), // Freeze the scoped symbol table for the eval context
-                parser.tokenIndex);
+                index);
     }
 
     /**
