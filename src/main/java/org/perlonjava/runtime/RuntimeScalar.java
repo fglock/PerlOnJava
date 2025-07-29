@@ -592,7 +592,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case TIED_SCALAR -> tiedFetch().hashDeref();
             default ->
                 // All other types (INTEGER, DOUBLE, etc.) cannot be dereferenced as hashes
-                    throw new PerlCompilerException("Variable does not contain a hash reference");
+                    throw new PerlCompilerException("Not a HASH reference");
         };
     }
 
