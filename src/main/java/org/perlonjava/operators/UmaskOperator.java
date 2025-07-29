@@ -1,185 +1,222 @@
 package org.perlonjava.operators;
 
+import com.sun.jna.Platform;
+import org.perlonjava.nativ.PosixLibrary;
 import org.perlonjava.runtime.*;
 
-import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.GlobalVariable.setGlobalVariable;
-
 /**
- * Implementation of Perl's umask operator for PerlOnJava
+ * Native implementation of Perl's umask operator using JNA
+ *
+ * This implementation provides direct access to the system umask:
+ * - On POSIX systems: Uses native umask() system call
+ * - On Windows: Simulates umask behavior (Windows has no umask concept)
+ * - No external process spawning
+ * - Thread-safe implementation
  */
 public class UmaskOperator {
 
-    // Store the current umask value for Windows simulation
-    private static int currentUmask = 022; // Default umask value
+    // Default umask value (022 = no write permission for group/others)
+    private static final int DEFAULT_UMASK = 022;
+
+    // Windows simulation of umask (thread-safe)
+    private static volatile int windowsSimulatedUmask = DEFAULT_UMASK;
+
+    private static final boolean IS_WINDOWS = Platform.isWindows();
 
     /**
      * Implements Perl's umask operator
+     *
      * @param args RuntimeBase array containing the new umask value (optional)
      * @return RuntimeScalar with the previous umask value
      */
     public static RuntimeScalar umask(RuntimeBase... args) {
-        if (SystemUtils.osIsWindows()) {
-            return umaskWindows(new RuntimeList(args));
+        RuntimeList argList = new RuntimeList(args);
+
+        if (IS_WINDOWS) {
+            return umaskWindows(argList);
         } else {
-            return umaskUnix(new RuntimeList(args));
+            return umaskPosix(argList);
         }
     }
 
     /**
-     * Implements umask for Unix-like systems (Linux, macOS)
+     * POSIX implementation using native umask() system call
      */
-    private static RuntimeScalar umaskUnix(RuntimeList args) {
+    private static RuntimeScalar umaskPosix(RuntimeList args) {
         try {
-            if (args.elements.isEmpty()) {
-                // Get current umask
-                RuntimeScalar output = SystemOperator.systemCommand(
-                        new RuntimeScalar("umask"),
-                        RuntimeContextType.SCALAR
-                ).scalar();
-                String umaskStr = output.toString().trim();
+            int newMask;
+            boolean hasNewMask = false;
 
-                try {
-                    // Parse octal string to integer
-                    return new RuntimeScalar(Integer.parseInt(umaskStr, 8));
-                } catch (NumberFormatException e) {
-                    return RuntimeScalarCache.scalarUndef;
+            if (!args.elements.isEmpty() && args.elements.get(0).scalar().getDefinedBoolean()) {
+                // Get new umask value
+                RuntimeScalar maskArg = args.elements.get(0).scalar();
+
+                // Handle both decimal and octal string input
+                String maskStr = maskArg.toString();
+                if (maskStr.startsWith("0") && maskStr.length() > 1) {
+                    // Parse as octal
+                    newMask = Integer.parseInt(maskStr, 8);
+                } else {
+                    // Get as integer (might already be decimal)
+                    newMask = maskArg.getInt();
                 }
+
+                // Ensure mask is within valid range (0-0777)
+                newMask &= 0777;
+                hasNewMask = true;
             } else {
-                // Set new umask and get previous value
-                RuntimeScalar newUmask = args.elements.get(0).scalar();
-                int umaskValue = newUmask.getInt();
-
-                // First get current umask
-                RuntimeScalar currentOutput = SystemOperator.systemCommand(
-                        new RuntimeScalar("umask"),
-                        RuntimeContextType.SCALAR
-                ).scalar();
-                String currentUmaskStr = currentOutput.toString().trim();
-                int previousUmask;
-
-                try {
-                    previousUmask = Integer.parseInt(currentUmaskStr, 8);
-                } catch (NumberFormatException e) {
-                    previousUmask = 022; // Default if we can't parse
-                }
-
-                // Now set the new umask
-                RuntimeList cmdArgs = new RuntimeList();
-                cmdArgs.elements.add(new RuntimeScalar(String.format("umask %04o", umaskValue)));
-
-                RuntimeScalar exitCode = SystemOperator.system(cmdArgs, false, RuntimeContextType.SCALAR);
-
-                if (exitCode.getInt() != 0) {
-                    // Check if trying to restrict access for self (EXPR & 0700) > 0
-                    if ((umaskValue & 0700) > 0) {
-                        throw new PerlCompilerException("umask not implemented");
-                    }
-                    return RuntimeScalarCache.scalarUndef;
-                }
-
-                // Update process umask using native call if available
-                updateProcessUmask(umaskValue);
-
-                return new RuntimeScalar(previousUmask);
+                // No argument - just get current umask
+                // umask() always sets a value, so we need to call it twice
+                // to get the current value without changing it
+                int current = PosixLibrary.INSTANCE.umask(0);
+                PosixLibrary.INSTANCE.umask(current); // Restore original
+                return new RuntimeScalar(current);
             }
-        } catch (Exception e) {
-            // Check if trying to restrict access for self
-            if (!args.elements.isEmpty()) {
-                int umaskValue = args.elements.get(0).scalar().getInt();
-                if ((umaskValue & 0700) > 0) {
-                    throw new PerlCompilerException("umask not implemented");
-                }
+
+            // Set new umask and get previous value
+            int previousMask = PosixLibrary.INSTANCE.umask(newMask);
+
+            // Check Perl's special behavior: die if trying to restrict self
+            if ((newMask & 0700) > 0) {
+                // Restore previous umask before throwing
+                PosixLibrary.INSTANCE.umask(previousMask);
+                throw new PerlCompilerException("umask not implemented");
             }
-            return RuntimeScalarCache.scalarUndef;
+
+            return new RuntimeScalar(previousMask);
+
+        } catch (UnsatisfiedLinkError | NoClassDefFoundError e) {
+            // JNA not available or native call failed
+            throw new PerlCompilerException("Native umask not available: " + e.getMessage());
         }
     }
 
     /**
-     * Simulates umask for Windows systems
-     * Windows doesn't have umask, so we simulate it with a static variable
+     * Windows implementation (simulation since Windows has no umask)
+     *
+     * Windows uses ACLs instead of Unix permissions, so umask doesn't
+     * directly apply. We simulate it for compatibility.
      */
     private static RuntimeScalar umaskWindows(RuntimeList args) {
-        if (args.elements.isEmpty()) {
+        if (args.elements.isEmpty() || !args.elements.get(0).scalar().getDefinedBoolean()) {
             // Return current simulated umask
-            return new RuntimeScalar(currentUmask);
+            return new RuntimeScalar(windowsSimulatedUmask);
+        }
+
+        // Get new umask value
+        RuntimeScalar maskArg = args.elements.get(0).scalar();
+
+        // Handle both decimal and octal string input
+        String maskStr = maskArg.toString();
+        int newMask;
+        if (maskStr.startsWith("0") && maskStr.length() > 1) {
+            // Parse as octal
+            newMask = Integer.parseInt(maskStr, 8);
         } else {
-            // Set new umask and return previous
-            RuntimeScalar newUmask = args.elements.get(0).scalar();
-            int newValue = newUmask.getInt();
-
-            // Check if trying to restrict access for self (EXPR & 0700) > 0
-            if ((newValue & 0700) > 0) {
-                // throw new PerlCompilerException("umask not implemented");
-            }
-
-            int previousUmask = currentUmask;
-            currentUmask = newValue & 0777; // Ensure it's within valid range
-
-            return new RuntimeScalar(previousUmask);
+            // Get as integer
+            newMask = maskArg.getInt();
         }
-    }
 
-    /**
-     * Attempts to update the process umask using reflection to access native methods
-     * This is a best-effort approach for Unix systems
-     */
-    private static void updateProcessUmask(int umaskValue) {
-        try {
-            // Try to use jnr-posix if available
-            Class<?> posixClass = Class.forName("jnr.posix.POSIXFactory");
-            Object posix = posixClass.getMethod("getPOSIX").invoke(null);
-            posixClass.getMethod("umask", int.class).invoke(posix, umaskValue);
-        } catch (Exception e) {
-            // jnr-posix not available, fall back to system command
-            // The umask has already been set via shell command above
+        // Ensure mask is within valid range (0-0777)
+        newMask &= 0777;
+
+        // Check Perl's special behavior: die if trying to restrict self
+        if ((newMask & 0700) > 0) {
+            throw new PerlCompilerException("umask not implemented");
         }
+
+        // Atomically update and return previous value
+        int previousMask = windowsSimulatedUmask;
+        windowsSimulatedUmask = newMask;
+
+        return new RuntimeScalar(previousMask);
     }
 
     /**
      * Apply umask to file permissions
      * This is used by file creation operations to apply the umask
+     *
+     * @param permissions The desired permissions
+     * @return The permissions after applying umask
      */
     public static int applyUmask(int permissions) {
-        if (SystemUtils.osIsWindows()) {
-            // On Windows, simulate umask behavior
-            return permissions & ~currentUmask;
-        } else {
-            // On Unix, the OS handles this automatically after umask is set
-            // But we can still calculate it for consistency
-            try {
-                RuntimeScalar output = SystemOperator.systemCommand(
-                        new RuntimeScalar("umask"),
-                        RuntimeContextType.SCALAR
-                ).scalar();
-                String umaskStr = output.toString().trim();
-                int umaskValue = Integer.parseInt(umaskStr, 8);
-
-                return permissions & ~umaskValue;
-            } catch (Exception e) {
-                // Fall back to default umask
-                return permissions & ~022;
-            }
-        }
+        int currentMask = getCurrentUmask();
+        return permissions & ~currentMask;
     }
 
     /**
      * Get current umask value without changing it
      * Useful for debugging and file operations
+     *
+     * @return Current umask value
      */
     public static int getCurrentUmask() {
-        if (SystemUtils.osIsWindows()) {
-            return currentUmask;
+        if (IS_WINDOWS) {
+            return windowsSimulatedUmask;
         } else {
             try {
-                RuntimeScalar output = SystemOperator.systemCommand(
-                        new RuntimeScalar("umask"),
-                        RuntimeContextType.SCALAR
-                ).scalar();
-                String umaskStr = output.toString().trim();
-                return Integer.parseInt(umaskStr, 8);
+                // Get current umask by setting and immediately restoring
+                int current = PosixLibrary.INSTANCE.umask(0);
+                PosixLibrary.INSTANCE.umask(current);
+                return current;
             } catch (Exception e) {
-                return 022; // Default umask
+                // If native call fails, return default
+                return DEFAULT_UMASK;
+            }
+        }
+    }
+
+    /**
+     * Convert umask to human-readable string (like shell umask command)
+     *
+     * @param umask The umask value
+     * @return Octal string representation (e.g., "022")
+     */
+    public static String umaskToString(int umask) {
+        return String.format("%04o", umask & 0777);
+    }
+
+    /**
+     * Convert permissions to symbolic notation considering umask
+     *
+     * @param permissions The full permissions
+     * @param umask The umask to apply
+     * @return String like "rwxr-xr-x"
+     */
+    public static String permissionsToString(int permissions, int umask) {
+        int effective = permissions & ~umask;
+        StringBuilder sb = new StringBuilder(9);
+
+        // Owner permissions
+        sb.append((effective & 0400) != 0 ? 'r' : '-');
+        sb.append((effective & 0200) != 0 ? 'w' : '-');
+        sb.append((effective & 0100) != 0 ? 'x' : '-');
+
+        // Group permissions
+        sb.append((effective & 040) != 0 ? 'r' : '-');
+        sb.append((effective & 020) != 0 ? 'w' : '-');
+        sb.append((effective & 010) != 0 ? 'x' : '-');
+
+        // Other permissions
+        sb.append((effective & 04) != 0 ? 'r' : '-');
+        sb.append((effective & 02) != 0 ? 'w' : '-');
+        sb.append((effective & 01) != 0 ? 'x' : '-');
+
+        return sb.toString();
+    }
+
+    /**
+     * Reset umask to system default
+     * Useful for testing or initialization
+     */
+    public static void resetToDefault() {
+        if (IS_WINDOWS) {
+            windowsSimulatedUmask = DEFAULT_UMASK;
+        } else {
+            try {
+                PosixLibrary.INSTANCE.umask(DEFAULT_UMASK);
+            } catch (Exception ignored) {
+                // Best effort
             }
         }
     }
