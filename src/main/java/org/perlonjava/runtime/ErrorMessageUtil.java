@@ -87,6 +87,11 @@ public class ErrorMessageUtil {
     }
 
     public static String stringifyException(Throwable t) {
+        return stringifyException(t, 0);
+    }
+
+    public static String stringifyException(Throwable t, int skipLevels) {
+
         // Use the custom formatter to print the Perl message and stack trace
         StringBuilder sb = new StringBuilder();
 
@@ -134,8 +139,12 @@ public class ErrorMessageUtil {
                         .append("\n");
             }
         } else {
+            int level = 0;
             for (ArrayList<String> line : formattedLines) {
-                sb.append("        ").append(line.get(0)).append(" at ").append(line.get(1)).append(" line ").append(line.get(2)).append("\n");
+                if (level >= skipLevels) {
+                    sb.append("        ").append(line.get(0)).append(" at ").append(line.get(1)).append(" line ").append(line.get(2)).append("\n");
+                }
+                level++;
             }
         }
 

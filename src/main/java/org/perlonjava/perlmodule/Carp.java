@@ -58,10 +58,10 @@ public class Carp extends PerlModuleBase {
 
         if (backtrace) {
             // Use ErrorMessageUtil to format the exception with a stack trace
-            formattedMessage = ErrorMessageUtil.stringifyException(new Throwable(formattedMessage));
+            formattedMessage = ErrorMessageUtil.stringifyException(new Throwable(formattedMessage), 2);
         } else {
             // Use caller to get context information
-            RuntimeList callerInfo = RuntimeCode.caller(new RuntimeList(), RuntimeContextType.LIST);
+            RuntimeList callerInfo = RuntimeCode.caller(new RuntimeScalar(1).getList(), RuntimeContextType.LIST);
             if (callerInfo.size() >= 3) {
                 String fileName = callerInfo.elements.get(1).toString();
                 int line = ((RuntimeScalar) callerInfo.elements.get(2)).getInt();
