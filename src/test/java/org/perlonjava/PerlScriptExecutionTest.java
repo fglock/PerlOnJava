@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.perlonjava.io.StandardIO;
 import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeIO;
 import org.perlonjava.runtime.RuntimeScalar;
@@ -20,6 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Locale;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -30,6 +32,12 @@ import static org.junit.jupiter.api.Assertions.*;
  * to run multiple Perl scripts located in the resources directory.
  */
 public class PerlScriptExecutionTest {
+
+    static {
+        // Set default locale to US (uses dot as decimal separator)
+        // This ensures consistent number formatting across different environments
+        Locale.setDefault(Locale.US);
+    }
 
     private PrintStream originalOut; // Stores the original System.out
     private ByteArrayOutputStream outputStream; // Captures the output of the Perl script execution
@@ -66,10 +74,17 @@ public class PerlScriptExecutionTest {
      */
     @BeforeEach
     void setUp() {
-        originalOut = System.out; // Save the original System.out
-        outputStream = new ByteArrayOutputStream(); // Initialize the custom output stream
-        System.setOut(new PrintStream(outputStream)); // Redirect System.out to the custom stream
-        RuntimeIO.setCustomOutputStream(outputStream); // Set custom OutputStream in RuntimeIO
+        originalOut = System.out;
+        outputStream = new ByteArrayOutputStream();
+
+        // Create a new StandardIO with the capture stream
+        StandardIO newStdout = new StandardIO(outputStream, true);
+
+        // Replace RuntimeIO.stdout with a new instance
+        RuntimeIO.stdout = new RuntimeIO(newStdout);
+
+        // Also update System.out for any direct Java calls
+        System.setOut(new PrintStream(outputStream));
     }
 
     /**
@@ -77,8 +92,9 @@ public class PerlScriptExecutionTest {
      */
     @AfterEach
     void tearDown() {
-        System.setOut(originalOut); // Restore the original System.out
-        RuntimeIO.setCustomOutputStream(System.out); // Reset to original System.out
+        // Restore original stdout
+        RuntimeIO.stdout = new RuntimeIO(new StandardIO(originalOut, true));
+        System.setOut(originalOut);
     }
 
     /**

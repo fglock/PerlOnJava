@@ -141,7 +141,9 @@ public class TextCsv extends PerlModuleBase {
             printer.printRecord(values);
             printer.flush();
 
-            String csvString = sw.toString().trim(); // Remove trailing newline
+            String csvString = sw.toString();
+            // Remove any trailing line terminators (handles \n, \r\n, or \r)
+            csvString = csvString.replaceAll("[\r\n]+$", "");
 
             self.put("_string", new RuntimeScalar(csvString));
             clearError(self);

@@ -38,7 +38,7 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
             // Check if the key is not present in the hash
             if (!parent.elements.containsKey(key)) {
                 // Add a new RuntimeScalar for the key
-                parent.elements.put(key, new RuntimeScalar());
+                parent.put(key, new RuntimeScalar());
             }
             // Retrieve the element associated with the key
             lvalue = parent.elements.get(key);

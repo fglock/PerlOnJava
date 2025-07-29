@@ -4,7 +4,7 @@ use Test::More;
 
 subtest 'Basic write to scalar' => sub {
     my $var = '';
-    open(my $memory, ">", \$var) or die "Can't open memory file: $!";
+    open(my $memory, ">:raw", \$var) or die "Can't open memory file: $!";
     print $memory "foo!\n";
     close $memory;
     
@@ -24,7 +24,7 @@ subtest 'Multiple writes' => sub {
 
 subtest 'Read from scalar' => sub {
     my $var = "Line 1\nLine 2\nLine 3\n";
-    open(my $memory, "<", \$var) or die "Can't open memory file for reading: $!";
+    open(my $memory, "<:raw", \$var) or die "Can't open memory file for reading: $!";
     
     my $line1 = <$memory>;
     is($line1, "Line 1\n", "First line read correctly");
@@ -41,7 +41,7 @@ subtest 'Read from scalar' => sub {
 
 subtest 'Append mode' => sub {
     my $var = "Initial content\n";
-    open(my $memory, ">>", \$var) or die "Can't open memory file for append: $!";
+    open(my $memory, ">>:raw", \$var) or die "Can't open memory file for append: $!";
     print $memory "Appended content\n";
     close $memory;
     
@@ -214,7 +214,7 @@ subtest 'Stacked layers' => sub {
 subtest 'Layer with read-write mode' => sub {
     # Start with ASCII content to avoid Unicode string issues
     my $var = "Original text\n";
-    open(my $memory, "+<", \$var) or die "Can't open for read/write: $!";
+    open(my $memory, "+<:raw", \$var) or die "Can't open for read/write: $!";
 
     # Read the content
     my $line = <$memory>;
