@@ -53,6 +53,10 @@ ok(!exists $hash{key2} && !exists $hash{key3}, 'Slice delete successful');
 $hash{outer}{inner} = 'nested';
 is($hash{outer}{inner}, 'nested', 'Autovivification works');
 
+my @array;
+$array[2]{inner} = 'nested';
+is($array[2]{inner}, 'nested', 'Autovivification works');
+
 # Complex nested structure
 my %nested = (
     a => { b => { c => 1 } },
