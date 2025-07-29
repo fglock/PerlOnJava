@@ -125,6 +125,11 @@ public class CustomFileChannel implements IOHandle {
                 return new RuntimeScalar("");
             }
 
+            // Check if we've reached EOF (read less than requested)
+            if (bytesRead < maxBytes) {
+                isEOF = true;
+            }
+
             // Convert bytes to string where each char represents a byte
             StringBuilder result = new StringBuilder(bytesRead);
             for (int i = 0; i < bytesRead; i++) {
