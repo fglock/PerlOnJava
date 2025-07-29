@@ -153,11 +153,6 @@ public class SpecialBlockParser {
         parsedArgs.compileOnly = false; // Special blocks are always run
         parser.ctx.logDebug("Special block captures " + parser.ctx.symbolTable.getAllVisibleVariables());
         RuntimeList result;
-        // Setup the caller stack for BEGIN
-        CallerStack.push(
-                parser.ctx.symbolTable.getCurrentPackage(),
-                parser.ctx.compilerOptions.fileName,
-                parser.ctx.errorUtil.getLineNumber(parser.tokenIndex));
         try {
             setCurrentScope(parser.ctx.symbolTable);
             result = PerlLanguageProvider.executePerlAST(
@@ -178,7 +173,6 @@ public class SpecialBlockParser {
             message += blockPhase + " failed--compilation aborted";
             throw new PerlCompilerException(parser.tokenIndex, message, parser.ctx.errorUtil);
         }
-        CallerStack.pop();  // restore the caller stack
         GlobalVariable.getGlobalVariable("main::@").set(""); // Reset error variable
 
         if (!blockPhase.equals("BEGIN")) {
