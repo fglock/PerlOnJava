@@ -23,7 +23,7 @@ sub cleanup_file {
 sub create_test_file {
     my ($filename, $content) = @_;
 
-    open my $fh, '>', $filename or die "Cannot create $filename: $!";
+    open my $fh, '>:raw', $filename or die "Cannot create $filename: $!";
     print $fh $content;
     close $fh;
 }
@@ -42,7 +42,7 @@ subtest 'Basic seek with SEEK_SET (absolute positioning)' => sub {
     my $filename = get_test_filename();
     create_test_file($filename, $test_content);
 
-    open my $fh, '<', $filename or die "Cannot open $filename: $!";
+    open my $fh, '<:raw', $filename or die "Cannot open $filename: $!";
 
     subtest 'Seek to beginning' => sub {
         ok(seek($fh, 0, SEEK_SET), 'seek to position 0 succeeds');
@@ -80,7 +80,7 @@ subtest 'Seek with SEEK_CUR (relative to current position)' => sub {
     my $filename = get_test_filename();
     create_test_file($filename, $test_content);
 
-    open my $fh, '<', $filename or die "Cannot open $filename: $!";
+    open my $fh, '<:raw', $filename or die "Cannot open $filename: $!";
 
     subtest 'Forward seek from beginning' => sub {
         seek($fh, 0, SEEK_SET); # Start at beginning
@@ -127,7 +127,7 @@ subtest 'Seek with SEEK_END (relative to end of file)' => sub {
     create_test_file($filename, $test_content);
     my $file_length = length($test_content);
 
-    open my $fh, '<', $filename or die "Cannot open $filename: $!";
+    open my $fh, '<:raw', $filename or die "Cannot open $filename: $!";
 
     subtest 'Seek to exact end' => sub {
         ok(seek($fh, 0, SEEK_END), 'seek to end succeeds');
@@ -177,7 +177,7 @@ subtest 'Seek with numeric whence values' => sub {
     my $filename = get_test_filename();
     create_test_file($filename, $test_content);
 
-    open my $fh, '<', $filename or die "Cannot open $filename: $!";
+    open my $fh, '<:raw', $filename or die "Cannot open $filename: $!";
 
     subtest 'Using numeric constants directly' => sub {
         # SEEK_SET = 0
@@ -202,7 +202,7 @@ subtest 'Seek with write operations' => sub {
     my $filename = get_test_filename();
     create_test_file($filename, $test_content);
 
-    open my $fh, '+<', $filename or die "Cannot open $filename: $!";
+    open my $fh, '+<:raw', $filename or die "Cannot open $filename: $!";
 
     subtest 'Seek and overwrite' => sub {
         ok(seek($fh, 10, SEEK_SET), 'seek to position 10');
@@ -223,7 +223,7 @@ subtest 'Seek clears EOF flag' => sub {
     my $filename = get_test_filename();
     create_test_file($filename, "Short content");
 
-    open my $fh, '<', $filename or die "Cannot open $filename: $!";
+    open my $fh, '<:raw', $filename or die "Cannot open $filename: $!";
 
     # Read to EOF
     my $buffer;
@@ -249,7 +249,7 @@ subtest 'Seek with different file modes' => sub {
     subtest 'Seek in append mode' => sub {
         create_test_file($filename, "Initial");
 
-        open my $fh, '>>', $filename or die "Cannot open $filename: $!";
+        open my $fh, '>>:raw', $filename or die "Cannot open $filename: $!";
 
         # In append mode, writes always go to end regardless of seek
         ok(seek($fh, 0, SEEK_SET), 'seek in append mode succeeds');
@@ -258,7 +258,7 @@ subtest 'Seek with different file modes' => sub {
         close $fh;
 
         # Verify content
-        open my $read_fh, '<', $filename or die "Cannot open $filename: $!";
+        open my $read_fh, '<:raw', $filename or die "Cannot open $filename: $!";
         my $content = do { local $/; <$read_fh> };
         close $read_fh;
 
@@ -272,7 +272,7 @@ subtest 'Edge cases and error conditions' => sub {
     my $filename = get_test_filename();
     create_test_file($filename, $test_content);
 
-    open my $fh, '<', $filename or die "Cannot open $filename: $!";
+    open my $fh, '<:raw', $filename or die "Cannot open $filename: $!";
 
     subtest 'Very large seek positions' => sub {
         my $large_pos = 2**31;  # 2GB
