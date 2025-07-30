@@ -2,8 +2,6 @@ package org.perlonjava.nativ;
 
 import com.sun.jna.*;
 import com.sun.jna.platform.win32.*;
-import com.sun.jna.ptr.IntByReference;
-import com.sun.jna.ptr.LongByReference;
 import org.perlonjava.runtime.*;
 
 /**
@@ -273,94 +271,6 @@ public class NativeUtils {
         } else {
             int oldMask = PosixLibrary.INSTANCE.umask(mask);
             return new RuntimeScalar(oldMask);
-        }
-    }
-
-    /**
-     * Rename a file
-     * @param args RuntimeBase array: [oldname, newname]
-     * @return RuntimeScalar with 1 on success, 0 on failure
-     */
-    public static RuntimeScalar rename(RuntimeBase... args) {
-        if (args.length < 2) {
-            return new RuntimeScalar(0);
-        }
-
-        String oldPath = args[0].getFirst().toString();
-        String newPath = args[1].getFirst().toString();
-
-        if (IS_WINDOWS) {
-            boolean result = Kernel32.INSTANCE.MoveFile(oldPath, newPath);
-            return new RuntimeScalar(result ? 1 : 0);
-        } else {
-            try {
-                int result = PosixLibrary.INSTANCE.rename(oldPath, newPath);
-                return new RuntimeScalar(result == 0 ? 1 : 0);
-            } catch (LastErrorException e) {
-                return new RuntimeScalar(0);
-            }
-        }
-    }
-
-    /**
-     * Get environment variable
-     * @param args RuntimeBase array: [varname]
-     * @return RuntimeScalar with variable value or empty string
-     */
-    public static RuntimeScalar getenv(RuntimeBase... args) {
-        if (args.length < 1) {
-            return new RuntimeScalar("");
-        }
-
-        String name = args[0].getFirst().toString();
-
-        if (IS_WINDOWS) {
-            String value = System.getenv(name);
-            return new RuntimeScalar(value != null ? value : "");
-        } else {
-            String value = PosixLibrary.INSTANCE.getenv(name);
-            return new RuntimeScalar(value != null ? value : "");
-        }
-    }
-
-    /**
-     * Sleep for specified seconds
-     * @param args RuntimeBase array: [seconds]
-     * @return RuntimeScalar with remaining sleep time (0 if completed)
-     */
-    public static RuntimeScalar sleep(RuntimeBase... args) {
-        if (args.length < 1) {
-            return new RuntimeScalar(0);
-        }
-
-        int seconds = (int) args[0].getFirst().getInt();
-
-        if (IS_WINDOWS) {
-            try {
-                Thread.sleep(seconds * 1000L);
-                return new RuntimeScalar(0);
-            } catch (InterruptedException e) {
-                // Return approximate remaining time
-                return new RuntimeScalar(1);
-            }
-        } else {
-            int remaining = PosixLibrary.INSTANCE.sleep(seconds);
-            return new RuntimeScalar(remaining);
-        }
-    }
-
-    /**
-     * Get current time in seconds since epoch
-     * @param args Unused (for API consistency)
-     * @return RuntimeScalar with current time
-     */
-    public static RuntimeScalar time(RuntimeBase... args) {
-        if (IS_WINDOWS) {
-            return new RuntimeScalar(System.currentTimeMillis() / 1000L);
-        } else {
-            LongByReference timeRef = new LongByReference();
-            long time = PosixLibrary.INSTANCE.time(timeRef);
-            return new RuntimeScalar(time);
         }
     }
 }

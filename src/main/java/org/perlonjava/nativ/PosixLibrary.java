@@ -32,6 +32,9 @@ public interface PosixLibrary extends Library {
     int unlink(String path) throws LastErrorException;
     int rename(String oldpath, String newpath) throws LastErrorException;
 
+    // Symbolic link operations
+    int readlink(String path, byte[] buf, int bufsiz) throws LastErrorException;
+
     // Signal handling
     Pointer signal(int sig, Pointer handler) throws LastErrorException;
     int raise(int sig) throws LastErrorException;
