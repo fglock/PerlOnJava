@@ -23,4 +23,12 @@ public interface WindowsLibrary extends StdCallLibrary {
         WinBase.STARTUPINFO startupInfo,
         WinBase.PROCESS_INFORMATION processInformation
     );
+
+    // File attributes and reparse point constants
+    int FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000;
+    int FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
+    int FSCTL_GET_REPARSE_POINT = 0x000900A8;
+
+    // Maximum reparse data buffer size
+    int MAXIMUM_REPARSE_DATA_BUFFER_SIZE = 16384;
 }

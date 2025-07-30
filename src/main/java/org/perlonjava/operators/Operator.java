@@ -1,8 +1,10 @@
 package org.perlonjava.operators;
 
+import com.sun.jna.Native;
 import org.perlonjava.regex.RuntimeRegex;
 import org.perlonjava.runtime.*;
 
+import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -422,5 +424,52 @@ public class Operator {
 
     public static RuntimeScalar repeat(RuntimeScalar runtimeScalar, RuntimeScalar arg) {
         return (RuntimeScalar) repeat(runtimeScalar, arg, RuntimeContextType.SCALAR);
+    }
+
+    /**
+     * Read the value of a symbolic link
+     * @param args RuntimeBase array: [filename] or empty (uses $_)
+     * @return RuntimeScalar with link target or undef on error
+     */
+    public static RuntimeScalar readlink(RuntimeBase... args) {
+        String path = args[0].getFirst().toString();
+        try {
+            Path linkPath = Paths.get(path);
+
+            // Check if file exists first
+            if (!Files.exists(linkPath)) {
+                // Set $! to "No such file or directory"
+                getGlobalVariable("main::!").set("No such file or directory");
+                Native.setLastError(2); // ENOENT
+                return RuntimeScalar.undef();
+            }
+
+            if (Files.isSymbolicLink(linkPath)) {
+                Path targetPath = Files.readSymbolicLink(linkPath);
+                return new RuntimeScalar(targetPath.toString());
+            } else {
+                // Not a symbolic link - set $! to appropriate error
+                getGlobalVariable("main::!").set("Invalid argument");
+                Native.setLastError(22); // EINVAL
+                return RuntimeScalar.undef();
+            }
+        } catch (UnsupportedOperationException e) {
+            // Symbolic links not supported on this platform
+            throw new RuntimeException("Symbolic links are not implemented on this platform");
+        } catch (IOException e) {
+            // Set $! based on the specific IOException
+            String errorMessage = e.getMessage();
+            if (errorMessage != null && errorMessage.contains("Access is denied")) {
+                getGlobalVariable("main::!").set("Permission denied");
+                Native.setLastError(13); // EACCES
+            } else {
+                getGlobalVariable("main::!").set(errorMessage != null ? errorMessage : "I/O error");
+            }
+            return RuntimeScalar.undef();
+        } catch (Exception e) {
+            // Generic error - set $!
+            getGlobalVariable("main::!").set(e.getMessage() != null ? e.getMessage() : "Unknown error");
+            return RuntimeScalar.undef();
+        }
     }
 }

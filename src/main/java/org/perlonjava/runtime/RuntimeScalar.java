@@ -1031,4 +1031,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             hasNext = true;
         }
     }
+
+    public static RuntimeScalar undef () {
+        return scalarUndef;
+    }
 }
