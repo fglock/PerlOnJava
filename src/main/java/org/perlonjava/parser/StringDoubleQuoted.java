@@ -82,8 +82,8 @@ public class StringDoubleQuoted extends StringSegmentParser {
      * @param isRegex True if parsing regex pattern (affects interpolation)
      * @param parseEscapes True to process escape sequences, false to preserve them
      */
-    private StringDoubleQuoted(EmitterContext ctx, List<LexerToken> tokens, Parser parser, int tokenIndex, boolean isRegex, boolean parseEscapes) {
-        super(ctx, tokens, parser, tokenIndex, isRegex);
+    private StringDoubleQuoted(EmitterContext ctx, List<LexerToken> tokens, Parser parser, int tokenIndex, boolean isRegex, boolean parseEscapes, boolean interpolateVariable) {
+        super(ctx, tokens, parser, tokenIndex, isRegex, interpolateVariable);
         this.parseEscapes = parseEscapes;
     }
 
@@ -103,7 +103,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
      * @param parseEscapes Whether to process escape sequences or preserve them literally
      * @return An AST node representing the parsed string (StringNode, BinaryOperatorNode for join, etc.)
      */
-    static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes) {
+    static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes, boolean interpolateVariable) {
         // Extract the first buffer (double-quoted strings don't have multiple parts like here-docs)
         var input = rawStr.buffers.getFirst();
         var tokenIndex = rawStr.next;
@@ -118,7 +118,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
         var parser = new Parser(ctx, tokens);
 
         // Create and run the double-quoted string parser
-        var doubleQuotedParser = new StringDoubleQuoted(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes);
+        var doubleQuotedParser = new StringDoubleQuoted(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes, interpolateVariable);
         return doubleQuotedParser.parse();
     }
 

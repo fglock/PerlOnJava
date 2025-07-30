@@ -54,6 +54,8 @@ public abstract class StringSegmentParser {
     /** List of AST nodes representing string segments (literals and interpolated expressions) */
     protected final List<Node> segments;
 
+    protected final boolean interpolateVariable;
+
     /**
      * Constructs a new StringSegmentParser with the specified parameters.
      *
@@ -63,7 +65,7 @@ public abstract class StringSegmentParser {
      * @param tokenIndex the token index in the original source for error reporting
      * @param isRegex flag indicating if this is parsing a regex pattern
      */
-    public StringSegmentParser(EmitterContext ctx, List<LexerToken> tokens, Parser parser, int tokenIndex, boolean isRegex) {
+    public StringSegmentParser(EmitterContext ctx, List<LexerToken> tokens, Parser parser, int tokenIndex, boolean isRegex, boolean interpolateVariable) {
         this.ctx = ctx;
         this.tokens = tokens;
         this.parser = parser;
@@ -71,6 +73,7 @@ public abstract class StringSegmentParser {
         this.isRegex = isRegex;
         this.currentSegment = new StringBuilder();
         this.segments = new ArrayList<>();
+        this.interpolateVariable = interpolateVariable;
     }
 
     /**
@@ -397,6 +400,10 @@ public abstract class StringSegmentParser {
      * @return true if the sigil should trigger variable interpolation
      */
     private boolean shouldInterpolateVariable(String sigil) {
+        if (!interpolateVariable) {
+            return false;
+        }
+
         var token1 = tokens.get(parser.tokenIndex);
         if (token1.type == LexerTokenType.EOF) {
             return false;
