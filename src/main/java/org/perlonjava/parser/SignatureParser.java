@@ -42,19 +42,14 @@ public class SignatureParser {
      *   <li>Default value assignments for optional parameters</li>
      * </ul>
      *
-     * @param parser The parent parser instance for error reporting
-     * @param signature The signature string to parse (e.g., "$a, $b = 10, @rest")
+     * @param parser The parser instance
      * @return A ListNode containing the generated AST nodes
      * @throws PerlCompilerException if the signature syntax is invalid
      */
-    public static ListNode parseSignature(Parser parser, String signature) {
-        int tokenIndex = parser.tokenIndex;
+    public static ListNode parseSignature(Parser parser) {
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR,"(");
 
-        // Tokenize the signature string into lexer tokens
-        Lexer lexer = new Lexer(signature);
-        List<LexerToken> tokens = lexer.tokenize();
-        Parser sigParser = new Parser(parser.ctx, tokens);
-        // sigParser.ctx.logDebug("signature tokens: " + tokens + " at " + sigParser.tokenIndex);
+        int tokenIndex = parser.tokenIndex;
 
         // Initialize collections for building the AST
         List<Node> nodes = new ArrayList<>();       // All generated AST nodes
@@ -64,9 +59,9 @@ public class SignatureParser {
         boolean hasSlurpy = false;                  // Whether signature has @array or %hash
 
         // Parse each parameter in the signature
+        LexerToken token = TokenUtils.consume(parser);
         while (true) {
-            LexerToken token = TokenUtils.consume(sigParser);
-            if (token.type == LexerTokenType.EOF) {
+            if (endSignature(token)) {
                 break;
             }
 
@@ -88,7 +83,7 @@ public class SignatureParser {
             }
 
             String name = null;
-            LexerToken nextToken = TokenUtils.peek(sigParser);
+            LexerToken nextToken = TokenUtils.peek(parser);
 
             // Check for double sigil (e.g., $$) which is invalid
             if (nextToken.text.equals("$") || nextToken.text.equals("@") || nextToken.text.equals("%")) {
@@ -102,7 +97,7 @@ public class SignatureParser {
 
             // Parse the variable name if present
             if (nextToken.type == LexerTokenType.IDENTIFIER) {
-                name = TokenUtils.consume(sigParser).text;
+                name = TokenUtils.consume(parser).text;
             }
 
             // Create variable node or undef placeholder
@@ -115,7 +110,7 @@ public class SignatureParser {
                 // Anonymous parameter: $ becomes undef
                 variables.add(new OperatorNode("undef", null, tokenIndex));
             }
-            sigParser.ctx.logDebug("signature variable: " + variable);
+            parser.ctx.logDebug("signature variable: " + variable);
 
             // Handle slurpy parameters (@array or %hash)
             if (sigil.equals("@") || sigil.equals("%")) {
@@ -123,10 +118,10 @@ public class SignatureParser {
                 maxParams = Integer.MAX_VALUE;  // Slurpy can accept unlimited arguments
 
                 // Verify no parameters come after the slurpy
-                LexerToken checkToken = TokenUtils.peek(sigParser);
+                LexerToken checkToken = TokenUtils.peek(parser);
                 if (checkToken.text.equals(",")) {
-                    TokenUtils.consume(sigParser); // consume comma
-                    checkToken = TokenUtils.peek(sigParser);
+                    TokenUtils.consume(parser); // consume comma
+                    checkToken = TokenUtils.peek(parser);
                     if (checkToken.type != LexerTokenType.EOF) {
                         // Check if it's another slurpy
                         if (checkToken.text.equals("@") || checkToken.text.equals("%")) {
@@ -141,22 +136,22 @@ public class SignatureParser {
 
             // Handle optional scalar parameters with default values
             Node defaultValue = null;
-            nextToken = TokenUtils.peek(sigParser);
+            nextToken = TokenUtils.peek(parser);
             if (nextToken.text.equals("=") ||
                     nextToken.text.equals("||=") ||
                     nextToken.text.equals("//=")) {
 
-                String op = TokenUtils.consume(sigParser).text;
+                String op = TokenUtils.consume(parser).text;
 
                 // Ensure there's a default expression after the assignment operator
-                if (TokenUtils.peek(sigParser).type == LexerTokenType.EOF ||
-                        TokenUtils.peek(sigParser).text.equals(",")) {
+                if (TokenUtils.peek(parser).type == LexerTokenType.EOF ||
+                        TokenUtils.peek(parser).text.equals(",")) {
                     if (variable != null) {
                         parser.throwError("Optional parameter lacks default expression");
                     }
                 } else {
                     // Parse the default value expression
-                    ListNode arguments = consumeArgsWithPrototype(sigParser, "$", false);
+                    ListNode arguments = consumeArgsWithPrototype(parser, "$", false);
                     defaultValue = arguments.elements.getFirst();
                 }
 
@@ -170,14 +165,14 @@ public class SignatureParser {
             maxParams++;
 
             // Handle comma or end of signature
-            token = TokenUtils.peek(sigParser);
+            token = TokenUtils.peek(parser);
             if (token.text.equals(",")) {
                 // Consume all consecutive commas
                 while (token.text.equals(",")) {
-                    TokenUtils.consume(sigParser);
-                    token = TokenUtils.peek(sigParser);
+                    TokenUtils.consume(parser);
+                    token = TokenUtils.peek(parser);
                 }
-            } else if (token.type == LexerTokenType.EOF) {
+            } else if (endSignature(token)) {
                 break;
             } else {
                 // Check for missing comma between parameters
@@ -188,12 +183,12 @@ public class SignatureParser {
             }
         }
 
-        // Verify all tokens were consumed
-        if (TokenUtils.peek(sigParser).type != LexerTokenType.EOF) {
-            parser.throwError("Expected ')' in signature prototype");
+        if (!token.text.equals(")")) {
+            throw new PerlCompilerException(parser.tokenIndex, "A signature parameter must start with '$', '@' or '%'", parser.ctx.errorUtil);
         }
+        TokenUtils.consume(parser);
 
-        sigParser.ctx.logDebug("signature min: " + minParams + " max: " + maxParams + " slurpy: " + hasSlurpy);
+        parser.ctx.logDebug("signature min: " + minParams + " max: " + maxParams + " slurpy: " + hasSlurpy);
 
         // Generate argument count validation
         // AST: (minParams <= @_ <= maxParams) || die "Bad number of arguments"
@@ -227,6 +222,10 @@ public class SignatureParser {
                         tokenIndex));
 
         return new ListNode(nodes, tokenIndex);
+    }
+
+    private static boolean endSignature(LexerToken token) {
+        return token.type == LexerTokenType.EOF || token.text.equals(")");
     }
 
     /**

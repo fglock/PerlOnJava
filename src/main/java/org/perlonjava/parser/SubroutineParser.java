@@ -190,18 +190,17 @@ public class SubroutineParser {
 
         // Check if the next token is an opening parenthesis '(' indicating a prototype.
         if (TokenUtils.peek(parser).text.equals("(")) {
-            // If a prototype exists, we parse it using 'parseRawString' method which handles it like the 'q()' operator.
-            // This means it will take everything inside the parentheses as a literal string.
-            String paren = ((StringNode) StringParser.parseRawString(parser, "q")).value;
             if (parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures")) {
-                parser.ctx.logDebug("Signatures feature enabled: " + paren);
-                // If the signatures feature is enabled, we parse the prototype as a signature.
-                signature = parseSignature(parser, paren);
-                // TODO integrate the AST for the signature into the subroutine definition
+                parser.ctx.logDebug("Signatures feature enabled");
+                // If the signatures feature is enabled, we parse a signature.
+                signature = parseSignature(parser);
                 parser.ctx.logDebug("Signature AST: " + signature);
+                parser.ctx.logDebug("next token " + TokenUtils.peek(parser));
             } else {
                 // If the signatures feature is not enabled, we just parse the prototype as a string.
-                prototype = paren;
+                // If a prototype exists, we parse it using 'parseRawString' method which handles it like the 'q()' operator.
+                // This means it will take everything inside the parentheses as a literal string.
+                prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
             }
         }
 
