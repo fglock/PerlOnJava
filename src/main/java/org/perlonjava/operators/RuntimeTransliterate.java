@@ -1,7 +1,11 @@
 package org.perlonjava.operators;
 
-import org.perlonjava.runtime.RuntimeContextType;
+import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeScalar;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * The RuntimeTransliterate class implements Perl's tr/// operator, which is used for character
@@ -10,11 +14,11 @@ import org.perlonjava.runtime.RuntimeScalar;
  */
 public class RuntimeTransliterate {
 
-    // Arrays and flags used for transliteration
-    private char[] translationMap;
-    private boolean[] usedChars;
-    private boolean[] deleteChars;
-    private boolean[] inSearchSet;  // Track which chars are in the original search set
+    // Maps and sets used for transliteration (now supports full Unicode)
+    private Map<Character, Character> translationMap;
+    private Set<Character> usedChars;
+    private Set<Character> deleteChars;
+    private Set<Character> inSearchSet;  // Track which chars are in the original search set
     private boolean complement;
     private boolean deleteUnmatched;
     private boolean squashDuplicates;
@@ -39,7 +43,7 @@ public class RuntimeTransliterate {
      * Applies the transliteration pattern to the given string.
      *
      * @param originalString The original string to be transliterated
-     * @param ctx The runtime context
+     * @param ctx            The runtime context
      * @return A new RuntimeScalar containing the transliterated string or count
      */
     public RuntimeScalar transliterate(RuntimeScalar originalString, int ctx) {
@@ -51,13 +55,14 @@ public class RuntimeTransliterate {
 
         for (int i = 0; i < input.length(); i++) {
             char ch = input.charAt(i);
-            if (ch < 256 && deleteChars[ch]) {
+
+            if (deleteChars.contains(ch)) {
                 count++;  // Count deleted characters
                 lastChar = '\0';
                 lastCharWasFromComplement = false;
-            } else if (ch < 256 && usedChars[ch]) {
-                char mappedChar = translationMap[ch];
-                boolean isFromComplement = complement && !inSearchSet[ch];
+            } else if (usedChars.contains(ch)) {
+                char mappedChar = translationMap.getOrDefault(ch, ch);
+                boolean isFromComplement = complement && !inSearchSet.contains(ch);
 
                 // Apply squashing logic
                 boolean shouldSquash = false;
@@ -117,30 +122,21 @@ public class RuntimeTransliterate {
         String expandedSearch = expandRanges(search);
         String expandedReplace = expandRanges(replace);
 
-        translationMap = new char[256];
-        usedChars = new boolean[256];
-        deleteChars = new boolean[256];
-        inSearchSet = new boolean[256];
-
-        for (int i = 0; i < 256; i++) {
-            translationMap[i] = (char) i;
-            usedChars[i] = false;
-            deleteChars[i] = false;
-            inSearchSet[i] = false;
-        }
+        translationMap = new HashMap<>();
+        usedChars = new HashSet<>();
+        deleteChars = new HashSet<>();
+        inSearchSet = new HashSet<>();
 
         // Mark characters in the search set
         for (int i = 0; i < expandedSearch.length(); i++) {
             char ch = expandedSearch.charAt(i);
-            if (ch < 256) {
-                inSearchSet[ch] = true;
-            }
+            inSearchSet.add(ch);
         }
 
         if (complement) {
-            complementTranslationMap(translationMap, usedChars, expandedSearch, expandedReplace);
+            complementTranslationMap(expandedSearch, expandedReplace);
         } else {
-            populateTranslationMap(translationMap, usedChars, expandedSearch, expandedReplace);
+            populateTranslationMap(expandedSearch, expandedReplace);
         }
     }
 
@@ -161,12 +157,20 @@ public class RuntimeTransliterate {
                 // Check if this is a valid range
                 if (start < end) {
                     // We already added start, so begin from start + 1
-                    for (char ch = (char)(start + 1); ch <= end; ch++) {
+                    for (char ch = (char) (start + 1); ch <= end; ch++) {
                         expanded.append(ch);
                     }
                     i++; // Skip the end character as we've already processed it
                     continue;
+                } else if (start > end) {
+                    // Invalid range - throw exception
+                    String startHex = String.format("\\x{%04X}", (int) start);
+                    String endHex = String.format("\\x{%04X}", (int) end);
+                    throw new PerlCompilerException(
+                            "Invalid range \"" + startHex + "-" + endHex + "\" in transliteration operator"
+                    );
                 }
+                // If start == end, fall through and treat as literal characters
             }
 
             expanded.append(input.charAt(i));
@@ -178,53 +182,49 @@ public class RuntimeTransliterate {
     /**
      * Complements the translation map based on the search and replace strings.
      *
-     * @param translationMap The translation map to populate
-     * @param usedChars      The array indicating which characters are used
      * @param search         The search string
      * @param replace        The replacement string
      */
-    private void complementTranslationMap(char[] translationMap, boolean[] usedChars, String search, String replace) {
-        boolean[] complementSet = new boolean[256];
+    private void complementTranslationMap(String search, String replace) {
+        Set<Character> searchSet = new HashSet<>();
         for (int i = 0; i < search.length(); i++) {
-            char ch = search.charAt(i);
-            if (ch < 256) {
-                complementSet[ch] = true;
-            }
+            searchSet.add(search.charAt(i));
         }
 
-        // Special case: complement with empty replacement
-        if (replace.isEmpty()) {
-            // For each character NOT in the search set (i.e., in the complement)
-            for (int i = 0; i < 256; i++) {
-                if (!complementSet[i]) {
+        // We need to iterate through all characters that might appear in the input
+        // For now, we'll handle the common case of characters up to U+FFFF
+        int replaceIndex = 0;
+
+        for (int codePoint = 0; codePoint <= 0xFFFF; codePoint++) {
+            char ch = (char) codePoint;
+
+            if (!searchSet.contains(ch)) {
+                // This character is in the complement set
+                if (replace.isEmpty()) {
+                    // Special case: complement with empty replacement
                     if (deleteUnmatched) {
                         // With 'd' modifier, delete complement characters
-                        deleteChars[i] = true;
-                        usedChars[i] = true;
+                        deleteChars.add(ch);
+                        usedChars.add(ch);
                     } else {
                         // Without 'd' modifier, map to themselves (for squashing)
-                        usedChars[i] = true;
-                        translationMap[i] = (char) i;
+                        usedChars.add(ch);
+                        translationMap.put(ch, ch);
                     }
-                }
-            }
-            return;
-        }
-
-        int replaceIndex = 0;
-        for (int i = 0; i < 256; i++) {
-            if (!complementSet[i]) {
-                if (replaceIndex < replace.length()) {
-                    translationMap[i] = replace.charAt(replaceIndex);
-                    usedChars[i] = true;
-                    replaceIndex++;
                 } else {
-                    if (deleteUnmatched) {
-                        deleteChars[i] = true;
-                        usedChars[i] = true;
+                    // Map to replacement characters
+                    if (replaceIndex < replace.length()) {
+                        translationMap.put(ch, replace.charAt(replaceIndex));
+                        usedChars.add(ch);
+                        replaceIndex++;
                     } else {
-                        translationMap[i] = replace.charAt(replace.length() - 1);
-                        usedChars[i] = true;
+                        if (deleteUnmatched) {
+                            deleteChars.add(ch);
+                            usedChars.add(ch);
+                        } else {
+                            translationMap.put(ch, replace.charAt(replace.length() - 1));
+                            usedChars.add(ch);
+                        }
                     }
                 }
             }
@@ -234,53 +234,39 @@ public class RuntimeTransliterate {
     /**
      * Populates the translation map based on the search and replace strings.
      *
-     * @param translationMap The translation map to populate
-     * @param usedChars      The array indicating which characters are used
      * @param search         The search string
      * @param replace        The replacement string
      */
-    private void populateTranslationMap(char[] translationMap, boolean[] usedChars, String search, String replace) {
+    private void populateTranslationMap(String search, String replace) {
         int minLength = Math.min(search.length(), replace.length());
 
         // First pass: map characters that have replacements
         for (int i = 0; i < minLength; i++) {
             char searchChar = search.charAt(i);
-            if (searchChar < 256) {
-                // Only map if not already mapped (first occurrence wins)
-                if (!usedChars[searchChar]) {
-                    translationMap[searchChar] = replace.charAt(i);
-                    usedChars[searchChar] = true;
-                }
+            // Only map if not already mapped (first occurrence wins)
+            if (!usedChars.contains(searchChar)) {
+                translationMap.put(searchChar, replace.charAt(i));
+                usedChars.add(searchChar);
             }
         }
 
         // Second pass: handle remaining characters in search string
         for (int i = minLength; i < search.length(); i++) {
             char searchChar = search.charAt(i);
-            if (searchChar < 256 && !usedChars[searchChar]) {
+            if (!usedChars.contains(searchChar)) {
                 if (deleteUnmatched) {
-                    deleteChars[searchChar] = true;
-                    usedChars[searchChar] = true;
+                    deleteChars.add(searchChar);
+                    usedChars.add(searchChar);
                 } else if (!replace.isEmpty()) {
                     // Map to the last character in replace string
-                    translationMap[searchChar] = replace.charAt(replace.length() - 1);
-                    usedChars[searchChar] = true;
+                    translationMap.put(searchChar, replace.charAt(replace.length() - 1));
+                    usedChars.add(searchChar);
                 } else {
                     // Empty replacement - map to self
-                    translationMap[searchChar] = searchChar;
-                    usedChars[searchChar] = true;
+                    translationMap.put(searchChar, searchChar);
+                    usedChars.add(searchChar);
                 }
             }
         }
-    }
-
-    /**
-     * Checks if a character is a hexadecimal digit.
-     *
-     * @param ch The character to check
-     * @return True if the character is a hexadecimal digit, false otherwise
-     */
-    private boolean isHexDigit(char ch) {
-        return (ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'F') || (ch >= 'a' && ch <= 'f');
     }
 }
