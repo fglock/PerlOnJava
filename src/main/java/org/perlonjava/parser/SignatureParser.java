@@ -59,8 +59,9 @@ public class SignatureParser {
         boolean hasSlurpy = false;                  // Whether signature has @array or %hash
 
         // Parse each parameter in the signature
-        LexerToken token = TokenUtils.consume(parser);
+        LexerToken token;
         while (true) {
+            token = TokenUtils.consume(parser);
             if (endSignature(token)) {
                 break;
             }
