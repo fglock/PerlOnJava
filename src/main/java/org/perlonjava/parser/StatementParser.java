@@ -355,55 +355,57 @@ public class StatementParser {
                     ctx.symbolTable.getCurrentPackage(),
                     ctx.compilerOptions.fileName,
                     ctx.errorUtil.getLineNumber(parser.tokenIndex));
+            try {
 
-            ctx.logDebug("Use statement: " + fullName + " called from " + CallerStack.peek(0));
+                ctx.logDebug("Use statement: " + fullName + " called from " + CallerStack.peek(0));
 
-            boolean moduleTrue = parser.ctx.symbolTable.isFeatureCategoryEnabled("module_true");
+                boolean moduleTrue = parser.ctx.symbolTable.isFeatureCategoryEnabled("module_true");
 
-            // execute 'require(fullName)'
-            RuntimeScalar ret = ModuleOperators.require(new RuntimeScalar(fullName), moduleTrue);
-            ctx.logDebug("Use statement return: " + ret);
+                // execute 'require(fullName)'
+                RuntimeScalar ret = ModuleOperators.require(new RuntimeScalar(fullName), moduleTrue);
+                ctx.logDebug("Use statement return: " + ret);
 
-            if (versionNode != null) {
-                // check module version
-                parser.ctx.logDebug("use version: check module version");
-                RuntimeArray args = new RuntimeArray();
-                RuntimeArray.push(args, new RuntimeScalar(packageName));
-                RuntimeArray.push(args, versionScalar);
-                Universal.VERSION(args, RuntimeContextType.SCALAR);
-            }
+                if (versionNode != null) {
+                    // check module version
+                    parser.ctx.logDebug("use version: check module version");
+                    RuntimeArray args = new RuntimeArray();
+                    RuntimeArray.push(args, new RuntimeScalar(packageName));
+                    RuntimeArray.push(args, versionScalar);
+                    Universal.VERSION(args, RuntimeContextType.SCALAR);
+                }
 
-            // call Module->import( LIST )
-            // or Module->unimport( LIST )
+                // call Module->import( LIST )
+                // or Module->unimport( LIST )
 
-            // Execute the argument list immediately
-            RuntimeList args = runSpecialBlock(parser, "BEGIN", list);
+                // Execute the argument list immediately
+                RuntimeList args = runSpecialBlock(parser, "BEGIN", list);
 
-            ctx.logDebug("Use statement list: " + args);
-            if (hasParentheses && args.size() == 0) {
-                // do not import
-            } else {
-                // fetch the method using `can` operator
-                String importMethod = isNoDeclaration ? "unimport" : "import";
-                RuntimeArray canArgs = new RuntimeArray();
-                RuntimeArray.push(canArgs, new RuntimeScalar(packageName));
-                RuntimeArray.push(canArgs, new RuntimeScalar(importMethod));
-                RuntimeList codeList = Universal.can(canArgs, RuntimeContextType.SCALAR);
-                ctx.logDebug("Use can(" + packageName + ", " + importMethod + "): " + codeList);
-                if (codeList.size() == 1) {
-                    RuntimeScalar code = codeList.getFirst();
-                    if (code.getBoolean()) {
-                        // call the method
-                        ctx.logDebug("Use call : " + importMethod + "(" + args + ")");
-                        RuntimeArray importArgs = args.getArrayOfAlias();
-                        RuntimeArray.unshift(importArgs, new RuntimeScalar(packageName));
-                        RuntimeCode.apply(code, importArgs, RuntimeContextType.SCALAR);
+                ctx.logDebug("Use statement list: " + args);
+                if (hasParentheses && args.size() == 0) {
+                    // do not import
+                } else {
+                    // fetch the method using `can` operator
+                    String importMethod = isNoDeclaration ? "unimport" : "import";
+                    RuntimeArray canArgs = new RuntimeArray();
+                    RuntimeArray.push(canArgs, new RuntimeScalar(packageName));
+                    RuntimeArray.push(canArgs, new RuntimeScalar(importMethod));
+                    RuntimeList codeList = Universal.can(canArgs, RuntimeContextType.SCALAR);
+                    ctx.logDebug("Use can(" + packageName + ", " + importMethod + "): " + codeList);
+                    if (codeList.size() == 1) {
+                        RuntimeScalar code = codeList.getFirst();
+                        if (code.getBoolean()) {
+                            // call the method
+                            ctx.logDebug("Use call : " + importMethod + "(" + args + ")");
+                            RuntimeArray importArgs = args.getArrayOfAlias();
+                            RuntimeArray.unshift(importArgs, new RuntimeScalar(packageName));
+                            RuntimeCode.apply(code, importArgs, RuntimeContextType.SCALAR);
+                        }
                     }
                 }
+            } finally {
+                // restore the caller stack
+                CallerStack.pop();
             }
-
-            // restore the caller stack
-            CallerStack.pop();
         }
 
         // return the current compiler flags

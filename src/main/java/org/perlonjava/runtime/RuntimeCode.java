@@ -329,16 +329,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         ArrayList<ArrayList<String>> stackTrace = ExceptionFormatter.formatException(t);
         int stackTraceSize = stackTrace.size();
 
+        if (stackTraceSize > 0) {
+            frame++;
+        }
+
 //        // Show debug info
-//        System.out.println("# Runtime stack trace:");
+//        System.out.println("# Runtime stack trace: frame=" + frame);
 //        for (int i = 0; i < stackTraceSize; i++) {
 //            System.out.println("#   " + i + ": " + stackTrace.get(i));
 //        }
 //        System.out.println();
 
-        if (stackTraceSize > 0) {
-            frame++;
-        }
         if (frame >= 0 && frame < stackTraceSize) {
             // Runtime stack trace
             if (ctx == RuntimeContextType.SCALAR) {
