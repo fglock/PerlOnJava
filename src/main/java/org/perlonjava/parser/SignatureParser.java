@@ -151,12 +151,14 @@ public class SignatureParser {
                 // Ensure there's a default expression after the assignment operator
                 if (TokenUtils.peek(sigParser).type == LexerTokenType.EOF ||
                         TokenUtils.peek(sigParser).text.equals(",")) {
-                    parser.throwError("Optional parameter lacks default expression");
+                    if (variable != null) {
+                        parser.throwError("Optional parameter lacks default expression");
+                    }
+                } else {
+                    // Parse the default value expression
+                    ListNode arguments = consumeArgsWithPrototype(sigParser, "$", false);
+                    defaultValue = arguments.elements.getFirst();
                 }
-
-                // Parse the default value expression
-                ListNode arguments = consumeArgsWithPrototype(sigParser, "$", false);
-                defaultValue = arguments.elements.getFirst();
 
                 // Generate conditional assignment for the default value
                 nodes.add(generateDefaultAssignment(defaultValue, op, maxParams, variable, parser));
