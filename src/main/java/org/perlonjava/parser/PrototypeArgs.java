@@ -65,8 +65,12 @@ public class PrototypeArgs {
      * @throws PerlCompilerException if the arguments don't match the prototype
      */
     static ListNode consumeArgsWithPrototype(Parser parser, String prototype) {
+        return consumeArgsWithPrototype(parser, prototype, true);
+    }
+
+    static ListNode consumeArgsWithPrototype(Parser parser, String prototype, boolean handleParen) {
         ListNode args = new ListNode(parser.tokenIndex);
-        boolean hasParentheses = handleOpeningParenthesis(parser);
+        boolean hasParentheses = handleParen ? handleOpeningParenthesis(parser) : false;
 
         // Comma is forbidden here
         if (prototype != null && !prototype.isEmpty() && isComma(TokenUtils.peek(parser))) {

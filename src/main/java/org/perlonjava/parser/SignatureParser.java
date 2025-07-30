@@ -155,7 +155,7 @@ public class SignatureParser {
                 }
 
                 // Parse the default value expression
-                ListNode arguments = consumeArgsWithPrototype(sigParser, "$");
+                ListNode arguments = consumeArgsWithPrototype(sigParser, "$", false);
                 defaultValue = arguments.elements.getFirst();
 
                 // Generate conditional assignment for the default value
