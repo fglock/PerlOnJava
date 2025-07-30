@@ -264,12 +264,16 @@ public class StatementResolver {
                         // Semicolon is a definitive block indicator
                         hasBlockIndicator = true;
                     }
+                    case "=" -> {
+                        // Assign is a block indicator
+                        hasBlockIndicator = true;
+                    }
                     case "," -> {
                         // Comma alone is not definitive - could be function args or hash
                         // Continue scanning for more evidence
                         parser.ctx.logDebug("isHashLiteral found comma, continuing scan");
                     }
-                    case "for", "while", "if", "unless", "until", "foreach", "my", "our", "say", "print" -> {
+                    case "for", "while", "if", "unless", "until", "foreach", "my", "our", "say", "print", "local" -> {
                         // Check if this is a hash key (followed by =>) or statement modifier
                         LexerToken nextToken = TokenUtils.peek(parser);
                         if (!nextToken.text.equals("=>") && !nextToken.text.equals(",")) {
