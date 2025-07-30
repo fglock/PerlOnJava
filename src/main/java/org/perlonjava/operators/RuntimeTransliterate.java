@@ -14,6 +14,7 @@ public class RuntimeTransliterate {
     private char[] translationMap;
     private boolean[] usedChars;
     private boolean[] deleteChars;
+    private boolean[] inSearchSet;  // Track which chars are in the original search set
     private boolean complement;
     private boolean deleteUnmatched;
     private boolean squashDuplicates;
@@ -44,25 +45,44 @@ public class RuntimeTransliterate {
     public RuntimeScalar transliterate(RuntimeScalar originalString, int ctx) {
         String input = originalString.toString();
         StringBuilder result = new StringBuilder();
-        boolean lastCharAdded = false;
+        char lastChar = '\0';
+        boolean lastCharWasFromComplement = false;
         int count = 0;  // Track count of transliterated characters
 
         for (int i = 0; i < input.length(); i++) {
             char ch = input.charAt(i);
             if (ch < 256 && deleteChars[ch]) {
-                lastCharAdded = false;
                 count++;  // Count deleted characters
+                lastChar = '\0';
+                lastCharWasFromComplement = false;
             } else if (ch < 256 && usedChars[ch]) {
                 char mappedChar = translationMap[ch];
-                if (!squashDuplicates || result.length() == 0 || result.charAt(result.length() - 1) != mappedChar) {
-                    result.append(mappedChar);
-                    lastCharAdded = true;
+                boolean isFromComplement = complement && !inSearchSet[ch];
+
+                // Apply squashing logic
+                boolean shouldSquash = false;
+                if (squashDuplicates && result.length() > 0 && lastChar == mappedChar) {
+                    // In complement mode, only squash if both current and last char are from complement
+                    if (complement) {
+                        shouldSquash = isFromComplement && lastCharWasFromComplement;
+                    } else {
+                        // In normal mode, squash all duplicates
+                        shouldSquash = true;
+                    }
                 }
+
+                if (!shouldSquash) {
+                    result.append(mappedChar);
+                }
+
                 // Always count characters that match the search pattern
                 count++;
+                lastChar = mappedChar;
+                lastCharWasFromComplement = isFromComplement;
             } else {
                 result.append(ch);
-                lastCharAdded = false;
+                lastChar = ch;
+                lastCharWasFromComplement = false;
             }
         }
 
@@ -100,11 +120,21 @@ public class RuntimeTransliterate {
         translationMap = new char[256];
         usedChars = new boolean[256];
         deleteChars = new boolean[256];
+        inSearchSet = new boolean[256];
 
         for (int i = 0; i < 256; i++) {
             translationMap[i] = (char) i;
             usedChars[i] = false;
             deleteChars[i] = false;
+            inSearchSet[i] = false;
+        }
+
+        // Mark characters in the search set
+        for (int i = 0; i < expandedSearch.length(); i++) {
+            char ch = expandedSearch.charAt(i);
+            if (ch < 256) {
+                inSearchSet[ch] = true;
+            }
         }
 
         if (complement) {
@@ -162,6 +192,25 @@ public class RuntimeTransliterate {
             }
         }
 
+        // Special case: complement with empty replacement
+        if (replace.isEmpty()) {
+            // For each character NOT in the search set (i.e., in the complement)
+            for (int i = 0; i < 256; i++) {
+                if (!complementSet[i]) {
+                    if (deleteUnmatched) {
+                        // With 'd' modifier, delete complement characters
+                        deleteChars[i] = true;
+                        usedChars[i] = true;
+                    } else {
+                        // Without 'd' modifier, map to themselves (for squashing)
+                        usedChars[i] = true;
+                        translationMap[i] = (char) i;
+                    }
+                }
+            }
+            return;
+        }
+
         int replaceIndex = 0;
         for (int i = 0; i < 256; i++) {
             if (!complementSet[i]) {
@@ -173,7 +222,7 @@ public class RuntimeTransliterate {
                     if (deleteUnmatched) {
                         deleteChars[i] = true;
                         usedChars[i] = true;
-                    } else if (!replace.isEmpty()) {
+                    } else {
                         translationMap[i] = replace.charAt(replace.length() - 1);
                         usedChars[i] = true;
                     }
