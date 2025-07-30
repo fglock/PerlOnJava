@@ -11,6 +11,7 @@ import java.util.List;
 
 import static org.perlonjava.parser.ListParser.parseZeroOrOneList;
 import static org.perlonjava.parser.ParserNodeUtils.atUnderscore;
+import static org.perlonjava.parser.PrototypeArgs.consumeArgsWithPrototype;
 
 /**
  * SignatureParser handles parsing of Perl subroutine signatures.
@@ -154,7 +155,8 @@ public class SignatureParser {
                 }
 
                 // Parse the default value expression
-                defaultValue = parseZeroOrOneList(sigParser, 0);
+                ListNode arguments = consumeArgsWithPrototype(sigParser, "$");
+                defaultValue = arguments.elements.getFirst();
 
                 // Generate conditional assignment for the default value
                 nodes.add(generateDefaultAssignment(defaultValue, op, maxParams, variable, parser));
