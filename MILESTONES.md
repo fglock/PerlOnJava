@@ -291,6 +291,7 @@ The following areas are currently under active development to enhance the functi
   - File::Path
   - File::Copy
   - IO::Handle
+  - Text::ParseWords
   - locale pragma
   - Indirect method call
   - Constant folding - in ConstantFoldingVisitor.java
