@@ -101,9 +101,9 @@ $os_name =~ s/\s+/_/g;
     dlsrc => 'classloader',
     so => 'jar',
 
-    # Threading (always available in Java)
-    useithreads => 'define',
-    usethreads => 'define',
+    ## # Threading
+    ## useithreads => 'define',
+    ## usethreads => 'define',
 
     # Sizes (Java platform - guaranteed minimums)
     intsize => '4',
