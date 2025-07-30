@@ -275,8 +275,7 @@ public class StringParser {
                     rawStr.endDelim,
                     ' ', ' '
             );
-            // searchNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, searchParsed, true, false);
-            searchNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, searchParsed, false, false);
+            searchNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, searchParsed, true, false);
         }
 
         // Same logic for replacement list
@@ -292,8 +291,7 @@ public class StringParser {
                     rawStr.secondBufferEndDelim,
                     ' ', ' '
             );
-            // replacementNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, replaceParsed, true, false);
-            replacementNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, replaceParsed, false, false);
+            replacementNode = StringDoubleQuoted.parseDoubleQuotedString(ctx, replaceParsed, true, false);
         }
 
         Node modifierNode = new StringNode(modifiers, rawStr.index);

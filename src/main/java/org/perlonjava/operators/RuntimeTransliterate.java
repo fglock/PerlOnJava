@@ -38,7 +38,8 @@ public class RuntimeTransliterate {
      * Applies the transliteration pattern to the given string.
      *
      * @param originalString The original string to be transliterated
-     * @return A new RuntimeScalar containing the transliterated string
+     * @param ctx The runtime context
+     * @return A new RuntimeScalar containing the transliterated string or count
      */
     public RuntimeScalar transliterate(RuntimeScalar originalString, int ctx) {
         String input = originalString.toString();
@@ -48,7 +49,7 @@ public class RuntimeTransliterate {
 
         for (int i = 0; i < input.length(); i++) {
             char ch = input.charAt(i);
-            if (deleteChars[ch]) {
+            if (ch < 256 && deleteChars[ch]) {
                 lastCharAdded = false;
                 count++;  // Count deleted characters
             } else if (ch < 256 && usedChars[ch]) {
@@ -92,8 +93,9 @@ public class RuntimeTransliterate {
         squashDuplicates = modifiers.contains("s");
         returnOriginal = modifiers.contains("r");
 
-        String expandedSearch = expandRangesAndEscapes(search);
-        String expandedReplace = expandRangesAndEscapes(replace);
+        // Parse escape sequences first, then expand ranges
+        String expandedSearch = expandRanges(search);
+        String expandedReplace = expandRanges(replace);
 
         translationMap = new char[256];
         usedChars = new boolean[256];
@@ -102,6 +104,7 @@ public class RuntimeTransliterate {
         for (int i = 0; i < 256; i++) {
             translationMap[i] = (char) i;
             usedChars[i] = false;
+            deleteChars[i] = false;
         }
 
         if (complement) {
@@ -112,70 +115,34 @@ public class RuntimeTransliterate {
     }
 
     /**
-     * Expands character ranges and escape sequences in the input string.
+     * Expands character ranges like a-z, A-Z, 0-9.
      *
-     * @param input The input string containing ranges and escapes
-     * @return The expanded string
+     * @param input The input string possibly containing character ranges
+     * @return The string with ranges expanded
      */
-    private String expandRangesAndEscapes(String input) {
+    private String expandRanges(String input) {
         StringBuilder expanded = new StringBuilder();
-        for (int i = 0; i < input.length(); i++) {
-            char ch = input.charAt(i);
-            if (i + 2 < input.length() && input.charAt(i + 1) == '-') {
-                char start = ch;
-                char end = input.charAt(i + 2);
-                i += 2;
-                if (start <= end) {
-                    for (char c = start; c <= end; c++) {
-                        expanded.append(c);
-                    }
-                } else {
-                    for (char c = start; c >= end; c--) {
-                        expanded.append(c);
-                    }
-                }
-            } else if (ch == '\\' && i + 1 < input.length()) {
-                char next = input.charAt(i + 1);
-                switch (next) {
-                    case 'n':
-                        expanded.append('\n');
-                        break;
-                    case 't':
-                        expanded.append('\t');
-                        break;
-                    case 'r':
-                        expanded.append('\r');
-                        break;
-                    case 'f':
-                        expanded.append('\f');
-                        break;
-                    case 'x':
-                        if (i + 3 < input.length() && isHexDigit(input.charAt(i + 2)) && isHexDigit(input.charAt(i + 3))) {
-                            int hexValue = Integer.parseInt(input.substring(i + 2, i + 4), 16);
-                            expanded.append((char) hexValue);
-                            i += 3;
-                        }
-                        break;
-                    default:
-                        expanded.append(next);
-                        break;
-                }
-                i++;
-            } else {
-                expanded.append(ch);
-            }
-        }
-        return expanded.toString();
-    }
 
-    /**
-     * Checks if a character is a hexadecimal digit.
-     *
-     * @param ch The character to check
-     * @return True if the character is a hexadecimal digit, false otherwise
-     */
-    private boolean isHexDigit(char ch) {
-        return (ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'F') || (ch >= 'a' && ch <= 'f');
+        for (int i = 0; i < input.length(); i++) {
+            if (i > 0 && i < input.length() - 1 && input.charAt(i) == '-') {
+                char start = input.charAt(i - 1);
+                char end = input.charAt(i + 1);
+
+                // Check if this is a valid range
+                if (start < end) {
+                    // We already added start, so begin from start + 1
+                    for (char ch = (char)(start + 1); ch <= end; ch++) {
+                        expanded.append(ch);
+                    }
+                    i++; // Skip the end character as we've already processed it
+                    continue;
+                }
+            }
+
+            expanded.append(input.charAt(i));
+        }
+
+        return expanded.toString();
     }
 
     /**
@@ -189,7 +156,10 @@ public class RuntimeTransliterate {
     private void complementTranslationMap(char[] translationMap, boolean[] usedChars, String search, String replace) {
         boolean[] complementSet = new boolean[256];
         for (int i = 0; i < search.length(); i++) {
-            complementSet[search.charAt(i)] = true;
+            char ch = search.charAt(i);
+            if (ch < 256) {
+                complementSet[ch] = true;
+            }
         }
 
         int replaceIndex = 0;
@@ -202,6 +172,7 @@ public class RuntimeTransliterate {
                 } else {
                     if (deleteUnmatched) {
                         deleteChars[i] = true;
+                        usedChars[i] = true;
                     } else if (!replace.isEmpty()) {
                         translationMap[i] = replace.charAt(replace.length() - 1);
                         usedChars[i] = true;
@@ -221,22 +192,46 @@ public class RuntimeTransliterate {
      */
     private void populateTranslationMap(char[] translationMap, boolean[] usedChars, String search, String replace) {
         int minLength = Math.min(search.length(), replace.length());
-        for (int i = 0; i < minLength; i++) {
-            translationMap[search.charAt(i)] = replace.charAt(i);
-            usedChars[search.charAt(i)] = true;
-        }
 
-        for (int i = minLength; i < search.length(); i++) {
-            if (deleteUnmatched) {
-                deleteChars[search.charAt(i)] = true;
-            } else if (!replace.isEmpty()) {
-                translationMap[search.charAt(i)] = replace.charAt(replace.length() - 1);
-                usedChars[search.charAt(i)] = true;
-            } else {
-                // Empty replacement - map to self
-                translationMap[search.charAt(i)] = search.charAt(i);
-                usedChars[search.charAt(i)] = true;
+        // First pass: map characters that have replacements
+        for (int i = 0; i < minLength; i++) {
+            char searchChar = search.charAt(i);
+            if (searchChar < 256) {
+                // Only map if not already mapped (first occurrence wins)
+                if (!usedChars[searchChar]) {
+                    translationMap[searchChar] = replace.charAt(i);
+                    usedChars[searchChar] = true;
+                }
             }
         }
+
+        // Second pass: handle remaining characters in search string
+        for (int i = minLength; i < search.length(); i++) {
+            char searchChar = search.charAt(i);
+            if (searchChar < 256 && !usedChars[searchChar]) {
+                if (deleteUnmatched) {
+                    deleteChars[searchChar] = true;
+                    usedChars[searchChar] = true;
+                } else if (!replace.isEmpty()) {
+                    // Map to the last character in replace string
+                    translationMap[searchChar] = replace.charAt(replace.length() - 1);
+                    usedChars[searchChar] = true;
+                } else {
+                    // Empty replacement - map to self
+                    translationMap[searchChar] = searchChar;
+                    usedChars[searchChar] = true;
+                }
+            }
+        }
+    }
+
+    /**
+     * Checks if a character is a hexadecimal digit.
+     *
+     * @param ch The character to check
+     * @return True if the character is a hexadecimal digit, false otherwise
+     */
+    private boolean isHexDigit(char ch) {
+        return (ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'F') || (ch >= 'a' && ch <= 'f');
     }
 }
