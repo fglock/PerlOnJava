@@ -742,7 +742,11 @@ public class EmitOperator {
                     "createListReference",
                     "()Lorg/perlonjava/runtime/RuntimeList;",
                     false);
-            handleVoidContext(emitterVisitor);
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                handleVoidContext(emitterVisitor);
+            } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                handleScalarContext(emitterVisitor, node);
+            }
         } else {
             if (node.operand instanceof OperatorNode operatorNode &&
                     operatorNode.operator.equals("&")) {
