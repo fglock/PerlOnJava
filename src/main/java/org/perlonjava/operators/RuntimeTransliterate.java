@@ -232,6 +232,10 @@ public class RuntimeTransliterate {
             } else if (!replace.isEmpty()) {
                 translationMap[search.charAt(i)] = replace.charAt(replace.length() - 1);
                 usedChars[search.charAt(i)] = true;
+            } else {
+                // Empty replacement - map to self
+                translationMap[search.charAt(i)] = search.charAt(i);
+                usedChars[search.charAt(i)] = true;
             }
         }
     }
