@@ -2,8 +2,10 @@ package org.perlonjava.codegen;
 
 import org.objectweb.asm.Label;
 
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Maps bytecode positions to their corresponding Perl source code locations.
@@ -100,7 +102,7 @@ public class ByteCodeSourceMapper {
      * @param element The stack trace element to parse
      * @return The corresponding source code location
      */
-    public static SourceLocation parseStackTraceElement(StackTraceElement element, ConcurrentHashMap<ByteCodeSourceMapper.SourceLocation, String> locationToClassName) {
+    public static SourceLocation parseStackTraceElement(StackTraceElement element, HashMap<ByteCodeSourceMapper.SourceLocation, String> locationToClassName) {
         int fileId = fileNameToId.getOrDefault(element.getFileName(), -1);
         int tokenIndex = element.getLineNumber();
 

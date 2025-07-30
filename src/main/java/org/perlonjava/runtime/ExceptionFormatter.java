@@ -3,9 +3,8 @@ package org.perlonjava.runtime;
 import org.perlonjava.codegen.ByteCodeSourceMapper;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.HashMap;
+import java.util.List;
 
 /**
  * The ExceptionFormatter class provides utility methods for formatting exceptions.
@@ -46,51 +45,51 @@ public class ExceptionFormatter {
      * @return A list of lists, where each inner list represents a stack trace element with package name, source file, and line number.
      */
     private static ArrayList<ArrayList<String>> formatThrowable(Throwable t) {
-        ArrayList<ArrayList<String>> stackTrace = new ArrayList<>();
-        AtomicInteger callerStackIndex = new AtomicInteger(); // Initialize the index for CallerStack
+        var stackTrace = new ArrayList<ArrayList<String>>();
+        int callerStackIndex = 0;
+        String lastFileName = "";
 
-        // Avoid duplicate stack entries
-        ConcurrentHashMap<ByteCodeSourceMapper.SourceLocation, String> locationToClassName = new ConcurrentHashMap<>();
+        var locationToClassName = new HashMap<ByteCodeSourceMapper.SourceLocation, String>();
 
-        Arrays.stream(t.getStackTrace())
-                .forEach(element -> {
-                    if (element.getClassName().equals("org.perlonjava.parser.StatementParser") &&
-                            element.getMethodName().equals("parseUseDeclaration")) {
-                        // Artificial caller stack entry created at `use` statement
-                        CallerStack.CallerInfo callerInfo = CallerStack.peek(callerStackIndex.get());
-                        if (callerInfo != null) {
-                            stackTrace.add(
-                                    new ArrayList<>(
-                                            Arrays.asList(
-                                                    callerInfo.packageName(),
-                                                    callerInfo.filename(),
-                                                    String.valueOf(callerInfo.line())
-                                            )
-                                    )
-                            );
-                            callerStackIndex.getAndIncrement(); // Increment the index for the next potential match
-                        }
-                    } else if (element.getClassName().contains("org.perlonjava.anon") ||
-                            element.getClassName().contains("org.perlonjava.perlmodule")) {
-                        // - Compiled Perl methods like:
-                        //     org.perlonjava.anon1.apply(misc/snippets/CallerTest.pm @ CallerTest:36)
-                        // - Perl-like Java methods like:
-                        //     org.perlonjava.perlmodule.Exporter.exportOkTags(Exporter.java:159)
-                        ByteCodeSourceMapper.SourceLocation loc = ByteCodeSourceMapper.parseStackTraceElement(element, locationToClassName);
-                        if (loc != null) {
-                            stackTrace.add(
-                                    new ArrayList<>(
-                                            Arrays.asList(
-                                                    loc.packageName(),
-                                                    loc.sourceFileName(),
-                                                    String.valueOf(loc.lineNumber())
-                                            )
-                                    )
-                            );
-                        }
-                    }
-                });
+        for (var element : t.getStackTrace()) {
+            if (element.getClassName().equals("org.perlonjava.parser.StatementParser") &&
+                    element.getMethodName().equals("parseUseDeclaration")) {
+                // Artificial caller stack entry created at `use` statement
+                var callerInfo = CallerStack.peek(callerStackIndex);
+                if (callerInfo != null) {
+                    stackTrace.add(new ArrayList<>(List.of(
+                            callerInfo.packageName(),
+                            callerInfo.filename(),
+                            String.valueOf(callerInfo.line())
+                    )));
+                    lastFileName = callerInfo.filename();
+                    callerStackIndex++;
+                }
+            } else if (element.getClassName().contains("org.perlonjava.anon") ||
+                    element.getClassName().contains("org.perlonjava.perlmodule")) {
+                // parseStackTraceElement returns null if location already seen in a different class
+                var loc = ByteCodeSourceMapper.parseStackTraceElement(element, locationToClassName);
+                if (loc != null) {
+                    stackTrace.add(new ArrayList<>(List.of(
+                            loc.packageName(),
+                            loc.sourceFileName(),
+                            String.valueOf(loc.lineNumber())
+                    )));
+                    lastFileName = loc.sourceFileName();
+                }
+            }
+        }
 
+        // Add the outermost artificial stack entry if different from last file
+        var callerInfo = CallerStack.peek(callerStackIndex);
+        if (callerInfo != null && !lastFileName.equals(callerInfo.filename())) {
+            stackTrace.add(new ArrayList<>(List.of(
+                    callerInfo.packageName(),
+                    callerInfo.filename(),
+                    String.valueOf(callerInfo.line())
+            )));
+        }
         return stackTrace;
     }
+
 }
