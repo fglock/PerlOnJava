@@ -248,6 +248,67 @@ public class StringParser {
         return new OperatorNode(operator, list, rawStr.index);
     }
 
+    public static OperatorNode parseTransliteration(EmitterContext ctx, ParsedString rawStr) {
+        String operator = "tr";
+
+        // Get the search list and replacement list
+        String searchList = rawStr.buffers.get(0);
+        String replacementList = rawStr.buffers.get(1);
+        String modifiers = rawStr.buffers.get(2);
+
+        Node searchNode;
+        Node replacementNode;
+
+        // If single quote delimiter, only process \\ escapes
+        if (rawStr.startDelim == '\'') {
+            // For single quotes, only remove \ from pairs of \\
+            searchList = searchList.replace("\\\\", "\\");
+            searchNode = new StringNode(searchList, rawStr.index);
+        } else {
+            searchNode = new StringNode(rawStr.buffers.get(0), rawStr.index);
+
+//            // For other delimiters, process double-quote escape sequences
+//            // but without variable interpolation
+//            ParsedString searchParsed = new ParsedString(
+//                    rawStr.index,
+//                    rawStr.next,
+//                    new ArrayList<>(List.of(searchList)),
+//                    rawStr.startDelim,
+//                    rawStr.endDelim,
+//                    ' ', ' '
+//            );
+//            searchNode = StringDoubleQuoted.parseDoubleQuotedEscapes(ctx, searchParsed);
+        }
+
+        // Same logic for replacement list
+        if (rawStr.secondBufferStartDelim == '\'') {
+            replacementList = replacementList.replace("\\\\", "\\");
+            replacementNode = new StringNode(replacementList, rawStr.index);
+        } else {
+            replacementNode = new StringNode(rawStr.buffers.get(1), rawStr.index);
+
+//            ParsedString replaceParsed = new ParsedString(
+//                    rawStr.index,
+//                    rawStr.next,
+//                    new ArrayList<>(List.of(replacementList)),
+//                    rawStr.secondBufferStartDelim,
+//                    rawStr.secondBufferEndDelim,
+//                    ' ', ' '
+//            );
+//            replacementNode = StringDoubleQuoted.parseDoubleQuotedEscapes(ctx, replaceParsed);
+        }
+
+        Node modifierNode = new StringNode(modifiers, rawStr.index);
+
+        List<Node> elements = new ArrayList<>();
+        elements.add(searchNode);
+        elements.add(replacementNode);
+        elements.add(modifierNode);
+
+        ListNode list = new ListNode(elements, rawStr.index);
+        return new OperatorNode(operator, list, rawStr.index);
+    }
+
     public static Node parseRawString(Parser parser, String operator) {
         // handle special quotes for operators: q qq qx qw // s/// m//
         if (operator.equals("<") || operator.equals("<<") || operator.equals("'") || operator.equals("\"") || operator.equals("/") || operator.equals("//") || operator.equals("/=")
@@ -286,6 +347,9 @@ public class StringParser {
                 return StringDoubleQuoted.parseDoubleQuotedString(parser.ctx, rawStr, true);
             case "qw":
                 return parseWordsString(rawStr);
+            case "tr":
+            case "y":
+                return parseTransliteration(parser.ctx, rawStr);
         }
 
         ListNode list = new ListNode(rawStr.index);
