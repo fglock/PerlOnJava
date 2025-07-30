@@ -172,7 +172,11 @@ public class SignatureParser {
             // Handle comma or end of signature
             token = TokenUtils.peek(sigParser);
             if (token.text.equals(",")) {
-                TokenUtils.consume(sigParser); // consume comma
+                // Consume all consecutive commas
+                while (token.text.equals(",")) {
+                    TokenUtils.consume(sigParser);
+                    token = TokenUtils.peek(sigParser);
+                }
             } else if (token.type == LexerTokenType.EOF) {
                 break;
             } else {
