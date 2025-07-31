@@ -34,6 +34,7 @@ Key requirements:
 - An argument of 0 cancels the timer without starting a new one
 - Returns the remaining seconds from the previous timer
 - Must interrupt both blocking I/O and CPU-bound operations
+- Signal handlers must execute in the original thread's context
 
 ## Implementation Challenges
 
@@ -58,31 +59,67 @@ In Java:
 - Thread.interrupt() doesn't affect CPU-bound operations
 - POSIX signals aren't available in pure Java
 
+### Challenge 3: Signal Handler Context
+
+Signal handlers must execute in the context of the interrupted thread, not the timer thread, to properly throw exceptions that can be caught by `eval`.
+
 ## Implementation Approach
 
-### 1. Basic Alarm Infrastructure
+### 1. Signal Queue Infrastructure
 
-Add to `TimeHiRes.java`:
+Create a thread-safe queue for pending signals:
 
 ```java
-private static ScheduledExecutorService alarmScheduler;
-private static ScheduledFuture<?> currentAlarmTask;
-private static long alarmStartTime;
-private static int alarmDuration;
-private static volatile boolean alarmFired = false;
-private static volatile RuntimeScalar pendingAlarmHandler = null;
-
-static {
-    // Initialize the alarm scheduler
-    alarmScheduler = Executors.newScheduledThreadPool(1);
+// PerlSignalQueue.java
+public class PerlSignalQueue {
+    private static final Queue<SignalEvent> signalQueue = new ConcurrentLinkedQueue<>();
+    
+    static class SignalEvent {
+        String signal;
+        RuntimeScalar handler;
+        
+        SignalEvent(String signal, RuntimeScalar handler) {
+            this.signal = signal;
+            this.handler = handler;
+        }
+    }
+    
+    public static void enqueue(String signal, RuntimeScalar handler) {
+        signalQueue.offer(new SignalEvent(signal, handler));
+    }
+    
+    public static void processSignals() {
+        SignalEvent event;
+        while ((event = signalQueue.poll()) != null) {
+            // Execute the handler - this may throw PerlDieException
+            RuntimeArray args = new RuntimeArray();
+            args.push(new RuntimeScalar(event.signal));
+            RuntimeCode.apply(event.handler, args, RuntimeContextType.VOID);
+        }
+    }
 }
 ```
 
-### 2. Alarm Method Implementation
+### 2. Enhanced Alarm Infrastructure
+
+Update `TimeHiRes.java` or create `NativeUtils.java`:
 
 ```java
-public static RuntimeList alarm(RuntimeArray args, int ctx) {
-    int seconds = args.size() > 0 ? args.get(0).toInt() : 0;
+private static final ScheduledExecutorService alarmScheduler = 
+    Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r);
+        t.setDaemon(true);
+        t.setName("PerlAlarmTimer");
+        return t;
+    });
+
+private static ScheduledFuture<?> currentAlarmTask;
+private static long alarmStartTime;
+private static int alarmDuration;
+private static Thread alarmTargetThread;
+
+public static RuntimeScalar alarm(RuntimeBase... args) {
+    int seconds = args.length > 0 ? args[0].getInt() : 0;
     
     // Calculate remaining time on previous timer
     int remainingTime = 0;
@@ -92,141 +129,203 @@ public static RuntimeList alarm(RuntimeArray args, int ctx) {
         currentAlarmTask.cancel(false);
     }
     
-    // Clear any pending alarm
-    alarmFired = false;
-    pendingAlarmHandler = null;
-    
     if (seconds == 0) {
         currentAlarmTask = null;
-        return new RuntimeScalar(remainingTime).getList();
+        return new RuntimeScalar(remainingTime);
     }
     
     // Set up new alarm
     alarmStartTime = System.currentTimeMillis();
     alarmDuration = seconds;
+    alarmTargetThread = Thread.currentThread();
     
     currentAlarmTask = alarmScheduler.schedule(() -> {
         RuntimeScalar sig = getGlobalHash("main::SIG").get("ALRM");
         if (sig.getDefinedBoolean()) {
-            pendingAlarmHandler = sig;
-            alarmFired = true;
-            // Interrupt main thread for blocking I/O
-            Thread.currentThread().interrupt();
+            // Queue the signal for processing in the target thread
+            PerlSignalQueue.enqueue("ALRM", sig);
+            // Interrupt the target thread to break out of blocking operations
+            alarmTargetThread.interrupt();
         }
     }, seconds, TimeUnit.SECONDS);
     
-    return new RuntimeScalar(remainingTime).getList();
+    return new RuntimeScalar(remainingTime);
 }
 ```
 
-### 3. Alarm Checking Mechanism
+### 3. Signal Processing Integration
+
+The PerlOnJava interpreter must process signals at safe points:
 
 ```java
-public static void checkAlarm() {
-    if (alarmFired && pendingAlarmHandler != null) {
-        alarmFired = false;
-        RuntimeScalar handler = pendingAlarmHandler;
-        pendingAlarmHandler = null;
-        
-        // Execute the alarm handler
-        RuntimeArray args = new RuntimeArray();
-        RuntimeCode.apply(handler, args, RuntimeContextType.SCALAR);
+public static void checkPendingSignals() {
+    // Process any queued signals
+    PerlSignalQueue.processSignals();
+    
+    // Clear interrupt flag if it was set by alarm
+    if (Thread.interrupted()) {
+        // The interrupt was handled via signal processing
     }
 }
 ```
 
 ### 4. Interpreter Integration Points
 
-The PerlOnJava interpreter must call `TimeHiRes.checkAlarm()` at regular intervals:
-
 #### a. Loop Operations
 ```java
 // In for/while/foreach loop implementations
 public RuntimeScalar executeForLoop(...) {
     while (condition) {
-        TimeHiRes.checkAlarm();  // Check before each iteration
+        checkPendingSignals();  // Check before each iteration
         // ... loop body ...
     }
 }
 ```
 
-#### b. Method Calls
-```java
-// In method dispatch
-public RuntimeScalar callMethod(...) {
-    TimeHiRes.checkAlarm();  // Check before method call
-    RuntimeScalar result = method.invoke(...);
-    TimeHiRes.checkAlarm();  // Check after method call
-    return result;
-}
-```
-
-#### c. Statement Boundaries
+#### b. Statement Boundaries
 ```java
 // In statement execution
 public void executeStatement(Statement stmt) {
-    TimeHiRes.checkAlarm();  // Check before each statement
+    checkPendingSignals();  // Check before each statement
     stmt.execute();
+}
+```
+
+#### c. Method Entry/Exit
+```java
+// In method dispatch
+public RuntimeScalar callMethod(...) {
+    checkPendingSignals();  // Check before method call
+    RuntimeScalar result = method.invoke(...);
+    checkPendingSignals();  // Check after method call
+    return result;
 }
 ```
 
 ### 5. I/O Operation Updates
 
-Update blocking I/O operations to handle interrupts:
+Update blocking I/O operations to handle interrupts properly:
 
 ```java
 // In readline implementation
 public RuntimeScalar readline() {
     try {
         String line = bufferedReader.readLine();
+        checkPendingSignals();  // Check after successful read
         return new RuntimeScalar(line);
     } catch (InterruptedIOException e) {
-        // Check for pending alarm
-        TimeHiRes.checkAlarm();
-        throw new PerlCompilerException("Interrupted system call");
+        // Process pending signals (which may throw)
+        checkPendingSignals();
+        // If no exception thrown, return undef
+        return RuntimeScalar.undef();
+    } catch (IOException e) {
+        if (Thread.interrupted()) {
+            // Clear interrupt and process signals
+            checkPendingSignals();
+            return RuntimeScalar.undef();
+        }
+        throw new PerlCompilerException("I/O error: " + e.getMessage());
+    }
+}
+
+// In sysread implementation
+public RuntimeScalar sysread(RuntimeBase... args) {
+    try {
+        // Use interruptible NIO channels when possible
+        int bytesRead = channel.read(buffer);
+        checkPendingSignals();
+        return new RuntimeScalar(bytesRead);
+    } catch (ClosedByInterruptException e) {
+        checkPendingSignals();
+        return new RuntimeScalar(-1);
+    }
+}
+```
+
+### 6. Native Implementation Option
+
+For better compatibility on POSIX systems, consider JNA-based implementation:
+
+```java
+// In NativeUtils.java
+public interface PosixLibrary extends Library {
+    PosixLibrary INSTANCE = Native.load("c", PosixLibrary.class);
+    
+    int alarm(int seconds);
+    SignalHandler signal(int signum, SignalHandler handler);
+    
+    interface SignalHandler extends Callback {
+        void invoke(int signal);
+    }
+}
+
+public static RuntimeScalar alarmNative(RuntimeBase... args) {
+    if (!IS_WINDOWS) {
+        int seconds = args.length > 0 ? args[0].getInt() : 0;
+        
+        // Set up SIGALRM handler
+        PosixLibrary.SignalHandler handler = (signal) -> {
+            RuntimeScalar sig = getGlobalHash("main::SIG").get("ALRM");
+            if (sig.getDefinedBoolean()) {
+                PerlSignalQueue.enqueue("ALRM", sig);
+            }
+        };
+        
+        PosixLibrary.INSTANCE.signal(14 /* SIGALRM */, handler);
+        int remaining = PosixLibrary.INSTANCE.alarm(seconds);
+        return new RuntimeScalar(remaining);
+    } else {
+        // Fall back to Java implementation
+        return alarm(args);
     }
 }
 ```
 
 ## Implementation Steps
 
-1. **Add alarm infrastructure to TimeHiRes.java**
-   - Import required concurrent utilities
-   - Add static fields for alarm state
-   - Implement checkAlarm() method
+1. **Create PerlSignalQueue class**
+   - Thread-safe queue for signal events
+   - Process signals in original thread context
 
-2. **Implement the alarm method**
-   - Handle timer cancellation and remaining time calculation
-   - Schedule alarm callback
-   - Set volatile flags for handler execution
+2. **Add alarm infrastructure**
+   - Scheduled executor for timers
+   - Thread tracking for interruption
+   - Signal queuing instead of direct execution
 
 3. **Update interpreter core**
-   - Add checkAlarm() calls at loop boundaries
-   - Add checkAlarm() calls at method entry/exit
-   - Add checkAlarm() calls between statements
+   - Add checkPendingSignals() method
+   - Call it at safe execution points
+   - Handle Thread.interrupted() flag
 
 4. **Update I/O operations**
-   - Catch InterruptedException in blocking operations
-   - Call checkAlarm() when interrupted
-   - Propagate interruption as Perl exception
+   - Use NIO channels where possible for better interruption
+   - Catch specific interrupted exceptions
+   - Process signals when interrupted
 
-5. **Test the implementation**
-   - Test interrupting blocking I/O (readline)
+5. **Optional: Add native implementation**
+   - Use JNA for real SIGALRM on POSIX systems
+   - Provides better compatibility
+
+6. **Test the implementation**
+   - Test interrupting blocking I/O (readline, sysread)
    - Test interrupting CPU-bound loops
    - Test alarm cancellation and nesting
+   - Test die propagation from signal handlers
+
+## Advantages of This Approach
+
+1. **Proper Context**: Signal handlers execute in the interrupted thread
+2. **Better I/O Handling**: Specific handling for different interruption types
+3. **Native Option**: Can use real signals on POSIX systems
+4. **Thread Safety**: Signal queue prevents race conditions
 
 ## Limitations
 
-1. **Timing Precision**: Alarm checks only happen at specific points, so the actual interruption may be delayed
-2. **Performance Impact**: Frequent checkAlarm() calls add overhead
-3. **Not True Signals**: This is a simulation, not real POSIX signal handling
-
-## Alternative Approaches Considered
-
-1. **Thread.stop()**: Deprecated and unsafe, can leave objects in inconsistent state
-2. **Bytecode Instrumentation**: Too complex and performance-intensive
-3. **Separate Alarm Thread**: Cannot safely interrupt the main thread's execution
+1. **Timing Precision**: Signal checks only happen at specific points
+2. **Performance Impact**: Frequent signal checks add overhead
+3. **Platform Differences**: Windows vs POSIX behavior may differ
+4. **Not All I/O Interruptible**: Some Java I/O operations cannot be interrupted
 
 ## Conclusion
 
-While we cannot perfectly replicate Perl's signal-based alarm in Java, this cooperative checking approach provides a reasonable approximation that handles both blocking I/O and CPU-bound operations, with acceptable performance overhead for most use cases.
+This hybrid approach provides the best compromise between compatibility and implementation complexity. The signal queue ensures handlers execute in the proper context, while strategic checkpoints provide reasonable interruption granularity. The optional native implementation offers better POSIX compatibility when needed.
