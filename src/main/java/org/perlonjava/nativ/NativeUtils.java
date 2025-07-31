@@ -68,8 +68,8 @@ public class NativeUtils {
             return new RuntimeScalar(0);
         }
 
-        String path = args[0].getFirst().toString();
-        int mode = (int) args[1].getFirst().getInt();
+        String path = RuntimeIO.resolvePath(args[0].getFirst().toString()).toString();
+        int mode = args[1].getFirst().getInt();
 
         if (IS_WINDOWS) {
             // Windows: use File attributes
@@ -210,7 +210,7 @@ public class NativeUtils {
             return new RuntimeScalar(0);
         }
 
-        String path = args[0].getFirst().toString();
+        String path = RuntimeIO.resolvePath(args[0].getFirst().toString()).toString();
 
         if (IS_WINDOWS) {
             boolean result = Kernel32.INSTANCE.DeleteFile(path);
@@ -235,7 +235,7 @@ public class NativeUtils {
             return new RuntimeScalar(0);
         }
 
-        String path = args[0].getFirst().toString();
+        String path = RuntimeIO.resolvePath(args[0].getFirst().toString()).toString();
         int uid = (int) args[1].getFirst().getInt();
         int gid = (int) args[2].getFirst().getInt();
 

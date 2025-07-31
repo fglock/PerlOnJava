@@ -2,17 +2,11 @@ package org.perlonjava.operators;
 
 import org.perlonjava.runtime.*;
 
-import java.io.File;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.attribute.GroupPrincipal;
 import java.nio.file.attribute.PosixFileAttributeView;
-import java.nio.file.attribute.UserPrincipal;
 import java.nio.file.attribute.UserPrincipalLookupService;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Implementation of Perl's chown operator for PerlOnJava
@@ -37,8 +31,8 @@ public class ChownOperator {
         RuntimeScalar gidArg = args[1].scalar();
 
         // Convert to numeric values (-1 means don't change)
-        int uid = uidArg.getDefinedBoolean() ? (int)uidArg.getInt() : -1;
-        int gid = gidArg.getDefinedBoolean() ? (int)gidArg.getInt() : -1;
+        int uid = uidArg.getDefinedBoolean() ? uidArg.getInt() : -1;
+        int gid = gidArg.getDefinedBoolean() ? gidArg.getInt() : -1;
 
         // If both are -1, nothing to do
         if (uid == -1 && gid == -1) {
@@ -53,7 +47,27 @@ public class ChownOperator {
 
             // Handle both scalar filenames and lists of filenames
             for (RuntimeScalar fileArg : arg) {
-                if (changeOwnership(fileArg, uid, gid)) {
+                boolean result = false;
+                try {
+                    // Check if this is a filehandle (glob reference)
+                    if (fileArg.type == RuntimeScalarType.GLOB ||
+                            fileArg.type == RuntimeScalarType.GLOBREFERENCE) {
+                        // Handle filehandle case
+                        result = changeFilehandleOwnership(fileArg, uid, gid);
+                    } else {// Regular filename case
+                        String filename = RuntimeIO.resolvePath(fileArg.toString()).toString();
+                        if (!filename.isEmpty()) {// Different implementation for different OS
+                            if (SystemUtils.osIsWindows()) {
+                                result = changeOwnershipWindows(filename, uid, gid);
+                            } else {
+                                result = changeOwnershipUnix(filename, uid, gid);
+                            }
+                        }
+                    }
+
+                } catch (Exception e) {
+                }
+                if (result) {
                     successCount++;
                 }
             }
@@ -63,46 +77,11 @@ public class ChownOperator {
     }
 
     /**
-     * Changes the ownership for a single file
-     *
-     * @param fileArg RuntimeScalar containing the file path or filehandle
-     * @param uid User ID (-1 to leave unchanged)
-     * @param gid Group ID (-1 to leave unchanged)
-     * @return true if successful, false otherwise
-     */
-    private static boolean changeOwnership(RuntimeScalar fileArg, int uid, int gid) {
-        try {
-            // Check if this is a filehandle (glob reference)
-            if (fileArg.type == RuntimeScalarType.GLOB ||
-                fileArg.type == RuntimeScalarType.GLOBREFERENCE) {
-                // Handle filehandle case
-                return changeFilehandleOwnership(fileArg, uid, gid);
-            }
-
-            // Regular filename case
-            String filename = fileArg.toString();
-            if (filename.isEmpty()) {
-                return false;
-            }
-
-            // Different implementation for different OS
-            if (SystemUtils.osIsWindows()) {
-                return changeOwnershipWindows(filename, uid, gid);
-            } else {
-                return changeOwnershipUnix(filename, uid, gid);
-            }
-
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    /**
      * Changes ownership on Unix-like systems
      *
      * @param filename Path to the file
-     * @param uid User ID (-1 to leave unchanged)
-     * @param gid Group ID (-1 to leave unchanged)
+     * @param uid      User ID (-1 to leave unchanged)
+     * @param gid      Group ID (-1 to leave unchanged)
      * @return true if successful, false otherwise
      */
     private static boolean changeOwnershipUnix(String filename, int uid, int gid) {
@@ -130,21 +109,21 @@ public class ChownOperator {
      * Attempts to use Java NIO to change ownership
      *
      * @param path Path object
-     * @param uid User ID (-1 to leave unchanged)
-     * @param gid Group ID (-1 to leave unchanged)
+     * @param uid  User ID (-1 to leave unchanged)
+     * @param gid  Group ID (-1 to leave unchanged)
      * @return true if successful, false otherwise
      */
     private static boolean tryJavaNioChown(Path path, int uid, int gid) {
         try {
             PosixFileAttributeView view = Files.getFileAttributeView(path,
-                PosixFileAttributeView.class);
+                    PosixFileAttributeView.class);
 
             if (view == null) {
                 return false;
             }
 
             UserPrincipalLookupService lookupService =
-                path.getFileSystem().getUserPrincipalLookupService();
+                    path.getFileSystem().getUserPrincipalLookupService();
 
             // Change owner if requested
             if (uid != -1) {
@@ -179,8 +158,8 @@ public class ChownOperator {
      * Uses system chown command to change ownership
      *
      * @param filename Path to the file
-     * @param uid User ID (-1 to leave unchanged)
-     * @param gid Group ID (-1 to leave unchanged)
+     * @param uid      User ID (-1 to leave unchanged)
+     * @param gid      Group ID (-1 to leave unchanged)
      * @return true if successful, false otherwise
      */
     private static boolean trySystemChown(String filename, int uid, int gid) {
@@ -203,7 +182,7 @@ public class ChownOperator {
                 cmdArgs.elements.add(new RuntimeScalar(filename));
 
                 RuntimeScalar exitCode = SystemOperator.system(cmdArgs, false,
-                    RuntimeContextType.SCALAR);
+                        RuntimeContextType.SCALAR);
                 return exitCode.getInt() == 0;
             }
 
@@ -219,8 +198,8 @@ public class ChownOperator {
      * Note: Windows file ownership works differently than Unix
      *
      * @param filename Path to the file
-     * @param uid User ID (not directly applicable on Windows)
-     * @param gid Group ID (not directly applicable on Windows)
+     * @param uid      User ID (not directly applicable on Windows)
+     * @param gid      Group ID (not directly applicable on Windows)
      * @return true if successful, false otherwise
      */
     private static boolean changeOwnershipWindows(String filename, int uid, int gid) {
@@ -236,12 +215,12 @@ public class ChownOperator {
      * Changes ownership for a filehandle (if supported)
      *
      * @param filehandle RuntimeScalar containing the filehandle
-     * @param uid User ID (-1 to leave unchanged)
-     * @param gid Group ID (-1 to leave unchanged)
+     * @param uid        User ID (-1 to leave unchanged)
+     * @param gid        Group ID (-1 to leave unchanged)
      * @return true if successful, false otherwise
      */
     private static boolean changeFilehandleOwnership(RuntimeScalar filehandle,
-                                                    int uid, int gid) {
+                                                     int uid, int gid) {
         // Java doesn't have direct support for fchown(2) equivalent
         // We would need to extract the file path from the filehandle
         // For now, this is a placeholder that returns false
@@ -265,7 +244,7 @@ public class ChownOperator {
             // Check if we can access PosixFileAttributeView
             Path tempPath = Paths.get(System.getProperty("java.io.tmpdir"));
             PosixFileAttributeView view = Files.getFileAttributeView(tempPath,
-                PosixFileAttributeView.class);
+                    PosixFileAttributeView.class);
             return view != null;
         } catch (Exception e) {
             return false;
