@@ -10,7 +10,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Iterator;
 
-import static org.perlonjava.runtime.RuntimeIO.handleIOException;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 
 /**
@@ -21,7 +20,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 public class DirectoryIO {
     private final String directoryPath;
     private final ArrayList<RuntimeScalar> directorySpecialEntries = new ArrayList<>();
-    private DirectoryStream<Path> directoryStream;
+    public DirectoryStream<Path> directoryStream;
     private Iterator<Path> directoryIterator;
     private int currentDirPosition = 0;
 
@@ -34,60 +33,6 @@ public class DirectoryIO {
     public DirectoryIO(DirectoryStream<Path> directoryStream, String directoryPath) {
         this.directoryStream = directoryStream;
         this.directoryPath = directoryPath;
-    }
-
-    /**
-     * Opens a directory specified by the arguments and returns a {@code RuntimeScalar} indicating
-     * success or failure.
-     *
-     * @param args a {@code RuntimeList} containing the directory handle and path
-     * @return {@code RuntimeScalarCache.scalarTrue} if the directory is successfully opened,
-     * otherwise {@code RuntimeScalarCache.scalarFalse}
-     */
-    public static RuntimeScalar openDir(RuntimeList args) {
-        RuntimeScalar dirHandle = (RuntimeScalar) args.elements.get(0);
-        String dirPath = args.elements.get(1).toString();
-
-        try {
-            // Fix: Check if path is absolute
-            Path fullDirPath;
-            Path path = Paths.get(dirPath);
-            if (path.isAbsolute()) {
-                fullDirPath = path;
-            } else {
-                fullDirPath = Paths.get(System.getProperty("user.dir")).resolve(dirPath);
-            }
-
-            DirectoryStream<Path> stream = Files.newDirectoryStream(fullDirPath);
-            DirectoryIO dirIO = new DirectoryIO(stream, dirPath);
-            dirHandle.type = RuntimeScalarType.GLOBREFERENCE;
-            dirHandle.value = new RuntimeGlob(null).setIO(new RuntimeIO(dirIO));
-
-            return scalarTrue;
-        } catch (IOException e) {
-            handleIOException(e, "Directory operation failed");
-            return RuntimeScalarCache.scalarFalse;
-        }
-    }
-
-    /**
-     * Closes the directory stream if it is open and returns a {@code RuntimeScalar} indicating
-     * success or failure.
-     *
-     * @return {@code RuntimeScalarCache.scalarTrue} if the directory stream is successfully closed,
-     * otherwise {@code RuntimeScalarCache.scalarFalse}
-     */
-    public RuntimeScalar closedir() {
-        try {
-            if (directoryStream != null) {
-                directoryStream.close();
-                directoryStream = null;
-                return scalarTrue;
-            }
-            return RuntimeScalarCache.scalarFalse;
-        } catch (IOException e) {
-            return handleIOException(e, "Directory operation failed");
-        }
     }
 
     /**

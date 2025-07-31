@@ -5,45 +5,17 @@ import org.perlonjava.runtime.*;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.*;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.HashSet;
 import java.util.Set;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.RuntimeIO.handleIOException;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 
 public class Directory {
-
-    /**
-     * Helper method to resolve paths relative to the current working directory.
-     * If the path is absolute, it returns it as-is.
-     * If the path is relative, it resolves it against the current working directory.
-     */
-    private static Path resolvePath(String pathString) {
-        if (pathString == null || pathString.isEmpty()) {
-            return Paths.get(System.getProperty("user.dir"));
-        }
-
-        Path path = Paths.get(pathString);
-        if (path.isAbsolute()) {
-            return path;
-        } else {
-            // Resolve relative to current working directory
-            return Paths.get(System.getProperty("user.dir")).resolve(pathString);
-        }
-    }
-
-    /**
-     * Helper method to convert a Path to a File, resolving relative paths first.
-     */
-    private static File resolveFile(String pathString) {
-        return resolvePath(pathString).toFile();
-    }
 
     public static RuntimeScalar chdir(RuntimeScalar runtimeScalar) {
         //    chdir EXPR
@@ -62,7 +34,7 @@ public class Directory {
         //            fchdir(2), passing handles raises an exception.
 
         String dirName = runtimeScalar.toString();
-        File absoluteDir = resolveFile(dirName);
+        File absoluteDir = RuntimeIO.resolveFile(dirName);
 
         if (absoluteDir.exists() && absoluteDir.isDirectory()) {
             System.setProperty("user.dir", absoluteDir.getAbsolutePath());
@@ -77,7 +49,7 @@ public class Directory {
         String dirName = runtimeScalar.toString();
 
         try {
-            Path path = resolvePath(dirName);
+            Path path = RuntimeIO.resolvePath(dirName);
             Files.delete(path);
             return scalarTrue;
         } catch (IOException e) {
@@ -89,13 +61,35 @@ public class Directory {
 
     public static RuntimeScalar opendir(RuntimeList args) {
         // Note: DirectoryIO.openDir should also use resolvePath internally
-        return DirectoryIO.openDir(args);
+        RuntimeScalar dirHandle = (RuntimeScalar) args.elements.get(0);
+        String dirPath = args.elements.get(1).toString();
+
+        try {
+            Path fullDirPath = RuntimeIO.resolvePath(dirPath);
+
+            DirectoryStream<Path> stream = Files.newDirectoryStream(fullDirPath);
+            DirectoryIO dirIO = new DirectoryIO(stream, dirPath);
+            dirHandle.type = RuntimeScalarType.GLOBREFERENCE;
+            dirHandle.value = new RuntimeGlob(null).setIO(new RuntimeIO(dirIO));
+
+            return scalarTrue;
+        } catch (IOException e) {
+            handleIOException(e, "Directory operation failed");
+            return scalarFalse;
+        }
     }
 
     public static RuntimeScalar closedir(RuntimeScalar runtimeScalar) {
         RuntimeIO dirIO = runtimeScalar.getRuntimeIO();
         if (dirIO.directoryIO != null) {
-            dirIO.directoryIO.closedir();
+            try {
+                if (dirIO.directoryIO.directoryStream != null) {
+                    dirIO.directoryIO.directoryStream.close();
+                    dirIO.directoryIO.directoryStream = null;
+                }
+            } catch (IOException e) {
+                handleIOException(e, "Directory operation failed");
+            }
             dirIO.directoryIO = null;
             return scalarTrue;
         }
@@ -187,7 +181,7 @@ public class Directory {
         fileName = fileName.replaceAll("/+$", "");
 
         try {
-            Path path = resolvePath(fileName);
+            Path path = RuntimeIO.resolvePath(fileName);
             Files.createDirectories(path);
 
             // Set permissions only if the file system supports POSIX permissions

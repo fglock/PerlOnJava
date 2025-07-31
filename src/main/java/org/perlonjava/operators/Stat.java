@@ -13,7 +13,7 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.util.Set;
 
 import static org.perlonjava.operators.FileTestOperator.lastFileHandle;
-import static org.perlonjava.runtime.RuntimeIO.getPath;
+import static org.perlonjava.runtime.RuntimeIO.resolvePath;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
@@ -59,7 +59,7 @@ public class Stat {
         lastFileHandle.set(arg);
         RuntimeList res = new RuntimeList();
         try {
-            Path path = getPath(arg.toString());
+            Path path = resolvePath(arg.toString());
 
             // Basic file attributes (similar to some Perl stat fields)
             BasicFileAttributes basicAttr = Files.readAttributes(path, BasicFileAttributes.class);
@@ -79,7 +79,7 @@ public class Stat {
         lastFileHandle.set(arg);
         RuntimeList res = new RuntimeList();
         try {
-            Path path = getPath(arg.toString());
+            Path path = resolvePath(arg.toString());
 
             // Basic attributes without following symlink
             BasicFileAttributes basicAttr = Files.readAttributes(path,
