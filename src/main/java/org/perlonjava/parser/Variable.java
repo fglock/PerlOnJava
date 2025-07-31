@@ -21,6 +21,18 @@ public class Variable {
      */
     public static Node parseVariable(Parser parser, String sigil) {
         Node operand;
+
+        // Special handling for $$ followed by {
+        if (peek(parser).text.equals("$")) {
+            // Check if we have $${...} pattern
+            if (parser.tokens.get(parser.tokenIndex + 1).text.equals("{")) {
+                // This is $${...}, parse as dereference of ${...}
+                // Don't consume the $ token, let it be parsed as part of the variable
+                operand = parser.parseExpression(parser.getPrecedence("$") + 1);
+                return new OperatorNode(sigil, operand, parser.tokenIndex);
+            }
+        }
+
         String varName = IdentifierParser.parseComplexIdentifier(parser);
         parser.ctx.logDebug("Parsing variable: " + varName);
 
