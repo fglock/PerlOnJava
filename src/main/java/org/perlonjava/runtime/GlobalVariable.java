@@ -1,6 +1,7 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.codegen.CustomClassLoader;
+import org.perlonjava.parser.DataSection;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -245,12 +246,20 @@ public class GlobalVariable {
      * @return The RuntimeScalar representing the global IO reference.
      */
     public static RuntimeGlob getGlobalIO(String key) {
-        RuntimeGlob var = globalIORefs.get(key);
-        if (var == null) {
-            var = new RuntimeGlob(key);
-            globalIORefs.put(key, var);
+        RuntimeGlob glob = globalIORefs.get(key);
+        if (glob == null) {
+            glob = new RuntimeGlob(key);
+
+            if (key.endsWith("::DATA")) {
+                var dataHandle = DataSection.getDataHandle(key);
+                if (dataHandle != null) {
+                    glob.setIO(dataHandle);
+                }
+            }
+
+            globalIORefs.put(key, glob);
         }
-        return var;
+        return glob;
     }
 
     /**
