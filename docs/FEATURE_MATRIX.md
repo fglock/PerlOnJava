@@ -524,6 +524,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Internals**: `Internals::SvREADONLY` is implemented as a no-op.
 - ✅  **Carp**: `carp`, `cluck`, `croak`, `confess`, `longmess`, `shortmess` are implemented.
 - ✅  **Cwd** module
+- ✅  **Env** module
 - ✅  **Fcntl** module
 - ✅  **File::Basename** use the same version as Perl.
 - ✅  **File::Find** use the same version as Perl.
