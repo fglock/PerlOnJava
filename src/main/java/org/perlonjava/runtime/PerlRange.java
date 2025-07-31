@@ -377,7 +377,10 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
             if (!hasNext) {
                 throw new NoSuchElementException();
             }
-            RuntimeScalar result = getScalarInt(current);
+            // Perl allows the value to be modified in a for-loop: `for (1..1) { $_ = "aaa"; }`
+            // so we need to return a lvalue,
+            // and we can't do: `getScalarInt(current)`
+            RuntimeScalar result = new RuntimeScalar(current);
             if (current < endInt) {
                 // Increment the current integer to the next in the sequence
                 current++;
