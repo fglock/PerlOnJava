@@ -51,13 +51,13 @@ public class Operator {
             throw new PerlCompilerException("Not enough arguments for chmod");
         }
 
-        int mode = (int) runtimeList.elements.get(0).scalar().getInt();
+        int mode = (int) runtimeList.elements.getFirst().scalar().getInt();
         int successCount = 0;
 
         // Process each file in the list
         for (int i = 1; i < runtimeList.size(); i++) {
             String fileName = runtimeList.elements.get(i).toString();
-            Path path = Paths.get(fileName);
+            Path path = RuntimeIO.resolvePath(fileName);
 
             if (Files.exists(path)) {
                 if (IOOperator.applyFilePermissions(path, mode)) {
@@ -335,7 +335,6 @@ public class Operator {
             String fileName = fileScalar.toString();
 
             try {
-                // Use RuntimeIO.getPath() to properly resolve relative paths against user.dir
                 Path path = RuntimeIO.resolvePath(fileName);
                 Files.delete(path);
             } catch (NoSuchFileException e) {
@@ -451,7 +450,7 @@ public class Operator {
     public static RuntimeScalar readlink(RuntimeBase... args) {
         String path = args[0].getFirst().toString();
         try {
-            Path linkPath = Paths.get(path);
+            Path linkPath = RuntimeIO.resolvePath(path);
 
             // Check if file exists first
             if (!Files.exists(linkPath)) {
