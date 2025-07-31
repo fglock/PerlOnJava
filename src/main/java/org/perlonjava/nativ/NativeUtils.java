@@ -131,31 +131,6 @@ public class NativeUtils {
     }
 
     /**
-     * Delete a file
-     * @param args RuntimeBase array: [filename]
-     * @return RuntimeScalar with 1 on success, 0 on failure
-     */
-    public static RuntimeScalar unlink(RuntimeBase... args) {
-        if (args.length < 1) {
-            return new RuntimeScalar(0);
-        }
-
-        String path = RuntimeIO.resolvePath(args[0].getFirst().toString()).toString();
-
-        if (IS_WINDOWS) {
-            boolean result = Kernel32.INSTANCE.DeleteFile(path);
-            return new RuntimeScalar(result ? 1 : 0);
-        } else {
-            try {
-                int result = PosixLibrary.INSTANCE.unlink(path);
-                return new RuntimeScalar(result == 0 ? 1 : 0);
-            } catch (LastErrorException e) {
-                return new RuntimeScalar(0);
-            }
-        }
-    }
-
-    /**
      * Change file ownership (limited support on Windows)
      * @param args RuntimeBase array: [filename, uid, gid]
      * @return RuntimeScalar with 1 on success, 0 on failure
@@ -166,8 +141,8 @@ public class NativeUtils {
         }
 
         String path = RuntimeIO.resolvePath(args[0].getFirst().toString()).toString();
-        int uid = (int) args[1].getFirst().getInt();
-        int gid = (int) args[2].getFirst().getInt();
+        int uid = args[1].getFirst().getInt();
+        int gid = args[2].getFirst().getInt();
 
         if (IS_WINDOWS) {
             // Windows doesn't have chown, always return success
