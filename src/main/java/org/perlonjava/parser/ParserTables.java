@@ -49,6 +49,18 @@ public class ParserTables {
 
     // Static block to initialize the CORE prototypes.
     static {
+        CORE_PROTOTYPES.put("__FILE__", "");
+        CORE_PROTOTYPES.put("__LINE__", "");
+        CORE_PROTOTYPES.put("__PACKAGE__", "");
+        CORE_PROTOTYPES.put("__SUB__", "");
+        CORE_PROTOTYPES.put("__DATA__", null);
+        CORE_PROTOTYPES.put("__END__", null);
+        CORE_PROTOTYPES.put("AUTOLOAD", null);
+        CORE_PROTOTYPES.put("BEGIN", null);
+        CORE_PROTOTYPES.put("CHECK", null);
+        CORE_PROTOTYPES.put("DESTROY", null);
+        CORE_PROTOTYPES.put("END", null);
+        CORE_PROTOTYPES.put("INIT", null);
         CORE_PROTOTYPES.put("abs", "_");
         CORE_PROTOTYPES.put("accept", "**");
         CORE_PROTOTYPES.put("alarm", "_");
