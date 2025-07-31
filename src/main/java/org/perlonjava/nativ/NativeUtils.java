@@ -59,38 +59,6 @@ public class NativeUtils {
     }
 
     /**
-     * Change file permissions
-     * @param args RuntimeBase array: [filename, mode]
-     * @return RuntimeScalar with success (1) or failure (0)
-     */
-    public static RuntimeScalar chmod(RuntimeBase... args) {
-        if (args.length < 2) {
-            return new RuntimeScalar(0);
-        }
-
-        String path = RuntimeIO.resolvePath(args[0].getFirst().toString()).toString();
-        int mode = args[1].getFirst().getInt();
-
-        if (IS_WINDOWS) {
-            // Windows: use File attributes
-            int attributes = 0;
-            if ((mode & 0200) == 0) { // Write bit not set
-                attributes |= WinNT.FILE_ATTRIBUTE_READONLY;
-            }
-
-            boolean success = Kernel32.INSTANCE.SetFileAttributes(path, new WinDef.DWORD(attributes));
-            return new RuntimeScalar(success ? 1 : 0);
-        } else {
-            try {
-                int result = PosixLibrary.INSTANCE.chmod(path, mode);
-                return new RuntimeScalar(result == 0 ? 1 : 0);
-            } catch (LastErrorException e) {
-                return new RuntimeScalar(0);
-            }
-        }
-    }
-
-    /**
      * Get user ID (returns username-based hash on Windows)
      * @param args Unused (for API consistency)
      * @return RuntimeScalar with user ID
