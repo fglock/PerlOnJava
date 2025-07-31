@@ -46,8 +46,57 @@ public class Readline {
 
         // Get the input record separator (equivalent to Perl's $/)
         String sep = getGlobalVariable("main::/").toString();
-        boolean hasSeparator = !sep.isEmpty();
-        int separator = hasSeparator ? sep.charAt(0) : '\n';
+
+        // Handle paragraph mode when $/ = ''
+        if (sep.isEmpty()) {
+            StringBuilder paragraph = new StringBuilder();
+            boolean inParagraph = false;
+            boolean lastWasNewline = false;
+
+            String readChar;
+            while (!(readChar = runtimeIO.ioHandle.read(1).toString()).isEmpty()) {
+                char c = readChar.charAt(0);
+
+                if (c == '\n') {
+                    if (!inParagraph) {
+                        // Skip leading newlines
+                        continue;
+                    }
+                    paragraph.append(c);
+                    if (lastWasNewline) {
+                        // Found blank line (two consecutive newlines) - end of paragraph
+                        break;
+                    }
+                    lastWasNewline = true;
+                } else {
+                    inParagraph = true;
+                    lastWasNewline = false;
+                    paragraph.append(c);
+                }
+            }
+
+            // Return undef if we've reached EOF and no characters were read (excluding skipped newlines)
+            if (!inParagraph && runtimeIO.eof().getBoolean()) {
+                return scalarUndef;
+            }
+
+            // Increment the line number counter if a paragraph was read
+            if (inParagraph) {
+                // Count the number of lines in the paragraph
+                String paragraphStr = paragraph.toString();
+                for (int i = 0; i < paragraphStr.length(); i++) {
+                    if (paragraphStr.charAt(i) == '\n') {
+                        runtimeIO.currentLineNumber++;
+                    }
+                }
+            }
+
+            // Return the read paragraph as a RuntimeScalar
+            return new RuntimeScalar(paragraph.toString());
+        }
+
+        // Normal mode (not paragraph mode)
+        int separator = sep.charAt(0);
 
         StringBuilder line = new StringBuilder();
 
@@ -56,7 +105,7 @@ public class Readline {
             char c = readChar.charAt(0);
             line.append(c);
             // Break if we've reached the separator (if defined)
-            if (hasSeparator && c == separator) {
+            if (c == separator) {
                 break;
             }
         }
