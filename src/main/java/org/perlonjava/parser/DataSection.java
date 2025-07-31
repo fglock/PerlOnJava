@@ -28,6 +28,8 @@ public class DataSection {
         // Create a scalar to hold the content
         RuntimeScalar contentScalar = new RuntimeScalar(content);
 
+        System.out.println("Creating DATA handle for package: " + packageName + " with content: " + content);
+
         // Create a read-only file handle backed by the scalar
         dataHandles.put(packageName, new RuntimeScalar(RuntimeIO.open(contentScalar, "<")));
     }
@@ -41,6 +43,24 @@ public class DataSection {
     public static RuntimeScalar getDataHandle(String packageName) {
         RuntimeScalar dataHandle = dataHandles.get(packageName);
         return dataHandle != null ? dataHandle : new RuntimeScalar();
+    }
+
+    /**
+     * Checks if a token represents an end-of-file marker.
+     * This includes EOF tokens and special characters like ^D (EOT) and ^Z (SUB).
+     *
+     * @param token the token to check
+     * @return true if the token is an end marker, false otherwise
+     */
+    private static boolean isEndMarker(LexerToken token) {
+        if (token.type == LexerTokenType.EOF) {
+            return true;
+        }
+        if (token.type == LexerTokenType.STRING) {
+            return token.text.equals(String.valueOf((char) 4)) ||  // ^D (EOT)
+                    token.text.equals(String.valueOf((char) 26));    // ^Z (SUB)
+        }
+        return false;
     }
 
     static int parseDataSection(Parser parser, int tokenIndex, List<LexerToken> tokens, LexerToken token) {
@@ -58,10 +78,17 @@ public class DataSection {
                 tokenIndex++;
             }
 
-            // Capture all remaining content
+            // Capture all remaining content until end marker
             StringBuilder dataContent = new StringBuilder();
             while (tokenIndex < tokens.size()) {
-                dataContent.append(tokens.get(tokenIndex).text);
+                LexerToken currentToken = tokens.get(tokenIndex);
+
+                // Stop if we hit an end marker
+                if (isEndMarker(currentToken)) {
+                    break;
+                }
+
+                dataContent.append(currentToken.text);
                 tokenIndex++;
             }
 
@@ -88,6 +115,15 @@ public class DataSection {
             while (tokenIndex < tokens.size()) {
                 LexerToken currentToken = tokens.get(tokenIndex);
 
+                // Stop if we hit an end marker
+                if (isEndMarker(currentToken)) {
+                    // If we're in top-level and haven't found __DATA__, save what we have
+                    if (shouldCapture) {
+                        createDataHandle(parser, dataContent.toString());
+                    }
+                    return tokenIndex;
+                }
+
                 // Check if we found __DATA__
                 if (currentToken.type == LexerTokenType.IDENTIFIER &&
                         currentToken.text.equals("__DATA__")) {
@@ -104,10 +140,17 @@ public class DataSection {
                         tokenIndex++;
                     }
 
-                    // Capture content after __DATA__
+                    // Capture content after __DATA__ until end marker
                     dataContent.setLength(0);
                     while (tokenIndex < tokens.size()) {
-                        dataContent.append(tokens.get(tokenIndex).text);
+                        LexerToken dataToken = tokens.get(tokenIndex);
+
+                        // Stop if we hit an end marker
+                        if (isEndMarker(dataToken)) {
+                            break;
+                        }
+
+                        dataContent.append(dataToken.text);
                         tokenIndex++;
                     }
 
