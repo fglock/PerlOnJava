@@ -276,7 +276,7 @@ The following areas are currently under active development to enhance the functi
   - Add `tie`, `tied`, `untie` operators.
   - Add all `tie` types: scalar, array, hash, and handle.
   - Add operators: `sysread`, `syswrite`, `kill`, `utime`, `chown`, `waitpid`, `umask`, `readlink`.
-  - Add modules: `XSLoader`, `Encode`,`Config`, `Errno`, `Tie::Scalar`, `Tie::Array`, `Tie::Hash`, `Tie::Handle`, `Perl::OSType`.
+  - Add modules: `XSLoader`, `Encode`,`Config`, `Errno`, `Tie::Scalar`, `Tie::Array`, `Tie::Hash`, `Tie::Handle`, `Perl::OSType`, `Env`.
   - Add key-value slices: `%c{"1", "3"}`.
   - Add special variable: `$^X`.
   - Add dualvar.
