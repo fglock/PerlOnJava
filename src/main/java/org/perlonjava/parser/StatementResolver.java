@@ -238,34 +238,54 @@ public class StatementResolver {
         int braceCount = 1; // Track nested braces
         boolean hasHashIndicator = false;  // Found =>, or comma in hash-like context
         boolean hasBlockIndicator = false; // Found ;, or statement modifier
+        boolean hasContent = false; // Track if we've seen any content
+
+        parser.ctx.logDebug("isHashLiteral START - initial braceCount: " + braceCount);
 
         while (braceCount > 0) {
             LexerToken token = consume(parser);
-            parser.ctx.logDebug("isHashLiteral " + token + " braceCount:" + braceCount);
+            parser.ctx.logDebug("isHashLiteral token: '" + token.text + "' type:" + token.type + " braceCount:" + braceCount);
+
             if (token.type == LexerTokenType.EOF) {
+                parser.ctx.logDebug("isHashLiteral EOF reached");
                 break; // Let caller handle EOF error
             }
 
+            // Track if we've seen any non-brace content
+            if (!token.text.equals("}")) {
+                hasContent = true;
+            }
+
             // Update brace count based on token
+            int oldBraceCount = braceCount;
             braceCount = switch (token.text) {
                 case "{", "(", "[" -> braceCount + 1;
                 case ")", "}", "]" -> braceCount - 1;
                 default -> braceCount;
             };
 
+            if (oldBraceCount != braceCount) {
+                parser.ctx.logDebug("isHashLiteral braceCount changed from " + oldBraceCount + " to " + braceCount);
+            }
+
             // Only check for indicators at depth 1
             if (braceCount == 1 && !token.text.matches("[{(\\[)}\\]]")) {
+                parser.ctx.logDebug("isHashLiteral checking token '" + token.text + "' at depth 1");
+
                 switch (token.text) {
                     case "=>" -> {
                         // Fat comma is a definitive hash indicator
+                        parser.ctx.logDebug("isHashLiteral found => (hash indicator)");
                         hasHashIndicator = true;
                     }
                     case ";" -> {
                         // Semicolon is a definitive block indicator
+                        parser.ctx.logDebug("isHashLiteral found ; (block indicator)");
                         hasBlockIndicator = true;
                     }
                     case "=" -> {
                         // Assign is a block indicator
+                        parser.ctx.logDebug("isHashLiteral found = (block indicator)");
                         hasBlockIndicator = true;
                     }
                     case "," -> {
@@ -276,20 +296,32 @@ public class StatementResolver {
                     case "for", "while", "if", "unless", "until", "foreach", "my", "our", "say", "print", "local" -> {
                         // Check if this is a hash key (followed by =>) or statement modifier
                         LexerToken nextToken = TokenUtils.peek(parser);
+                        parser.ctx.logDebug("isHashLiteral found keyword '" + token.text + "', next token: '" + nextToken.text + "'");
                         if (!nextToken.text.equals("=>") && !nextToken.text.equals(",")) {
                             // Statement modifier - definitive block indicator
-                            parser.ctx.logDebug("isHashLiteral found statement modifier");
+                            parser.ctx.logDebug("isHashLiteral found statement modifier (block indicator)");
                             hasBlockIndicator = true;
+                        } else {
+                            parser.ctx.logDebug("isHashLiteral keyword followed by => or , (possible hash key)");
                         }
                     }
+                    default -> {
+                        parser.ctx.logDebug("isHashLiteral token '" + token.text + "' not a special indicator");
+                    }
                 }
+            } else if (braceCount == 1) {
+                parser.ctx.logDebug("isHashLiteral skipping bracket token '" + token.text + "' at depth 1");
             }
 
             // Early exit if we have definitive evidence
             if (hasBlockIndicator) {
-                parser.ctx.logDebug("isHashLiteral FALSE - block indicator found");
+                parser.ctx.logDebug("isHashLiteral EARLY EXIT - block indicator found, returning FALSE");
                 parser.tokenIndex = currentIndex;
                 return false;
+            }
+
+            if (braceCount == 0) {
+                parser.ctx.logDebug("isHashLiteral braceCount reached 0, exiting loop");
             }
         }
 
@@ -298,16 +330,23 @@ public class StatementResolver {
         // Decision logic:
         // - If we found => it's definitely a hash
         // - If we found block indicators, it's a block
-        // - Otherwise, default to hash (empty {} is a hash ref)
+        // - Empty {} is a hash ref
+        // - Otherwise, default to block (safer when parsing is incomplete)
+        parser.ctx.logDebug("isHashLiteral FINAL DECISION - hasHashIndicator:" + hasHashIndicator +
+                " hasBlockIndicator:" + hasBlockIndicator + " hasContent:" + hasContent);
+
         if (hasHashIndicator) {
-            parser.ctx.logDebug("isHashLiteral TRUE - hash indicator found");
+            parser.ctx.logDebug("isHashLiteral RESULT: TRUE - hash indicator found");
             return true;
         } else if (hasBlockIndicator) {
-            parser.ctx.logDebug("isHashLiteral FALSE - block indicator found");
+            parser.ctx.logDebug("isHashLiteral RESULT: FALSE - block indicator found");
             return false;
+        } else if (!hasContent) {
+            parser.ctx.logDebug("isHashLiteral RESULT: TRUE - empty {} is hash ref");
+            return true; // Empty {} is a hash ref
         } else {
-            parser.ctx.logDebug("isHashLiteral TRUE - default for ambiguous case");
-            return true; // Default: {} is an empty hash ref
+            parser.ctx.logDebug("isHashLiteral RESULT: FALSE - default for ambiguous case (assuming block)");
+            return false; // Default: assume block when we can't determine
         }
     }
 
