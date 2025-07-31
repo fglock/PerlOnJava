@@ -249,14 +249,6 @@ public class GlobalVariable {
         RuntimeGlob glob = globalIORefs.get(key);
         if (glob == null) {
             glob = new RuntimeGlob(key);
-
-            if (key.endsWith("::DATA")) {
-                var dataHandle = DataSection.getDataHandle(key);
-                if (dataHandle != null) {
-                    glob.setIO(dataHandle);
-                }
-            }
-
             globalIORefs.put(key, glob);
         }
         return glob;
