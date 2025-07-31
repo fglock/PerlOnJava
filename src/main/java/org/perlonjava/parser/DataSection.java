@@ -8,6 +8,8 @@ import org.perlonjava.runtime.RuntimeScalar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
 
 public class DataSection {
 
@@ -15,6 +17,11 @@ public class DataSection {
      * Map of package names to their DATA handles
      */
     private static final Map<String, RuntimeScalar> dataHandles = new HashMap<>();
+
+    /**
+     * Set of parser instances that have already processed their DATA section
+     */
+    private static final Set<Parser> processedParsers = new HashSet<>();
 
     /**
      * Creates or updates a DATA filehandle for a package.
@@ -28,7 +35,7 @@ public class DataSection {
         // Create a scalar to hold the content
         RuntimeScalar contentScalar = new RuntimeScalar(content);
 
-        System.out.println("Creating DATA handle for package: " + packageName + " with content: " + content);
+        parser.ctx.logDebug("Creating DATA handle for package: " + packageName + " with content: " + content);
 
         // Create a read-only file handle backed by the scalar
         dataHandles.put(packageName, new RuntimeScalar(RuntimeIO.open(contentScalar, "<")));
@@ -64,7 +71,14 @@ public class DataSection {
     }
 
     static int parseDataSection(Parser parser, int tokenIndex, List<LexerToken> tokens, LexerToken token) {
+        // Check if this parser instance has already processed its DATA section
+        if (processedParsers.contains(parser)) {
+            return tokens.size();
+        }
+
         if (token.text.equals("__DATA__")) {
+            processedParsers.add(parser);
+
             // __DATA__ works in all scripts - just capture content after it
             tokenIndex++;
 
@@ -94,6 +108,9 @@ public class DataSection {
 
             createDataHandle(parser, dataContent.toString());
 
+            // Return tokens.size() to indicate we've consumed everything
+            return tokens.size();
+
         } else if (token.text.equals("__END__")) {
             // __END__ - always scan for __DATA__, but only capture if top-level
             tokenIndex++;
@@ -119,14 +136,18 @@ public class DataSection {
                 if (isEndMarker(currentToken)) {
                     // If we're in top-level and haven't found __DATA__, save what we have
                     if (shouldCapture) {
+                        processedParsers.add(parser);
                         createDataHandle(parser, dataContent.toString());
                     }
-                    return tokenIndex;
+                    // Return tokens.size() to indicate we've consumed everything
+                    return tokens.size();
                 }
 
                 // Check if we found __DATA__
                 if (currentToken.type == LexerTokenType.IDENTIFIER &&
                         currentToken.text.equals("__DATA__")) {
+                    processedParsers.add(parser);
+
                     // Found __DATA__, process it
                     tokenIndex++;
 
@@ -155,7 +176,8 @@ public class DataSection {
                     }
 
                     createDataHandle(parser, dataContent.toString());
-                    return tokenIndex;
+                    // Return tokens.size() to indicate we've consumed everything
+                    return tokens.size();
                 }
 
                 // If we're in top-level, capture content
@@ -167,9 +189,11 @@ public class DataSection {
 
             // Only set content if we were in top-level and didn't find __DATA__
             if (shouldCapture) {
+                processedParsers.add(parser);
                 createDataHandle(parser, dataContent.toString());
             }
         }
-        return tokenIndex;
+        // Return tokens.size() to indicate we've consumed everything
+        return tokens.size();
     }
 }
