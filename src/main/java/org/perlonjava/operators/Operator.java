@@ -1,6 +1,12 @@
 package org.perlonjava.operators;
 
+import com.sun.jna.LastErrorException;
 import com.sun.jna.Native;
+import com.sun.jna.platform.win32.Kernel32;
+import com.sun.jna.platform.win32.WinDef;
+import com.sun.jna.platform.win32.WinNT;
+import org.perlonjava.nativ.NativeUtils;
+import org.perlonjava.nativ.PosixLibrary;
 import org.perlonjava.regex.RuntimeRegex;
 import org.perlonjava.runtime.*;
 
@@ -51,18 +57,39 @@ public class Operator {
             throw new PerlCompilerException("Not enough arguments for chmod");
         }
 
-        int mode = (int) runtimeList.elements.getFirst().scalar().getInt();
+        int mode = runtimeList.elements.getFirst().scalar().getInt();
         int successCount = 0;
+
+        // Detect platform
+        boolean isWindows = System.getProperty("os.name").toLowerCase().contains("windows");
 
         // Process each file in the list
         for (int i = 1; i < runtimeList.size(); i++) {
             String fileName = runtimeList.elements.get(i).toString();
-            Path path = RuntimeIO.resolvePath(fileName);
+            String path = RuntimeIO.resolvePath(fileName).toString();
 
-            if (Files.exists(path)) {
-                if (IOOperator.applyFilePermissions(path, mode)) {
-                    successCount++;
+            boolean success;
+
+            if (isWindows) {
+                // Windows: use File attributes
+                int attributes = 0;
+                if ((mode & 0200) == 0) { // Write bit not set
+                    attributes |= WinNT.FILE_ATTRIBUTE_READONLY;
                 }
+
+                success = Kernel32.INSTANCE.SetFileAttributes(path, new WinDef.DWORD(attributes));
+            } else {
+                // POSIX systems
+                try {
+                    int result = PosixLibrary.INSTANCE.chmod(path, mode);
+                    success = (result == 0);
+                } catch (LastErrorException e) {
+                    success = false;
+                }
+            }
+
+            if (success) {
+                successCount++;
             }
         }
 
