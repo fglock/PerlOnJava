@@ -95,7 +95,7 @@ public class Whitespace {
 
                 case IDENTIFIER:
                     if (token.text.equals("__END__") || token.text.equals("__DATA__")) {
-                        tokenIndex = tokens.size();
+                        return DataSection.parseDataSection(parser, tokenIndex, tokens, token);
                     }
                     return tokenIndex; // Stop processing and return current index
 
