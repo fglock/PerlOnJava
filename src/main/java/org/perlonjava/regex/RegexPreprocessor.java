@@ -98,6 +98,20 @@ public class RegexPreprocessor {
                     }
                     regexError(s, offset, "Unmatched ) in regex");
                     break;
+                case '#':
+                    if (regexFlags.isExtended() || regexFlags.isExtendedWhitespace()) {
+                        // Consume comment to end of line
+                        while (offset < length) {
+                            if (s.codePointAt(offset) == '\n') {
+                                break;
+                            }
+                            offset++;
+                        }
+                        break;
+                    } else {
+                        sb.append(Character.toChars(c));
+                        break;
+                    }
                 default:    // Append normal characters
                     sb.append(Character.toChars(c));
                     break;
