@@ -280,6 +280,7 @@ The following areas are currently under active development to enhance the functi
   - Add key-value slices: `%c{"1", "3"}`.
   - Add special variable: `$^X`.
   - Add dualvar.
+  - Add `DATA` file handle.
   - Bugfix: methods can be called in all blessed reference types.
   - Bugfix: more robust `sprintf` formatting.
   - Planned release date: 2025-12-10.
@@ -296,7 +297,6 @@ The following areas are currently under active development to enhance the functi
   - Indirect method call
   - Constant folding - in ConstantFoldingVisitor.java
   - `method` keyword
-  - `__DATA__` section
 
 ### v4.0.0 Milestone (Planned Release Date: 2026-05-10)
 

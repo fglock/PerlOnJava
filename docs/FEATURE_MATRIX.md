@@ -403,6 +403,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`sysread`**
 - ✅  **`syswrite`**
 - ✅  **Tied Handles**: Tied file handles are not implemented.
+- ✅  **`DATA`**: `DATA` file handle works.
 
 ### Unimplemented I/O Operators
 - ❌  **`socket`**: Socket creation
@@ -412,7 +413,6 @@ my @copy = @{$z};         # ERROR
 - ❌  **`accept`**: Connection acceptance
 - ❌  **`listen`**: Socket listening
 - ❌  **`pipe`**: Unix pipes
-- ❌  **`DATA`**: There is no `DATA` file handle yet.
 
 ### I/O Layers
 - ✅  **Layer support**: `open` and `binmode` support these I/O layers:
