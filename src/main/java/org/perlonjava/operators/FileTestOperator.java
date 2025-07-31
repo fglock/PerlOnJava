@@ -12,7 +12,7 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.UserPrincipal;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.RuntimeIO.getPath;
+import static org.perlonjava.runtime.RuntimeIO.resolvePath;
 import static org.perlonjava.runtime.RuntimeScalarCache.*;
 
 /**
@@ -57,7 +57,7 @@ public class FileTestOperator {
     public static RuntimeScalar fileTest(String operator, RuntimeScalar fileHandle) {
         lastFileHandle.set(fileHandle);
         String filePath = fileHandle.toString();
-        Path path = getPath(filePath);
+        Path path = resolvePath(filePath);
 
         try {
             return switch (operator) {

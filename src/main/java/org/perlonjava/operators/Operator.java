@@ -336,7 +336,7 @@ public class Operator {
 
             try {
                 // Use RuntimeIO.getPath() to properly resolve relative paths against user.dir
-                Path path = RuntimeIO.getPath(fileName);
+                Path path = RuntimeIO.resolvePath(fileName);
                 Files.delete(path);
             } catch (NoSuchFileException e) {
                 allDeleted = false;

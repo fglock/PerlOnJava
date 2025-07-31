@@ -33,7 +33,7 @@ public class ModuleOperators {
         Path filePath = Paths.get(fileName);
         if (filePath.isAbsolute() || fileName.startsWith("./") || fileName.startsWith("../")) {
             // For absolute or explicit relative paths, resolve using RuntimeIO.getPath
-            filePath = RuntimeIO.getPath(fileName);
+            filePath = RuntimeIO.resolvePath(fileName);
             fullName = Files.exists(filePath) ? filePath : null;
         } else {
             // Otherwise, search in INC directories
@@ -84,7 +84,7 @@ public class ModuleOperators {
                     }
                 } else {
                     // Use RuntimeIO.getPath to properly resolve the directory path first
-                    Path dirPath = RuntimeIO.getPath(dirName);
+                    Path dirPath = RuntimeIO.resolvePath(dirName);
                     Path fullPath = dirPath.resolve(fileName);
                     if (Files.exists(fullPath)) {
                         fullName = fullPath;

@@ -9,7 +9,9 @@ package org.perlonjava.runtime;
  */
 
 import org.perlonjava.io.*;
+import org.perlonjava.operators.Directory;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -317,7 +319,7 @@ public class RuntimeIO implements RuntimeScalarReference {
                 }
             }
 
-            Path filePath = getPath(fileName);
+            Path filePath = resolvePath(fileName);
             Set<StandardOpenOption> options = fh.convertMode(mode);
 
             // Initialize ioHandle with CustomFileChannel
@@ -497,14 +499,8 @@ public class RuntimeIO implements RuntimeScalarReference {
      * @param fileName the filename to convert
      * @return Path object for the file
      */
-    public static Path getPath(String fileName) {
-        Path path = Paths.get(fileName);
-        if (path.isAbsolute()) {
-            return path;
-        } else {
-            // Resolve relative to current working directory
-            return Paths.get(System.getProperty("user.dir")).resolve(fileName);
-        }
+    public static Path resolvePath(String fileName) {
+        return Paths.get(System.getProperty("user.dir")).resolve(fileName).toAbsolutePath();
     }
 
     /**
@@ -632,6 +628,13 @@ public class RuntimeIO implements RuntimeScalarReference {
         }
 
         return fh;
+    }
+
+    /**
+     * Helper method to convert a Path to a File, resolving relative paths first.
+     */
+    public static File resolveFile(String pathString) {
+        return resolvePath(pathString).toFile();
     }
 
     /**
