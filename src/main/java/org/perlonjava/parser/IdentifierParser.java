@@ -207,21 +207,63 @@ public class IdentifierParser {
         StringBuilder variableName = new StringBuilder();
         LexerToken token = parser.tokens.get(parser.tokenIndex);
         LexerToken nextToken = parser.tokens.get(parser.tokenIndex + 1);
-        if (token.type == LexerTokenType.NUMBER) {
+
+        // Track if we're at the start of the identifier
+        boolean isFirstToken = true;
+
+        // Numbers are not allowed at the very beginning
+        if (isFirstToken && token.type == LexerTokenType.NUMBER) {
             return null;
         }
+
         while (true) {
             // Check for various token types that can form part of a subroutine identifier
-            if (token.type == LexerTokenType.WHITESPACE || token.type == LexerTokenType.EOF || token.type == LexerTokenType.NEWLINE || (token.type == LexerTokenType.OPERATOR && !token.text.equals("::"))) {
+            if (token.type == LexerTokenType.WHITESPACE || token.type == LexerTokenType.EOF ||
+                    token.type == LexerTokenType.NEWLINE ||
+                    (token.type == LexerTokenType.OPERATOR && !token.text.equals("::"))) {
                 return variableName.toString();
             }
+
+            // Append the current token
             variableName.append(token.text);
-            if ((token.type == LexerTokenType.IDENTIFIER || token.type == LexerTokenType.NUMBER)
-                    && (!nextToken.text.equals("::"))
-            ) {
+
+            // Mark that we're no longer at the first token
+            if (isFirstToken) {
+                isFirstToken = false;
+            }
+
+            // If this is a :: operator, continue to next token
+            if (token.text.equals("::")) {
+                parser.tokenIndex++;
+                token = parser.tokens.get(parser.tokenIndex);
+                nextToken = parser.tokens.get(parser.tokenIndex + 1);
+                continue;
+            }
+
+            // If current token is IDENTIFIER or NUMBER
+            if (token.type == LexerTokenType.IDENTIFIER || token.type == LexerTokenType.NUMBER) {
+                // If next token is ::, continue parsing
+                if (nextToken.text.equals("::")) {
+                    parser.tokenIndex++;
+                    token = parser.tokens.get(parser.tokenIndex);
+                    nextToken = parser.tokens.get(parser.tokenIndex + 1);
+                    continue;
+                }
+
+                // If current token is NUMBER and next token is IDENTIFIER (like "5" followed by "p_4p1s")
+                // This handles cases where an identifier segment after :: starts with a number
+                if (token.type == LexerTokenType.NUMBER && nextToken.type == LexerTokenType.IDENTIFIER) {
+                    parser.tokenIndex++;
+                    token = parser.tokens.get(parser.tokenIndex);
+                    nextToken = parser.tokens.get(parser.tokenIndex + 1);
+                    continue;  // Continue to append the IDENTIFIER part
+                }
+
+                // Otherwise, we've reached the end of the identifier
                 parser.tokenIndex++;
                 return variableName.toString();
             }
+
             parser.tokenIndex++;
             token = parser.tokens.get(parser.tokenIndex);
             nextToken = parser.tokens.get(parser.tokenIndex + 1);
