@@ -282,6 +282,7 @@ public class EmitVariable {
                 node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));   // emit the variable
                 mv.visitInsn(Opcodes.SWAP); // move the target first
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "setFromList", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeArray;", false);
+                EmitOperator.handleScalarContext(emitterVisitor, node);
                 break;
             default:
                 throw new PerlCompilerException(node.tokenIndex, "Unsupported assignment context: " + lvalueContext, ctx.errorUtil);
