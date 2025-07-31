@@ -16,19 +16,6 @@ public class NativeUtils {
     private static final int ID_RANGE = 65536;
 
     /**
-     * Get current process ID
-     * @param args Unused (for API consistency)
-     * @return RuntimeScalar with process ID
-     */
-    public static RuntimeScalar getpid(RuntimeBase... args) {
-        if (IS_WINDOWS) {
-            return new RuntimeScalar(Kernel32.INSTANCE.GetCurrentProcessId());
-        } else {
-            return new RuntimeScalar(PosixLibrary.INSTANCE.getpid());
-        }
-    }
-
-    /**
      * Get parent process ID
      * @param args Unused (for API consistency)
      * @return RuntimeScalar with parent process ID
@@ -127,55 +114,6 @@ public class NativeUtils {
             return getgid(args);
         } else {
             return new RuntimeScalar(PosixLibrary.INSTANCE.getegid());
-        }
-    }
-
-    /**
-     * Change file ownership (limited support on Windows)
-     * @param args RuntimeBase array: [filename, uid, gid]
-     * @return RuntimeScalar with 1 on success, 0 on failure
-     */
-    public static RuntimeScalar chown(RuntimeBase... args) {
-        if (args.length < 3) {
-            return new RuntimeScalar(0);
-        }
-
-        String path = RuntimeIO.resolvePath(args[0].getFirst().toString()).toString();
-        int uid = args[1].getFirst().getInt();
-        int gid = args[2].getFirst().getInt();
-
-        if (IS_WINDOWS) {
-            // Windows doesn't have chown, always return success
-            // In a real implementation, you might use Windows security APIs
-            return new RuntimeScalar(1);
-        } else {
-            try {
-                int result = PosixLibrary.INSTANCE.chown(path, uid, gid);
-                return new RuntimeScalar(result == 0 ? 1 : 0);
-            } catch (LastErrorException e) {
-                return new RuntimeScalar(0);
-            }
-        }
-    }
-
-    /**
-     * Set file creation mask
-     * @param args RuntimeBase array: [mask]
-     * @return RuntimeScalar with previous mask value
-     */
-    public static RuntimeScalar umask(RuntimeBase... args) {
-        if (args.length < 1) {
-            return new RuntimeScalar(0);
-        }
-
-        int mask = (int) args[0].getFirst().getInt();
-
-        if (IS_WINDOWS) {
-            // Windows doesn't have umask, return the input value
-            return new RuntimeScalar(mask);
-        } else {
-            int oldMask = PosixLibrary.INSTANCE.umask(mask);
-            return new RuntimeScalar(oldMask);
         }
     }
 }
