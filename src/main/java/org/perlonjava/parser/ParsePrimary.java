@@ -264,6 +264,9 @@ public class ParsePrimary {
             case "!", "+":
                 // Simple unary operators
                 operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
+                if (operand == null) {
+                    parser.throwError("syntax error");
+                }
                 return new OperatorNode(token.text, operand, parser.tokenIndex);
 
             case "~", "~.":
