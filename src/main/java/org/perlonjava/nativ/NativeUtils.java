@@ -131,44 +131,6 @@ public class NativeUtils {
     }
 
     /**
-     * Send signal to process (limited support on Windows)
-     * @param args RuntimeBase array: [pid, signal]
-     * @return RuntimeScalar with 0 on success, -1 on failure
-     */
-    public static RuntimeScalar kill(RuntimeBase... args) {
-        if (args.length < 2) {
-            return new RuntimeScalar(-1);
-        }
-
-        int pid = (int) args[0].getFirst().getInt();
-        int sig = (int) args[1].getFirst().getInt();
-
-        if (IS_WINDOWS) {
-            // Windows doesn't have signals, but can terminate process
-            if (sig == 9 || sig == 15) { // SIGKILL or SIGTERM
-                WinNT.HANDLE process = Kernel32.INSTANCE.OpenProcess(
-                        WinNT.PROCESS_TERMINATE, false, pid);
-                if (process != null) {
-                    try {
-                        boolean result = Kernel32.INSTANCE.TerminateProcess(process, 1);
-                        return new RuntimeScalar(result ? 0 : -1);
-                    } finally {
-                        Kernel32.INSTANCE.CloseHandle(process);
-                    }
-                }
-            }
-            return new RuntimeScalar(-1);
-        } else {
-            try {
-                int result = PosixLibrary.INSTANCE.kill(pid, sig);
-                return new RuntimeScalar(result);
-            } catch (LastErrorException e) {
-                return new RuntimeScalar(-1);
-            }
-        }
-    }
-
-    /**
      * Delete a file
      * @param args RuntimeBase array: [filename]
      * @return RuntimeScalar with 1 on success, 0 on failure
