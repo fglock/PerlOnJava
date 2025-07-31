@@ -2,21 +2,15 @@ package org.perlonjava.parser;
 
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.RuntimeIO;
 import org.perlonjava.runtime.RuntimeScalar;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.HashSet;
 
 public class DataSection {
-
-    /**
-     * Map of package names to their DATA handles
-     */
-    private static final Map<String, RuntimeScalar> dataHandles = new HashMap<>();
 
     /**
      * Set of parser instances that have already processed their DATA section
@@ -38,17 +32,8 @@ public class DataSection {
         parser.ctx.logDebug("Creating DATA handle for package: " + handleName + " with content: " + content);
 
         // Create a read-only file handle backed by the scalar
-        dataHandles.put(handleName, new RuntimeScalar(RuntimeIO.open(contentScalar, "<")));
-    }
-
-    /**
-     * Gets the DATA filehandle for a package.
-     *
-     * @param packageName the package name
-     * @return the RuntimeIO handle, or undef if no DATA section exists
-     */
-    public static RuntimeScalar getDataHandle(String packageName) {
-        return dataHandles.get(packageName);
+        var fileHandle = RuntimeIO.open(contentScalar.createReference(), "<");
+        GlobalVariable.getGlobalIO(handleName).setIO(fileHandle);
     }
 
     /**
