@@ -345,51 +345,6 @@ public class Operator {
 
     }
 
-    /**
-     * Deletes a list of files specified in the RuntimeList.
-     *
-     * @param value The list of files to be deleted.
-     * @return A RuntimeScalar indicating the result of the unlink operation.
-     */
-    public static RuntimeBase unlink(RuntimeBase value, int ctx) {
-        boolean allDeleted = true;
-        RuntimeList fileList = value.getList();
-        if (fileList.isEmpty()) {
-            fileList.elements.add(GlobalVariable.getGlobalVariable("main::_"));
-        }
-
-        for (RuntimeScalar fileScalar : fileList) {
-            String fileName = fileScalar.toString();
-
-            try {
-                Path path = RuntimeIO.resolvePath(fileName);
-                Files.delete(path);
-            } catch (NoSuchFileException e) {
-                allDeleted = false;
-                getGlobalVariable("main::!").set("No such file or directory");
-                Native.setLastError(2); // ENOENT
-            } catch (AccessDeniedException e) {
-                allDeleted = false;
-                getGlobalVariable("main::!").set("Permission denied");
-                Native.setLastError(13); // EACCES
-            } catch (DirectoryNotEmptyException e) {
-                allDeleted = false;
-                getGlobalVariable("main::!").set("Directory not empty");
-                Native.setLastError(39); // ENOTEMPTY
-            } catch (IOException e) {
-                allDeleted = false;
-                String errorMessage = e.getMessage();
-                getGlobalVariable("main::!").set(errorMessage != null ? errorMessage : "I/O error");
-                // Try to set appropriate errno based on the exception
-                if (errorMessage != null && errorMessage.contains("in use")) {
-                    Native.setLastError(16); // EBUSY
-                }
-            }
-        }
-
-        return getScalarBoolean(allDeleted);
-    }
-
     public static RuntimeBase reverse(RuntimeBase value, int ctx) {
         if (ctx == RuntimeContextType.SCALAR) {
             StringBuilder sb = new StringBuilder();
