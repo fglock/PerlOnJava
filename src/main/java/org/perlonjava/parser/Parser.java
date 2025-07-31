@@ -28,6 +28,8 @@ public class Parser {
     // Flags to indicate special parsing states.
     public boolean parsingForLoopVariable = false;
     public boolean parsingTakeReference = false;
+    // Are we parsing the top level script?
+    public boolean isTopLevelScript = false;
 
     /**
      * Constructs a Parser with the given context and tokens.

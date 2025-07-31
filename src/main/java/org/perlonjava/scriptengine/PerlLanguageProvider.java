@@ -55,7 +55,7 @@ public class PerlLanguageProvider {
      * @return The result of the Perl code execution.
      */
     public static RuntimeList executePerlCode(ArgumentParser.CompilerOptions compilerOptions,
-                                              boolean isMainProgram) throws Exception {
+                                              boolean isTopLevelScript) throws Exception {
 
         ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
         // Enter a new scope in the symbol table and add special Perl variables
@@ -102,6 +102,7 @@ public class PerlLanguageProvider {
         // Create an instance of ErrorMessageUtil with the file name and token list
         ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
         Parser parser = new Parser(ctx, tokens); // Parse the tokens
+        parser.isTopLevelScript = isTopLevelScript;
         Node ast = parser.parse(); // Generate the abstract syntax tree (AST)
 
         // ast = ConstantFoldingVisitor.foldConstants(ast);
@@ -124,7 +125,7 @@ public class PerlLanguageProvider {
                 ast,
                 false   // no try-catch
         );
-        return executeGeneratedClass(generatedClass, ctx, isMainProgram);
+        return executeGeneratedClass(generatedClass, ctx, isTopLevelScript);
     }
 
     /**
