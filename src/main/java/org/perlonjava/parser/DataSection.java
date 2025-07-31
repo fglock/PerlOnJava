@@ -30,15 +30,15 @@ public class DataSection {
      * @param content the content after __DATA__ or __END__
      */
     public static void createDataHandle(Parser parser, String content) {
-        String packageName = parser.ctx.symbolTable.getCurrentPackage();
+        String handleName = parser.ctx.symbolTable.getCurrentPackage() + "::DATA";
 
         // Create a scalar to hold the content
         RuntimeScalar contentScalar = new RuntimeScalar(content);
 
-        parser.ctx.logDebug("Creating DATA handle for package: " + packageName + " with content: " + content);
+        parser.ctx.logDebug("Creating DATA handle for package: " + handleName + " with content: " + content);
 
         // Create a read-only file handle backed by the scalar
-        dataHandles.put(packageName, new RuntimeScalar(RuntimeIO.open(contentScalar, "<")));
+        dataHandles.put(handleName, new RuntimeScalar(RuntimeIO.open(contentScalar, "<")));
     }
 
     /**
@@ -48,8 +48,7 @@ public class DataSection {
      * @return the RuntimeIO handle, or undef if no DATA section exists
      */
     public static RuntimeScalar getDataHandle(String packageName) {
-        RuntimeScalar dataHandle = dataHandles.get(packageName);
-        return dataHandle != null ? dataHandle : new RuntimeScalar();
+        return dataHandles.get(packageName);
     }
 
     /**
@@ -76,10 +75,8 @@ public class DataSection {
             return tokens.size();
         }
 
-        if (token.text.equals("__DATA__")) {
+        if (token.text.equals("__DATA__") || (token.text.equals("__END__") && parser.isTopLevelScript)) {
             processedParsers.add(parser);
-
-            // __DATA__ works in all scripts - just capture content after it
             tokenIndex++;
 
             // Skip any whitespace immediately after __DATA__
@@ -107,91 +104,6 @@ public class DataSection {
             }
 
             createDataHandle(parser, dataContent.toString());
-
-            // Return tokens.size() to indicate we've consumed everything
-            return tokens.size();
-
-        } else if (token.text.equals("__END__")) {
-            // __END__ - always scan for __DATA__, but only capture if top-level
-            tokenIndex++;
-
-            // Skip any whitespace immediately after __END__
-            while (tokenIndex < tokens.size() && tokens.get(tokenIndex).type == LexerTokenType.WHITESPACE) {
-                tokenIndex++;
-            }
-
-            // Skip the newline after __END__
-            if (tokenIndex < tokens.size() && tokens.get(tokenIndex).type == LexerTokenType.NEWLINE) {
-                tokenIndex++;
-            }
-
-            StringBuilder dataContent = new StringBuilder();
-            boolean shouldCapture = parser.isTopLevelScript;
-
-            // Scan for __DATA__ (always)
-            while (tokenIndex < tokens.size()) {
-                LexerToken currentToken = tokens.get(tokenIndex);
-
-                // Stop if we hit an end marker
-                if (isEndMarker(currentToken)) {
-                    // If we're in top-level and haven't found __DATA__, save what we have
-                    if (shouldCapture) {
-                        processedParsers.add(parser);
-                        createDataHandle(parser, dataContent.toString());
-                    }
-                    // Return tokens.size() to indicate we've consumed everything
-                    return tokens.size();
-                }
-
-                // Check if we found __DATA__
-                if (currentToken.type == LexerTokenType.IDENTIFIER &&
-                        currentToken.text.equals("__DATA__")) {
-                    processedParsers.add(parser);
-
-                    // Found __DATA__, process it
-                    tokenIndex++;
-
-                    // Skip whitespace after __DATA__
-                    while (tokenIndex < tokens.size() && tokens.get(tokenIndex).type == LexerTokenType.WHITESPACE) {
-                        tokenIndex++;
-                    }
-
-                    // Skip newline after __DATA__
-                    if (tokenIndex < tokens.size() && tokens.get(tokenIndex).type == LexerTokenType.NEWLINE) {
-                        tokenIndex++;
-                    }
-
-                    // Capture content after __DATA__ until end marker
-                    dataContent.setLength(0);
-                    while (tokenIndex < tokens.size()) {
-                        LexerToken dataToken = tokens.get(tokenIndex);
-
-                        // Stop if we hit an end marker
-                        if (isEndMarker(dataToken)) {
-                            break;
-                        }
-
-                        dataContent.append(dataToken.text);
-                        tokenIndex++;
-                    }
-
-                    createDataHandle(parser, dataContent.toString());
-                    // Return tokens.size() to indicate we've consumed everything
-                    return tokens.size();
-                }
-
-                // If we're in top-level, capture content
-                if (shouldCapture) {
-                    dataContent.append(currentToken.text);
-                }
-                tokenIndex++;
-            }
-
-            // Only set content if we were in top-level and didn't find __DATA__
-            if (shouldCapture) {
-                processedParsers.add(parser);
-                createDataHandle(parser, dataContent.toString());
-            }
         }
         // Return tokens.size() to indicate we've consumed everything
         return tokens.size();
