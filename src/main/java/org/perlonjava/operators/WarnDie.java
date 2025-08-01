@@ -22,6 +22,10 @@ public class WarnDie {
      * @return A RuntimeBase representing the result of the warning operation.
      */
     public static RuntimeBase warn(RuntimeBase message, RuntimeScalar where) {
+        return warn(message, where, null, 0);
+    }
+
+    public static RuntimeBase warn(RuntimeBase message, RuntimeScalar where, String filename, int lineNumber) {
         String out = message.toString();
         if (out.isEmpty()) {
             RuntimeScalar err = getGlobalVariable("main::@");
@@ -66,13 +70,17 @@ public class WarnDie {
      * in the global %SIG hash under the "__DIE__" key, it will be invoked with the
      * error message. Otherwise, a PerlCompilerException is thrown.
      *
-     * @param value   The error message to be issued.
-     * @param message Additional context or location information to append to the message.
+     * @param message   The error message to be issued.
+     * @param where     Additional context or location information to append to the message.
      * @return A RuntimeBase representing the result of the die operation.
      * @throws PerlCompilerException if no custom die handler is defined.
      */
-    public static RuntimeBase die(RuntimeBase value, RuntimeScalar message) {
-        String out = value.toString();
+    public static RuntimeBase die(RuntimeBase message, RuntimeScalar where) {
+        return die(message, where, null, 0);
+    }
+
+    public static RuntimeBase die(RuntimeBase message, RuntimeScalar where, String filename, int lineNumber) {
+        String out = message.toString();
         if (out.isEmpty()) {
             RuntimeScalar err = getGlobalVariable("main::@");
             if (!err.toString().isEmpty()) {
@@ -82,7 +90,7 @@ public class WarnDie {
             }
         }
         if (!out.endsWith("\n")) {
-            out += message.toString();
+            out += where.toString();
         }
 
         RuntimeScalar sig = getGlobalHash("main::SIG").get("__DIE__");
