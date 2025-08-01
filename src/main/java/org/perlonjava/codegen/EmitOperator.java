@@ -216,12 +216,19 @@ public class EmitOperator {
         // Handle:  die LIST
         //   static RuntimeBase die(RuntimeBase value, int ctx)
         emitterVisitor.ctx.logDebug("handleDieBuiltin " + node);
+        MethodVisitor mv = emitterVisitor.ctx.mv;
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
         // Push the formatted line number as a message.
         Node message = new StringNode(emitterVisitor.ctx.errorUtil.errorMessage(node.tokenIndex, ""), node.tokenIndex);
         message.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+
+        String fileName = emitterVisitor.ctx.errorUtil.getFileName();
+        mv.visitLdcInsn(fileName);
+        int lineNumber = emitterVisitor.ctx.errorUtil.getLineNumber(node.tokenIndex);
+        mv.visitLdcInsn(lineNumber);
+
         emitOperator(node, emitterVisitor);
     }
 

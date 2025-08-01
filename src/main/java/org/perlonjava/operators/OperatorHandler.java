@@ -137,8 +137,8 @@ public class OperatorHandler {
 
         put("caller", "caller", "org/perlonjava/runtime/RuntimeCode", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
         put("reset", "reset", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeList;I)Lorg/perlonjava/runtime/RuntimeList;");
-        put("warn", "warn", "org/perlonjava/operators/WarnDie", "(Lorg/perlonjava/runtime/RuntimeBase;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeBase;");
-        put("die", "die", "org/perlonjava/operators/WarnDie", "(Lorg/perlonjava/runtime/RuntimeBase;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeBase;");
+        put("warn", "warn", "org/perlonjava/operators/WarnDie", "(Lorg/perlonjava/runtime/RuntimeBase;Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeBase;");
+        put("die", "die", "org/perlonjava/operators/WarnDie", "(Lorg/perlonjava/runtime/RuntimeBase;Lorg/perlonjava/runtime/RuntimeScalar;Ljava/lang/String;I)Lorg/perlonjava/runtime/RuntimeBase;");
         put("exit", "exit", "org/perlonjava/operators/WarnDie", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("reverse", "reverse", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeBase;I)Lorg/perlonjava/runtime/RuntimeBase;");
         put("crypt", "crypt", "org/perlonjava/operators/Crypt", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
