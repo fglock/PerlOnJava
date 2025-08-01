@@ -2,6 +2,7 @@ package org.perlonjava.parser;
 
 import org.perlonjava.astnode.*;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.PerlCompilerException;
 
 import static org.perlonjava.parser.ListParser.consumeCommas;
@@ -299,6 +300,10 @@ public class PrototypeArgs {
             args.elements.add(typeglobRef);
         } else if (expr instanceof IdentifierNode idNode) {
             // Bareword - create a typeglob reference
+
+            // autovivify the bareword handle
+            GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, idNode.name));
+
             Node typeglobRef = FileHandle.parseBarewordHandle(parser, idNode.name);
             args.elements.add(typeglobRef == null ? expr : typeglobRef);
         } else {
