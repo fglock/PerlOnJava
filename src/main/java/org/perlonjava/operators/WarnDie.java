@@ -1,9 +1,12 @@
 package org.perlonjava.operators;
 
+import org.objectweb.asm.Opcodes;
+import org.perlonjava.codegen.EmitOperator;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 
 import static org.perlonjava.runtime.GlobalVariable.*;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 import static org.perlonjava.runtime.SpecialBlock.runEndBlocks;
 
 /**
@@ -12,6 +15,15 @@ import static org.perlonjava.runtime.SpecialBlock.runEndBlocks;
  * respectively. These operations can trigger custom signal handlers if defined.
  */
 public class WarnDie {
+
+    /**
+     *  Catches the exception in an eval-block
+     */
+    public static RuntimeScalar catchEval(Exception e) {
+        String message = ErrorMessageUtil.stringifyException(e);
+        getGlobalVariable("main::@").set(new RuntimeScalar(message));
+        return scalarUndef;
+    }
 
     /**
      * Issues a warning message. If a custom warning handler is defined in the
@@ -62,7 +74,6 @@ public class WarnDie {
         RuntimeIO stderrIO = getGlobalIO("main::STDERR").getRuntimeIO();
         stderrIO.write(out);
 
-        // System.err.print(out);
         return new RuntimeScalar();
     }
 
@@ -102,15 +113,13 @@ public class WarnDie {
 
         RuntimeScalar sig = getGlobalHash("main::SIG").get("__DIE__");
         if (sig.getDefinedBoolean()) {
-            RuntimeArray args = new RuntimeScalar(errVariable).getArrayOfAlias();
-            return RuntimeCode.apply(sig, args, RuntimeContextType.SCALAR);
+            return RuntimeCode.apply(sig, errVariable.getArrayOfAlias(), RuntimeContextType.SCALAR);
         }
 
         throw new PerlCompilerException(errVariable.toString());
     }
 
     private static RuntimeBase dieEmptyMessage(RuntimeScalar oldErr, String fileName, int lineNumber) {
-        String out;
         if (oldErr.getDefinedBoolean() && !oldErr.toString().isEmpty()) {
             // Check if $@ contains an object reference with a PROPAGATE method
             if (oldErr.isReference()) {
@@ -139,13 +148,12 @@ public class WarnDie {
                 }
             } else {
                 // $@ is not an object reference, append ...propagated
-                out = oldErr + "\t...propagated";
+                return new RuntimeScalar(oldErr + "\t...propagated");
             }
         } else {
             // $@ is empty, use "Died"
-            out = "Died";
+            return new RuntimeScalar("Died");
         }
-        return new RuntimeScalar(out);
     }
 
     /**
@@ -161,7 +169,7 @@ public class WarnDie {
         } catch (Throwable t) {
             RuntimeIO.closeAllHandles();
             String errorMessage = ErrorMessageUtil.stringifyException(t);
-            System.out.println(errorMessage);
+            System.err.println(errorMessage);
             System.exit(1);
         }
         System.exit(runtimeScalar.getInt());

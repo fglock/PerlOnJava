@@ -232,27 +232,11 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitLabel(catchBlock);
 
                 // The exception object is on the stack
-                // Example: print the stack trace of the caught exception
-                //   mv.visitMethodInsn(
-                //      Opcodes.INVOKEVIRTUAL, "java/lang/Exception", "printStackTrace", "()V", false);
-
-                // Convert the exception to a string
+                // Catch the exception
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/ErrorMessageUtil",
-                        "stringifyException",
-                        "(Ljava/lang/Exception;)Ljava/lang/String;", false);
-
-                // Set the global error variable "$@" using GlobalVariable.setGlobalVariable(key, value)
-                mv.visitLdcInsn("main::@");
-                mv.visitInsn(Opcodes.SWAP);
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/GlobalVariable",
-                        "setGlobalVariable",
-                        "(Ljava/lang/String;Ljava/lang/String;)V", false);
-
-                // Restore the stack state to match the end of the try block if needed
-                // Return "undef"
-                EmitOperator.emitUndef(mv);
+                        "org/perlonjava/operators/WarnDie",
+                        "catchEval",
+                        "(Ljava/lang/Exception;)Lorg/perlonjava/runtime/RuntimeScalar;", false);
 
                 // End of the catch block
                 mv.visitLabel(endCatch);
