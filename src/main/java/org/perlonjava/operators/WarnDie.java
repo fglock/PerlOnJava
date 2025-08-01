@@ -81,35 +81,42 @@ public class WarnDie {
     }
 
     public static RuntimeBase die(RuntimeBase message, RuntimeScalar where, String fileName, int lineNumber) {
-        String out = message.toString();
-        if (out.isEmpty()) {
-            out = dieEmptyMessage(fileName, lineNumber);
-        }
-        if (!out.endsWith("\n")) {
-            out += where.toString();
+        var errVariable = getGlobalVariable("main::@");
+        var oldErr = new RuntimeScalar(errVariable);
+
+        if (!message.getFirst().isReference()) {
+            // Error message
+            String out = message.toString();
+            if (out.isEmpty()) {
+                out = dieEmptyMessage(oldErr, fileName, lineNumber);
+            }
+            if (!out.endsWith("\n")) {
+                out += where.toString();
+            }
+            errVariable.set(out);
+        } else {
+            // Error object
+            errVariable.set(message.getFirst());
         }
 
         RuntimeScalar sig = getGlobalHash("main::SIG").get("__DIE__");
         if (sig.getDefinedBoolean()) {
-            RuntimeArray args = new RuntimeScalar(out).getArrayOfAlias();
+            RuntimeArray args = new RuntimeScalar(errVariable).getArrayOfAlias();
             return RuntimeCode.apply(sig, args, RuntimeContextType.SCALAR);
         }
 
-        throw new PerlCompilerException(out);
+        throw new PerlCompilerException(errVariable.toString());
     }
 
-    private static String dieEmptyMessage(String fileName, int lineNumber) {
+    private static String dieEmptyMessage(RuntimeScalar oldErr, String fileName, int lineNumber) {
         String out;
-        RuntimeScalar err = getGlobalVariable("main::@");
-        if (err.getDefinedBoolean() && !err.toString().isEmpty()) {
+        if (oldErr.getDefinedBoolean() && !oldErr.toString().isEmpty()) {
             // Check if $@ contains an object reference with a PROPAGATE method
-            if (err.type == RuntimeScalarType.REFERENCE ||
-                    err.type == RuntimeScalarType.ARRAYREFERENCE ||
-                    err.type == RuntimeScalarType.HASHREFERENCE) {
+            if (oldErr.isReference()) {
 
                 // Use Universal.can to check if the object has a PROPAGATE method
                 RuntimeArray canArgs = new RuntimeArray();
-                RuntimeArray.push(canArgs, err);
+                RuntimeArray.push(canArgs, oldErr);
                 RuntimeArray.push(canArgs, new RuntimeScalar("PROPAGATE"));
                 RuntimeList canResult = Universal.can(canArgs, RuntimeContextType.SCALAR);
 
@@ -117,7 +124,7 @@ public class WarnDie {
                     // The object has a PROPAGATE method, call it with file and line info
                     RuntimeScalar propagateMethod = canResult.getFirst();
                     RuntimeArray propagateArgs = new RuntimeArray();
-                    RuntimeArray.push(propagateArgs, err); // self
+                    RuntimeArray.push(propagateArgs, oldErr); // self
                     RuntimeArray.push(propagateArgs, new RuntimeScalar(fileName)); // __FILE__
                     RuntimeArray.push(propagateArgs, new RuntimeScalar(lineNumber)); // __LINE__
 
@@ -128,15 +135,15 @@ public class WarnDie {
                         out = newErr.toString();
                     } catch (Exception e) {
                         // If PROPAGATE fails, fall back to appending ...propagated
-                        out = err + "\t...propagated";
+                        out = oldErr + "\t...propagated";
                     }
                 } else {
                     // No PROPAGATE method, append ...propagated
-                    out = err + "\t...propagated";
+                    out = oldErr + "\t...propagated";
                 }
             } else {
                 // $@ is not an object reference, append ...propagated
-                out = err + "\t...propagated";
+                out = oldErr + "\t...propagated";
             }
         } else {
             // $@ is empty, use "Died"

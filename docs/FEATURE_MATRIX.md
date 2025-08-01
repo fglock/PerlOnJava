@@ -319,6 +319,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Special literals**: `__PACKAGE__`, `__FILE__`, `__LINE__`
 - ✅  **`die`, `warn` operators**: `die`, `warn` are supported.
 - ✅  **`die` related features**: `$SIG{__DIE__}`, `$SIG{__WARN__}`
+- ✅  **`die` with object**: `PROPAGATE` method is supported.
 - ✅  **`exit`**: `exit` is supported.
 - ✅  **`kill`**: `kill` is supported.
 - ✅  **`waitpid`**: `waitpid` is partially supported.
@@ -326,7 +327,6 @@ my @copy = @{$z};         # ERROR
 - ✅  **`umask`**: `umask` is supported.
 - ✅  **`chown`**: `chown` is supported.
 - ✅  **`readlink`**: `readlink` is supported.
-- ❌  **`PROPAGATE`**: `PROPAGATE` method is not yet supported.
 - ✅  **`require` operator**: The `require` operator implemented; version checks are implemented.
 - ✅  **`use` and `no` statements**: Module imports and version check via `use` and `no` are implemented; version checks are implemented. `use` arguments are executed at compile-time.
 - ✅  **`use version`**: `use version` enables the corresponding features, strictures, and warnings.
