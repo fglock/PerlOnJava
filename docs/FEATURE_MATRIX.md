@@ -514,47 +514,49 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 
 ### Core modules
 
-- ✅  **UNIVERSAL**: `isa`, `can`, `DOES`, `VERSION` are implemented. `isa` operator is implemented.
+- ✅  **Benchmark** use the same version as Perl.
+- ✅  **Carp**: `carp`, `cluck`, `croak`, `confess`, `longmess`, `shortmess` are implemented.
 - ✅  **Config** module.
+- ✅  **Cwd** module
 - ✅  **Data::Dumper**: use the same version as Perl.
 - ✅  **Encode** module.
+- ✅  **Env** module
 - ✅  **Errno** module.
 - ✅  **Exporter**: `@EXPORT_OK`, `@EXPORT`, `%EXPORT_TAGS` are implemented.
-- ✅  **Scalar::Util**: `blessed`, `reftype`, `set_prototype`, `dualvar` are implemented.
-- ✅  **Internals**: `Internals::SvREADONLY` is implemented as a no-op.
-- ✅  **Carp**: `carp`, `cluck`, `croak`, `confess`, `longmess`, `shortmess` are implemented.
-- ✅  **Cwd** module
-- ✅  **Env** module
 - ✅  **Fcntl** module
 - ✅  **File::Basename** use the same version as Perl.
 - ✅  **File::Find** use the same version as Perl.
-- ✅  **File::Spec** module.
 - ✅  **File::Spec::Functions** module.
+- ✅  **File::Spec** module.
 - ✅  **Getopt::Long** module.
-- ✅  **Symbol**: `qualify` and `qualify_to_ref` are implemented.
-- ✅  **Perl::OSType** module.
-- ✅  **Term::ANSIColor** module.
-- ✅  **Time::Local** module.
-- ✅  **Time::HiRes** module.
 - ✅  **HTTP::Date** module.
-- ✅  **URI::Escape** module.
+- ✅  **Internals**: `Internals::SvREADONLY` is implemented as a no-op.
+- ✅  **MIME::Base64** module
+- ✅  **MIME::QuotedPrint** module
+- ✅  **Perl::OSType** module.
+- ✅  **Scalar::Util**: `blessed`, `reftype`, `set_prototype`, `dualvar` are implemented.
+- ✅  **Symbol**: `qualify` and `qualify_to_ref` are implemented.
+- ✅  **Term::ANSIColor** module.
 - ✅  **Test** module.
 - ✅  **Text::Balanced** use the same version as Perl.
-- ✅  **Tie::Scalar** module.
 - ✅  **Tie::Array** module.
-- ✅  **Tie::Hash** module.
 - ✅  **Tie::Handle** module.
-- ✅  **Benchmark** use the same version as Perl.
+- ✅  **Tie::Hash** module.
+- ✅  **Tie::Scalar** module.
+- ✅  **Time::HiRes** module.
+- ✅  **Time::Local** module.
+- ✅  **UNIVERSAL**: `isa`, `can`, `DOES`, `VERSION` are implemented. `isa` operator is implemented.
+- ✅  **URI::Escape** module.
 - ✅  **XSLoader** module.
-- 🚧  **Test::More** some features missing: `skip`, `BAIL_OUT`.
-- 🚧  **HTTP::Tiny** some features untested: proxy settings.
 - 🚧  **DynaLoader** placeholder module.
+- 🚧  **HTTP::Tiny** some features untested: proxy settings.
+- 🚧  **Test::More** some features missing: `skip`, `BAIL_OUT`.
 - 🚧  **Unicode::Normalize** `normalize`, `NFC`, `NFD`, `NFKC`, `NFKD`.
-- ❌  **IO::Socket** module, and related modules or asynchronous I/O operations.
-- ❌  **Safe** module.
 - ❌  **Digest::MD5** module.
 - ❌  **Digest::SHA** module.
+- ❌  **IO::Socket** module, and related modules or asynchronous I/O operations.
 - ❌  **POSIX** module.
+- ❌  **Safe** module.
 
 ### Non-core modules
 - ✅  **HTTP::CookieJar** module.
