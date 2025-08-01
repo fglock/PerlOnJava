@@ -84,12 +84,13 @@ public class WarnDie {
         var errVariable = getGlobalVariable("main::@");
         var oldErr = new RuntimeScalar(errVariable);
 
+        if (message.toString().isEmpty()) {
+            // Empty message
+            message = dieEmptyMessage(oldErr, fileName, lineNumber);
+        }
         if (!message.getFirst().isReference()) {
             // Error message
             String out = message.toString();
-            if (out.isEmpty()) {
-                out = dieEmptyMessage(oldErr, fileName, lineNumber);
-            }
             if (!out.endsWith("\n")) {
                 out += where.toString();
             }
@@ -108,7 +109,7 @@ public class WarnDie {
         throw new PerlCompilerException(errVariable.toString());
     }
 
-    private static String dieEmptyMessage(RuntimeScalar oldErr, String fileName, int lineNumber) {
+    private static RuntimeBase dieEmptyMessage(RuntimeScalar oldErr, String fileName, int lineNumber) {
         String out;
         if (oldErr.getDefinedBoolean() && !oldErr.toString().isEmpty()) {
             // Check if $@ contains an object reference with a PROPAGATE method
@@ -129,17 +130,12 @@ public class WarnDie {
                     RuntimeArray.push(propagateArgs, new RuntimeScalar(lineNumber)); // __LINE__
 
                     try {
-                        RuntimeScalar newErr = RuntimeCode.apply(propagateMethod, propagateArgs, RuntimeContextType.SCALAR).scalar();
-                        // Replace $@ with the return value
-                        getGlobalVariable("main::@").set(newErr);
-                        out = newErr.toString();
+                        return RuntimeCode.apply(propagateMethod, propagateArgs, RuntimeContextType.SCALAR).scalar();
                     } catch (Exception e) {
-                        // If PROPAGATE fails, fall back to appending ...propagated
-                        out = oldErr + "\t...propagated";
+                        return oldErr;
                     }
                 } else {
-                    // No PROPAGATE method, append ...propagated
-                    out = oldErr + "\t...propagated";
+                    return oldErr;
                 }
             } else {
                 // $@ is not an object reference, append ...propagated
@@ -149,7 +145,7 @@ public class WarnDie {
             // $@ is empty, use "Died"
             out = "Died";
         }
-        return out;
+        return new RuntimeScalar(out);
     }
 
     /**
