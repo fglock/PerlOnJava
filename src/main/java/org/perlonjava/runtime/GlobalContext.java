@@ -78,7 +78,7 @@ public class GlobalContext {
         GlobalVariable.getGlobalArray("main::+").elements = new ArraySpecialVariable(ArraySpecialVariable.Id.LAST_MATCH_END);  // regex @+
         GlobalVariable.getGlobalArray("main::-").elements = new ArraySpecialVariable(ArraySpecialVariable.Id.LAST_MATCH_START);  // regex @-
         GlobalVariable.getGlobalArray("main::'");  // @'
-        
+
         // Initialize hashes
         GlobalVariable.getGlobalHash("main::SIG");
         GlobalVariable.getGlobalHash("main::+").elements = new HashSpecialVariable(HashSpecialVariable.Id.CAPTURE);  // regex %+

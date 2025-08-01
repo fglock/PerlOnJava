@@ -327,6 +327,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return (type & REFERENCE_BIT) != 0 ? ((RuntimeBase) value).blessId : 0;
     }
 
+    public boolean isReference() {
+        return (type & REFERENCE_BIT) != 0;
+    }
+
     // Get the Scalar alias into an Array
     public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
         arr.elements.add(this);
