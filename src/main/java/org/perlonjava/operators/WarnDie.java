@@ -1,5 +1,6 @@
 package org.perlonjava.operators;
 
+import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 
 import static org.perlonjava.runtime.GlobalVariable.*;
@@ -25,7 +26,7 @@ public class WarnDie {
         return warn(message, where, null, 0);
     }
 
-    public static RuntimeBase warn(RuntimeBase message, RuntimeScalar where, String filename, int lineNumber) {
+    public static RuntimeBase warn(RuntimeBase message, RuntimeScalar where, String fileName, int lineNumber) {
         String out = message.toString();
         if (out.isEmpty()) {
             RuntimeScalar err = getGlobalVariable("main::@");
@@ -79,15 +80,10 @@ public class WarnDie {
         return die(message, where, null, 0);
     }
 
-    public static RuntimeBase die(RuntimeBase message, RuntimeScalar where, String filename, int lineNumber) {
+    public static RuntimeBase die(RuntimeBase message, RuntimeScalar where, String fileName, int lineNumber) {
         String out = message.toString();
         if (out.isEmpty()) {
-            RuntimeScalar err = getGlobalVariable("main::@");
-            if (!err.toString().isEmpty()) {
-                out = err + "\t...propagated";
-            } else {
-                out = "Died";
-            }
+            out = dieEmptyMessage(fileName, lineNumber);
         }
         if (!out.endsWith("\n")) {
             out += where.toString();
@@ -100,6 +96,53 @@ public class WarnDie {
         }
 
         throw new PerlCompilerException(out);
+    }
+
+    private static String dieEmptyMessage(String fileName, int lineNumber) {
+        String out;
+        RuntimeScalar err = getGlobalVariable("main::@");
+        if (err.getDefinedBoolean() && !err.toString().isEmpty()) {
+            // Check if $@ contains an object reference with a PROPAGATE method
+            if (err.type == RuntimeScalarType.REFERENCE ||
+                    err.type == RuntimeScalarType.ARRAYREFERENCE ||
+                    err.type == RuntimeScalarType.HASHREFERENCE) {
+
+                // Use Universal.can to check if the object has a PROPAGATE method
+                RuntimeArray canArgs = new RuntimeArray();
+                RuntimeArray.push(canArgs, err);
+                RuntimeArray.push(canArgs, new RuntimeScalar("PROPAGATE"));
+                RuntimeList canResult = Universal.can(canArgs, RuntimeContextType.SCALAR);
+
+                if (canResult.size() == 1 && canResult.getFirst().getBoolean()) {
+                    // The object has a PROPAGATE method, call it with file and line info
+                    RuntimeScalar propagateMethod = canResult.getFirst();
+                    RuntimeArray propagateArgs = new RuntimeArray();
+                    RuntimeArray.push(propagateArgs, err); // self
+                    RuntimeArray.push(propagateArgs, new RuntimeScalar(fileName)); // __FILE__
+                    RuntimeArray.push(propagateArgs, new RuntimeScalar(lineNumber)); // __LINE__
+
+                    try {
+                        RuntimeScalar newErr = RuntimeCode.apply(propagateMethod, propagateArgs, RuntimeContextType.SCALAR).scalar();
+                        // Replace $@ with the return value
+                        getGlobalVariable("main::@").set(newErr);
+                        out = newErr.toString();
+                    } catch (Exception e) {
+                        // If PROPAGATE fails, fall back to appending ...propagated
+                        out = err + "\t...propagated";
+                    }
+                } else {
+                    // No PROPAGATE method, append ...propagated
+                    out = err + "\t...propagated";
+                }
+            } else {
+                // $@ is not an object reference, append ...propagated
+                out = err + "\t...propagated";
+            }
+        } else {
+            // $@ is empty, use "Died"
+            out = "Died";
+        }
+        return out;
     }
 
     /**
