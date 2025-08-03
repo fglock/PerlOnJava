@@ -104,6 +104,10 @@ public class Unpack {
                     case 'V':
                         values.add(new RuntimeScalar(readIntLittleEndian(buffer) & 0xFFFFFFFFL));
                         break;
+                    case 'W':
+                        // Read UTF-8 encoded Unicode character
+                        values.add(new RuntimeScalar(readUTF8Character(buffer)));
+                        break;
                     case 'n':
                         values.add(new RuntimeScalar(readShortBigEndian(buffer)));
                         break;
@@ -262,5 +266,53 @@ public class Unpack {
         }
 
         return bitString.toString();
+    }
+
+    /**
+     * Reads a single UTF-8 encoded character from the buffer.
+     */
+    private static long readUTF8Character(ByteBuffer buffer) {
+        if (!buffer.hasRemaining()) {
+            throw new PerlCompilerException("unpack: no data for UTF-8 character");
+        }
+
+        int firstByte = buffer.get() & 0xFF;
+
+        // Determine how many bytes this UTF-8 character uses
+        int bytesNeeded;
+        int codePoint;
+
+        if ((firstByte & 0x80) == 0) {
+            // 1 byte: 0xxxxxxx
+            return firstByte;
+        } else if ((firstByte & 0xE0) == 0xC0) {
+            // 2 bytes: 110xxxxx 10xxxxxx
+            bytesNeeded = 1;
+            codePoint = firstByte & 0x1F;
+        } else if ((firstByte & 0xF0) == 0xE0) {
+            // 3 bytes: 1110xxxx 10xxxxxx 10xxxxxx
+            bytesNeeded = 2;
+            codePoint = firstByte & 0x0F;
+        } else if ((firstByte & 0xF8) == 0xF0) {
+            // 4 bytes: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+            bytesNeeded = 3;
+            codePoint = firstByte & 0x07;
+        } else {
+            throw new PerlCompilerException("unpack: invalid UTF-8 sequence");
+        }
+
+        // Read continuation bytes
+        for (int i = 0; i < bytesNeeded; i++) {
+            if (!buffer.hasRemaining()) {
+                throw new PerlCompilerException("unpack: incomplete UTF-8 sequence");
+            }
+            int nextByte = buffer.get() & 0xFF;
+            if ((nextByte & 0xC0) != 0x80) {
+                throw new PerlCompilerException("unpack: invalid UTF-8 continuation byte");
+            }
+            codePoint = (codePoint << 6) | (nextByte & 0x3F);
+        }
+
+        return codePoint;
     }
 }

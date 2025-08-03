@@ -3,6 +3,7 @@ package org.perlonjava.operators;
 import org.perlonjava.runtime.*;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
@@ -117,18 +118,42 @@ public class Pack {
                         case 'V':
                             writeIntLittleEndian(output, (long) value.getDouble());
                             break;
-                        case 'U':
-                            // Pack a Unicode character number
+                        case 'W':
+                            // Pack a Unicode code point as UTF-8 bytes
                             int codePoint;
                             String strValue = value.toString();
-                            if (strValue.length() > 0 && !Character.isDigit(strValue.charAt(0))) {
+                            if (!strValue.isEmpty() && !Character.isDigit(strValue.charAt(0))) {
                                 // If it's a character, get its code point
                                 codePoint = strValue.codePointAt(0);
                             } else {
-                                // If it's a number, use it directly
+                                // If it's a number, use it directly as code point
                                 codePoint = value.getInt();
                             }
-                            writeInt(output, codePoint);
+
+                            if (Character.isValidCodePoint(codePoint)) {
+                                String unicodeChar = new String(Character.toChars(codePoint));
+                                byte[] utf8Bytes = unicodeChar.getBytes(StandardCharsets.UTF_8);
+                                try {
+                                    output.write(utf8Bytes);
+                                } catch (IOException e) {
+                                    throw new RuntimeException(e);
+                                }
+                            } else {
+                                throw new PerlCompilerException("pack: invalid Unicode code point: " + codePoint);
+                            }
+                            break;
+                        case 'U':
+                            // Pack a Unicode character number
+                            int codePoint1;
+                            String strValue1 = value.toString();
+                            if (!strValue1.isEmpty() && !Character.isDigit(strValue1.charAt(0))) {
+                                // If it's a character, get its code point
+                                codePoint1 = strValue1.codePointAt(0);
+                            } else {
+                                // If it's a number, use it directly
+                                codePoint1 = value.getInt();
+                            }
+                            writeInt(output, codePoint1);
                             break;
                         case 'n':
                             writeShortBigEndian(output, value.getInt());
