@@ -7,6 +7,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 
+import static org.perlonjava.parser.StringParser.assertNoWideCharacters;
+
 /**
  * Provides functionality to perform cryptographic hashing on strings
  * using a salt, similar to Perl's crypt function.
@@ -33,6 +35,8 @@ public class Crypt {
 
         String plaintext = plaintextScalar.toString();
         String salt = saltScalar.toString();
+
+        assertNoWideCharacters(plaintext, "crypt");
 
         // Ensure salt is at least 2 characters long
         if (salt.length() < 2) {
