@@ -6,6 +6,7 @@ import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.codegen.JavaClassInfo;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 import org.perlonjava.symbols.SymbolTable;
 
@@ -18,6 +19,7 @@ import java.util.function.Supplier;
 
 import static org.perlonjava.parser.PrototypeArgs.consumeArgsWithPrototype;
 import static org.perlonjava.parser.SignatureParser.parseSignature;
+import static org.perlonjava.parser.TokenUtils.peek;
 
 public class SubroutineParser {
 
@@ -39,6 +41,37 @@ public class SubroutineParser {
         parser.ctx.logDebug("SubroutineCall subName `" + subName + "` package " + parser.ctx.symbolTable.getCurrentPackage());
         if (subName == null) {
             throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+        }
+
+        // If the subroutine name is not fully qualified and a package name follows, then it looks like a indirect method
+        if (!subName.contains("::")) {
+            var nextToken = peek(parser);
+            if (nextToken.type == LexerTokenType.IDENTIFIER) {
+                int currentToken = parser.tokenIndex;
+                String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
+                // System.out.println("maybe indirect object: " + packageName + "->" + subName);
+
+                // Use Universal.can to check if the package has the method
+                RuntimeArray canArgs = new RuntimeArray();
+                RuntimeArray.push(canArgs, new RuntimeScalar(packageName));
+                RuntimeArray.push(canArgs, new RuntimeScalar(subName));
+                RuntimeList canResult = Universal.can(canArgs, RuntimeContextType.SCALAR);
+                if (canResult.size() == 1 && canResult.getFirst().getBoolean()) {
+                    // System.out.println("  can: " + packageName + "->" + subName);
+                    ListNode arguments = consumeArgsWithPrototype(parser, "@");
+                    return new BinaryOperatorNode(
+                            "->",
+                            new IdentifierNode(packageName, currentToken),
+                            new BinaryOperatorNode("(",
+                                new OperatorNode("&",
+                                        new IdentifierNode(subName, currentToken),
+                                        currentIndex),
+                                arguments, currentToken),
+                            currentToken);
+                }
+                // backtrack
+                parser.tokenIndex = currentToken;
+            }
         }
 
         // Normalize the subroutine name to include the current package
@@ -71,7 +104,7 @@ public class SubroutineParser {
         }
 
         // Check if the subroutine call has parentheses
-        boolean hasParentheses = TokenUtils.peek(parser).text.equals("(");
+        boolean hasParentheses = peek(parser).text.equals("(");
         if (!subExists && !hasParentheses) {
             return parseIndirectMethodCall(parser, nameNode);
         }
@@ -85,7 +118,7 @@ public class SubroutineParser {
 
             // Handle the parameter list for the subroutine call
             ListNode arguments;
-            if (TokenUtils.peek(parser).text.equals("->")) {
+            if (peek(parser).text.equals("->")) {
                 // method call without parentheses
                 arguments = new ListNode(parser.tokenIndex);
             } else {
@@ -125,7 +158,7 @@ public class SubroutineParser {
                     Can't locate object method "rmtree" via package "File::Path" (perhaps you forgot to load "File::Path"?)
              */
 
-        if (TokenUtils.peek(parser).text.equals("$")) {
+        if (peek(parser).text.equals("$")) {
             // System.out.println("maybe indirect object call");
             ListNode arguments = consumeArgsWithPrototype(parser, "$");
             int index = parser.tokenIndex;
@@ -153,7 +186,7 @@ public class SubroutineParser {
         String subName = null;
 
         // If the 'wantName' flag is true and the next token is an identifier, we parse the subroutine name.
-        if (wantName && TokenUtils.peek(parser).type == LexerTokenType.IDENTIFIER) {
+        if (wantName && peek(parser).type == LexerTokenType.IDENTIFIER) {
             // 'parseSubroutineIdentifier' is called to handle cases where the subroutine name might be complex
             // (e.g., namespaced, fully qualified names). It may return null if no valid name is found.
             subName = IdentifierParser.parseSubroutineIdentifier(parser);
@@ -166,7 +199,7 @@ public class SubroutineParser {
         List<String> attributes = new ArrayList<>();
 
         // While there are attributes (denoted by a colon ':'), we keep parsing them.
-        while (TokenUtils.peek(parser).text.equals(":")) {
+        while (peek(parser).text.equals(":")) {
             // Consume the colon operator.
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, ":");
 
@@ -189,13 +222,13 @@ public class SubroutineParser {
         ListNode signature = null;
 
         // Check if the next token is an opening parenthesis '(' indicating a prototype.
-        if (TokenUtils.peek(parser).text.equals("(")) {
+        if (peek(parser).text.equals("(")) {
             if (parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures")) {
                 parser.ctx.logDebug("Signatures feature enabled");
                 // If the signatures feature is enabled, we parse a signature.
                 signature = parseSignature(parser);
                 parser.ctx.logDebug("Signature AST: " + signature);
-                parser.ctx.logDebug("next token " + TokenUtils.peek(parser));
+                parser.ctx.logDebug("next token " + peek(parser));
             } else {
                 // If the signatures feature is not enabled, we just parse the prototype as a string.
                 // If a prototype exists, we parse it using 'parseRawString' method which handles it like the 'q()' operator.
@@ -204,7 +237,7 @@ public class SubroutineParser {
             }
         }
 
-        if (wantName && !TokenUtils.peek(parser).text.equals("{")) {
+        if (wantName && !peek(parser).text.equals("{")) {
             // A named subroutine can be predeclared without a block of code.
             String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
             RuntimeCode codeRef = (RuntimeCode) GlobalVariable.getGlobalCodeRef(fullName).value;
@@ -356,7 +389,7 @@ public class SubroutineParser {
     private static SubroutineNode handleAnonSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, int currentIndex) {
         // Now we check if the next token is one of the illegal characters that cannot follow a subroutine.
         // These are '(', '{', and '['. If any of these follow, we throw a syntax error.
-        LexerToken token = TokenUtils.peek(parser);
+        LexerToken token = peek(parser);
         if (token.text.equals("(") || token.text.equals("{") || token.text.equals("[")) {
             // Throw an exception indicating a syntax error.
             throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
