@@ -124,7 +124,7 @@ sub can_ok ($@) {
 sub isa_ok ($$;$) {
     my ($object, $class, $name) = @_;
     $name ||= "The object";
-    my $test = defined $object && $object->isa($class);
+    my $test = UNIVERSAL::isa($object, $class);
     ok($test, "$name isa $class");
     return $test;
 }
