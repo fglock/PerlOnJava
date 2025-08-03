@@ -20,8 +20,18 @@ public class WarnDie {
      *  Catches the exception in an eval-block
      */
     public static RuntimeScalar catchEval(Exception e) {
-        String message = ErrorMessageUtil.stringifyException(e);
-        getGlobalVariable("main::@").set(new RuntimeScalar(message));
+        if (e instanceof PerlCompilerException && getGlobalVariable("main::@").getBoolean()) {
+            // $@ is already set
+
+//            System.out.println("catchEval :" + e);
+//            System.out.println("          :" + getGlobalVariable("main::@"));
+            return scalarUndef;
+        }
+
+        // System.out.println("catchEval : not PerlCompilerException: " + e);
+        // e.printStackTrace();
+
+        getGlobalVariable("main::@").set(new RuntimeScalar(ErrorMessageUtil.stringifyException(e)));
         return scalarUndef;
     }
 
@@ -111,9 +121,11 @@ public class WarnDie {
             errVariable.set(message.getFirst());
         }
 
+        // System.out.println("die :" + errVariable);
+
         RuntimeScalar sig = getGlobalHash("main::SIG").get("__DIE__");
         if (sig.getDefinedBoolean()) {
-            return RuntimeCode.apply(sig, errVariable.getArrayOfAlias(), RuntimeContextType.SCALAR);
+            return RuntimeCode.apply(sig, message.getArrayOfAlias(), RuntimeContextType.SCALAR);
         }
 
         throw new PerlCompilerException(errVariable.toString());
