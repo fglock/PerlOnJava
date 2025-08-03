@@ -106,8 +106,9 @@ public class IdentifierParser {
                 }
                 if (token.text.equals("$") && (nextToken.text.equals("$")
                         || nextToken.type == LexerTokenType.IDENTIFIER
-                        || nextToken.type == LexerTokenType.NUMBER)) {
-                    // `@$` can't be followed by `$` or name or number
+                        || nextToken.type == LexerTokenType.NUMBER)
+                        || nextToken.text.equals("::")) {
+                    // `@$` can't be followed by `$`, `::`, name or number
                     return null;
                 }
                 if (token.text.equals("^") && nextToken.type == LexerTokenType.IDENTIFIER && Character.isUpperCase(nextToken.text.charAt(0))) {
