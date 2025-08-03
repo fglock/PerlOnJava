@@ -1,9 +1,6 @@
 package org.perlonjava.operators;
 
-import org.perlonjava.runtime.RuntimeArray;
-import org.perlonjava.runtime.RuntimeBase;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.*;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -24,7 +21,7 @@ public class Pack {
      */
     public static RuntimeScalar pack(RuntimeList args) {
         if (args.isEmpty()) {
-            throw new RuntimeException("pack: not enough arguments");
+            throw new PerlCompilerException("pack: not enough arguments");
         }
 
         RuntimeScalar templateScalar = args.getFirst();
@@ -68,7 +65,7 @@ public class Pack {
 
             if (format == 'b' || format == 'B') {
                 if (valueIndex >= values.size()) {
-                    throw new RuntimeException("pack: not enough arguments");
+                    throw new PerlCompilerException("pack: not enough arguments");
                 }
                 RuntimeScalar value = (RuntimeScalar) values.get(valueIndex++);
                 String bitString = value.toString();
@@ -79,7 +76,7 @@ public class Pack {
             } else if (format == 'a' || format == 'A' || format == 'Z') {
                 // String formats consume only one value
                 if (valueIndex >= values.size()) {
-                    throw new RuntimeException("pack: not enough arguments");
+                    throw new PerlCompilerException("pack: not enough arguments");
                 }
                 RuntimeScalar value = (RuntimeScalar) values.get(valueIndex++);
                 String str = value.toString();
@@ -96,7 +93,7 @@ public class Pack {
                 // Numeric formats
                 for (int j = 0; j < count; j++) {
                     if (valueIndex >= values.size()) {
-                        throw new RuntimeException("pack: not enough arguments");
+                        throw new PerlCompilerException("pack: not enough arguments");
                     }
 
                     RuntimeScalar value = (RuntimeScalar) values.get(valueIndex++);
@@ -146,7 +143,7 @@ public class Pack {
                             writeDouble(output, value.getDouble());
                             break;
                         default:
-                            throw new RuntimeException("pack: unsupported format character: " + format);
+                            throw new PerlCompilerException("pack: unsupported format character: " + format);
                     }
                 }
             }
