@@ -1,5 +1,6 @@
 package org.perlonjava.operators;
 
+import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeBase;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
@@ -24,7 +25,7 @@ public class Unpack {
      */
     public static RuntimeList unpack(RuntimeList args) {
         if (args.elements.size() < 2) {
-            throw new RuntimeException("unpack: not enough arguments");
+            throw new PerlCompilerException("unpack: not enough arguments");
         }
         RuntimeScalar templateScalar = (RuntimeScalar) args.elements.get(0);
         RuntimeScalar packedData = (RuntimeScalar) args.elements.get(1);
@@ -73,7 +74,7 @@ public class Unpack {
                     // For other formats, calculate how many items we can read
                     int formatSize = getFormatSize(format);
                     if (formatSize == 0) {
-                        throw new RuntimeException("unpack: unknown format size for: " + format);
+                        throw new PerlCompilerException("unpack: unknown format size for: " + format);
                     }
                     count = buffer.remaining() / formatSize;
                 }
@@ -84,7 +85,7 @@ public class Unpack {
                     if (isStarCount) {
                         break; // For star count, just stop when we run out of data
                     }
-                    throw new RuntimeException("unpack: not enough data");
+                    throw new PerlCompilerException("unpack: not enough data");
                 }
 
                 switch (format) {
@@ -139,7 +140,7 @@ public class Unpack {
                         j = count; // Exit the inner loop
                         break;
                     default:
-                        throw new RuntimeException("unpack: unsupported format character: " + format);
+                        throw new PerlCompilerException("unpack: unsupported format character: " + format);
                 }
             }
         }
