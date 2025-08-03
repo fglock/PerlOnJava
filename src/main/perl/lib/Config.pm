@@ -121,6 +121,7 @@ $os_name =~ s/\s+/_/g;
     d_alarm => 'undef', # No reliable alarm in Java
     d_chown => _check_chown_support(),
     d_chroot => 'undef',
+    d_crypt => 'define',
 
     # Signal handling
     sig_name => 'HUP INT QUIT ILL TRAP ABRT BUS FPE KILL USR1 SEGV USR2 PIPE ALRM TERM',
