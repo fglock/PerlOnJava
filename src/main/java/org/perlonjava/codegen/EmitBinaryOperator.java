@@ -2,7 +2,9 @@ package org.perlonjava.codegen;
 
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.BinaryOperatorNode;
+import org.perlonjava.astnode.IdentifierNode;
 import org.perlonjava.astnode.NumberNode;
+import org.perlonjava.astnode.StringNode;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.operators.OperatorHandler;
 import org.perlonjava.runtime.RuntimeContextType;
@@ -38,8 +40,15 @@ public class EmitBinaryOperator {
             }
         }
 
+        var right = node.right;
+
+        // Special case for `isa` - left side can be bareword
+        if (node.operator.equals("isa") && right instanceof IdentifierNode identifierNode) {
+            right = new StringNode(identifierNode.name, node.tokenIndex);
+        }
+
         node.left.accept(scalarVisitor); // left parameter
-        node.right.accept(scalarVisitor); // right parameter
+        right.accept(scalarVisitor); // right parameter
         // stack: [left, right]
         emitOperator(node, emitterVisitor);
     }

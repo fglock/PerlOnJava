@@ -102,6 +102,17 @@ public class ReferenceOperators {
      */
     public static RuntimeScalar isa(RuntimeScalar runtimeScalar, RuntimeScalar className) {
         RuntimeArray args = new RuntimeArray();
+
+        if (runtimeScalar.blessedId() != 0) {
+            RuntimeArray.push(args, className);
+            return RuntimeCode.call(
+                    runtimeScalar,
+                    new RuntimeScalar("isa"),
+                    null,
+                    args,
+                    RuntimeContextType.SCALAR).scalar();
+        }
+
         RuntimeArray.push(args, runtimeScalar);
         RuntimeArray.push(args, className);
         return Universal.isa(args, RuntimeContextType.SCALAR).scalar();
