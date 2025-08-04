@@ -4,7 +4,6 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
-import org.perlonjava.astvisitor.LValueVisitor;
 import org.perlonjava.astvisitor.ReturnTypeVisitor;
 import org.perlonjava.operators.OperatorHandler;
 import org.perlonjava.operators.ScalarGlobOperator;
@@ -419,45 +418,6 @@ public class EmitOperator {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
     }
 
-    // Handles the 'local' operator.
-    static void handleLocal(EmitterVisitor emitterVisitor, OperatorNode node) {
-        // emit the lvalue
-        int lvalueContext = LValueVisitor.getContext(node.operand);
-
-        if (node.operand instanceof ListNode listNode) {
-            for (Node child : listNode.elements) {
-                handleLocal(emitterVisitor.with(RuntimeContextType.VOID), new OperatorNode("local", child, node.tokenIndex));
-            }
-            node.operand.accept(emitterVisitor.with(lvalueContext));
-            handleVoidContext(emitterVisitor);
-            return;
-        }
-
-        node.operand.accept(emitterVisitor.with(lvalueContext));
-        boolean isTypeglob = node.operand instanceof OperatorNode operatorNode && operatorNode.operator.equals("*");
-        // save the old value
-        if (isTypeglob) {
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/DynamicVariableManager",
-                    "pushLocalVariable",
-                    "(Lorg/perlonjava/runtime/RuntimeGlob;)Lorg/perlonjava/runtime/RuntimeGlob;",
-                    false);
-        } else if (lvalueContext == RuntimeContextType.LIST) {
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/DynamicVariableManager",
-                    "pushLocalVariable",
-                    "(Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeBase;",
-                    false);
-        } else {
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/DynamicVariableManager",
-                    "pushLocalVariable",
-                    "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                    false);
-        }
-        handleVoidContext(emitterVisitor);
-    }
-
     static void handleVoidContext(EmitterVisitor emitterVisitor) {
         // If the context is VOID, pop the result from the stack.
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
@@ -494,109 +454,6 @@ public class EmitOperator {
             // For unknown types
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
         }
-    }
-
-    // Handles the 'delete' and 'exists' operators for hash elements.
-    static void handleDeleteExists(EmitterVisitor emitterVisitor, OperatorNode node) {
-        //   OperatorNode: delete
-        //    ListNode:
-        //      BinaryOperatorNode: {
-        //        OperatorNode: $
-        //          IdentifierNode: a
-        //        HashLiteralNode:
-        //          NumberNode: 10
-        String operator = node.operator;
-        if (node.operand instanceof ListNode operand) {
-            if (operand.elements.size() == 1) {
-                if (operand.elements.getFirst() instanceof OperatorNode operatorNode) {
-                    if (operator.equals("exists") && operatorNode.operator.equals("&")) {
-                        emitterVisitor.ctx.logDebug("exists & " + operatorNode.operand);
-                        if (operatorNode.operand instanceof IdentifierNode identifierNode) {
-                            // exists &sub
-                            handleExistsSubroutine(emitterVisitor, identifierNode);
-                            return;
-                        }
-                    }
-                } else {
-                    BinaryOperatorNode binop = (BinaryOperatorNode) operand.elements.getFirst();
-                    switch (binop.operator) {
-                        case "{" -> {
-                            // Handle hash element operator.
-                            Dereference.handleHashElementOperator(emitterVisitor, binop, operator);
-                            return;
-                        }
-                        case "[" -> {
-                            // Check if this is a compound expression like $hash->{key}[index]
-                            if (binop.left instanceof BinaryOperatorNode leftBinop && leftBinop.operator.equals("->")) {
-                                // Handle compound hash->array dereference for exists/delete
-                                // First evaluate the hash dereference to get the array
-                                leftBinop.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-
-                                // Now emit the index
-                                if (binop.right instanceof ArrayLiteralNode arrayLiteral &&
-                                        arrayLiteral.elements.size() == 1) {
-                                    arrayLiteral.elements.get(0).accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-                                } else {
-                                    throw new PerlCompilerException(node.tokenIndex,
-                                            "Invalid array index in " + operator + " operator",
-                                            emitterVisitor.ctx.errorUtil);
-                                }
-
-                                // Call the appropriate method
-                                if (operator.equals("exists")) {
-                                    emitterVisitor.ctx.mv.visitMethodInsn(
-                                            Opcodes.INVOKEVIRTUAL,
-                                            "org/perlonjava/runtime/RuntimeScalar",
-                                            "arrayDerefExists",
-                                            "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                                            false);
-                                } else if (operator.equals("delete")) {
-                                    emitterVisitor.ctx.mv.visitMethodInsn(
-                                            Opcodes.INVOKEVIRTUAL,
-                                            "org/perlonjava/runtime/RuntimeScalar",
-                                            "arrayDerefDelete",
-                                            "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                                            false);
-                                }
-                                return;
-                            }
-
-                            // Handle simple array element operator.
-                            Dereference.handleArrayElementOperator(emitterVisitor, binop, operator);
-                            return;
-                        }
-                        case "->" -> {
-                            if (binop.right instanceof HashLiteralNode) { // ->{x}
-                                // Handle arrow hash dereference
-                                Dereference.handleArrowHashDeref(emitterVisitor, binop, operator);
-                                return;
-                            }
-                            if (binop.right instanceof ArrayLiteralNode) { // ->[x]
-                                // Handle arrow array dereference
-                                Dereference.handleArrowArrayDeref(emitterVisitor, binop, operator);
-                                return;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        // Throw an exception if the operator is not implemented.
-        throw new PerlCompilerException(node.tokenIndex, "Not implemented: operator: " + operator, emitterVisitor.ctx.errorUtil);
-    }
-
-    private static void handleExistsSubroutine(EmitterVisitor emitterVisitor, IdentifierNode identifierNode) {
-        // exists &sub
-        String name = identifierNode.name;
-        String fullName = NameNormalizer.normalizeVariableName(name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
-        emitterVisitor.ctx.mv.visitLdcInsn(fullName); // emit string
-        emitterVisitor.ctx.mv.visitMethodInsn(
-                Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/GlobalVariable",
-                "existsGlobalCodeRefAsScalar",
-                "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                false);
-        handleVoidContext(emitterVisitor);
     }
 
     // Handles the 'package' operator, which sets the current package for the symbol table.
