@@ -2,7 +2,6 @@ package org.perlonjava.codegen;
 
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
-import org.perlonjava.runtime.PerlCompilerException;
 
 /**
  * Handles the bytecode emission for Perl operator nodes during compilation.
@@ -83,8 +82,8 @@ public class EmitOperatorNode {
             case "rindex", "index" -> EmitOperator.handleIndexBuiltin(emitterVisitor, node);
             case "atan2" -> EmitOperator.handleAtan2(emitterVisitor, node);
             case "scalar" -> EmitOperator.handleScalar(emitterVisitor, node);
-            case "delete", "exists" -> EmitOperator.handleDeleteExists(emitterVisitor, node);
-            case "local" -> EmitOperator.handleLocal(emitterVisitor, node);
+            case "delete", "exists" -> EmitOperatorDeleteExists.handleDeleteExists(emitterVisitor, node);
+            case "local" -> EmitOperatorLocal.handleLocal(emitterVisitor, node);
             case "\\" -> EmitOperator.handleCreateReference(emitterVisitor, node);
             case "$#" -> EmitOperator.handleArrayUnaryBuiltin(emitterVisitor,
                     new OperatorNode("$#", new OperatorNode("@", node.operand, node.tokenIndex), node.tokenIndex),
