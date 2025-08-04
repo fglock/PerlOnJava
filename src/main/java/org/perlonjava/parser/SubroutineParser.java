@@ -20,6 +20,7 @@ import java.util.function.Supplier;
 import static org.perlonjava.parser.PrototypeArgs.consumeArgsWithPrototype;
 import static org.perlonjava.parser.SignatureParser.parseSignature;
 import static org.perlonjava.parser.TokenUtils.peek;
+import static org.perlonjava.runtime.GlobalVariable.isPackageLoaded;
 
 public class SubroutineParser {
 
@@ -51,13 +52,8 @@ public class SubroutineParser {
                 String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
                 // System.out.println("maybe indirect object: " + packageName + "->" + subName);
 
-                // Use Universal.can to check if the package has the method
-                RuntimeArray canArgs = new RuntimeArray();
-                RuntimeArray.push(canArgs, new RuntimeScalar(packageName));
-                RuntimeArray.push(canArgs, new RuntimeScalar(subName));
-                RuntimeList canResult = Universal.can(canArgs, RuntimeContextType.SCALAR);
-                if (canResult.size() == 1 && canResult.getFirst().getBoolean()) {
-                    // System.out.println("  can: " + packageName + "->" + subName);
+                if (isPackageLoaded(packageName)) {
+                    // System.out.println("  package loaded: " + packageName + "->" + subName);
                     ListNode arguments = consumeArgsWithPrototype(parser, "@");
                     return new BinaryOperatorNode(
                             "->",
