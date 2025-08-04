@@ -56,6 +56,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Method object representing the compiled subroutine
     public MethodHandle methodHandle;
     public boolean isStatic;
+    public boolean isAutoload = false;
     // Code object instance used during execution
     public Object codeObject;
     // Prototype of the subroutine
@@ -320,6 +321,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         if (method != null) {
+            // System.out.println("call ->" + method + " " + currentPackage + " " + args + " AUTOLOAD: " + ((RuntimeCode) method.value).isAutoload);
+
             return apply(method, args, callContext);
         }
 

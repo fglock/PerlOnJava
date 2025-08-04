@@ -208,6 +208,25 @@ public class InheritanceResolver {
                 cacheMethod(cacheKey, codeRef);
                 return codeRef;
             }
+
+            // Method not found in current class, check AUTOLOAD
+            if (methodName.equals("((") || methodName.equals("()")) {
+                // refuse to AUTOLOAD tie() flags
+            } else {
+                // Check for AUTOLOAD in current class
+                String autoloadName = className + "::AUTOLOAD";
+                if (GlobalVariable.existsGlobalCodeRef(autoloadName)) {
+                    RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadName);
+                    if (autoload.getDefinedBoolean()) {
+                        // System.out.println("AUTOLOAD: " + autoloadName + " looking for " + methodName);
+
+                        // Don't cache AUTOLOAD methods as they need special handling
+                        // The caller will need to set $AUTOLOAD before calling
+                        ((RuntimeCode) autoload.value).isAutoload = true;
+                        return autoload;
+                    }
+                }
+            }
         }
 
         // Cache the fact that method was not found (using null)

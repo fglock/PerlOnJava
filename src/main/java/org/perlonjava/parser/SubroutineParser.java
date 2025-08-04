@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.concurrent.Semaphore;
 import java.util.function.Supplier;
 
+import static org.perlonjava.parser.ParserTables.CORE_PROTOTYPES;
 import static org.perlonjava.parser.PrototypeArgs.consumeArgsWithPrototype;
 import static org.perlonjava.parser.SignatureParser.parseSignature;
 import static org.perlonjava.parser.TokenUtils.peek;
@@ -44,14 +45,15 @@ public class SubroutineParser {
         }
 
         // If a package name follows, then it looks like a indirect method
-        var nextToken = peek(parser);
-        if (nextToken.type == LexerTokenType.IDENTIFIER) {
+        // Unless the subName looks like an operator
+        if (peek(parser).type == LexerTokenType.IDENTIFIER && isValidIndirectMethod(subName)) {
             int currentIndex2 = parser.tokenIndex;
             String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
             // System.out.println("maybe indirect object: " + packageName + "->" + subName);
 
             if (isPackageLoaded(packageName)) {
                 // System.out.println("  package loaded: " + packageName + "->" + subName);
+
                 ListNode arguments = consumeArgsWithPrototype(parser, "@");
                 return new BinaryOperatorNode(
                         "->",
@@ -127,6 +129,13 @@ public class SubroutineParser {
             // Restore the previous subroutine context
             parser.ctx.symbolTable.setCurrentSubroutine(previousSubroutine);
         }
+    }
+
+    private static boolean isValidIndirectMethod(String subName) {
+        if (CORE_PROTOTYPES.containsKey(subName)) {
+            return false;
+        }
+        return true;
     }
 
     private static Node parseIndirectMethodCall(Parser parser, IdentifierNode nameNode) {
