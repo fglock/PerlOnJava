@@ -8,6 +8,7 @@ import org.perlonjava.runtime.PerlCompilerException;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.perlonjava.parser.PrototypeArgs.consumeArgsWithPrototype;
 import static org.perlonjava.parser.TokenUtils.consume;
 import static org.perlonjava.parser.TokenUtils.peek;
 
@@ -130,6 +131,11 @@ public class ParseInfix {
                         if (nextText.equals("$")) {
                             // Method call with ->$var or ->$var()
                             right = parser.parseExpression(precedence);
+                            if (peek(parser).text.equals("(")) {
+                                // Method call with ->$var()
+                                ListNode args = consumeArgsWithPrototype(parser, null);
+                                right = new BinaryOperatorNode("(", right, args, parser.tokenIndex);
+                            }
                         } else {
                             // Method call with ->method or ->method()
                             right = SubroutineParser.parseSubroutineCall(parser, true);
