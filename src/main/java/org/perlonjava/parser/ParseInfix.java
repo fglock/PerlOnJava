@@ -8,6 +8,7 @@ import org.perlonjava.runtime.PerlCompilerException;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.perlonjava.parser.OperatorParser.ensureOneOperand;
 import static org.perlonjava.parser.PrototypeArgs.consumeArgsWithPrototype;
 import static org.perlonjava.parser.TokenUtils.consume;
 import static org.perlonjava.parser.TokenUtils.peek;
@@ -108,6 +109,14 @@ public class ParseInfix {
                         return new BinaryOperatorNode("(",
                                 left,
                                 ParserNodeUtils.atUnderscore(parser),
+                                parser.tokenIndex);
+                    case "$#":
+                        // ->$#*
+                        TokenUtils.consume(parser);
+                        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "*");
+                        left = ensureOneOperand(parser, token, left);
+                        return new OperatorNode("$#",
+                                left,
                                 parser.tokenIndex);
                     case "@":
                         // ->@[0,-1];

@@ -433,13 +433,18 @@ public class OperatorParser {
         Node operand;
         // Handle operators with a single operand
         operand = ParsePrimary.parsePrimary(parser);
+        operand = ensureOneOperand(parser, token, operand);
+        return new OperatorNode(token.text, operand, currentIndex);
+    }
+
+    public static Node ensureOneOperand(Parser parser, LexerToken token, Node operand) {
         if (operand instanceof ListNode listNode) {
             if (listNode.elements.size() != 1) {
                 throw new PerlCompilerException(parser.tokenIndex, "Too many arguments for " + token.text, parser.ctx.errorUtil);
             }
             operand = listNode.elements.getFirst();
         }
-        return new OperatorNode(token.text, operand, currentIndex);
+        return operand;
     }
 
     static OperatorNode parseDelete(Parser parser, LexerToken token, int currentIndex) {
