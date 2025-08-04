@@ -223,7 +223,10 @@ public class InheritanceResolver {
                         // The caller will need to set $AUTOLOAD before calling
                         ((RuntimeCode) autoload.value).autoloadVariableName = autoloadName;
 
-                        // Don't cache AUTOLOAD methods as they need special handling
+                        // Cache the found method;
+                        // In case AUTOLOAD creates the missing method, it will invalidate the cache
+                        cacheMethod(cacheKey, autoload);
+
                         return autoload;
                     }
                 }
