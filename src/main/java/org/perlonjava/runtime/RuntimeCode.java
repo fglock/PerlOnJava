@@ -2,7 +2,6 @@ package org.perlonjava.runtime;
 
 import org.perlonjava.astnode.Node;
 import org.perlonjava.astnode.OperatorNode;
-import org.perlonjava.astvisitor.ConstantFoldingVisitor;
 import org.perlonjava.codegen.EmitterContext;
 import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.codegen.JavaClassInfo;
@@ -56,7 +55,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Method object representing the compiled subroutine
     public MethodHandle methodHandle;
     public boolean isStatic;
-    public boolean isAutoload = false;
+    public String autoloadVariableName = null;
     // Code object instance used during execution
     public Object codeObject;
     // Prototype of the subroutine
@@ -321,7 +320,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         if (method != null) {
-            // System.out.println("call ->" + method + " " + currentPackage + " " + args + " AUTOLOAD: " + ((RuntimeCode) method.value).isAutoload);
+            // System.out.println("call ->" + method + " " + currentPackage + " " + args + " AUTOLOAD: " + ((RuntimeCode) method.value).autoloadVariableName);
+
+            String autoloadVariableName = ((RuntimeCode) method.value).autoloadVariableName;
+            if (autoloadVariableName != null) {
+                // The inherited method is an autoloaded subroutine
+                // Set the $AUTOLOAD variable to the name of the method that was called
+                getGlobalVariable(autoloadVariableName).set(methodName);
+            }
 
             return apply(method, args, callContext);
         }
