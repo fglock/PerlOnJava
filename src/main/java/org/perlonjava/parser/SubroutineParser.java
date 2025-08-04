@@ -6,7 +6,6 @@ import org.perlonjava.codegen.EmitterMethodCreator;
 import org.perlonjava.codegen.JavaClassInfo;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
-import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 import org.perlonjava.symbols.SymbolTable;
 
@@ -44,30 +43,28 @@ public class SubroutineParser {
             throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
         }
 
-        // If the subroutine name is not fully qualified and a package name follows, then it looks like a indirect method
-        if (!subName.contains("::")) {
-            var nextToken = peek(parser);
-            if (nextToken.type == LexerTokenType.IDENTIFIER) {
-                int currentToken = parser.tokenIndex;
-                String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
-                // System.out.println("maybe indirect object: " + packageName + "->" + subName);
+        // If a package name follows, then it looks like a indirect method
+        var nextToken = peek(parser);
+        if (nextToken.type == LexerTokenType.IDENTIFIER) {
+            int currentIndex2 = parser.tokenIndex;
+            String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
+            // System.out.println("maybe indirect object: " + packageName + "->" + subName);
 
-                if (isPackageLoaded(packageName)) {
-                    // System.out.println("  package loaded: " + packageName + "->" + subName);
-                    ListNode arguments = consumeArgsWithPrototype(parser, "@");
-                    return new BinaryOperatorNode(
-                            "->",
-                            new IdentifierNode(packageName, currentToken),
-                            new BinaryOperatorNode("(",
+            if (isPackageLoaded(packageName)) {
+                // System.out.println("  package loaded: " + packageName + "->" + subName);
+                ListNode arguments = consumeArgsWithPrototype(parser, "@");
+                return new BinaryOperatorNode(
+                        "->",
+                        new IdentifierNode(packageName, currentIndex2),
+                        new BinaryOperatorNode("(",
                                 new OperatorNode("&",
-                                        new IdentifierNode(subName, currentToken),
+                                        new IdentifierNode(subName, currentIndex2),
                                         currentIndex),
-                                arguments, currentToken),
-                            currentToken);
-                }
-                // backtrack
-                parser.tokenIndex = currentToken;
+                                arguments, currentIndex2),
+                        currentIndex2);
             }
+            // backtrack
+            parser.tokenIndex = currentIndex2;
         }
 
         // Normalize the subroutine name to include the current package
@@ -283,7 +280,7 @@ public class SubroutineParser {
             codeRef.type = RuntimeScalarType.CODE;
             codeRef.value = new RuntimeCode(subName, attributes);
         }
-        
+
         RuntimeCode code = (RuntimeCode) codeRef.value;
         code.prototype = prototype;
         code.attributes = attributes;
