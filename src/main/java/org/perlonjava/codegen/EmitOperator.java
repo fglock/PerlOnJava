@@ -423,6 +423,16 @@ public class EmitOperator {
     static void handleLocal(EmitterVisitor emitterVisitor, OperatorNode node) {
         // emit the lvalue
         int lvalueContext = LValueVisitor.getContext(node.operand);
+
+        if (node.operand instanceof ListNode listNode) {
+            for (Node child : listNode.elements) {
+                handleLocal(emitterVisitor.with(RuntimeContextType.VOID), new OperatorNode("local", child, node.tokenIndex));
+            }
+            node.operand.accept(emitterVisitor.with(lvalueContext));
+            handleVoidContext(emitterVisitor);
+            return;
+        }
+
         node.operand.accept(emitterVisitor.with(lvalueContext));
         boolean isTypeglob = node.operand instanceof OperatorNode operatorNode && operatorNode.operator.equals("*");
         // save the old value
