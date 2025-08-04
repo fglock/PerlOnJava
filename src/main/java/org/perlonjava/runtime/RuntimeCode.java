@@ -297,6 +297,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // - STDOUT
         // - A subroutine (e.g., Class->new() is Class()->new() if Class is a subroutine)
         // - Class::->new() is the same as Class->new()
+        // - Class->Other::new() fully qualified method name
 
         // System.out.println("call perlClassName: " + perlClassName + " methodName: " + methodName);
         if (methodName.startsWith("SUPER::")) {
@@ -306,7 +307,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     currentPackage + "::" + methodName,  // cache key includes the SUPER:: prefix
                     1   // start looking in the parent package
             );
+        }
+        else if (methodName.contains("::")) {
+            // Fully qualified method name - call the exact subroutine
+            method = GlobalVariable.getGlobalCodeRef(methodName);
+            if (!method.getDefinedBoolean()) {
+                throw new PerlCompilerException("Undefined subroutine &" + methodName + " called");
+            }
         } else {
+            // Regular method lookup through inheritance
             method = InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, null, 0);
         }
 
