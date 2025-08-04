@@ -112,9 +112,9 @@ subtest "Non-existent class" => sub {
     like($@, qr/Can't locate object method|Bareword/, 'new NonExistentClass fails appropriately');
     
     eval q{
-        my $obj = method AnotherNonExistentClass;
+        my $obj = meth AnotherNonExistentClass;
     };
-    like($@, qr/Can't locate object method|Bareword/, 'method AnotherNonExistentClass fails');
+    like($@, qr/Can't locate object method|Bareword/, 'meth AnotherNonExistentClass fails');
 };
 
 subtest "Bareword vs quoted strings" => sub {
