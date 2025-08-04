@@ -52,7 +52,9 @@ public class SubroutineParser {
             String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
             // System.out.println("maybe indirect object: " + packageName + "->" + subName);
 
-            if (isValidIndirectMethod(packageName)) {
+            // Check if the packageName is not a subroutine or operator
+            String fullName1 = NameNormalizer.normalizeVariableName(packageName, parser.ctx.symbolTable.getCurrentPackage());
+            if (!GlobalVariable.existsGlobalCodeRef(fullName1) && isValidIndirectMethod(packageName)) {
                 LexerToken token = peek(parser);
                 if (!(token.text.equals("->") || token.text.equals("=>") || INFIX_OP.contains(token.text))) {
                     // System.out.println("  package loaded: " + packageName + "->" + subName);
