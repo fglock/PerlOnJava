@@ -30,6 +30,9 @@ public class GlobalVariable {
     public static CustomClassLoader globalClassLoader =
             new CustomClassLoader(GlobalVariable.class.getClassLoader());
 
+    // Cache for package existence checks
+    private static final Map<String, Boolean> packageExistsCache = new HashMap<>();
+
     // Flags used by operator override
 
     // globalGlobs: Tracks typeglob assignments (e.g., *CORE::GLOBAL::hex = sub {...})
@@ -56,6 +59,7 @@ public class GlobalVariable {
         globalIORefs.clear();
         globalGlobs.clear();
         isSubs.clear();
+        clearPackageCache();
 
         RuntimeCode.clearCaches();
 
@@ -227,16 +231,36 @@ public class GlobalVariable {
     }
 
     /**
+     * Clears the package existence cache.
+     * Should be called when new packages are loaded or code refs are modified.
+     */
+    public static void clearPackageCache() {
+        packageExistsCache.clear();
+    }
+
+    /**
      * Checks if a Perl package is loaded by scanning for any methods in its namespace
      *
      * @param className The name of the package/class to check
      * @return true if any methods exist in the class namespace
      */
     public static boolean isPackageLoaded(String className) {
-        String prefix = className + "::";
+        // Check cache first
+        Boolean cached = packageExistsCache.get(className);
+        if (cached != null) {
+            return cached;
+        }
+
+        // Ensure we have the :: suffix for the prefix check
+        final String prefix = className.endsWith("::") ? className : className + "::";
+
         // Check if any code references exist with this class prefix
-        return globalCodeRefs.keySet().stream()
+        boolean exists = globalCodeRefs.keySet().stream()
                 .anyMatch(key -> key.startsWith(prefix));
+
+        // Cache the result
+        packageExistsCache.put(className, exists);
+        return exists;
     }
 
     /**
