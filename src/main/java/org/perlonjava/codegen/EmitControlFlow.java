@@ -47,7 +47,20 @@ public class EmitControlFlow {
         LoopLabels loopLabels = ctx.javaClassInfo.findLoopLabelsByName(labelStr);
         ctx.logDebug("visit(next) operator: " + operator + " label: " + labelStr + " labels: " + loopLabels);
         if (loopLabels == null) {
-            throw new PerlCompilerException(node.tokenIndex, "Can't \"" + operator + "\" outside a loop block", ctx.errorUtil);
+            // throw new PerlCompilerException(node.tokenIndex, "Can't \"" + operator + "\" outside a loop block", ctx.errorUtil);
+
+            String errorMessage = ctx.errorUtil.errorMessage(node.tokenIndex, "Can't \"" + operator + "\" outside a loop block");
+
+            // Emit bytecode to call throwControlFlowException
+            ctx.mv.visitLdcInsn(labelStr);
+            ctx.mv.visitLdcInsn(operator);
+            ctx.mv.visitLdcInsn(errorMessage);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/PerlControlFlowException",
+                    "throwControlFlowException",
+                    "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
+                    false);
+            return;
         }
 
         ctx.logDebug("visit(next): asmStackLevel: " + ctx.javaClassInfo.stackLevelManager.getStackLevel());

@@ -20,7 +20,7 @@ my $error_message = $@ // "No error";
 print "not "
   if !($error_message
     && $error_message =~ /Can't "next" outside a loop block/ );
-say "ok # error message for `next` outside a loop <" . substr($error_message, 0, 20) . ">";
+say "ok # error message for `next` outside a loop <" . $error_message . ">";
 
 ###################
 # `next` Tests with `do ... while ...` with an outer loop
