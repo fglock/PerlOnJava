@@ -22,6 +22,14 @@ public class DBI extends PerlModuleBase {
     private static final String GENERAL_ERROR_STATE = "S1000";
 
     /**
+     * Functional interface for DBI operations that can throw exceptions.
+     */
+    @FunctionalInterface
+    private interface DBIOperation {
+        RuntimeList execute() throws Exception;
+    }
+
+    /**
      * Constructor initializes the DBI module.
      */
     public DBI() {
@@ -66,6 +74,32 @@ public class DBI extends PerlModuleBase {
     }
 
     /**
+     * Executes a DBI operation with standardized error handling.
+     *
+     * @param operation The operation to execute
+     * @param handle The database or statement handle for error context
+     * @param methodName The name of the method being executed (for error messages)
+     * @return RuntimeList result from the operation or error result
+     */
+    private static RuntimeList executeWithErrorHandling(DBIOperation operation, RuntimeHash handle, String methodName) {
+        try {
+            return operation.execute();
+        } catch (SQLException e) {
+            setError(handle, e);
+        } catch (Exception e) {
+            setError(handle, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
+        }
+        RuntimeScalar msg = new RuntimeScalar("DBI " + methodName + "() failed: " + getGlobalVariable("DBI::errstr"));
+        if (handle.get("RaiseError").getBoolean()) {
+            Carp.croak(new RuntimeArray(msg), RuntimeContextType.VOID);
+        }
+        if (handle.get("PrintError").getBoolean()) {
+            Carp.carp(new RuntimeArray(msg), RuntimeContextType.VOID);
+        }
+        return new RuntimeList();
+    }
+
+    /**
      * Establishes a database connection using the provided credentials.
      *
      * @param args RuntimeArray containing connection parameters:
@@ -79,14 +113,14 @@ public class DBI extends PerlModuleBase {
      */
     public static RuntimeList connect(RuntimeArray args, int ctx) {
         RuntimeHash dbh = new RuntimeHash();
-        String jdbcUrl = null;
-        try {
+        String jdbcUrl = args.size() > 1 ? args.get(1).toString() : "";
+
+        return executeWithErrorHandling(() -> {
             if (args.size() < 4) {
                 throw new IllegalStateException("Bad number of arguments for DBI->connect");
             }
 
             // Extract connection parameters from args
-            jdbcUrl = args.get(1).toString();
             dbh.put("Username", new RuntimeScalar(args.get(2).toString()));
             dbh.put("Password", new RuntimeScalar(args.get(3).toString()));
             RuntimeScalar attr = args.get(4);   //  \%attr
@@ -125,23 +159,7 @@ public class DBI extends PerlModuleBase {
             // Create blessed reference for Perl compatibility
             RuntimeScalar dbhRef = ReferenceOperators.bless(dbh.createReference(), new RuntimeScalar("DBI"));
             return dbhRef.getList();
-        } catch (SQLException e) {
-            setError(dbh, e);
-        } catch (Exception e) {
-            setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-        }
-        RuntimeScalar msg = new RuntimeScalar("DBI connect('" + jdbcUrl + "','" + dbh.get("Username") + "',...) failed: " + getGlobalVariable("DBI::errstr"));
-        return handleError(dbh, msg);
-    }
-
-    private static RuntimeList handleError(RuntimeHash dbh, RuntimeScalar msg) {
-        if (dbh.get("RaiseError").getBoolean()) {
-            Carp.croak(new RuntimeArray(msg), RuntimeContextType.VOID);
-        }
-        if (dbh.get("PrintError").getBoolean()) {
-            Carp.carp(new RuntimeArray(msg), RuntimeContextType.VOID);
-        }
-        return new RuntimeList();
+        }, dbh, "connect('" + jdbcUrl + "','" + dbh.get("Username") + "',...) failed");
     }
 
     /**
@@ -158,7 +176,8 @@ public class DBI extends PerlModuleBase {
         RuntimeHash dbh = args.get(0).hashDeref();
         RuntimeHash sth = new RuntimeHash();
         sth.put("Database", dbh.createReference());
-        try {
+
+        return executeWithErrorHandling(() -> {
             if (args.size() < 2) {
                 throw new IllegalStateException("Bad number of arguments for DBI->prepare");
             }
@@ -206,17 +225,10 @@ public class DBI extends PerlModuleBase {
             dbh.get("sth").set(sthRef);
 
             return sthRef.getList();
-        } catch (SQLException e) {
-            setError(sth, e);
-        } catch (Exception e) {
-            setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-        }
-        RuntimeScalar msg = new RuntimeScalar("DBI prepare() failed: " + getGlobalVariable("DBI::errstr"));
-        return handleError(dbh, msg);
+        }, dbh, "prepare");
     }
 
     public static RuntimeList last_insert_id(RuntimeArray args, int ctx) {
-
         // argument can be either a dbh or a sth
         RuntimeHash dbh = args.get(0).hashDeref();
         RuntimeHash sth = null;
@@ -228,9 +240,11 @@ public class DBI extends PerlModuleBase {
             dbh = sth.get("Database").hashDeref();
         }
 
-        try {
-            Connection conn = (Connection) dbh.get("connection").value;
-            Statement stmt = (Statement) sth.get("statement").value;
+        final RuntimeHash finalDbh = dbh;
+        final RuntimeHash finalSth = sth;
+        return executeWithErrorHandling(() -> {
+            Connection conn = (Connection) finalDbh.get("connection").value;
+            Statement stmt = (Statement) finalSth.get("statement").value;
             ResultSet rs = stmt.getGeneratedKeys();
 
             if (rs.next()) {
@@ -239,13 +253,7 @@ public class DBI extends PerlModuleBase {
             }
 
             return scalarUndef.getList();
-        } catch (SQLException e) {
-            setError(dbh, e);
-        } catch (Exception e) {
-            setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-        }
-        RuntimeScalar msg = new RuntimeScalar("DBI last_insert_id() failed: " + getGlobalVariable("DBI::errstr"));
-        return handleError(dbh, msg);
+        }, finalDbh, "last_insert_id");
     }
 
     /**
@@ -260,8 +268,9 @@ public class DBI extends PerlModuleBase {
     public static RuntimeList execute(RuntimeArray args, int ctx) {
         RuntimeHash sth = args.get(0).hashDeref();
         RuntimeHash dbh = sth.get("Database").hashDeref();
-        try {
-            if (args.size() < 1) {
+
+        return executeWithErrorHandling(() -> {
+            if (args.isEmpty()) {
                 throw new IllegalStateException("Bad number of arguments for DBI->execute");
             }
 
@@ -316,13 +325,7 @@ public class DBI extends PerlModuleBase {
             // Store execution result in statement handle
             sth.put("execute_result", result.createReference());
             return result.createReference().getList();
-        } catch (SQLException e) {
-            setError(sth, e);
-        } catch (Exception e) {
-            setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-        }
-        RuntimeScalar msg = new RuntimeScalar("DBI execute() failed: " + getGlobalVariable("DBI::errstr"));
-        return handleError(dbh, msg);
+        }, dbh, "execute");
     }
 
     /**
@@ -336,7 +339,8 @@ public class DBI extends PerlModuleBase {
         // Get statement handle and result set
         RuntimeHash sth = args.get(0).hashDeref();
         RuntimeHash dbh = sth.get("Database").hashDeref();
-        try {
+
+        return executeWithErrorHandling(() -> {
             RuntimeHash executeResult = sth.get("execute_result").hashDeref();
             ResultSet rs = (ResultSet) executeResult.get("resultset").value;
 
@@ -353,13 +357,7 @@ public class DBI extends PerlModuleBase {
 
             // Return empty array if no more rows
             return new RuntimeList();
-        } catch (SQLException e) {
-            setError(sth, e);
-        } catch (Exception e) {
-            setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-        }
-        RuntimeScalar msg = new RuntimeScalar("DBI fetchrow_arrayref() failed: " + getGlobalVariable("DBI::errstr"));
-        return handleError(dbh, msg);
+        }, dbh, "fetchrow_arrayref");
     }
 
     /**
@@ -372,7 +370,8 @@ public class DBI extends PerlModuleBase {
     public static RuntimeList fetchrow_hashref(RuntimeArray args, int ctx) {
         RuntimeHash sth = args.get(0).hashDeref();
         RuntimeHash dbh = sth.get("Database").hashDeref();
-        try {
+
+        return executeWithErrorHandling(() -> {
             RuntimeHash executeResult = sth.get("execute_result").hashDeref();
             ResultSet rs = (ResultSet) executeResult.get("resultset").value;
 
@@ -402,13 +401,7 @@ public class DBI extends PerlModuleBase {
 
             // Return undef if no more rows
             return scalarUndef.getList();
-        } catch (SQLException e) {
-            setError(sth, e);
-        } catch (Exception e) {
-            setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-        }
-        RuntimeScalar msg = new RuntimeScalar("DBI fetchrow_hashref() failed: " + getGlobalVariable("DBI::errstr"));
-        return handleError(dbh, msg);
+        }, dbh, "fetchrow_hashref");
     }
 
     /**
@@ -420,8 +413,9 @@ public class DBI extends PerlModuleBase {
      */
     public static RuntimeList rows(RuntimeArray args, int ctx) {
         RuntimeHash sth = args.get(0).hashDeref();
-        try {
-            if (args.size() < 1) {
+
+        return executeWithErrorHandling(() -> {
+            if (args.isEmpty()) {
                 throw new IllegalStateException("Bad number of arguments for DBI->rows");
             }
 
@@ -452,10 +446,7 @@ public class DBI extends PerlModuleBase {
             }
 
             return new RuntimeArray(new RuntimeScalar(rowCount)).getList();
-        } catch (Exception e) {
-            setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-            return new RuntimeArray(new RuntimeScalar(-1)).getList();
-        }
+        }, sth, "rows");
     }
 
     /**
@@ -467,7 +458,8 @@ public class DBI extends PerlModuleBase {
      */
     public static RuntimeList disconnect(RuntimeArray args, int ctx) {
         RuntimeHash dbh = args.get(0).hashDeref();
-        try {
+
+        return executeWithErrorHandling(() -> {
             Connection conn = (Connection) dbh.get("connection").value;
             String name = dbh.get("Name").toString();
 
@@ -475,13 +467,7 @@ public class DBI extends PerlModuleBase {
             dbh.put("Active", new RuntimeScalar(false));
 
             return new RuntimeHash().createReference().getList();
-        } catch (SQLException e) {
-            setError(dbh, e);
-        } catch (Exception e) {
-            setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-        }
-        RuntimeScalar msg = new RuntimeScalar("DBI disconnect() failed: " + getGlobalVariable("DBI::errstr"));
-        return handleError(dbh, msg);
+        }, dbh, "disconnect");
     }
 
     /**
@@ -508,58 +494,44 @@ public class DBI extends PerlModuleBase {
 
     public static RuntimeList begin_work(RuntimeArray args, int ctx) {
         RuntimeHash dbh = args.get(0).hashDeref();
-        try {
+
+        return executeWithErrorHandling(() -> {
             Connection conn = (Connection) dbh.get("connection").value;
             conn.setAutoCommit(false);
             dbh.put("AutoCommit", scalarFalse);
             return scalarTrue.getList();
-        } catch (SQLException e) {
-            setError(dbh, e);
-        } catch (Exception e) {
-            setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-        }
-        RuntimeScalar msg = new RuntimeScalar("DBI begin_work() failed: " + getGlobalVariable("DBI::errstr"));
-        return handleError(dbh, msg);
+        }, dbh, "begin_work");
     }
 
     public static RuntimeList commit(RuntimeArray args, int ctx) {
         RuntimeHash dbh = args.get(0).hashDeref();
-        try {
+
+        return executeWithErrorHandling(() -> {
             Connection conn = (Connection) dbh.get("connection").value;
             conn.commit();
             conn.setAutoCommit(true);
             dbh.put("AutoCommit", scalarTrue);
             return scalarTrue.getList();
-        } catch (SQLException e) {
-            setError(dbh, e);
-        } catch (Exception e) {
-            setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-        }
-        RuntimeScalar msg = new RuntimeScalar("DBI commit() failed: " + getGlobalVariable("DBI::errstr"));
-        return handleError(dbh, msg);
+        }, dbh, "commit");
     }
 
     public static RuntimeList rollback(RuntimeArray args, int ctx) {
         RuntimeHash dbh = args.get(0).hashDeref();
-        try {
+
+        return executeWithErrorHandling(() -> {
             Connection conn = (Connection) dbh.get("connection").value;
             conn.rollback();
             conn.setAutoCommit(true);
             dbh.put("AutoCommit", scalarTrue);
             return scalarTrue.getList();
-        } catch (SQLException e) {
-            setError(dbh, e);
-        } catch (Exception e) {
-            setError(dbh, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-        }
-        RuntimeScalar msg = new RuntimeScalar("DBI rollback() failed: " + getGlobalVariable("DBI::errstr"));
-        return handleError(dbh, msg);
+        }, dbh, "rollback");
     }
 
     public static RuntimeList bind_param(RuntimeArray args, int ctx) {
         RuntimeHash sth = args.get(0).hashDeref();
         RuntimeHash dbh = sth.get("Database").hashDeref();
-        try {
+
+        return executeWithErrorHandling(() -> {
             if (args.size() < 3) {
                 throw new IllegalStateException("Bad number of arguments for DBI->bind_param");
             }
@@ -576,19 +548,14 @@ public class DBI extends PerlModuleBase {
 
             stmt.setObject(paramIndex, value);
             return scalarTrue.getList();
-        } catch (SQLException e) {
-            setError(sth, e);
-        } catch (Exception e) {
-            setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-        }
-        RuntimeScalar msg = new RuntimeScalar("DBI bind_param() failed: " + getGlobalVariable("DBI::errstr"));
-        return handleError(dbh, msg);
+        }, dbh, "bind_param");
     }
 
     public static RuntimeList bind_param_inout(RuntimeArray args, int ctx) {
         RuntimeHash sth = args.get(0).hashDeref();
         RuntimeHash dbh = sth.get("Database").hashDeref();
-        try {
+
+        return executeWithErrorHandling(() -> {
             if (args.size() < 3) {
                 throw new IllegalStateException("Bad number of arguments for DBI->bind_param_inout");
             }
@@ -605,19 +572,14 @@ public class DBI extends PerlModuleBase {
 
             stmt.setObject(paramIndex, valueRef.value);
             return scalarTrue.getList();
-        } catch (SQLException e) {
-            setError(sth, e);
-        } catch (Exception e) {
-            setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-        }
-        RuntimeScalar msg = new RuntimeScalar("DBI bind_param_inout() failed: " + getGlobalVariable("DBI::errstr"));
-        return handleError(dbh, msg);
+        }, dbh, "bind_param_inout");
     }
 
     public static RuntimeList bind_col(RuntimeArray args, int ctx) {
         RuntimeHash sth = args.get(0).hashDeref();
         RuntimeHash dbh = sth.get("Database").hashDeref();
-        try {
+
+        return executeWithErrorHandling(() -> {
             if (args.size() < 2) {
                 throw new IllegalStateException("Bad number of arguments for DBI->bind_col");
             }
@@ -632,16 +594,13 @@ public class DBI extends PerlModuleBase {
             sth.put("bound_columns", boundColumns.createReference());
 
             return scalarTrue.getList();
-        } catch (Exception e) {
-            setError(sth, new SQLException(e.getMessage(), GENERAL_ERROR_STATE, DBI_ERROR_CODE));
-        }
-        RuntimeScalar msg = new RuntimeScalar("DBI bind_col() failed: " + getGlobalVariable("DBI::errstr"));
-        return handleError(dbh, msg);
+        }, dbh, "bind_col");
     }
 
     public static RuntimeList table_info(RuntimeArray args, int ctx) {
         RuntimeHash dbh = args.get(0).hashDeref();
-        try {
+
+        return executeWithErrorHandling(() -> {
             Connection conn = (Connection) dbh.get("connection").value;
             DatabaseMetaData metaData = conn.getMetaData();
 
@@ -655,16 +614,13 @@ public class DBI extends PerlModuleBase {
             // Create statement handle for results
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
             return sth.createReference().getList();
-        } catch (SQLException e) {
-            setError(dbh, e);
-        }
-        RuntimeScalar msg = new RuntimeScalar("DBI table_info() failed: " + getGlobalVariable("DBI::errstr"));
-        return handleError(dbh, msg);
+        }, dbh, "table_info");
     }
 
     public static RuntimeList column_info(RuntimeArray args, int ctx) {
         RuntimeHash dbh = args.get(0).hashDeref();
-        try {
+
+        return executeWithErrorHandling(() -> {
             if (args.size() < 4) {
                 throw new IllegalStateException("Bad number of arguments for DBI->column_info");
             }
@@ -681,16 +637,13 @@ public class DBI extends PerlModuleBase {
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
             return sth.createReference().getList();
-        } catch (SQLException e) {
-            setError(dbh, e);
-        }
-        RuntimeScalar msg = new RuntimeScalar("DBI column_info() failed: " + getGlobalVariable("DBI::errstr"));
-        return handleError(dbh, msg);
+        }, dbh, "column_info");
     }
 
     public static RuntimeList primary_key_info(RuntimeArray args, int ctx) {
         RuntimeHash dbh = args.get(0).hashDeref();
-        try {
+
+        return executeWithErrorHandling(() -> {
             if (args.size() < 4) {
                 throw new IllegalStateException("Bad number of arguments for DBI->primary_key_info");
             }
@@ -706,16 +659,13 @@ public class DBI extends PerlModuleBase {
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
             return sth.createReference().getList();
-        } catch (SQLException e) {
-            setError(dbh, e);
-        }
-        RuntimeScalar msg = new RuntimeScalar("DBI primary_key_info() failed: " + getGlobalVariable("DBI::errstr"));
-        return handleError(dbh, msg);
+        }, dbh, "primary_key_info");
     }
 
     public static RuntimeList foreign_key_info(RuntimeArray args, int ctx) {
         RuntimeHash dbh = args.get(0).hashDeref();
-        try {
+
+        return executeWithErrorHandling(() -> {
             if (args.size() < 7) {
                 throw new IllegalStateException("Bad number of arguments for DBI->foreign_key_info");
             }
@@ -735,27 +685,20 @@ public class DBI extends PerlModuleBase {
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
             return sth.createReference().getList();
-        } catch (SQLException e) {
-            setError(dbh, e);
-        }
-        RuntimeScalar msg = new RuntimeScalar("DBI foreign_key_info() failed: " + getGlobalVariable("DBI::errstr"));
-        return handleError(dbh, msg);
+        }, dbh, "foreign_key_info");
     }
 
     public static RuntimeList type_info(RuntimeArray args, int ctx) {
         RuntimeHash dbh = args.get(0).hashDeref();
-        try {
+
+        return executeWithErrorHandling(() -> {
             Connection conn = (Connection) dbh.get("connection").value;
             DatabaseMetaData metaData = conn.getMetaData();
             ResultSet rs = metaData.getTypeInfo();
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
             return sth.createReference().getList();
-        } catch (SQLException e) {
-            setError(dbh, e);
-        }
-        RuntimeScalar msg = new RuntimeScalar("DBI type_info() failed: " + getGlobalVariable("DBI::errstr"));
-        return handleError(dbh, msg);
+        }, dbh, "type_info");
     }
 
     private static RuntimeHash createMetadataResultSet(RuntimeHash dbh, ResultSet rs) throws SQLException {
@@ -797,13 +740,11 @@ public class DBI extends PerlModuleBase {
 
     public static RuntimeList ping(RuntimeArray args, int ctx) {
         RuntimeHash dbh = args.get(0).hashDeref();
-        try {
+
+        return executeWithErrorHandling(() -> {
             Connection conn = (Connection) dbh.get("connection").value;
             return new RuntimeScalar(conn.isValid(5)).getList(); // 5 second timeout
-        } catch (SQLException e) {
-            setError(dbh, e);
-            return scalarFalse.getList();
-        }
+        }, dbh, "ping");
     }
 
     public static RuntimeList available_drivers(RuntimeArray args, int ctx) {
@@ -822,7 +763,7 @@ public class DBI extends PerlModuleBase {
 
     public static RuntimeList data_sources(RuntimeArray args, int ctx) {
         RuntimeArray sources = new RuntimeArray();
-        String driverClass = args.size() > 0 ? args.get(0).toString() : null;
+        String driverClass = !args.isEmpty() ? args.get(0).toString() : null;
 
         try {
             if (driverClass != null) {
@@ -854,9 +795,9 @@ public class DBI extends PerlModuleBase {
 
     public static RuntimeList get_info(RuntimeArray args, int ctx) {
         RuntimeHash dbh = args.get(0).hashDeref();
-        RuntimeHash info = new RuntimeHash();
 
-        try {
+        return executeWithErrorHandling(() -> {
+            RuntimeHash info = new RuntimeHash();
             Connection conn = (Connection) dbh.get("connection").value;
             DatabaseMetaData meta = conn.getMetaData();
 
@@ -873,10 +814,6 @@ public class DBI extends PerlModuleBase {
             info.put("STRING_FUNCTIONS", RuntimeScalar.newScalarOrString(meta.getStringFunctions()));
 
             return info.createReference().getList();
-        } catch (SQLException e) {
-            setError(dbh, e);
-        }
-        RuntimeScalar msg = new RuntimeScalar("DBI get_info() failed: " + getGlobalVariable("DBI::errstr"));
-        return handleError(dbh, msg);
+        }, dbh, "get_info");
     }
 }
