@@ -220,9 +220,10 @@ public class InheritanceResolver {
                     if (autoload.getDefinedBoolean()) {
                         // System.out.println("AUTOLOAD: " + autoloadName + " looking for " + methodName);
 
-                        // Don't cache AUTOLOAD methods as they need special handling
                         // The caller will need to set $AUTOLOAD before calling
-                        ((RuntimeCode) autoload.value).isAutoload = true;
+                        ((RuntimeCode) autoload.value).autoloadVariableName = autoloadName;
+
+                        // Don't cache AUTOLOAD methods as they need special handling
                         return autoload;
                     }
                 }
