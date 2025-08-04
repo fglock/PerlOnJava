@@ -17,6 +17,7 @@ import java.util.concurrent.Semaphore;
 import java.util.function.Supplier;
 
 import static org.perlonjava.parser.ParserTables.CORE_PROTOTYPES;
+import static org.perlonjava.parser.ParserTables.INFIX_OP;
 import static org.perlonjava.parser.PrototypeArgs.consumeArgsWithPrototype;
 import static org.perlonjava.parser.SignatureParser.parseSignature;
 import static org.perlonjava.parser.TokenUtils.peek;
@@ -51,20 +52,24 @@ public class SubroutineParser {
             String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
             // System.out.println("maybe indirect object: " + packageName + "->" + subName);
 
-            if (isPackageLoaded(packageName)) {
-                // System.out.println("  package loaded: " + packageName + "->" + subName);
+            if (isValidIndirectMethod(packageName)) {
+                LexerToken token = peek(parser);
+                if (!(token.text.equals("->") || token.text.equals("=>") || INFIX_OP.contains(token.text))) {
+                    // System.out.println("  package loaded: " + packageName + "->" + subName);
 
-                ListNode arguments = consumeArgsWithPrototype(parser, "@");
-                return new BinaryOperatorNode(
-                        "->",
-                        new IdentifierNode(packageName, currentIndex2),
-                        new BinaryOperatorNode("(",
-                                new OperatorNode("&",
-                                        new IdentifierNode(subName, currentIndex2),
-                                        currentIndex),
-                                arguments, currentIndex2),
-                        currentIndex2);
+                    ListNode arguments = consumeArgsWithPrototype(parser, "@");
+                    return new BinaryOperatorNode(
+                            "->",
+                            new IdentifierNode(packageName, currentIndex2),
+                            new BinaryOperatorNode("(",
+                                    new OperatorNode("&",
+                                            new IdentifierNode(subName, currentIndex2),
+                                            currentIndex),
+                                    arguments, currentIndex2),
+                            currentIndex2);
+                }
             }
+
             // backtrack
             parser.tokenIndex = currentIndex2;
         }
