@@ -158,6 +158,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Inheritance**: `SUPER::method` is implemented.
 - ✅  **Autoload**: `AUTOLOAD` mechanism is implemented; `$AUTOLOAD` variable is implemented.
 - ✅  **`class`**: `class` token is supported.
+- ✅  **Indirect object syntax** indirect object syntax is implemented.
 - ❌  **`__CLASS__`**: `__CLASS__` token is not yet supported.
 - ❌  **`:isa`**: `:isa` class attribute is not yet supported.
 - ❌  **`method`**: `method` block is not yet supported.
@@ -595,7 +596,6 @@ The DBI module provides seamless integration with JDBC drivers:
 - ❌  **`format` operator**: `format` and `write` functions for report generation are not implemented.
 - ❌  **DBM file support**: `dbmclose`, `dbmopen` are not implemented.
 - ❌  **`reset("A-Z")`** resetting global variables is not implemented.
-- ❌  **Indirect object syntax** indirect object syntax is not implemented.
 
 ## Features Incompatible with JVM
 - ❌  **`fork` operator**: `fork` is not implemented. Calling `fork` will always fail and return `undef`.
