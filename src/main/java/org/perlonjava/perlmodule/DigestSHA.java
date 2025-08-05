@@ -391,7 +391,7 @@ public class DigestSHA extends PerlModuleBase {
     /**
      * Convert bit string to bytes.
      */
-    private static byte[] bitStringToBytes(String bitString) {
+    public static byte[] bitStringToBytes(String bitString) {
         // Remove any non-binary characters
         bitString = bitString.replaceAll("[^01]", "");
 
