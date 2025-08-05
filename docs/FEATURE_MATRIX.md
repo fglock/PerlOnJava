@@ -520,6 +520,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Config** module.
 - ✅  **Cwd** module
 - ✅  **Data::Dumper**: use the same version as Perl.
+- ✅  **Digest** module
 - ✅  **Digest::MD5** module
 - ✅  **Digest::SHA** module
 - ✅  **Encode** module.

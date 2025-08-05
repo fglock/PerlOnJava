@@ -1,6 +1,7 @@
 package Digest::MD5;
 use strict;
 use warnings;
+use base "Digest::base";
 
 our $VERSION = '2.58';
 

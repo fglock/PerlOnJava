@@ -1,6 +1,7 @@
 package Digest::SHA;
 use strict;
 use warnings;
+use base "Digest::base";
 
 our $VERSION = '6.04';
 
