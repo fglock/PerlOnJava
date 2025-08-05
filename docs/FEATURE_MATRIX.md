@@ -556,8 +556,6 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - 🚧  **HTTP::Tiny** some features untested: proxy settings.
 - 🚧  **Test::More** some features missing: `skip`, `BAIL_OUT`.
 - 🚧  **Unicode::Normalize** `normalize`, `NFC`, `NFD`, `NFKC`, `NFKD`.
-- ❌  **Digest::MD5** module.
-- ❌  **Digest::SHA** module.
 - ❌  **IO::Socket** module, and related modules or asynchronous I/O operations.
 - ❌  **POSIX** module.
 - ❌  **Safe** module.
