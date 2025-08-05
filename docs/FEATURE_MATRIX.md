@@ -598,6 +598,7 @@ The DBI module provides seamless integration with JDBC drivers:
 - ❌  **`format` operator**: `format` and `write` functions for report generation are not implemented.
 - ❌  **DBM file support**: `dbmclose`, `dbmopen` are not implemented.
 - ❌  **`reset("A-Z")`** resetting global variables is not implemented.
+- ❌  **Calling a class name** `package Test; Test->()` gives `Undefined subroutine &Test::Test called`.
 
 ## Features Incompatible with JVM
 - ❌  **`fork` operator**: `fork` is not implemented. Calling `fork` will always fail and return `undef`.
