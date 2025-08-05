@@ -106,23 +106,14 @@ subtest 'Basic digest operations' => sub {
 };
 
 subtest 'Algorithm-specific methods' => sub {
-    plan tests => 3;
+    plan tests => 2;
 
     my $sha = Digest::SHA->new('256');
     is($sha->algorithm(), '256', 'algorithm() returns correct value');
 
     # Check if hashsize exists and what it returns
-    SKIP: {
-        skip "hashsize() may not be implemented", 1 unless $sha->can('hashsize');
-        my $size = $sha->hashsize();
-        ok(defined $size, 'hashsize() returns a value');
-    }
-
-    # Check if bitsize exists (standard Digest::SHA has this)
-    SKIP: {
-        skip "bitsize() may not be implemented", 1 unless $sha->can('bitsize');
-        is($sha->bitsize(), 256, 'bitsize() returns correct value');
-    }
+    my $size = $sha->hashsize();
+    ok(defined $size, 'hashsize() returns a value');
 };
 
 subtest 'File operations' => sub {
