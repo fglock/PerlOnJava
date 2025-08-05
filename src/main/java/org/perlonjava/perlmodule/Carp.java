@@ -65,7 +65,7 @@ public class Carp extends PerlModuleBase {
             if (callerInfo.size() >= 3) {
                 String fileName = callerInfo.elements.get(1).toString();
                 int line = ((RuntimeScalar) callerInfo.elements.get(2)).getInt();
-                formattedMessage += " at " + fileName + " line " + line;
+                formattedMessage += " at " + fileName + " line " + line + "\n";
             }
         }
 

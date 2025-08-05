@@ -16,15 +16,32 @@ import static org.perlonjava.runtime.SpecialBlock.runEndBlocks;
  */
 public class WarnDie {
 
+    private static Exception unwrapException(Exception throwable) {
+        Throwable current = throwable;
+
+        // Unwrap RuntimeExceptions that just wrap other exceptions
+        while (current instanceof RuntimeException && current.getCause() != null) {
+            Throwable cause = current.getCause();
+
+            // Stop unwrapping if we find a meaningful exception
+            if (cause instanceof PerlCompilerException pc) {
+                return pc;
+            }
+            current = cause;
+        }
+        return throwable;
+    }
+
     /**
      *  Catches the exception in an eval-block
      */
     public static RuntimeScalar catchEval(Exception e) {
+        e = unwrapException(e);
         if (e instanceof PerlCompilerException && getGlobalVariable("main::@").getBoolean()) {
             // $@ is already set
 
-//            System.out.println("catchEval :" + e);
-//            System.out.println("          :" + getGlobalVariable("main::@"));
+            // System.out.println("catchEval :" + e);
+            // System.out.println("          :" + getGlobalVariable("main::@"));
             return scalarUndef;
         }
 
