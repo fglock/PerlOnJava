@@ -1,5 +1,6 @@
 package org.perlonjava.perlmodule;
 
+import org.perlonjava.parser.StringParser;
 import org.perlonjava.runtime.*;
 
 import java.io.*;
@@ -69,7 +70,12 @@ public class DigestMD5 extends PerlModuleBase {
             for (int i = 1; i < args.size(); i++) {
                 RuntimeScalar data = args.get(i);
                 if (data.type != RuntimeScalarType.UNDEF) {
-                    byte[] bytes = data.toString().getBytes(StandardCharsets.UTF_8);
+                    String dataStr = data.toString();
+
+                    // Check for wide characters using the utility method
+                    StringParser.assertNoWideCharacters(dataStr, "add");
+
+                    byte[] bytes = dataStr.getBytes(StandardCharsets.UTF_8);
                     md.update(bytes);
                     updateBlockCount(self, bytes.length);
                 }
@@ -95,37 +101,49 @@ public class DigestMD5 extends PerlModuleBase {
 
         try {
             MessageDigest md = getMessageDigest(self);
+            RuntimeIO fh = null;
 
-            // Handle different file argument types
-            InputStream inputStream = null;
-
-            if (fileArg.toString().startsWith("*")) {
-                // Handle filehandle reference
-                String filename = fileArg.toString().substring(1);
-                inputStream = new FileInputStream(filename);
-            } else if (fileArg.type == JAVAOBJECT && fileArg.value instanceof InputStream) {
-                // Direct InputStream
-                inputStream = (InputStream) fileArg.value;
-            } else {
-                // Handle filename string
-                String filename = fileArg.toString();
-                inputStream = new FileInputStream(filename);
+            // Check if argument is a reference (filehandle)
+            if (!fileArg.isReference()) {
+                // Not a reference at all - this should croak
+                throw new PerlCompilerException("Not a GLOB reference");
             }
 
-            // Read file in chunks
+            // Extract the filehandle from the reference
+            fh = RuntimeIO.getRuntimeIO(fileArg);
+            if (fh == null) {
+                // It's a reference but not a valid filehandle
+                throw new PerlCompilerException("Not a GLOB reference");
+            }
+
+            // The filehandle should already be in the appropriate mode
+            // The caller is responsible for setting binmode if needed
+
+            // Read the file content in chunks
             byte[] buffer = new byte[8192];
-            int bytesRead;
-            while ((bytesRead = inputStream.read(buffer)) != -1) {
-                md.update(buffer, 0, bytesRead);
-                updateBlockCount(self, bytesRead);
-            }
+            try {
+                while (true) {
+                    RuntimeScalar result = fh.ioHandle.read(buffer.length);
+                    if (result.type == RuntimeScalarType.UNDEF || result.toString().isEmpty()) {
+                        break;  // EOF
+                    }
 
-            inputStream.close();
+                    byte[] bytes = result.toString().getBytes(StandardCharsets.ISO_8859_1);
+                    md.update(bytes);
+                    updateBlockCount(self, bytes.length);
+                }
+            } catch (Exception e) {
+                // If reading fails, the state is unpredictable as documented
+                throw new PerlCompilerException("Read error in addfile: " + e.getMessage());
+            }
 
             return self.createReference().getList();
 
+        } catch (PerlCompilerException e) {
+            // Re-throw PerlCompilerException as-is
+            throw e;
         } catch (Exception e) {
-            throw new RuntimeException("Digest::MD5 addfile failed: " + e.getMessage(), e);
+            throw new PerlCompilerException("Digest::MD5 addfile failed: " + e.getMessage());
         }
     }
 
@@ -289,6 +307,7 @@ public class DigestMD5 extends PerlModuleBase {
 
             // Create new Perl object
             RuntimeHash clonedSelf = new RuntimeHash();
+            clonedSelf.blessId = self.blessId;
             clonedSelf.put("algorithm", new RuntimeScalar("MD5"));
             clonedSelf.put(CACHE_KEY, new RuntimeScalar(clonedMd));
 

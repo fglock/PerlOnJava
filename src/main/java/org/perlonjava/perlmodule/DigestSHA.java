@@ -1,5 +1,6 @@
 package org.perlonjava.perlmodule;
 
+import org.perlonjava.parser.StringParser;
 import org.perlonjava.runtime.*;
 
 import java.io.*;
@@ -94,8 +95,14 @@ public class DigestSHA extends PerlModuleBase {
             // Add all provided data arguments
             for (int i = 1; i < args.size(); i++) {
                 RuntimeScalar data = args.get(i);
+
+                String dataStr = data.toString();
+
+                // Check for wide characters using the utility method
+                StringParser.assertNoWideCharacters(dataStr, "add");
+
                 if (data.type != RuntimeScalarType.UNDEF) {
-                    md.update(data.toString().getBytes(StandardCharsets.UTF_8));
+                    md.update(dataStr.getBytes(StandardCharsets.UTF_8));
                 }
             }
 
@@ -119,18 +126,45 @@ public class DigestSHA extends PerlModuleBase {
 
         try {
             MessageDigest md = getMessageDigest(self);
+            RuntimeIO fh = null;
+            boolean needToClose = false;
 
-            // Handle different file argument types
-            if (fileArg.toString().startsWith("*")) {
-                // Handle filehandle reference (simplified)
-                String filename = fileArg.toString().substring(1);
-                byte[] fileBytes = Files.readAllBytes(Paths.get(filename));
-                md.update(fileBytes);
+            // Check if argument is a reference (filehandle) or string (filename)
+            if (fileArg.isReference()) {
+                // Extract the filehandle from the reference
+                fh = RuntimeIO.getRuntimeIO(fileArg);
+                if (fh == null) {
+                    throw new RuntimeException("Not a valid filehandle reference");
+                }
             } else {
-                // Handle filename string
+                // It's a filename string - open it
                 String filename = fileArg.toString();
-                byte[] fileBytes = Files.readAllBytes(Paths.get(filename));
-                md.update(fileBytes);
+                fh = RuntimeIO.open(filename, "<");  // Open in read mode
+                if (fh == null) {
+                    throw new RuntimeException("Cannot open file: " + filename);
+                }
+                needToClose = true;  // We opened it, so we should close it
+            }
+
+            // Now we have a filehandle in both cases
+            // Set binary mode for accurate byte reading
+            fh.binmode(":raw");
+
+            // Read the file content in chunks
+            byte[] buffer = new byte[8192];
+            while (true) {
+                RuntimeScalar result = fh.ioHandle.read(buffer.length);
+                if (result.type == RuntimeScalarType.UNDEF || result.toString().isEmpty()) {
+                    break;  // EOF
+                }
+
+                byte[] bytes = result.toString().getBytes(StandardCharsets.ISO_8859_1);
+                md.update(bytes);
+            }
+
+            // Close the filehandle only if we opened it
+            if (needToClose) {
+                fh.close();
             }
 
             return self.createReference().getList();
@@ -279,6 +313,7 @@ public class DigestSHA extends PerlModuleBase {
 
             // Create new Perl object
             RuntimeHash clonedSelf = new RuntimeHash();
+            clonedSelf.blessId = self.blessId;
             clonedSelf.put("algorithm", self.get("algorithm"));
             clonedSelf.put(cacheKey, new RuntimeScalar(clonedMd));
 
