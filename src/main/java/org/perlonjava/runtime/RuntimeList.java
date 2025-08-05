@@ -191,6 +191,16 @@ public class RuntimeList extends RuntimeBase {
         return count;
     }
 
+    public RuntimeList clone() {
+        RuntimeList newList = new RuntimeList();
+        for (RuntimeBase elem : elements) {
+            for (RuntimeScalar scalar : elem) {
+                newList.add(scalar.clone());
+            }
+        }
+        return newList;
+    }
+
     /**
      * Gets the array value of the list as aliases into an array.
      *
