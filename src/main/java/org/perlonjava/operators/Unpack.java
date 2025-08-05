@@ -28,7 +28,7 @@ public class Unpack {
             throw new PerlCompilerException("unpack: not enough arguments");
         }
         RuntimeScalar templateScalar = (RuntimeScalar) args.elements.get(0);
-        RuntimeScalar packedData = (RuntimeScalar) args.elements.get(1);
+        RuntimeScalar packedData = args.elements.get(1).scalar();
 
         String template = templateScalar.toString();
         byte[] data = packedData.toString().getBytes(StandardCharsets.ISO_8859_1);
@@ -70,6 +70,9 @@ public class Unpack {
                 if (format == 'a' || format == 'A' || format == 'Z') {
                     // For string formats, read all remaining bytes as one string
                     count = buffer.remaining();
+                } else if (format == 'h' || format == 'H') {
+                    // For hex formats, each byte produces 2 hex digits
+                    count = buffer.remaining() * 2;
                 } else {
                     // For other formats, calculate how many items we can read
                     int formatSize = getFormatSize(format);
@@ -141,6 +144,11 @@ public class Unpack {
                     case 'b':
                     case 'B':
                         values.add(new RuntimeScalar(readBitString(buffer, count, format)));
+                        j = count; // Exit the inner loop
+                        break;
+                    case 'h':
+                    case 'H':
+                        values.add(new RuntimeScalar(readHexString(buffer, count, format)));
                         j = count; // Exit the inner loop
                         break;
                     default:
@@ -266,6 +274,51 @@ public class Unpack {
         }
 
         return bitString.toString();
+    }
+
+    /**
+     * Reads a hex string from the buffer based on the specified format and count.
+     *
+     * @param buffer The ByteBuffer containing the data.
+     * @param count  The number of hex digits to read.
+     * @param format The format character indicating the hex string type ('h' for low nybble first, 'H' for high nybble first).
+     * @return The hex string read from the buffer.
+     */
+    private static String readHexString(ByteBuffer buffer, int count, char format) {
+        StringBuilder hexString = new StringBuilder();
+        int bytesToRead = (count + 1) / 2; // Each byte contains 2 hex digits
+
+        final char[] hexChars = "0123456789abcdef".toCharArray();
+
+        for (int i = 0; i < bytesToRead && buffer.hasRemaining(); i++) {
+            int byteValue = buffer.get() & 0xFF;
+
+            if (format == 'h') {
+                // Low nybble first
+                int lowNybble = byteValue & 0x0F;
+                int highNybble = (byteValue >> 4) & 0x0F;
+
+                if (hexString.length() < count) {
+                    hexString.append(hexChars[lowNybble]);
+                }
+                if (hexString.length() < count) {
+                    hexString.append(hexChars[highNybble]);
+                }
+            } else {
+                // High nybble first (normal hex representation)
+                int highNybble = (byteValue >> 4) & 0x0F;
+                int lowNybble = byteValue & 0x0F;
+
+                if (hexString.length() < count) {
+                    hexString.append(hexChars[highNybble]);
+                }
+                if (hexString.length() < count) {
+                    hexString.append(hexChars[lowNybble]);
+                }
+            }
+        }
+
+        return hexString.toString();
     }
 
     /**

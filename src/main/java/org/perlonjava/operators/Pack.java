@@ -74,6 +74,16 @@ public class Pack {
                     count = bitString.length(); // For bit strings with *, use the entire string length
                 }
                 writeBitString(output, bitString, count, format);
+            } else if (format == 'h' || format == 'H') {
+                if (valueIndex >= values.size()) {
+                    throw new PerlCompilerException("pack: not enough arguments");
+                }
+                RuntimeScalar value = (RuntimeScalar) values.get(valueIndex++);
+                String hexString = value.toString();
+                if (hasStar) {
+                    count = hexString.length(); // For hex strings with *, use the entire string length
+                }
+                writeHexString(output, hexString, count, format);
             } else if (format == 'a' || format == 'A' || format == 'Z') {
                 // String formats consume only one value
                 if (valueIndex >= values.size()) {
@@ -353,6 +363,61 @@ public class Pack {
             }
         }
         if (bitIndex > 0) {
+            output.write(byteValue);
+        }
+    }
+
+    /**
+     * Writes a hex string to the output stream based on the specified format and count.
+     *
+     * @param output The ByteArrayOutputStream to write to.
+     * @param str    The hex string to write.
+     * @param count  The number of hex digits to write.
+     * @param format The format character indicating the hex string type ('h' for low nybble first, 'H' for high nybble first).
+     */
+    private static void writeHexString(ByteArrayOutputStream output, String str, int count, char format) {
+        int hexDigitsToProcess = Math.min(str.length(), count);
+
+        // Process pairs of hex digits
+        int i;
+        for (i = 0; i + 1 < hexDigitsToProcess; i += 2) {
+            // Get first nybble
+            char c1 = str.charAt(i);
+            int nybble1 = Character.digit(c1, 16);
+            if (nybble1 == -1) nybble1 = 0; // Default to 0 for invalid hex digit
+
+            // Get second nybble
+            char c2 = str.charAt(i + 1);
+            int nybble2 = Character.digit(c2, 16);
+            if (nybble2 == -1) nybble2 = 0; // Default to 0 for invalid hex digit
+
+            int byteValue;
+            if (format == 'h') {
+                // Low nybble first
+                byteValue = (nybble2 << 4) | nybble1;
+            } else {
+                // High nybble first
+                byteValue = (nybble1 << 4) | nybble2;
+            }
+
+            output.write(byteValue);
+        }
+
+        // Handle the last hex digit if we have an odd count
+        if (i < hexDigitsToProcess) {
+            char c = str.charAt(i);
+            int nybble = Character.digit(c, 16);
+            if (nybble == -1) nybble = 0;
+
+            int byteValue;
+            if (format == 'h') {
+                // Low nybble first - the single digit goes in the low nybble
+                byteValue = nybble;
+            } else {
+                // High nybble first - the single digit goes in the high nybble
+                byteValue = nybble << 4;
+            }
+
             output.write(byteValue);
         }
     }
