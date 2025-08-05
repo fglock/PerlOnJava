@@ -322,6 +322,10 @@ public class ParsePrimary {
                 }
                 return new OperatorNode("unaryMinus", operand, parser.tokenIndex);
 
+            case "*=":
+                // Special variable glob "="
+                return new OperatorNode("*", new IdentifierNode("=", parser.tokenIndex), parser.tokenIndex);
+
             default:
                 // Unknown operator
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
