@@ -296,6 +296,7 @@ The following areas are currently under active development to enhance the functi
   - IO::Handle
   - Filter::Simple
   - Text::ParseWords
+  - Digest
   - Digest::SHA
   - Digest::MD5
   - locale pragma
