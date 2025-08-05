@@ -8,6 +8,8 @@ import java.util.*;
  * for method resolution and linearized class hierarchies to improve performance.
  */
 public class InheritanceResolver {
+    public static boolean autoloadEnabled = true;
+
     // Method resolution cache
     private static final Map<String, RuntimeScalar> methodCache = new HashMap<>();
     // Cache for linearized class hierarchies
@@ -210,7 +212,7 @@ public class InheritanceResolver {
             }
 
             // Method not found in current class, check AUTOLOAD
-            if (methodName.equals("((") || methodName.equals("()")) {
+            if (!autoloadEnabled || methodName.equals("((") || methodName.equals("()")) {
                 // refuse to AUTOLOAD tie() flags
             } else {
                 // Check for AUTOLOAD in current class

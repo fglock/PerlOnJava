@@ -19,6 +19,7 @@ import static org.perlonjava.perlmodule.Feature.featureManager;
 import static org.perlonjava.perlmodule.Strict.useStrict;
 import static org.perlonjava.perlmodule.Universal.normalizeVersion;
 import static org.perlonjava.perlmodule.Warnings.useWarnings;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
@@ -389,7 +390,15 @@ public class StatementParser {
                     RuntimeArray canArgs = new RuntimeArray();
                     RuntimeArray.push(canArgs, new RuntimeScalar(packageName));
                     RuntimeArray.push(canArgs, new RuntimeScalar(importMethod));
-                    RuntimeList codeList = Universal.can(canArgs, RuntimeContextType.SCALAR);
+
+                    RuntimeList codeList = null;
+                    InheritanceResolver.autoloadEnabled = false;
+                    try {
+                        codeList = Universal.can(canArgs, RuntimeContextType.SCALAR);
+                    } finally {
+                        InheritanceResolver.autoloadEnabled = true;
+                    }
+
                     ctx.logDebug("Use can(" + packageName + ", " + importMethod + "): " + codeList);
                     if (codeList.size() == 1) {
                         RuntimeScalar code = codeList.getFirst();
