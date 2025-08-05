@@ -326,7 +326,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (autoloadVariableName != null) {
                 // The inherited method is an autoloaded subroutine
                 // Set the $AUTOLOAD variable to the name of the method that was called
-                getGlobalVariable(autoloadVariableName).set(methodName);
+
+                // Extract class name from "ClassName::AUTOLOAD"
+                String className = autoloadVariableName.substring(0, autoloadVariableName.lastIndexOf("::"));
+                // Make fully qualified method name
+                String fullMethodName = NameNormalizer.normalizeVariableName(methodName, className);
+                // Set the $AUTOLOAD variable to the fully qualified name of the method
+                getGlobalVariable(autoloadVariableName).set(fullMethodName);
             }
 
             return apply(method, args, callContext);
