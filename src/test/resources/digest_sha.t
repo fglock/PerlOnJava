@@ -244,7 +244,7 @@ subtest 'Functional interface' => sub {
 };
 
 subtest 'Edge cases and error handling' => sub {
-    plan tests => 6;
+    plan tests => 7;
 
     # Test with undef
     my $sha = Digest::SHA->new('256');
@@ -287,6 +287,12 @@ subtest 'Edge cases and error handling' => sub {
     $sha->hexdigest();
     my $clone = $sha->clone();
     isa_ok($clone, 'Digest::SHA', 'Clone after digest');
+
+    # Test UTF-8 handling (wide character)
+    $sha = Digest::SHA->new('256');
+    my $utf8_string = "Hello \x{263A}"; # Unicode smiley
+    eval { $sha->add($utf8_string) };
+    ok($@, 'Wide character in add() throws error');
 };
 
 done_testing();

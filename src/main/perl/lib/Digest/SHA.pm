@@ -42,7 +42,8 @@ sub new {
     
     # Validate algorithm
     unless ($VALID_ALGORITHMS{$algorithm}) {
-        die "Digest::SHA::new: invalid algorithm '$algorithm'";
+        # die "Digest::SHA::new: invalid algorithm '$algorithm'";
+        return undef;
     }
     
     my $self = bless {

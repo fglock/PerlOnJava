@@ -1,5 +1,6 @@
 package org.perlonjava.perlmodule;
 
+import org.perlonjava.parser.StringParser;
 import org.perlonjava.runtime.*;
 import java.util.Base64;
 import java.nio.charset.StandardCharsets;
@@ -36,11 +37,7 @@ public class MIMEBase64 extends PerlModuleBase {
         }
 
         // Check for wide characters
-        for (int i = 0; i < input.length(); i++) {
-            if (input.charAt(i) > 255) {
-                throw new IllegalArgumentException("Wide character in subroutine entry");
-            }
-        }
+        StringParser.assertNoWideCharacters(input, "subroutine entry");
 
         byte[] inputBytes = input.getBytes(StandardCharsets.ISO_8859_1);
         String eolStr = eol.toString();
