@@ -209,6 +209,15 @@ public class EmitVariable {
         int lvalueContext = LValueVisitor.getContext(node);
         ctx.logDebug("SET Lvalue context: " + lvalueContext);
         // Execute the right side first: assignment is right-associative
+
+        Node left = node.left;
+        Node right = node.right;
+
+        boolean isLocalAssignment = false;
+        if (left instanceof OperatorNode operatorNode && operatorNode.operator.equals("local")) {
+            isLocalAssignment = true;
+        }
+
         switch (lvalueContext) {
             case RuntimeContextType.SCALAR:
                 ctx.logDebug("SET right side scalar");
@@ -222,6 +231,22 @@ public class EmitVariable {
                 //   `pos`, `substr`, `vec`, `sub :lvalue`
 
                 node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the value
+
+                if (isLocalAssignment) {
+                    // Clone the scalar before calling local()
+                    if (right instanceof OperatorNode operatorNode && operatorNode.operator.equals("*")) {
+                        // TODO - glob clone
+                    } else {
+                        mv.visitMethodInsn(
+                                Opcodes.INVOKEVIRTUAL,
+                                "org/perlonjava/runtime/RuntimeScalar",
+                                "clone",
+                                "()Lorg/perlonjava/runtime/RuntimeScalar;",
+                                false
+                        );
+                    }
+                }
+
                 node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the variable
 
                 OperatorNode nodeLeft = null;
@@ -271,14 +296,25 @@ public class EmitVariable {
                     break;
                 }
 
-                Node nodeRight = node.right;
                 // make sure the right node is a ListNode
-                if (!(nodeRight instanceof ListNode)) {
+                if (!(right instanceof ListNode)) {
                     List<Node> elements = new ArrayList<>();
-                    elements.add(nodeRight);
-                    nodeRight = new ListNode(elements, node.tokenIndex);
+                    elements.add(right);
+                    right = new ListNode(elements, node.tokenIndex);
                 }
-                nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));   // emit the value
+                right.accept(emitterVisitor.with(RuntimeContextType.LIST));   // emit the value
+
+                if (isLocalAssignment) {
+                    // Clone the list before calling local()
+                    mv.visitMethodInsn(
+                            Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/RuntimeList",
+                            "clone",
+                            "()Lorg/perlonjava/runtime/RuntimeList;",
+                            false
+                    );
+                }
+
                 node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));   // emit the variable
                 mv.visitInsn(Opcodes.SWAP); // move the target first
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "setFromList", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeArray;", false);
