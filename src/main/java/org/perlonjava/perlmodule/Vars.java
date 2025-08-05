@@ -1,5 +1,6 @@
 package org.perlonjava.perlmodule;
 
+import org.perlonjava.parser.FileHandle;
 import org.perlonjava.runtime.*;
 
 /**
@@ -42,19 +43,23 @@ public class Vars extends PerlModuleBase {
         // Create the specified variables in the caller's namespace
         for (RuntimeScalar variableObj : args.elements) {
             String variableString = variableObj.toString();
+            String fullName = caller + "::" + variableString.substring(1);
 
             if (variableString.startsWith("$")) {
                 // Create a scalar variable
-                GlobalVariable.getGlobalVariable(caller + "::" + variableString.substring(1));
+                GlobalVariable.getGlobalVariable(fullName);
             } else if (variableString.startsWith("@")) {
                 // Create an array variable
-                GlobalVariable.getGlobalArray(caller + "::" + variableString.substring(1));
+                GlobalVariable.getGlobalArray(fullName);
             } else if (variableString.startsWith("%")) {
                 // Create a hash variable
-                GlobalVariable.getGlobalHash(caller + "::" + variableString.substring(1));
+                GlobalVariable.getGlobalHash(fullName);
             } else if (variableString.startsWith("&")) {
                 // Create a code variable
-                GlobalVariable.getGlobalCodeRef(caller + "::" + variableString.substring(1));
+                GlobalVariable.getGlobalCodeRef(fullName);
+            } else if (variableString.startsWith("*")) {
+                // autovivify the bareword handle
+                GlobalVariable.getGlobalIO(fullName);
             } else {
                 throw new PerlCompilerException("Invalid variable type: " + variableString);
             }
