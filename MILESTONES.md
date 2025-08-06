@@ -299,6 +299,7 @@ The following areas are currently under active development to enhance the functi
   - Locale::Maketext::Simple
   - Params::Check
   - locale pragma
+  - utf8 pragma
   - Constant folding - in ConstantFoldingVisitor.java
   - `method` keyword
 

@@ -121,23 +121,16 @@ public class StringParser {
             String str = buffer.toString();
             StringBuilder octetString = new StringBuilder();
 
-            for (int i = 0; i < str.length(); i++) {
-                char ch = str.charAt(i);
-                if (ch > 127) {
-                    // Characters above 255 need to be encoded as UTF-8 bytes
-                    byte[] bytes = Character.toString(ch).getBytes(java.nio.charset.StandardCharsets.UTF_8);
-                    for (byte b : bytes) {
-                        octetString.append((char)(b & 0xFF));
-                    }
-                } else {
-                    // Characters 0-255 map directly to octets
-                    octetString.append(ch);
-                }
+            // First, we need to convert the Unicode string back to UTF-8 bytes
+            // to simulate reading the source file as raw bytes
+            byte[] utf8Bytes = str.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+            // Then treat each UTF-8 byte as a separate character/octet
+            for (byte b : utf8Bytes) {
+                octetString.append((char)(b & 0xFF));
             }
 
             buffers.add(octetString.toString());
-
-            // System.out.println("buffers octets: " + octetString.toString().length() + " " + octetString.toString());
         }
 
         if (!remain.isEmpty()) {

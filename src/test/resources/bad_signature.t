@@ -1,5 +1,5 @@
 use v5.36;
-use Test::More tests => 8;
+use Test::More tests => 7;
 
 # Bad signature tests using eval
 # Test invalid sigil
