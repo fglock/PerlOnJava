@@ -16,6 +16,7 @@ public class UnpackState {
     private int codePointIndex = 0;
     private boolean characterMode;
     private ByteBuffer buffer;
+    private final boolean isUTF8Data;
 
     public UnpackState(String dataString, boolean startsWithU) {
         this.dataString = dataString;
@@ -39,7 +40,8 @@ public class UnpackState {
         }
 
         // If we have Unicode characters beyond Latin-1, use UTF-8
-        if (hasHighUnicode || hasSurrogates) {
+        this.isUTF8Data = hasHighUnicode || hasSurrogates;
+        if (isUTF8Data) {
             this.originalBytes = dataString.getBytes(StandardCharsets.UTF_8);
         } else {
             // For strings that only contain characters 0-255, preserve as ISO-8859-1
@@ -58,25 +60,30 @@ public class UnpackState {
             // Need to synchronize code point position with consumed bytes
             if (buffer != null) {
                 int bytesConsumed = buffer.position();
-                // Count code points in consumed bytes
-                int cpIndex = 0;
-                int byteIndex = 0;
-                while (byteIndex < bytesConsumed && cpIndex < codePoints.length) {
-                    int cp = codePoints[cpIndex];
-                    if (cp <= 0x7F) {
-                        byteIndex += 1;
-                    } else if (cp <= 0x7FF) {
-                        byteIndex += 2;
-                    } else if (cp <= 0xFFFF) {
-                        byteIndex += 3;
-                    } else {
-                        byteIndex += 4;
+                if (isUTF8Data) {
+                    // Count code points in consumed UTF-8 bytes
+                    int cpIndex = 0;
+                    int byteIndex = 0;
+                    while (byteIndex < bytesConsumed && cpIndex < codePoints.length) {
+                        int cp = codePoints[cpIndex];
+                        if (cp <= 0x7F) {
+                            byteIndex += 1;
+                        } else if (cp <= 0x7FF) {
+                            byteIndex += 2;
+                        } else if (cp <= 0xFFFF) {
+                            byteIndex += 3;
+                        } else {
+                            byteIndex += 4;
+                        }
+                        if (byteIndex <= bytesConsumed) {
+                            cpIndex++;
+                        }
                     }
-                    if (byteIndex <= bytesConsumed) {
-                        cpIndex++;
-                    }
+                    codePointIndex = cpIndex;
+                } else {
+                    // For ISO-8859-1 data, each byte is one code point
+                    codePointIndex = bytesConsumed;
                 }
-                codePointIndex = cpIndex;
             }
             buffer = null; // Clear buffer to force recreation if needed
         }
@@ -91,18 +98,23 @@ public class UnpackState {
             }
             // Calculate byte position based on consumed code points
             int bytePos = 0;
-            for (int i = 0; i < codePointIndex; i++) {
-                // Calculate UTF-8 byte length of each consumed code point
-                int cp = codePoints[i];
-                if (cp <= 0x7F) {
-                    bytePos += 1;
-                } else if (cp <= 0x7FF) {
-                    bytePos += 2;
-                } else if (cp <= 0xFFFF) {
-                    bytePos += 3;
-                } else {
-                    bytePos += 4;
+            if (isUTF8Data) {
+                // For UTF-8 data, calculate variable-length byte position
+                for (int i = 0; i < codePointIndex; i++) {
+                    int cp = codePoints[i];
+                    if (cp <= 0x7F) {
+                        bytePos += 1;
+                    } else if (cp <= 0x7FF) {
+                        bytePos += 2;
+                    } else if (cp <= 0xFFFF) {
+                        bytePos += 3;
+                    } else {
+                        bytePos += 4;
+                    }
                 }
+            } else {
+                // For ISO-8859-1 data, each code point is exactly one byte
+                bytePos = codePointIndex;
             }
             buffer.position(bytePos);
         }
