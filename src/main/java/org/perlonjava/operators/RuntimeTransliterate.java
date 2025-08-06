@@ -87,18 +87,23 @@ public class RuntimeTransliterate {
                         lastChar = codePoint;
                     } else {
                         // Check if we've already assigned a mapping for this character
-                        Integer mappedChar;
+                        Integer mappedChar = null;
                         if (complementMap.containsKey(codePoint)) {
                             mappedChar = complementMap.get(codePoint);
                         } else {
                             // Assign new mapping
                             if (replacementIndex < replacementChars.size()) {
                                 mappedChar = replacementChars.get(replacementIndex++);
+                                complementMap.put(codePoint, mappedChar);
+                            } else if (deleteUnmatched) {
+                                // With /d modifier, delete characters that have no replacement
+                                lastChar = null;
+                                continue;  // Skip this character (delete it)
                             } else {
                                 // Use last replacement character
                                 mappedChar = replacementChars.get(replacementChars.size() - 1);
+                                complementMap.put(codePoint, mappedChar);
                             }
-                            complementMap.put(codePoint, mappedChar);
                         }
 
                         if (!squashDuplicates || lastChar == null || !lastChar.equals(mappedChar)) {
