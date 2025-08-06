@@ -114,6 +114,8 @@ public class StringParser {
         if (ctx.symbolTable.isStrictOptionEnabled(UTF8_PRAGMA_BIT_POSITION)) {
             // utf8 source code is true - keep Unicode string as-is
             buffers.add(buffer.toString());
+
+            // System.out.println("buffers utf8: " + buffer.toString().length() + " " + buffer.toString());
         } else {
             // utf8 source code is false - convert to octets
             String str = buffer.toString();
@@ -121,7 +123,7 @@ public class StringParser {
 
             for (int i = 0; i < str.length(); i++) {
                 char ch = str.charAt(i);
-                if (ch > 255) {
+                if (ch > 127) {
                     // Characters above 255 need to be encoded as UTF-8 bytes
                     byte[] bytes = Character.toString(ch).getBytes(java.nio.charset.StandardCharsets.UTF_8);
                     for (byte b : bytes) {
@@ -134,6 +136,8 @@ public class StringParser {
             }
 
             buffers.add(octetString.toString());
+
+            // System.out.println("buffers octets: " + octetString.toString().length() + " " + octetString.toString());
         }
 
         if (!remain.isEmpty()) {
