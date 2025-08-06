@@ -1,60 +1,112 @@
 package org.perlonjava.operators;
 
-import org.perlonjava.runtime.PerlCompilerException;
-import org.perlonjava.runtime.RuntimeBase;
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
-
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.charset.StandardCharsets;
-import java.util.List;
+import org.perlonjava.operators.unpack.*;
+import org.perlonjava.runtime.*;
+import java.util.*;
 
 /**
  * Provides functionality to unpack binary data into a list of scalars
  * based on a specified template, similar to Perl's unpack function.
  */
 public class Unpack {
+    private static final Map<Character, FormatHandler> handlers = new HashMap<>();
 
-    /**
-     * Unpacks binary data into a list of RuntimeScalar objects according to the specified template.
-     *
-     * @param args A RuntimeList containing the template string and the packed data.
-     * @return A RuntimeList of unpacked RuntimeScalar objects.
-     * @throws RuntimeException if there are not enough arguments or if the data is insufficient for unpacking.
-     */
+    static {
+        // Initialize format handlers
+        handlers.put('C', new CFormatHandler());
+        handlers.put('S', new NumericFormatHandler.ShortHandler(false));
+        handlers.put('s', new NumericFormatHandler.ShortHandler(true));
+        handlers.put('L', new NumericFormatHandler.LongHandler(false));
+        handlers.put('l', new NumericFormatHandler.LongHandler(true));
+        handlers.put('N', new NumericFormatHandler.NetworkLongHandler());
+        handlers.put('n', new NumericFormatHandler.NetworkShortHandler());
+        handlers.put('V', new NumericFormatHandler.VAXLongHandler());
+        handlers.put('v', new NumericFormatHandler.VAXShortHandler());
+        handlers.put('f', new NumericFormatHandler.FloatHandler());
+        handlers.put('d', new NumericFormatHandler.DoubleHandler());
+        handlers.put('a', new StringFormatHandler('a'));
+        handlers.put('A', new StringFormatHandler('A'));
+        handlers.put('Z', new StringFormatHandler('Z'));
+        handlers.put('b', new BitStringFormatHandler('b'));
+        handlers.put('B', new BitStringFormatHandler('B'));
+        handlers.put('h', new HexStringFormatHandler('h'));
+        handlers.put('H', new HexStringFormatHandler('H'));
+        handlers.put('W', new WFormatHandler());
+        // Note: U handler is created dynamically based on startsWithU
+    }
+
     public static RuntimeList unpack(RuntimeList args) {
         if (args.elements.size() < 2) {
             throw new PerlCompilerException("unpack: not enough arguments");
         }
+
         RuntimeScalar templateScalar = (RuntimeScalar) args.elements.get(0);
         RuntimeScalar packedData = args.elements.get(1).scalar();
 
         String template = templateScalar.toString();
-        byte[] data = packedData.toString().getBytes(StandardCharsets.ISO_8859_1);
+        String dataString = packedData.toString();
 
-        ByteBuffer buffer = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN); // Ensure consistent byte order
+        // Default mode is C0 (character mode) unless template starts with U
+        boolean defaultCharacterMode = !template.startsWith("U");
+        boolean startsWithU = template.startsWith("U") && !template.startsWith("U0");
+
+        // Create state object
+        UnpackState state = new UnpackState(dataString, startsWithU);
 
         RuntimeList out = new RuntimeList();
         List<RuntimeBase> values = out.elements;
 
+        // Stack to track mode for parentheses scoping
+        Stack<Boolean> modeStack = new Stack<>();
+
+        // Parse template
         for (int i = 0; i < template.length(); i++) {
             char format = template.charAt(i);
 
-            // Skip spaces
+            // Handle parentheses for mode scoping
+            if (format == '(') {
+                // Push current mode onto stack
+                modeStack.push(state.isCharacterMode());
+                continue;
+            } else if (format == ')') {
+                // Restore mode from stack
+                if (!modeStack.isEmpty()) {
+                    boolean savedMode = modeStack.pop();
+                    if (savedMode) {
+                        state.switchToCharacterMode();
+                    } else {
+                        state.switchToByteMode();
+                    }
+                }
+                continue;
+            }
+
+            // Skip whitespace
             if (Character.isWhitespace(format)) {
                 continue;
             }
 
+            // Check for explicit mode modifiers
+            if (format == 'C' && i + 1 < template.length() && template.charAt(i + 1) == '0') {
+                state.switchToCharacterMode();
+                i++; // Skip the '0'
+                continue;
+            } else if (format == 'U' && i + 1 < template.length() && template.charAt(i + 1) == '0') {
+                state.switchToByteMode();
+                i++; // Skip the '0'
+                continue;
+            }
+
+            // Parse count
             int count = 1;
             boolean isStarCount = false;
 
-            // Check for repeat count or *
             if (i + 1 < template.length()) {
                 char nextChar = template.charAt(i + 1);
                 if (nextChar == '*') {
                     isStarCount = true;
-                    i++; // Skip the '*' character
+                    i++;
+                    count = getRemainingCount(state, format, startsWithU);
                 } else if (Character.isDigit(nextChar)) {
                     int j = i + 1;
                     while (j < template.length() && Character.isDigit(template.charAt(j))) {
@@ -65,307 +117,53 @@ public class Unpack {
                 }
             }
 
-            if (isStarCount) {
-                // For star count, process all remaining bytes for this format
-                if (format == 'a' || format == 'A' || format == 'Z') {
-                    // For string formats, read all remaining bytes as one string
-                    count = buffer.remaining();
-                } else if (format == 'h' || format == 'H') {
-                    // For hex formats, each byte produces 2 hex digits
-                    count = buffer.remaining() * 2;
-                } else {
-                    // For other formats, calculate how many items we can read
-                    int formatSize = getFormatSize(format);
-                    if (formatSize == 0) {
-                        throw new PerlCompilerException("unpack: unknown format size for: " + format);
-                    }
-                    count = buffer.remaining() / formatSize;
-                }
-            }
-
-            for (int j = 0; j < count; j++) {
-                if (buffer.remaining() < getFormatSize(format)) {
-                    if (isStarCount) {
-                        break; // For star count, just stop when we run out of data
-                    }
-                    throw new PerlCompilerException("unpack: not enough data");
-                }
-
-                switch (format) {
-                    case 'C':
-                        values.add(new RuntimeScalar(buffer.get() & 0xFF));
-                        break;
-                    case 'S':
-                        values.add(new RuntimeScalar(buffer.getShort() & 0xFFFF));
-                        break;
-                    case 'L':
-                        values.add(new RuntimeScalar(buffer.getInt() & 0xFFFFFFFFL));
-                        break;
-                    case 'N':
-                        values.add(new RuntimeScalar(readIntBigEndian(buffer) & 0xFFFFFFFFL));
-                        break;
-                    case 'V':
-                        values.add(new RuntimeScalar(readIntLittleEndian(buffer) & 0xFFFFFFFFL));
-                        break;
-                    case 'W':
-                        // Read UTF-8 encoded Unicode character
-                        values.add(new RuntimeScalar(readUTF8Character(buffer)));
-                        break;
-                    case 'n':
-                        values.add(new RuntimeScalar(readShortBigEndian(buffer)));
-                        break;
-                    case 'v':
-                        values.add(new RuntimeScalar(readShortLittleEndian(buffer)));
-                        break;
-                    case 'U':
-                        // Read a Unicode character number (code point)
-                        int codePoint = buffer.getInt();
-                        if (Character.isValidCodePoint(codePoint)) {
-                            values.add(new RuntimeScalar(new String(Character.toChars(codePoint))));
-                        } else {
-                            // For invalid code points, add the numeric value
-                            values.add(new RuntimeScalar(codePoint));
-                        }
-                        break;
-                    case 'f':
-                        float floatValue = buffer.getFloat();
-                        values.add(new RuntimeScalar(floatValue));
-                        break;
-                    case 'd':
-                        double doubleValue = buffer.getDouble();
-                        values.add(new RuntimeScalar(doubleValue));
-                        break;
-                    case 'a':
-                    case 'A':
-                    case 'Z':
-                        values.add(new RuntimeScalar(readString(buffer, count, format)));
-                        j = count; // Exit the inner loop
-                        break;
-                    case 'b':
-                    case 'B':
-                        values.add(new RuntimeScalar(readBitString(buffer, count, format)));
-                        j = count; // Exit the inner loop
-                        break;
-                    case 'h':
-                    case 'H':
-                        values.add(new RuntimeScalar(readHexString(buffer, count, format)));
-                        j = count; // Exit the inner loop
-                        break;
-                    default:
-                        throw new PerlCompilerException("unpack: unsupported format character: " + format);
-                }
+            // Get handler and unpack
+            FormatHandler handler = getHandler(format, startsWithU);
+            if (handler != null) {
+                handler.unpack(state, values, count, isStarCount);
+            } else {
+                throw new PerlCompilerException("unpack: unsupported format character: " + format);
             }
         }
 
         return out;
     }
 
-    /**
-     * Determines the size in bytes of the data type specified by the format character.
-     *
-     * @param format The format character indicating the data type.
-     * @return The size in bytes of the data type.
-     */
-    private static int getFormatSize(char format) {
+    private static FormatHandler getHandler(char format, boolean startsWithU) {
+        if (format == 'U') {
+            return new UFormatHandler(startsWithU);
+        }
+        return handlers.get(format);
+    }
+
+    private static int getRemainingCount(UnpackState state, char format, boolean startsWithU) {
         switch (format) {
             case 'C':
-                return 1;
-            case 'S':
-            case 'n':
-            case 'v':
-                return 2;
-            case 'L':
-            case 'N':
-            case 'V':
             case 'U':
-            case 'f':
-                return 4;
-            case 'd':
-                return 8;
+                if (state.isCharacterMode() || (format == 'U' && startsWithU)) {
+                    return state.remainingCodePoints();
+                } else {
+                    return state.remainingBytes();
+                }
+            case 'a':
+            case 'A':
+            case 'Z':
+                return state.isCharacterMode() ? state.remainingCodePoints() : state.remainingBytes();
+            case 'b':
+            case 'B':
+                return state.isCharacterMode() ? state.remainingCodePoints() * 8 : state.remainingBytes() * 8;
+            case 'h':
+            case 'H':
+                return state.isCharacterMode() ? state.remainingCodePoints() * 2 : state.remainingBytes() * 2;
             default:
-                return 1; // For string and bit formats, we'll check in their respective methods
-        }
-    }
-
-    /**
-     * Reads a 16-bit short from the buffer in big-endian order.
-     *
-     * @param buffer The ByteBuffer containing the data.
-     * @return The short value read from the buffer.
-     */
-    private static int readShortBigEndian(ByteBuffer buffer) {
-        return (buffer.get() & 0xFF) << 8 | buffer.get() & 0xFF;
-    }
-
-    /**
-     * Reads a 16-bit short from the buffer in little-endian order.
-     *
-     * @param buffer The ByteBuffer containing the data.
-     * @return The short value read from the buffer.
-     */
-    private static int readShortLittleEndian(ByteBuffer buffer) {
-        return buffer.get() & 0xFF | (buffer.get() & 0xFF) << 8;
-    }
-
-    /**
-     * Reads a 32-bit integer from the buffer in big-endian order.
-     *
-     * @param buffer The ByteBuffer containing the data.
-     * @return The integer value read from the buffer.
-     */
-    private static int readIntBigEndian(ByteBuffer buffer) {
-        return (buffer.get() & 0xFF) << 24 | (buffer.get() & 0xFF) << 16 | (buffer.get() & 0xFF) << 8 | buffer.get() & 0xFF;
-    }
-
-    /**
-     * Reads a 32-bit integer from the buffer in little-endian order.
-     *
-     * @param buffer The ByteBuffer containing the data.
-     * @return The integer value read from the buffer.
-     */
-    private static int readIntLittleEndian(ByteBuffer buffer) {
-        return buffer.get() & 0xFF | (buffer.get() & 0xFF) << 8 | (buffer.get() & 0xFF) << 16 | (buffer.get() & 0xFF) << 24;
-    }
-
-    /**
-     * Reads a string from the buffer based on the specified format and count.
-     *
-     * @param buffer The ByteBuffer containing the data.
-     * @param count  The number of characters to read.
-     * @param format The format character indicating the string type.
-     * @return The string read from the buffer.
-     */
-    private static String readString(ByteBuffer buffer, int count, char format) {
-        byte[] bytes = new byte[count];
-        buffer.get(bytes, 0, count);
-
-        if (format == 'Z') {
-            int nullIndex = 0;
-            while (nullIndex < count && bytes[nullIndex] != 0) {
-                nullIndex++;
-            }
-            return new String(bytes, 0, nullIndex, StandardCharsets.UTF_8);
-        } else if (format == 'a') {
-            return new String(bytes, StandardCharsets.UTF_8);
-        } else { // 'A'
-            return new String(bytes, StandardCharsets.UTF_8).trim();
-        }
-    }
-
-    /**
-     * Reads a bit string from the buffer based on the specified format and count.
-     *
-     * @param buffer The ByteBuffer containing the data.
-     * @param count  The number of bits to read.
-     * @param format The format character indicating the bit string type.
-     * @return The bit string read from the buffer.
-     */
-    private static String readBitString(ByteBuffer buffer, int count, char format) {
-        StringBuilder bitString = new StringBuilder();
-        int bytesToRead = (count + 7) / 8;
-        byte[] bytes = new byte[bytesToRead];
-        buffer.get(bytes);
-
-        for (int i = 0; i < count; i++) {
-            int byteIndex = i / 8;
-            int bitIndex = i % 8;
-            boolean bit = (bytes[byteIndex] & (1 << (format == 'b' ? bitIndex : 7 - bitIndex))) != 0;
-            bitString.append(bit ? '1' : '0');
-        }
-
-        return bitString.toString();
-    }
-
-    /**
-     * Reads a hex string from the buffer based on the specified format and count.
-     *
-     * @param buffer The ByteBuffer containing the data.
-     * @param count  The number of hex digits to read.
-     * @param format The format character indicating the hex string type ('h' for low nybble first, 'H' for high nybble first).
-     * @return The hex string read from the buffer.
-     */
-    private static String readHexString(ByteBuffer buffer, int count, char format) {
-        StringBuilder hexString = new StringBuilder();
-        int bytesToRead = (count + 1) / 2; // Each byte contains 2 hex digits
-
-        final char[] hexChars = "0123456789abcdef".toCharArray();
-
-        for (int i = 0; i < bytesToRead && buffer.hasRemaining(); i++) {
-            int byteValue = buffer.get() & 0xFF;
-
-            if (format == 'h') {
-                // Low nybble first
-                int lowNybble = byteValue & 0x0F;
-                int highNybble = (byteValue >> 4) & 0x0F;
-
-                if (hexString.length() < count) {
-                    hexString.append(hexChars[lowNybble]);
+                FormatHandler handler = handlers.get(format);
+                if (handler != null) {
+                    int size = handler.getFormatSize();
+                    if (size > 0) {
+                        return state.remainingBytes() / size;
+                    }
                 }
-                if (hexString.length() < count) {
-                    hexString.append(hexChars[highNybble]);
-                }
-            } else {
-                // High nybble first (normal hex representation)
-                int highNybble = (byteValue >> 4) & 0x0F;
-                int lowNybble = byteValue & 0x0F;
-
-                if (hexString.length() < count) {
-                    hexString.append(hexChars[highNybble]);
-                }
-                if (hexString.length() < count) {
-                    hexString.append(hexChars[lowNybble]);
-                }
-            }
+                return Integer.MAX_VALUE; // Let the handler decide
         }
-
-        return hexString.toString();
-    }
-
-    /**
-     * Reads a single UTF-8 encoded character from the buffer.
-     */
-    private static long readUTF8Character(ByteBuffer buffer) {
-        if (!buffer.hasRemaining()) {
-            throw new PerlCompilerException("unpack: no data for UTF-8 character");
-        }
-
-        int firstByte = buffer.get() & 0xFF;
-
-        // Determine how many bytes this UTF-8 character uses
-        int bytesNeeded;
-        int codePoint;
-
-        if ((firstByte & 0x80) == 0) {
-            // 1 byte: 0xxxxxxx
-            return firstByte;
-        } else if ((firstByte & 0xE0) == 0xC0) {
-            // 2 bytes: 110xxxxx 10xxxxxx
-            bytesNeeded = 1;
-            codePoint = firstByte & 0x1F;
-        } else if ((firstByte & 0xF0) == 0xE0) {
-            // 3 bytes: 1110xxxx 10xxxxxx 10xxxxxx
-            bytesNeeded = 2;
-            codePoint = firstByte & 0x0F;
-        } else if ((firstByte & 0xF8) == 0xF0) {
-            // 4 bytes: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
-            bytesNeeded = 3;
-            codePoint = firstByte & 0x07;
-        } else {
-            throw new PerlCompilerException("unpack: invalid UTF-8 sequence");
-        }
-
-        // Read continuation bytes
-        for (int i = 0; i < bytesNeeded; i++) {
-            if (!buffer.hasRemaining()) {
-                throw new PerlCompilerException("unpack: incomplete UTF-8 sequence");
-            }
-            int nextByte = buffer.get() & 0xFF;
-            if ((nextByte & 0xC0) != 0x80) {
-                throw new PerlCompilerException("unpack: invalid UTF-8 continuation byte");
-            }
-            codePoint = (codePoint << 6) | (nextByte & 0x3F);
-        }
-
-        return codePoint;
     }
 }
