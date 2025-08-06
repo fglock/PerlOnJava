@@ -46,12 +46,16 @@ public class Unpack {
         String template = templateScalar.toString();
         String dataString = packedData.toString();
 
-        // Default mode is C0 (character mode) unless template starts with U
-        boolean defaultCharacterMode = !template.startsWith("U");
+        // Default mode is always C0 (character mode)
         boolean startsWithU = template.startsWith("U") && !template.startsWith("U0");
 
-        // Create state object
-        UnpackState state = new UnpackState(dataString, startsWithU);
+        // Create state object - always starts in character mode
+        UnpackState state = new UnpackState(dataString, false);
+
+        // Check if template starts with U0 to switch to byte mode
+        if (template.startsWith("U0")) {
+            state.switchToByteMode();
+        }
 
         RuntimeList out = new RuntimeList();
         List<RuntimeBase> values = out.elements;
