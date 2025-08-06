@@ -207,6 +207,26 @@ public class MathOperators {
             if (result != null) return result;
         }
 
+        if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
+            // Use double arithmetic when either argument is a double
+            double dividend = arg1.getDouble();
+            double divisor = arg2.getDouble();
+
+            // Handle division by zero
+            if (divisor == 0.0) {
+                throw new PerlCompilerException("Division by zero in modulus operation");
+            }
+
+            // Calculate modulus using double precision
+            double result = dividend % divisor;
+
+            // Adjust result for Perl-style modulus behavior
+            // In Perl, the result has the same sign as the divisor
+            if (result != 0.0 && ((divisor > 0.0 && result < 0.0) || (divisor < 0.0 && result > 0.0))) {
+                result += divisor;
+            }
+            return new RuntimeScalar(result);
+        }
         int divisor = arg2.getInt();
         int result = arg1.getInt() % divisor;
         // Adjust result for negative modulus
