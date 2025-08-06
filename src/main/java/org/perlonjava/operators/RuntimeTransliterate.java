@@ -80,29 +80,44 @@ public class RuntimeTransliterate {
                         lastChar = null;
                     } else if (replacementChars.isEmpty()) {
                         // Empty replacement, non-delete mode - keep character as is
-                        // but respect squash duplicates flag
                         if (!squashDuplicates || lastChar == null || lastChar != codePoint) {
                             appendCodePoint(result, codePoint);
                         }
                         lastChar = codePoint;
                     } else {
-                        // Check if we've already assigned a mapping for this character
                         Integer mappedChar = null;
-                        if (complementMap.containsKey(codePoint)) {
-                            mappedChar = complementMap.get(codePoint);
-                        } else {
-                            // Assign new mapping
-                            if (replacementIndex < replacementChars.size()) {
-                                mappedChar = replacementChars.get(replacementIndex++);
-                                complementMap.put(codePoint, mappedChar);
-                            } else if (deleteUnmatched) {
-                                // With /d modifier, delete characters that have no replacement
-                                lastChar = null;
-                                continue;  // Skip this character (delete it)
+
+                        // Check if this is the common case of search range 0x00-0xFF
+                        if (isRange0x00_0xFF(searchSet)) {
+                            // Calculate position relative to first char after range
+                            int position = codePoint - 0x100;
+                            if (position >= 0) {
+                                // Use position as index with wraparound
+                                int index = position % replacementChars.size();
+                                mappedChar = replacementChars.get(index);
                             } else {
-                                // Use last replacement character
-                                mappedChar = replacementChars.get(replacementChars.size() - 1);
-                                complementMap.put(codePoint, mappedChar);
+                                // This shouldn't happen for chars matching complement
+                                mappedChar = replacementChars.get(0);
+                            }
+                        } else {
+                            // For other search ranges, use sequential assignment
+                            // Check if we've already assigned a mapping for this character
+                            if (complementMap.containsKey(codePoint)) {
+                                mappedChar = complementMap.get(codePoint);
+                            } else {
+                                // Assign new mapping
+                                if (replacementIndex < replacementChars.size()) {
+                                    mappedChar = replacementChars.get(replacementIndex++);
+                                    complementMap.put(codePoint, mappedChar);
+                                } else if (deleteUnmatched) {
+                                    // With /d modifier, delete characters that have no replacement
+                                    lastChar = null;
+                                    continue;  // Skip this character (delete it)
+                                } else {
+                                    // Use last replacement character
+                                    mappedChar = replacementChars.get(replacementChars.size() - 1);
+                                    complementMap.put(codePoint, mappedChar);
+                                }
                             }
                         }
 
@@ -114,15 +129,24 @@ public class RuntimeTransliterate {
                 } else {
                     // Normal mode handling
                     if (deleteSet.contains(codePoint)) {
-                        // Character should be deleted
-                        lastChar = null;
+                        // Character should be deleted - DON'T change lastChar!
+                        // We need to preserve it for squashing logic
                     } else if (translationMap.containsKey(codePoint)) {
                         int mappedChar = translationMap.get(codePoint);
+
+                        // DEBUG
+                        System.err.printf("DEBUG: char 0x%02X -> 0x%02X, lastChar=%s, squash=%b\n",
+                                codePoint, mappedChar,
+                                lastChar == null ? "null" : String.format("0x%02X", lastChar),
+                                squashDuplicates);
 
                         // Handle squash duplicates
                         if (!squashDuplicates || lastChar == null || !lastChar.equals(mappedChar)) {
                             appendCodePoint(result, mappedChar);
                             lastChar = mappedChar;
+                            System.err.printf("  OUTPUT: '%c'\n", (char)mappedChar);
+                        } else {
+                            System.err.println("  SQUASHED");
                         }
                     } else {
                         // No mapping found (shouldn't happen if compilation is correct)
@@ -151,6 +175,15 @@ public class RuntimeTransliterate {
         return new RuntimeScalar(count);
     }
 
+    private boolean isRange0x00_0xFF(Set<Integer> searchSet) {
+        // Check if searchSet contains exactly the range 0x00-0xFF
+        if (searchSet.size() != 256) return false;
+        for (int i = 0; i <= 0xFF; i++) {
+            if (!searchSet.contains(i)) return false;
+        }
+        return true;
+    }
+
     /**
      * Compiles the transliteration pattern and replacement strings with the given modifiers.
      */
@@ -164,6 +197,21 @@ public class RuntimeTransliterate {
         // Expand ranges and escapes
         List<Integer> searchChars = expandRangesAndEscapes(search);
         List<Integer> replaceChars = expandRangesAndEscapes(replace);
+
+        // DEBUG: Print first 10 search chars
+        System.err.print("DEBUG: First 10 search chars: ");
+        for (int i = 0; i < Math.min(10, searchChars.size()); i++) {
+            System.err.printf("0x%02X ", searchChars.get(i));
+        }
+        System.err.println();
+
+        // DEBUG: Print all replace chars
+        System.err.print("DEBUG: Replace chars: ");
+        for (int ch : replaceChars) {
+            System.err.printf("'%c' ", (char)ch);
+        }
+        System.err.println();
+
 
         // Initialize data structures
         translationMap = new HashMap<>();
@@ -184,12 +232,21 @@ public class RuntimeTransliterate {
         int searchLen = searchChars.size();
         int replaceLen = replaceChars.size();
 
+        // Debug: Track mapping index for proper assignment
+        int mappingIndex = 0;
+
         for (int i = 0; i < searchLen; i++) {
             int searchChar = searchChars.get(i);
 
-            if (i < replaceLen) {
-                // Direct mapping
-                translationMap.put(searchChar, replaceChars.get(i));
+            // Skip if already mapped (character appeared earlier in search pattern)
+            if (translationMap.containsKey(searchChar) || deleteSet.contains(searchChar)) {
+                continue;
+            }
+
+            if (mappingIndex < replaceLen) {
+                // Direct mapping using the mapping index, not i
+                translationMap.put(searchChar, replaceChars.get(mappingIndex));
+                mappingIndex++;
             } else if (deleteUnmatched || replaceLen == 0) {
                 // Delete this character
                 deleteSet.add(searchChar);
@@ -198,6 +255,16 @@ public class RuntimeTransliterate {
                 translationMap.put(searchChar, replaceChars.get(replaceLen - 1));
             }
         }
+
+
+        // DEBUG: Print the actual mappings created
+        System.err.println("DEBUG: Mappings created:");
+        for (Map.Entry<Integer, Integer> entry : translationMap.entrySet()) {
+            System.err.printf("  0x%02X ('%c') -> 0x%02X ('%c')\n",
+                    entry.getKey(), (char)(int)entry.getKey(),
+                    entry.getValue(), (char)(int)entry.getValue());
+        }
+        System.err.println("DEBUG: DeleteSet size: " + deleteSet.size());
     }
 
     /**
@@ -205,6 +272,14 @@ public class RuntimeTransliterate {
      * Returns a list of Unicode code points.
      */
     private List<Integer> expandRangesAndEscapes(String input) {
+        // DEBUG
+        System.err.println("DEBUG expandRangesAndEscapes input: '" + input + "'");
+        System.err.print("DEBUG hex: ");
+        for (char c : input.toCharArray()) {
+            System.err.printf("%02X ", (int)c);
+        }
+        System.err.println();
+
         List<Integer> expanded = new ArrayList<>();
 
         int i = 0;
