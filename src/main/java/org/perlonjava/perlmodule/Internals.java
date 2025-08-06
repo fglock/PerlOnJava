@@ -28,9 +28,17 @@ public class Internals extends PerlModuleBase {
             internals.registerMethod("initialize_state_array", "initializeStateArray", "$$");
             internals.registerMethod("initialize_state_hash", "initializeStateHash", "$$");
             internals.registerMethod("is_initialized_state_variable", "isInitializedStateVariable", "$$");
+            internals.registerMethod("stack_refcounted", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Internals method: " + e.getMessage());
         }
+    }
+
+    public static RuntimeList stack_refcounted(RuntimeArray args, int ctx) {
+
+        // XXX TODO placeholder
+
+        return new RuntimeList();
     }
 
     /**
