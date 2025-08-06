@@ -45,6 +45,7 @@ public class Warnings extends PerlModuleBase {
         for (int i = 1; i < args.size(); i++) {
             String category = args.get(i).toString();
             if (category.startsWith("-")) {
+                category = category.substring(1);
                 if (!warningExists(category)) {
                     throw new PerlCompilerException("Unknown warnings category '" + category + "'");
                 }
