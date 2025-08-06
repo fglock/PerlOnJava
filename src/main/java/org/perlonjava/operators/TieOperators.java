@@ -27,8 +27,10 @@ public class TieOperators {
      * @throws PerlCompilerException if the variable type is not supported or not yet implemented
      */
     public static RuntimeScalar tie(RuntimeBase... scalars) {
-        RuntimeScalar variable = (RuntimeScalar) scalars[0];
-        String className = scalars[1].toString();
+        RuntimeScalar variable = scalars[0].getFirst();
+        RuntimeScalar classArg = scalars[1].getFirst();
+        String className = classArg.getBoolean() ? scalars[1].toString() : "main";
+        
         RuntimeArray args = new RuntimeArray(Arrays.copyOfRange(scalars, 2, scalars.length));
 
         String method = switch (variable.type) {
