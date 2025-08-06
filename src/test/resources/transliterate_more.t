@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use Test::More;
+use utf8;
 
 # Test basic character range handling
 subtest 'Character range tests' => sub {
@@ -163,8 +164,8 @@ subtest 'Unicode and high-byte tests' => sub {
     # Basic Unicode character
     my $string = "café";
     my $count = $string =~ tr/é/e/;
-    is($string, "cafee", "Unicode character replacement");
-    is($count, 2, "Count for Unicode replacement");
+    is($string, "cafe", "Unicode character replacement");
+    is($count, 1, "Count for Unicode replacement");
 
     # High-byte characters (Latin-1)
     $string = "\x{00}\x{7f}\x{80}\x{ff}";
