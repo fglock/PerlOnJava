@@ -55,16 +55,56 @@ public class UnpackState {
     public void switchToCharacterMode() {
         if (!characterMode) {
             characterMode = true;
-            // Clear buffer to force recreation
-            buffer = null;
+            // Need to synchronize code point position with consumed bytes
+            if (buffer != null) {
+                int bytesConsumed = buffer.position();
+                // Count code points in consumed bytes
+                int cpIndex = 0;
+                int byteIndex = 0;
+                while (byteIndex < bytesConsumed && cpIndex < codePoints.length) {
+                    int cp = codePoints[cpIndex];
+                    if (cp <= 0x7F) {
+                        byteIndex += 1;
+                    } else if (cp <= 0x7FF) {
+                        byteIndex += 2;
+                    } else if (cp <= 0xFFFF) {
+                        byteIndex += 3;
+                    } else {
+                        byteIndex += 4;
+                    }
+                    if (byteIndex <= bytesConsumed) {
+                        cpIndex++;
+                    }
+                }
+                codePointIndex = cpIndex;
+            }
+            buffer = null; // Clear buffer to force recreation if needed
         }
     }
 
     public void switchToByteMode() {
         if (characterMode) {
             characterMode = false;
-            // Clear buffer to force recreation
-            buffer = null;
+            // Need to synchronize byte position with consumed code points
+            if (buffer == null) {
+                buffer = ByteBuffer.wrap(originalBytes).order(ByteOrder.LITTLE_ENDIAN);
+            }
+            // Calculate byte position based on consumed code points
+            int bytePos = 0;
+            for (int i = 0; i < codePointIndex; i++) {
+                // Calculate UTF-8 byte length of each consumed code point
+                int cp = codePoints[i];
+                if (cp <= 0x7F) {
+                    bytePos += 1;
+                } else if (cp <= 0x7FF) {
+                    bytePos += 2;
+                } else if (cp <= 0xFFFF) {
+                    bytePos += 3;
+                } else {
+                    bytePos += 4;
+                }
+            }
+            buffer.position(bytePos);
         }
     }
 
