@@ -111,7 +111,8 @@ public class StringParser {
             tokPos++;  // Move to the next token
         }
 
-        if (ctx.symbolTable.isStrictOptionEnabled(UTF8_PRAGMA_BIT_POSITION)) {
+        if (ctx.symbolTable.isStrictOptionEnabled(UTF8_PRAGMA_BIT_POSITION)
+                || ctx.compilerOptions.isUnicodeSource) {
             // utf8 source code is true - keep Unicode string as-is
             buffers.add(buffer.toString());
 
