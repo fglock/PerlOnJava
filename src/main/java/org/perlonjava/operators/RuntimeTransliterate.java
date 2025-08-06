@@ -133,20 +133,11 @@ public class RuntimeTransliterate {
                         // We need to preserve it for squashing logic
                     } else if (translationMap.containsKey(codePoint)) {
                         int mappedChar = translationMap.get(codePoint);
-
-                        // DEBUG
-                        System.err.printf("DEBUG: char 0x%02X -> 0x%02X, lastChar=%s, squash=%b\n",
-                                codePoint, mappedChar,
-                                lastChar == null ? "null" : String.format("0x%02X", lastChar),
-                                squashDuplicates);
-
                         // Handle squash duplicates
                         if (!squashDuplicates || lastChar == null || !lastChar.equals(mappedChar)) {
                             appendCodePoint(result, mappedChar);
                             lastChar = mappedChar;
-                            System.err.printf("  OUTPUT: '%c'\n", (char)mappedChar);
                         } else {
-                            System.err.println("  SQUASHED");
                         }
                     } else {
                         // No mapping found (shouldn't happen if compilation is correct)
@@ -198,21 +189,6 @@ public class RuntimeTransliterate {
         List<Integer> searchChars = expandRangesAndEscapes(search);
         List<Integer> replaceChars = expandRangesAndEscapes(replace);
 
-        // DEBUG: Print first 10 search chars
-        System.err.print("DEBUG: First 10 search chars: ");
-        for (int i = 0; i < Math.min(10, searchChars.size()); i++) {
-            System.err.printf("0x%02X ", searchChars.get(i));
-        }
-        System.err.println();
-
-        // DEBUG: Print all replace chars
-        System.err.print("DEBUG: Replace chars: ");
-        for (int ch : replaceChars) {
-            System.err.printf("'%c' ", (char)ch);
-        }
-        System.err.println();
-
-
         // Initialize data structures
         translationMap = new HashMap<>();
         deleteSet = new HashSet<>();
@@ -255,16 +231,6 @@ public class RuntimeTransliterate {
                 translationMap.put(searchChar, replaceChars.get(replaceLen - 1));
             }
         }
-
-
-        // DEBUG: Print the actual mappings created
-        System.err.println("DEBUG: Mappings created:");
-        for (Map.Entry<Integer, Integer> entry : translationMap.entrySet()) {
-            System.err.printf("  0x%02X ('%c') -> 0x%02X ('%c')\n",
-                    entry.getKey(), (char)(int)entry.getKey(),
-                    entry.getValue(), (char)(int)entry.getValue());
-        }
-        System.err.println("DEBUG: DeleteSet size: " + deleteSet.size());
     }
 
     /**
@@ -272,14 +238,6 @@ public class RuntimeTransliterate {
      * Returns a list of Unicode code points.
      */
     private List<Integer> expandRangesAndEscapes(String input) {
-        // DEBUG
-        System.err.println("DEBUG expandRangesAndEscapes input: '" + input + "'");
-        System.err.print("DEBUG hex: ");
-        for (char c : input.toCharArray()) {
-            System.err.printf("%02X ", (int)c);
-        }
-        System.err.println();
-
         List<Integer> expanded = new ArrayList<>();
 
         int i = 0;
