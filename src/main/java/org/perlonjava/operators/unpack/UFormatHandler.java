@@ -18,25 +18,17 @@ public class UFormatHandler implements FormatHandler {
 
     @Override
     public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
-        // IMPORTANT: U format does NOT change the mode
-        // It just reads differently based on the current mode
-
         for (int i = 0; i < count; i++) {
             if (state.isCharacterMode() || startsWithU) {
-                // In character mode or when template starts with U, read codepoints directly
                 if (state.hasMoreCodePoints()) {
                     output.add(new RuntimeScalar(state.nextCodePoint()));
-                } else if (!isStarCount) {
-                    throw new PerlCompilerException("unpack: not enough data");
                 } else {
-                    break;
+                    break; // Just stop unpacking
                 }
             } else {
-                // In byte mode, read UTF-8 encoded character from bytes
                 ByteBuffer buffer = state.getBuffer();
                 if (!buffer.hasRemaining()) {
-                    if (isStarCount) break;
-                    throw new PerlCompilerException("unpack: not enough data");
+                    break; // Just stop unpacking
                 }
                 long codePoint = readUTF8Character(buffer);
                 output.add(new RuntimeScalar(codePoint));
