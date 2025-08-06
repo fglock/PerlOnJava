@@ -1,7 +1,9 @@
 package org.perlonjava.runtime;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -34,53 +36,84 @@ public class FileUtils {
             return "";
         }
 
+        Charset charset = null;
+        int offset = 0;
+
         // Check for BOM (Byte Order Mark)
         if (bytes.length >= 3 && bytes[0] == (byte)0xEF && bytes[1] == (byte)0xBB && bytes[2] == (byte)0xBF) {
             // UTF-8 BOM
-            return new String(bytes, 3, bytes.length - 3, StandardCharsets.UTF_8);
+            charset = StandardCharsets.UTF_8;
+            offset = 3;
         } else if (bytes.length >= 2 && bytes[0] == (byte)0xFE && bytes[1] == (byte)0xFF) {
             // UTF-16BE BOM
-            return new String(bytes, 2, bytes.length - 2, StandardCharsets.UTF_16BE);
+            charset = StandardCharsets.UTF_16BE;
+            offset = 2;
         } else if (bytes.length >= 2 && bytes[0] == (byte)0xFF && bytes[1] == (byte)0xFE) {
             // UTF-16LE BOM
-            return new String(bytes, 2, bytes.length - 2, StandardCharsets.UTF_16LE);
+            charset = StandardCharsets.UTF_16LE;
+            offset = 2;
         } else {
             // No BOM - try to detect UTF-16 without BOM using heuristics
-            if (bytes.length >= 2) {
-                // Check for UTF-16LE pattern (ASCII chars would have 0x00 as second byte)
-                boolean couldBeUTF16LE = true;
-                boolean couldBeUTF16BE = true;
-                int nullCount = 0;
+            charset = detectCharsetWithoutBOM(bytes);
+            offset = 0;
+        }
 
-                for (int i = 0; i < Math.min(bytes.length, 100); i++) {
-                    if (bytes[i] == 0) nullCount++;
-                }
+        // For UTF-16 encodings, use a decoder that can handle malformed input
+        // This is needed to preserve invalid surrogate sequences that Perl allows
+        if (charset == StandardCharsets.UTF_16LE || charset == StandardCharsets.UTF_16BE) {
+            CharsetDecoder decoder = charset.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPLACE)
+                    .onUnmappableCharacter(CodingErrorAction.REPLACE);
 
-                // If we have a lot of null bytes, it might be UTF-16
-                if (nullCount > bytes.length / 4) {
-                    // Try to determine byte order by looking for ASCII patterns
-                    for (int i = 0; i < Math.min(bytes.length - 1, 20); i += 2) {
-                        byte b1 = bytes[i];
-                        byte b2 = bytes[i + 1];
+            try {
+                ByteBuffer buffer = ByteBuffer.wrap(bytes, offset, bytes.length - offset);
+                CharBuffer result = decoder.decode(buffer);
+                return result.toString();
+            } catch (CharacterCodingException e) {
+                // Fall back to default behavior
+                return new String(bytes, offset, bytes.length - offset, charset);
+            }
+        }
 
-                        // Common ASCII characters in range 0x20-0x7E
-                        if (b1 >= 0x20 && b1 <= 0x7E && b2 == 0) {
-                            couldBeUTF16BE = false;
-                        } else if (b2 >= 0x20 && b2 <= 0x7E && b1 == 0) {
-                            couldBeUTF16LE = false;
-                        }
-                    }
+        // For UTF-8 and other charsets, use standard decoding
+        return new String(bytes, offset, bytes.length - offset, charset);
+    }
 
-                    if (couldBeUTF16LE && !couldBeUTF16BE) {
-                        return new String(bytes, StandardCharsets.UTF_16LE);
-                    } else if (couldBeUTF16BE && !couldBeUTF16LE) {
-                        return new String(bytes, StandardCharsets.UTF_16BE);
-                    }
-                }
+    private static Charset detectCharsetWithoutBOM(byte[] bytes) {
+        if (bytes.length >= 2) {
+            // Check for UTF-16LE pattern (ASCII chars would have 0x00 as second byte)
+            boolean couldBeUTF16LE = true;
+            boolean couldBeUTF16BE = true;
+            int nullCount = 0;
+
+            for (int i = 0; i < Math.min(bytes.length, 100); i++) {
+                if (bytes[i] == 0) nullCount++;
             }
 
-            // Default to UTF-8
-            return new String(bytes, StandardCharsets.UTF_8);
+            // If we have a lot of null bytes, it might be UTF-16
+            if (nullCount > bytes.length / 4) {
+                // Try to determine byte order by looking for ASCII patterns
+                for (int i = 0; i < Math.min(bytes.length - 1, 20); i += 2) {
+                    byte b1 = bytes[i];
+                    byte b2 = bytes[i + 1];
+
+                    // Common ASCII characters in range 0x20-0x7E
+                    if (b1 >= 0x20 && b1 <= 0x7E && b2 == 0) {
+                        couldBeUTF16BE = false;
+                    } else if (b2 >= 0x20 && b2 <= 0x7E && b1 == 0) {
+                        couldBeUTF16LE = false;
+                    }
+                }
+
+                if (couldBeUTF16LE && !couldBeUTF16BE) {
+                    return StandardCharsets.UTF_16LE;
+                } else if (couldBeUTF16BE && !couldBeUTF16LE) {
+                    return StandardCharsets.UTF_16BE;
+                }
+            }
         }
+
+        // Default to UTF-8
+        return StandardCharsets.UTF_8;
     }
 }
