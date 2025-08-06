@@ -836,6 +836,7 @@ public class ArgumentParser {
         public boolean usePathEnv = false; // For -S
         public boolean discardLeadingGarbage = false; // For -x
         List<ModuleUseStatement> moduleUseStatements = new ArrayList<>(); // For -m -M
+        public boolean isUnicodeSource = false; // Set to true for UTF-16/UTF-32 source files
 
         @Override
         public CompilerOptions clone() {
@@ -872,6 +873,7 @@ public class ArgumentParser {
                     "    argumentList=" + argumentList + ",\n" +
                     "    inc=" + inc + ",\n" +
                     "    moduleUseStatements=" + moduleUseStatements + "\n" +
+                    "    isUnicodeSource=" + isUnicodeSource + "\n" +
                     "}";
         }
     }
