@@ -22,6 +22,9 @@ public class Strict extends PerlModuleBase {
     public static final int EXPLICIT_STRICT_SUBS = 0x00000040;
     public static final int EXPLICIT_STRICT_VARS = 0x00000080;
 
+    // Bitmask for utf8 source code
+    public static final int UTF8_PRAGMA_BIT_POSITION = 0x00800000;
+
     /**
      * Constructor for Strict.
      * Initializes the module with the name "strict".

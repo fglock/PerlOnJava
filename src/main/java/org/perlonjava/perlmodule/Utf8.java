@@ -16,8 +16,6 @@ import static org.perlonjava.parser.SpecialBlockParser.getCurrentScope;
  */
 public class Utf8 extends PerlModuleBase {
 
-    public static final int UTF8_PRAGMA_BIT_POSITION = 0x00800000;
-
     /**
      * Constructor for Utf8.
      * Initializes the module with the name "utf8".
@@ -58,7 +56,7 @@ public class Utf8 extends PerlModuleBase {
      */
     public static RuntimeList useUtf8(RuntimeArray args, int ctx) {
         ScopedSymbolTable symbolTable = getCurrentScope();
-        symbolTable.enableStrictOption(UTF8_PRAGMA_BIT_POSITION);
+        symbolTable.enableStrictOption(Strict.UTF8_PRAGMA_BIT_POSITION);
         return new RuntimeScalar().getList();
     }
 
@@ -71,7 +69,7 @@ public class Utf8 extends PerlModuleBase {
      */
     public static RuntimeList noUtf8(RuntimeArray args, int ctx) {
         ScopedSymbolTable symbolTable = getCurrentScope();
-        symbolTable.disableStrictOption(UTF8_PRAGMA_BIT_POSITION);
+        symbolTable.disableStrictOption(Strict.UTF8_PRAGMA_BIT_POSITION);
         return new RuntimeScalar().getList();
     }
 
