@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 7;
+use Test::More tests => 6;
 use Data::Dumper;
 
 # Test autovivification with local() on array reference
