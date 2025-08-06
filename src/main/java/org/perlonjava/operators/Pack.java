@@ -36,11 +36,25 @@ public class Pack {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         int valueIndex = 0;
 
+        // Track current mode - default is byte mode (U0) unless C0 is specified
+        boolean characterMode = false;  // Default is byte mode
+
         for (int i = 0; i < template.length(); i++) {
             char format = template.charAt(i);
 
             // Skip spaces
             if (Character.isWhitespace(format)) {
+                continue;
+            }
+
+            // Check for mode modifiers C0 and U0
+            if (format == 'C' && i + 1 < template.length() && template.charAt(i + 1) == '0') {
+                characterMode = true;
+                i++; // Skip the '0'
+                continue;
+            } else if (format == 'U' && i + 1 < template.length() && template.charAt(i + 1) == '0') {
+                characterMode = false;
+                i++; // Skip the '0'
                 continue;
             }
 
@@ -99,7 +113,13 @@ public class Pack {
                         count = str.length();
                     }
                 }
-                writeString(output, str, count, format);
+                // In character mode, we need to handle the string differently
+                if (characterMode && format == 'a') {
+                    // In character mode with 'a', preserve the string as-is
+                    writeString(output, str, count, format, characterMode);
+                } else {
+                    writeString(output, str, count, format, false);
+                }
             } else {
                 // Numeric formats
                 for (int j = 0; j < count; j++) {
@@ -111,7 +131,9 @@ public class Pack {
 
                     switch (format) {
                         case 'C':
-                            output.write(value.getInt() & 0xFF);
+                            // Always use numeric value for C format
+                            int intValue = value.getInt();
+                            output.write(intValue & 0xFF);
                             break;
                         case 's':
                             writeShortLittleEndian(output, value.getInt());
@@ -153,7 +175,7 @@ public class Pack {
                             }
                             break;
                         case 'U':
-                            // Pack a Unicode character number
+                            // Pack a Unicode character number as UTF-8
                             int codePoint1;
                             String strValue1 = value.toString();
                             if (!strValue1.isEmpty() && !Character.isDigit(strValue1.charAt(0))) {
@@ -163,7 +185,18 @@ public class Pack {
                                 // If it's a number, use it directly
                                 codePoint1 = value.getInt();
                             }
-                            writeInt(output, codePoint1);
+                            // U format creates UTF-8 encoded output
+                            if (Character.isValidCodePoint(codePoint1)) {
+                                String unicodeChar1 = new String(Character.toChars(codePoint1));
+                                byte[] utf8Bytes1 = unicodeChar1.getBytes(StandardCharsets.UTF_8);
+                                try {
+                                    output.write(utf8Bytes1);
+                                } catch (IOException e) {
+                                    throw new RuntimeException(e);
+                                }
+                            } else {
+                                throw new PerlCompilerException("pack: invalid Unicode code point: " + codePoint1);
+                            }
                             break;
                         case 'n':
                             writeShortBigEndian(output, value.getInt());
@@ -184,8 +217,27 @@ public class Pack {
             }
         }
 
-        // Convert the byte array to a string using ISO-8859-1 encoding
-        return new RuntimeScalar(output.toString(StandardCharsets.ISO_8859_1));
+        // Convert the byte array to a string
+        // The result should be a byte string (not UTF-8 decoded)
+        byte[] bytes = output.toByteArray();
+
+        // Check if we packed any Unicode characters with U format
+        boolean hasUnicodeFormat = false;
+        for (int i = 0; i < template.length(); i++) {
+            char c = template.charAt(i);
+            if (c == 'U' || c == 'W') {
+                hasUnicodeFormat = true;
+                break;
+            }
+        }
+
+        if (hasUnicodeFormat) {
+            // For U and W formats, return UTF-8 decoded string
+            return new RuntimeScalar(new String(bytes, StandardCharsets.UTF_8));
+        } else {
+            // For other formats, return as byte string
+            return new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1));
+        }
     }
 
     /**
@@ -309,11 +361,20 @@ public class Pack {
      * @param str    The string to write.
      * @param count  The number of characters to write.
      * @param format The format character indicating the string type.
+     * @param characterMode Whether we're in character mode (C0) or byte mode (U0)
      */
-    private static void writeString(ByteArrayOutputStream output, String str, int count, char format) {
-        byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
-        int length = Math.min(bytes.length, count);
+    private static void writeString(ByteArrayOutputStream output, String str, int count, char format, boolean characterMode) {
+        byte[] bytes;
 
+        if (characterMode && format == 'a') {
+            // In character mode with 'a', use the string as-is (already UTF-8 encoded if needed)
+            bytes = str.getBytes(StandardCharsets.ISO_8859_1);
+        } else {
+            // Normal UTF-8 encoding
+            bytes = str.getBytes(StandardCharsets.UTF_8);
+        }
+
+        int length = Math.min(bytes.length, count);
         output.write(bytes, 0, length);
 
         // Pad with nulls or spaces
@@ -327,12 +388,17 @@ public class Pack {
             byte[] currentOutput = output.toByteArray();
             boolean needsNullTerminator = currentOutput.length <= 0 || currentOutput[currentOutput.length - 1] != 0;
 
-            // Check if the last byte written is a null byte
-
             if (needsNullTerminator) {
                 output.write(0);
             }
         }
+    }
+
+    /**
+     * Overloaded writeString for backward compatibility
+     */
+    private static void writeString(ByteArrayOutputStream output, String str, int count, char format) {
+        writeString(output, str, count, format, false);
     }
 
     /**
