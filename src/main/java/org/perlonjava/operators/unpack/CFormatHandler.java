@@ -13,22 +13,18 @@ public class CFormatHandler implements FormatHandler {
     public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
         for (int i = 0; i < count; i++) {
             if (state.isCharacterMode()) {
-                // In character mode, read Unicode codepoints
                 if (state.hasMoreCodePoints()) {
                     output.add(new RuntimeScalar(state.nextCodePoint()));
-                } else if (!isStarCount) {
-                    throw new PerlCompilerException("unpack: not enough data");
                 } else {
-                    break; // Star count, stop when no more data
+                    break; // Just stop unpacking
                 }
             } else {
-                // In byte mode, read single bytes
                 ByteBuffer buffer = state.getBuffer();
-                if (buffer == null || buffer.remaining() < 1) {
-                    if (isStarCount) break;
-                    throw new PerlCompilerException("unpack: not enough data");
+                if (buffer.hasRemaining()) {
+                    output.add(new RuntimeScalar(buffer.get() & 0xFF));
+                } else {
+                    break; // Just stop unpacking
                 }
-                output.add(new RuntimeScalar(buffer.get() & 0xFF));
             }
         }
     }
