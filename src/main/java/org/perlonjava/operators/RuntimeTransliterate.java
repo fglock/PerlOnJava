@@ -80,7 +80,10 @@ public class RuntimeTransliterate {
                         lastChar = null;
                     } else if (replacementChars.isEmpty()) {
                         // Empty replacement, non-delete mode - keep character as is
-                        appendCodePoint(result, codePoint);
+                        // but respect squash duplicates flag
+                        if (!squashDuplicates || lastChar == null || lastChar != codePoint) {
+                            appendCodePoint(result, codePoint);
+                        }
                         lastChar = codePoint;
                     } else {
                         // Check if we've already assigned a mapping for this character
