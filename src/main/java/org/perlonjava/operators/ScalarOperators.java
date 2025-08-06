@@ -70,7 +70,7 @@ public class ScalarOperators {
         if (str.isEmpty()) {
             i = 0;
         } else {
-            i = str.charAt(0);
+            i = str.codePointAt(0);
         }
         return getScalarInt(i);
     }
