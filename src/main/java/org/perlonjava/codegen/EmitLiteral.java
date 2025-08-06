@@ -166,12 +166,16 @@ public class EmitLiteral {
 
         MethodVisitor mv = ctx.mv;
 
+        // Use a conservative limit to avoid constant pool size issues
+        final int MAX_STRING_LENGTH = 16000; // Conservative limit
+        boolean isLargeString = node.value != null && node.value.length() > MAX_STRING_LENGTH;
+
         if (ctx.isBoxed) {
             if (node.isVString) {
                 // V-strings: no caching (they are rare)
                 mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
                 mv.visitInsn(Opcodes.DUP);
-                mv.visitLdcInsn(node.value);
+                emitStringValue(mv, node.value, isLargeString);
                 mv.visitMethodInsn(
                         Opcodes.INVOKESPECIAL,
                         "org/perlonjava/runtime/RuntimeScalar",
@@ -182,6 +186,17 @@ public class EmitLiteral {
                 mv.visitInsn(Opcodes.DUP);
                 mv.visitLdcInsn(RuntimeScalarType.VSTRING);
                 mv.visitFieldInsn(Opcodes.PUTFIELD, "org/perlonjava/runtime/RuntimeScalar", "type", "I");
+            } else if (isLargeString) {
+                // Large strings: create new object without caching
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
+                mv.visitInsn(Opcodes.DUP);
+                emitStringValue(mv, node.value, true);
+                mv.visitMethodInsn(
+                        Opcodes.INVOKESPECIAL,
+                        "org/perlonjava/runtime/RuntimeScalar",
+                        "<init>",
+                        "(Ljava/lang/String;)V",
+                        false);
             } else {
                 // Use cache for regular strings
                 int stringIndex = RuntimeScalarCache.getOrCreateStringIndex(node.value);
@@ -196,10 +211,10 @@ public class EmitLiteral {
                             "(I)Lorg/perlonjava/runtime/RuntimeScalar;",
                             false);
                 } else {
-                    // String is too long or null, create new object
+                    // String is too long for cache or null, create new object
                     mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
                     mv.visitInsn(Opcodes.DUP);
-                    mv.visitLdcInsn(node.value);
+                    emitStringValue(mv, node.value, false);
                     mv.visitMethodInsn(
                             Opcodes.INVOKESPECIAL,
                             "org/perlonjava/runtime/RuntimeScalar",
@@ -209,9 +224,45 @@ public class EmitLiteral {
                 }
             }
         } else {
-            // Unboxed context: just push the string value
-            mv.visitLdcInsn(node.value);
+            // Unboxed context: push the string value
+            emitStringValue(mv, node.value, isLargeString);
         }
+    }
+
+    /**
+     * Emits a string value, handling large strings by breaking them into chunks.
+     */
+    private static void emitStringValue(MethodVisitor mv, String value, boolean isLarge) {
+        if (!isLarge) {
+            mv.visitLdcInsn(value);
+            return;
+        }
+
+        // For large strings, use StringBuilder
+        mv.visitTypeInsn(Opcodes.NEW, "java/lang/StringBuilder");
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn(value.length());
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder",
+                "<init>", "(I)V", false);
+
+        // Break string into chunks
+        final int CHUNK_SIZE = 10000; // Safe chunk size
+        int offset = 0;
+
+        while (offset < value.length()) {
+            int end = Math.min(offset + CHUNK_SIZE, value.length());
+            String chunk = value.substring(offset, end);
+
+            mv.visitLdcInsn(chunk);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder",
+                    "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false);
+
+            offset = end;
+        }
+
+        // Convert StringBuilder to String
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder",
+                "toString", "()Ljava/lang/String;", false);
     }
 
     /**
