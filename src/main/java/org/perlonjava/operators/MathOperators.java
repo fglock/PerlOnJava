@@ -36,7 +36,7 @@ public class MathOperators {
         if (arg1.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2);
         } else {
-            return getScalarInt(arg1.getInt() + arg2);
+            return getScalarInt(arg1.getLong() + arg2);
         }
     }
 
@@ -67,7 +67,7 @@ public class MathOperators {
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2.getDouble());
         } else {
-            return getScalarInt(arg1.getInt() + arg2.getInt());
+            return getScalarInt(arg1.getLong() + arg2.getLong());
         }
     }
 
@@ -94,7 +94,7 @@ public class MathOperators {
         if (arg1.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2);
         } else {
-            return getScalarInt(arg1.getInt() - arg2);
+            return getScalarInt(arg1.getLong() - arg2);
         }
     }
 
@@ -125,7 +125,7 @@ public class MathOperators {
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2.getDouble());
         } else {
-            return getScalarInt(arg1.getInt() - arg2.getInt());
+            return getScalarInt(arg1.getLong() - arg2.getLong());
         }
     }
 
