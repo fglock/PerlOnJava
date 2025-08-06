@@ -6,7 +6,7 @@ import java.nio.ByteBuffer;
 import java.util.List;
 
 /**
- * Handles 'W' format - BER-compressed integer (variable-length UTF-8).
+ * Handles 'W' format - Converts each byte to its unsigned value.
  */
 public class WFormatHandler implements FormatHandler {
 
@@ -19,39 +19,26 @@ public class WFormatHandler implements FormatHandler {
 
         ByteBuffer buffer = state.getBuffer();
 
-        for (int i = 0; i < count; i++) {
-            if (!buffer.hasRemaining()) {
-                if (isStarCount) break;
-                throw new PerlCompilerException("unpack: not enough data");
+        if (isStarCount) {
+            // Read all remaining bytes
+            while (buffer.hasRemaining()) {
+                int value = buffer.get() & 0xFF;
+                output.add(new RuntimeScalar(value));
             }
-
-            long value = readBERInteger(buffer);
-            output.add(new RuntimeScalar(value));
+        } else {
+            // Read exactly 'count' bytes
+            for (int i = 0; i < count; i++) {
+                if (!buffer.hasRemaining()) {
+                    throw new PerlCompilerException("unpack: not enough data");
+                }
+                int value = buffer.get() & 0xFF;
+                output.add(new RuntimeScalar(value));
+            }
         }
     }
 
-    private long readBERInteger(ByteBuffer buffer) {
-        long result = 0;
-        int shift = 0;
-
-        while (buffer.hasRemaining()) {
-            int b = buffer.get() & 0xFF;
-
-            if ((b & 0x80) == 0) {
-                // Last byte
-                result |= ((long) b) << shift;
-                return result;
-            } else {
-                // More bytes follow
-                result |= ((long) (b & 0x7F)) << shift;
-                shift += 7;
-
-                if (shift > 63) {
-                    throw new PerlCompilerException("unpack: W format integer overflow");
-                }
-            }
-        }
-
-        throw new PerlCompilerException("unpack: incomplete W format integer");
+    @Override
+    public int getFormatSize() {
+        return 1; // Each W reads exactly 1 byte
     }
 }
