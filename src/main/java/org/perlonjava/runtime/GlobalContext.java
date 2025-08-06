@@ -66,6 +66,7 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::0").set(compilerOptions.fileName);
         GlobalVariable.getGlobalVariable(GLOBAL_PHASE).set(""); // ${^GLOBAL_PHASE}
         GlobalVariable.getGlobalVariable(TAINT); // ${^TAINT}
+        GlobalVariable.getGlobalVariable("main::>");  // TODO
 
         GlobalVariable.globalVariables.put("main::`", new ScalarSpecialVariable(ScalarSpecialVariable.Id.PREMATCH));
         GlobalVariable.globalVariables.put("main::&", new ScalarSpecialVariable(ScalarSpecialVariable.Id.MATCH));
@@ -83,6 +84,7 @@ public class GlobalContext {
         GlobalVariable.getGlobalHash("main::SIG");
         GlobalVariable.getGlobalHash("main::+").elements = new HashSpecialVariable(HashSpecialVariable.Id.CAPTURE);  // regex %+
         GlobalVariable.getGlobalHash("main::-").elements = new HashSpecialVariable(HashSpecialVariable.Id.CAPTURE_ALL);  // regex %-
+        GlobalVariable.getGlobalHash("main::!");  // TODO %!
 
         // Initialize %ENV
         Map<String, RuntimeScalar> env = GlobalVariable.getGlobalHash("main::ENV").elements;
