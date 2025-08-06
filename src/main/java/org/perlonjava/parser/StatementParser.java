@@ -88,8 +88,8 @@ public class StatementParser {
 
         // Parse optional loop variable
         Node varNode = null;
-        LexerToken token = TokenUtils.peek(parser); // "my" "$" "("
-        if (token.text.equals("my") || token.text.equals("$")) {
+        LexerToken token = TokenUtils.peek(parser); // "my" "$" "(" "CORE::my"
+        if (token.text.equals("my") || token.text.equals("our") || token.text.equals("CORE") || token.text.equals("$")) {
             parser.parsingForLoopVariable = true;
             varNode = ParsePrimary.parsePrimary(parser);
             parser.parsingForLoopVariable = false;
