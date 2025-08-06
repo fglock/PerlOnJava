@@ -218,7 +218,7 @@ public class MathOperators {
             }
 
             // Calculate modulus using double precision
-            double result = dividend % divisor;
+            double result = truncate(dividend) % truncate(divisor);
 
             // Adjust result for Perl-style modulus behavior
             // In Perl, the result has the same sign as the divisor
@@ -234,6 +234,10 @@ public class MathOperators {
             result += divisor;
         }
         return new RuntimeScalar(result);
+    }
+
+    private static double truncate(double value) {
+        return (value >= 0) ? Math.floor(value) : Math.ceil(value);
     }
 
     /**
