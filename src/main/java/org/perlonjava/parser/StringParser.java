@@ -11,6 +11,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.perlonjava.perlmodule.Strict.STRICT_SUBS;
+import static org.perlonjava.perlmodule.Strict.UTF8_PRAGMA_BIT_POSITION;
 import static org.perlonjava.runtime.ScalarUtils.printable;
 
 /*
@@ -108,7 +110,32 @@ public class StringParser {
             }
             tokPos++;  // Move to the next token
         }
-        buffers.add(buffer.toString());
+
+        if (ctx.symbolTable.isStrictOptionEnabled(UTF8_PRAGMA_BIT_POSITION)) {
+            // utf8 source code is true - keep Unicode string as-is
+            buffers.add(buffer.toString());
+        } else {
+            // utf8 source code is false - convert to octets
+            String str = buffer.toString();
+            StringBuilder octetString = new StringBuilder();
+
+            for (int i = 0; i < str.length(); i++) {
+                char ch = str.charAt(i);
+                if (ch > 255) {
+                    // Characters above 255 need to be encoded as UTF-8 bytes
+                    byte[] bytes = Character.toString(ch).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    for (byte b : bytes) {
+                        octetString.append((char)(b & 0xFF));
+                    }
+                } else {
+                    // Characters 0-255 map directly to octets
+                    octetString.append(ch);
+                }
+            }
+
+            buffers.add(octetString.toString());
+        }
+
         if (!remain.isEmpty()) {
             tokPos--;
             tokens.get(tokPos).text = remain.toString();  // Put the remaining string back in the tokens list
