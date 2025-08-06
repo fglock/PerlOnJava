@@ -102,7 +102,7 @@ public class ModuleOperators {
         parsedArgs.fileName = fullName.toString();
         if (code == null) {
             try {
-                code = new String(Files.readAllBytes(Paths.get(parsedArgs.fileName)));
+                code = FileUtils.readFileWithEncodingDetection(Paths.get(parsedArgs.fileName));
             } catch (IOException e) {
                 GlobalVariable.setGlobalVariable("main::!", "Unable to read file " + parsedArgs.fileName);
                 return new RuntimeScalar();

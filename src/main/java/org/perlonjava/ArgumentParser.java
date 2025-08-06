@@ -134,7 +134,7 @@ public class ArgumentParser {
                         }
                     }
                 }
-                String fileContent = Files.readString(Paths.get(filePath), StandardCharsets.UTF_8);
+                String fileContent = FileUtils.readFileWithEncodingDetection(Paths.get(filePath));
                 parsedArgs.code = fileContent;
                 processShebangLine(args, parsedArgs, fileContent, index);
             } catch (IOException e) {
