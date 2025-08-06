@@ -1,5 +1,6 @@
 package org.perlonjava.operators;
 
+import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeScalar;
 
 import java.util.*;
@@ -225,9 +226,10 @@ public class RuntimeTransliterate {
 
                     // Validate range
                     if (start > end) {
-                        throw new RuntimeException("Invalid range \"" +
-                                new String(Character.toChars(start)) + "-" +
-                                new String(Character.toChars(end)) + "\" in transliteration operator");
+                        String startStr = formatCharForError(start);
+                        String endStr = formatCharForError(end);
+                        throw new PerlCompilerException("Invalid range \"" + startStr + "-" + endStr +
+                                "\" in transliteration operator");
                     }
 
                     // Add the range
@@ -250,6 +252,25 @@ public class RuntimeTransliterate {
     }
 
     /**
+     * Formats a character for error messages.
+     * Printable characters are shown as-is, non-printable as \x{XXXX}.
+     */
+    private String formatCharForError(int codePoint) {
+        // Check if the character is printable ASCII or a common printable character
+        // Basic printable ASCII range (excluding control characters)
+        if (codePoint >= 0x20 && codePoint <= 0x7E) {
+            return new String(Character.toChars(codePoint));
+        }
+
+        // Format as \x{XXXX} with appropriate padding
+        if (codePoint <= 0xFF) {
+            return String.format("\\x{%02X}", codePoint);
+        } else {
+            return String.format("\\x{%04X}", codePoint);
+        }
+    }
+
+    /**
      * Parses a character at the given position, handling escape sequences.
      * Returns the number of characters consumed.
      */
@@ -263,28 +284,69 @@ public class RuntimeTransliterate {
         if (ch == '\\' && pos + 1 < input.length()) {
             char next = input.charAt(pos + 1);
             switch (next) {
-                case 'n': result.add((int)'\n'); return 2;
-                case 't': result.add((int)'\t'); return 2;
-                case 'r': result.add((int)'\r'); return 2;
-                case 'f': result.add((int)'\f'); return 2;
-                case 'b': result.add((int)'\b'); return 2;
-                case 'a': result.add(0x07); return 2; // Bell character
-                case 'e': result.add(0x1B); return 2; // Escape character
-                case '0': result.add(0); return 2; // Null character
+                case 'n':
+                    result.add((int) '\n');
+                    return 2;
+                case 't':
+                    result.add((int) '\t');
+                    return 2;
+                case 'r':
+                    result.add((int) '\r');
+                    return 2;
+                case 'f':
+                    result.add((int) '\f');
+                    return 2;
+                case 'b':
+                    result.add((int) '\b');
+                    return 2;
+                case 'a':
+                    result.add(0x07);
+                    return 2; // Bell character
+                case 'e':
+                    result.add(0x1B);
+                    return 2; // Escape character
+                case '0':
+                    result.add(0);
+                    return 2; // Null character
                 case 'x':
                     return 2 + parseHexSequence(input, pos + 2, result);
                 case '-':
                     // Escaped dash
-                    result.add((int)'-');
+                    result.add((int) '-');
+                    return 2;
+                case 'N':
+                    if (pos + 2 < input.length() && input.charAt(pos + 2) == '{') {
+                        int closePos = input.indexOf('}', pos + 3);
+                        if (closePos > pos + 3) {
+                            String content = input.substring(pos + 3, closePos);
+
+                            // Check if it's a Unicode code point \N{U+XXXX}
+                            if (content.startsWith("U+")) {
+                                try {
+                                    int codePoint = Integer.parseInt(content.substring(2), 16);
+                                    result.add(codePoint);
+                                    return closePos - pos + 1;
+                                } catch (NumberFormatException e) {
+                                    // Invalid format
+                                }
+                            }
+
+                            // For named characters, we'd need a lookup table
+                            // For now, throw error for named sequences
+                            throw new RuntimeException("\\" + "N{" + content +
+                                    "} must not be a named sequence in transliteration operator");
+                        }
+                    }
+                    result.add((int) 'N');
                     return 2;
                 default:
                     // Other escaped character
-                    result.add((int)next);
+                    result.add((int) next);
                     return 2;
             }
         } else {
             // Regular character
-            result.add((int)ch);
+            result.add((int) ch);
             return 1;
         }
     }
@@ -295,7 +357,7 @@ public class RuntimeTransliterate {
      */
     private int parseHexSequence(String input, int start, List<Integer> result) {
         if (start >= input.length()) {
-            result.add((int)'x'); // Invalid sequence, treat as literal 'x'
+            result.add((int) 'x'); // Invalid sequence, treat as literal 'x'
             return -2; // Back up to just after '\'
         }
 
@@ -327,7 +389,7 @@ public class RuntimeTransliterate {
         }
 
         // Invalid sequence - treat \x as literal characters
-        result.add((int)'x');
+        result.add((int) 'x');
         return -2; // Back up to just after '\'
     }
 
