@@ -67,6 +67,8 @@
 │   └── Perl example files
 ├── docs/
 │   └── project documentation files
+├── t/
+│   └── Perl test suite placeholder
 └── misc/
     └── project notes
 ```
