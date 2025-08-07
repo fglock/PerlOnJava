@@ -526,9 +526,17 @@ public abstract class StringSegmentParser {
         if (!hexStr.isEmpty()) {
             try {
                 var hexValue = Integer.parseInt(hexStr.toString(), 16);
-                var result = hexValue <= 0xFFFF
-                        ? String.valueOf((char) hexValue)
-                        : new String(Character.toChars(hexValue));
+                String result;
+                    if (hexValue <= 0xFFFF) {
+                        result = String.valueOf((char) hexValue);
+                    } else if (Character.isValidCodePoint(hexValue)) {
+                        result = new String(Character.toChars(hexValue));
+                    } else {
+                        // For invalid Unicode code points, create a representation using
+                        // surrogate characters that won't crash Java but will fail later
+                        // when used as identifiers (which is the expected Perl behavior)
+                        result = String.valueOf((char) 0xDC00) + String.valueOf((char) (hexValue & 0xFFFF));
+                    }
                 appendToCurrentSegment(result);
             } catch (NumberFormatException e) {
                 // Invalid hex sequence, treat as literal
