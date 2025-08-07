@@ -113,6 +113,7 @@ $os_name =~ s/\s+/_/g;
     byteorder => _determine_byteorder(),
 
     ivsize => 4,
+    lseeksize => 8,
 
     # Features available in PerlOnJava
     d_readlink => 'define',
