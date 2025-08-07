@@ -268,6 +268,9 @@ sub skip {
     die "Test::More::skip() is not implemented";
 }
 
+# Workaround to avoid non-local goto (last SKIP).
+# The skip_internal subroutine is called from a macro in TestMoreHelper.java
+#
 sub skip_internal {
     my ($name, $count) = @_;
     for (1..$count) {

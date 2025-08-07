@@ -371,7 +371,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`goto &name`**: `goto &name` is implemented. It is not a tail-call.
 - ✅  **`goto` operator**: `goto LABEL` is implemented.
 - ❌  **`goto` operator**: `goto EXPR` is not implemented.
-- ❌  **`goto` operator**: `goto` going to a different place in the call stack is not implemented. Label searching in the call stack is missing.
+- ❌  **`goto` operator**: Non local `goto` (going to a different place in the call stack) is not implemented. Label searching in the call stack is missing.
 - ✅  **setting `$_` in `while` loop with `<>`**: automatic setting `$_` in `while` loops is implemented.
 - ✅  **`do BLOCK while`**: `do` executes once before the conditional is evaluated.
 - ✅  **`...` ellipsis statement**: `...` is supported.
