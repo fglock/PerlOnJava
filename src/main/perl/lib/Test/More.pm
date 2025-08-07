@@ -9,6 +9,7 @@ our @EXPORT = qw(
     plan ok is isnt like unlike cmp_ok can_ok isa_ok
     pass fail diag done_testing is_deeply subtest
     use_ok require_ok skip
+    skip_internal
 );
 
 our $Test_Count = 0;
