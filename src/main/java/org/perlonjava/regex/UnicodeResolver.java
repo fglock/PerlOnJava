@@ -30,6 +30,11 @@ public class UnicodeResolver {
 
     public static String translateUnicodeProperty(String property, boolean negated) {
         try {
+            if (property.equals("XPosixSpace")) {
+                property = "IsWhite_Space";
+                return (negated ? "\\P{" : "\\p{") + property + "}";
+            }
+
             // Remove common prefixes like "Script=", "Block=", "In=", or "Is="
             if (property.startsWith("Script=")) {
                 property = property.substring("Script=".length());
