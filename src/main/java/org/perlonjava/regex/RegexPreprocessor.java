@@ -388,7 +388,7 @@ public class RegexPreprocessor {
             } else {
                 regexError(s, offset, "Unmatched brace in \\N{name} construct");
             }
-        } else if (nextChar == 'p' || nextChar == 'P') {
+        } else if ((nextChar == 'p' || nextChar == 'P') && offset + 1 < length && s.charAt(offset + 1) == '{') {
             // Handle \p{...} and \P{...} constructs
             boolean negated = (nextChar == 'P');
             offset += 2; // Skip past \p or \P
