@@ -4,6 +4,8 @@ use warnings;
 
 our $VERSION = '2.06';
 
+XSLoader::load( 'TextCsv' );
+
 use constant cacheKey => "_CSVFormat";
 
 # NOTE: Core functionality is implemented in:

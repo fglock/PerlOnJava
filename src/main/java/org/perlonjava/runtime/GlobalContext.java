@@ -135,17 +135,13 @@ public class GlobalContext {
         Internals.initialize();
         Parent.initialize();
         Lib.initialize();
-        Carp.initialize();
         Re.initialize();
         Cwd.initialize();
         FileSpec.initialize();
-        Json.initialize();
-        HttpTiny.initialize();
         UnicodeNormalize.initialize();
         TimeHiRes.initialize();
         TermReadLine.initialize();
         TermReadKey.initialize();
-        TextCsv.initialize();
         FileTemp.initialize();
         IOHandleModule.initialize();
         Encode.initialize();
