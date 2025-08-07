@@ -267,4 +267,14 @@ sub skip {
     die "Test::More::skip() is not implemented";
 }
 
+sub skip_internal {
+    my ($name, $count) = @_;
+    for (1..$count) {
+        $Test_Count++;
+        my $result = "ok";
+        print "$Test_Indent$result $Test_Count # skip $name\n";
+    }
+    return 1;
+}
+
 1;

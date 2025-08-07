@@ -283,6 +283,7 @@ The following areas are currently under active development to enhance the functi
   - Add dualvar.
   - Add `DATA` file handle.
   - Add Indirect method call.
+  - `Test::More` `skip` works.
   - Bugfix: methods can be called in all blessed reference types.
   - Bugfix: more robust `sprintf` formatting.
   - Bugfix: string constants can be larger than 64k.
