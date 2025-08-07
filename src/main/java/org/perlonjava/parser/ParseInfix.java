@@ -3,6 +3,7 @@ package org.perlonjava.parser;
 import org.perlonjava.astnode.*;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.operators.Operator;
 import org.perlonjava.runtime.PerlCompilerException;
 
 import java.util.ArrayList;
@@ -56,6 +57,17 @@ public class ParseInfix {
             if (right == null) {
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
             }
+
+            if (operator.equals("..") || operator.equals("...")) {
+                // Handle regex in: /3/../5/
+                if (left instanceof OperatorNode operatorNode && operatorNode.operator.equals("matchRegex")) {
+                    operatorNode.operator = "quoteRegex";
+                }
+                if (right instanceof OperatorNode operatorNode && operatorNode.operator.equals("matchRegex")) {
+                    operatorNode.operator = "quoteRegex";
+                }
+            }
+
             return new BinaryOperatorNode(operator, left, right, parser.tokenIndex);
         }
 
