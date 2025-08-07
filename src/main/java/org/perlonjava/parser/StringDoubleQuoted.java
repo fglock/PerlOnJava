@@ -323,16 +323,43 @@ public class StringDoubleQuoted extends StringSegmentParser {
         if (parseEscapes) {
             parseDoubleQuotedEscapes();
         } else {
-            // In regex context, preserve escape sequences literally
-            // The regex engine will process them
-            currentSegment.append("\\");
-            var token = tokens.get(parser.tokenIndex);
-            currentSegment.append(token.text.charAt(0));
-            if (token.text.length() == 1) {
-                parser.tokenIndex++;
-            } else {
-                token.text = token.text.substring(1);
+            parseDoubleQuotedEscapesRegex();
+        }
+    }
+
+    private void parseDoubleQuotedEscapesRegex() {
+        // In regex context, preserve almost all escape sequences literally
+        // The regex engine will process them
+
+        // Consume the character after the backslash
+        var escape = TokenUtils.consumeChar(parser);
+
+        switch (escape) {
+            // Case modification end marker
+            case "E" -> {
+                // Flush any pending literal text
+                flushCurrentSegment();
+                // Pop and apply the most recent case modifier
+                if (!caseModifiers.isEmpty()) {
+                    applyCaseModifier(caseModifiers.pop());
+                }
             }
+
+            // Case modifiers
+            case "U" -> startCaseModifier("U", false);  // Uppercase until \E
+            case "L" -> startCaseModifier("L", false);  // Lowercase until \E
+            case "u" -> startCaseModifier("u", true);   // Uppercase next char
+            case "l" -> startCaseModifier("l", true);   // Lowercase next char
+
+            // Quotemeta modifier
+            case "Q" -> {
+                flushCurrentSegment();
+                inQuotemeta = true;
+                caseModifiers.push(new CaseModifier("Q", false));
+            }
+
+            // Unknown escape - treat as literal character
+            default -> appendToCurrentSegment("\\" + escape);
         }
     }
 

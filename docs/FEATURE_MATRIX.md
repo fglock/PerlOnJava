@@ -269,6 +269,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Unicode Properties**: Matching with `\p{...}` and `\P{...}` (e.g., `\p{L}` for letters).
 - ✅  **Possessive Quantifiers**: Quantifiers like `*+`, `++`, `?+`, or `{n,m}+`, which disable backtracking, are not supported.
 - ✅  **Atomic Grouping**: Use of `(?>...)` for atomic groups is supported.
+- ✅  **Preprocessor**: `\Q`, `\L`, `\U`, `\l`, `\u`, `\E` are preprocessed in regex.
 
 ### Missing Regular Expression Features
 
