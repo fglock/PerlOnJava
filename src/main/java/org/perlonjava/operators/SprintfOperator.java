@@ -11,8 +11,9 @@ import java.util.regex.Pattern;
 public class SprintfOperator {
 
     // Pattern to match a complete format specifier
+    // Updated to handle size modifiers like hh, ll, t, z
     private static final Pattern FORMAT_PATTERN = Pattern.compile(
-            "%([-+ #0]*)([*]?)(\\d*)(?:\\.(\\d*))?([*]?)([hvlqLV]?)([diouxXeEfFgGaAcspnvDUOb%])"
+            "%([-+ #0]*)([*]?)(\\d*)(?:\\.(\\d*))?([*]?)(?:(hh|h|ll|l|t|z|q|L|V)?)([diouxXeEfFgGaAcspnvDUOBb%])"
     );
 
     /**
@@ -113,6 +114,7 @@ public class SprintfOperator {
                 return formatUnsigned(value, flags, width, precision);
 
             case 'o':
+            case 'O':  // Add support for uppercase O
                 return formatInteger(value.getInt(), flags, width, precision, "%o");
 
             case 'x':
@@ -121,6 +123,7 @@ public class SprintfOperator {
                 return formatInteger(value.getInt(), flags, width, precision, hexFormat);
 
             case 'b':
+            case 'B':  // Add support for uppercase B
                 return formatBinary(value.getInt(), width);
 
             case 'e':
@@ -149,6 +152,12 @@ public class SprintfOperator {
             case 'v':
                 // %v is handled separately in the main loop
                 throw new PerlCompilerException("Internal error: %v should be handled separately");
+
+            case 'D':  // Add support for D format
+                return formatFloatingPoint(value.getDouble(), flags, width, precision, "%f");
+
+            case 'U':  // Add support for U format
+                return formatUnsigned(value, flags, width, precision);
 
             default:
                 throw new PerlCompilerException("Unknown format specifier: %" + conversion);
