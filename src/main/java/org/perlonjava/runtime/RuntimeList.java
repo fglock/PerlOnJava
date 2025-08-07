@@ -274,6 +274,9 @@ public class RuntimeList extends RuntimeBase {
      * @return A scalar representing the result of the chop operation.
      */
     public RuntimeScalar chop() {
+        if (this.isEmpty()) {
+            this.elements.add(GlobalVariable.getGlobalVariable("main::_"));
+        }
         RuntimeScalar result = new RuntimeScalar("");
         Iterator<RuntimeScalar> iterator = this.iterator();
         while (iterator.hasNext()) {
@@ -288,6 +291,9 @@ public class RuntimeList extends RuntimeBase {
      * @return A scalar representing the result of the chomp operation.
      */
     public RuntimeScalar chomp() {
+        if (this.isEmpty()) {
+            this.elements.add(GlobalVariable.getGlobalVariable("main::_"));
+        }
         int count = 0;
         Iterator<RuntimeScalar> iterator = this.iterator();
         while (iterator.hasNext()) {
