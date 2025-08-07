@@ -16,10 +16,8 @@ import static org.perlonjava.runtime.RuntimeIO.initStdHandles;
 public class GlobalContext {
 
     // Special variables internal names
-    public static final String LAST_FH = "main::" + Character.toString('L' - 'A' + 1) + "AST_FH"; // $^LAST_FH
-    public static final String GLOBAL_PHASE = "main::" + Character.toString('G' - 'A' + 1) + "LOBAL_PHASE"; // $^GLOBAL_PHASE
-    public static final String TAINT = "main::" + Character.toString('T' - 'A' + 1) + "AINT"; // $^TAINT
-    public static final String OPEN = "main::" + Character.toString('O' - 'A' + 1) + "PEN"; // $^OPEN
+    public static final String GLOBAL_PHASE = encodeSpecialVar("GLOBAL_PHASE"); // $^GLOBAL_PHASE
+    public static final String OPEN = encodeSpecialVar("OPEN"); // $^OPEN
 
     // Internal name of the "./src/main/perl/lib" directory
     public static final String JAR_PERLLIB = "jar:PERL5LIB";
@@ -65,7 +63,7 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::?");
         GlobalVariable.getGlobalVariable("main::0").set(compilerOptions.fileName);
         GlobalVariable.getGlobalVariable(GLOBAL_PHASE).set(""); // ${^GLOBAL_PHASE}
-        GlobalVariable.getGlobalVariable(TAINT); // ${^TAINT}
+        GlobalVariable.getGlobalVariable(encodeSpecialVar("TAINT")); // ${^TAINT}
         GlobalVariable.getGlobalVariable("main::>");  // TODO
         GlobalVariable.getGlobalVariable("main::<");  // TODO
         GlobalVariable.getGlobalVariable("main::;");  // TODO
@@ -78,7 +76,12 @@ public class GlobalContext {
         GlobalVariable.globalVariables.put("main::'", new ScalarSpecialVariable(ScalarSpecialVariable.Id.POSTMATCH));
         GlobalVariable.globalVariables.put("main::.", new ScalarSpecialVariable(ScalarSpecialVariable.Id.INPUT_LINE_NUMBER)); // $.
         GlobalVariable.globalVariables.put("main::+", new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_PAREN_MATCH));
-        GlobalVariable.globalVariables.put(LAST_FH, new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_FH)); // $^LAST_FH
+        GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_FH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_FH)); // $^LAST_FH
+
+        // Aliases
+        GlobalVariable.aliasGlobalVariable(encodeSpecialVar("PREMATCH"), "main::`");
+        GlobalVariable.aliasGlobalVariable(encodeSpecialVar("MATCH"), "main::&");
+        GlobalVariable.aliasGlobalVariable(encodeSpecialVar("POSTMATCH"), "main::'");
 
         // Initialize arrays
         GlobalVariable.getGlobalArray("main::+").elements = new ArraySpecialVariable(ArraySpecialVariable.Id.LAST_MATCH_END);  // regex @+
@@ -155,6 +158,11 @@ public class GlobalContext {
 
         // Reset method cache after initializing UNIVERSAL
         InheritanceResolver.invalidateCache();
+    }
+
+    public static String encodeSpecialVar(String name) {
+        // Perl's $^X is represented as "main::" + (char)('X' - 'A' + 1) + "..."
+        return "main::" + (char) (name.charAt(0) - 'A' + 1) + name.substring(1);
     }
 }
 
