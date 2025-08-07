@@ -34,6 +34,7 @@ public interface PosixLibrary extends Library {
 
     // Symbolic link operations
     int readlink(String path, byte[] buf, int bufsiz) throws LastErrorException;
+    int link(String oldPath, String newPath);
 
     // Signal handling
     Pointer signal(int sig, Pointer handler) throws LastErrorException;
