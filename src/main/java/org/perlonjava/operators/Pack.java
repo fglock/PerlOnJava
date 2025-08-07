@@ -98,7 +98,15 @@ public class Pack {
                     count = hexString.length(); // For hex strings with *, use the entire string length
                 }
                 writeHexString(output, hexString, count, format);
-            } else if (format == 'a' || format == 'A' || format == 'Z') {
+                    } else if (format == 'u') {
+                        // Uuencode format - consumes one value
+                        if (valueIndex >= values.size()) {
+                            throw new PerlCompilerException("pack: not enough arguments");
+                        }
+                        RuntimeScalar value = (RuntimeScalar) values.get(valueIndex++);
+                        String str = value.toString();
+                        writeUuencodedString(output, str);
+                    } else if (format == 'a' || format == 'A' || format == 'Z') {
                 // String formats consume only one value
                 if (valueIndex >= values.size()) {
                     throw new PerlCompilerException("pack: not enough arguments");
@@ -247,6 +255,10 @@ public class Pack {
                             break;
                         case 'f':
                             writeFloat(output, (float) value.getDouble());
+                            break;
+                        case 'F':
+                            // F is double-precision float in native format (8 bytes)
+                            writeDouble(output, value.getDouble());
                             break;
                         case 'd':
                             writeDouble(output, value.getDouble());
@@ -572,6 +584,41 @@ public class Pack {
             }
 
             output.write(byteValue);
+        }
+    }
+
+    /**
+     * Writes a uuencoded string to the output stream.
+     * Uuencoding converts binary data to printable ASCII characters.
+     *
+     * @param output The ByteArrayOutputStream to write to.
+     * @param str    The string to uuencode.
+     */
+    private static void writeUuencodedString(ByteArrayOutputStream output, String str) {
+        byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
+        int length = bytes.length;
+
+        // Uuencode line format: length byte followed by encoded data
+        // For pack 'u', we encode the entire string as one line
+        output.write((length & 0x3F) + 32); // Length byte (add 32 to make printable)
+
+        // Process in groups of 3 bytes (which encode to 4 uuencoded characters)
+        for (int i = 0; i < length; i += 3) {
+            int b1 = (i < length) ? (bytes[i] & 0xFF) : 0;
+            int b2 = (i + 1 < length) ? (bytes[i + 1] & 0xFF) : 0;
+            int b3 = (i + 2 < length) ? (bytes[i + 2] & 0xFF) : 0;
+
+            // Convert 3 bytes to 4 uuencoded characters
+            int c1 = (b1 >> 2) & 0x3F;
+            int c2 = ((b1 << 4) | (b2 >> 4)) & 0x3F;
+            int c3 = ((b2 << 2) | (b3 >> 6)) & 0x3F;
+            int c4 = b3 & 0x3F;
+
+            // Write encoded characters (add 32 to convert to printable ASCII)
+            output.write(c1 + 32);
+            output.write(c2 + 32);
+            output.write(c3 + 32);
+            output.write(c4 + 32);
         }
     }
 }

@@ -279,7 +279,7 @@ The following areas are currently under active development to enhance the functi
   - Add modules: `XSLoader`, `Encode`,`Config`, `Errno`, `Tie::Scalar`, `Tie::Array`, `Tie::Hash`, `Tie::Handle`, `Perl::OSType`, `Env`, `MIME::Base64`, `MIME::QuotedPrint`, `Digest::SHA`, `Digest::MD5`, `Digest`.
   - Add key-value slices: `%c{"1", "3"}`.
   - Add special variable: `$^X`.
-  - Add `W`, `H`, `F`, `h`, `c`, `C0`, `U0` formats to `pack`, `unpack`.
+  - Add `W`, `H`, `F`, `h`, `c`, `u`, `C0`, `U0` formats to `pack`, `unpack`.
   - Add dualvar.
   - Add `DATA` file handle.
   - Add Indirect method call.

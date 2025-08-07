@@ -23,6 +23,7 @@ public class Unpack {
         handlers.put('V', new NumericFormatHandler.VAXLongHandler());
         handlers.put('v', new NumericFormatHandler.VAXShortHandler());
         handlers.put('f', new NumericFormatHandler.FloatHandler());
+        handlers.put('F', new NumericFormatHandler.DoubleHandler());  // F is double-precision like d
         handlers.put('d', new NumericFormatHandler.DoubleHandler());
         handlers.put('a', new StringFormatHandler('a'));
         handlers.put('A', new StringFormatHandler('A'));

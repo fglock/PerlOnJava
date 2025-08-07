@@ -208,7 +208,7 @@ public class NumberParser {
         return null;
     }
 
-    // Existing helper methods
+    // Helper methods
     public static Node parseFractionalNumber(Parser parser) {
         StringBuilder number = new StringBuilder("0.");
         LexerToken token = parser.tokens.get(parser.tokenIndex++);
@@ -421,6 +421,20 @@ public class NumberParser {
                 }
                 if (str.regionMatches(true, start, "Inf", 0, 3)) {
                     result = new RuntimeScalar(isNegative ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
+                }
+            }
+
+            // Only check for Windows-style formats if we haven't found a result yet
+            if (result == null && start < end) {
+                String remaining = str.substring(start, end);
+
+                // Check for Windows-style Inf: 1.#INF, 1#INF, 1.#INF00, etc.
+                if (remaining.matches("1\\.?#INF\\d*")) {
+                    result = new RuntimeScalar(isNegative ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
+                }
+                // Check for Windows-style NaN: 1.#QNAN, 1.#NAN, 1.#IND, 1.#IND00, etc.
+                else if (remaining.matches("\\+?1\\.?#(QNAN|NAN|IND|SNAN)\\d*")) {
+                    result = new RuntimeScalar(Double.NaN);
                 }
             }
 
