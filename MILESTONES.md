@@ -283,6 +283,7 @@ The following areas are currently under active development to enhance the functi
   - Add dualvar.
   - Add `DATA` file handle.
   - Add Indirect method call.
+  - Process `\L`, `\U`, `\l`, `\u` in regex.
   - `Test::More` `skip` works.
   - Bugfix: methods can be called in all blessed reference types.
   - Bugfix: more robust `sprintf` formatting.
