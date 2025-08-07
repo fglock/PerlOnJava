@@ -143,7 +143,7 @@ public class IOOperator {
         if (fileHandle.type == RuntimeScalarType.STRING) {
             // Handle as filename
             String filename = fileHandle.toString();
-            Path filePath = Paths.get(filename);
+            Path filePath = RuntimeIO.resolvePath(filename);
             try (FileChannel channel1 = FileChannel.open(filePath, StandardOpenOption.WRITE)) {
                 channel1.truncate(length);
                 return scalarTrue;
@@ -716,7 +716,7 @@ public class IOOperator {
 
         // If creating a new file, apply the permissions
         if ((mode & O_CREAT) != 0) {
-            File file = new File(fileName);
+            File file = RuntimeIO.resolveFile(fileName);
             if (!file.exists()) {
                 try {
                     file.createNewFile();

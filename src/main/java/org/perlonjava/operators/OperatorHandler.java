@@ -147,6 +147,7 @@ public class OperatorHandler {
         put("lstat", "lstat", "org/perlonjava/operators/Stat", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeList;");
         put("vec", "vec", "org/perlonjava/operators/Vec", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("chmod", "chmod", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("link", "link", "org/perlonjava/operators/NativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         put("unpack", "unpack", "org/perlonjava/operators/Unpack", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;");
         put("pack", "pack", "org/perlonjava/operators/Pack", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");

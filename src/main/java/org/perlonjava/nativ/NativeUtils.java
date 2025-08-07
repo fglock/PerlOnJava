@@ -15,6 +15,44 @@ public class NativeUtils {
     private static final int DEFAULT_GID = 1000;
     private static final int ID_RANGE = 65536;
 
+    // Direct function mapping for CreateHardLink on Windows
+    private static final Function CREATE_HARD_LINK = IS_WINDOWS ?
+            Function.getFunction("kernel32", "CreateHardLinkA") : null;
+
+    /**
+     * Create a hard link between two files
+     * @param args RuntimeScalar array containing [oldfile, newfile]
+     * @return RuntimeScalar with 1 for success, 0 for failure
+     */
+    public static RuntimeScalar link(RuntimeBase... args) {
+        if (args.length < 2) {
+            return new RuntimeScalar(0);
+        }
+
+        String oldFile = RuntimeIO.resolvePath(args[0].toString()).toString();
+        String newFile = RuntimeIO.resolvePath(args[1].toString()).toString();
+
+        if (oldFile == null || newFile == null || oldFile.isEmpty() || newFile.isEmpty()) {
+            return new RuntimeScalar(0);
+        }
+
+        try {
+            if (IS_WINDOWS) {
+                // Windows implementation using CreateHardLinkA via direct function call
+                Object[] args_array = {newFile, oldFile, null};
+                Object result = CREATE_HARD_LINK.invoke(Boolean.class, args_array);
+                boolean success = (Boolean) result;
+                return new RuntimeScalar(success ? 1 : 0);
+            } else {
+                // POSIX implementation using link() system call
+                int result = PosixLibrary.INSTANCE.link(oldFile, newFile);
+                return new RuntimeScalar(result == 0 ? 1 : 0);
+            }
+        } catch (Exception e) {
+            return new RuntimeScalar(0);
+        }
+    }
+
     /**
      * Get parent process ID
      * @param args Unused (for API consistency)
