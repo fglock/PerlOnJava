@@ -155,16 +155,14 @@ public class ScalarUtils {
                 } catch (NumberFormatException e) {
                     return false;
                 }
-            case UNDEF:
-                return false;
-            case GLOB:
-            case ARRAYREFERENCE:
-            case HASHREFERENCE:
-            case CODE:
-                // These types don't look like numbers in Perl
-                return false;
+            case VSTRING:
+                return true;
+            case BOOLEAN, DUALVAR:
+                return true;
+            case TIED_SCALAR:
+                return looksLikeNumber(runtimeScalar.tiedFetch());
             default:
-                throw new PerlCompilerException("Unexpected value: " + runtimeScalar.type);
+                return false;
         }
     }
 
