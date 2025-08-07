@@ -12,18 +12,22 @@ import static org.perlonjava.parser.SpecialBlockParser.getCurrentScope;
  */
 public class Strict extends PerlModuleBase {
 
+    // Bitmask for use integer, bytes
+    public static final int HINT_INTEGER = 0x00000001;
+    public static final int HINT_BYTES = 0x00000008;
+
     // Bitmask for strict options
-    public static final int STRICT_REFS = 0x00000002;
-    public static final int STRICT_SUBS = 0x00000200;
-    public static final int STRICT_VARS = 0x00000400;
+    public static final int HINT_STRICT_REFS = 0x00000002;
+    public static final int HINT_STRICT_SUBS = 0x00000200;
+    public static final int HINT_STRICT_VARS = 0x00000400;
 
     // Bitmask for explicit strict options
-    public static final int EXPLICIT_STRICT_REFS = 0x00000020;
-    public static final int EXPLICIT_STRICT_SUBS = 0x00000040;
-    public static final int EXPLICIT_STRICT_VARS = 0x00000080;
+    public static final int HINT_EXPLICIT_STRICT_REFS = 0x00000020;
+    public static final int HINT_EXPLICIT_STRICT_SUBS = 0x00000040;
+    public static final int HINT_EXPLICIT_STRICT_VARS = 0x00000080;
 
     // Bitmask for utf8 source code
-    public static final int UTF8_PRAGMA_BIT_POSITION = 0x00800000;
+    public static final int HINT_UTF8 = 0x00800000;
 
     /**
      * Constructor for Strict.
@@ -57,19 +61,19 @@ public class Strict extends PerlModuleBase {
         ScopedSymbolTable symbolTable = getCurrentScope();
         if (args.size() == 1) {
             // Enable all strict options if no specific category is provided
-            symbolTable.enableStrictOption(STRICT_REFS | STRICT_SUBS | STRICT_VARS);
+            symbolTable.enableStrictOption(HINT_STRICT_REFS | HINT_STRICT_SUBS | HINT_STRICT_VARS);
         } else {
             for (int i = 1; i < args.size(); i++) {
                 String category = args.get(i).toString();
                 switch (category) {
                     case "refs":
-                        symbolTable.enableStrictOption(STRICT_REFS);
+                        symbolTable.enableStrictOption(HINT_STRICT_REFS);
                         break;
                     case "subs":
-                        symbolTable.enableStrictOption(STRICT_SUBS);
+                        symbolTable.enableStrictOption(HINT_STRICT_SUBS);
                         break;
                     case "vars":
-                        symbolTable.enableStrictOption(STRICT_VARS);
+                        symbolTable.enableStrictOption(HINT_STRICT_VARS);
                         break;
                     default:
                         throw new IllegalArgumentException("Unknown strict category: " + category);
@@ -90,19 +94,19 @@ public class Strict extends PerlModuleBase {
         ScopedSymbolTable symbolTable = getCurrentScope();
         if (args.size() == 1) {
             // Disable all strict options if no specific category is provided
-            symbolTable.disableStrictOption(STRICT_REFS | STRICT_SUBS | STRICT_VARS);
+            symbolTable.disableStrictOption(HINT_STRICT_REFS | HINT_STRICT_SUBS | HINT_STRICT_VARS);
         } else {
             for (int i = 1; i < args.size(); i++) {
                 String category = args.get(i).toString();
                 switch (category) {
                     case "refs":
-                        symbolTable.disableStrictOption(STRICT_REFS);
+                        symbolTable.disableStrictOption(HINT_STRICT_REFS);
                         break;
                     case "subs":
-                        symbolTable.disableStrictOption(STRICT_SUBS);
+                        symbolTable.disableStrictOption(HINT_STRICT_SUBS);
                         break;
                     case "vars":
-                        symbolTable.disableStrictOption(STRICT_VARS);
+                        symbolTable.disableStrictOption(HINT_STRICT_VARS);
                         break;
                     default:
                         throw new IllegalArgumentException("Unknown strict category: " + category);

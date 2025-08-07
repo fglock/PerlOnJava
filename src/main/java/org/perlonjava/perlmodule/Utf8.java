@@ -56,7 +56,7 @@ public class Utf8 extends PerlModuleBase {
      */
     public static RuntimeList useUtf8(RuntimeArray args, int ctx) {
         ScopedSymbolTable symbolTable = getCurrentScope();
-        symbolTable.enableStrictOption(Strict.UTF8_PRAGMA_BIT_POSITION);
+        symbolTable.enableStrictOption(Strict.HINT_UTF8);
         return new RuntimeScalar().getList();
     }
 
@@ -69,7 +69,7 @@ public class Utf8 extends PerlModuleBase {
      */
     public static RuntimeList noUtf8(RuntimeArray args, int ctx) {
         ScopedSymbolTable symbolTable = getCurrentScope();
-        symbolTable.disableStrictOption(Strict.UTF8_PRAGMA_BIT_POSITION);
+        symbolTable.disableStrictOption(Strict.HINT_UTF8);
         return new RuntimeScalar().getList();
     }
 
