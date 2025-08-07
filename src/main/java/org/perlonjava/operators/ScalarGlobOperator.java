@@ -376,16 +376,18 @@ public class ScalarGlobOperator {
         List<String> results = new ArrayList<>();
 
         try {
-            String cwd = System.getProperty("user.dir");
-
-            // Check for Windows absolute path
-            boolean isWindowsAbsolute = isWindowsAbsolutePath(pattern);
+            // Preserve the original pattern format for result formatting
+            String originalPattern = pattern;
 
             // Normalize path separators
             String normalizedPattern = normalizePathSeparators(pattern);
 
+            // Check if pattern is absolute
+            boolean patternIsAbsolute = Paths.get(normalizedPattern).isAbsolute() ||
+                    isWindowsAbsolutePath(normalizedPattern);
+
             // Extract directory and file pattern
-            PathComponents components = extractPathComponents(normalizedPattern, cwd, isWindowsAbsolute);
+            PathComponents components = extractPathComponents(normalizedPattern, patternIsAbsolute);
 
             if (!components.baseDir.exists() || components.filePattern.isEmpty()) {
                 // For non-existent paths or empty patterns, return literal if no glob chars
@@ -402,7 +404,7 @@ public class ScalarGlobOperator {
             }
 
             // Match files against pattern
-            matchFiles(components, regex, results, cwd);
+            matchFiles(components, regex, results, originalPattern, patternIsAbsolute);
 
             // For exact matches that don't exist (from brace expansion)
             if (results.isEmpty() && !containsGlobChars(pattern)) {
@@ -432,51 +434,53 @@ public class ScalarGlobOperator {
         final File baseDir;
         final String filePattern;
         final boolean hasDirectory;
-        final boolean isAbsolute;
+        final String directoryPart;
 
-        PathComponents(File baseDir, String filePattern, boolean hasDirectory, boolean isAbsolute) {
+        PathComponents(File baseDir, String filePattern, boolean hasDirectory, String directoryPart) {
             this.baseDir = baseDir;
             this.filePattern = filePattern;
             this.hasDirectory = hasDirectory;
-            this.isAbsolute = isAbsolute;
+            this.directoryPart = directoryPart;
         }
     }
 
     /**
      * Extracts directory and file pattern components from a path.
      */
-    private PathComponents extractPathComponents(String normalizedPattern, String cwd, boolean isWindowsAbsolute) {
-        File baseDir = new File(cwd);
+    private PathComponents extractPathComponents(String normalizedPattern, boolean isAbsolute) {
+        File baseDir;
         String filePattern = normalizedPattern;
         boolean hasDirectory = false;
-        boolean isAbsolute = isWindowsAbsolute || normalizedPattern.startsWith("/");
+        String directoryPart = "";
 
         int lastSep = normalizedPattern.lastIndexOf('/');
 
         if (lastSep >= 0) {
             hasDirectory = true;
-            String dirPart = normalizedPattern.substring(0, lastSep);
+            directoryPart = normalizedPattern.substring(0, lastSep);
 
-            if (dirPart.isEmpty()) {
-                baseDir = new File("/");
+            if (directoryPart.isEmpty()) {
+                // Root directory case
+                baseDir = RuntimeIO.resolveFile("/");
             } else {
-                dirPart = dirPart.replace('/', File.separatorChar);
-                baseDir = new File(dirPart);
-                if (!baseDir.isAbsolute()) {
-                    baseDir = new File(cwd, dirPart);
-                }
+                // Use RuntimeIO for all directory resolution
+                baseDir = RuntimeIO.resolveFile(directoryPart);
             }
 
             filePattern = normalizedPattern.substring(lastSep + 1);
+        } else {
+            // No directory separator - use current directory
+            baseDir = RuntimeIO.resolveFile(".");
         }
 
-        return new PathComponents(baseDir, filePattern, hasDirectory, isAbsolute);
+        return new PathComponents(baseDir, filePattern, hasDirectory, directoryPart);
     }
 
     /**
      * Matches files in a directory against a pattern.
      */
-    private void matchFiles(PathComponents components, Pattern regex, List<String> results, String cwd) {
+    private void matchFiles(PathComponents components, Pattern regex, List<String> results,
+                            String originalPattern, boolean patternIsAbsolute) {
         File[] files = components.baseDir.listFiles();
         if (files == null) {
             return;
@@ -491,7 +495,7 @@ public class ScalarGlobOperator {
             }
 
             if (regex.matcher(fileName).matches()) {
-                String result = formatResult(file, components.hasDirectory, components.isAbsolute, cwd);
+                String result = formatResult(file, components, originalPattern, patternIsAbsolute);
                 results.add(result);
             }
         }
@@ -662,42 +666,22 @@ public class ScalarGlobOperator {
     }
 
     /**
-     * Formats a file result based on context.
+     * Formats a file result based on Perl's glob behavior:
+     * - No slashes in pattern: return just filename
+     * - Relative path with slashes: preserve relative structure from pattern
+     * - Absolute path: return absolute paths
      */
-    private String formatResult(File file, boolean hasDirectory, boolean isAbsolute, String cwd) {
-        String result;
-
-        if (isAbsolute) {
-            result = file.getAbsolutePath();
-        } else if (hasDirectory) {
-            result = getRelativePath(file, cwd);
+    private String formatResult(File file, PathComponents components, String originalPattern, boolean patternIsAbsolute) {
+        if (patternIsAbsolute) {
+            // Absolute pattern - return absolute path
+            return file.getAbsolutePath();
+        } else if (components.hasDirectory) {
+            // Relative pattern with directory - preserve the directory structure from original pattern
+            return components.directoryPart + "/" + file.getName();
         } else {
-            result = file.getName();
+            // Pattern has no directory separators - return just filename
+            return file.getName();
         }
-
-        // Return native path separators for compatibility with File::Spec
-        return result;
-    }
-
-    /**
-     * Gets the relative path of a file from the specified base directory.
-     *
-     * @param file the file to get the relative path for
-     * @param baseDir the base directory to calculate the relative path from (typically cwd)
-     * @return the relative path as a string
-     */
-    private String getRelativePath(File file, String baseDir) {
-        try {
-            Path basePath = Paths.get(baseDir);
-            Path filePath = file.toPath();
-
-            if (filePath.startsWith(basePath)) {
-                return basePath.relativize(filePath).toString();
-            }
-        } catch (Exception e) {
-            // Fall back to absolute path on error
-        }
-        return file.getPath();
     }
 
     /**
