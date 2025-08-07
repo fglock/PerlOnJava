@@ -2,6 +2,8 @@ package org.perlonjava.operators;
 
 import com.ibm.icu.text.CaseMap;
 import com.ibm.icu.text.Normalizer2;
+import org.perlonjava.parser.NumberParser;
+import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarType;
 
@@ -230,6 +232,21 @@ public class StringOperators {
     }
 
     public static RuntimeScalar chr(RuntimeScalar runtimeScalar) {
+        // Convert string type to number if necessary
+        if (runtimeScalar.type == RuntimeScalarType.STRING) {
+            runtimeScalar = NumberParser.parseNumber(runtimeScalar);
+        }
+
+        // Check if it's a double (which could be Inf or NaN)
+        if (runtimeScalar.type == RuntimeScalarType.DOUBLE) {
+            double doubleValue = runtimeScalar.getDouble();
+            if (Double.isInfinite(doubleValue) || Double.isNaN(doubleValue)) {
+                String value = Double.isNaN(doubleValue) ? "NaN" :
+                        (doubleValue > 0 ? "Inf" : "-Inf");
+                throw new PerlCompilerException("Cannot chr " + value);
+            }
+        }
+
         int codePoint = runtimeScalar.getInt(); // Get the integer representing the code point
 
         // Convert the code point to a char array (to handle both BMP and non-BMP)
