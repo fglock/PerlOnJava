@@ -382,6 +382,19 @@ public class Operator {
     }
 
     public static RuntimeBase repeat(RuntimeBase value, RuntimeScalar timesScalar, int ctx) {
+        // Check for non-finite values first
+        if (timesScalar.type == RuntimeScalarType.DOUBLE) {
+            double d = timesScalar.getDouble();
+            if (Double.isInfinite(d) || Double.isNaN(d)) {
+                // Return empty string in scalar context or empty list in list context
+                if (ctx == RuntimeContextType.SCALAR || value instanceof RuntimeScalar) {
+                    return new RuntimeScalar("");
+                } else {
+                    return new RuntimeList();
+                }
+            }
+        }
+
         int times = timesScalar.getInt();
         if (ctx == RuntimeContextType.SCALAR || value instanceof RuntimeScalar) {
             StringBuilder sb = new StringBuilder();
