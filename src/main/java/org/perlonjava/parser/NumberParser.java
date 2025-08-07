@@ -420,17 +420,52 @@ public class NumberParser {
             // Check for special values with trailing characters
             boolean shouldWarn = false;
             String originalStr = str.substring(start, end);
+            int specialEnd = start;
 
             if (end - start >= 3) {
+                // Check for NaN variants
                 if (str.regionMatches(true, start, "NaN", 0, 3)) {
                     result = new RuntimeScalar(Double.NaN);
-                    if (start + 3 < end) {
-                        shouldWarn = true;
+                    specialEnd = start + 3;
+                    if (specialEnd < end) {
+                        // Check for valid NaN extensions
+                        String remaining = str.substring(specialEnd, end);
+                        if (remaining.matches("^[qQsS]?$") ||
+                            remaining.matches("^[qQsS]?\\(\\d+\\)$") ||
+                            remaining.matches("^[qQsS]?\\(0x[0-9a-fA-F]+\\)$") ||
+                            remaining.matches("^\\(\\d+\\)$") ||
+                            remaining.matches("^\\(0x[0-9a-fA-F]+\\)$")) {
+                            // Valid NaN extensions, no warning
+                            shouldWarn = false;
+                        } else {
+                            shouldWarn = true;
+                        }
                     }
                 }
-                if (str.regionMatches(true, start, "Inf", 0, 3)) {
+                // Check for Inf
+                else if (str.regionMatches(true, start, "Inf", 0, 3)) {
                     result = new RuntimeScalar(isNegative ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
-                    if (start + 3 < end && !str.regionMatches(true, start, "Infinity", 0, 8)) {
+                    specialEnd = start + 3;
+                    if (specialEnd < end) {
+                        // Check if it's "Infinity"
+                        if (end - specialEnd >= 5 && str.regionMatches(true, specialEnd, "inity", 0, 5)) {
+                            specialEnd += 5;
+                        }
+                        if (specialEnd < end) {
+                            shouldWarn = true;
+                        }
+                    }
+                }
+            }
+
+            // Check for special NaN variants at the beginning
+            if (result == null && end - start >= 4) {
+                String upperStr = str.substring(start, Math.min(end, start + 5)).toUpperCase();
+                if (upperStr.startsWith("QNAN") || upperStr.startsWith("SNAN") ||
+                    upperStr.startsWith("NANQ") || upperStr.startsWith("NANS")) {
+                    result = new RuntimeScalar(Double.NaN);
+                    specialEnd = start + 4;
+                    if (specialEnd < end) {
                         shouldWarn = true;
                     }
                 }
@@ -441,12 +476,44 @@ public class NumberParser {
                 String remaining = str.substring(start, end);
 
                 // Check for Windows-style Inf: 1.#INF, 1#INF, 1.#INF00, etc.
-                if (remaining.matches("1\\.?#INF\\d*")) {
+                if (remaining.matches("1\\.?#INF.*")) {
                     result = new RuntimeScalar(isNegative ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
+                    // Check if there are non-digit characters after INF
+                    int infPos = remaining.indexOf("INF") + 3;
+                    if (infPos < remaining.length()) {
+                        String afterInf = remaining.substring(infPos);
+                        if (!afterInf.matches("\\d*")) {
+                            shouldWarn = true;
+                        }
+                    }
                 }
                 // Check for Windows-style NaN: 1.#QNAN, 1.#NAN, 1.#IND, 1.#IND00, etc.
-                else if (remaining.matches("\\+?1\\.?#(QNAN|NAN|IND|SNAN)\\d*")) {
+                else if (remaining.matches("\\+?1\\.?#(QNAN|NANQ|NAN|IND|SNAN).*")) {
                     result = new RuntimeScalar(Double.NaN);
+                    // Check if there are non-digit characters after the NaN variant
+                    int nanPos = remaining.indexOf('#') + 1;
+                    String afterHash = remaining.substring(nanPos);
+
+                    // Determine where the NaN identifier ends
+                    if (afterHash.startsWith("QNAN")) {
+                        nanPos += 4;
+                    } else if (afterHash.startsWith("NANQ")) {
+                        nanPos += 4;
+                    } else if (afterHash.startsWith("SNAN")) {
+                        nanPos += 4;
+                    } else if (afterHash.startsWith("NAN")) {
+                        nanPos += 3;
+                    } else if (afterHash.startsWith("IND")) {
+                        nanPos += 3;
+                    }
+
+                    if (nanPos < remaining.length()) {
+                        String afterNan = remaining.substring(nanPos);
+                        // Only digits (including empty string) are valid after NaN identifier
+                        if (!afterNan.matches("\\d*")) {
+                            shouldWarn = true;
+                        }
+                    }
                 }
             }
 
