@@ -11,8 +11,8 @@ import org.perlonjava.runtime.*;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.perlonjava.perlmodule.Strict.STRICT_REFS;
-import static org.perlonjava.perlmodule.Strict.STRICT_VARS;
+import static org.perlonjava.perlmodule.Strict.HINT_STRICT_REFS;
+import static org.perlonjava.perlmodule.Strict.HINT_STRICT_VARS;
 
 public class EmitVariable {
     private static void fetchGlobalVariable(EmitterContext ctx, boolean createIfNotExists, String sigil, String varName, int tokenIndex) {
@@ -125,7 +125,7 @@ public class EmitVariable {
                 // TODO special variables: `$,` `$$`
                 boolean createIfNotExists = name.contains("::") // Fully qualified name
                         || ScalarUtils.isInteger(name)  // Regex variable always exists
-                        || !emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(STRICT_VARS);  // `no strict "vars"`
+                        || !emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_VARS);  // `no strict "vars"`
                 fetchGlobalVariable(emitterVisitor.ctx, createIfNotExists, sigil, name, node.getIndex());
             } else {
                 // retrieve the `my` or `our` variable from local vars
@@ -157,7 +157,7 @@ public class EmitVariable {
             case "$":
                 // `$$a`
                 emitterVisitor.ctx.logDebug("GETVAR `$$a`");
-                if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(STRICT_REFS)) {
+                if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
                     node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "scalarDeref", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
                 } else {
@@ -170,7 +170,7 @@ public class EmitVariable {
             case "*":
                 // `*$a`
                 emitterVisitor.ctx.logDebug("GETVAR `*$a`");
-                if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(STRICT_REFS)) {
+                if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_REFS)) {
                     node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeScalar", "globDeref", "()Lorg/perlonjava/runtime/RuntimeGlob;", false);
                 } else {

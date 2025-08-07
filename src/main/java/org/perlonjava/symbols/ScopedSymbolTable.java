@@ -98,16 +98,16 @@ public class ScopedSymbolTable {
 
     public static String stringifyStrictOptions(int strictOptions) {
         StringBuilder result = new StringBuilder();
-        if ((strictOptions & Strict.STRICT_REFS) != 0) {
+        if ((strictOptions & Strict.HINT_STRICT_REFS) != 0) {
             result.append("STRICT_REFS");
         }
-        if ((strictOptions & Strict.STRICT_SUBS) != 0) {
+        if ((strictOptions & Strict.HINT_STRICT_SUBS) != 0) {
             if (!result.isEmpty()) {
                 result.append(", ");
             }
             result.append("STRICT_SUBS");
         }
-        if ((strictOptions & Strict.STRICT_VARS) != 0) {
+        if ((strictOptions & Strict.HINT_STRICT_VARS) != 0) {
             if (!result.isEmpty()) {
                 result.append(", ");
             }

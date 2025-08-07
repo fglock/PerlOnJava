@@ -7,7 +7,7 @@ import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.astvisitor.ReturnTypeVisitor;
 import org.perlonjava.runtime.*;
 
-import static org.perlonjava.perlmodule.Strict.STRICT_SUBS;
+import static org.perlonjava.perlmodule.Strict.HINT_STRICT_SUBS;
 import static org.perlonjava.runtime.ScalarUtils.isInteger;
 
 /**
@@ -430,7 +430,7 @@ public class EmitLiteral {
             return;
         }
 
-        if (ctx.symbolTable.isStrictOptionEnabled(STRICT_SUBS)) {
+        if (ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_SUBS)) {
             throw new PerlCompilerException(
                     node.tokenIndex,
                     "Bareword \"" + node.name + "\" not allowed while \"strict subs\" in use",

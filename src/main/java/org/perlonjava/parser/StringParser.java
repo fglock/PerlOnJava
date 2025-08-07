@@ -11,8 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static org.perlonjava.perlmodule.Strict.STRICT_SUBS;
-import static org.perlonjava.perlmodule.Strict.UTF8_PRAGMA_BIT_POSITION;
+import static org.perlonjava.perlmodule.Strict.HINT_UTF8;
 import static org.perlonjava.runtime.ScalarUtils.printable;
 
 /*
@@ -111,7 +110,7 @@ public class StringParser {
             tokPos++;  // Move to the next token
         }
 
-        if (ctx.symbolTable.isStrictOptionEnabled(UTF8_PRAGMA_BIT_POSITION)
+        if (ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
                 || ctx.compilerOptions.isUnicodeSource) {
             // utf8 source code is true - keep Unicode string as-is
             buffers.add(buffer.toString());
