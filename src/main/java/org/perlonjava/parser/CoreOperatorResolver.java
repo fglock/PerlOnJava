@@ -53,7 +53,7 @@ public class CoreOperatorResolver {
                 yield new OperatorNode(token.text, new ListNode(currentIndex), currentIndex);
             }
             case "not" -> OperatorParser.parseNot(parser, token, currentIndex);
-            case "abs", "caller", "chdir", "chomp", "chop", "chr", "cos", "exit", "exp", "fc",
+            case "abs", "caller", "chdir", "chr", "cos", "exit", "exp", "fc",
                  "glob", "gmtime", "hex", "int", "lc", "lcfirst", "length", "localtime", "log",
                  "oct", "ord", "pop", "pos", "prototype", "quotemeta", "rand", "ref", "reset",
                  "rmdir", "shift", "sin", "sleep", "sqrt", "srand", "study", "uc",
@@ -68,7 +68,7 @@ public class CoreOperatorResolver {
             case "sort" -> ParseMapGrepSort.parseSort(parser, token);
             case "map", "grep", "all", "any" -> ParseMapGrepSort.parseMapGrep(parser, token);
             case "pack" -> OperatorParser.parsePack(parser, token, currentIndex);
-            case "reverse", "splice", "unlink", "mkdir", "die", "warn" -> OperatorParser.parseReverse(parser, token, currentIndex);
+            case "chomp", "chop", "reverse", "splice", "unlink", "mkdir", "die", "warn" -> OperatorParser.parseReverse(parser, token, currentIndex);
             case "system", "exec" -> OperatorParser.parseSystem(parser, token, currentIndex);
             case "readline", "eof", "tell", "getc", "open", "fileno", "truncate" -> OperatorParser.parseReadline(parser, token, currentIndex);
             case "binmode" -> OperatorParser.parseBinmodeOperator(parser, token, currentIndex);

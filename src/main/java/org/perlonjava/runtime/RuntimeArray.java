@@ -728,7 +728,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return A scalar representing the result of the chop operation.
      */
     public RuntimeScalar chop() {
-        return this.getList().chop();
+        RuntimeScalar result = new RuntimeScalar("");
+        Iterator<RuntimeScalar> iterator = this.iterator();
+        while (iterator.hasNext()) {
+            result = iterator.next().chop();
+        }
+        return result;
     }
 
     /**
@@ -737,7 +742,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return A scalar representing the result of the chomp operation.
      */
     public RuntimeScalar chomp() {
-        return this.getList().chomp();
+        RuntimeScalar result = new RuntimeScalar("");
+        Iterator<RuntimeScalar> iterator = this.iterator();
+        while (iterator.hasNext()) {
+            result = iterator.next().chomp();
+        }
+        return result;
     }
 
     /**

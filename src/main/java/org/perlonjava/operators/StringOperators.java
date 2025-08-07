@@ -195,6 +195,7 @@ public class StringOperators {
 
         String separator = separatorScalar.toString();
         int charsRemoved = 0;
+        String originalStr = str;
 
         if (separator.isEmpty()) {
             // Paragraph mode: remove all trailing newlines
@@ -215,9 +216,11 @@ public class StringOperators {
         }
         // Note: In slurp mode ($/ = undef) or fixed-length record mode, we don't remove anything
 
-        if (charsRemoved > 0) {
+        // Always update the original scalar if we modified the string
+        if (!str.equals(originalStr)) {
             runtimeScalar.set(str);
         }
+
         return getScalarInt(charsRemoved);
     }
 
@@ -226,8 +229,15 @@ public class StringOperators {
         if (str.isEmpty()) {
             return new RuntimeScalar();
         }
-        String lastChar = str.substring(str.length() - 1);
-        runtimeScalar.set(str.substring(0, str.length() - 1));
+
+        // Handle Unicode properly by using code points instead of char units
+        int lastCodePoint = str.codePointBefore(str.length());
+        int lastCharSize = Character.charCount(lastCodePoint);
+
+        String lastChar = str.substring(str.length() - lastCharSize);
+        String remainingStr = str.substring(0, str.length() - lastCharSize);
+
+        runtimeScalar.set(remainingStr);
         return new RuntimeScalar(lastChar);
     }
 
