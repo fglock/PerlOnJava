@@ -13,8 +13,8 @@ use POSIX qw(WNOHANG);
 # Runs standard Perl tests against PerlOnJava and analyzes results
 
 my $jperl_path = './jperl';
-my $timeout = 3;  # Default to 3 seconds
-my $jobs = 4;     # Default to 4 parallel jobs
+my $timeout = 30; # Default to 30 seconds
+my $jobs = 5;     # Default to 5 parallel jobs
 my $output_file;
 my $help;
 

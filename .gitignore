@@ -20,4 +20,10 @@ gradlew.bat
 *.ipr
 out/
 src/test/_Deparsed_XSubs.pm
+
+# Ignore Perl test suite files
 t/
+# But don't ignore these two specific files
+!t/README.md
+!t/test.pl
+
