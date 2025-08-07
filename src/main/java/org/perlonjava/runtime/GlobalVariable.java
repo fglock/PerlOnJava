@@ -97,6 +97,12 @@ public class GlobalVariable {
         return var;
     }
 
+    public static RuntimeScalar aliasGlobalVariable(String key, String to) {
+        RuntimeScalar var = globalVariables.get(to);
+        globalVariables.put(key, var);
+        return var;
+    }
+
     /**
      * Sets the value of a global variable.
      *
