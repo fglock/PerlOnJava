@@ -67,6 +67,11 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable(GLOBAL_PHASE).set(""); // ${^GLOBAL_PHASE}
         GlobalVariable.getGlobalVariable(TAINT); // ${^TAINT}
         GlobalVariable.getGlobalVariable("main::>");  // TODO
+        GlobalVariable.getGlobalVariable("main::<");  // TODO
+        GlobalVariable.getGlobalVariable("main::;");  // TODO
+        GlobalVariable.getGlobalVariable("main::(");  // TODO
+        GlobalVariable.getGlobalVariable("main::)");  // TODO
+        GlobalVariable.getGlobalVariable("main::=");  // TODO
 
         GlobalVariable.globalVariables.put("main::`", new ScalarSpecialVariable(ScalarSpecialVariable.Id.PREMATCH));
         GlobalVariable.globalVariables.put("main::&", new ScalarSpecialVariable(ScalarSpecialVariable.Id.MATCH));
