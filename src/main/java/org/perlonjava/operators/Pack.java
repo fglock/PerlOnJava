@@ -129,9 +129,38 @@ public class Pack {
 
                     RuntimeScalar value = (RuntimeScalar) values.get(valueIndex++);
 
+                    // Check for Inf/NaN values for integer formats
+                    if (isIntegerFormat(format)) {
+                        String strValue = value.toString().trim();
+                        if (strValue.equalsIgnoreCase("Inf") || strValue.equalsIgnoreCase("+Inf") || strValue.equalsIgnoreCase("Infinity")) {
+                            if (format == 'w') {
+                                throw new PerlCompilerException("Cannot compress Inf");
+                            } else {
+                                throw new PerlCompilerException("Cannot pack Inf");
+                            }
+                        } else if (strValue.equalsIgnoreCase("-Inf") || strValue.equalsIgnoreCase("-Infinity")) {
+                            if (format == 'w') {
+                                throw new PerlCompilerException("Cannot compress -Inf");
+                            } else {
+                                throw new PerlCompilerException("Cannot pack -Inf");
+                            }
+                        } else if (strValue.equalsIgnoreCase("NaN")) {
+                            if (format == 'w') {
+                                throw new PerlCompilerException("Cannot compress NaN");
+                            } else {
+                                throw new PerlCompilerException("Cannot pack NaN");
+                            }
+                        }
+                    }
+
                     switch (format) {
+                        case 'c':
+                            // Signed char
+                            int signedChar = value.getInt();
+                            output.write(signedChar & 0xFF);
+                            break;
                         case 'C':
-                            // Always use numeric value for C format
+                            // Unsigned char
                             int intValue = value.getInt();
                             output.write(intValue & 0xFF);
                             break;
@@ -141,14 +170,32 @@ public class Pack {
                         case 'S':
                             writeShort(output, value.getInt());
                             break;
+                        case 'l':
+                            writeIntLittleEndian(output, (long) value.getDouble());
+                            break;
                         case 'L', 'J':
                             writeLong(output, (long) value.getDouble());
+                            break;
+                        case 'i':
+                        case 'I':
+                            // Native integer (assume 32-bit little-endian)
+                            writeIntLittleEndian(output, (long) value.getDouble());
                             break;
                         case 'N':
                             writeIntBigEndian(output, (long) value.getDouble());
                             break;
                         case 'V':
                             writeIntLittleEndian(output, (long) value.getDouble());
+                            break;
+                        case 'n':
+                            writeShortBigEndian(output, value.getInt());
+                            break;
+                        case 'v':
+                            writeShortLittleEndian(output, value.getInt());
+                            break;
+                        case 'w':
+                            // BER compressed integer
+                            writeBER(output, (long) value.getDouble());
                             break;
                         case 'W':
                             // Pack a Unicode code point as UTF-8 bytes
@@ -198,12 +245,6 @@ public class Pack {
                                 throw new PerlCompilerException("pack: invalid Unicode code point: " + codePoint1);
                             }
                             break;
-                        case 'n':
-                            writeShortBigEndian(output, value.getInt());
-                            break;
-                        case 'v':
-                            writeShortLittleEndian(output, value.getInt());
-                            break;
                         case 'f':
                             writeFloat(output, (float) value.getDouble());
                             break;
@@ -237,6 +278,52 @@ public class Pack {
         } else {
             // For other formats, return as byte string
             return new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1));
+        }
+    }
+
+    /**
+     * Check if the format is an integer format that should reject Inf/NaN values
+     */
+    private static boolean isIntegerFormat(char format) {
+        switch (format) {
+            case 'c':
+            case 'C':
+            case 's':
+            case 'S':
+            case 'l':
+            case 'L':
+            case 'i':
+            case 'I':
+            case 'n':
+            case 'N':
+            case 'v':
+            case 'V':
+            case 'j':
+            case 'J':
+            case 'w':
+            case 'W':
+            case 'U':
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * Write a BER compressed integer
+     */
+    private static void writeBER(ByteArrayOutputStream output, long value) {
+        if (value < 0) {
+            throw new PerlCompilerException("Cannot compress negative numbers");
+        }
+
+        if (value < 128) {
+            output.write((int) value);
+        } else {
+            // Write high-order bytes with continuation bit set
+            writeBER(output, value >> 7);
+            // Write low-order 7 bits with continuation bit
+            output.write((int) ((value & 0x7F) | 0x80));
         }
     }
 
