@@ -292,7 +292,7 @@ public class ListParser {
             case OPERATOR:
                 switch (token.text) {
                     case "[", "\"", "//", "\\", "`", "$", "$#", "@", "%", "&", "!", "~",
-                         "+", "-", "/", "*", ";", "++", "--":
+                         "+", "-", "/", "*", ";", "++", "--", "<", "<<":
                         isSpace = true;
                         break;
                     case ".":
