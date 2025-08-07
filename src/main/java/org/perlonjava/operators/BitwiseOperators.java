@@ -1,5 +1,6 @@
 package org.perlonjava.operators;
 
+import org.perlonjava.parser.NumberParser;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarType;
@@ -237,6 +238,29 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the left shift operation.
      */
     public static RuntimeScalar shiftLeft(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
+        // Convert string type to number if necessary
+        if (runtimeScalar.type == RuntimeScalarType.STRING) {
+            runtimeScalar = NumberParser.parseNumber(runtimeScalar);
+        }
+
+        // Check for special values only if it's a DOUBLE
+        if (runtimeScalar.type == RuntimeScalarType.DOUBLE) {
+            double doubleValue = runtimeScalar.getDouble();
+            if (Double.isInfinite(doubleValue)) {
+                if (doubleValue > 0) {
+                    // +Inf should convert to UV_MAX (32-bit unsigned maximum)
+                    return new RuntimeScalar(4294967295L); // 2^32 - 1
+                } else {
+                    // -Inf should convert to 0 for unsigned interpretation
+                    return new RuntimeScalar(0L);
+                }
+            }
+            if (Double.isNaN(doubleValue)) {
+                // NaN should convert to 0
+                return new RuntimeScalar(0L);
+            }
+        }
+
         long value = runtimeScalar.getLong();
         int shift = arg2.getInt();
 
@@ -277,6 +301,34 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the right shift operation.
      */
     public static RuntimeScalar shiftRight(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
+        // Convert string type to number if necessary
+        if (runtimeScalar.type == RuntimeScalarType.STRING) {
+            runtimeScalar = NumberParser.parseNumber(runtimeScalar);
+        }
+
+        // Check for special values only if it's a DOUBLE
+        if (runtimeScalar.type == RuntimeScalarType.DOUBLE) {
+            double doubleValue = runtimeScalar.getDouble();
+            if (Double.isInfinite(doubleValue)) {
+                if (doubleValue > 0) {
+                    // +Inf should convert to UV_MAX (32-bit), then shift right
+                    long uvMax = 4294967295L; // 2^32 - 1
+                    int shift = arg2.getInt();
+                    if (shift >= 32) {
+                        return new RuntimeScalar(0L);
+                    }
+                    return new RuntimeScalar(uvMax >> shift);
+                } else {
+                    // -Inf should convert to 0 for unsigned interpretation
+                    return new RuntimeScalar(0L);
+                }
+            }
+            if (Double.isNaN(doubleValue)) {
+                // NaN should convert to 0
+                return new RuntimeScalar(0L);
+            }
+        }
+
         // Use long for consistency
         long value = runtimeScalar.getLong();
         int shift = arg2.getInt();
