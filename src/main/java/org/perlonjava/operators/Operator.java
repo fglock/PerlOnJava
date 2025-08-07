@@ -104,9 +104,9 @@ public class Operator {
      * @return A RuntimeList containing the split parts of the string.
      */
     public static RuntimeList split(RuntimeScalar quotedRegex, RuntimeList args) {
-        int size = args.size();
-        RuntimeScalar string = size > 0 ? (RuntimeScalar) args.elements.get(0) : getGlobalVariable("main::_");  // The string to be split.
-        RuntimeScalar limitArg = size > 1 ? (RuntimeScalar) args.elements.get(1) : new RuntimeScalar(0);   // The maximum number of splits (optional).
+        Iterator<RuntimeScalar> iterator = args.iterator();
+        RuntimeScalar string = iterator.hasNext() ? iterator.next() : getGlobalVariable("main::_");
+        RuntimeScalar limitArg = iterator.hasNext() ? iterator.next() : new RuntimeScalar(0);
 
         int limit = limitArg.getInt();
         String inputStr = string.toString();
