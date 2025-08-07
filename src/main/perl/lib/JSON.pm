@@ -5,6 +5,8 @@ use warnings;
 use strict;
 use Symbol;
 
+XSLoader::load( 'Json' );
+
 # NOTE: The rest of the code is in file:
 #       src/main/java/org/perlonjava/perlmodule/Json.java
 

@@ -7,6 +7,8 @@ use Symbol;
 
 our $VERSION = '0.086';
 
+XSLoader::load( 'HttpTiny' );
+
 sub _croak { require Carp; Carp::croak(@_) }
 
 #pod =method new
