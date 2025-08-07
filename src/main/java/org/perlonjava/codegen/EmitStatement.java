@@ -131,8 +131,6 @@ public class EmitStatement {
                 // Visit the loop body
                 node.body.accept(voidVisitor);
 
-                // Cleanup loop labels
-                emitterVisitor.ctx.javaClassInfo.popLoopLabels();
             } else {
                 // Within a `while` modifier, next/redo/last labels are not active
                 // Visit the loop body
@@ -145,6 +143,12 @@ public class EmitStatement {
             // Execute continue block if it exists
             if (node.continueBlock != null) {
                 node.continueBlock.accept(voidVisitor);
+            }
+
+            if (node.useNewScope) {
+                // Cleanup loop labels
+                // The labels are also active inside the continue block
+                emitterVisitor.ctx.javaClassInfo.popLoopLabels();
             }
 
             // Visit the increment node (executed after the loop body)
