@@ -11,7 +11,7 @@ public class IdentifierNode extends AbstractNode {
     /**
      * The identifier name represented by this node.
      */
-    public final String name;
+    public String name;
 
     /**
      * Constructs a new IdentifierNode with the specified identifier name.

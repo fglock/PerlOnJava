@@ -5,6 +5,8 @@ import org.perlonjava.codegen.ByteCodeSourceMapper;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 
+import java.util.List;
+
 import static org.perlonjava.parser.ParserNodeUtils.scalarUnderscore;
 import static org.perlonjava.parser.TokenUtils.consume;
 import static org.perlonjava.parser.TokenUtils.peek;
@@ -143,6 +145,11 @@ public class StatementResolver {
 
                         parser.ctx.symbolTable.exitScope(scopeIndex);
 
+                        if (label != null && label.equals("SKIP")) {
+                            // Use a macro to emulate Test::More SKIP blocks
+                            handleSkipTest(block);
+                        }
+
                         yield new For3Node(label,
                                 true,
                                 null, null,
@@ -226,6 +233,42 @@ public class StatementResolver {
 
         parseStatementTerminator(parser);
         return expression;
+    }
+
+    private static void handleSkipTest(BlockNode block) {
+        // Locate skip statements
+        // TODO create skip visitor
+        for (Node node : block.elements) {
+            if (node instanceof BinaryOperatorNode op) {
+                if (!op.operator.equals("(")) {
+                    // Possible if-modifier
+                    if (op.left instanceof BinaryOperatorNode left) {
+                        handleSkipTestInner(left);
+                    }
+                    if (op.right instanceof BinaryOperatorNode right) {
+                        handleSkipTestInner(right);
+                    }
+                } else {
+                    handleSkipTestInner(op);
+                }
+            }
+        }
+    }
+
+    private static void handleSkipTestInner(BinaryOperatorNode op) {
+        if (op.operator.equals("(")) {
+            int index = op.tokenIndex;
+            if (op.left instanceof OperatorNode sub && sub.operator.equals("&") && sub.operand instanceof IdentifierNode subName && subName.name.equals("skip")) {
+                // skip() call
+                // op.right contains the arguments
+                // Becomes:  `skip_internal() && last SKIP`
+                subName.name = "Test::More::skip_internal";
+                op.operator = "&&";
+                op.left = new BinaryOperatorNode("(", op.left, op.right, index);
+                op.right = new OperatorNode("last",
+                        new ListNode(List.of(new IdentifierNode("SKIP", index)), index), index);
+            }
+        }
     }
 
     // disambiguate between Block or Hash literal

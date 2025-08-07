@@ -11,17 +11,17 @@ public class BinaryOperatorNode extends AbstractNode {
     /**
      * The binary operator represented by this node.
      */
-    public final String operator;
+    public String operator;
 
     /**
      * The left operand of the binary operator.
      */
-    public final Node left;
+    public Node left;
 
     /**
      * The right operand of the binary operator.
      */
-    public final Node right;
+    public Node right;
 
     /**
      * Constructs a new BinaryOperatorNode with the specified operator and operands.
