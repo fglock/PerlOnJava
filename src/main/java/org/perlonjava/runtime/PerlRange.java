@@ -351,6 +351,20 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
          * Constructs a PerlRangeIntegerIterator for the current range.
          */
         PerlRangeIntegerIterator() {
+            // Check for NaN or Inf before converting to int
+            if (start.type == RuntimeScalarType.DOUBLE) {
+                double startDouble = start.getDouble();
+                if (Double.isNaN(startDouble) || Double.isInfinite(startDouble)) {
+                    throw new PerlCompilerException("Range iterator outside integer range");
+                }
+            }
+            if (end.type == RuntimeScalarType.DOUBLE) {
+                double endDouble = end.getDouble();
+                if (Double.isNaN(endDouble) || Double.isInfinite(endDouble)) {
+                    throw new PerlCompilerException("Range iterator outside integer range");
+                }
+            }
+
             current = start.getInt();
             endInt = end.getInt();
             hasNext = current <= endInt;

@@ -4,7 +4,9 @@ import org.perlonjava.astnode.Node;
 import org.perlonjava.astnode.NumberNode;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.operators.WarnDie;
 import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.RuntimeScalarCache;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -415,16 +417,26 @@ public class NumberParser {
 
             int numberEnd = start;
 
+            // Check for special values with trailing characters
+            boolean shouldWarn = false;
+            String originalStr = str.substring(start, end);
+
             if (end - start >= 3) {
                 if (str.regionMatches(true, start, "NaN", 0, 3)) {
                     result = new RuntimeScalar(Double.NaN);
+                    if (start + 3 < end) {
+                        shouldWarn = true;
+                    }
                 }
                 if (str.regionMatches(true, start, "Inf", 0, 3)) {
                     result = new RuntimeScalar(isNegative ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
+                    if (start + 3 < end && !str.regionMatches(true, start, "Infinity", 0, 8)) {
+                        shouldWarn = true;
+                    }
                 }
             }
 
-            // Only check for Windows-style formats if we haven't found a result yet
+            // Check for Windows-style formats
             if (result == null && start < end) {
                 String remaining = str.substring(start, end);
 
@@ -481,6 +493,16 @@ public class NumberParser {
                         result = getScalarInt(0);
                     }
                 }
+            }
+
+            // Generate warning if needed
+            if (shouldWarn) {
+                String warnStr = str.trim();
+                if (warnStr.startsWith("-") || warnStr.startsWith("+")) {
+                    warnStr = warnStr.substring(1);
+                }
+                WarnDie.warn(new RuntimeScalar("Argument \"" + warnStr + "\" isn't numeric"),
+                           RuntimeScalarCache.scalarEmptyString);
             }
         }
 
