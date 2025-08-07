@@ -1,7 +1,6 @@
 package org.perlonjava.parser;
 
 import org.perlonjava.astnode.*;
-import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
@@ -9,276 +8,293 @@ import org.perlonjava.runtime.PerlCompilerException;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.perlonjava.parser.ListParser.parseZeroOrOneList;
 import static org.perlonjava.parser.ParserNodeUtils.atUnderscore;
 import static org.perlonjava.parser.PrototypeArgs.consumeArgsWithPrototype;
 
 /**
- * SignatureParser handles parsing of Perl subroutine signatures.
+ * SignatureParser handles parsing of Perl 5.42 subroutine signatures.
  *
- * <p>Perl signatures define the parameters that a subroutine accepts, including:
+ * <p>Supported signature features:
  * <ul>
- *   <li>Positional parameters: {@code sub foo($a, $b)}</li>
- *   <li>Optional parameters with defaults: {@code sub foo($a = 10)}</li>
- *   <li>Slurpy parameters: {@code sub foo($a, @rest)} or {@code sub foo(%opts)}</li>
+ *   <li>Empty signatures: {@code sub foo() { }}</li>
+ *   <li>Mandatory parameters: {@code sub foo($a, $b) { }}</li>
+ *   <li>Ignored parameters: {@code sub foo($a, $, $c) { }}</li>
+ *   <li>Optional parameters: {@code sub foo($a = 10) { }}</li>
+ *   <li>Default from previous parameter: {@code sub foo($a, $b = $a) { }}</li>
+ *   <li>Defined-or defaults: {@code sub foo($a //= 'default') { }}</li>
+ *   <li>Logical-or defaults: {@code sub foo($a ||= 100) { }}</li>
+ *   <li>Slurpy arrays: {@code sub foo($a, @rest) { }}</li>
+ *   <li>Slurpy hashes: {@code sub foo(%opts) { }}</li>
+ *   <li>Anonymous slurpy: {@code sub foo($a, @) { }}</li>
  * </ul>
- *
- * <p>The parser generates AST nodes that:
- * <ol>
- *   <li>Validate the number of arguments passed</li>
- *   <li>Assign arguments from @_ to the signature variables</li>
- *   <li>Apply default values for optional parameters</li>
- * </ol>
  */
 public class SignatureParser {
 
+    private final Parser parser;
+    private final List<Node> astNodes = new ArrayList<>();
+    private final List<Node> parameterVariables = new ArrayList<>();
+    private int minParams = 0;
+    private int maxParams = 0;
+    private boolean hasSlurpy = false;
+
+    private SignatureParser(Parser parser) {
+        this.parser = parser;
+    }
+
     /**
      * Parses a Perl subroutine signature and generates the corresponding AST.
-     *
-     * <p>The generated AST includes:
-     * <ul>
-     *   <li>Argument count validation</li>
-     *   <li>Variable declaration and assignment from @_</li>
-     *   <li>Default value assignments for optional parameters</li>
-     * </ul>
      *
      * @param parser The parser instance
      * @return A ListNode containing the generated AST nodes
      * @throws PerlCompilerException if the signature syntax is invalid
      */
     public static ListNode parseSignature(Parser parser) {
-        TokenUtils.consume(parser, LexerTokenType.OPERATOR,"(");
+        return new SignatureParser(parser).parse();
+    }
 
-        int tokenIndex = parser.tokenIndex;
+    private ListNode parse() {
+        consumeOpenParen();
 
-        // Initialize collections for building the AST
-        List<Node> nodes = new ArrayList<>();       // All generated AST nodes
-        List<Node> variables = new ArrayList<>();   // Variable nodes for "my (...) = @_"
-        int minParams = 0;                          // Minimum required parameters
-        int maxParams = 0;                          // Maximum allowed parameters
-        boolean hasSlurpy = false;                  // Whether signature has @array or %hash
+        // Handle empty signature
+        if (peekToken().text.equals(")")) {
+            consumeCloseParen();
+            return generateSignatureAST();
+        }
 
-        // Parse each parameter in the signature
-        LexerToken token;
+        // Parse parameters
         while (true) {
-            token = TokenUtils.consume(parser);
-            if (endSignature(token)) {
+            parseParameter();
+
+            // Check what comes after the parameter
+            LexerToken next = peekToken();
+            if (next.text.equals(")")) {
                 break;
-            }
-
-            String sigil = token.text;
-
-            // Special case: $# is tokenized as a single token but is invalid in signatures
-            if (sigil.equals("$#")) {
-                parser.throwError("'#' not allowed immediately following a sigil in a subroutine signature");
-            }
-
-            // Validate that parameter starts with a valid sigil ($, @, or %)
-            if (!sigil.equals("$") && !sigil.equals("@") && !sigil.equals("%")) {
-                parser.throwError("A signature parameter must start with '$', '@' or '%'");
-            }
-
-            // Check if we already have a slurpy parameter (which must be last)
-            if (hasSlurpy) {
-                parser.throwError("Slurpy parameter not last");
-            }
-
-            String name = null;
-            LexerToken nextToken = TokenUtils.peek(parser);
-
-            // Check for double sigil (e.g., $$) which is invalid
-            if (nextToken.text.equals("$") || nextToken.text.equals("@") || nextToken.text.equals("%")) {
-                parser.throwError("Illegal character following sigil in a subroutine signature");
-            }
-
-            // Check for invalid character after sigil
-            if (nextToken.text.equals("#")) {
-                parser.throwError("'#' not allowed immediately following a sigil in a subroutine signature");
-            }
-
-            // Parse the variable name if present
-            if (nextToken.type == LexerTokenType.IDENTIFIER) {
-                name = TokenUtils.consume(parser).text;
-            }
-
-            // Create variable node or undef placeholder
-            Node variable = null;
-            if (name != null) {
-                // Named parameter: $foo becomes OperatorNode("$", IdentifierNode("foo"))
-                variable = new OperatorNode(sigil, new IdentifierNode(name, tokenIndex), tokenIndex);
-                variables.add(variable);
-            } else {
-                // Anonymous parameter: $ becomes undef
-                variables.add(new OperatorNode("undef", null, tokenIndex));
-            }
-            parser.ctx.logDebug("signature variable: " + variable);
-
-            // Handle slurpy parameters (@array or %hash)
-            if (sigil.equals("@") || sigil.equals("%")) {
-                hasSlurpy = true;
-                maxParams = Integer.MAX_VALUE;  // Slurpy can accept unlimited arguments
-
-                // Verify no parameters come after the slurpy
-                LexerToken checkToken = TokenUtils.peek(parser);
-                if (checkToken.text.equals(",")) {
-                    TokenUtils.consume(parser); // consume comma
-                    checkToken = TokenUtils.peek(parser);
-                    if (checkToken.type != LexerTokenType.EOF) {
-                        // Check if it's another slurpy
-                        if (checkToken.text.equals("@") || checkToken.text.equals("%")) {
-                            parser.throwError("Multiple slurpy parameters not allowed");
-                        } else {
-                            parser.throwError("Slurpy parameter not last");
-                        }
-                    }
+            } else if (next.text.equals(",")) {
+                consumeCommas();
+                // Check for trailing comma
+                if (peekToken().text.equals(")")) {
+                    break;
                 }
-                break; // Slurpy must be last parameter
-            }
-
-            // Handle optional scalar parameters with default values
-            Node defaultValue = null;
-            nextToken = TokenUtils.peek(parser);
-            if (nextToken.text.equals("=") ||
-                    nextToken.text.equals("||=") ||
-                    nextToken.text.equals("//=")) {
-
-                String op = TokenUtils.consume(parser).text;
-
-                // Ensure there's a default expression after the assignment operator
-                if (TokenUtils.peek(parser).type == LexerTokenType.EOF ||
-                        TokenUtils.peek(parser).text.equals(",")) {
-                    if (variable != null) {
-                        parser.throwError("Optional parameter lacks default expression");
-                    }
-                } else {
-                    // Parse the default value expression
-                    ListNode arguments = consumeArgsWithPrototype(parser, "$", false);
-                    defaultValue = arguments.elements.getFirst();
-                }
-
-                // Generate conditional assignment for the default value
-                nodes.add(generateDefaultAssignment(defaultValue, op, maxParams, variable, parser));
             } else {
-                // Required parameter (no default value)
-                minParams++;
-            }
-
-            maxParams++;
-
-            // Handle comma or end of signature
-            token = TokenUtils.peek(parser);
-            if (token.text.equals(",")) {
-                // Consume all consecutive commas
-                while (token.text.equals(",")) {
-                    TokenUtils.consume(parser);
-                    token = TokenUtils.peek(parser);
-                }
-            } else if (endSignature(token)) {
-                break;
-            } else {
-                // Check for missing comma between parameters
-                if (token.text.equals("$") || token.text.equals("@") || token.text.equals("%")) {
+                // Check for missing comma between parameters (special case)
+                if (next.text.equals("$") || next.text.equals("@") || next.text.equals("%")) {
                     parser.throwError("syntax error");
                 }
                 parser.throwError("Expected ',' or ')' in signature prototype");
             }
         }
 
-        if (!token.text.equals(")")) {
-            throw new PerlCompilerException(parser.tokenIndex, "A signature parameter must start with '$', '@' or '%'", parser.ctx.errorUtil);
+        consumeCloseParen();
+        return generateSignatureAST();
+    }
+
+    private void parseParameter() {
+        LexerToken sigilToken = consumeToken();
+        String sigil = sigilToken.text;
+
+        validateSigil(sigil);
+
+        if (hasSlurpy) {
+            parser.throwError("Slurpy parameter not last");
         }
-        TokenUtils.consume(parser);
 
-        parser.ctx.logDebug("signature min: " + minParams + " max: " + maxParams + " slurpy: " + hasSlurpy);
+        // Check if this is a slurpy parameter
+        boolean isSlurpy = sigil.equals("@") || sigil.equals("%");
 
-        // Generate argument count validation
-        // AST: (minParams <= @_ <= maxParams) || die "Bad number of arguments"
-        nodes.add(0, new BinaryOperatorNode(
-                "||",
-                new ListNode(List.of(
-                        new BinaryOperatorNode("<=",
-                                new BinaryOperatorNode("<=",
-                                        new NumberNode(Integer.toString(minParams), tokenIndex),
-                                        atUnderscore(parser),
-                                        tokenIndex),
-                                new NumberNode(Integer.toString(maxParams), tokenIndex),
-                                tokenIndex)
-                ), tokenIndex),
-                new OperatorNode("die",
-                        new ListNode(List.of(
-                                new StringNode("Bad number of arguments", tokenIndex)
-                        ), tokenIndex),
-                        tokenIndex),
-                tokenIndex));
+        // Parse parameter name (if present)
+        String paramName = null;
+        if (peekToken().type == LexerTokenType.IDENTIFIER) {
+            paramName = consumeToken().text;
+        }
 
-        // Generate parameter assignment from @_
-        // AST: my ($a, $b, @rest) = @_
-        nodes.add(0,
-                new BinaryOperatorNode(
-                        "=",
-                        new OperatorNode("my",
-                                new ListNode(variables, tokenIndex),
-                                tokenIndex),
-                        atUnderscore(parser),
-                        tokenIndex));
+        // Create parameter variable or undef placeholder
+        Node paramVariable = createParameterVariable(sigil, paramName);
+        parameterVariables.add(paramVariable);
 
-        return new ListNode(nodes, tokenIndex);
+        if (isSlurpy) {
+            handleSlurpyParameter();
+        } else {
+            handleScalarParameter(paramVariable);
+        }
     }
 
-    private static boolean endSignature(LexerToken token) {
-        return token.type == LexerTokenType.EOF || token.text.equals(")");
+    private void validateSigil(String sigil) {
+        // Check for $# which is tokenized as a single token
+        if (sigil.equals("$#")) {
+            parser.throwError("'#' not allowed immediately following a sigil in a subroutine signature");
+        }
+
+        if (!sigil.equals("$") && !sigil.equals("@") && !sigil.equals("%")) {
+            parser.throwError("A signature parameter must start with '$', '@' or '%'");
+        }
+
+        // Check for double sigil or invalid character after sigil
+        LexerToken next = peekToken();
+        if (next.text.equals("$") || next.text.equals("@") || next.text.equals("%")) {
+            parser.throwError("Illegal character following sigil in a subroutine signature");
+        }
+        if (next.text.equals("#")) {
+            parser.throwError("'#' not allowed immediately following a sigil in a subroutine signature");
+        }
     }
 
-    /**
-     * Generates AST nodes for default parameter value assignment.
-     *
-     * <p>Handles three types of default assignments:
-     * <ul>
-     *   <li>{@code $a = 10} - Simple assignment if parameter not provided</li>
-     *   <li>{@code $a //= 10} - Assign if parameter is undefined</li>
-     *   <li>{@code $a ||= 10} - Assign if parameter is false</li>
-     * </ul>
-     *
-     * @param defaultValue The default value expression
-     * @param op The assignment operator (=, //=, or ||=)
-     * @param paramIndex The parameter's position in the signature (0-based)
-     * @param variable The variable node to assign to
-     * @param parser Parser instance
-     * @return AST node for the conditional default assignment
-     */
-    private static Node generateDefaultAssignment(Node defaultValue, String op, int paramIndex, Node variable, Parser parser) {
-        int tokenIndex = parser.tokenIndex;
-        if (variable == null) {
-            // Anonymous parameter with default: $ = value
-            // This is valid syntax but effectively a no-op
-            return new ListNode(tokenIndex);
+    private Node createParameterVariable(String sigil, String name) {
+        if (name != null) {
+            return new OperatorNode(sigil, new IdentifierNode(name, parser.tokenIndex), parser.tokenIndex);
+        } else {
+            return new OperatorNode("undef", null, parser.tokenIndex);
+        }
+    }
+
+    private void handleSlurpyParameter() {
+        hasSlurpy = true;
+        maxParams = Integer.MAX_VALUE;
+
+        // Verify no more parameters after slurpy
+        LexerToken next = peekToken();
+        if (next.text.equals(",")) {
+            consumeToken(); // consume comma
+            next = peekToken();
+            if (!next.text.equals(")")) {
+                if (next.text.equals("@") || next.text.equals("%")) {
+                    parser.throwError("Multiple slurpy parameters not allowed");
+                } else {
+                    parser.throwError("Slurpy parameter not last");
+                }
+            }
+        }
+    }
+
+    private void handleScalarParameter(Node paramVariable) {
+        LexerToken next = peekToken();
+
+        // Check for default value
+        if (next.text.equals("=") || next.text.equals("||=") || next.text.equals("//=")) {
+            String defaultOp = consumeToken().text;
+            Node defaultValue = parseDefaultValue(paramVariable);
+
+            if (defaultValue != null) {
+                astNodes.add(generateDefaultAssignment(paramVariable, defaultValue, defaultOp, maxParams));
+            }
+        } else {
+            // Mandatory parameter
+            minParams++;
+        }
+
+        maxParams++;
+    }
+
+    private Node generateDefaultAssignment(Node variable, Node defaultValue, String op, int paramIndex) {
+        if (variable == null || (variable instanceof OperatorNode && ((OperatorNode) variable).operator.equals("undef"))) {
+            // Anonymous parameter with default - no-op
+            return new ListNode(parser.tokenIndex);
         }
 
         if (op.equals("=")) {
-            // Simple default: assign if not enough arguments provided
-            // AST: @_ < (paramIndex + 1) && ($var = defaultValue)
+            // Simple default: assign if not enough arguments
+            // @_ < (paramIndex + 1) && ($var = defaultValue)
             return new BinaryOperatorNode(
                     "&&",
                     new BinaryOperatorNode(
                             "<",
                             atUnderscore(parser),
-                            new NumberNode(Integer.toString(paramIndex + 1), tokenIndex),
-                            tokenIndex),
+                            new NumberNode(Integer.toString(paramIndex + 1), parser.tokenIndex),
+                            parser.tokenIndex),
                     new BinaryOperatorNode(
                             "=",
                             variable,
                             defaultValue,
-                            tokenIndex),
-                    tokenIndex);
+                            parser.tokenIndex),
+                    parser.tokenIndex);
         }
 
-        // Defined-or (//=) and logical-or (||=) assignments
-        // These apply the default based on the parameter's value, not its presence
-        // AST: $var //= defaultValue or $var ||= defaultValue
+        // //= or ||= operators
+        return new BinaryOperatorNode(op, variable, defaultValue, parser.tokenIndex);
+    }
+
+    private Node parseDefaultValue(Node paramVariable) {
+        // Check if there's actually a default expression
+        LexerToken next = peekToken();
+        if (next.type == LexerTokenType.EOF || next.text.equals(",") || next.text.equals(")")) {
+            boolean isUndef = paramVariable instanceof OperatorNode && ((OperatorNode) paramVariable).operator.equals("undef");
+            if (paramVariable != null && !isUndef) {
+                parser.throwError("Optional parameter lacks default expression");
+            }
+            return null;
+        }
+
+        // Parse the default value expression
+        ListNode arguments = consumeArgsWithPrototype(parser, "$", false);
+        return arguments.elements.getFirst();
+    }
+
+    private ListNode generateSignatureAST() {
+        List<Node> allNodes = new ArrayList<>();
+
+        // Add argument count validation
+        allNodes.add(generateArgCountValidation());
+
+        // Add parameter assignment from @_
+        allNodes.add(generateParameterAssignment());
+
+        // Add default value assignments
+        allNodes.addAll(astNodes);
+
+        return new ListNode(allNodes, parser.tokenIndex);
+    }
+
+    private Node generateArgCountValidation() {
+        // (minParams <= @_ <= maxParams) || die "Bad number of arguments"
         return new BinaryOperatorNode(
-                op,
-                variable,
-                defaultValue,
-                tokenIndex);
+                "||",
+                new ListNode(List.of(
+                        new BinaryOperatorNode("<=",
+                                new BinaryOperatorNode("<=",
+                                        new NumberNode(Integer.toString(minParams), parser.tokenIndex),
+                                        atUnderscore(parser),
+                                        parser.tokenIndex),
+                                new NumberNode(Integer.toString(maxParams), parser.tokenIndex),
+                                parser.tokenIndex)
+                ), parser.tokenIndex),
+                new OperatorNode("die",
+                        new ListNode(List.of(
+                                new StringNode("Bad number of arguments", parser.tokenIndex)
+                        ), parser.tokenIndex),
+                        parser.tokenIndex),
+                parser.tokenIndex);
+    }
+
+    private Node generateParameterAssignment() {
+        // my ($a, $b, @rest) = @_
+        return new BinaryOperatorNode(
+                "=",
+                new OperatorNode("my",
+                        new ListNode(parameterVariables, parser.tokenIndex),
+                        parser.tokenIndex),
+                atUnderscore(parser),
+                parser.tokenIndex);
+    }
+
+    // Token handling utilities
+    private void consumeOpenParen() {
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+    }
+
+    private void consumeCloseParen() {
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+    }
+
+    private void consumeCommas() {
+        while (peekToken().text.equals(",")) {
+            consumeToken();
+        }
+    }
+
+    private LexerToken peekToken() {
+        return TokenUtils.peek(parser);
+    }
+
+    private LexerToken consumeToken() {
+        return TokenUtils.consume(parser);
     }
 }

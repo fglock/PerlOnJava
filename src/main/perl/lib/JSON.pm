@@ -4,6 +4,7 @@ use Exporter "import";
 use warnings;
 use strict;
 use Symbol;
+use Carp;
 
 XSLoader::load( 'Json' );
 
