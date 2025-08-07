@@ -189,7 +189,14 @@ public class MathOperators {
             throw new PerlCompilerException("Illegal division by zero");
         }
         // Perform division
-        return new RuntimeScalar(arg1.getDouble() / divisor);
+        double result = arg1.getDouble() / divisor;
+
+        // Fix negative zero to positive zero
+        if (result == 0.0 && Double.doubleToRawLongBits(result) == Double.doubleToRawLongBits(-0.0)) {
+            result = 0.0;
+        }
+
+        return new RuntimeScalar(result);
     }
 
     /**
@@ -237,7 +244,12 @@ public class MathOperators {
     }
 
     private static double truncate(double value) {
-        return (value >= 0) ? Math.floor(value) : Math.ceil(value);
+        double result = (value >= 0) ? Math.floor(value) : Math.ceil(value);
+        // Fix negative zero to positive zero
+        if (result == 0.0 && Double.doubleToRawLongBits(result) == Double.doubleToRawLongBits(-0.0)) {
+            result = 0.0;
+        }
+        return result;
     }
 
     /**
@@ -439,8 +451,28 @@ public class MathOperators {
             if (result != null) return result;
         }
 
-        return getScalarInt(runtimeScalar.getInt());
+        // Convert string type to number if necessary
+        if (runtimeScalar.type == RuntimeScalarType.STRING) {
+            runtimeScalar = NumberParser.parseNumber(runtimeScalar);
+        }
+
+        // Already an integer
+        if (runtimeScalar.type == RuntimeScalarType.INTEGER) {
+            return runtimeScalar;
+        }
+
+        // Handle DOUBLE type
+        double value = runtimeScalar.getDouble();
+
+        // Check for infinity and NaN values
+        if (Double.isInfinite(value) || Double.isNaN(value)) {
+            return new RuntimeScalar(value);  // Return infinity or NaN as-is
+        }
+
+        // Use truncate to get integer part (truncates towards zero)
+        return new RuntimeScalar(truncate(value));
     }
+
 
     public static RuntimeScalar not(RuntimeScalar runtimeScalar) {
         return switch (runtimeScalar.type) {
