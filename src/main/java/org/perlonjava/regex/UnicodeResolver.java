@@ -35,6 +35,20 @@ public class UnicodeResolver {
                 return (negated ? "\\P{" : "\\p{") + property + "}";
             }
 
+            if (property.equals(("_Perl_IDStart"))) {
+
+                // \p{L} - All Unicode letters
+                // \p{Nl} - Letter numbers (like Roman numerals)
+                // _ - Underscore
+                property = "\\p{L}\\p{Nl}_";
+
+                if (negated) {
+                    return "[^" + property + "]";
+                } else {
+                    return "[" + property + "]";
+                }
+            }
+
             // Remove common prefixes like "Script=", "Block=", "In=", or "Is="
             if (property.startsWith("Script=")) {
                 property = property.substring("Script=".length());
@@ -54,7 +68,7 @@ public class UnicodeResolver {
             // Handle combined properties (e.g., \p{Script=Hiragana;Letter})
             if (property.contains(";")) {
                 String[] parts = property.split(";");
-                StringBuilder combinedPattern = new StringBuilder("[");
+                StringBuilder combinedPattern = new StringBuilder(negated ? "[^" : "[");
                 for (String part : parts) {
                     combinedPattern.append(translateUnicodeProperty(part, false));
                 }
