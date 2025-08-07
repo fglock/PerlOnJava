@@ -123,6 +123,8 @@ $os_name =~ s/\s+/_/g;
     d_chown => _check_chown_support(),
     d_chroot => 'undef',
     d_crypt => 'define',
+    d_double_has_inf => 'define',
+    d_double_has_nan => 'define',
 
     # Signal handling
     sig_name => 'HUP INT QUIT ILL TRAP ABRT BUS FPE KILL USR1 SEGV USR2 PIPE ALRM TERM',
