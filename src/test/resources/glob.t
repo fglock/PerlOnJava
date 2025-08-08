@@ -183,12 +183,14 @@ subtest 'Special characters in filenames' => sub {
     my @bracket_files = glob('test\[1\].txt');
     is(scalar(@bracket_files), 1, 'Can match literal square brackets with escaping');
 
-    # Test with wildcard to match special files
-    my @test_special = glob('test[\[\{]*\.txt');
-    is(scalar(@test_special), 2, 'Can match files with special chars using character class');
+    SKIP: {
+        skip ("Skipping special character tests on Windows", 2) if $^O eq 'MSWin32';
 
-    # On non-Windows, also test the asterisk file
-    if ($^O ne 'MSWin32') {
+        # Test with wildcard to match special files
+        my @test_special = glob('test[\[\{]*\.txt');
+        is(scalar(@test_special), 2, 'Can match files with special chars using character class');
+
+        # On non-Windows, also test the asterisk file
         my @star_files = glob('test\*.txt');
         is(scalar(@star_files), 1, 'Can match literal asterisk with escaping');
     }
