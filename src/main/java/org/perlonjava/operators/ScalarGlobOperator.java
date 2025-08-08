@@ -690,14 +690,14 @@ public class ScalarGlobOperator {
 
     /**
      * Formats a file result based on Perl's glob behavior.
-     * The key issue on Windows is that we need to preserve the original path style.
+     * For relative paths, returns results in platform-native format.
+     * For absolute paths, preserves the original pattern's style.
      */
     private String formatResult(File file, PathComponents components, String originalPattern, boolean patternIsAbsolute) {
         String fileName = file.getName();
 
         if (patternIsAbsolute) {
             // For absolute patterns, return the full absolute path
-            // But we need to match the style of the original pattern
             String absPath = file.getAbsolutePath();
 
             // On Windows, if the original pattern used forward slashes, convert result to forward slashes
@@ -707,16 +707,15 @@ public class ScalarGlobOperator {
 
             return absPath;
         } else if (components.hasDirectory) {
-            // Relative pattern with directory - preserve the directory structure
-            // Again, match the style of the original pattern
-            String result = components.directoryPart + "/" + fileName;
-
-            // If original pattern used backslashes, convert result to backslashes
-            if (File.separatorChar == '\\' && originalPattern.indexOf('\\') >= 0 && originalPattern.indexOf('/') < 0) {
-                result = result.replace('/', '\\');
+            // Relative pattern with directory
+            // Return in platform-native format (like Perl does)
+            if (File.separatorChar == '\\') {
+                // Windows - use backslashes
+                return components.directoryPart.replace('/', '\\') + '\\' + fileName;
+            } else {
+                // Unix/Mac - use forward slashes
+                return components.directoryPart + '/' + fileName;
             }
-
-            return result;
         } else {
             // Pattern has no directory separators - return just filename
             return fileName;
