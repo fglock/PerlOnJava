@@ -647,7 +647,13 @@ public class ScalarGlobOperator {
                             }
                             break;
                         default:
-                            regex.append("\\Q").append(c).append("\\E");
+                            // Only quote special regex characters, not every character
+                            if (c == '.' || c == '^' || c == '$' || c == '+' || c == '{' || c == '}' ||
+                                c == '(' || c == ')' || c == '|') {
+                                regex.append('\\').append(c);
+                            } else {
+                                regex.append(c);
+                            }
                             break;
                     }
                 }
