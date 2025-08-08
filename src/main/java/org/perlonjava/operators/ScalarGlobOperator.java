@@ -480,9 +480,19 @@ public class ScalarGlobOperator {
      * Matches files in a directory against a pattern.
      */
     private void matchFiles(PathComponents components, Pattern regex, List<String> results,
-                            String originalPattern, boolean patternIsAbsolute) {
-        File[] files = components.baseDir.listFiles();
+                        String originalPattern, boolean patternIsAbsolute) {
+        File[] files;
+        try {
+            files = components.baseDir.listFiles();
+        } catch (SecurityException e) {
+            // Set Perl's $! variable to indicate the error
+            getGlobalVariable("main::!").set(new RuntimeScalar("Permission denied"));
+            return;
+        }
+
         if (files == null) {
+            // listFiles() returns null if directory doesn't exist or isn't a directory
+            // This is not an error condition for glob - just return empty results
             return;
         }
 
