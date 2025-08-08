@@ -604,8 +604,8 @@ public class ScalarGlobOperator {
                 if (escaped) {
                     if (inCharClass) {
                         // In glob character class, \[ means literal [, \{ means literal {
-                        // In Java regex character class, [ needs to be escaped as \[
-                        if (c == ']' || c == '\\' || c == '-' || c == '^' || c == '[') {
+                        // In Java regex character class: [ and ] need escaping, { doesn't
+                        if (c == '[' || c == ']') {
                             regex.append('\\');
                         }
                         regex.append(c);
@@ -627,7 +627,11 @@ public class ScalarGlobOperator {
                         regex.append("]");
                         inCharClass = false;
                     } else {
-                        handleCharClassChar(c, regex);
+                        // Regular character in character class
+                        if (c == '-' || c == '^' || c == '[' || c == ']' || c == '\\') {
+                            regex.append('\\');
+                        }
+                        regex.append(c);
                     }
                 } else {
                     switch (c) {
@@ -646,7 +650,7 @@ public class ScalarGlobOperator {
                             }
                             break;
                         default:
-                            // Only quote special regex characters, not every character
+                            // Only quote special regex characters
                             if (c == '.' || c == '^' || c == '$' || c == '+' || c == '{' || c == '}' ||
                                     c == '(' || c == ')' || c == '|') {
                                 regex.append('\\').append(c);
