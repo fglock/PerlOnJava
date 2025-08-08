@@ -379,12 +379,11 @@ public class ScalarGlobOperator {
             // Preserve the original pattern format for result formatting
             String originalPattern = pattern;
 
-            // Normalize path separators
+            // Normalize path separators for Windows compatibility
             String normalizedPattern = normalizePathSeparators(pattern);
 
             // Check if pattern is absolute
-            boolean patternIsAbsolute = Paths.get(normalizedPattern).isAbsolute() ||
-                    isWindowsAbsolutePath(normalizedPattern);
+            boolean patternIsAbsolute = isAbsolutePath(normalizedPattern);
 
             // Extract directory and file pattern
             PathComponents components = extractPathComponents(normalizedPattern, patternIsAbsolute);
@@ -412,19 +411,40 @@ public class ScalarGlobOperator {
             }
         } catch (Exception e) {
             // Return empty results on error
+            System.err.println("DEBUG: Exception in globSinglePattern: " + e.getMessage());
+            e.printStackTrace();
         }
 
         return results;
     }
 
     /**
-     * Checks if a pattern is a Windows absolute path.
+     * Checks if a pattern is an absolute path (Windows or Unix).
      */
-    private boolean isWindowsAbsolutePath(String pattern) {
-        return pattern.length() >= 3 &&
+    private boolean isAbsolutePath(String pattern) {
+        if (pattern.isEmpty()) {
+            return false;
+        }
+
+        // Check for Unix absolute path
+        if (pattern.startsWith("/")) {
+            return true;
+        }
+
+        // Check for Windows absolute path (C:\, D:/, etc.)
+        if (pattern.length() >= 3 &&
                 Character.isLetter(pattern.charAt(0)) &&
                 pattern.charAt(1) == ':' &&
-                (pattern.charAt(2) == '\\' || pattern.charAt(2) == '/');
+                (pattern.charAt(2) == '\\' || pattern.charAt(2) == '/')) {
+            return true;
+        }
+
+        // Check for UNC path (\\server\share)
+        if (pattern.startsWith("\\\\") || pattern.startsWith("//")) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -453,6 +473,7 @@ public class ScalarGlobOperator {
         boolean hasDirectory = false;
         String directoryPart = "";
 
+        // Use forward slash as canonical separator internally
         int lastSep = normalizedPattern.lastIndexOf('/');
 
         if (lastSep >= 0) {
@@ -461,10 +482,15 @@ public class ScalarGlobOperator {
 
             if (directoryPart.isEmpty()) {
                 // Root directory case
-                baseDir = RuntimeIO.resolveFile("/");
+                baseDir = new File("/");
             } else {
-                // Use RuntimeIO for all directory resolution
-                baseDir = RuntimeIO.resolveFile(directoryPart);
+                // Convert back to platform-specific path for File operations
+                String platformPath = directoryPart.replace('/', File.separatorChar);
+                baseDir = new File(platformPath);
+                if (!baseDir.isAbsolute()) {
+                    // Relative path - resolve from current directory
+                    baseDir = new File(System.getProperty("user.dir"), platformPath);
+                }
             }
 
             filePattern = normalizedPattern.substring(lastSep + 1);
@@ -480,31 +506,18 @@ public class ScalarGlobOperator {
      * Matches files in a directory against a pattern.
      */
     private void matchFiles(PathComponents components, Pattern regex, List<String> results,
-                        String originalPattern, boolean patternIsAbsolute) {
-        // DEBUG: Print what directory we're looking in
-        System.err.println("DEBUG: Looking for files in directory: " + components.baseDir.getAbsolutePath());
-        System.err.println("DEBUG: Directory exists: " + components.baseDir.exists());
-        System.err.println("DEBUG: Is directory: " + components.baseDir.isDirectory());
-        System.err.println("DEBUG: Pattern: " + components.filePattern);
-        System.err.println("DEBUG: Regex: " + regex.pattern());
+                            String originalPattern, boolean patternIsAbsolute) {
 
         File[] files;
         try {
             files = components.baseDir.listFiles();
         } catch (SecurityException e) {
-            System.err.println("DEBUG: SecurityException: " + e.getMessage());
             getGlobalVariable("main::!").set(new RuntimeScalar("Permission denied"));
             return;
         }
 
         if (files == null) {
-            System.err.println("DEBUG: listFiles() returned null");
             return;
-        }
-
-        System.err.println("DEBUG: Found " + files.length + " files in directory");
-        for (File file : files) {
-            System.err.println("DEBUG: File: " + file.getName());
         }
 
         for (File file : files) {
@@ -516,64 +529,72 @@ public class ScalarGlobOperator {
             }
 
             boolean matches = regex.matcher(fileName).matches();
-            System.err.println("DEBUG: File " + fileName + " matches pattern: " + matches);
 
             if (matches) {
                 String result = formatResult(file, components, originalPattern, patternIsAbsolute);
                 results.add(result);
-                System.err.println("DEBUG: Added result: " + result);
             }
         }
     }
 
     /**
-     * Normalizes path separators in a pattern, handling escape sequences.
+     * Normalizes path separators in a pattern for consistent internal processing.
+     * Always uses forward slashes internally, regardless of platform.
      *
      * @param pattern the pattern to normalize
-     * @return normalized pattern with forward slashes where appropriate
+     * @return normalized pattern with forward slashes
      */
     private String normalizePathSeparators(String pattern) {
-        // Don't normalize if no backslashes
         if (pattern.indexOf('\\') == -1) {
-            return pattern;
+            return pattern; // No backslashes to process
         }
 
-        // On Unix/Mac, backslashes in patterns are always escape sequences
-        // Don't convert them to forward slashes
-        if (File.separatorChar == '/') {
-            return pattern;
-        }
-
-        // On Windows, we need to normalize path separators but preserve escape sequences
-        // Find the last path separator before any glob metacharacters
-        int lastPathSep = -1;
-        int firstGlobChar = -1;
+        StringBuilder result = new StringBuilder();
+        boolean escaped = false;
+        boolean inCharClass = false;
 
         for (int i = 0; i < pattern.length(); i++) {
             char c = pattern.charAt(i);
-            if (c == '*' || c == '?' || c == '[' || c == '{') {
-                firstGlobChar = i;
-                break;
+
+            if (escaped) {
+                // Previous character was escape - this char is literal
+                result.append(c);
+                escaped = false;
+                continue;
             }
-            if (c == '\\' || c == '/') {
-                lastPathSep = i;
+
+            if (c == '\\') {
+                // Check if this is an escape sequence or path separator
+                if (i + 1 < pattern.length()) {
+                    char next = pattern.charAt(i + 1);
+                    // If next char is a glob metachar, this is an escape
+                    if (next == '*' || next == '?' || next == '[' || next == ']' ||
+                            next == '{' || next == '}' || next == '\\') {
+                        result.append(c); // Keep the escape backslash
+                        escaped = true;
+                        continue;
+                    }
+                }
+                // Otherwise, treat as path separator on Windows
+                if (File.separatorChar == '\\' && !inCharClass) {
+                    result.append('/'); // Convert to forward slash
+                } else {
+                    result.append(c); // Keep as-is (escape or literal)
+                }
+                continue;
             }
+
+            // Handle character classes
+            if (c == '[' && !inCharClass) {
+                inCharClass = true;
+            } else if (c == ']' && inCharClass) {
+                inCharClass = false;
+            }
+
+            result.append(c);
         }
 
-        if (firstGlobChar == -1) {
-            // No glob chars, convert all backslashes to forward slashes
-            return pattern.replace('\\', '/');
-        }
-
-        if (lastPathSep == -1 || lastPathSep > firstGlobChar) {
-            // No path separators before glob chars, preserve all backslashes
-            return pattern;
-        }
-
-        // Normalize path separators up to the last separator before glob chars
-        String pathPart = pattern.substring(0, lastPathSep + 1).replace('\\', '/');
-        String globPart = pattern.substring(lastPathSep + 1);
-        return pathPart + globPart;
+        return result.toString();
     }
 
     /**
@@ -649,7 +670,7 @@ public class ScalarGlobOperator {
                         default:
                             // Only quote special regex characters, not every character
                             if (c == '.' || c == '^' || c == '$' || c == '+' || c == '{' || c == '}' ||
-                                c == '(' || c == ')' || c == '|') {
+                                    c == '(' || c == ')' || c == '|') {
                                 regex.append('\\').append(c);
                             } else {
                                 regex.append(c);
@@ -663,6 +684,7 @@ public class ScalarGlobOperator {
             return Pattern.compile(regex.toString());
 
         } catch (PatternSyntaxException e) {
+            System.err.println("DEBUG: Pattern compilation error: " + e.getMessage());
             return null;
         }
     }
@@ -704,11 +726,14 @@ public class ScalarGlobOperator {
      */
     private String formatResult(File file, PathComponents components, String originalPattern, boolean patternIsAbsolute) {
         if (patternIsAbsolute) {
-            // Absolute pattern - return absolute path
-            return file.getAbsolutePath();
+            // Absolute pattern - return absolute path using forward slashes
+            String absPath = file.getAbsolutePath();
+            return absPath.replace('\\', '/');
         } else if (components.hasDirectory) {
             // Relative pattern with directory - preserve the directory structure from original pattern
-            return components.directoryPart + "/" + file.getName();
+            // Use forward slashes for consistency with Perl behavior
+            String dirPart = components.directoryPart.replace('\\', '/');
+            return dirPart + "/" + file.getName();
         } else {
             // Pattern has no directory separators - return just filename
             return file.getName();
