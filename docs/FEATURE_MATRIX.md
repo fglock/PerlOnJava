@@ -68,16 +68,13 @@ PerlOnJava implements most core Perl features with some key differences:
     4. **With arguments**: `./jperl -e 'print "Hello\n"'` or `./jperl script.pl`
 
 - ✅  Accept command line switches from the shebang line.
-- ✅  Accept command line switches: `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-S`, `-x`, `-v`, `-V`, `-?` are implemented.
+- ✅  Accept command line switches: `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-S`, `-x`, `-v`, `-V`, `-?`, `-w`, `-W`, `-X` are implemented.
 - ❌  Missing command line switches include:
   - `-s`: Rudimentary switch parsing.
   - `-T`: Taint checks.
   - `-t`: Taint checks with warnings.
   - `-u`: Dumps core after compiling.
   - `-U`: Allows unsafe operations.
-  - `-W`: Enables all warnings.
-  - `-X`: Disables all warnings.
-  - `-w`: Enables warnings.
   - `-d[t][:debugger]`: Runs the program under the debugger.
   - `-D[number/list]`: Sets debugging flags.
   - `-f`: Suppresses execution of `sitecustomize.pl`.

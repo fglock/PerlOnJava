@@ -192,6 +192,20 @@ public class ArgumentParser {
                 case 'M':
                     index = handleModuleSwitch(args, parsedArgs, index, j, arg, switchChar);
                     return index;
+
+                case 'w':
+                    // enable many useful warnings
+                    parsedArgs.moduleUseStatements.add(new ModuleUseStatement(switchChar, "warnings", null, false));
+                    break;
+                case 'W':
+                    // enable all warnings
+                    parsedArgs.moduleUseStatements.add(new ModuleUseStatement(switchChar, "warnings", "all", false));
+                    break;
+                case 'X':
+                    // disable all warnings
+                    parsedArgs.moduleUseStatements.add(new ModuleUseStatement(switchChar, "warnings", null, true));
+                    break;
+
                 case 'a':
                     // Enable autosplit mode
                     parsedArgs.autoSplit = true;
@@ -747,7 +761,10 @@ public class ArgumentParser {
         System.out.println("  -n                    assume \"while (<>) { ... }\" loop around program");
         System.out.println("  -p                    assume loop like -n but print line also, like sed");
         System.out.println("  -S                    look for programfile using PATH environment variable");
+        System.out.println("  -w                    enable many useful warnings");
+        System.out.println("  -W                    enable all warnings");
         System.out.println("  -x[directory]         ignore text before #!perl line (optionally cd to directory)");
+        System.out.println("  -X                    disable all warnings");
         System.out.println("  --debug               enable debugging mode");
         System.out.println("  --tokenize            tokenize the input code");
         System.out.println("  --parse               parse the input code");
