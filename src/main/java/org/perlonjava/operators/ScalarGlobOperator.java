@@ -14,20 +14,6 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
 /**
  * Implements Perl's glob operator functionality for file pattern matching.
- *
- * <p>The glob operator expands file patterns containing wildcards (* ? []) and
- * brace expansions ({a,b,c}) into lists of matching file paths. It maintains
- * state between scalar context calls to iterate through results.</p>
- *
- * <p>Supported pattern features:
- * <ul>
- *   <li>* - matches any sequence of characters</li>
- *   <li>? - matches any single character</li>
- *   <li>[...] - character class matching</li>
- *   <li>{a,b,c} - brace expansion for alternatives</li>
- *   <li>Escape sequences with backslash</li>
- * </ul>
- * </p>
  */
 public class ScalarGlobOperator {
 
@@ -353,6 +339,7 @@ public class ScalarGlobOperator {
                 current.append(c);
             } else if (c == ',' && depth == 0) {
                 parts.add(current.toString());
+
                 current = new StringBuilder();
             } else {
                 current.append(c);
@@ -383,7 +370,7 @@ public class ScalarGlobOperator {
             String normalizedPattern = normalizePathSeparators(pattern);
 
             // Check if pattern is absolute
-            boolean patternIsAbsolute = isAbsolutePath(normalizedPattern);
+            boolean patternIsAbsolute = isAbsolutePath(pattern);
 
             // Extract directory and file pattern
             PathComponents components = extractPathComponents(normalizedPattern, patternIsAbsolute);
@@ -411,8 +398,6 @@ public class ScalarGlobOperator {
             }
         } catch (Exception e) {
             // Return empty results on error
-            System.err.println("DEBUG: Exception in globSinglePattern: " + e.getMessage());
-            e.printStackTrace();
         }
 
         return results;
@@ -420,6 +405,7 @@ public class ScalarGlobOperator {
 
     /**
      * Checks if a pattern is an absolute path (Windows or Unix).
+     * Must check against the original pattern, not normalized.
      */
     private boolean isAbsolutePath(String pattern) {
         if (pattern.isEmpty()) {
@@ -482,15 +468,10 @@ public class ScalarGlobOperator {
 
             if (directoryPart.isEmpty()) {
                 // Root directory case
-                baseDir = new File("/");
+                baseDir = RuntimeIO.resolveFile("/");
             } else {
-                // Convert back to platform-specific path for File operations
-                String platformPath = directoryPart.replace('/', File.separatorChar);
-                baseDir = new File(platformPath);
-                if (!baseDir.isAbsolute()) {
-                    // Relative path - resolve from current directory
-                    baseDir = new File(System.getProperty("user.dir"), platformPath);
-                }
+                // Use RuntimeIO.resolveFile for proper path resolution
+                baseDir = RuntimeIO.resolveFile(directoryPart);
             }
 
             filePattern = normalizedPattern.substring(lastSep + 1);
@@ -507,7 +488,6 @@ public class ScalarGlobOperator {
      */
     private void matchFiles(PathComponents components, Pattern regex, List<String> results,
                             String originalPattern, boolean patternIsAbsolute) {
-
         File[] files;
         try {
             files = components.baseDir.listFiles();
@@ -539,59 +519,57 @@ public class ScalarGlobOperator {
 
     /**
      * Normalizes path separators in a pattern for consistent internal processing.
-     * Always uses forward slashes internally, regardless of platform.
+     * On Windows, converts backslashes to forward slashes except when they're escape sequences.
      *
      * @param pattern the pattern to normalize
      * @return normalized pattern with forward slashes
      */
     private String normalizePathSeparators(String pattern) {
-        if (pattern.indexOf('\\') == -1) {
-            return pattern; // No backslashes to process
+        // On Unix/Mac, don't change anything
+        if (File.separatorChar == '/') {
+            return pattern;
         }
 
+        // On Windows, we need to intelligently handle backslashes
         StringBuilder result = new StringBuilder();
-        boolean escaped = false;
-        boolean inCharClass = false;
+        boolean inGlobPart = false;
+
+        // Find where the glob pattern starts (first *, ?, [, or {)
+        int globStart = Integer.MAX_VALUE;
+        for (int i = 0; i < pattern.length(); i++) {
+            char c = pattern.charAt(i);
+            if (c == '*' || c == '?' || c == '[' || c == '{') {
+                globStart = i;
+                break;
+            }
+        }
 
         for (int i = 0; i < pattern.length(); i++) {
             char c = pattern.charAt(i);
 
-            if (escaped) {
-                // Previous character was escape - this char is literal
-                result.append(c);
-                escaped = false;
-                continue;
+            if (i >= globStart) {
+                inGlobPart = true;
             }
 
             if (c == '\\') {
-                // Check if this is an escape sequence or path separator
-                if (i + 1 < pattern.length()) {
-                    char next = pattern.charAt(i + 1);
-                    // If next char is a glob metachar, this is an escape
-                    if (next == '*' || next == '?' || next == '[' || next == ']' ||
-                            next == '{' || next == '}' || next == '\\') {
-                        result.append(c); // Keep the escape backslash
-                        escaped = true;
-                        continue;
+                if (inGlobPart) {
+                    // In glob part, check if this is an escape
+                    if (i + 1 < pattern.length()) {
+                        char next = pattern.charAt(i + 1);
+                        // Check if next char is something that can be escaped in glob
+                        if (next == '*' || next == '?' || next == '[' || next == ']' ||
+                                next == '{' || next == '}' || next == '\\' || next == ' ') {
+                            // This is an escape sequence, keep the backslash
+                            result.append(c);
+                            continue;
+                        }
                     }
                 }
-                // Otherwise, treat as path separator on Windows
-                if (File.separatorChar == '\\' && !inCharClass) {
-                    result.append('/'); // Convert to forward slash
-                } else {
-                    result.append(c); // Keep as-is (escape or literal)
-                }
-                continue;
+                // Convert path separator to forward slash
+                result.append('/');
+            } else {
+                result.append(c);
             }
-
-            // Handle character classes
-            if (c == '[' && !inCharClass) {
-                inCharClass = true;
-            } else if (c == ']' && inCharClass) {
-                inCharClass = false;
-            }
-
-            result.append(c);
         }
 
         return result.toString();
@@ -684,16 +662,8 @@ public class ScalarGlobOperator {
             return Pattern.compile(regex.toString());
 
         } catch (PatternSyntaxException e) {
-            System.err.println("DEBUG: Pattern compilation error: " + e.getMessage());
             return null;
         }
-    }
-
-    /**
-     * Checks if a character is a glob special character.
-     */
-    private boolean isGlobSpecialChar(char c) {
-        return c == '*' || c == '?' || c == '[' || c == ']' || c == '{' || c == '}';
     }
 
     /**
@@ -719,24 +689,37 @@ public class ScalarGlobOperator {
     }
 
     /**
-     * Formats a file result based on Perl's glob behavior:
-     * - No slashes in pattern: return just filename
-     * - Relative path with slashes: preserve relative structure from pattern
-     * - Absolute path: return absolute paths
+     * Formats a file result based on Perl's glob behavior.
+     * The key issue on Windows is that we need to preserve the original path style.
      */
     private String formatResult(File file, PathComponents components, String originalPattern, boolean patternIsAbsolute) {
+        String fileName = file.getName();
+
         if (patternIsAbsolute) {
-            // Absolute pattern - return absolute path using forward slashes
+            // For absolute patterns, return the full absolute path
+            // But we need to match the style of the original pattern
             String absPath = file.getAbsolutePath();
-            return absPath.replace('\\', '/');
+
+            // On Windows, if the original pattern used forward slashes, convert result to forward slashes
+            if (File.separatorChar == '\\' && originalPattern.indexOf('/') >= 0) {
+                absPath = absPath.replace('\\', '/');
+            }
+
+            return absPath;
         } else if (components.hasDirectory) {
-            // Relative pattern with directory - preserve the directory structure from original pattern
-            // Use forward slashes for consistency with Perl behavior
-            String dirPart = components.directoryPart.replace('\\', '/');
-            return dirPart + "/" + file.getName();
+            // Relative pattern with directory - preserve the directory structure
+            // Again, match the style of the original pattern
+            String result = components.directoryPart + "/" + fileName;
+
+            // If original pattern used backslashes, convert result to backslashes
+            if (File.separatorChar == '\\' && originalPattern.indexOf('\\') >= 0 && originalPattern.indexOf('/') < 0) {
+                result = result.replace('/', '\\');
+            }
+
+            return result;
         } else {
             // Pattern has no directory separators - return just filename
-            return file.getName();
+            return fileName;
         }
     }
 
