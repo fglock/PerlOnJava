@@ -52,7 +52,7 @@ public class ScalarGlobOperatorHelper {
                 if (escaped) {
                     if (inCharClass) {
                         // Inside character class, handle escaped characters
-                        // In glob character class: \[ means literal [, \] means literal ]
+                        // In glob character class: \[ means literal [, \{ means literal {
                         // These need to be escaped in Java regex character class too
                         if (c == '[' || c == ']' || c == '\\') {
                             regex.append('\\');

@@ -279,8 +279,9 @@ public class ScalarGlobOperator {
             // Relative pattern with directory
             // Return in platform-native format (like Perl does)
             if (File.separatorChar == '\\') {
-                // Windows - use backslashes for result
-                return components.directoryPart.replace('/', '\\') + '\\' + fileName;
+                // Windows - convert the directory part back to native backslashes
+                String nativeDir = components.directoryPart.replace('/', '\\');
+                return nativeDir + '\\' + fileName;
             } else {
                 // Unix/Mac - use forward slashes
                 return components.directoryPart + '/' + fileName;
