@@ -470,7 +470,7 @@ public class ScalarGlobOperator {
             filePattern = normalizedPattern.substring(lastSep + 1);
         } else {
             // No directory separator - use current directory
-            baseDir = RuntimeIO.resolveFile(".");
+            baseDir = new File(System.getProperty("user.dir"));
         }
 
         return new PathComponents(baseDir, filePattern, hasDirectory, directoryPart);
