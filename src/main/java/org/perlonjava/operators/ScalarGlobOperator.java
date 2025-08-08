@@ -266,49 +266,49 @@ public class ScalarGlobOperator {
         return -1;
     }
 
-    /**
-     * Finds the matching closing brace for an opening brace, skipping character classes.
-     */
-    private int findMatchingBrace(String str, int start) {
-        int depth = 1;
-        boolean escaped = false;
-        boolean inCharClass = false;
+/**
+ * Finds the matching closing brace for an opening brace, skipping character classes.
+ */
+private int findMatchingBrace(String str, int start) {
+    int depth = 1;
+    boolean escaped = false;
+    boolean inCharClass = false;
 
-        for (int i = start + 1; i < str.length(); i++) {
-            char c = str.charAt(i);
-            if (escaped) {
-                escaped = false;
-                continue;
-            }
-            if (c == '\\') {
-                escaped = true;
-                continue;
-            }
+    for (int i = start + 1; i < str.length(); i++) {
+        char c = str.charAt(i);
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (c == '\\') {
+            escaped = true;
+            continue;
+        }
 
-            // Handle character classes
-            if (c == '[' && !inCharClass) {
-                inCharClass = true;
-                continue;
-            }
-            if (c == ']' && inCharClass) {
-                inCharClass = false;
-                continue;
-            }
+        // Handle character classes
+        if (c == '[' && !inCharClass) {
+            inCharClass = true;
+            continue;
+        }
+        if (c == ']' && inCharClass) {
+            inCharClass = false;
+            continue;
+        }
 
-            // Only process braces if not in character class
-            if (!inCharClass) {
-                if (c == '{') {
-                    depth++;
-                } else if (c == '}') {
-                    depth--;
-                    if (depth == 0) {
-                        return i;
-                    }
+        // Only process braces if not in character class
+        if (!inCharClass) {
+            if (c == '{') {
+                depth++;
+            } else if (c == '}') {
+                depth--;
+                if (depth == 0) {
+                    return i;
                 }
             }
         }
-        return -1;
     }
+    return -1;
+}
 
     /**
      * Splits brace content by commas, respecting nested braces.
@@ -369,7 +369,7 @@ public class ScalarGlobOperator {
             String normalizedPattern = normalizePathSeparators(pattern);
 
             // Check if pattern is absolute
-            boolean patternIsAbsolute = isAbsolutePath(pattern);
+            boolean patternIsAbsolute = isAbsolutePath(originalPattern);
 
             // Extract directory and file pattern
             PathComponents components = extractPathComponents(normalizedPattern, patternIsAbsolute);
@@ -531,48 +531,112 @@ public class ScalarGlobOperator {
 
         // On Windows, we need to intelligently handle backslashes
         StringBuilder result = new StringBuilder();
-        boolean escaped = false;
         boolean inCharClass = false;
 
         for (int i = 0; i < pattern.length(); i++) {
             char c = pattern.charAt(i);
 
-            if (escaped) {
-                // This backslash was an escape - keep both the backslash and the next char
-                result.append('\\').append(c);
-                escaped = false;
-                continue;
-            }
-
-            if (c == '\\') {
-                // Check if this is an escape sequence
-                if (i + 1 < pattern.length()) {
-                    char next = pattern.charAt(i + 1);
-                    // Check if next char is something that can be escaped in glob
-                    if (next == '*' || next == '?' || next == '[' || next == ']' ||
-                            next == '{' || next == '}' || next == '\\' || next == ' ' ||
-                            next == '.' || next == '-' || next == '!' || next == '^' ||
-                            next == '$' || next == '(' || next == ')' || next == '+' ||
-                            next == '|' || next == ',' || next == '~' || next == '`') {
-                        // This is an escape sequence, don't convert
-                        escaped = true;
-                        continue;
-                    }
-                }
-                // This is a path separator, convert to forward slash
-                result.append('/');
-            } else if (c == '[' && !inCharClass) {
+            if (c == '[' && !isEscapedAt(pattern, i)) {
                 inCharClass = true;
                 result.append(c);
-            } else if (c == ']' && inCharClass) {
+            } else if (c == ']' && inCharClass && !isEscapedAt(pattern, i)) {
                 inCharClass = false;
                 result.append(c);
+            } else if (c == '\\' && !isEscapedAt(pattern, i)) {
+                // Check if this backslash is followed by another backslash (UNC path)
+                if (i == 0 && i + 1 < pattern.length() && pattern.charAt(i + 1) == '\\') {
+                    // UNC path start - convert both to forward slashes
+                    result.append("//");
+                    i++; // Skip next backslash
+                } else if (i + 1 < pattern.length()) {
+                    char next = pattern.charAt(i + 1);
+                    // In a file path context, backslash before these chars is a path separator
+                    // not an escape (unless we're in a character class)
+                    if (!inCharClass && isLikelyPathSeparator(pattern, i)) {
+                        result.append('/');
+                    } else {
+                        // This is an escape sequence, keep the backslash
+                        result.append('\\');
+                    }
+                } else {
+                    // Trailing backslash - convert to forward slash
+                    result.append('/');
+                }
             } else {
                 result.append(c);
             }
         }
 
         return result.toString();
+    }
+
+    /**
+     * Checks if a character at the given position is escaped.
+     */
+    private boolean isEscapedAt(String str, int pos) {
+        if (pos == 0) return false;
+        int backslashCount = 0;
+        int checkPos = pos - 1;
+        while (checkPos >= 0 && str.charAt(checkPos) == '\\') {
+            backslashCount++;
+            checkPos--;
+        }
+        return (backslashCount % 2) == 1;
+    }
+
+    /**
+     * Determines if a backslash at the given position is likely a path separator.
+     * On Windows, a backslash is a path separator when:
+     * - It's part of a drive letter path (C:\)
+     * - It's between directory/file names
+     * - It's NOT followed by a glob meta character that could be escaped
+     */
+    private boolean isLikelyPathSeparator(String pattern, int pos) {
+        // Check for drive letter pattern (e.g., C:\)
+        if (pos == 2 && pos >= 2 &&
+                Character.isLetter(pattern.charAt(0)) &&
+                pattern.charAt(1) == ':') {
+            return true;
+        }
+
+        if (pos + 1 >= pattern.length()) {
+            return true; // Trailing backslash
+        }
+
+        char next = pattern.charAt(pos + 1);
+
+        // In Windows paths, these characters after backslash indicate path separator
+        // not escape sequence (except in character classes which are handled elsewhere)
+        // Common path patterns: \file, \dir, \123, etc.
+        if (Character.isLetterOrDigit(next) || next == '_' || next == '-' || next == '.') {
+            return true;
+        }
+
+        // Check if we're in a path context by looking at surrounding characters
+        // Look for patterns like "dir\file" or "C:\temp\*"
+        if (pos > 0) {
+            char prev = pattern.charAt(pos - 1);
+            if (Character.isLetterOrDigit(prev) || prev == '_' || prev == '-' || prev == '.') {
+                // Previous char suggests we're in a filename/dirname
+                return true;
+            }
+        }
+
+        // These characters after backslash are typically escape sequences
+        if (next == '*' || next == '?' || next == '[' || next == ']' ||
+                next == '{' || next == '}' || next == '\\' || next == ' ') {
+            // However, in Windows absolute paths like C:\*.txt, the backslash
+            // before * is still a path separator
+            if (pos == 2 && pos >= 2 &&
+                    Character.isLetter(pattern.charAt(0)) &&
+                    pattern.charAt(1) == ':') {
+                return true; // Drive letter path
+            }
+            return false; // Likely an escape sequence
+        }
+
+        // Default to path separator for other cases
+        return true;
     }
 
     /**
