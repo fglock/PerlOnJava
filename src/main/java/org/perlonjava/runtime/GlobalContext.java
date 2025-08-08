@@ -70,6 +70,7 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::(");  // TODO
         GlobalVariable.getGlobalVariable("main::)");  // TODO
         GlobalVariable.getGlobalVariable("main::=");  // TODO
+        GlobalVariable.getGlobalVariable("main::^");  // TODO
 
         GlobalVariable.globalVariables.put("main::`", new ScalarSpecialVariable(ScalarSpecialVariable.Id.PREMATCH));
         GlobalVariable.globalVariables.put("main::&", new ScalarSpecialVariable(ScalarSpecialVariable.Id.MATCH));
