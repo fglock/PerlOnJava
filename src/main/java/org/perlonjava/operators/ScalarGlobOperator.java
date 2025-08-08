@@ -339,7 +339,6 @@ public class ScalarGlobOperator {
                 current.append(c);
             } else if (c == ',' && depth == 0) {
                 parts.add(current.toString());
-
                 current = new StringBuilder();
             } else {
                 current.append(c);
@@ -532,58 +531,48 @@ public class ScalarGlobOperator {
 
         // On Windows, we need to intelligently handle backslashes
         StringBuilder result = new StringBuilder();
-        boolean inGlobPart = false;
-
-        // Find where the glob pattern starts (first *, ?, [, or {)
-        int globStart = Integer.MAX_VALUE;
-        for (int i = 0; i < pattern.length(); i++) {
-            char c = pattern.charAt(i);
-            if (c == '*' || c == '?' || c == '[' || c == '{') {
-                globStart = i;
-                break;
-            }
-        }
+        boolean escaped = false;
+        boolean inCharClass = false;
 
         for (int i = 0; i < pattern.length(); i++) {
             char c = pattern.charAt(i);
 
-            if (i >= globStart) {
-                inGlobPart = true;
+            if (escaped) {
+                // This backslash was an escape - keep both the backslash and the next char
+                result.append('\\').append(c);
+                escaped = false;
+                continue;
             }
 
             if (c == '\\') {
-                if (inGlobPart) {
-                    // In glob part, check if this is an escape
-                    if (i + 1 < pattern.length()) {
-                        char next = pattern.charAt(i + 1);
-                        // Check if next char is something that can be escaped in glob
-                        if (next == '*' || next == '?' || next == '[' || next == ']' ||
-                                next == '{' || next == '}' || next == '\\' || next == ' ') {
-                            // This is an escape sequence, keep the backslash
-                            result.append(c);
-                            continue;
-                        }
+                // Check if this is an escape sequence
+                if (i + 1 < pattern.length()) {
+                    char next = pattern.charAt(i + 1);
+                    // Check if next char is something that can be escaped in glob
+                    if (next == '*' || next == '?' || next == '[' || next == ']' ||
+                            next == '{' || next == '}' || next == '\\' || next == ' ' ||
+                            next == '.' || next == '-' || next == '!' || next == '^' ||
+                            next == '$' || next == '(' || next == ')' || next == '+' ||
+                            next == '|' || next == ',' || next == '~' || next == '`') {
+                        // This is an escape sequence, don't convert
+                        escaped = true;
+                        continue;
                     }
                 }
-                // Convert path separator to forward slash
+                // This is a path separator, convert to forward slash
                 result.append('/');
+            } else if (c == '[' && !inCharClass) {
+                inCharClass = true;
+                result.append(c);
+            } else if (c == ']' && inCharClass) {
+                inCharClass = false;
+                result.append(c);
             } else {
                 result.append(c);
             }
         }
 
         return result.toString();
-    }
-
-    /**
-     * Handles a character inside a character class in regex conversion.
-     */
-    private void handleCharClassChar(char c, StringBuilder regex) {
-        // Inside character class, certain chars need escaping in Java regex
-        if (c == '\\' || c == '-' || c == '^' || c == '[' || c == ']') {
-            regex.append('\\');
-        }
-        regex.append(c);
     }
 
     /**
@@ -596,6 +585,7 @@ public class ScalarGlobOperator {
         StringBuilder regex = new StringBuilder("^");
         boolean escaped = false;
         boolean inCharClass = false;
+        int charClassStart = -1;
 
         try {
             for (int i = 0; i < glob.length(); i++) {
@@ -603,15 +593,19 @@ public class ScalarGlobOperator {
 
                 if (escaped) {
                     if (inCharClass) {
-                        // In glob character class, \[ means literal [, \{ means literal {
-                        // In Java regex character class: [ and ] need escaping, { doesn't
-                        if (c == '[' || c == ']') {
+                        // Inside character class, handle escaped characters
+                        // In glob character class: \[ means literal [, \] means literal ]
+                        // These need to be escaped in Java regex character class too
+                        if (c == '[' || c == ']' || c == '\\') {
                             regex.append('\\');
                         }
                         regex.append(c);
                     } else {
                         // Outside character class, escaped char is literal
-                        regex.append("\\Q").append(c).append("\\E");
+                        if (".$^*+?{}()[]|\\".indexOf(c) >= 0) {
+                            regex.append('\\');
+                        }
+                        regex.append(c);
                     }
                     escaped = false;
                     continue;
@@ -623,15 +617,26 @@ public class ScalarGlobOperator {
                 }
 
                 if (inCharClass) {
-                    if (c == ']') {
+                    if (c == ']' && i > charClassStart + 1) {
+                        // End of character class (not at start position)
                         regex.append("]");
                         inCharClass = false;
+                        charClassStart = -1;
                     } else {
-                        // Regular character in character class
-                        if (c == '-' || c == '^' || c == '[' || c == ']' || c == '\\') {
-                            regex.append('\\');
+                        // Inside character class - handle special chars
+                        if (c == '^' && i == charClassStart + 1) {
+                            // ^ at start of char class is negation
+                            regex.append('^');
+                        } else if (c == '-' && i > charClassStart + 1 && i + 1 < glob.length() &&
+                                glob.charAt(i + 1) != ']') {
+                            // - in middle is range operator
+                            regex.append('-');
+                        } else if (c == '\\' || c == ']' || c == '[') {
+                            // These need escaping in Java regex char class
+                            regex.append('\\').append(c);
+                        } else {
+                            regex.append(c);
                         }
-                        regex.append(c);
                     }
                 } else {
                     switch (c) {
@@ -645,18 +650,24 @@ public class ScalarGlobOperator {
                             if (hasMatchingBracket(glob, i)) {
                                 regex.append("[");
                                 inCharClass = true;
+                                charClassStart = i;
                             } else {
-                                regex.append("\\Q[\\E");
+                                regex.append("\\[");
                             }
                             break;
+                        case '.':
+                        case '^':
+                        case '$':
+                        case '+':
+                        case '{':
+                        case '}':
+                        case '(':
+                        case ')':
+                        case '|':
+                            regex.append('\\').append(c);
+                            break;
                         default:
-                            // Only quote special regex characters
-                            if (c == '.' || c == '^' || c == '$' || c == '+' || c == '{' || c == '}' ||
-                                    c == '(' || c == ')' || c == '|') {
-                                regex.append('\\').append(c);
-                            } else {
-                                regex.append(c);
-                            }
+                            regex.append(c);
                             break;
                     }
                 }
@@ -714,7 +725,7 @@ public class ScalarGlobOperator {
             // Relative pattern with directory
             // Return in platform-native format (like Perl does)
             if (File.separatorChar == '\\') {
-                // Windows - use backslashes
+                // Windows - use backslashes for result
                 return components.directoryPart.replace('/', '\\') + '\\' + fileName;
             } else {
                 // Unix/Mac - use forward slashes
