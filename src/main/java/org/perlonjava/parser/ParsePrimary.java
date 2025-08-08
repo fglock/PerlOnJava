@@ -206,7 +206,7 @@ public class ParsePrimary {
      * @throws PerlCompilerException if the operator is not recognized or used incorrectly
      */
     private static Node parseOperator(Parser parser, LexerToken token, String operator) {
-        Node operand;
+        Node operand = null;
         switch (token.text) {
             case "(":
                 // Parentheses create a list context and group expressions
@@ -296,23 +296,7 @@ public class ParsePrimary {
                 // Unary minus or file test operator (-f, -d, etc.)
                 LexerToken nextToken = parser.tokens.get(parser.tokenIndex);
                 if (nextToken.type == LexerTokenType.IDENTIFIER && nextToken.text.length() == 1) {
-                    // File test operator: -f filename, -d $dir, etc.
-                    operator = "-" + nextToken.text;
-                    parser.tokenIndex++;
-                    nextToken = peek(parser);
-                    if (nextToken.text.equals("_")) {
-                        // Special case: -f _ uses the stat buffer from the last file test
-                        TokenUtils.consume(parser);
-                        operand = new IdentifierNode("_", parser.tokenIndex);
-                    } else {
-                        // Parse the filename/handle argument
-                        operand = ListParser.parseZeroOrOneList(parser, 0);
-                        if (((ListNode) operand).elements.isEmpty()) {
-                            // No argument provided, use $_ as default
-                            operand = scalarUnderscore(parser);
-                        }
-                    }
-                    return new OperatorNode(operator, operand, parser.tokenIndex);
+                    return parseFileTestOperator(parser, nextToken, operand);
                 }
                 // Regular unary minus
                 operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
@@ -330,5 +314,43 @@ public class ParsePrimary {
                 // Unknown operator
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
         }
+    }
+
+    private static OperatorNode parseFileTestOperator(Parser parser, LexerToken nextToken, Node operand) {
+        String operator;
+        // File test operator: -f filename, -d $dir, etc.
+        operator = "-" + nextToken.text;
+        parser.tokenIndex++;
+        nextToken = peek(parser);
+
+        var hasParenthesis = false;
+        if (nextToken.text.equals("(")) {
+            hasParenthesis = true;
+            TokenUtils.consume(parser);
+            nextToken = peek(parser);
+        }
+
+        if (nextToken.text.equals("_")) {
+            // Special case: -f _ uses the stat buffer from the last file test
+            TokenUtils.consume(parser);
+            operand = new IdentifierNode("_", parser.tokenIndex);
+        } else {
+            // Parse the filename/handle argument
+            ListNode listNode = ListParser.parseZeroOrOneList(parser, 0);
+            if (listNode.elements.isEmpty()) {
+                // No argument provided, use $_ as default
+                operand = scalarUnderscore(parser);
+            } else if (listNode.elements.size() == 1) {
+                operand = listNode.elements.getFirst();
+            } else {
+                parser.throwError("syntax error");
+            }
+        }
+
+        if (hasParenthesis) {
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR,")");
+        }
+
+        return new OperatorNode(operator, operand, parser.tokenIndex);
     }
 }
