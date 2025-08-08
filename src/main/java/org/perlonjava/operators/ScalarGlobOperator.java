@@ -481,19 +481,30 @@ public class ScalarGlobOperator {
      */
     private void matchFiles(PathComponents components, Pattern regex, List<String> results,
                         String originalPattern, boolean patternIsAbsolute) {
+        // DEBUG: Print what directory we're looking in
+        System.err.println("DEBUG: Looking for files in directory: " + components.baseDir.getAbsolutePath());
+        System.err.println("DEBUG: Directory exists: " + components.baseDir.exists());
+        System.err.println("DEBUG: Is directory: " + components.baseDir.isDirectory());
+        System.err.println("DEBUG: Pattern: " + components.filePattern);
+        System.err.println("DEBUG: Regex: " + regex.pattern());
+
         File[] files;
         try {
             files = components.baseDir.listFiles();
         } catch (SecurityException e) {
-            // Set Perl's $! variable to indicate the error
+            System.err.println("DEBUG: SecurityException: " + e.getMessage());
             getGlobalVariable("main::!").set(new RuntimeScalar("Permission denied"));
             return;
         }
 
         if (files == null) {
-            // listFiles() returns null if directory doesn't exist or isn't a directory
-            // This is not an error condition for glob - just return empty results
+            System.err.println("DEBUG: listFiles() returned null");
             return;
+        }
+
+        System.err.println("DEBUG: Found " + files.length + " files in directory");
+        for (File file : files) {
+            System.err.println("DEBUG: File: " + file.getName());
         }
 
         for (File file : files) {
@@ -504,9 +515,13 @@ public class ScalarGlobOperator {
                 continue;
             }
 
-            if (regex.matcher(fileName).matches()) {
+            boolean matches = regex.matcher(fileName).matches();
+            System.err.println("DEBUG: File " + fileName + " matches pattern: " + matches);
+
+            if (matches) {
                 String result = formatResult(file, components, originalPattern, patternIsAbsolute);
                 results.add(result);
+                System.err.println("DEBUG: Added result: " + result);
             }
         }
     }
