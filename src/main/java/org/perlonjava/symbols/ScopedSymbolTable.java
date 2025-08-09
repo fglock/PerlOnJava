@@ -1,7 +1,6 @@
 package org.perlonjava.symbols;
 
 import org.perlonjava.astnode.OperatorNode;
-import org.perlonjava.perlmodule.Strict;
 import org.perlonjava.runtime.FeatureFlags;
 import org.perlonjava.runtime.PerlCompilerException;
 import org.perlonjava.runtime.WarningFlags;
@@ -92,26 +91,6 @@ public class ScopedSymbolTable {
                 }
                 result.append(warningName);
             }
-        }
-        return result.toString();
-    }
-
-    public static String stringifyStrictOptions(int strictOptions) {
-        StringBuilder result = new StringBuilder();
-        if ((strictOptions & Strict.HINT_STRICT_REFS) != 0) {
-            result.append("STRICT_REFS");
-        }
-        if ((strictOptions & Strict.HINT_STRICT_SUBS) != 0) {
-            if (!result.isEmpty()) {
-                result.append(", ");
-            }
-            result.append("STRICT_SUBS");
-        }
-        if ((strictOptions & Strict.HINT_STRICT_VARS) != 0) {
-            if (!result.isEmpty()) {
-                result.append(", ");
-            }
-            result.append("STRICT_VARS");
         }
         return result.toString();
     }

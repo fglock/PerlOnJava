@@ -1,6 +1,7 @@
 package org.perlonjava.astvisitor;
 
 import org.perlonjava.astnode.*;
+import org.perlonjava.perlmodule.Strict;
 
 import static org.perlonjava.runtime.ScalarUtils.printable;
 import static org.perlonjava.symbols.ScopedSymbolTable.*;
@@ -406,7 +407,7 @@ public class PrintVisitor implements Visitor {
         sb.append("Feature Flags: ").append(stringifyFeatureFlags(node.getFeatureFlags())).append("\n");
 
         appendIndent();
-        sb.append("Strict Options: ").append(stringifyStrictOptions(node.getStrictOptions())).append("\n");
+        sb.append("Strict Options: ").append(Strict.stringifyStrictOptions(node.getStrictOptions())).append("\n");
 
         indentLevel--;
     }
