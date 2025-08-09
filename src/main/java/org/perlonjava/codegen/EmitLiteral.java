@@ -185,18 +185,35 @@ public class EmitLiteral {
                     "(Ljava/lang/String;)V",
                     false);
 
+            // Set the Perl scalar type to VSTRING
             mv.visitInsn(Opcodes.DUP);
             mv.visitLdcInsn(RuntimeScalarType.VSTRING);
             mv.visitFieldInsn(Opcodes.PUTFIELD, "org/perlonjava/runtime/RuntimeScalarReadOnly", "type", "I");
             return;
         }
 
-        // WIP - byte strings
-//        if (ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)) {
-//            System.out.println("String literal is uft8");
-//        } else {
-//            System.out.println("String literal is octets");
-//        }
+        if (!ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)) {
+            // Under no utf8 - create a octet string
+
+            // XXX TODO Create cache for octet strings
+
+            // Create new object
+            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalarReadOnly");
+            mv.visitInsn(Opcodes.DUP);
+            emitStringValue(mv, node.value);
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/RuntimeScalarReadOnly",
+                    "<init>",
+                    "(Ljava/lang/String;)V",
+                    false);
+
+            // Set the Perl scalar type to BYTE_STRING
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitLdcInsn(RuntimeScalarType.BYTE_STRING);
+            mv.visitFieldInsn(Opcodes.PUTFIELD, "org/perlonjava/runtime/RuntimeScalarReadOnly", "type", "I");
+            return;
+        }
 
         // Use cache for regular strings
         int stringIndex = RuntimeScalarCache.getOrCreateStringIndex(node.value);
