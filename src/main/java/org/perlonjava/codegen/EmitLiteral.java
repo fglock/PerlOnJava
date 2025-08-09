@@ -8,6 +8,7 @@ import org.perlonjava.astvisitor.ReturnTypeVisitor;
 import org.perlonjava.runtime.*;
 
 import static org.perlonjava.perlmodule.Strict.HINT_STRICT_SUBS;
+import static org.perlonjava.perlmodule.Strict.HINT_UTF8;
 import static org.perlonjava.runtime.ScalarUtils.isInteger;
 
 /**
@@ -166,74 +167,72 @@ public class EmitLiteral {
 
         MethodVisitor mv = ctx.mv;
 
-        // Use a conservative limit to avoid constant pool size issues
-        final int MAX_STRING_LENGTH = 16000; // Conservative limit
-        boolean isLargeString = node.value != null && node.value.length() > MAX_STRING_LENGTH;
-
-        if (ctx.isBoxed) {
-            if (node.isVString) {
-                // V-strings: no caching (they are rare)
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
-                mv.visitInsn(Opcodes.DUP);
-                emitStringValue(mv, node.value, isLargeString);
-                mv.visitMethodInsn(
-                        Opcodes.INVOKESPECIAL,
-                        "org/perlonjava/runtime/RuntimeScalar",
-                        "<init>",
-                        "(Ljava/lang/String;)V",
-                        false);
-
-                mv.visitInsn(Opcodes.DUP);
-                mv.visitLdcInsn(RuntimeScalarType.VSTRING);
-                mv.visitFieldInsn(Opcodes.PUTFIELD, "org/perlonjava/runtime/RuntimeScalar", "type", "I");
-            } else if (isLargeString) {
-                // Large strings: create new object without caching
-                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
-                mv.visitInsn(Opcodes.DUP);
-                emitStringValue(mv, node.value, true);
-                mv.visitMethodInsn(
-                        Opcodes.INVOKESPECIAL,
-                        "org/perlonjava/runtime/RuntimeScalar",
-                        "<init>",
-                        "(Ljava/lang/String;)V",
-                        false);
-            } else {
-                // Use cache for regular strings
-                int stringIndex = RuntimeScalarCache.getOrCreateStringIndex(node.value);
-
-                if (stringIndex >= 0) {
-                    // Use cached RuntimeScalar
-                    mv.visitLdcInsn(stringIndex);
-                    mv.visitMethodInsn(
-                            Opcodes.INVOKESTATIC,
-                            "org/perlonjava/runtime/RuntimeScalarCache",
-                            "getScalarString",
-                            "(I)Lorg/perlonjava/runtime/RuntimeScalar;",
-                            false);
-                } else {
-                    // String is too long for cache or null, create new object
-                    mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalar");
-                    mv.visitInsn(Opcodes.DUP);
-                    emitStringValue(mv, node.value, false);
-                    mv.visitMethodInsn(
-                            Opcodes.INVOKESPECIAL,
-                            "org/perlonjava/runtime/RuntimeScalar",
-                            "<init>",
-                            "(Ljava/lang/String;)V",
-                            false);
-                }
-            }
-        } else {
+        if (!ctx.isBoxed) {
             // Unboxed context: push the string value
-            emitStringValue(mv, node.value, isLargeString);
+            emitStringValue(mv, node.value);
+            return;
+        }
+
+        if (node.isVString) {
+            // V-strings: no caching (they are rare)
+            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalarReadOnly");
+            mv.visitInsn(Opcodes.DUP);
+            emitStringValue(mv, node.value);
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/RuntimeScalarReadOnly",
+                    "<init>",
+                    "(Ljava/lang/String;)V",
+                    false);
+
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitLdcInsn(RuntimeScalarType.VSTRING);
+            mv.visitFieldInsn(Opcodes.PUTFIELD, "org/perlonjava/runtime/RuntimeScalarReadOnly", "type", "I");
+            return;
+        }
+
+        // WIP - byte strings
+//        if (ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)) {
+//            System.out.println("String literal is uft8");
+//        } else {
+//            System.out.println("String literal is octets");
+//        }
+
+        // Use cache for regular strings
+        int stringIndex = RuntimeScalarCache.getOrCreateStringIndex(node.value);
+
+        if (stringIndex >= 0) {
+            // Use cached RuntimeScalar
+            mv.visitLdcInsn(stringIndex);
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/RuntimeScalarCache",
+                    "getScalarString",
+                    "(I)Lorg/perlonjava/runtime/RuntimeScalar;",
+                    false);
+        } else {
+            // String is too long for cache or null, create new object
+            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalarReadOnly");
+            mv.visitInsn(Opcodes.DUP);
+            emitStringValue(mv, node.value);
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/RuntimeScalarReadOnly",
+                    "<init>",
+                    "(Ljava/lang/String;)V",
+                    false);
         }
     }
 
     /**
      * Emits a string value, handling large strings by breaking them into chunks.
      */
-    private static void emitStringValue(MethodVisitor mv, String value, boolean isLarge) {
-        if (!isLarge) {
+    private static void emitStringValue(MethodVisitor mv, String value) {
+        // Use a conservative limit to avoid constant pool size issues
+        final int MAX_STRING_LENGTH = 16000; // Conservative limit
+        boolean isLargeString = value != null && value.length() > MAX_STRING_LENGTH;
+
+        if (!isLargeString) {
             mv.visitLdcInsn(value);
             return;
         }
