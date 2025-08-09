@@ -5,11 +5,13 @@ import com.ibm.icu.text.CharsetMatch;
 import org.perlonjava.runtime.RuntimeArray;
 import org.perlonjava.runtime.RuntimeList;
 import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.RuntimeScalarCache;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
 import java.nio.charset.StandardCharsets;
 
 import static org.perlonjava.parser.SpecialBlockParser.getCurrentScope;
+import static org.perlonjava.runtime.RuntimeScalarType.STRING;
 
 /**
  * The Utf8 class provides functionalities similar to the Perl utf8 pragma.
@@ -220,12 +222,14 @@ public class Utf8 extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for is_utf8() method");
         }
         RuntimeScalar scalar = args.get(0);
-        String string = scalar.toString();
-        CharsetDetector detector = new CharsetDetector();
-        detector.setText(string.getBytes());
-        CharsetMatch match = detector.detect();
-        boolean isUtf8 = match != null && "UTF-8".equalsIgnoreCase(match.getName());
-        return new RuntimeScalar(isUtf8).getList();
+        return RuntimeScalarCache.getScalarBoolean(scalar.type == STRING).getList();
+        
+//        String string = scalar.toString();
+//        CharsetDetector detector = new CharsetDetector();
+//        detector.setText(string.getBytes());
+//        CharsetMatch match = detector.detect();
+//        boolean isUtf8 = match != null && "UTF-8".equalsIgnoreCase(match.getName());
+//        return new RuntimeScalar(isUtf8).getList();
     }
 
     /**
