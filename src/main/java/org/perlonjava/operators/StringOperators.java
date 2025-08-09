@@ -4,11 +4,15 @@ import com.ibm.icu.text.CaseMap;
 import com.ibm.icu.text.Normalizer2;
 import org.perlonjava.parser.NumberParser;
 import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.RuntimeBase;
 import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.runtime.RuntimeScalarType;
 
+import java.util.Iterator;
+
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
+import static org.perlonjava.runtime.RuntimeScalarType.BYTE_STRING;
 
 /**
  * A utility class that provides various string operations on {@link RuntimeScalar} objects.
@@ -263,6 +267,39 @@ public class StringOperators {
         char[] chars = Character.toChars(codePoint);
 
         // Create a string from the char array
-        return new RuntimeScalar(String.valueOf(chars));
+        RuntimeScalar res = new RuntimeScalar(String.valueOf(chars));
+        if (codePoint < 256) {
+            res.type = BYTE_STRING;
+        }
+        return res;
+    }
+
+    public static RuntimeScalar join(RuntimeScalar runtimeScalar, RuntimeBase list) {
+
+        // TODO - convert octet string back to unicode if needed
+
+        boolean isByteString = runtimeScalar.type == BYTE_STRING;
+
+        String delimiter = runtimeScalar.toString();
+        // Join the list into a string
+        StringBuilder sb = new StringBuilder();
+
+        Iterator<RuntimeScalar> iterator = list.iterator();
+        boolean start = true;
+        while (iterator.hasNext()) {
+            if (start) {
+                start = false;
+            } else {
+                sb.append(delimiter);
+            }
+            RuntimeScalar scalar = iterator.next();
+            isByteString = isByteString && scalar.type == BYTE_STRING;
+            sb.append(scalar.toString());
+        }
+        RuntimeScalar res = new RuntimeScalar(sb.toString());
+        if (isByteString) {
+            res.type = BYTE_STRING;
+        }
+        return res;
     }
 }

@@ -5,7 +5,6 @@ import com.sun.jna.Native;
 import com.sun.jna.platform.win32.Kernel32;
 import com.sun.jna.platform.win32.WinDef;
 import com.sun.jna.platform.win32.WinNT;
-import org.perlonjava.nativ.NativeUtils;
 import org.perlonjava.nativ.PosixLibrary;
 import org.perlonjava.regex.RuntimeRegex;
 import org.perlonjava.runtime.*;
@@ -24,24 +23,6 @@ public class Operator {
 
     public static RuntimeScalar xor(RuntimeScalar left, RuntimeScalar right) {
         return getScalarBoolean(left.getBoolean() ^ right.getBoolean());
-    }
-
-    public static RuntimeScalar join(RuntimeScalar runtimeScalar, RuntimeBase list) {
-        String delimiter = runtimeScalar.toString();
-        // Join the list into a string
-        StringBuilder sb = new StringBuilder();
-
-        Iterator<RuntimeScalar> iterator = list.iterator();
-        boolean start = true;
-        while (iterator.hasNext()) {
-            if (start) {
-                start = false;
-            } else {
-                sb.append(delimiter);
-            }
-            sb.append(iterator.next().toString());
-        }
-        return new RuntimeScalar(sb.toString());
     }
 
     /**
