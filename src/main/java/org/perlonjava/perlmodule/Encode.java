@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.RuntimeScalarType.BYTE_STRING;
 
 /**
  * The Encode module for PerlOnJava.
@@ -90,8 +91,10 @@ public class Encode extends PerlModuleBase {
             Charset charset = getCharset(encodingName);
             byte[] bytes = string.getBytes(charset);
 
-            // Return the encoded bytes as a string (Perl treats byte strings as regular strings)
-            return new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1)).getList();
+            // Return the encoded bytes as a byte string
+            RuntimeScalar scalar = new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1));
+            scalar.type = BYTE_STRING;
+            return scalar.getList();
         } catch (Exception e) {
             throw new RuntimeException("Cannot encode string to " + encodingName + ": " + e.getMessage());
         }
@@ -135,7 +138,9 @@ public class Encode extends PerlModuleBase {
         byte[] bytes = string.getBytes(StandardCharsets.UTF_8);
 
         // Return the encoded bytes as a string
-        return new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1)).getList();
+        RuntimeScalar scalar = new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1));
+        scalar.type = BYTE_STRING;
+        return scalar.getList();
     }
 
     /**
@@ -166,23 +171,25 @@ public class Encode extends PerlModuleBase {
      * Tests whether the UTF8 flag is turned on in the string.
      */
     public static RuntimeList is_utf8(RuntimeArray args, int ctx) {
-        if (args.size() < 1) {
+        if (args.isEmpty()) {
             throw new IllegalStateException("Bad number of arguments for is_utf8");
         }
 
-        // In PerlOnJava, strings are always internally Unicode (Java strings)
-        // So we'll check if the string contains any non-ASCII characters
-        String string = args.get(0).toString();
-        boolean hasNonAscii = false;
+        return RuntimeScalarCache.getScalarBoolean(args.get(0).type == BYTE_STRING).getList();
 
-        for (int i = 0; i < string.length(); i++) {
-            if (string.charAt(i) > 127) {
-                hasNonAscii = true;
-                break;
-            }
-        }
-
-        return new RuntimeScalar(hasNonAscii).getList();
+//        // In PerlOnJava, strings are always internally Unicode (Java strings)
+//        // So we'll check if the string contains any non-ASCII characters
+//        String string = args.get(0).toString();
+//        boolean hasNonAscii = false;
+//
+//        for (int i = 0; i < string.length(); i++) {
+//            if (string.charAt(i) > 127) {
+//                hasNonAscii = true;
+//                break;
+//            }
+//        }
+//
+//        return new RuntimeScalar(hasNonAscii).getList();
     }
 
     /**
@@ -190,7 +197,7 @@ public class Encode extends PerlModuleBase {
      * Returns an encoding object for the given encoding name.
      */
     public static RuntimeList find_encoding(RuntimeArray args, int ctx) {
-        if (args.size() < 1) {
+        if (args.isEmpty()) {
             throw new IllegalStateException("Bad number of arguments for find_encoding");
         }
 
