@@ -48,6 +48,16 @@ public class RuntimeScalarCache {
         // Don't pre-register strings - let them be added naturally
     }
 
+    public static int getOrCreateByteStringIndex(String s) {
+        // XXX TODO Create cache for octet strings
+        return -1;
+    }
+
+    public static RuntimeScalar getScalarByteString(int index) {
+        // XXX TODO Create cache for octet strings
+        return scalarString[index];
+    }
+
     /**
      * Gets or creates a cache index for the specified string.
      * Returns -1 if the string should not be cached (too long or null).
