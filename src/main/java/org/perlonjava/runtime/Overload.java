@@ -36,7 +36,7 @@ public class Overload {
      */
     public static RuntimeScalar stringify(RuntimeScalar runtimeScalar) {
         // Prepare overload context and check if object is eligible for overloading
-        int blessId = runtimeScalar.blessedId();
+        int blessId = RuntimeScalarType.blessedId(runtimeScalar);
         if (blessId != 0) {
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
@@ -65,7 +65,7 @@ public class Overload {
      */
     public static RuntimeScalar numify(RuntimeScalar runtimeScalar) {
         // Prepare overload context and check if object is eligible for overloading
-        int blessId = runtimeScalar.blessedId();
+        int blessId = RuntimeScalarType.blessedId(runtimeScalar);
         if (blessId != 0) {
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
@@ -94,7 +94,7 @@ public class Overload {
      */
     public static RuntimeScalar boolify(RuntimeScalar runtimeScalar) {
         // Prepare overload context and check if object is eligible for overloading
-        int blessId = runtimeScalar.blessedId();
+        int blessId = RuntimeScalarType.blessedId(runtimeScalar);
         if (blessId != 0) {
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
@@ -123,7 +123,7 @@ public class Overload {
      */
     public static RuntimeScalar bool_not(RuntimeScalar runtimeScalar) {
         // Prepare overload context and check if object is eligible for overloading
-        int blessId = runtimeScalar.blessedId();
+        int blessId = RuntimeScalarType.blessedId(runtimeScalar);
         if (blessId != 0) {
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {

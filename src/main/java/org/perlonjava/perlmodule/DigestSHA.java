@@ -3,10 +3,7 @@ package org.perlonjava.perlmodule;
 import org.perlonjava.parser.StringParser;
 import org.perlonjava.runtime.*;
 
-import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
@@ -130,7 +127,7 @@ public class DigestSHA extends PerlModuleBase {
             boolean needToClose = false;
 
             // Check if argument is a reference (filehandle) or string (filename)
-            if (fileArg.isReference()) {
+            if (RuntimeScalarType.isReference(fileArg)) {
                 // Extract the filehandle from the reference
                 fh = RuntimeIO.getRuntimeIO(fileArg);
                 if (fh == null) {

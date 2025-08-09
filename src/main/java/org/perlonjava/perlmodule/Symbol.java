@@ -120,7 +120,7 @@ public class Symbol extends PerlModuleBase {
         }
         RuntimeScalar result;
         // System.out.println("qualify " + object + " :: " + packageName + " type:" + object.type);
-        if (object.type != RuntimeScalarType.STRING) {
+        if (!object.isString()) {
             result = object;
         } else {
             // System.out.println("qualify normalizeVariableName");
@@ -144,7 +144,7 @@ public class Symbol extends PerlModuleBase {
         }
         RuntimeScalar object = qualify(args, ctx).scalar();
         RuntimeScalar result;
-        if (object.type != RuntimeScalarType.STRING) {
+        if (!object.isString()) {
             result = object;
         } else {
             // System.out.println("qualify_to_ref");

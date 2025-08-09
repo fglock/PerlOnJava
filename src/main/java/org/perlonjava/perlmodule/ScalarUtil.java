@@ -61,7 +61,7 @@ public class ScalarUtil extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for blessed() method");
         }
 
-        int blessId = args.get(0).blessedId();
+        int blessId = blessedId(args.get(0));
         return new RuntimeScalar(NameNormalizer.getBlessStr(blessId)).getList();
     }
 

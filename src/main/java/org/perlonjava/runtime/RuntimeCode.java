@@ -267,7 +267,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         // Retrieve Perl class name
         String perlClassName;
-        if ((runtimeScalar.type & REFERENCE_BIT) != 0) {
+
+        if (RuntimeScalarType.isReference (runtimeScalar)) {
             // Handle all reference types (REFERENCE, ARRAYREFERENCE, HASHREFERENCE, etc.)
             int blessId = ((RuntimeBase) runtimeScalar.value).blessId;
             if (blessId == 0) {
@@ -396,7 +397,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     private static RuntimeScalar handleCodeOverload(RuntimeScalar runtimeScalar) {
         // Check if object is eligible for overloading
-        int blessId = runtimeScalar.blessedId();
+        int blessId = blessedId(runtimeScalar);
         if (blessId != 0) {
             // Prepare overload context and check if object is eligible for overloading
             OverloadContext ctx = OverloadContext.prepare(blessId);

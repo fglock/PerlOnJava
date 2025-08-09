@@ -140,7 +140,7 @@ public class IOOperator {
 
     public static RuntimeScalar truncate(RuntimeScalar fileHandle, RuntimeList runtimeList) {
         long length = runtimeList.getFirst().getLong();
-        if (fileHandle.type == RuntimeScalarType.STRING) {
+        if (fileHandle.isString()) {
             // Handle as filename
             String filename = fileHandle.toString();
             Path filePath = RuntimeIO.resolvePath(filename);

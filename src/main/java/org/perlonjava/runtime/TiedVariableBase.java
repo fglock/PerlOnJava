@@ -1,7 +1,5 @@
 package org.perlonjava.runtime;
 
-import java.util.Stack;
-
 /**
  * TiedVariableBase provides a common base class for all tied variable types in Perl.
  * This includes tied scalars ($v), array elements ($a[10]), and hash elements ($h{a}).
@@ -146,7 +144,7 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
     @Override
     public boolean isString() {
         vivify();
-        return type == RuntimeScalarType.STRING;
+        return super.isString();
     }
 
     /**

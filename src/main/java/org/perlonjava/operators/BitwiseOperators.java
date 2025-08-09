@@ -239,7 +239,7 @@ public class BitwiseOperators {
      */
     public static RuntimeScalar shiftLeft(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
         // Convert string type to number if necessary
-        if (runtimeScalar.type == RuntimeScalarType.STRING) {
+        if (runtimeScalar.isString()) {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);
         }
 
@@ -302,7 +302,7 @@ public class BitwiseOperators {
      */
     public static RuntimeScalar shiftRight(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
         // Convert string type to number if necessary
-        if (runtimeScalar.type == RuntimeScalarType.STRING) {
+        if (runtimeScalar.isString()) {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);
         }
 

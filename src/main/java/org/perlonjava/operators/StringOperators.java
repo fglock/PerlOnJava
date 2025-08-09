@@ -243,7 +243,7 @@ public class StringOperators {
 
     public static RuntimeScalar chr(RuntimeScalar runtimeScalar) {
         // Convert string type to number if necessary
-        if (runtimeScalar.type == RuntimeScalarType.STRING) {
+        if (runtimeScalar.isString()) {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);
         }
 

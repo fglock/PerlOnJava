@@ -1,7 +1,5 @@
 package org.perlonjava.operators;
 
-import org.objectweb.asm.Opcodes;
-import org.perlonjava.codegen.EmitOperator;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 
@@ -126,7 +124,7 @@ public class WarnDie {
             // Empty message
             message = dieEmptyMessage(oldErr, fileName, lineNumber);
         }
-        if (!message.getFirst().isReference()) {
+        if (!RuntimeScalarType.isReference(message.getFirst())) {
             // Error message
             String out = message.toString();
             if (!out.endsWith("\n")) {
@@ -151,7 +149,7 @@ public class WarnDie {
     private static RuntimeBase dieEmptyMessage(RuntimeScalar oldErr, String fileName, int lineNumber) {
         if (oldErr.getDefinedBoolean() && !oldErr.toString().isEmpty()) {
             // Check if $@ contains an object reference with a PROPAGATE method
-            if (oldErr.isReference()) {
+            if (RuntimeScalarType.isReference(oldErr)) {
 
                 // Use Universal.can to check if the object has a PROPAGATE method
                 RuntimeArray canArgs = new RuntimeArray();

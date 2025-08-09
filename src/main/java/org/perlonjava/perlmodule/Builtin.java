@@ -192,7 +192,7 @@ public class Builtin extends PerlModuleBase {
 
     public static RuntimeList createdAsString(RuntimeArray args, int ctx) {
         RuntimeScalar scalar = args.get(0);
-        return new RuntimeList(getScalarBoolean(scalar.type == RuntimeScalarType.STRING));
+        return new RuntimeList(getScalarBoolean(scalar.isString()));
     }
 
     public static RuntimeList createdAsNumber(RuntimeArray args, int ctx) {

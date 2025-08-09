@@ -3,10 +3,7 @@ package org.perlonjava.perlmodule;
 import org.perlonjava.parser.StringParser;
 import org.perlonjava.runtime.*;
 
-import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
@@ -104,7 +101,7 @@ public class DigestMD5 extends PerlModuleBase {
             RuntimeIO fh = null;
 
             // Check if argument is a reference (filehandle)
-            if (!fileArg.isReference()) {
+            if (!RuntimeScalarType.isReference(fileArg)) {
                 // Not a reference at all - this should croak
                 throw new PerlCompilerException("Not a GLOB reference");
             }
