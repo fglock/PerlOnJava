@@ -115,4 +115,69 @@ public class Strict extends PerlModuleBase {
         }
         return new RuntimeScalar().getList();
     }
+
+    public static String stringifyStrictOptions(int strictOptions) {
+        StringBuilder result = new StringBuilder();
+
+        // Handle integer and bytes hints
+        if ((strictOptions & HINT_INTEGER) != 0) {
+            result.append("INTEGER");
+        }
+        if ((strictOptions & HINT_BYTES) != 0) {
+            if (!result.isEmpty()) {
+                result.append(", ");
+            }
+            result.append("BYTES");
+        }
+
+        // Handle strict options
+        if ((strictOptions & HINT_STRICT_REFS) != 0) {
+            if (!result.isEmpty()) {
+                result.append(", ");
+            }
+            result.append("STRICT_REFS");
+        }
+        if ((strictOptions & HINT_STRICT_SUBS) != 0) {
+            if (!result.isEmpty()) {
+                result.append(", ");
+            }
+            result.append("STRICT_SUBS");
+        }
+        if ((strictOptions & HINT_STRICT_VARS) != 0) {
+            if (!result.isEmpty()) {
+                result.append(", ");
+            }
+            result.append("STRICT_VARS");
+        }
+
+        // Handle explicit strict options
+        if ((strictOptions & HINT_EXPLICIT_STRICT_REFS) != 0) {
+            if (!result.isEmpty()) {
+                result.append(", ");
+            }
+            result.append("EXPLICIT_STRICT_REFS");
+        }
+        if ((strictOptions & HINT_EXPLICIT_STRICT_SUBS) != 0) {
+            if (!result.isEmpty()) {
+                result.append(", ");
+            }
+            result.append("EXPLICIT_STRICT_SUBS");
+        }
+        if ((strictOptions & HINT_EXPLICIT_STRICT_VARS) != 0) {
+            if (!result.isEmpty()) {
+                result.append(", ");
+            }
+            result.append("EXPLICIT_STRICT_VARS");
+        }
+
+        // Handle UTF8 option
+        if ((strictOptions & HINT_UTF8) != 0) {
+            if (!result.isEmpty()) {
+                result.append(", ");
+            }
+            result.append("UTF8");
+        }
+
+        return result.toString();
+    }
 }
