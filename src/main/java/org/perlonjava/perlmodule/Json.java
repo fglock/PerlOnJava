@@ -211,7 +211,7 @@ public class Json extends PerlModuleBase {
                     jsonArray.add(convertRuntimeScalarToJson(element));
                 }
                 return jsonArray;
-            case STRING, VSTRING:
+            case STRING, BYTE_STRING, VSTRING:
                 return scalar.toString();
             case DOUBLE:
                 return scalar.getDouble();
