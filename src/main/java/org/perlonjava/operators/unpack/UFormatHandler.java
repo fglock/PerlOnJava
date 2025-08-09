@@ -19,19 +19,36 @@ public class UFormatHandler implements FormatHandler {
     @Override
     public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
         for (int i = 0; i < count; i++) {
-            if (state.isCharacterMode() || startsWithU) {
+            if (state.isCharacterMode()) {
+                // In character mode, read Unicode code points directly
                 if (state.hasMoreCodePoints()) {
                     output.add(new RuntimeScalar(state.nextCodePoint()));
                 } else {
                     break; // Just stop unpacking
                 }
             } else {
-                ByteBuffer buffer = state.getBuffer();
-                if (!buffer.hasRemaining()) {
-                    break; // Just stop unpacking
+                // In byte mode, check if we have a Unicode string or byte string
+                if (state.isUTF8Data()) {
+                    // Input contains high Unicode characters, read directly as Unicode
+                    if (state.hasMoreCodePoints()) {
+                        output.add(new RuntimeScalar(state.nextCodePoint()));
+                    } else {
+                        break;
+                    }
+                } else {
+                    // Input is byte string, decode UTF-8
+                    ByteBuffer buffer = state.getBuffer();
+                    if (!buffer.hasRemaining()) {
+                        break; // Just stop unpacking
+                    }
+                    long codePoint = readUTF8Character(buffer);
+                    output.add(new RuntimeScalar(codePoint));
                 }
-                long codePoint = readUTF8Character(buffer);
-                output.add(new RuntimeScalar(codePoint));
+
+                // U format switches to character mode for subsequent formats
+                if (!state.isCharacterMode()) {
+                    state.switchToCharacterMode();
+                }
             }
         }
     }

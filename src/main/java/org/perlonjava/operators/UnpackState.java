@@ -16,7 +16,7 @@ public class UnpackState {
     private int codePointIndex = 0;
     private boolean characterMode;
     private ByteBuffer buffer;
-    private final boolean isUTF8Data;
+    public final boolean isUTF8Data;
 
     public UnpackState(String dataString, boolean startsWithU) {
         this.dataString = dataString;
@@ -66,17 +66,25 @@ public class UnpackState {
                     int byteIndex = 0;
                     while (byteIndex < bytesConsumed && cpIndex < codePoints.length) {
                         int cp = codePoints[cpIndex];
+                        int utf8ByteLength;
+
+                        // Calculate actual UTF-8 byte length for this code point
                         if (cp <= 0x7F) {
-                            byteIndex += 1;
+                            utf8ByteLength = 1;
                         } else if (cp <= 0x7FF) {
-                            byteIndex += 2;
+                            utf8ByteLength = 2;
                         } else if (cp <= 0xFFFF) {
-                            byteIndex += 3;
+                            utf8ByteLength = 3;
                         } else {
-                            byteIndex += 4;
+                            utf8ByteLength = 4;
                         }
-                        if (byteIndex <= bytesConsumed) {
+
+                        // Check if we have consumed exactly this character's bytes
+                        if (byteIndex + utf8ByteLength <= bytesConsumed) {
+                            byteIndex += utf8ByteLength;
                             cpIndex++;
+                        } else {
+                            break; // Haven't consumed enough bytes for this character
                         }
                     }
                     codePointIndex = cpIndex;
@@ -85,8 +93,12 @@ public class UnpackState {
                     codePointIndex = bytesConsumed;
                 }
             }
-            buffer = null; // Clear buffer to force recreation if needed
+            // DON'T reset buffer to null - keep the current position!
         }
+    }
+
+    public boolean isUTF8Data() {
+        return isUTF8Data;
     }
 
     public void switchToByteMode() {
