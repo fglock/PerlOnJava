@@ -193,26 +193,37 @@ public class EmitLiteral {
         }
 
         if (!ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)) {
-            // Under no utf8 - create a octet string
+            // Under `no utf8` - create a octet string
 
-            // XXX TODO Create cache for octet strings
+            int stringIndex = RuntimeScalarCache.getOrCreateByteStringIndex(node.value);
 
-            // Create new object
-            mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalarReadOnly");
-            mv.visitInsn(Opcodes.DUP);
-            emitStringValue(mv, node.value);
-            mv.visitMethodInsn(
-                    Opcodes.INVOKESPECIAL,
-                    "org/perlonjava/runtime/RuntimeScalarReadOnly",
-                    "<init>",
-                    "(Ljava/lang/String;)V",
-                    false);
+            if (stringIndex >= 0) {
+                // Use cached RuntimeScalar
+                mv.visitLdcInsn(stringIndex);
+                mv.visitMethodInsn(
+                        Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/RuntimeScalarCache",
+                        "getScalarByteString",
+                        "(I)Lorg/perlonjava/runtime/RuntimeScalar;",
+                        false);
+            } else {
+                // String is too long for cache or null, create new object
+                mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/RuntimeScalarReadOnly");
+                mv.visitInsn(Opcodes.DUP);
+                emitStringValue(mv, node.value);
+                mv.visitMethodInsn(
+                        Opcodes.INVOKESPECIAL,
+                        "org/perlonjava/runtime/RuntimeScalarReadOnly",
+                        "<init>",
+                        "(Ljava/lang/String;)V",
+                        false);
 
-            // Set the Perl scalar type to BYTE_STRING
-            mv.visitInsn(Opcodes.DUP);
-            mv.visitLdcInsn(RuntimeScalarType.BYTE_STRING);
-            mv.visitFieldInsn(Opcodes.PUTFIELD, "org/perlonjava/runtime/RuntimeScalarReadOnly", "type", "I");
-            return;
+                // Set the Perl scalar type to BYTE_STRING
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitLdcInsn(RuntimeScalarType.BYTE_STRING);
+                mv.visitFieldInsn(Opcodes.PUTFIELD, "org/perlonjava/runtime/RuntimeScalarReadOnly", "type", "I");
+                return;
+            }
         }
 
         // Use cache for regular strings
