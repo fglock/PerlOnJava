@@ -303,7 +303,7 @@ public class YAMLPP extends PerlModuleBase {
                         list.add(convertRuntimeScalarToYaml(element, seen)));
                 yield list;
             }
-            case STRING, VSTRING -> scalar.toString();
+            case STRING, BYTE_STRING, VSTRING -> scalar.toString();
             case DOUBLE -> scalar.getDouble();
             case INTEGER -> scalar.getLong();
             case BOOLEAN -> scalar.getBoolean();

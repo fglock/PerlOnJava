@@ -216,7 +216,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public boolean isString() {
         // TODO optimization: group the string type ids to simplify the isString test
         int t = this.type;
-        return t == STRING || t == VSTRING;
+        return t == STRING || t == BYTE_STRING || t == VSTRING;
     }
 
     public RuntimeScalar getNumber() {
@@ -254,7 +254,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             case INTEGER -> (int) value;
             case DOUBLE -> (int) ((double) value);
-            case STRING -> NumberParser.parseNumber(this).getInt();
+            case STRING, BYTE_STRING -> NumberParser.parseNumber(this).getInt();
             case UNDEF -> 0;
             case VSTRING -> 0;
             case BOOLEAN -> (boolean) value ? 1 : 0;
@@ -272,7 +272,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             case INTEGER -> (int) value;
             case DOUBLE -> (long) ((double) value);
-            case STRING -> NumberParser.parseNumber(this).getLong();
+            case STRING, BYTE_STRING -> NumberParser.parseNumber(this).getLong();
             case UNDEF -> 0L;
             case VSTRING -> 0L;
             case BOOLEAN -> (boolean) value ? 1L : 0L;
@@ -290,7 +290,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             case INTEGER -> (int) value;
             case DOUBLE -> (double) value;
-            case STRING -> NumberParser.parseNumber(this).getDouble();
+            case STRING, BYTE_STRING -> NumberParser.parseNumber(this).getDouble();
             case UNDEF -> 0.0;
             case VSTRING -> 0.0;
             case BOOLEAN -> (boolean) value ? 1.0 : 0.0;
@@ -308,7 +308,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             case INTEGER -> (int) value != 0;
             case DOUBLE -> (double) value != 0.0;
-            case STRING -> {
+            case STRING, BYTE_STRING -> {
                 String s = (String) value;
                 yield !s.isEmpty() && !s.equals("0");
             }
@@ -438,7 +438,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             case INTEGER -> Integer.toString((int) value);
             case DOUBLE -> ScalarUtils.formatLikePerl((double) value);
-            case STRING -> (String) value;
+            case STRING, BYTE_STRING -> (String) value;
             case UNDEF -> "";
             case VSTRING -> (String) value;
             case BOOLEAN -> (boolean) value ? "1" : "";
@@ -528,7 +528,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             case UNDEF -> AutovivificationArray.createAutovivifiedArray(this);
             case ARRAYREFERENCE -> (RuntimeArray) value;
-            case STRING ->
+            case STRING, BYTE_STRING ->
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as an ARRAY ref while \"strict refs\" in use");
             case TIED_SCALAR -> tiedFetch().arrayDeref();
             default -> throw new PerlCompilerException("Not an ARRAY reference");
@@ -583,7 +583,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case HASHREFERENCE ->
                 // Simple case: already a hash reference, just return the hash
                     (RuntimeHash) value;
-            case STRING ->
+            case STRING, BYTE_STRING ->
                 // Strict refs violation: attempting to use a string as a hash ref
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref while \"strict refs\" in use");
             case TIED_SCALAR -> tiedFetch().hashDeref();
@@ -613,7 +613,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as a SCALAR reference");
             case REFERENCE -> (RuntimeScalar) value;
-            case STRING ->
+            case STRING, BYTE_STRING ->
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as a SCALAR ref while \"strict refs\" in use");
             case TIED_SCALAR -> tiedFetch().scalarDeref();
             default -> throw new PerlCompilerException("Variable does not contain a scalar reference");
@@ -667,7 +667,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as a GLOB reference");
             case GLOB, GLOBREFERENCE -> (RuntimeGlob) value;
-            case STRING ->
+            case STRING, BYTE_STRING ->
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as a symbol ref while \"strict refs\" in use");
             default -> throw new PerlCompilerException("Variable does not contain a glob reference");
         };
@@ -734,7 +734,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     this.value = (int) this.value + 1;
             case DOUBLE -> // 1
                     this.value = (double) this.value + 1;
-            case STRING -> // 2
+            case STRING, BYTE_STRING -> // 2
                     ScalarUtils.stringIncrement(this);
             case UNDEF -> { // 3
                 this.type = RuntimeScalarType.INTEGER;
@@ -782,7 +782,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     this.value = (int) this.value + 1;
             case DOUBLE -> // 1
                     this.value = (double) this.value + 1;
-            case STRING -> // 2
+            case STRING, BYTE_STRING -> // 2
                     ScalarUtils.stringIncrement(this);
             case UNDEF -> { // 3
                 this.type = RuntimeScalarType.INTEGER;
@@ -828,7 +828,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     this.value = (int) this.value - 1;
             case DOUBLE -> // 1
                     this.value = (double) this.value - 1;
-            case STRING -> { // 2
+            case STRING, BYTE_STRING -> { // 2
                 // Handle numeric decrement
                 this.set(NumberParser.parseNumber(this));
                 return this.preAutoDecrement();
@@ -882,7 +882,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     this.value = (int) this.value - 1;
             case DOUBLE -> // 1
                     this.value = (double) this.value - 1;
-            case STRING -> { // 2
+            case STRING, BYTE_STRING -> { // 2
                 // Handle numeric decrement
                 this.set(NumberParser.parseNumber(this));
                 this.preAutoDecrement();

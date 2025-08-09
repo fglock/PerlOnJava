@@ -8,14 +8,15 @@ public class RuntimeScalarType {
     public static final int INTEGER = 0;
     public static final int DOUBLE = 1;
     public static final int STRING = 2;
-    public static final int UNDEF = 3;
-    public static final int VSTRING = 4;
-    public static final int BOOLEAN = 5;
-    public static final int GLOB = 6;
-    public static final int REGEX = 7;
-    public static final int JAVAOBJECT = 8;
-    public static final int TIED_SCALAR = 9;
-    public static final int DUALVAR = 10;
+    public static final int BYTE_STRING = 3;
+    public static final int UNDEF = 4;
+    public static final int VSTRING = 5;
+    public static final int BOOLEAN = 6;
+    public static final int GLOB = 7;
+    public static final int REGEX = 8;
+    public static final int JAVAOBJECT = 9;
+    public static final int TIED_SCALAR = 10;
+    public static final int DUALVAR = 11;
     // References with bit pattern
     public static final int CODE = 100 | REFERENCE_BIT;
     public static final int REFERENCE = 101 | REFERENCE_BIT;
