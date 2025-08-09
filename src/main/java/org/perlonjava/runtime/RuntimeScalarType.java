@@ -3,7 +3,7 @@ package org.perlonjava.runtime;
 public class RuntimeScalarType {
 
     // Reference types (with high bit set)
-    public static final int REFERENCE_BIT = 0x8000;
+    private static final int REFERENCE_BIT = 0x8000;
 
     public static final int INTEGER = 0;
     public static final int DOUBLE = 1;
@@ -25,5 +25,14 @@ public class RuntimeScalarType {
 
     private RuntimeScalarType() {
     } // Prevent instantiation
+
+    // Get blessing ID as an integer
+    public static int blessedId(RuntimeScalar runtimeScalar) {
+        return (runtimeScalar.type & REFERENCE_BIT) != 0 ? ((RuntimeBase) runtimeScalar.value).blessId : 0;
+    }
+
+    public static boolean isReference(RuntimeScalar runtimeScalar) {
+        return (runtimeScalar.type & REFERENCE_BIT) != 0;
+    }
 }
 

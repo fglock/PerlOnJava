@@ -30,7 +30,7 @@ public class KillOperator {
         int signal;
 
         // Handle named signals (e.g., "TERM", "KILL", "HUP")
-        if (signalArg.type == RuntimeScalarType.STRING) {
+        if (signalArg.isString()) {
             signal = getSignalNumber(signalArg.toString());
             if (signal == -1) {
                 // Invalid signal name

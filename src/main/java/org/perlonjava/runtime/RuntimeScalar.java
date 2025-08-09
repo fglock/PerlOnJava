@@ -214,11 +214,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public boolean isString() {
-        return type == STRING;
+        // TODO optimization: group the string type ids to simplify the isString test
+        int t = this.type;
+        return t == STRING || t == VSTRING;
     }
 
     public RuntimeScalar getNumber() {
-        if (type == STRING) {
+        if (isString()) {
             return NumberParser.parseNumber(this);
         }
         return this;
@@ -320,15 +322,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case DUALVAR -> ((DualVar) this.value).stringValue.getBoolean();
             default -> Overload.boolify(this).getBoolean();
         };
-    }
-
-    // Get blessing ID as an integer
-    public int blessedId() {
-        return (type & REFERENCE_BIT) != 0 ? ((RuntimeBase) value).blessId : 0;
-    }
-
-    public boolean isReference() {
-        return (type & REFERENCE_BIT) != 0;
     }
 
     // Get the Scalar alias into an Array
@@ -518,7 +511,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Method to implement `@$v`
     public RuntimeArray arrayDeref() {
         // Check if object is eligible for overloading
-        int blessId = this.blessedId();
+        int blessId = blessedId(this);
         if (blessId != 0) {
             // Prepare overload context and check if object is eligible for overloading
             OverloadContext ctx = OverloadContext.prepare(blessId);
@@ -564,7 +557,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public RuntimeHash hashDeref() {
         // Check if object is eligible for overloading (blessed objects)
-        int blessId = this.blessedId();
+        int blessId = blessedId(this);
         if (blessId != 0) {
             // Prepare overload context and check if object is eligible for overloading
             OverloadContext ctx = OverloadContext.prepare(blessId);
@@ -603,7 +596,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Method to implement `$$v`
     public RuntimeScalar scalarDeref() {
         // Check if object is eligible for overloading
-        int blessId = this.blessedId();
+        int blessId = blessedId(this);
         if (blessId != 0) {
             // Prepare overload context and check if object is eligible for overloading
             OverloadContext ctx = OverloadContext.prepare(blessId);
@@ -630,7 +623,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Method to implement `$$v`, when "no strict refs" is in effect
     public RuntimeScalar scalarDerefNonStrict(String packageName) {
         // Check if object is eligible for overloading
-        int blessId = this.blessedId();
+        int blessId = blessedId(this);
         if (blessId != 0) {
             // Prepare overload context and check if object is eligible for overloading
             OverloadContext ctx = OverloadContext.prepare(blessId);
@@ -657,7 +650,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Method to implement `*$v`
     public RuntimeGlob globDeref() {
         // Check if object is eligible for overloading
-        int blessId = this.blessedId();
+        int blessId = blessedId(this);
         if (blessId != 0) {
             // Prepare overload context and check if object is eligible for overloading
             OverloadContext ctx = OverloadContext.prepare(blessId);
@@ -683,7 +676,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Method to implement `*$v`, when "no strict refs" is in effect
     public RuntimeGlob globDerefNonStrict(String packageName) {
         // Check if object is eligible for overloading
-        int blessId = this.blessedId();
+        int blessId = blessedId(this);
         if (blessId != 0) {
             // Prepare overload context and check if object is eligible for overloading
             OverloadContext ctx = OverloadContext.prepare(blessId);

@@ -443,7 +443,7 @@ public class ConstantFoldingVisitor implements Visitor {
                 // Bitwise operators using BitwiseOperators
                 case "&":
                     result = BitwiseOperators.bitwiseAnd(leftValue, rightValue);
-                    if (result.type == RuntimeScalarType.STRING) {
+                    if (result.isString()) {
                         return new StringNode(result.toString(), tokenIndex);
                     } else {
                         return new NumberNode(result.toString(), tokenIndex);
@@ -451,7 +451,7 @@ public class ConstantFoldingVisitor implements Visitor {
 
                 case "|":
                     result = BitwiseOperators.bitwiseOr(leftValue, rightValue);
-                    if (result.type == RuntimeScalarType.STRING) {
+                    if (result.isString()) {
                         return new StringNode(result.toString(), tokenIndex);
                     } else {
                         return new NumberNode(result.toString(), tokenIndex);
@@ -459,7 +459,7 @@ public class ConstantFoldingVisitor implements Visitor {
 
 //                case "^":
 //                    result = BitwiseOperators.bitwiseXor(leftValue, rightValue);
-//                    if (result.type == RuntimeScalarType.STRING) {
+//                    if (result.isString()) {
 //                        return new StringNode(result.toString(), tokenIndex);
 //                    } else {
 //                        // Format the number properly
@@ -572,7 +572,7 @@ public class ConstantFoldingVisitor implements Visitor {
 //                case "~":
 //                    // Bitwise not using BitwiseOperators
 //                    RuntimeScalar bitwiseNot = BitwiseOperators.bitwiseNot(value);
-//                    if (bitwiseNot.type == RuntimeScalarType.STRING) {
+//                    if (bitwiseNot.isString()) {
 //                        return new StringNode(bitwiseNot.toString(), tokenIndex);
 //                    } else {
 //                        // Format the number properly

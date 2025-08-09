@@ -139,7 +139,7 @@ public class ScalarUtils {
             case INTEGER:
             case DOUBLE:
                 return true;
-            case STRING:
+            case STRING, VSTRING:
                 String str = runtimeScalar.toString().trim();
                 if (str.isEmpty()) {
                     return false;
@@ -155,8 +155,6 @@ public class ScalarUtils {
                 } catch (NumberFormatException e) {
                     return false;
                 }
-            case VSTRING:
-                return true;
             case BOOLEAN, DUALVAR:
                 return true;
             case TIED_SCALAR:

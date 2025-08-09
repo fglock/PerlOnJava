@@ -22,14 +22,14 @@ public class MathOperators {
      */
     public static RuntimeScalar add(RuntimeScalar arg1, int arg2) {
         // Prepare overload context and check if object is eligible for overloading
-        int blessId = arg1.blessedId();
+        int blessId = blessedId(arg1);
         if (blessId != 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, 0, "(+", "+");
             if (result != null) return result;
         }
 
         // Convert string type to number if necessary
-        if (arg1.type == RuntimeScalarType.STRING) {
+        if (arg1.isString()) {
             arg1 = NumberParser.parseNumber(arg1);
         }
         // Perform addition based on the type of RuntimeScalar
@@ -49,18 +49,18 @@ public class MathOperators {
      */
     public static RuntimeScalar add(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Prepare overload context and check if object is eligible for overloading
-        int blessId = arg1.blessedId();
-        int blessId2 = arg2.blessedId();
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
         if (blessId != 0 || blessId2 != 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(+", "+");
             if (result != null) return result;
         }
 
         // Convert string type to number if necessary
-        if (arg1.type == RuntimeScalarType.STRING) {
+        if (arg1.isString()) {
             arg1 = NumberParser.parseNumber(arg1);
         }
-        if (arg2.type == RuntimeScalarType.STRING) {
+        if (arg2.isString()) {
             arg2 = NumberParser.parseNumber(arg2);
         }
         // Perform addition based on the type of RuntimeScalar
@@ -80,14 +80,14 @@ public class MathOperators {
      */
     public static RuntimeScalar subtract(RuntimeScalar arg1, int arg2) {
         // Prepare overload context and check if object is eligible for overloading
-        int blessId = arg1.blessedId();
+        int blessId = blessedId(arg1);
         if (blessId != 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, 0, "(-", "-");
             if (result != null) return result;
         }
 
         // Convert string type to number if necessary
-        if (arg1.type == RuntimeScalarType.STRING) {
+        if (arg1.isString()) {
             arg1 = NumberParser.parseNumber(arg1);
         }
         // Perform subtraction based on the type of RuntimeScalar
@@ -107,18 +107,18 @@ public class MathOperators {
      */
     public static RuntimeScalar subtract(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Prepare overload context and check if object is eligible for overloading
-        int blessId = arg1.blessedId();
-        int blessId2 = arg2.blessedId();
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
         if (blessId != 0 || blessId2 != 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(-", "-");
             if (result != null) return result;
         }
 
         // Convert string type to number if necessary
-        if (arg1.type == RuntimeScalarType.STRING) {
+        if (arg1.isString()) {
             arg1 = NumberParser.parseNumber(arg1);
         }
-        if (arg2.type == RuntimeScalarType.STRING) {
+        if (arg2.isString()) {
             arg2 = NumberParser.parseNumber(arg2);
         }
         // Perform subtraction based on the type of RuntimeScalar
@@ -138,18 +138,18 @@ public class MathOperators {
      */
     public static RuntimeScalar multiply(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Prepare overload context and check if object is eligible for overloading
-        int blessId = arg1.blessedId();
-        int blessId2 = arg2.blessedId();
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
         if (blessId != 0 || blessId2 != 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(*", "*");
             if (result != null) return result;
         }
 
         // Convert string type to number if necessary
-        if (arg1.type == RuntimeScalarType.STRING) {
+        if (arg1.isString()) {
             arg1 = NumberParser.parseNumber(arg1);
         }
-        if (arg2.type == RuntimeScalarType.STRING) {
+        if (arg2.isString()) {
             arg2 = NumberParser.parseNumber(arg2);
         }
         // Perform multiplication based on the type of RuntimeScalar
@@ -170,17 +170,17 @@ public class MathOperators {
      */
     public static RuntimeScalar divide(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Prepare overload context and check if object is eligible for overloading
-        int blessId = arg1.blessedId();
+        int blessId = blessedId(arg1);
         if (blessId != 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, 0, "(/", "/");
             if (result != null) return result;
         }
 
         // Convert string type to number if necessary
-        if (arg1.type == RuntimeScalarType.STRING) {
+        if (arg1.isString()) {
             arg1 = NumberParser.parseNumber(arg1);
         }
-        if (arg2.type == RuntimeScalarType.STRING) {
+        if (arg2.isString()) {
             arg2 = NumberParser.parseNumber(arg2);
         }
         double divisor = arg2.getDouble();
@@ -208,7 +208,7 @@ public class MathOperators {
      */
     public static RuntimeScalar modulus(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Prepare overload context and check if object is eligible for overloading
-        int blessId = arg1.blessedId();
+        int blessId = blessedId(arg1);
         if (blessId != 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, 0, "(%", "%");
             if (result != null) return result;
@@ -260,7 +260,7 @@ public class MathOperators {
      */
     public static RuntimeScalar log(RuntimeScalar runtimeScalar) {
         // Check if object is eligible for overloading
-        int blessId = runtimeScalar.blessedId();
+        int blessId = blessedId(runtimeScalar);
         if (blessId != 0) {
             RuntimeScalar result = OverloadContext.tryOneArgumentOverload(runtimeScalar, blessId, "(log", "log", MathOperators::log);
             if (result != null) return result;
@@ -281,7 +281,7 @@ public class MathOperators {
      */
     public static RuntimeScalar sqrt(RuntimeScalar runtimeScalar) {
         // Check if object is eligible for overloading
-        int blessId = runtimeScalar.blessedId();
+        int blessId = blessedId(runtimeScalar);
         if (blessId != 0) {
             RuntimeScalar result = OverloadContext.tryOneArgumentOverload(runtimeScalar, blessId, "(sqrt", "sqrt", MathOperators::sqrt);
             if (result != null) return result;
@@ -298,7 +298,7 @@ public class MathOperators {
      */
     public static RuntimeScalar cos(RuntimeScalar runtimeScalar) {
         // Check if object is eligible for overloading
-        int blessId = runtimeScalar.blessedId();
+        int blessId = blessedId(runtimeScalar);
         if (blessId != 0) {
             RuntimeScalar result = OverloadContext.tryOneArgumentOverload(runtimeScalar, blessId, "(cos", "cos", MathOperators::cos);
             if (result != null) return result;
@@ -315,7 +315,7 @@ public class MathOperators {
      */
     public static RuntimeScalar sin(RuntimeScalar runtimeScalar) {
         // Check if object is eligible for overloading
-        int blessId = runtimeScalar.blessedId();
+        int blessId = blessedId(runtimeScalar);
         if (blessId != 0) {
             RuntimeScalar result = OverloadContext.tryOneArgumentOverload(runtimeScalar, blessId, "(sin", "sin", MathOperators::sin);
             if (result != null) return result;
@@ -332,7 +332,7 @@ public class MathOperators {
      */
     public static RuntimeScalar exp(RuntimeScalar runtimeScalar) {
         // Check if object is eligible for overloading
-        int blessId = runtimeScalar.blessedId();
+        int blessId = blessedId(runtimeScalar);
         if (blessId != 0) {
             RuntimeScalar result = OverloadContext.tryOneArgumentOverload(runtimeScalar, blessId, "(exp", "exp", MathOperators::exp);
             if (result != null) return result;
@@ -350,7 +350,7 @@ public class MathOperators {
      */
     public static RuntimeScalar pow(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Prepare overload context and check if object is eligible for overloading
-        int blessId = arg1.blessedId();
+        int blessId = blessedId(arg1);
         if (blessId != 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, 0, "(**", "**");
             if (result != null) return result;
@@ -371,7 +371,7 @@ public class MathOperators {
      */
     public static RuntimeScalar atan2(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Prepare overload context and check if object is eligible for overloading
-        int blessId = arg1.blessedId();
+        int blessId = blessedId(arg1);
         if (blessId != 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, 0, "(atan2", "atan2");
             if (result != null) return result;
@@ -388,7 +388,7 @@ public class MathOperators {
      */
     public static RuntimeScalar abs(RuntimeScalar runtimeScalar) {
         // Check if object is eligible for overloading
-        int blessId = runtimeScalar.blessedId();
+        int blessId = blessedId(runtimeScalar);
         if (blessId != 0) {
             RuntimeScalar result = OverloadContext.tryOneArgumentOverload(runtimeScalar, blessId, "(abs", "abs", MathOperators::abs);
             if (result != null) return result;
@@ -396,7 +396,7 @@ public class MathOperators {
 
         RuntimeScalar arg1 = runtimeScalar;
         // Convert string type to number if necessary
-        if (arg1.type == RuntimeScalarType.STRING) {
+        if (arg1.isString()) {
             arg1 = NumberParser.parseNumber(arg1);
         }
         // Compute absolute value based on the type of RuntimeScalar
@@ -409,13 +409,13 @@ public class MathOperators {
 
     public static RuntimeScalar unaryMinus(RuntimeScalar runtimeScalar) {
         // Check if object is eligible for overloading
-        int blessId = runtimeScalar.blessedId();
+        int blessId = blessedId(runtimeScalar);
         if (blessId != 0) {
             RuntimeScalar result = OverloadContext.tryOneArgumentOverload(runtimeScalar, blessId, "(neg", "neg", MathOperators::unaryMinus);
             if (result != null) return result;
         }
 
-        if (runtimeScalar.type == RuntimeScalarType.STRING) {
+        if (runtimeScalar.isString()) {
             String input = runtimeScalar.toString();
             if (input.length() < 2) {
                 if (input.isEmpty()) {
@@ -445,14 +445,14 @@ public class MathOperators {
 
     public static RuntimeScalar integer(RuntimeScalar runtimeScalar) {
         // Check if object is eligible for overloading
-        int blessId = runtimeScalar.blessedId();
+        int blessId = blessedId(runtimeScalar);
         if (blessId != 0) {
             RuntimeScalar result = OverloadContext.tryOneArgumentOverload(runtimeScalar, blessId, "(int", "int", MathOperators::integer);
             if (result != null) return result;
         }
 
         // Convert string type to number if necessary
-        if (runtimeScalar.type == RuntimeScalarType.STRING) {
+        if (runtimeScalar.isString()) {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);
         }
 

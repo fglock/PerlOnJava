@@ -22,7 +22,7 @@ public class ReferenceOperators {
      * @throws PerlCompilerException if attempting to bless a non-reference value
      */
     public static RuntimeScalar bless(RuntimeScalar runtimeScalar, RuntimeScalar className) {
-        if ((runtimeScalar.type & REFERENCE_BIT) != 0 ) {
+        if (RuntimeScalarType.isReference(runtimeScalar)) {
                 // Default to "main" if className is empty
                 String str = className.toString();
                 if (str.isEmpty()) {
@@ -103,7 +103,7 @@ public class ReferenceOperators {
     public static RuntimeScalar isa(RuntimeScalar runtimeScalar, RuntimeScalar className) {
         RuntimeArray args = new RuntimeArray();
 
-        if (runtimeScalar.blessedId() != 0) {
+        if (blessedId(runtimeScalar) != 0) {
             RuntimeArray.push(args, className);
             return RuntimeCode.call(
                     runtimeScalar,

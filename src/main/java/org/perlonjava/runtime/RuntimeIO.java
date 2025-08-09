@@ -9,7 +9,6 @@ package org.perlonjava.runtime;
  */
 
 import org.perlonjava.io.*;
-import org.perlonjava.operators.Directory;
 
 import java.io.File;
 import java.io.IOException;
@@ -591,7 +590,7 @@ public class RuntimeIO implements RuntimeScalarReference {
         // Handle: my $fh2 = \*STDOUT;
         // Handle: my $fh = *STDOUT;
 
-        if (runtimeScalar.type == RuntimeScalarType.STRING) {
+        if (runtimeScalar.isString()) {
             String name = runtimeScalar.toString();
             String packageName = "main";  // XXX TODO: get the current package name
             if (name.equals("STDOUT") || name.equals("STDERR") || name.equals("STDIN")) {
@@ -613,7 +612,7 @@ public class RuntimeIO implements RuntimeScalarReference {
 
         if (fh == null) {
             // Check if object is eligible for overloading `*{}`
-            int blessId = runtimeScalar.blessedId();
+            int blessId = RuntimeScalarType.blessedId(runtimeScalar);
             if (blessId != 0) {
                 // Prepare overload context and check if object is eligible for overloading
                 OverloadContext ctx = OverloadContext.prepare(blessId);
