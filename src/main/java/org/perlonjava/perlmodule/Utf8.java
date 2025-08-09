@@ -11,6 +11,7 @@ import org.perlonjava.symbols.ScopedSymbolTable;
 import java.nio.charset.StandardCharsets;
 
 import static org.perlonjava.parser.SpecialBlockParser.getCurrentScope;
+import static org.perlonjava.runtime.RuntimeScalarType.BYTE_STRING;
 import static org.perlonjava.runtime.RuntimeScalarType.STRING;
 
 /**
@@ -118,6 +119,7 @@ public class Utf8 extends PerlModuleBase {
             if (string.equals(decoded)) {
                 // Ensure the UTF-8 flag is off by using the ISO-8859-1 encoding
                 scalar.set(new String(bytes, StandardCharsets.ISO_8859_1));
+                scalar.type = BYTE_STRING;
                 return new RuntimeScalar(true).getList();
             } else {
                 // If the strings do not match, the conversion failed
@@ -150,6 +152,7 @@ public class Utf8 extends PerlModuleBase {
         String string = scalar.toString();
         byte[] utf8Bytes = string.getBytes(StandardCharsets.UTF_8);
         scalar.set(new String(utf8Bytes, StandardCharsets.ISO_8859_1));
+        scalar.type = BYTE_STRING;
         return new RuntimeScalar().getList();
     }
 
@@ -223,7 +226,7 @@ public class Utf8 extends PerlModuleBase {
         }
         RuntimeScalar scalar = args.get(0);
         return RuntimeScalarCache.getScalarBoolean(scalar.type == STRING).getList();
-        
+
 //        String string = scalar.toString();
 //        CharsetDetector detector = new CharsetDetector();
 //        detector.setText(string.getBytes());
