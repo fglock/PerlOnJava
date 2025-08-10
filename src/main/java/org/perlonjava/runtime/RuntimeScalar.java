@@ -8,8 +8,7 @@ import org.perlonjava.regex.RuntimeRegex;
 import java.util.*;
 
 import static org.perlonjava.runtime.RuntimeArray.*;
-import static org.perlonjava.runtime.RuntimeScalarCache.getScalarBoolean;
-import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
+import static org.perlonjava.runtime.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.RuntimeScalarType.*;
 
 /**
@@ -219,13 +218,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return t == STRING || t == BYTE_STRING || t == VSTRING;
     }
 
-    public RuntimeScalar getNumber() {
-        if (isString()) {
-            return NumberParser.parseNumber(this);
-        }
-        return this;
-    }
-
     private void initializeWithLong(Long value) {
         if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
             this.type = DOUBLE;
@@ -249,6 +241,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     // Getters
+    public RuntimeScalar getNumber() {
+        // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch
+        return switch (type) {
+            case INTEGER, DOUBLE -> this;
+            case STRING, BYTE_STRING -> NumberParser.parseNumber(this);
+            case UNDEF -> scalarZero;
+            case VSTRING -> NumberParser.parseNumber(this);
+            case BOOLEAN -> (boolean) value ? scalarOne : scalarZero;
+            case GLOB -> scalarOne;  // Assuming globs are truthy, so 1
+            case REGEX -> scalarOne; // Assuming regexes are truthy, so 1
+            case JAVAOBJECT -> value != null ? scalarOne : scalarZero;
+            case TIED_SCALAR -> this.tiedFetch().getNumber();
+            case DUALVAR -> ((DualVar) this.value).numericValue;
+            default -> Overload.numify(this);
+        };
+    }
+
     public int getInt() {
         // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {

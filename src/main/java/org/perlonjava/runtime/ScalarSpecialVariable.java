@@ -97,6 +97,10 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         }
     }
 
+    public RuntimeScalar getNumber() {
+        return this.getValueAsScalar().getNumber();
+    }
+
     /**
      * Retrieves the integer representation of the special variable.
      *

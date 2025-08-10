@@ -29,9 +29,7 @@ public class MathOperators {
         }
 
         // Convert string type to number if necessary
-        if (arg1.isString()) {
-            arg1 = NumberParser.parseNumber(arg1);
-        }
+        arg1 = arg1.getNumber();
         // Perform addition based on the type of RuntimeScalar
         if (arg1.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2);
@@ -57,12 +55,8 @@ public class MathOperators {
         }
 
         // Convert string type to number if necessary
-        if (arg1.isString()) {
-            arg1 = NumberParser.parseNumber(arg1);
-        }
-        if (arg2.isString()) {
-            arg2 = NumberParser.parseNumber(arg2);
-        }
+        arg1 = arg1.getNumber();
+        arg2 = arg2.getNumber();
         // Perform addition based on the type of RuntimeScalar
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2.getDouble());
@@ -87,9 +81,7 @@ public class MathOperators {
         }
 
         // Convert string type to number if necessary
-        if (arg1.isString()) {
-            arg1 = NumberParser.parseNumber(arg1);
-        }
+        arg1 = arg1.getNumber();
         // Perform subtraction based on the type of RuntimeScalar
         if (arg1.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2);
@@ -115,12 +107,8 @@ public class MathOperators {
         }
 
         // Convert string type to number if necessary
-        if (arg1.isString()) {
-            arg1 = NumberParser.parseNumber(arg1);
-        }
-        if (arg2.isString()) {
-            arg2 = NumberParser.parseNumber(arg2);
-        }
+        arg1 = arg1.getNumber();
+        arg2 = arg2.getNumber();
         // Perform subtraction based on the type of RuntimeScalar
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2.getDouble());
@@ -146,16 +134,13 @@ public class MathOperators {
         }
 
         // Convert string type to number if necessary
-        if (arg1.isString()) {
-            arg1 = NumberParser.parseNumber(arg1);
-        }
-        if (arg2.isString()) {
-            arg2 = NumberParser.parseNumber(arg2);
-        }
+        arg1 = arg1.getNumber();
+        arg2 = arg2.getNumber();
         // Perform multiplication based on the type of RuntimeScalar
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() * arg2.getDouble());
         } else {
+            System.out.println("multiply " + arg1 + " * " + arg2 + " = " + getScalarInt((long) arg1.getInt() * (long) arg2.getInt()));
             return getScalarInt((long) arg1.getInt() * (long) arg2.getInt());
         }
     }
@@ -177,12 +162,8 @@ public class MathOperators {
         }
 
         // Convert string type to number if necessary
-        if (arg1.isString()) {
-            arg1 = NumberParser.parseNumber(arg1);
-        }
-        if (arg2.isString()) {
-            arg2 = NumberParser.parseNumber(arg2);
-        }
+        arg1 = arg1.getNumber();
+        arg2 = arg2.getNumber();
         double divisor = arg2.getDouble();
         // Check for division by zero
         if (divisor == 0.0) {
@@ -396,9 +377,7 @@ public class MathOperators {
 
         RuntimeScalar arg1 = runtimeScalar;
         // Convert string type to number if necessary
-        if (arg1.isString()) {
-            arg1 = NumberParser.parseNumber(arg1);
-        }
+        arg1 = arg1.getNumber();
         // Compute absolute value based on the type of RuntimeScalar
         if (arg1.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(Math.abs(arg1.getDouble()));
@@ -443,26 +422,24 @@ public class MathOperators {
         return subtract(getScalarInt(0), runtimeScalar);
     }
 
-    public static RuntimeScalar integer(RuntimeScalar runtimeScalar) {
+    public static RuntimeScalar integer(RuntimeScalar arg1) {
         // Check if object is eligible for overloading
-        int blessId = blessedId(runtimeScalar);
+        int blessId = blessedId(arg1);
         if (blessId != 0) {
-            RuntimeScalar result = OverloadContext.tryOneArgumentOverload(runtimeScalar, blessId, "(int", "int", MathOperators::integer);
+            RuntimeScalar result = OverloadContext.tryOneArgumentOverload(arg1, blessId, "(int", "int", MathOperators::integer);
             if (result != null) return result;
         }
 
         // Convert string type to number if necessary
-        if (runtimeScalar.isString()) {
-            runtimeScalar = NumberParser.parseNumber(runtimeScalar);
-        }
+        arg1 = arg1.getNumber();
 
         // Already an integer
-        if (runtimeScalar.type == RuntimeScalarType.INTEGER) {
-            return runtimeScalar;
+        if (arg1.type == RuntimeScalarType.INTEGER) {
+            return arg1;
         }
 
         // Handle DOUBLE type
-        double value = runtimeScalar.getDouble();
+        double value = arg1.getDouble();
 
         // Check for infinity and NaN values
         if (Double.isInfinite(value) || Double.isNaN(value)) {
