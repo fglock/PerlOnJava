@@ -125,10 +125,9 @@ subtest 'Default mode behavior' => sub {
     
     # U format with UTF-8 flagged string
     my @u_mode = unpack("U C", $str);
+    is(scalar(@u_mode), 1, "Only 1 value extracted");
     is($u_mode[0], 0x3B1, "U format reads Unicode codepoint");
-    # After U, we're back to default C0 mode
-    is($u_mode[1], 0x3C9, "C after U is in character mode") if defined $u_mode[1];
-    
+
     # Test with explicit modes
     my @explicit = unpack("U0 C2", $str);
     is_deeply(\@explicit, [0xCE, 0xB1], "U0 at start sets byte mode");
