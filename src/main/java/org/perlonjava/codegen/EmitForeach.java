@@ -60,6 +60,27 @@ public class EmitForeach {
             loopVariableIsGlobal = false;
         }
 
+        // If we have a global variable, localize it before the loop
+        if (loopVariableIsGlobal) {
+            // Get the global variable state - to be restored at the end of the loop
+            mv.visitLdcInsn(globalVarName);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/GlobalRuntimeScalar",
+                "getLocalState",
+                "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                false);
+
+            // Push it onto the local variable stack (this saves its current state)
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/DynamicVariableManager",
+                "pushLocalVariable",
+                "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
+                false);
+
+            // Pop the return value as we don't need it
+            mv.visitInsn(Opcodes.POP);
+        }
+
         // Obtain the iterator for the list
         node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
@@ -118,10 +139,10 @@ public class EmitForeach {
                 mv.visitLdcInsn(globalVarName);
                 mv.visitInsn(Opcodes.SWAP); // Stack: globalVarName, iteratorValue
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/GlobalVariable",
-                        "aliasGlobalVariable",
-                        "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeScalar;)V",
-                        false);
+                    "org/perlonjava/runtime/GlobalVariable",
+                    "aliasGlobalVariable",
+                    "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeScalar;)V",
+                    false);
             } else if (node.variable instanceof OperatorNode operatorNode) {
                 // Local variable case
                 String varName = operatorNode.operator + ((IdentifierNode) operatorNode.operand).name;

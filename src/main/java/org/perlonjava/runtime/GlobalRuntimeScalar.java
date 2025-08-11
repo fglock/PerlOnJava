@@ -18,9 +18,8 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         this.fullName = fullName;
     }
 
-    public GlobalRuntimeScalar(String fullName, RuntimeScalar value) {
-        super(value);
-        this.fullName = fullName;
+    public static RuntimeScalar getLocalState(String fullName) {
+        return new GlobalRuntimeScalar(fullName);
     }
 
     @Override
@@ -30,7 +29,8 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         System.out.println("Saving state for " + fullName + " with value " + value);
 
         // Save the current global reference
-        localizedStack.push(new SavedGlobalState(fullName, this));
+        var originalVariable = GlobalVariable.globalVariables.get(fullName);
+        localizedStack.push(new SavedGlobalState(fullName, originalVariable));
 
         // Replace this variable in the global symbol table with the new one
         GlobalVariable.globalVariables.put(fullName, newLocal);
