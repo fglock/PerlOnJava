@@ -30,24 +30,19 @@ public class ListOperators {
 
         // Iterate over each element in the current RuntimeArray
         for (RuntimeScalar element : runtimeList) {
-                try {
-                    // Create $_ argument for the map subroutine
-                    GlobalVariable.aliasGlobalVariable("main::_", element);
+            // Create $_ argument for the map subroutine
+            GlobalVariable.aliasGlobalVariable("main::_", element);
 
-                    // Apply the Perl map subroutine with the argument
-                    RuntimeList result = RuntimeCode.apply(perlMapClosure, mapArgs, RuntimeContextType.LIST);
+            // Apply the Perl map subroutine with the argument
+            RuntimeList result = RuntimeCode.apply(perlMapClosure, mapArgs, RuntimeContextType.LIST);
 
-                    // `result` list contains aliases to the original array;
-                    // We need to make copies of the result elements
-                    RuntimeArray arr = new RuntimeArray();
-                    result.addToArray(arr);
+            // `result` list contains aliases to the original array;
+            // We need to make copies of the result elements
+            RuntimeArray arr = new RuntimeArray();
+            result.addToArray(arr);
 
-                    // Add all elements of the result list to the transformed list
-                    transformedElements.addAll(arr.elements);
-                } catch (Exception e) {
-                    // Wrap any exceptions thrown by the map subroutine in a RuntimeException
-                    throw new RuntimeException(e);
-                }
+            // Add all elements of the result list to the transformed list
+            transformedElements.addAll(arr.elements);
         }
 
         // Create a new RuntimeList to hold the transformed elements
