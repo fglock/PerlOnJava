@@ -32,8 +32,7 @@ public class EmitForeach {
                 int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
                 if (varIndex == -1) {
                     loopVariableIsGlobal = true;
-                    // Construct the fully qualified global variable name
-                    globalVarName = NameNormalizer.normalizeVariableName(idNode.name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
+                    globalVarName = idNode.name;
                 }
             }
         }
@@ -60,10 +59,7 @@ public class EmitForeach {
             loopVariableIsGlobal = false;
         }
 
-        // Hack - add a "local" OperatorNode to force localRecord.containsLocalOperator to true
-        Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx,
-                new OperatorNode("local", null, 1),
-                mv);
+        Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv);
 
         // If we have a global variable, localize it before the loop
         if (loopVariableIsGlobal) {
