@@ -24,7 +24,8 @@ public class ListOperators {
         // Create a new list to hold the transformed elements
         List<RuntimeBase> transformedElements = new ArrayList<>();
 
-        RuntimeScalar var_ = getGlobalVariable("main::_");
+        RuntimeScalar oldValue = getGlobalVariable("main::_");
+
         RuntimeArray mapArgs = new RuntimeArray();
 
         // Iterate over each element in the current RuntimeArray
@@ -32,7 +33,7 @@ public class ListOperators {
         while (iterator.hasNext()) {
             try {
                 // Create $_ argument for the map subroutine
-                var_.set(iterator.next());
+                GlobalVariable.aliasGlobalVariable("main::_", iterator.next());
 
                 // Apply the Perl map subroutine with the argument
                 RuntimeList result = RuntimeCode.apply(perlMapClosure, mapArgs, RuntimeContextType.LIST);
@@ -53,6 +54,8 @@ public class ListOperators {
         // Create a new RuntimeList to hold the transformed elements
         RuntimeList transformedList = new RuntimeList();
         transformedList.elements = transformedElements;
+
+        GlobalVariable.aliasGlobalVariable("main::_", oldValue);
 
         // Return based on context
         if (ctx == RuntimeContextType.SCALAR) {
