@@ -196,6 +196,17 @@ public class ScopedSymbolTable {
         return -1;
     }
 
+    public SymbolTable.SymbolEntry getSymbolEntry(String name) {
+        // Iterate from innermost scope to outermost
+        for (int i = symbolTableStack.size() - 1; i >= 0; i--) {
+            SymbolTable.SymbolEntry decl = symbolTableStack.get(i).getSymbolEntry(name);
+            if (decl != null) {
+                return decl;
+            }
+        }
+        return null;
+    }
+
     /**
      * Clears the cache for the getAllVisibleVariables method.
      * This method should be called whenever the symbol table is modified.
