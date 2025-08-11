@@ -4,6 +4,7 @@ import org.perlonjava.parser.StringParser;
 import org.perlonjava.runtime.RuntimeScalar;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarZero;
 
 public class ScalarOperators {
     public static RuntimeScalar oct(RuntimeScalar runtimeScalar) {
@@ -84,11 +85,16 @@ public class ScalarOperators {
         // Remove underscores as they are ignored in Perl's hex()
         expr = expr.replace("_", "");
 
+        int len = expr.length();
+
         int start = 0;
         if (expr.startsWith("0")) {
             start++;
         }
-        if (expr.charAt(start) == 'x' || expr.charAt(start) == 'X') {
+        if (start >= len) {
+            return scalarZero;
+        }
+        if (start < len && (expr.charAt(start) == 'x' || expr.charAt(start) == 'X')) {
             start++;
         }
         // Convert each valid hex character
