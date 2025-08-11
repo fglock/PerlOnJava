@@ -91,7 +91,7 @@ public class ParserNodeUtils {
      */
     static OperatorNode scalarUnderscore(Parser parser) {
         return new OperatorNode(
-                "$", new IdentifierNode("_", parser.tokenIndex), parser.tokenIndex);
+                "$", new IdentifierNode("main::_", parser.tokenIndex), parser.tokenIndex);
     }
 
     /**
