@@ -60,6 +60,11 @@ public class EmitForeach {
             loopVariableIsGlobal = false;
         }
 
+        // Hack - add a "local" OperatorNode to force localRecord.containsLocalOperator to true
+        Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx,
+                new OperatorNode("local", null, 1),
+                mv);
+
         // If we have a global variable, localize it before the loop
         if (loopVariableIsGlobal) {
             // Get the global variable state - to be restored at the end of the loop
@@ -84,8 +89,6 @@ public class EmitForeach {
         // Obtain the iterator for the list
         node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
-
-        Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv);
 
         mv.visitLabel(loopStart);
 
