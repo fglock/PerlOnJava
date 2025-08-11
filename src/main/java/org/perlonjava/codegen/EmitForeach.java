@@ -13,11 +13,6 @@ public class EmitForeach {
     public static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
         emitterVisitor.ctx.logDebug("FOR1 start");
 
-        int scopeIndex = -1;
-        if (node.useNewScope) {
-            scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
-        }
-
         MethodVisitor mv = emitterVisitor.ctx.mv;
         Label loopStart = new Label();
         Label loopEnd = new Label();
@@ -60,27 +55,6 @@ public class EmitForeach {
         }
 
         Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv);
-
-        // If we have a global variable, localize it before the loop
-        if (loopVariableIsGlobal) {
-            // Get the global variable state - to be restored at the end of the loop
-            mv.visitLdcInsn(globalVarName);
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/GlobalRuntimeScalar",
-                "getLocalState",
-                "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                false);
-
-            // Push it onto the local variable stack (this saves its current state)
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/DynamicVariableManager",
-                "pushLocalVariable",
-                "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;",
-                false);
-
-            // Pop the return value as we don't need it
-            mv.visitInsn(Opcodes.POP);
-        }
 
         // Obtain the iterator for the list
         node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
@@ -183,10 +157,6 @@ public class EmitForeach {
 
         if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
             EmitOperator.emitUndef(mv);
-        }
-
-        if (node.useNewScope) {
-            emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
         }
 
         emitterVisitor.ctx.logDebug("FOR1 end");
