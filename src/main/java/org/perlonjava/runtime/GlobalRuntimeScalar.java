@@ -26,10 +26,10 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
     public void dynamicSaveState() {
         // Create a new RuntimeScalar for the localized value
         GlobalRuntimeScalar newLocal = new GlobalRuntimeScalar(fullName);
-        System.out.println("Saving state for " + fullName + " with value " + value);
 
         // Save the current global reference
         var originalVariable = GlobalVariable.globalVariables.get(fullName);
+        System.out.println("Saving state for " + fullName + " with value " + value + " put " + originalVariable.hashCode());
         localizedStack.push(new SavedGlobalState(fullName, originalVariable));
 
         // Replace this variable in the global symbol table with the new one
@@ -43,7 +43,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
             if (saved.fullName.equals(this.fullName)) {
                 localizedStack.pop();
 
-                System.out.println("Restoring state for " + fullName);
+                System.out.println("Restoring state for " + saved.fullName + " put back " + saved.originalVariable.hashCode());
                 // Restore the original variable in the global symbol table
                 GlobalVariable.globalVariables.put(saved.fullName, saved.originalVariable);
             }
