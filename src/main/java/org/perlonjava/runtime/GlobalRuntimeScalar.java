@@ -18,8 +18,10 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         this.fullName = fullName;
     }
 
-    public static RuntimeScalar getLocalState(String fullName) {
-        return new GlobalRuntimeScalar(fullName);
+    public static RuntimeScalar makeLocal(String fullName) {
+        var localMarker = new GlobalRuntimeScalar(fullName);
+        DynamicVariableManager.pushLocalVariable(localMarker);
+        return GlobalVariable.getGlobalVariable(fullName);
     }
 
     @Override
