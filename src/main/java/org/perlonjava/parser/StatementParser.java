@@ -10,6 +10,8 @@ import org.perlonjava.operators.ModuleOperators;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 
+import java.util.List;
+
 import static org.perlonjava.parser.NumberParser.parseNumber;
 import static org.perlonjava.parser.ParserNodeUtils.scalarUnderscore;
 import static org.perlonjava.parser.SpecialBlockParser.runSpecialBlock;
@@ -144,6 +146,24 @@ public class StatementParser {
         // Use $_ as the default loop variable if not specified
         if (varNode == null) {
             varNode = scalarUnderscore(parser);  // $_
+        }
+
+        if (varNode instanceof OperatorNode operatorNode && operatorNode.operator.equals("$")) {
+            if (operatorNode.operand instanceof IdentifierNode identifierNode) {
+                String identifier = identifierNode.name;
+                int varIndex = parser.ctx.symbolTable.getVariableIndex("$" + identifier);
+                if (varIndex == -1) {
+                    // Is global variable
+                    String fullName = NameNormalizer.normalizeVariableName(identifier, parser.ctx.symbolTable.getCurrentPackage());
+                    identifierNode.name = fullName;
+
+                    return new BlockNode(
+                            List.of(
+                                    new OperatorNode("local", varNode, parser.tokenIndex),
+                                    new For1Node(label, true, varNode, initialization, body, continueNode, parser.tokenIndex)
+                            ), parser.tokenIndex);
+                }
+            }
         }
 
         return new For1Node(label, true, varNode, initialization, body, continueNode, parser.tokenIndex);
