@@ -76,26 +76,24 @@ public class ListOperators {
      */
     public static RuntimeList sort(RuntimeList runtimeList, RuntimeScalar perlComparatorClosure, String packageName) {
 
-        String $a = packageName + "::a";
-        String $b = packageName + "::b";
-
         // Check each element to ensure it's not an undefined array reference
         runtimeList.validateNoAutovivification();
 
         // Create a new list from the elements of this RuntimeArray
         RuntimeArray array = runtimeList.getArrayOfAlias();
 
-        RuntimeScalar saveValueA = getGlobalVariable($a);
-        RuntimeScalar saveValueB = getGlobalVariable($b);
-
         RuntimeArray comparatorArgs = new RuntimeArray();
+
+        // Create the sort variables
+        RuntimeScalar varA = getGlobalVariable(packageName + "::a");
+        RuntimeScalar varB = getGlobalVariable(packageName + "::b");
 
         // Sort the new array using the Perl comparator subroutine
         array.elements.sort((a, b) -> {
             try {
                 // Create $a, $b arguments for the comparator
-                GlobalVariable.aliasGlobalVariable($a, a);
-                GlobalVariable.aliasGlobalVariable($b, b);
+                varA.set(a);
+                varB.set(b);
 
                 // Apply the Perl comparator subroutine with the arguments
                 RuntimeList result = RuntimeCode.apply(perlComparatorClosure, comparatorArgs, RuntimeContextType.SCALAR);
@@ -110,9 +108,6 @@ public class ListOperators {
 
         // Create a new RuntimeList to hold the sorted elements
         RuntimeList sortedList = new RuntimeList(array);
-
-        GlobalVariable.aliasGlobalVariable($a, saveValueA);
-        GlobalVariable.aliasGlobalVariable($b, saveValueB);
 
         // Return the sorted RuntimeList
         return sortedList;
