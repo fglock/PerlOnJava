@@ -7,6 +7,7 @@ import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.astvisitor.LValueVisitor;
 import org.perlonjava.perlmodule.Warnings;
 import org.perlonjava.runtime.*;
+import org.perlonjava.symbols.SymbolTable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -117,25 +118,43 @@ public class EmitVariable {
                 return;
             }
 
-            int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(sigil + name);
-            if (varIndex == -1) {
-                // not a declared `my` or `our` variable
+            SymbolTable.SymbolEntry symbolEntry = emitterVisitor.ctx.symbolTable.getSymbolEntry(sigil + name);
+            // Note: @_ is lexical in PerlOnJava
+            boolean isDeclared = symbolEntry != null;
+            boolean isLexical = isDeclared && (
+                    symbolEntry.decl().equals("my")
+                            || symbolEntry.decl().equals("state")
+                            || symbolEntry.decl().equals("our")
+
+                            // XXX This breaks some tests
+                            // || (symbolEntry.decl().equals("our") && symbolEntry.name().equals("@_"))
+            );
+
+            if (!isLexical) {
+                // not a declared `my` or `state` variable
                 // Fetch a global variable.
                 // Autovivify if the name is fully qualified, or if it is a regex variable like `$1`
                 // TODO special variables: `$,` `$$`
+
+                if (symbolEntry != null) {
+                    name = NameNormalizer.normalizeVariableName(name, symbolEntry.perlPackage());
+                    // System.out.println("SYMBOL " + sigil +  name + " " + symbolEntry);
+                }
+
                 boolean createIfNotExists = name.contains("::") // Fully qualified name
                         || ScalarUtils.isInteger(name)  // Regex variable always exists
-                        || !emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_VARS);  // `no strict "vars"`
+                        || !emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_VARS)  // `no strict "vars"`
+                        || isDeclared;
                 fetchGlobalVariable(emitterVisitor.ctx, createIfNotExists, sigil, name, node.getIndex());
             } else {
                 // retrieve the `my` or `our` variable from local vars
-                mv.visitVarInsn(Opcodes.ALOAD, varIndex);
+                mv.visitVarInsn(Opcodes.ALOAD, symbolEntry.index());
             }
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR && !sigil.equals("$")) {
                 // scalar context: transform the value in the stack to scalar
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/RuntimeBase", "scalar", "()Lorg/perlonjava/runtime/RuntimeScalar;", false);
             }
-            emitterVisitor.ctx.logDebug("GETVAR end " + varIndex);
+            emitterVisitor.ctx.logDebug("GETVAR end " + symbolEntry);
             return;
         }
         switch (sigil) {
@@ -213,10 +232,7 @@ public class EmitVariable {
         Node left = node.left;
         Node right = node.right;
 
-        boolean isLocalAssignment = false;
-        if (left instanceof OperatorNode operatorNode && operatorNode.operator.equals("local")) {
-            isLocalAssignment = true;
-        }
+        boolean isLocalAssignment = left instanceof OperatorNode operatorNode && operatorNode.operator.equals("local");
 
         switch (lvalueContext) {
             case RuntimeContextType.SCALAR:

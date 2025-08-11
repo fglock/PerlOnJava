@@ -47,6 +47,11 @@ public class SymbolTable {
         return variableIndex.getOrDefault(name, new SymbolEntry(-1, null, null, null, null)).index;
     }
 
+    public SymbolEntry getSymbolEntry(String name) {
+        // Return the index of the variable, or null if not found
+        return variableIndex.getOrDefault(name, null);
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();

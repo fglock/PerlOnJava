@@ -234,17 +234,19 @@ subtest "Sort tests" => sub {
     # In order for sort to work, we have to mask the lexical $a, $b that we have declared before.
     our ($a, $b);   # Hide the existing `my` variables
 
+    # XXX BUG our() variables access is lost when they are aliased
+
     my @unsorted = (5, 3, 1, 4, 2);
-    my @sorted = sort { $a <=> $b } @unsorted;
+    my @sorted = sort { $::a <=> $::b } @unsorted;
     is("@sorted", "1 2 3 4 5", "sort in numerical ascending order");
 
-    @sorted = sort { $b <=> $a } @unsorted;
+    @sorted = sort { $::b <=> $::a } @unsorted;
     is("@sorted", "5 4 3 2 1", "sort in numerical descending order");
 
-    @sorted = sort { length($a) <=> length($b) } qw(foo foobar bar);
+    @sorted = sort { length($::a) <=> length($::b) } qw(foo foobar bar);
     is("@sorted", "foo bar foobar", "sort by string length");
 
-    @sorted = sort { $a cmp $b } qw(zebra apple monkey);
+    @sorted = sort { $::a cmp $::b } qw(zebra apple monkey);
     is("@sorted", "apple monkey zebra", "sort in alphabetical order");
 
     @sorted = sort qw(zebra apple monkey);
