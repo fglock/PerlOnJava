@@ -6,6 +6,7 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.astnode.*;
 import org.perlonjava.astvisitor.EmitterVisitor;
 import org.perlonjava.perlmodule.Warnings;
+import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.RuntimeContextType;
 
 public class EmitForeach {
@@ -24,23 +25,16 @@ public class EmitForeach {
 
         // Check if the variable is global
         boolean loopVariableIsGlobal = false;
+        String globalVarName = null;
         if (node.variable instanceof OperatorNode opNode && opNode.operator.equals("$")) {
             if (opNode.operand instanceof IdentifierNode idNode) {
-                int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(opNode.operator + idNode.name);
+                String varName = opNode.operator + idNode.name;
+                int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
                 if (varIndex == -1) {
                     loopVariableIsGlobal = true;
+                    // Construct the fully qualified global variable name
+                    globalVarName = NameNormalizer.normalizeVariableName(idNode.name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
                 }
-            }
-        }
-
-        if (loopVariableIsGlobal) {
-            // TODO - special case if loopVariableIsGlobal
-            // FIXME - Workaround: Handle $_ by declaring it as 'our'
-            if (node.variable instanceof OperatorNode opNode &&
-                    opNode.operator.equals("$") &&
-                    opNode.operand instanceof IdentifierNode idNode &&
-                    !idNode.name.contains("::")) {
-                node.variable = new OperatorNode("our", node.variable, node.variable.getIndex());
             }
         }
 
@@ -61,6 +55,9 @@ public class EmitForeach {
                 // restore warnings
                 Warnings.warningManager.setWarningState("redefine", true);
             }
+
+            // Reset global variable check after rewriting
+            loopVariableIsGlobal = false;
         }
 
         // Obtain the iterator for the list
@@ -116,7 +113,17 @@ public class EmitForeach {
             mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
             mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/RuntimeScalar");
 
-            if (node.variable instanceof OperatorNode operatorNode) {
+            if (loopVariableIsGlobal) {
+                // For global variables, alias the global to point to the iterator value
+                mv.visitLdcInsn(globalVarName);
+                mv.visitInsn(Opcodes.SWAP); // Stack: globalVarName, iteratorValue
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/GlobalVariable",
+                        "aliasGlobalVariable",
+                        "(Ljava/lang/String;Lorg/perlonjava/runtime/RuntimeScalar;)V",
+                        false);
+            } else if (node.variable instanceof OperatorNode operatorNode) {
+                // Local variable case
                 String varName = operatorNode.operator + ((IdentifierNode) operatorNode.operand).name;
                 int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
                 emitterVisitor.ctx.logDebug("FOR1 single var name:" + varName + " index:" + varIndex);
