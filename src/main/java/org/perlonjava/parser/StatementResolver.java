@@ -4,6 +4,9 @@ import org.perlonjava.astnode.*;
 import org.perlonjava.codegen.ByteCodeSourceMapper;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.runtime.NameNormalizer;
+
+import java.util.List;
 
 import static org.perlonjava.parser.ParserNodeUtils.scalarUnderscore;
 import static org.perlonjava.parser.TokenUtils.consume;
@@ -191,14 +194,11 @@ public class StatementResolver {
                     TokenUtils.consume(parser);
                     Node modifierExpression = parser.parseExpression(0);
                     parseStatementTerminator(parser);
-                    yield new For1Node(
-                            null,
-                            false,
-                            scalarUnderscore(parser),  // $_
-                            modifierExpression,
-                            expression,
-                            null,
-                            parser.tokenIndex);
+                    yield new BlockNode(
+                                        List.of(
+                                                new OperatorNode("local", scalarUnderscore(parser), parser.tokenIndex),
+                                                new For1Node(null, false, scalarUnderscore(parser), modifierExpression, expression, null, parser.tokenIndex)
+                                        ), parser.tokenIndex);
                 }
 
                 case "while", "until" -> {

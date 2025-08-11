@@ -33,8 +33,10 @@ sub new {
     $impl = [$impl] unless ref($impl);
     local $@;    # don't clobber it for our caller
     my $err;
+    print Data::Dumper::Dumper($impl);
     for (@$impl) {
         my $class = $_;
+        print Data::Dumper::Dumper($_);
         my @args;
         ( $class, @args ) = @$class if ref($class);
         no strict 'refs';
@@ -44,6 +46,7 @@ sub new {
             eval {
                 local @INC = @INC;
                 pop @INC if $INC[-1] eq '.';
+                print "TRY $pm_file";
                 require $pm_file
 	    };
             if ($@) {
