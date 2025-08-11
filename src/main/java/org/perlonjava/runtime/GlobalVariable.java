@@ -103,6 +103,10 @@ public class GlobalVariable {
         return var;
     }
 
+    public static void aliasGlobalVariable(String key, RuntimeScalar var) {
+        globalVariables.put(key, var);
+    }
+
     /**
      * Sets the value of a global variable.
      *
