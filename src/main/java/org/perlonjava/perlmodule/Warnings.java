@@ -23,8 +23,7 @@ public class Warnings extends PerlModuleBase {
     public static void initialize() {
         Warnings warnings = new Warnings();
         try {
-            warnings.registerMethod("warnings_enabled", "$;$");
-            warnings.registerMethod("warnings_enabled", ";$");
+            warnings.registerMethod("enabled", ";$");
             warnings.registerMethod("import", "useWarnings", ";$");
             warnings.registerMethod("unimport", "noWarnings", ";$");
             warnings.registerMethod("warn", "warn", "$;$");
@@ -95,9 +94,9 @@ public class Warnings extends PerlModuleBase {
      * @param ctx  The context in which the method is called.
      * @return A RuntimeList containing a boolean value.
      */
-    public static RuntimeList warnings_enabled(RuntimeArray args, int ctx) {
+    public static RuntimeList enabled(RuntimeArray args, int ctx) {
         if (args.size() < 1 || args.size() > 2) {
-            throw new IllegalStateException("Bad number of arguments for warnings_enabled()");
+            throw new IllegalStateException("Bad number of arguments for warnings::enabled()");
         }
         String category = args.get(0).toString();
         boolean isEnabled = warningManager.isWarningEnabled(category);
