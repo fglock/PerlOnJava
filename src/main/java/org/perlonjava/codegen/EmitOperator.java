@@ -317,8 +317,13 @@ public class EmitOperator {
                     "org/perlonjava/runtime/DiamondIO",
                     "readline",
                     "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBase;", false);
-            // If the context is VOID, pop the result from the stack.
-            handleVoidContext(emitterVisitor);
+
+            // Handle context
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                handleVoidContext(emitterVisitor);
+            } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                handleScalarContext(emitterVisitor, node);
+            }
         } else {
             // Handle globbing if the argument is not empty or "<>".
             node.operator = "glob";
