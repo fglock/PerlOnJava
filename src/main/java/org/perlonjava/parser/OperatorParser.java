@@ -454,35 +454,25 @@ public class OperatorParser {
     }
 
     static BinaryOperatorNode parseReadline(Parser parser, LexerToken token, int currentIndex) {
-        Node operand;
         String operator = token.text;
-
         // Handle file-related operators with special handling for default handles
-        operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
+        ListNode operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
         Node handle;
-        if (((ListNode) operand).elements.isEmpty()) {
+        if (operand.elements.isEmpty()) {
             String defaultHandle = switch (operator) {
                 case "readline" -> "main::ARGV";
                 case "eof" -> "main::STDIN";
                 case "tell" -> "main::^LAST_FH";
                 case "getc" -> "main::STDIN";
-                case "open", "fileno" ->
+                case "fileno" ->
                         throw new PerlCompilerException(parser.tokenIndex, "Not enough arguments for " + token.text, parser.ctx.errorUtil);
                 case "close" -> "main::STDIN";    // XXX TODO use currently selected file handle
                 default -> throw new PerlCompilerException(parser.tokenIndex, "Unexpected value: " + token.text, parser.ctx.errorUtil);
             };
             handle = new IdentifierNode(defaultHandle, currentIndex);
         } else {
-            handle = ((ListNode) operand).elements.removeFirst();
+            handle = operand.elements.removeFirst();
         }
-
-        if (operator.equals("open") && handle instanceof IdentifierNode identifierNode) {
-            // autovivify the bareword handle
-            String name = identifierNode.name;
-            name = FileHandle.normalizeBarewordHandle(parser, name);
-            GlobalVariable.getGlobalIO(name);
-        }
-
         return new BinaryOperatorNode(operator, handle, operand, currentIndex);
     }
 

@@ -51,7 +51,7 @@ public class EmitBinaryOperatorNode {
             case "map", "sort", "grep", "all", "any" -> EmitOperator.handleMapOperator(emitterVisitor, node);
 
             // I/O operations
-            case "eof", "open", "printf", "print", "say" ->
+            case "eof", "printf", "print", "say" ->
                     EmitOperator.handleSayOperator(emitterVisitor, node);
 
             case "close", "readline", "fileno", "getc", "tell" ->
