@@ -85,7 +85,7 @@ public class GlobalContext {
         GlobalVariable.aliasGlobalVariable(encodeSpecialVar("POSTMATCH"), "main::'");
 
         GlobalVariable.getGlobalVariable(encodeSpecialVar("SAFE_LOCALES"));  // TODO
-        
+
         // Initialize arrays
         GlobalVariable.getGlobalArray("main::+").elements = new ArraySpecialVariable(ArraySpecialVariable.Id.LAST_MATCH_END);  // regex @+
         GlobalVariable.getGlobalArray("main::-").elements = new ArraySpecialVariable(ArraySpecialVariable.Id.LAST_MATCH_START);  // regex @-
