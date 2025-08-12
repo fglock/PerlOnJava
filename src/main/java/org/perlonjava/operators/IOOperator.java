@@ -191,7 +191,7 @@ public class IOOperator {
         if (mode.contains("|")) {
             // Pipe open
             fh = RuntimeIO.openPipe(runtimeList);
-        } else if (!runtimeList.isEmpty()) {
+        } else if (args.length > 2) {
             // 3-argument open
             RuntimeScalar secondArg = args[2].scalar();
 
