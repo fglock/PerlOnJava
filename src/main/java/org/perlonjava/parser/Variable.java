@@ -3,6 +3,7 @@ package org.perlonjava.parser;
 import org.perlonjava.astnode.*;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.perlmodule.Strict;
 import org.perlonjava.runtime.GlobalVariable;
 import org.perlonjava.runtime.NameNormalizer;
 import org.perlonjava.runtime.PerlCompilerException;
@@ -33,10 +34,33 @@ public class Variable {
             }
         }
 
+        // Store the current position before parsing the identifier
+        int startIndex = parser.tokenIndex;
+
         String varName = IdentifierParser.parseComplexIdentifier(parser);
         parser.ctx.logDebug("Parsing variable: " + varName);
 
         if (varName != null) {
+            // Check for non-ASCII characters in variable names under 'no utf8'
+            if (!parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)) {
+                // Under 'no utf8', check if this is a multi-character identifier with non-ASCII
+                boolean hasNonAscii = false;
+                for (int i = 0; i < varName.length(); i++) {
+                    if (varName.charAt(i) > 127) {
+                        hasNonAscii = true;
+                        break;
+                    }
+                }
+
+                if (hasNonAscii && varName.length() > 1) {
+                    // Multi-character identifier with non-ASCII under 'no utf8' is an error
+                    // Reset parser position and throw error
+                    parser.tokenIndex = startIndex;
+                    parser.throwError("Unrecognized character \\x{" +
+                        Integer.toHexString((int)varName.charAt(varName.length()-1)) + "}");
+                }
+            }
+
             // Variable name is valid.
             // Check for illegal characters after a variable
             if (peek(parser).text.equals("(") && !sigil.equals("&") && !parser.parsingForLoopVariable) {
