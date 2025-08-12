@@ -19,6 +19,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
  */
 public class DirectoryIO {
     private final String directoryPath;
+    private final Path absoluteDirectoryPath;
     private final ArrayList<RuntimeScalar> directorySpecialEntries = new ArrayList<>();
     public DirectoryStream<Path> directoryStream;
     private Iterator<Path> directoryIterator;
@@ -33,6 +34,13 @@ public class DirectoryIO {
     public DirectoryIO(DirectoryStream<Path> directoryStream, String directoryPath) {
         this.directoryStream = directoryStream;
         this.directoryPath = directoryPath;
+
+        // Resolve and store absolute path
+        Path path = Paths.get(directoryPath);
+        if (!path.isAbsolute()) {
+            path = Paths.get(System.getProperty("user.dir"), directoryPath);
+        }
+        this.absoluteDirectoryPath = path.toAbsolutePath().normalize();
     }
 
     /**
@@ -57,7 +65,8 @@ public class DirectoryIO {
 
         try {
             directoryStream.close();
-            directoryStream = Files.newDirectoryStream(Paths.get(directoryPath));
+            // Use the pre-resolved absolute path
+            directoryStream = Files.newDirectoryStream(absoluteDirectoryPath);
             directoryIterator = directoryStream.iterator();
             for (int i = 1; i < position && directoryIterator.hasNext(); i++) {
                 directoryIterator.next();
