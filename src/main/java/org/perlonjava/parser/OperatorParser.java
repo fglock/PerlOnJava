@@ -466,7 +466,6 @@ public class OperatorParser {
                 case "getc" -> "main::STDIN";
                 case "fileno" ->
                         throw new PerlCompilerException(parser.tokenIndex, "Not enough arguments for " + token.text, parser.ctx.errorUtil);
-                case "close" -> "main::STDIN";    // XXX TODO use currently selected file handle
                 default -> throw new PerlCompilerException(parser.tokenIndex, "Unexpected value: " + token.text, parser.ctx.errorUtil);
             };
             handle = new IdentifierNode(defaultHandle, currentIndex);
