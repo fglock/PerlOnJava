@@ -78,6 +78,7 @@ public class ParseHeredoc {
             int currentIndex = newlineIndex + 1; // Start after the newline
             String indentWhitespace = "";
             StringBuilder currentLine = new StringBuilder();
+            boolean foundTerminator = false; // Track if we found the terminator
 
             while (currentIndex < tokens.size()) {
                 LexerToken token = tokens.get(currentIndex);
@@ -105,6 +106,7 @@ public class ParseHeredoc {
                         // Determine the indentation of the end marker
                         indentWhitespace = line.substring(0, line.length() - lineToCompare.length());
                         parser.ctx.logDebug("Detected end marker indentation: '" + indentWhitespace + "'");
+                        foundTerminator = true; // Mark that we found the terminator
                         break;
                     }
 
@@ -114,6 +116,11 @@ public class ParseHeredoc {
                     currentLine.append(token.text);
                     currentIndex++;
                 }
+            }
+
+            // Check if we found the terminator
+            if (!foundTerminator) {
+                heredocError(parser);
             }
 
             // Handle indentation
