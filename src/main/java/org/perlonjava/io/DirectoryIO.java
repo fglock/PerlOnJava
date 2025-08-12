@@ -8,7 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Iterator;
+import java.util.List;
 
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 
@@ -20,10 +20,10 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 public class DirectoryIO {
     private final String directoryPath;
     private final Path absoluteDirectoryPath;
-    private final ArrayList<RuntimeScalar> directorySpecialEntries = new ArrayList<>();
     public DirectoryStream<Path> directoryStream;
-    private Iterator<Path> directoryIterator;
-    private int currentDirPosition = 0;
+    private List<String> allEntries; // Cache all directory entries
+    private int currentPosition = 0;
+    private boolean entriesLoaded = false;
 
     /**
      * Constructs a {@code DirectoryIO} object with the specified directory stream and path.
@@ -44,12 +44,32 @@ public class DirectoryIO {
     }
 
     /**
+     * Load all directory entries into memory for consistent seeking
+     */
+    private void loadAllEntries() {
+        if (entriesLoaded) {
+            return;
+        }
+
+        allEntries = new ArrayList<>();
+        allEntries.add("."); // Always add special entries first
+        allEntries.add("..");
+
+        // Add all actual directory entries
+        for (Path entry : directoryStream) {
+            allEntries.add(entry.getFileName().toString());
+        }
+
+        entriesLoaded = true;
+    }
+
+    /**
      * Returns the current position within the directory stream.
      *
      * @return the current directory position as an integer
      */
     public RuntimeScalar telldir() {
-        return new RuntimeScalar(currentDirPosition);
+        return new RuntimeScalar(currentPosition);
     }
 
     /**
@@ -63,26 +83,24 @@ public class DirectoryIO {
             throw new PerlCompilerException("seekdir is not supported for non-directory streams");
         }
 
-        try {
-            directoryStream.close();
-            // Use the pre-resolved absolute path
-            directoryStream = Files.newDirectoryStream(absoluteDirectoryPath);
-            directoryIterator = directoryStream.iterator();
-            for (int i = 1; i < position && directoryIterator.hasNext(); i++) {
-                directoryIterator.next();
-            }
-            currentDirPosition = position;
-            return scalarTrue;
-        } catch (IOException e) {
-            throw new PerlCompilerException("Directory operation failed: " + e.getMessage());
+        // Make sure all entries are loaded
+        loadAllEntries();
+
+        // Set the current position
+        if (position < 0 || position > allEntries.size()) {
+            currentPosition = -1; // Out of range
+        } else {
+            currentPosition = position;
         }
+
+        return scalarTrue;
     }
 
     /**
      * Resets the directory stream to the beginning.
      */
     public void rewinddir() {
-        seekdir(1);
+        seekdir(0);
     }
 
     /**
@@ -94,35 +112,30 @@ public class DirectoryIO {
      * @return a {@code RuntimeScalar} representing the directory entry or entries
      */
     public RuntimeScalar readdir(int ctx) {
-        if (directoryIterator == null) {
-            directoryIterator = directoryStream.iterator();
-            directorySpecialEntries.add(new RuntimeScalar("."));
-            directorySpecialEntries.add(new RuntimeScalar(".."));
-        }
+        // Make sure all entries are loaded
+        loadAllEntries();
 
         if (ctx == RuntimeContextType.SCALAR) {
-            if (!directorySpecialEntries.isEmpty()) {
-                return directorySpecialEntries.removeFirst();
-            }
-
-            if (directoryIterator.hasNext()) {
-                Path entry = directoryIterator.next();
-                return new RuntimeScalar(entry.getFileName().toString());
-            } else {
+            // Check if we're at a valid position
+            if (currentPosition < 0 || currentPosition >= allEntries.size()) {
                 return RuntimeScalarCache.scalarFalse;
             }
-        } else {
-            RuntimeList result = new RuntimeList();
-            result.elements.addAll(directorySpecialEntries);
-            directorySpecialEntries.clear();
 
-            while (directoryIterator.hasNext()) {
-                Path entry = directoryIterator.next();
-                result.elements.add(new RuntimeScalar(entry.getFileName().toString()));
+            // Get the entry at current position and advance
+            String entry = allEntries.get(currentPosition);
+            currentPosition++;
+            return new RuntimeScalar(entry);
+
+        } else {
+            // List context - return all remaining entries
+            RuntimeList result = new RuntimeList();
+
+            while (currentPosition >= 0 && currentPosition < allEntries.size()) {
+                result.elements.add(new RuntimeScalar(allEntries.get(currentPosition)));
+                currentPosition++;
             }
 
             return result.scalar();
         }
     }
 }
-
