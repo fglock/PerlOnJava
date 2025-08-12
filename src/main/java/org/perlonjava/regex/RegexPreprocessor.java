@@ -337,7 +337,7 @@ public class RegexPreprocessor {
 //    }
 
     private static int handleEscapeSequences(String s, StringBuilder sb, int c, int offset) {
-        sb.append(Character.toChars(c));
+        sb.append(Character.toChars(c));  // This appends the backslash
         final int length = s.length();
 
         offset++;
@@ -345,14 +345,7 @@ public class RegexPreprocessor {
             return offset;
         }
 
-        // Note: \Q .. \E sequences are handled separately, in escapeQ()
-
         char nextChar = s.charAt(offset);
-//        if (nextChar == 'X') {
-//            // Translate \X to a Java-compatible grapheme cluster pattern
-//            sb.setLength(sb.length() - 1); // Remove the backslash
-//            sb.append(generateGraphemeClusterRegex());
-//        } else
         if (nextChar == 'g' && offset + 1 < length && s.charAt(offset + 1) == '{') {
             // Handle \g{name} backreference
             offset += 2; // Skip past \g{
@@ -376,17 +369,36 @@ public class RegexPreprocessor {
                 }
                 offset = endBrace;
             }
-        } else if (nextChar == 'N' && offset + 1 < length && s.charAt(offset + 1) == '{') {
-            // Handle \N{name} constructs
-            offset += 2; // Skip past \N{
-            int endBrace = s.indexOf('}', offset);
-            if (endBrace != -1) {
-                String name = s.substring(offset, endBrace).trim();
-                int codePoint = UnicodeResolver.getCodePointFromName(name);
-                sb.append(String.format("x{%X}", codePoint));
-                offset = endBrace;
+        } else if (nextChar == 'N') {
+            // Handle \N constructs
+            if (offset + 1 < length && s.charAt(offset + 1) == '{') {
+                // Check if it's a quantifier or a Unicode name
+                offset += 2; // Skip past \N{
+                int endBrace = s.indexOf('}', offset);
+                if (endBrace != -1) {
+                    String content = s.substring(offset, endBrace).trim();
+                    // Check if content is a quantifier (digits, comma, optional spaces)
+                    if (content.matches("\\s*\\d+\\s*(?:,\\s*\\d*\\s*)?")) {
+                        // It's a quantifier like {2} or {3,4} or {3,}
+                        // Remove all spaces from the quantifier for Java compatibility
+                        String cleanQuantifier = content.replaceAll("\\s+", "");
+                        sb.setLength(sb.length() - 1); // Remove only the backslash
+                        sb.append("[^\\n]{").append(cleanQuantifier).append("}");
+                        return endBrace;
+                    } else {
+                        // It's a Unicode name
+                        int codePoint = UnicodeResolver.getCodePointFromName(content);
+                        sb.append(String.format("x{%X}", codePoint));
+                        return endBrace;
+                    }
+                } else {
+                    regexError(s, offset, "Unmatched brace in \\N{...} construct");
+                }
             } else {
-                regexError(s, offset, "Unmatched brace in \\N{name} construct");
+                // Plain \N without braces - matches any non-newline character
+                sb.setLength(sb.length() - 1); // Remove only the backslash
+                sb.append("[^\\n]");
+                return offset;
             }
         } else if ((nextChar == 'p' || nextChar == 'P') && offset + 1 < length && s.charAt(offset + 1) == '{') {
             // Handle \p{...} and \P{...} constructs
@@ -462,17 +474,30 @@ public class RegexPreprocessor {
                 case '\\':  // Handle escape sequences
                     sb.append(Character.toChars(c));
                     offset++;
-                    if (offset < length && s.charAt(offset) == 'N' && offset + 1 < length && s.charAt(offset + 1) == '{') {
-                        // Handle \N{name} constructs
-                        offset += 2; // Skip past \N{
-                        int endBrace = s.indexOf('}', offset);
-                        if (endBrace != -1) {
-                            String name = s.substring(offset, endBrace).trim();
-                            int codePoint = UnicodeResolver.getCodePointFromName(name);
-                            sb.append(String.format("x{%X}", codePoint));
-                            offset = endBrace;
+                    if (offset < length && s.charAt(offset) == 'N') {
+                        if (offset + 1 < length && s.charAt(offset + 1) == '{') {
+                            // Handle \N{...} constructs
+                            offset += 2; // Skip past \N{
+                            int endBrace = s.indexOf('}', offset);
+                            if (endBrace != -1) {
+                                String content = s.substring(offset, endBrace).trim();
+                                // Check if content is a quantifier
+                                if (content.matches("\\d+(?:\\s*,\\s*\\d*)?")) {
+                                    // Can't use quantifiers inside character class
+                                    regexError(s, offset - 2, "Quantifier \\N{" + content + "} not allowed inside character class");
+                                } else {
+                                    // It's a Unicode name
+                                    int codePoint = UnicodeResolver.getCodePointFromName(content);
+                                    sb.append(String.format("x{%X}", codePoint));
+                                    offset = endBrace;
+                                }
+                            } else {
+                                regexError(s, offset, "Unmatched brace in \\N{name} construct");
+                            }
                         } else {
-                            regexError(s, offset, "Unmatched brace in \\N{name} construct");
+                            // Plain \N - but inside character class we can't use [^\n]
+                            // We need to handle this differently - maybe reject it
+                            regexError(s, offset - 1, "\\N (non-newline) not supported inside character class");
                         }
                     } else if (s.codePointAt(offset) == 'b') {
                         rejected.append("\\b"); // Java doesn't support \b inside [...]
