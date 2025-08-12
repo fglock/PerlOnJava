@@ -119,7 +119,11 @@ public class FileHandle {
                 // Check if the next token is an infix operator
                 // If so, this is likely an expression, not a file handle
                 String nextText = peek(parser).text;
-                if (ParserTables.INFIX_OP.contains(nextText) || "{[".contains(nextText) || "->".equals(nextText)) {
+
+                if ("<<".equals(nextText)) {
+                    // `<<` is an infix, but it is also a heredoc
+                }
+                else if (ParserTables.INFIX_OP.contains(nextText) || "{[".contains(nextText) || "->".equals(nextText)) {
                     // Examples that are NOT file handles:
                     // print $fh + 2;     # arithmetic
                     // print $fh{key};    # hash access
