@@ -40,6 +40,64 @@ public class RegexPreprocessorHelper {
                 }
                 offset = endBrace;
             }
+        } else if ((nextChar == 'b' || nextChar == 'B') && offset + 1 < length && s.charAt(offset + 1) == '{') {
+            // Handle \b{...} and \B{...} boundary assertions
+            boolean negated = (nextChar == 'B');
+            offset += 2; // Skip past \b{ or \B{
+            int endBrace = s.indexOf('}', offset);
+            if (endBrace != -1) {
+                String boundaryType = s.substring(offset, endBrace).trim();
+                sb.setLength(sb.length() - 1); // Remove the backslash
+
+                if (negated) {
+                    // Negated boundaries - wrap in negative lookaround
+                    sb.append("(?!");
+                }
+
+                switch (boundaryType) {
+                    case "gcb":
+                        // Grapheme cluster boundary
+                        // This is a simplified version - a full implementation would be more complex
+                        sb.append("(?<!\\p{M})(?=\\p{M})|(?<=\\p{M})(?!\\p{M})|");
+                        sb.append("(?<!\\p{L})(?=\\p{L})|(?<=\\p{L})(?!\\p{L})|");
+                        sb.append("(?<![\uD800-\uDBFF])(?=[\uD800-\uDBFF])|");
+                        sb.append("(?<=[\uDC00-\uDFFF])(?![\uDC00-\uDFFF])");
+                        break;
+                    case "lb":
+                        // Line break boundary
+                        sb.append("(?=\\r\\n|[\\n\\r\\u0085\\u2028\\u2029])|");
+                        sb.append("(?<=\\r\\n|[\\n\\r\\u0085\\u2028\\u2029])");
+                        break;
+                    case "sb":
+                        // Sentence boundary (simplified)
+                        sb.append("(?<=[.!?])\\s+(?=[A-Z])|");
+                        sb.append("(?<=^)(?=.)|(?<=.)(?=$)");
+                        break;
+                    case "wb":
+                        // Word boundary
+                        if (negated) {
+                            // For \B{wb}, we can use the simpler \B
+                            sb.setLength(sb.length() - 3); // Remove "(?!"
+                            sb.append("\\B");
+                            offset = endBrace;
+                            return offset;
+                        } else {
+                            sb.append("\\b");
+                        }
+                        break;
+                    default:
+                        RegexPreprocessor.regexError(s, offset - 3,
+                            "Unknown boundary type '" + boundaryType + "' in \\" + nextChar + "{...}");
+                }
+
+                if (negated) {
+                    sb.append(")");  // Close the negative lookahead
+                }
+
+                offset = endBrace;
+            } else {
+                RegexPreprocessor.regexError(s, offset, "Unmatched brace in \\" + nextChar + "{...} construct");
+            }
         } else if (nextChar == 'N') {
             // Handle \N constructs
             if (offset + 1 < length && s.charAt(offset + 1) == '{') {

@@ -259,6 +259,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Inline comments**: `(?#comment)` in regex is implemented.
 - ✅  **caret modifier**: `(?^` embedded pattern-match modifier, shorthand equivalent to "d-imnsx".
 - ✅  **\b inside character class**: `[\b]` is supported in regex.
+- ✅  **\b{gcb} \B{gcb}**: Boundary assertions.
 - ✅  **Variable Interpolation in Regex**: Features like `${var}` for embedding variables.
 - ✅  **Non-capturing groups**: `(?:...)` is implemented.
 - ✅  **Named Capture Groups**: Defining named capture groups using `(?<name>...)` or `(?'name'...)` is supported.
