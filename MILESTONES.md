@@ -284,6 +284,7 @@ The following areas are currently under active development to enhance the functi
   - Add `DATA` file handle.
   - Add Indirect method call.
   - Add regex variables: `${^PREMATCH}`, `${^MATCH}`, `${^POSTMATCH}`.
+  - Add regex operator: `\N` (not newline)
   - Add command line switches: `-w`, `-W`, `-X`.
   - Process `\L`, `\U`, `\l`, `\u` in regex.
   - `Test::More` `skip` works.
