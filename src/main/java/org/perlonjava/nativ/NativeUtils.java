@@ -4,6 +4,11 @@ import com.sun.jna.*;
 import com.sun.jna.platform.win32.*;
 import org.perlonjava.runtime.*;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
 /**
  * Platform-agnostic native operations utility following PerlOnJava operator API
  */
@@ -18,6 +23,69 @@ public class NativeUtils {
     // Direct function mapping for CreateHardLink on Windows
     private static final Function CREATE_HARD_LINK = IS_WINDOWS ?
             Function.getFunction("kernel32", "CreateHardLinkA") : null;
+
+    /**
+     * Create a symbolic link
+     * @param args RuntimeScalar array containing [oldfile, newfile]
+     * @return RuntimeScalar with 1 for success, 0 for failure
+     */
+    public static RuntimeScalar symlink(RuntimeBase... args) {
+        if (args.length < 2) {
+            return new RuntimeScalar(0);
+        }
+
+        String oldFile = RuntimeIO.resolvePath(args[0].toString()).toString();
+        String newFile = RuntimeIO.resolvePath(args[1].toString()).toString();
+
+        if (oldFile == null || newFile == null || oldFile.isEmpty() || newFile.isEmpty()) {
+            return new RuntimeScalar(0);
+        }
+
+        try {
+            Path target = Paths.get(oldFile);
+            Path link = Paths.get(newFile);
+
+            // Check if the link already exists
+            if (Files.exists(link)) {
+                // Set $! to "File exists"
+                GlobalVariable.getGlobalVariable("main::!").set("File exists");
+                Native.setLastError(17); // EEXIST
+                return new RuntimeScalar(0);
+            }
+
+            // Create the symbolic link
+            Files.createSymbolicLink(link, target);
+
+            return new RuntimeScalar(1);
+
+        } catch (UnsupportedOperationException e) {
+            // Symbolic links not supported on this platform
+            throw new RuntimeException("Symbolic links are not implemented on this platform");
+        } catch (IOException e) {
+            // Set $! based on the specific IOException
+            String errorMessage = e.getMessage();
+            if (errorMessage != null && errorMessage.contains("privilege")) {
+                GlobalVariable.getGlobalVariable("main::!").set("Permission denied");
+                Native.setLastError(13); // EACCES
+            } else if (errorMessage != null && errorMessage.contains("Access is denied")) {
+                GlobalVariable.getGlobalVariable("main::!").set("Permission denied");
+                Native.setLastError(13); // EACCES
+            } else if (errorMessage != null && errorMessage.contains("No such file")) {
+                GlobalVariable.getGlobalVariable("main::!").set("No such file or directory");
+                Native.setLastError(2); // ENOENT
+            } else {
+                GlobalVariable.getGlobalVariable("main::!").set(errorMessage != null ? errorMessage : "I/O error");
+            }
+            return new RuntimeScalar(0);
+        } catch (SecurityException e) {
+            GlobalVariable.getGlobalVariable("main::!").set("Permission denied");
+            Native.setLastError(13); // EACCES
+            return new RuntimeScalar(0);
+        } catch (Exception e) {
+            GlobalVariable.getGlobalVariable("main::!").set(e.getMessage() != null ? e.getMessage() : "Unknown error");
+            return new RuntimeScalar(0);
+        }
+    }
 
     /**
      * Create a hard link between two files
