@@ -34,7 +34,8 @@ public class MathOperators {
         if (arg1.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2);
         } else {
-            return getScalarInt(arg1.getLong() + arg2);
+            // Note: do not cache, because the result of addition is mutable - t/comp/fold.t
+            return new RuntimeScalar(arg1.getLong() + arg2);
         }
     }
 
