@@ -45,9 +45,32 @@ public class SubroutineParser {
             throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
         }
 
+        // Normalize the subroutine name to include the current package
+        String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
+
+        // Check if we are parsing a method;
+        // Otherwise, check that the subroutine exists in the global namespace - then fetch prototype and attributes
+        boolean subExists = !isMethod && GlobalVariable.existsGlobalCodeRef(fullName);
+        String prototype = null;
+        List<String> attributes = null;
+        if (subExists) {
+            // Fetch the subroutine reference
+            RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+            if (codeRef.value == null) {
+                // subExists = false;
+            } else {
+                prototype = ((RuntimeCode) codeRef.value).prototype;
+                attributes = ((RuntimeCode) codeRef.value).attributes;
+            }
+        }
+        parser.ctx.logDebug("SubroutineCall exists " + subExists + " prototype `" + prototype + "` attributes " + attributes);
+
+        boolean prototypeHasGlob = prototype != null && prototype.contains("*");
+
         // If a package name follows, then it looks like a indirect method
         // Unless the subName looks like an operator
-        if (peek(parser).type == LexerTokenType.IDENTIFIER && isValidIndirectMethod(subName)) {
+        // Unless the subName has a prototype with `*`
+        if (peek(parser).type == LexerTokenType.IDENTIFIER && isValidIndirectMethod(subName) && !prototypeHasGlob) {
             int currentIndex2 = parser.tokenIndex;
             String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
             // System.out.println("maybe indirect object: " + packageName + "->" + subName);
@@ -76,28 +99,8 @@ public class SubroutineParser {
             parser.tokenIndex = currentIndex2;
         }
 
-        // Normalize the subroutine name to include the current package
-        String fullName = NameNormalizer.normalizeVariableName(subName, parser.ctx.symbolTable.getCurrentPackage());
-
         // Create an identifier node for the subroutine name
         IdentifierNode nameNode = new IdentifierNode(subName, parser.tokenIndex);
-
-        // Check if we are parsing a method;
-        // Otherwise, check that the subroutine exists in the global namespace - then fetch prototype and attributes
-        boolean subExists = !isMethod && GlobalVariable.existsGlobalCodeRef(fullName);
-        String prototype = null;
-        List<String> attributes = null;
-        if (subExists) {
-            // Fetch the subroutine reference
-            RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
-            if (codeRef.value == null) {
-                // subExists = false;
-            } else {
-                prototype = ((RuntimeCode) codeRef.value).prototype;
-                attributes = ((RuntimeCode) codeRef.value).attributes;
-            }
-        }
-        parser.ctx.logDebug("SubroutineCall exists " + subExists + " prototype `" + prototype + "` attributes " + attributes);
 
         if (subName.startsWith("v") && subName.matches("^v\\d+$")) {
             if (parser.tokens.get(parser.tokenIndex).text.equals(".") || !subExists) {
