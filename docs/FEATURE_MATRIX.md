@@ -329,6 +329,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`chown`**: `chown` is supported.
 - ✅  **`readlink`**: `readlink` is supported.
 - ✅  **`link`**: `link` is supported.
+- ✅  **`rename`**: `rename` is supported.
 - ✅  **`require` operator**: The `require` operator implemented; version checks are implemented.
 - ✅  **`use` and `no` statements**: Module imports and version check via `use` and `no` are implemented; version checks are implemented. `use` arguments are executed at compile-time.
 - ✅  **`use version`**: `use version` enables the corresponding features, strictures, and warnings.
