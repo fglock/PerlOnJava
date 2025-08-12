@@ -316,6 +316,10 @@ public class RegexPreprocessorHelper {
             negativeFlags = negativeFlags.replace("n", "");
         }
 
+        // Filter flags to only include Java-supported ones
+        positiveFlags = filterSupportedFlags(positiveFlags);
+        negativeFlags = filterSupportedFlags(negativeFlags);
+
         // Build the new flag string
         sb.append(positiveFlags);
         if (!negativeFlags.isEmpty()) {
@@ -343,5 +347,40 @@ public class RegexPreprocessorHelper {
         }
         sb.append(')');
         return offset;
+    }
+
+    /**
+     * Filters out regex flags that are not supported by Java's regex engine.
+     *
+     * @param flags The flags string to filter
+     * @return The filtered flags string containing only Java-supported flags
+     */
+    private static String filterSupportedFlags(String flags) {
+        // Java supports: i, m, s, x, u, d
+        // We need to remove: a, l, p, and any other Perl-specific flags
+        StringBuilder filtered = new StringBuilder();
+        for (char c : flags.toCharArray()) {
+            switch (c) {
+                case 'i': // case-insensitive
+                case 'm': // multi-line
+                case 's': // single-line (dotall)
+                case 'x': // extended/comments
+                case 'u': // Unicode case
+                case 'd': // Unix lines
+                    filtered.append(c);
+                    break;
+                // Skip unsupported flags
+                case 'a': // ASCII
+                case 'l': // locale
+                case 'p': // preserve
+                case 'n': // no capture (already handled separately)
+                    // These are Perl flags not supported in Java
+                    break;
+                default:
+                    // Unknown flag - you might want to warn or error here
+                    break;
+            }
+        }
+        return filtered.toString();
     }
 }

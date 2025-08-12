@@ -35,6 +35,8 @@ public class WarningFlags {
         warningHierarchy.put("newline", new String[]{});
         warningHierarchy.put("NONFATAL", new String[]{});
         warningHierarchy.put("non_unicode", new String[]{});
+        warningHierarchy.put("surrogate", new String[]{});
+        warningHierarchy.put("nonchar", new String[]{});
     }
 
     /**
