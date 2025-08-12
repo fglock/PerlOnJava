@@ -12,7 +12,9 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.*;
 import java.nio.file.attribute.PosixFilePermission;
+import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Set;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
@@ -166,26 +168,32 @@ public class IOOperator {
     /**
      * Opens a file and initialize a file handle.
      *
-     * @param runtimeList
-     * @param fileHandle  The file handle.
+     * @args  file handle, file mode, arg list.
      * @return A RuntimeScalar indicating the result of the open operation.
      */
-    public static RuntimeScalar open(RuntimeList runtimeList, RuntimeScalar fileHandle) {
+    public static RuntimeScalar open(RuntimeBase... args) {
+    //public static RuntimeScalar open(RuntimeList runtimeList, RuntimeScalar fileHandle) {
 //        open FILEHANDLE,MODE,EXPR
 //        open FILEHANDLE,MODE,EXPR,LIST
 //        open FILEHANDLE,MODE,REFERENCE
 //        open FILEHANDLE,EXPR
 //        open FILEHANDLE
 
+        RuntimeScalar fileHandle = args[0].scalar();
+        if (args.length < 2) {
+            throw new PerlCompilerException("1 argument open is not implemented");
+        }
+        String mode = args[1].toString();
+        RuntimeList runtimeList = new RuntimeList(Arrays.copyOfRange(args, 1, args.length));
+
         RuntimeIO fh;
-        String mode = runtimeList.getFirst().toString();
 
         if (mode.contains("|")) {
             // Pipe open
             fh = RuntimeIO.openPipe(runtimeList);
-        } else if (runtimeList.size() > 1) {
+        } else if (!runtimeList.isEmpty()) {
             // 3-argument open
-            RuntimeScalar secondArg = runtimeList.elements.get(1).scalar();
+            RuntimeScalar secondArg = args[2].scalar();
 
             // Check if the second argument is a scalar reference (for in-memory operations)
             if (secondArg.type == RuntimeScalarType.REFERENCE) {

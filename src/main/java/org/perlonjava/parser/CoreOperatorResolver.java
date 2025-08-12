@@ -70,7 +70,7 @@ public class CoreOperatorResolver {
             case "pack" -> OperatorParser.parsePack(parser, token, currentIndex);
             case "chomp", "chop", "reverse", "splice", "unlink", "mkdir", "die", "warn" -> OperatorParser.parseReverse(parser, token, currentIndex);
             case "system", "exec" -> OperatorParser.parseSystem(parser, token, currentIndex);
-            case "readline", "eof", "tell", "getc", "open", "fileno", "truncate" -> OperatorParser.parseReadline(parser, token, currentIndex);
+            case "readline", "eof", "tell", "getc", "fileno", "truncate" -> OperatorParser.parseReadline(parser, token, currentIndex);
             case "binmode" -> OperatorParser.parseBinmodeOperator(parser, token, currentIndex);
             case "seek" -> OperatorParser.parseSeek(parser, token, currentIndex);
             case "printf", "print", "say" -> OperatorParser.parsePrint(parser, token, currentIndex);

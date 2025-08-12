@@ -101,6 +101,7 @@ public class OperatorHandler {
         put("sleep", "sleep", "org/perlonjava/operators/Time", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         // File
+        put("open", "open", "org/perlonjava/operators/IOOperator", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("readline", "readline", "org/perlonjava/operators/Readline", "(Lorg/perlonjava/runtime/RuntimeScalar;I)Lorg/perlonjava/runtime/RuntimeBase;");
         put("close", "close", "org/perlonjava/operators/IOOperator", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("tell", "tell", "org/perlonjava/operators/IOOperator", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
