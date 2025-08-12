@@ -84,6 +84,8 @@ public class GlobalContext {
         GlobalVariable.aliasGlobalVariable(encodeSpecialVar("MATCH"), "main::&");
         GlobalVariable.aliasGlobalVariable(encodeSpecialVar("POSTMATCH"), "main::'");
 
+        GlobalVariable.getGlobalVariable(encodeSpecialVar("SAFE_LOCALES"));  // TODO
+        
         // Initialize arrays
         GlobalVariable.getGlobalArray("main::+").elements = new ArraySpecialVariable(ArraySpecialVariable.Id.LAST_MATCH_END);  // regex @+
         GlobalVariable.getGlobalArray("main::-").elements = new ArraySpecialVariable(ArraySpecialVariable.Id.LAST_MATCH_START);  // regex @-
@@ -91,6 +93,7 @@ public class GlobalContext {
 
         // Initialize hashes
         GlobalVariable.getGlobalHash("main::SIG");
+        GlobalVariable.getGlobalHash(encodeSpecialVar("H"));
         GlobalVariable.getGlobalHash("main::+").elements = new HashSpecialVariable(HashSpecialVariable.Id.CAPTURE);  // regex %+
         GlobalVariable.getGlobalHash("main::-").elements = new HashSpecialVariable(HashSpecialVariable.Id.CAPTURE_ALL);  // regex %-
         GlobalVariable.getGlobalHash("main::!");  // TODO %!
