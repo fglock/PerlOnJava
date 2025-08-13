@@ -196,12 +196,15 @@ public class Pack {
         byte[] bytes = output.toByteArray();
 
         // Return UTF-8 decoded string only if 'U' was used in normal mode
-        if (hasUnicodeInNormalMode) {
-            // For U format in normal mode, return UTF-8 decoded string
+        if (!byteMode && hasUnicodeInNormalMode) {
+            // In character mode with U format, return UTF-8 decoded string
+            // This will have UTF8 flag ON (not BYTE_STRING)
             return new RuntimeScalar(new String(bytes, StandardCharsets.UTF_8));
         } else {
-            // For U in byte mode or other formats, return as byte string
-            return new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1));
+            // In byte mode or other formats, return as byte string
+            RuntimeScalar result = new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1));
+            result.type = RuntimeScalarType.BYTE_STRING;  // UTF8 flag OFF
+            return result;
         }
     }
 

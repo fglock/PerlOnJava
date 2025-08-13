@@ -26,8 +26,9 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} containing the length of the input as an integer
      */
     public static RuntimeScalar length(RuntimeScalar runtimeScalar) {
-        // Convert the RuntimeScalar to a string and return its length as a RuntimeScalar
-        return getScalarInt(runtimeScalar.toString().length());
+        // Convert the RuntimeScalar to a string and return its length in codepoints
+        String str = runtimeScalar.toString();
+        return getScalarInt(str.codePointCount(0, str.length()));
     }
 
     /**
