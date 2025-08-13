@@ -133,12 +133,7 @@ public class Lexer {
                 && (input[position] == ' ' || Character.isWhitespace(input[position]))) {
             position++;
         }
-        int len = position - start;
-        if (input[position - 1] == '\r') {
-            // Clean up Windows `\r`
-            len--;
-        }
-        return new LexerToken(LexerTokenType.WHITESPACE, new String(input, start, len));
+        return new LexerToken(LexerTokenType.WHITESPACE, new String(input, start, position - start));
     }
 
     public LexerToken consumeNumber() {
