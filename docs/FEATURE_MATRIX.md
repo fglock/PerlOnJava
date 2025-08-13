@@ -66,6 +66,7 @@ PerlOnJava implements most core Perl features with some key differences:
     2. **Interactive input**: `./jperl` - shows a prompt and waits for you to type code, then press Ctrl+D (on Unix/Linux/Mac) or Ctrl+Z (on Windows) to signal end of input
     3. **File redirection**: `./jperl < script.pl` - reads from the file
     4. **With arguments**: `./jperl -e 'print "Hello\n"'` or `./jperl script.pl`
+- ✅  UTF-16 is accepted in source code.
 
 - ✅  Accept command line switches from the shebang line.
 - ✅  Accept command line switches: `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-S`, `-x`, `-v`, `-V`, `-?`, `-w`, `-W`, `-X` are implemented.
