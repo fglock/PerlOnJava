@@ -2,6 +2,7 @@ package org.perlonjava.parser;
 
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
+import org.perlonjava.runtime.PerlCompilerException;
 
 /**
  * The IdentifierParser class is responsible for parsing complex Perl identifiers
@@ -81,6 +82,16 @@ public class IdentifierParser {
             // Consume the '|' from the next token (which might be "|=" or just "|")
             variableName.append(TokenUtils.consumeChar(parser));
             return variableName.toString(); // Returns "|" for the special variable $|
+        }
+
+        if (token.type == LexerTokenType.STRING) {
+            // Assert valid Unicode start of identifier - \p{XID_Start}
+            String id = token.text;
+            int cp = id.codePointAt(0);
+            boolean valid = cp == '_' || Character.isUnicodeIdentifierStart(cp);
+            if (!valid) {
+                throw new PerlCompilerException("Unrecognized character \\x{" + Integer.toHexString(cp) + "};");
+            }
         }
 
         while (true) {
