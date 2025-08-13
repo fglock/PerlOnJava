@@ -89,10 +89,6 @@ public class ParseHeredoc {
                 if (token.type == LexerTokenType.NEWLINE) {
                     // End of the current line
                     String line = currentLine.toString();
-                    // Remove trailing \r if present (for Windows compatibility)
-                    if (line.endsWith("\r")) {
-                        line = line.substring(0, line.length() - 1);
-                    }
                     lines.add(line);
                     currentLine.setLength(0); // Reset the current line
 
