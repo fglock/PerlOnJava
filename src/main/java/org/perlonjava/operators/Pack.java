@@ -39,6 +39,9 @@ public class Pack {
         // Track current mode - default is byte mode (U0) unless C0 is specified
         boolean characterMode = false;  // Default is byte mode
 
+        // Track if 'U' was used in UTF-8 mode (not character mode)
+        boolean hasUnicodeInUTF8Mode = false;
+
         for (int i = 0; i < template.length(); i++) {
             char format = template.charAt(i);
 
@@ -240,6 +243,12 @@ public class Pack {
                                 // If it's a number, use it directly
                                 codePoint1 = value.getInt();
                             }
+
+                            // Track if U is used in UTF-8 mode (not character mode)
+                            if (!characterMode) {
+                                hasUnicodeInUTF8Mode = true;
+                            }
+
                             // U format creates UTF-8 encoded output
                             if (Character.isValidCodePoint(codePoint1)) {
                                 String unicodeChar1 = new String(Character.toChars(codePoint1));
@@ -271,24 +280,14 @@ public class Pack {
         }
 
         // Convert the byte array to a string
-        // The result should be a byte string (not UTF-8 decoded)
         byte[] bytes = output.toByteArray();
 
-        // Check if we packed any Unicode characters with U format
-        boolean hasUnicodeFormat = false;
-        for (int i = 0; i < template.length(); i++) {
-            char c = template.charAt(i);
-            if (c == 'U' || c == 'W') {
-                hasUnicodeFormat = true;
-                break;
-            }
-        }
-
-        if (hasUnicodeFormat) {
-            // For U and W formats, return UTF-8 decoded string
+        // Return UTF-8 decoded string only if 'U' was used in UTF-8 mode
+        if (hasUnicodeInUTF8Mode) {
+            // For U format in UTF-8 mode, return UTF-8 decoded string
             return new RuntimeScalar(new String(bytes, StandardCharsets.UTF_8));
         } else {
-            // For other formats, return as byte string
+            // For other formats or U in character mode, return as byte string
             return new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1));
         }
     }
