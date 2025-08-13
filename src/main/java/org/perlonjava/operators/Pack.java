@@ -37,7 +37,8 @@ public class Pack {
         int valueIndex = 0;
 
         // Track current mode - default is normal/character mode
-        boolean byteMode = false;  // false = normal mode, true = byte mode (C0)
+        boolean byteMode = false;  // false = character mode (default), true = byte mode (after C0)
+        boolean byteModeUsed = false;  // Track if byte mode was ever used
 
         // Track if 'U' was used in normal mode (not byte mode)
         boolean hasUnicodeInNormalMode = false;
@@ -53,6 +54,7 @@ public class Pack {
             // Check for mode modifiers C0 and U0
             if (format == 'C' && i + 1 < template.length() && template.charAt(i + 1) == '0') {
                 byteMode = true;  // C0 switches to byte mode
+                byteModeUsed = true;  // Mark that byte mode was used
                 i++; // Skip the '0'
                 continue;
             } else if (format == 'U' && i + 1 < template.length() && template.charAt(i + 1) == '0') {
@@ -195,15 +197,14 @@ public class Pack {
         // Convert the byte array to a string
         byte[] bytes = output.toByteArray();
 
-        // Return UTF-8 decoded string only if 'U' was used in normal mode
-        if (!byteMode && hasUnicodeInNormalMode) {
-            // In character mode with U format, return UTF-8 decoded string
-            // This will have UTF8 flag ON (not BYTE_STRING)
+        // Return UTF-8 decoded string only if we never used byte mode AND used U in character mode
+        if (!byteModeUsed && hasUnicodeInNormalMode) {
+            // Pure character mode with U format - decode UTF-8
             return new RuntimeScalar(new String(bytes, StandardCharsets.UTF_8));
         } else {
-            // In byte mode or other formats, return as byte string
+            // Mixed mode or byte mode - return as byte string
             RuntimeScalar result = new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1));
-            result.type = RuntimeScalarType.BYTE_STRING;  // UTF8 flag OFF
+            result.type = RuntimeScalarType.BYTE_STRING;
             return result;
         }
     }
@@ -293,12 +294,13 @@ public class Pack {
             codePoint1 = value.getInt();
         }
 
-        // Track if U is used in normal mode (not byte mode)
+        // Track if U is used in character mode (not byte mode)
         if (!byteMode) {
             hasUnicodeInNormalMode = true;
         }
 
-        // U format creates UTF-8 encoded output
+        // U format always writes UTF-8 encoded bytes
+        // The difference between modes is handled at the final string conversion
         if (Character.isValidCodePoint(codePoint1)) {
             String unicodeChar1 = new String(Character.toChars(codePoint1));
             byte[] utf8Bytes1 = unicodeChar1.getBytes(StandardCharsets.UTF_8);
