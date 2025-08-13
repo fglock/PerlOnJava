@@ -36,11 +36,11 @@ public class Pack {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         int valueIndex = 0;
 
-        // Track current mode - default is byte mode (U0) unless C0 is specified
-        boolean characterMode = false;  // Default is byte mode
+        // Track current mode - default is normal/character mode
+        boolean byteMode = false;  // false = normal mode, true = byte mode (C0)
 
-        // Track if 'U' was used in UTF-8 mode (not character mode)
-        boolean hasUnicodeInUTF8Mode = false;
+        // Track if 'U' was used in normal mode (not byte mode)
+        boolean hasUnicodeInNormalMode = false;
 
         for (int i = 0; i < template.length(); i++) {
             char format = template.charAt(i);
@@ -52,11 +52,11 @@ public class Pack {
 
             // Check for mode modifiers C0 and U0
             if (format == 'C' && i + 1 < template.length() && template.charAt(i + 1) == '0') {
-                characterMode = true;
+                byteMode = true;  // C0 switches to byte mode
                 i++; // Skip the '0'
                 continue;
             } else if (format == 'U' && i + 1 < template.length() && template.charAt(i + 1) == '0') {
-                characterMode = false;
+                byteMode = false;  // U0 switches to normal mode
                 i++; // Skip the '0'
                 continue;
             }
@@ -85,31 +85,31 @@ public class Pack {
                 if (valueIndex >= values.size()) {
                     throw new PerlCompilerException("pack: not enough arguments");
                 }
-                RuntimeScalar value = (RuntimeScalar) values.get(valueIndex++);
+                RuntimeScalar value = values.get(valueIndex++);
                 String bitString = value.toString();
                 if (hasStar) {
                     count = bitString.length(); // For bit strings with *, use the entire string length
                 }
-                writeBitString(output, bitString, count, format);
+                PackHelper.writeBitString(output, bitString, count, format);
             } else if (format == 'h' || format == 'H') {
                 if (valueIndex >= values.size()) {
                     throw new PerlCompilerException("pack: not enough arguments");
                 }
-                RuntimeScalar value = (RuntimeScalar) values.get(valueIndex++);
+                RuntimeScalar value = values.get(valueIndex++);
                 String hexString = value.toString();
                 if (hasStar) {
                     count = hexString.length(); // For hex strings with *, use the entire string length
                 }
-                writeHexString(output, hexString, count, format);
-                    } else if (format == 'u') {
-                        // Uuencode format - consumes one value
-                        if (valueIndex >= values.size()) {
-                            throw new PerlCompilerException("pack: not enough arguments");
-                        }
-                        RuntimeScalar value = (RuntimeScalar) values.get(valueIndex++);
-                        String str = value.toString();
-                        writeUuencodedString(output, str);
-                    } else if (format == 'a' || format == 'A' || format == 'Z') {
+                PackHelper.writeHexString(output, hexString, count, format);
+            } else if (format == 'u') {
+                // Uuencode format - consumes one value
+                if (valueIndex >= values.size()) {
+                    throw new PerlCompilerException("pack: not enough arguments");
+                }
+                RuntimeScalar value = values.get(valueIndex++);
+                String str = value.toString();
+                PackHelper.writeUuencodedString(output, str);
+            } else if (format == 'a' || format == 'A' || format == 'Z') {
                 // String formats consume only one value
                 if (valueIndex >= values.size()) {
                     throw new PerlCompilerException("pack: not enough arguments");
@@ -124,12 +124,12 @@ public class Pack {
                         count = str.length();
                     }
                 }
-                // In character mode, we need to handle the string differently
-                if (characterMode && format == 'a') {
-                    // In character mode with 'a', preserve the string as-is
-                    writeString(output, str, count, format, characterMode);
+                // In byte mode, we need to handle the string differently
+                if (byteMode && format == 'a') {
+                    // In byte mode with 'a', preserve the string as-is
+                    PackHelper.writeString(output, str, count, format, byteMode);
                 } else {
-                    writeString(output, str, count, format, false);
+                    PackHelper.writeString(output, str, count, format, false);
                 }
             } else {
                 // Numeric formats
@@ -138,10 +138,10 @@ public class Pack {
                         throw new PerlCompilerException("pack: not enough arguments");
                     }
 
-                    RuntimeScalar value = (RuntimeScalar) values.get(valueIndex++);
+                    RuntimeScalar value = values.get(valueIndex++);
 
                     // Check for Inf/NaN values for integer formats
-                    if (isIntegerFormat(format)) {
+                    if (PackHelper.isIntegerFormat(format)) {
                         String strValue = value.toString().trim();
                         if (strValue.equalsIgnoreCase("Inf") || strValue.equalsIgnoreCase("+Inf") || strValue.equalsIgnoreCase("Infinity")) {
                             if (format == 'w') {
@@ -176,37 +176,37 @@ public class Pack {
                             output.write(intValue & 0xFF);
                             break;
                         case 's':
-                            writeShortLittleEndian(output, value.getInt());
+                            PackHelper.writeShortLittleEndian(output, value.getInt());
                             break;
                         case 'S':
-                            writeShort(output, value.getInt());
+                            PackHelper.writeShort(output, value.getInt());
                             break;
                         case 'l':
-                            writeIntLittleEndian(output, (long) value.getDouble());
+                            PackHelper.writeIntLittleEndian(output, (long) value.getDouble());
                             break;
                         case 'L', 'J':
-                            writeLong(output, (long) value.getDouble());
+                            PackHelper.writeLong(output, (long) value.getDouble());
                             break;
                         case 'i':
                         case 'I':
                             // Native integer (assume 32-bit little-endian)
-                            writeIntLittleEndian(output, (long) value.getDouble());
+                            PackHelper.writeIntLittleEndian(output, (long) value.getDouble());
                             break;
                         case 'N':
-                            writeIntBigEndian(output, (long) value.getDouble());
+                            PackHelper.writeIntBigEndian(output, (long) value.getDouble());
                             break;
                         case 'V':
-                            writeIntLittleEndian(output, (long) value.getDouble());
+                            PackHelper.writeIntLittleEndian(output, (long) value.getDouble());
                             break;
                         case 'n':
-                            writeShortBigEndian(output, value.getInt());
+                            PackHelper.writeShortBigEndian(output, value.getInt());
                             break;
                         case 'v':
-                            writeShortLittleEndian(output, value.getInt());
+                            PackHelper.writeShortLittleEndian(output, value.getInt());
                             break;
                         case 'w':
                             // BER compressed integer
-                            writeBER(output, (long) value.getDouble());
+                            PackHelper.writeBER(output, (long) value.getDouble());
                             break;
                         case 'W':
                             // Pack a Unicode code point as UTF-8 bytes
@@ -244,9 +244,9 @@ public class Pack {
                                 codePoint1 = value.getInt();
                             }
 
-                            // Track if U is used in UTF-8 mode (not character mode)
-                            if (!characterMode) {
-                                hasUnicodeInUTF8Mode = true;
+                            // Track if U is used in normal mode (not byte mode)
+                            if (!byteMode) {
+                                hasUnicodeInNormalMode = true;
                             }
 
                             // U format creates UTF-8 encoded output
@@ -263,14 +263,14 @@ public class Pack {
                             }
                             break;
                         case 'f':
-                            writeFloat(output, (float) value.getDouble());
+                            PackHelper.writeFloat(output, (float) value.getDouble());
                             break;
                         case 'F':
                             // F is double-precision float in native format (8 bytes)
-                            writeDouble(output, value.getDouble());
+                            PackHelper.writeDouble(output, value.getDouble());
                             break;
                         case 'd':
-                            writeDouble(output, value.getDouble());
+                            PackHelper.writeDouble(output, value.getDouble());
                             break;
                         default:
                             throw new PerlCompilerException("pack: unsupported format character: " + format);
@@ -282,342 +282,13 @@ public class Pack {
         // Convert the byte array to a string
         byte[] bytes = output.toByteArray();
 
-        // Return UTF-8 decoded string only if 'U' was used in UTF-8 mode
-        if (hasUnicodeInUTF8Mode) {
-            // For U format in UTF-8 mode, return UTF-8 decoded string
+        // Return UTF-8 decoded string only if 'U' was used in normal mode
+        if (hasUnicodeInNormalMode) {
+            // For U format in normal mode, return UTF-8 decoded string
             return new RuntimeScalar(new String(bytes, StandardCharsets.UTF_8));
         } else {
-            // For other formats or U in character mode, return as byte string
+            // For U in byte mode or other formats, return as byte string
             return new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1));
-        }
-    }
-
-    /**
-     * Check if the format is an integer format that should reject Inf/NaN values
-     */
-    private static boolean isIntegerFormat(char format) {
-        switch (format) {
-            case 'c':
-            case 'C':
-            case 's':
-            case 'S':
-            case 'l':
-            case 'L':
-            case 'i':
-            case 'I':
-            case 'n':
-            case 'N':
-            case 'v':
-            case 'V':
-            case 'j':
-            case 'J':
-            case 'w':
-            case 'W':
-            case 'U':
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    /**
-     * Write a BER compressed integer
-     */
-    private static void writeBER(ByteArrayOutputStream output, long value) {
-        if (value < 0) {
-            throw new PerlCompilerException("Cannot compress negative numbers");
-        }
-
-        if (value < 128) {
-            output.write((int) value);
-        } else {
-            // Write high-order bytes with continuation bit set
-            writeBER(output, value >> 7);
-            // Write low-order 7 bits with continuation bit
-            output.write((int) ((value & 0x7F) | 0x80));
-        }
-    }
-
-    /**
-     * Writes a short integer to the output stream in little-endian order.
-     *
-     * @param output The ByteArrayOutputStream to write to.
-     * @param value  The integer value to write.
-     */
-    private static void writeShort(ByteArrayOutputStream output, int value) {
-        output.write(value & 0xFF);
-        output.write((value >> 8) & 0xFF);
-    }
-
-    /**
-     * Writes a short integer to the output stream in big-endian order.
-     *
-     * @param output The ByteArrayOutputStream to write to.
-     * @param value  The integer value to write.
-     */
-    private static void writeShortBigEndian(ByteArrayOutputStream output, int value) {
-        output.write((value >> 8) & 0xFF);
-        output.write(value & 0xFF);
-    }
-
-    /**
-     * Writes a short integer to the output stream in little-endian order.
-     *
-     * @param output The ByteArrayOutputStream to write to.
-     * @param value  The integer value to write.
-     */
-    private static void writeShortLittleEndian(ByteArrayOutputStream output, int value) {
-        output.write(value & 0xFF);
-        output.write((value >> 8) & 0xFF);
-    }
-
-    /**
-     * Writes a 32-bit integer to the output stream in little-endian order.
-     *
-     * @param output The ByteArrayOutputStream to write to.
-     * @param value  The integer value to write.
-     */
-    private static void writeInt(ByteArrayOutputStream output, int value) {
-        output.write(value & 0xFF);
-        output.write((value >> 8) & 0xFF);
-        output.write((value >> 16) & 0xFF);
-        output.write((value >> 24) & 0xFF);
-    }
-
-    /**
-     * Writes a 32-bit integer to the output stream in big-endian order.
-     *
-     * @param output The ByteArrayOutputStream to write to.
-     * @param value  The long value to write.
-     */
-    private static void writeIntBigEndian(ByteArrayOutputStream output, long value) {
-        output.write((int) ((value >> 24) & 0xFF));
-        output.write((int) ((value >> 16) & 0xFF));
-        output.write((int) ((value >> 8) & 0xFF));
-        output.write((int) (value & 0xFF));
-    }
-
-    /**
-     * Writes a 32-bit integer to the output stream in little-endian order.
-     *
-     * @param output The ByteArrayOutputStream to write to.
-     * @param value  The long value to write.
-     */
-    private static void writeIntLittleEndian(ByteArrayOutputStream output, long value) {
-        output.write((int) (value & 0xFF));
-        output.write((int) ((value >> 8) & 0xFF));
-        output.write((int) ((value >> 16) & 0xFF));
-        output.write((int) ((value >> 24) & 0xFF));
-    }
-
-    /**
-     * Writes a long integer to the output stream in little-endian order.
-     *
-     * @param output The ByteArrayOutputStream to write to.
-     * @param value  The long value to write.
-     */
-    private static void writeLong(ByteArrayOutputStream output, long value) {
-        output.write((int) (value & 0xFF));
-        output.write((int) ((value >> 8) & 0xFF));
-        output.write((int) ((value >> 16) & 0xFF));
-        output.write((int) ((value >> 24) & 0xFF));
-    }
-
-    /**
-     * Writes a float to the output stream in little-endian order.
-     *
-     * @param output The ByteArrayOutputStream to write to.
-     * @param value  The float value to write.
-     */
-    private static void writeFloat(ByteArrayOutputStream output, float value) {
-        int intBits = Float.floatToIntBits(value);
-        writeInt(output, intBits);
-    }
-
-    /**
-     * Writes a double to the output stream in little-endian order.
-     *
-     * @param output The ByteArrayOutputStream to write to.
-     * @param value  The double value to write.
-     */
-    private static void writeDouble(ByteArrayOutputStream output, double value) {
-        long longBits = Double.doubleToLongBits(value);
-        output.write((int) (longBits & 0xFF));
-        output.write((int) ((longBits >> 8) & 0xFF));
-        output.write((int) ((longBits >> 16) & 0xFF));
-        output.write((int) ((longBits >> 24) & 0xFF));
-        output.write((int) ((longBits >> 32) & 0xFF));
-        output.write((int) ((longBits >> 40) & 0xFF));
-        output.write((int) ((longBits >> 48) & 0xFF));
-        output.write((int) ((longBits >> 56) & 0xFF));
-    }
-
-    /**
-     * Writes a string to the output stream based on the specified format and count.
-     *
-     * @param output The ByteArrayOutputStream to write to.
-     * @param str    The string to write.
-     * @param count  The number of characters to write.
-     * @param format The format character indicating the string type.
-     * @param characterMode Whether we're in character mode (C0) or byte mode (U0)
-     */
-    private static void writeString(ByteArrayOutputStream output, String str, int count, char format, boolean characterMode) {
-        byte[] bytes;
-
-        if (characterMode && format == 'a') {
-            // In character mode with 'a', use the string as-is (already UTF-8 encoded if needed)
-            bytes = str.getBytes(StandardCharsets.ISO_8859_1);
-        } else {
-            // Normal UTF-8 encoding
-            bytes = str.getBytes(StandardCharsets.UTF_8);
-        }
-
-        int length = Math.min(bytes.length, count);
-        output.write(bytes, 0, length);
-
-        // Pad with nulls or spaces
-        byte padByte = (format == 'A') ? (byte) ' ' : (byte) 0;
-        for (int i = length; i < count; i++) {
-            output.write(padByte);
-        }
-
-        // Add null terminator for 'Z' format if not already present
-        if (format == 'Z') {
-            byte[] currentOutput = output.toByteArray();
-            boolean needsNullTerminator = currentOutput.length <= 0 || currentOutput[currentOutput.length - 1] != 0;
-
-            if (needsNullTerminator) {
-                output.write(0);
-            }
-        }
-    }
-
-    /**
-     * Overloaded writeString for backward compatibility
-     */
-    private static void writeString(ByteArrayOutputStream output, String str, int count, char format) {
-        writeString(output, str, count, format, false);
-    }
-
-    /**
-     * Writes a bit string to the output stream based on the specified format and count.
-     *
-     * @param output The ByteArrayOutputStream to write to.
-     * @param str    The bit string to write.
-     * @param count  The number of bits to write.
-     * @param format The format character indicating the bit string type.
-     */
-    private static void writeBitString(ByteArrayOutputStream output, String str, int count, char format) {
-        int bitIndex = 0;
-        int byteValue = 0;
-        int bitsToProcess = Math.min(str.length(), count);
-
-        for (int i = 0; i < bitsToProcess; i++) {
-            char c = str.charAt(i);
-            if (format == 'b') {
-                byteValue |= (c == '1' ? 1 : 0) << bitIndex;
-            } else {
-                byteValue |= (c == '1' ? 1 : 0) << (7 - bitIndex);
-            }
-            bitIndex++;
-            if (bitIndex == 8) {
-                output.write(byteValue);
-                bitIndex = 0;
-                byteValue = 0;
-            }
-        }
-        if (bitIndex > 0) {
-            output.write(byteValue);
-        }
-    }
-
-    /**
-     * Writes a hex string to the output stream based on the specified format and count.
-     *
-     * @param output The ByteArrayOutputStream to write to.
-     * @param str    The hex string to write.
-     * @param count  The number of hex digits to write.
-     * @param format The format character indicating the hex string type ('h' for low nybble first, 'H' for high nybble first).
-     */
-    private static void writeHexString(ByteArrayOutputStream output, String str, int count, char format) {
-        int hexDigitsToProcess = Math.min(str.length(), count);
-
-        // Process pairs of hex digits
-        int i;
-        for (i = 0; i + 1 < hexDigitsToProcess; i += 2) {
-            // Get first nybble
-            char c1 = str.charAt(i);
-            int nybble1 = Character.digit(c1, 16);
-            if (nybble1 == -1) nybble1 = 0; // Default to 0 for invalid hex digit
-
-            // Get second nybble
-            char c2 = str.charAt(i + 1);
-            int nybble2 = Character.digit(c2, 16);
-            if (nybble2 == -1) nybble2 = 0; // Default to 0 for invalid hex digit
-
-            int byteValue;
-            if (format == 'h') {
-                // Low nybble first
-                byteValue = (nybble2 << 4) | nybble1;
-            } else {
-                // High nybble first
-                byteValue = (nybble1 << 4) | nybble2;
-            }
-
-            output.write(byteValue);
-        }
-
-        // Handle the last hex digit if we have an odd count
-        if (i < hexDigitsToProcess) {
-            char c = str.charAt(i);
-            int nybble = Character.digit(c, 16);
-            if (nybble == -1) nybble = 0;
-
-            int byteValue;
-            if (format == 'h') {
-                // Low nybble first - the single digit goes in the low nybble
-                byteValue = nybble;
-            } else {
-                // High nybble first - the single digit goes in the high nybble
-                byteValue = nybble << 4;
-            }
-
-            output.write(byteValue);
-        }
-    }
-
-    /**
-     * Writes a uuencoded string to the output stream.
-     * Uuencoding converts binary data to printable ASCII characters.
-     *
-     * @param output The ByteArrayOutputStream to write to.
-     * @param str    The string to uuencode.
-     */
-    private static void writeUuencodedString(ByteArrayOutputStream output, String str) {
-        byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
-        int length = bytes.length;
-
-        // Uuencode line format: length byte followed by encoded data
-        // For pack 'u', we encode the entire string as one line
-        output.write((length & 0x3F) + 32); // Length byte (add 32 to make printable)
-
-        // Process in groups of 3 bytes (which encode to 4 uuencoded characters)
-        for (int i = 0; i < length; i += 3) {
-            int b1 = (i < length) ? (bytes[i] & 0xFF) : 0;
-            int b2 = (i + 1 < length) ? (bytes[i + 1] & 0xFF) : 0;
-            int b3 = (i + 2 < length) ? (bytes[i + 2] & 0xFF) : 0;
-
-            // Convert 3 bytes to 4 uuencoded characters
-            int c1 = (b1 >> 2) & 0x3F;
-            int c2 = ((b1 << 4) | (b2 >> 4)) & 0x3F;
-            int c3 = ((b2 << 2) | (b3 >> 6)) & 0x3F;
-            int c4 = b3 & 0x3F;
-
-            // Write encoded characters (add 32 to convert to printable ASCII)
-            output.write(c1 + 32);
-            output.write(c2 + 32);
-            output.write(c3 + 32);
-            output.write(c4 + 32);
         }
     }
 }
