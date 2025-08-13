@@ -134,7 +134,7 @@ public class ArgumentParser {
                         }
                     }
                 }
-                String fileContent = FileUtils.readFileWithEncodingDetection(Paths.get(filePath));
+                String fileContent = FileUtils.readFileWithEncodingDetection(Paths.get(filePath), parsedArgs);
                 parsedArgs.code = fileContent;
                 processShebangLine(args, parsedArgs, fileContent, index);
             } catch (IOException e) {
@@ -839,6 +839,7 @@ public class ArgumentParser {
         public boolean processAndPrint = false; // For -p
         public boolean inPlaceEdit = false; // New field for in-place editing
         public String code = null;
+        public boolean codeHasEncoding = false;
         public String fileName = null;
         public String inPlaceExtension = null; // For -i
         public String inputRecordSeparator = "\n";
@@ -878,6 +879,7 @@ public class ArgumentParser {
                     "    processAndPrint=" + processAndPrint + ",\n" +
                     "    inPlaceEdit=" + inPlaceEdit + ",\n" +
                     "    code='" + (code != null ? code : "null") + "',\n" +
+                    "    codeHasEncoding=" + codeHasEncoding + "\n" +
                     "    fileName='" + ScalarUtils.printable(fileName) + "',\n" +
                     "    inPlaceExtension='" + ScalarUtils.printable(inPlaceExtension) + "',\n" +
                     "    inputRecordSeparator=" + ScalarUtils.printable(inputRecordSeparator) + ",\n" +
