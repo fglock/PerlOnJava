@@ -111,6 +111,10 @@ public class Lexer {
             if (current == '\n') {
                 position++;
                 return new LexerToken(LexerTokenType.NEWLINE, "\n");
+            } else if (current == '\r') {
+                // Skip carriage return characters
+                position++;
+                return nextToken(); // Continue to next character
             } else {
                 return consumeWhitespace();
             }
@@ -130,6 +134,7 @@ public class Lexer {
         int start = position;
         while (position < length
                 && input[position] != '\n'
+                && input[position] != '\r'
                 && (input[position] == ' ' || Character.isWhitespace(input[position]))) {
             position++;
         }
