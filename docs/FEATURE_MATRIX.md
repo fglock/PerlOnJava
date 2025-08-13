@@ -267,6 +267,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Backreferences to Named Groups**: Using `\k<name>` or `\g{name}` for backreferences to named groups is supported.
 - ✅  **Relative Backreferences**: Using `\g{-n}` for relative backreferences.
 - ✅  **Unicode Properties**: Matching with `\p{...}` and `\P{...}` (e.g., `\p{L}` for letters).
+- ✅  **Unicode Properties**: Add regex properties supported by Perl but missing in Java regex.
 - ✅  **Possessive Quantifiers**: Quantifiers like `*+`, `++`, `?+`, or `{n,m}+`, which disable backtracking, are not supported.
 - ✅  **Atomic Grouping**: Use of `(?>...)` for atomic groups is supported.
 - ✅  **Preprocessor**: `\Q`, `\L`, `\U`, `\l`, `\u`, `\E` are preprocessed in regex.

@@ -30,19 +30,40 @@ public class UnicodeResolver {
 
     public static String translateUnicodeProperty(String property, boolean negated) {
         try {
-            // Special cases
-            if (property.equals("XPosixSpace")) {
-                return (negated ? "\\P{" : "\\p{") + "IsWhite_Space}";
-            }
-
-            if (property.equals("_Perl_IDStart")) {
-                String pattern = "\\p{L}\\p{Nl}_";
-                return negated ? "[^" + pattern + "]" : "[" + pattern + "]";
-            }
-
-            if (property.equals("_Perl_IDCont")) {
-                String pattern = "\\p{L}\\p{Nl}\\p{Nd}\\p{Mn}\\p{Mc}\\p{Pc}";
-                return negated ? "[^" + pattern + "]" : "[" + pattern + "]";
+            // Special cases - Perl XPosix properties not natively supported in Java
+            switch (property) {
+                case "XPosixSpace": case "XPerlSpace": case "SpacePerl":
+                    return wrapProperty("IsWhite_Space", negated);
+                case "XPosixAlnum":
+                    return wrapCharClass("\\p{IsAlphabetic}\\p{IsDigit}", negated);
+                case "XPosixAlpha": case "Alpha": case "Alphabetic":
+                    return wrapProperty("IsAlphabetic", negated);
+                case "XPosixBlank": case "Blank": case "HorizSpace":
+                    return wrapProperty("IsWhite_Space", negated);
+                case "XPosixCntrl": case "Cc": case "Cntrl": case "Control":
+                    return wrapProperty("gc=Cc", negated);
+                case "XPosixDigit": case "Decimal_Number": case "Digit": case "Nd":
+                    return wrapProperty("IsDigit", negated);
+                case "XPosixGraph": case "Graph":
+                    return wrapCharClass("\\p{IsAlphabetic}\\p{IsDigit}\\p{IsPunctuation}", negated);
+                case "XPosixLower": case "Lower": case "Lowercase":
+                    return wrapProperty("IsLowercase", negated);
+                case "XPosixPrint": case "Print":
+                    return wrapCharClass("\\p{IsAlphabetic}\\p{IsDigit}\\p{IsPunctuation}\\p{IsWhite_Space}", negated);
+                case "XPosixPunct":
+                    return wrapProperty("IsPunctuation", negated);
+                case "XPosixUpper": case "Upper": case "Uppercase":
+                    return wrapProperty("IsUppercase", negated);
+                case "XPosixWord": case "Word":
+                    return wrapCharClass("\\p{IsAlphabetic}\\p{gc=Mn}\\p{gc=Me}\\p{gc=Mc}\\p{IsDigit}\\p{gc=Pc}", negated);
+                case "XPosixXDigit": case "Hex": case "Hex_Digit": case "XDigit":
+                    return wrapProperty("IsHex_Digit", negated);
+                case "_Perl_IDStart":
+                    return wrapCharClass("\\p{L}\\p{Nl}_", negated);
+                case "_Perl_IDCont":
+                    return wrapCharClass("\\p{L}\\p{Nl}\\p{Nd}\\p{Mn}\\p{Mc}\\p{Pc}", negated);
+                default:
+                    break;
             }
 
             // Remove prefixes
@@ -55,7 +76,7 @@ public class UnicodeResolver {
 
             // Single character properties
             if (property.length() == 1) {
-                return (negated ? "\\P{" : "\\p{") + property + "}";
+                return wrapProperty(property, negated);
             }
 
             // Combined properties
@@ -76,11 +97,20 @@ public class UnicodeResolver {
             }
 
             String pattern = unicodeSet.toPattern(false);
-            return negated ? "[^" + pattern + "]" : "[" + pattern + "]";
+            return wrapCharClass(pattern, negated);
 
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("Invalid or unsupported Unicode property: " + property, e);
         }
+    }
+
+    // Helper methods for negation
+    private static String wrapProperty(String property, boolean negated) {
+        return (negated ? "\\P{" : "\\p{") + property + "}";
+    }
+
+    private static String wrapCharClass(String pattern, boolean negated) {
+        return negated ? "[^" + pattern + "]" : "[" + pattern + "]";
     }
 
     // Helper method to check if a property is a block property
