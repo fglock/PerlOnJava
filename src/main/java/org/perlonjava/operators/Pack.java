@@ -110,27 +110,7 @@ public class Pack {
                 String str = value.toString();
                 PackHelper.writeUuencodedString(output, str);
             } else if (format == 'a' || format == 'A' || format == 'Z') {
-                // String formats consume only one value
-                if (valueIndex >= values.size()) {
-                    throw new PerlCompilerException("pack: not enough arguments");
-                }
-                RuntimeScalar value = (RuntimeScalar) values.get(valueIndex++);
-                String str = value.toString();
-                if (hasStar) {
-                    // For string formats with *, use the string length as count
-                    if (format == 'Z') {
-                        count = str.length() + 1; // Include space for null terminator
-                    } else {
-                        count = str.length();
-                    }
-                }
-                // In byte mode, we need to handle the string differently
-                if (byteMode && format == 'a') {
-                    // In byte mode with 'a', preserve the string as-is
-                    PackHelper.writeString(output, str, count, format, byteMode);
-                } else {
-                    PackHelper.writeString(output, str, count, format, false);
-                }
+                valueIndex = handleStringFormat(valueIndex, values, hasStar, format, count, byteMode, output);
             } else {
                 // Numeric formats
                 for (int j = 0; j < count; j++) {
@@ -142,26 +122,7 @@ public class Pack {
 
                     // Check for Inf/NaN values for integer formats
                     if (PackHelper.isIntegerFormat(format)) {
-                        String strValue = value.toString().trim();
-                        if (strValue.equalsIgnoreCase("Inf") || strValue.equalsIgnoreCase("+Inf") || strValue.equalsIgnoreCase("Infinity")) {
-                            if (format == 'w') {
-                                throw new PerlCompilerException("Cannot compress Inf");
-                            } else {
-                                throw new PerlCompilerException("Cannot pack Inf");
-                            }
-                        } else if (strValue.equalsIgnoreCase("-Inf") || strValue.equalsIgnoreCase("-Infinity")) {
-                            if (format == 'w') {
-                                throw new PerlCompilerException("Cannot compress -Inf");
-                            } else {
-                                throw new PerlCompilerException("Cannot pack -Inf");
-                            }
-                        } else if (strValue.equalsIgnoreCase("NaN")) {
-                            if (format == 'w') {
-                                throw new PerlCompilerException("Cannot compress NaN");
-                            } else {
-                                throw new PerlCompilerException("Cannot pack NaN");
-                            }
-                        }
+                        handleInfinity(value, format);
                     }
 
                     switch (format) {
@@ -209,58 +170,10 @@ public class Pack {
                             PackHelper.writeBER(output, (long) value.getDouble());
                             break;
                         case 'W':
-                            // Pack a Unicode code point as UTF-8 bytes
-                            int codePoint;
-                            String strValue = value.toString();
-                            if (!strValue.isEmpty() && !Character.isDigit(strValue.charAt(0))) {
-                                // If it's a character, get its code point
-                                codePoint = strValue.codePointAt(0);
-                            } else {
-                                // If it's a number, use it directly as code point
-                                codePoint = value.getInt();
-                            }
-
-                            if (Character.isValidCodePoint(codePoint)) {
-                                String unicodeChar = new String(Character.toChars(codePoint));
-                                byte[] utf8Bytes = unicodeChar.getBytes(StandardCharsets.UTF_8);
-                                try {
-                                    output.write(utf8Bytes);
-                                } catch (IOException e) {
-                                    throw new RuntimeException(e);
-                                }
-                            } else {
-                                throw new PerlCompilerException("pack: invalid Unicode code point: " + codePoint);
-                            }
+                            packW(value, output);
                             break;
                         case 'U':
-                            // Pack a Unicode character number as UTF-8
-                            int codePoint1;
-                            String strValue1 = value.toString();
-                            if (!strValue1.isEmpty() && !Character.isDigit(strValue1.charAt(0))) {
-                                // If it's a character, get its code point
-                                codePoint1 = strValue1.codePointAt(0);
-                            } else {
-                                // If it's a number, use it directly
-                                codePoint1 = value.getInt();
-                            }
-
-                            // Track if U is used in normal mode (not byte mode)
-                            if (!byteMode) {
-                                hasUnicodeInNormalMode = true;
-                            }
-
-                            // U format creates UTF-8 encoded output
-                            if (Character.isValidCodePoint(codePoint1)) {
-                                String unicodeChar1 = new String(Character.toChars(codePoint1));
-                                byte[] utf8Bytes1 = unicodeChar1.getBytes(StandardCharsets.UTF_8);
-                                try {
-                                    output.write(utf8Bytes1);
-                                } catch (IOException e) {
-                                    throw new RuntimeException(e);
-                                }
-                            } else {
-                                throw new PerlCompilerException("pack: invalid Unicode code point: " + codePoint1);
-                            }
+                            hasUnicodeInNormalMode = packU(value, byteMode, hasUnicodeInNormalMode, output);
                             break;
                         case 'f':
                             PackHelper.writeFloat(output, (float) value.getDouble());
@@ -290,5 +203,110 @@ public class Pack {
             // For U in byte mode or other formats, return as byte string
             return new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1));
         }
+    }
+
+    private static int handleStringFormat(int valueIndex, List<RuntimeScalar> values, boolean hasStar, char format, int count, boolean byteMode, ByteArrayOutputStream output) {
+        // String formats consume only one value
+        if (valueIndex >= values.size()) {
+            throw new PerlCompilerException("pack: not enough arguments");
+        }
+        RuntimeScalar value = (RuntimeScalar) values.get(valueIndex++);
+        String str = value.toString();
+        if (hasStar) {
+            // For string formats with *, use the string length as count
+            if (format == 'Z') {
+                count = str.length() + 1; // Include space for null terminator
+            } else {
+                count = str.length();
+            }
+        }
+        // In byte mode, we need to handle the string differently
+        if (byteMode && format == 'a') {
+            // In byte mode with 'a', preserve the string as-is
+            PackHelper.writeString(output, str, count, format, byteMode);
+        } else {
+            PackHelper.writeString(output, str, count, format, false);
+        }
+        return valueIndex;
+    }
+
+    private static void handleInfinity(RuntimeScalar value, char format) {
+        String strValue = value.toString().trim();
+        if (strValue.equalsIgnoreCase("Inf") || strValue.equalsIgnoreCase("+Inf") || strValue.equalsIgnoreCase("Infinity")) {
+            if (format == 'w') {
+                throw new PerlCompilerException("Cannot compress Inf");
+            } else {
+                throw new PerlCompilerException("Cannot pack Inf");
+            }
+        } else if (strValue.equalsIgnoreCase("-Inf") || strValue.equalsIgnoreCase("-Infinity")) {
+            if (format == 'w') {
+                throw new PerlCompilerException("Cannot compress -Inf");
+            } else {
+                throw new PerlCompilerException("Cannot pack -Inf");
+            }
+        } else if (strValue.equalsIgnoreCase("NaN")) {
+            if (format == 'w') {
+                throw new PerlCompilerException("Cannot compress NaN");
+            } else {
+                throw new PerlCompilerException("Cannot pack NaN");
+            }
+        }
+    }
+
+    private static void packW(RuntimeScalar value, ByteArrayOutputStream output) {
+        // Pack a Unicode code point as UTF-8 bytes
+        int codePoint;
+        String strValue = value.toString();
+        if (!strValue.isEmpty() && !Character.isDigit(strValue.charAt(0))) {
+            // If it's a character, get its code point
+            codePoint = strValue.codePointAt(0);
+        } else {
+            // If it's a number, use it directly as code point
+            codePoint = value.getInt();
+        }
+
+        if (Character.isValidCodePoint(codePoint)) {
+            String unicodeChar = new String(Character.toChars(codePoint));
+            byte[] utf8Bytes = unicodeChar.getBytes(StandardCharsets.UTF_8);
+            try {
+                output.write(utf8Bytes);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        } else {
+            throw new PerlCompilerException("pack: invalid Unicode code point: " + codePoint);
+        }
+    }
+
+    private static boolean packU(RuntimeScalar value, boolean byteMode, boolean hasUnicodeInNormalMode, ByteArrayOutputStream output) {
+        // Pack a Unicode character number as UTF-8
+        int codePoint1;
+        String strValue1 = value.toString();
+        if (!strValue1.isEmpty() && !Character.isDigit(strValue1.charAt(0))) {
+            // If it's a character, get its code point
+            codePoint1 = strValue1.codePointAt(0);
+        } else {
+            // If it's a number, use it directly
+            codePoint1 = value.getInt();
+        }
+
+        // Track if U is used in normal mode (not byte mode)
+        if (!byteMode) {
+            hasUnicodeInNormalMode = true;
+        }
+
+        // U format creates UTF-8 encoded output
+        if (Character.isValidCodePoint(codePoint1)) {
+            String unicodeChar1 = new String(Character.toChars(codePoint1));
+            byte[] utf8Bytes1 = unicodeChar1.getBytes(StandardCharsets.UTF_8);
+            try {
+                output.write(utf8Bytes1);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        } else {
+            throw new PerlCompilerException("pack: invalid Unicode code point: " + codePoint1);
+        }
+        return hasUnicodeInNormalMode;
     }
 }
