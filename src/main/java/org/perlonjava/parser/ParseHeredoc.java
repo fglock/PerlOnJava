@@ -101,7 +101,7 @@ public class ParseHeredoc {
 
                     if (lineToCompare.equals(identifier)) {
                         // End of heredoc - remove the end marker line from the content
-                        lines.remove(lines.size() - 1);
+                        lines.removeLast();
 
                         // Determine the indentation of the end marker
                         indentWhitespace = line.substring(0, line.length() - lineToCompare.length());

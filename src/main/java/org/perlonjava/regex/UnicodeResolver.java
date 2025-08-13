@@ -30,68 +30,54 @@ public class UnicodeResolver {
 
     public static String translateUnicodeProperty(String property, boolean negated) {
         try {
+            // Special cases
             if (property.equals("XPosixSpace")) {
-                property = "IsWhite_Space";
-                return (negated ? "\\P{" : "\\p{") + property + "}";
+                return (negated ? "\\P{" : "\\p{") + "IsWhite_Space}";
             }
 
-            if (property.equals(("_Perl_IDStart"))) {
+            if (property.equals("_Perl_IDStart")) {
+                String pattern = "\\p{L}\\p{Nl}_";
+                return negated ? "[^" + pattern + "]" : "[" + pattern + "]";
+            }
 
-                // \p{L} - All Unicode letters
-                // \p{Nl} - Letter numbers (like Roman numerals)
-                // _ - Underscore
-                property = "\\p{L}\\p{Nl}_";
+            if (property.equals("_Perl_IDCont")) {
+                String pattern = "\\p{L}\\p{Nl}\\p{Nd}\\p{Mn}\\p{Mc}\\p{Pc}";
+                return negated ? "[^" + pattern + "]" : "[" + pattern + "]";
+            }
 
-                if (negated) {
-                    return "[^" + property + "]";
-                } else {
-                    return "[" + property + "]";
+            // Remove prefixes
+            for (String prefix : new String[]{"Script=", "Block=", "In=", "Is="}) {
+                if (property.startsWith(prefix)) {
+                    property = property.substring(prefix.length());
+                    break;
                 }
             }
 
-            // Remove common prefixes like "Script=", "Block=", "In=", or "Is="
-            if (property.startsWith("Script=")) {
-                property = property.substring("Script=".length());
-            } else if (property.startsWith("Block=")) {
-                property = property.substring("Block=".length());
-            } else if (property.startsWith("In=")) {
-                property = property.substring("In=".length());
-            } else if (property.startsWith("Is=")) {
-                property = property.substring("Is=".length());
-            }
-
-            // Handle single-character properties (e.g., \p{L}, \p{N})
+            // Single character properties
             if (property.length() == 1) {
                 return (negated ? "\\P{" : "\\p{") + property + "}";
             }
 
-            // Handle combined properties (e.g., \p{Script=Hiragana;Letter})
+            // Combined properties
             if (property.contains(";")) {
-                String[] parts = property.split(";");
-                StringBuilder combinedPattern = new StringBuilder(negated ? "[^" : "[");
-                for (String part : parts) {
-                    combinedPattern.append(translateUnicodeProperty(part, false));
+                StringBuilder result = new StringBuilder(negated ? "[^" : "[");
+                for (String part : property.split(";")) {
+                    result.append(translateUnicodeProperty(part, false));
                 }
-                combinedPattern.append("]");
-                return combinedPattern.toString();
+                return result.append("]").toString();
             }
 
-            // Use ICU4J to resolve the Unicode property
+            // Standard Unicode properties
             UnicodeSet unicodeSet = new UnicodeSet();
-
-            // Handle block properties separately
             if (isBlockProperty(property)) {
                 unicodeSet.applyPropertyAlias("Block", property);
             } else {
                 unicodeSet.applyPropertyAlias(property, "");
             }
 
-            // Generate the Java-compatible regex pattern
-            if (negated) {
-                return "[^" + unicodeSet.toPattern(false) + "]";
-            } else {
-                return "[" + unicodeSet.toPattern(false) + "]";
-            }
+            String pattern = unicodeSet.toPattern(false);
+            return negated ? "[^" + pattern + "]" : "[" + pattern + "]";
+
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("Invalid or unsupported Unicode property: " + property, e);
         }
