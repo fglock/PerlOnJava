@@ -9,6 +9,8 @@ import org.perlonjava.codegen.JavaClassInfo;
 import org.perlonjava.lexer.Lexer;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.parser.Parser;
+import org.perlonjava.perlmodule.Strict;
+import org.perlonjava.perlmodule.Utf8;
 import org.perlonjava.runtime.*;
 import org.perlonjava.symbols.ScopedSymbolTable;
 
@@ -63,6 +65,10 @@ public class PerlLanguageProvider {
         globalSymbolTable.addVariable("this", "", null); // anon sub instance is local variable 0
         globalSymbolTable.addVariable("@_", "our", null); // Argument list is local variable 1
         globalSymbolTable.addVariable("wantarray", "", null); // Call context is local variable 2
+
+        if (compilerOptions.codeHasEncoding) {
+            globalSymbolTable.enableStrictOption(Strict.HINT_UTF8);
+        }
 
         // Create the compiler context
         EmitterContext ctx = new EmitterContext(

@@ -1,5 +1,7 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.ArgumentParser;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
@@ -20,9 +22,9 @@ public class FileUtils {
      * @return The decoded string content of the file
      * @throws IOException if the file cannot be read
      */
-    public static String readFileWithEncodingDetection(Path filePath) throws IOException {
+    public static String readFileWithEncodingDetection(Path filePath, ArgumentParser.CompilerOptions parsedArgs) throws IOException {
         byte[] bytes = Files.readAllBytes(filePath);
-        return detectEncodingAndDecode(bytes);
+        return detectEncodingAndDecode(bytes, parsedArgs);
     }
 
     /**
@@ -31,7 +33,7 @@ public class FileUtils {
      * @param bytes The file content as bytes
      * @return The decoded string content
      */
-    private static String detectEncodingAndDecode(byte[] bytes) {
+    private static String detectEncodingAndDecode(byte[] bytes, ArgumentParser.CompilerOptions parsedArgs) {
         if (bytes.length == 0) {
             return "";
         }
@@ -61,6 +63,7 @@ public class FileUtils {
         // For UTF-16 encodings, use a decoder that can handle malformed input
         // This is needed to preserve invalid surrogate sequences that Perl allows
         if (charset == StandardCharsets.UTF_16LE || charset == StandardCharsets.UTF_16BE) {
+            parsedArgs.codeHasEncoding = true;
             CharsetDecoder decoder = charset.newDecoder()
                     .onMalformedInput(CodingErrorAction.REPLACE)
                     .onUnmappableCharacter(CodingErrorAction.REPLACE);
