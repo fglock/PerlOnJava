@@ -89,14 +89,17 @@ public class FileUtils {
             boolean couldBeUTF16BE = true;
             int nullCount = 0;
 
-            for (int i = 0; i < Math.min(bytes.length, 100); i++) {
+            int lookSize = 1000;
+            int zeroesSize = lookSize/5;
+
+            for (int i = 0; i < Math.min(bytes.length, lookSize); i++) {
                 if (bytes[i] == 0) nullCount++;
             }
 
             // If we have a lot of null bytes, it might be UTF-16
             if (nullCount > bytes.length / 4) {
                 // Try to determine byte order by looking for ASCII patterns
-                for (int i = 0; i < Math.min(bytes.length - 1, 20); i += 2) {
+                for (int i = 0; i < Math.min(bytes.length - 1, zeroesSize); i += 2) {
                     byte b1 = bytes[i];
                     byte b2 = bytes[i + 1];
 
