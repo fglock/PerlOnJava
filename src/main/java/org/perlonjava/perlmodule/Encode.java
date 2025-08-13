@@ -91,10 +91,8 @@ public class Encode extends PerlModuleBase {
             Charset charset = getCharset(encodingName);
             byte[] bytes = string.getBytes(charset);
 
-            // Return the encoded bytes as a byte string
-            RuntimeScalar scalar = new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1));
-            scalar.type = BYTE_STRING;
-            return scalar.getList();
+            // Return the encoded bytes as a byte string, inside a list
+            return new RuntimeScalar(bytes).getList();
         } catch (Exception e) {
             throw new RuntimeException("Cannot encode string to " + encodingName + ": " + e.getMessage());
         }
@@ -137,10 +135,8 @@ public class Encode extends PerlModuleBase {
         String string = args.get(0).toString();
         byte[] bytes = string.getBytes(StandardCharsets.UTF_8);
 
-        // Return the encoded bytes as a string
-        RuntimeScalar scalar = new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1));
-        scalar.type = BYTE_STRING;
-        return scalar.getList();
+        // Return the encoded bytes as a string, inside a list
+        return new RuntimeScalar(bytes).getList();
     }
 
     /**

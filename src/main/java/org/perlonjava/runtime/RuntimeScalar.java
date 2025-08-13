@@ -5,6 +5,7 @@ import org.perlonjava.operators.StringOperators;
 import org.perlonjava.parser.NumberParser;
 import org.perlonjava.regex.RuntimeRegex;
 
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import static org.perlonjava.runtime.RuntimeArray.*;
@@ -134,6 +135,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             this.type = value.type;
         }
         this.value = value;
+    }
+
+    public RuntimeScalar(byte[] bytes) {
+        this.value = new String(bytes, StandardCharsets.ISO_8859_1);
+        this.type = BYTE_STRING;
     }
 
     /**
