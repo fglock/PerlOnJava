@@ -285,6 +285,7 @@ The following areas are currently under active development to enhance the functi
   - Add Indirect method call.
   - Add regex variables: `${^PREMATCH}`, `${^MATCH}`, `${^POSTMATCH}`.
   - Add regex operators: `\N` not-newline, `\b{gcb}`, `\B{gcb}` boundary assertions.
+  - Add regex properties supported by Perl but missing in Java regex.
   - Add command line switches: `-w`, `-W`, `-X`.
   - Process `\L`, `\U`, `\l`, `\u` in regex.
   - `Test::More` `skip` works.
