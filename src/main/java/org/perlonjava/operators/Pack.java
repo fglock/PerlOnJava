@@ -203,9 +203,7 @@ public class Pack {
             return new RuntimeScalar(new String(bytes, StandardCharsets.UTF_8));
         } else {
             // Mixed mode or byte mode - return as byte string
-            RuntimeScalar result = new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1));
-            result.type = RuntimeScalarType.BYTE_STRING;
-            return result;
+            return new RuntimeScalar(bytes);
         }
     }
 
