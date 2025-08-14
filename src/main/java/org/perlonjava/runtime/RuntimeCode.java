@@ -285,6 +285,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (perlClassName.endsWith("::")) {
                 perlClassName = perlClassName.substring(0, perlClassName.length() - 2);
             }
+            if (perlClassName.startsWith("::")) {
+                perlClassName = perlClassName.substring(2, perlClassName.length());
+            }
+            if (perlClassName.startsWith("main::")) {
+                perlClassName = perlClassName.substring(6, perlClassName.length());
+            }
+            if (perlClassName.isEmpty()) {
+                // Nothing left
+                perlClassName = "main";
+            }
         }
 
         // Method name can be:
