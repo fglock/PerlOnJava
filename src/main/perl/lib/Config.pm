@@ -167,6 +167,9 @@ $os_name =~ s/\s+/_/g;
     useperlio => 'define',
 );
 
+sub non_bincompat_options() {}
+sub bincompat_options() {}
+
 # Helper functions
 sub _determine_byteorder {
     # Java is big-endian in its bytecode, but native byte order varies
