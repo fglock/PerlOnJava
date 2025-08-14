@@ -250,6 +250,9 @@ public class RuntimeIO implements RuntimeScalarReference {
         if (fileName.startsWith(">>")) {
             mode = ">>";
             modeEndIndex = 2;
+        } else if (fileName.startsWith(">&")) {
+            mode = ">&";
+            modeEndIndex = 3;
         } else if (fileName.startsWith(">")) {
             mode = ">";
             modeEndIndex = 1;
@@ -336,9 +339,6 @@ public class RuntimeIO implements RuntimeScalarReference {
             if (">>".equals(mode)) {
                 RuntimeScalar size = fh.ioHandle.tell();
                 fh.ioHandle.seek(size.getLong()); // Move to end for appending
-            }
-            if (">&".equals(mode)) {
-                handleIOException(new PerlCompilerException("Not implemented mode >&"), "open failed");
             }
 
             // Apply any I/O layers
