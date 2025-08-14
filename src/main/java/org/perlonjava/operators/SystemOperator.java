@@ -38,7 +38,7 @@ public class SystemOperator {
         CommandResult result = executeCommand(command.toString(), true);
 
         // Set $? to the exit status
-        getGlobalVariable("main::?").set(result.exitCode);
+        getGlobalVariable("main::?").set(result.exitCode << 8);
 
         return processOutput(result.output, ctx);
     }
@@ -81,7 +81,7 @@ public class SystemOperator {
         }
 
         // Set $? to the exit status
-        getGlobalVariable("main::?").set(result.exitCode);
+        getGlobalVariable("main::?").set(result.exitCode << 8);
 
         return new RuntimeScalar(result.exitCode);
     }

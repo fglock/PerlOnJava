@@ -54,11 +54,12 @@ public class Main {
             // exit 255;                   # last resort
 
             RuntimeScalar errno = GlobalVariable.getGlobalVariable("main::!");
+            RuntimeScalar childStatus = GlobalVariable.getGlobalVariable("main::?");
+
             if (errno != null && errno.getInt() != 0) {
                 System.exit(errno.getInt());
             }
 
-            RuntimeScalar childStatus = GlobalVariable.getGlobalVariable("main::?");
             if (childStatus != null) {
                 int exitStatus = childStatus.getInt() >> 8;
                 if (exitStatus != 0) {
