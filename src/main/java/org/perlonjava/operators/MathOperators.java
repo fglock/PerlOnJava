@@ -141,7 +141,6 @@ public class MathOperators {
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() * arg2.getDouble());
         } else {
-            System.out.println("multiply " + arg1 + " * " + arg2 + " = " + getScalarInt((long) arg1.getInt() * (long) arg2.getInt()));
             return getScalarInt((long) arg1.getInt() * (long) arg2.getInt());
         }
     }
