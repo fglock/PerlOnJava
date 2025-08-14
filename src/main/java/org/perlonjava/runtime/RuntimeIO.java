@@ -206,7 +206,7 @@ public class RuntimeIO implements RuntimeScalarReference {
      * @param message additional context about the operation that failed
      * @return RuntimeScalar false value for error indication
      */
-    public static RuntimeScalar handleIOException(IOException e, String message) {
+    public static RuntimeScalar handleIOException(Exception e, String message) {
         return handleIOError(message + ": " + e.getMessage());
     }
 
@@ -336,6 +336,9 @@ public class RuntimeIO implements RuntimeScalarReference {
             if (">>".equals(mode)) {
                 RuntimeScalar size = fh.ioHandle.tell();
                 fh.ioHandle.seek(size.getLong()); // Move to end for appending
+            }
+            if (">&".equals(mode)) {
+                handleIOException(new PerlCompilerException("Not implemented mode >&"), "open failed");
             }
 
             // Apply any I/O layers
