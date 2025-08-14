@@ -238,7 +238,7 @@ public class PerlLanguageProvider {
 
         ctx.logDebug("Result of generatedMethod: " + result);
 
-        RuntimeIO.closeAllHandles();
+        // RuntimeIO.closeAllHandles();
         return result;
     }
 }
