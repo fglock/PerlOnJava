@@ -38,7 +38,13 @@ public class SystemOperator {
         CommandResult result = executeCommand(command.toString(), true);
 
         // Set $? to the exit status
-        getGlobalVariable("main::?").set(result.exitCode << 8);
+        if (result.exitCode == -1) {
+            // Command failed to execute
+            getGlobalVariable("main::?").set(-1);
+        } else {
+            // Normal exit - put exit code in upper byte
+            getGlobalVariable("main::?").set(result.exitCode << 8);
+        }
 
         return processOutput(result.output, ctx);
     }
@@ -81,7 +87,13 @@ public class SystemOperator {
         }
 
         // Set $? to the exit status
-        getGlobalVariable("main::?").set(result.exitCode << 8);
+        if (result.exitCode == -1) {
+            // Command failed to execute
+            getGlobalVariable("main::?").set(-1);
+        } else {
+            // Normal exit - put exit code in upper byte
+            getGlobalVariable("main::?").set(result.exitCode << 8);
+        }
 
         return new RuntimeScalar(result.exitCode);
     }
