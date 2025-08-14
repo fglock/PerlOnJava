@@ -1,6 +1,8 @@
 package org.perlonjava;
 
 import org.perlonjava.runtime.ErrorMessageUtil;
+import org.perlonjava.runtime.GlobalVariable;
+import org.perlonjava.runtime.RuntimeScalar;
 import org.perlonjava.scriptengine.PerlLanguageProvider;
 
 import java.util.Locale;
@@ -46,7 +48,26 @@ public class Main {
             String errorMessage = ErrorMessageUtil.stringifyException(t);
             System.out.println(errorMessage);
 
-            System.exit(1);
+            // Implement Perl's exit code logic based on $! and $?
+            // exit $! if $!;              # errno
+            // exit $? >> 8 if $? >> 8;    # child exit status
+            // exit 255;                   # last resort
+
+            RuntimeScalar errno = GlobalVariable.getGlobalVariable("main::!");
+            if (errno != null && errno.getInt() != 0) {
+                System.exit(errno.getInt());
+            }
+
+            RuntimeScalar childStatus = GlobalVariable.getGlobalVariable("main::?");
+            if (childStatus != null) {
+                int exitStatus = childStatus.getInt() >> 8;
+                if (exitStatus != 0) {
+                    System.exit(exitStatus);
+                }
+            }
+
+            // Last resort
+            System.exit(255);
         }
     }
 
