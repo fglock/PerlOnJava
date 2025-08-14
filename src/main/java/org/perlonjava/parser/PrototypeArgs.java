@@ -70,6 +70,7 @@ public class PrototypeArgs {
     }
 
     static ListNode consumeArgsWithPrototype(Parser parser, String prototype, boolean handleParen) {
+        int index = parser.tokenIndex;
         ListNode args = new ListNode(parser.tokenIndex);
         boolean hasParentheses = handleParen ? handleOpeningParenthesis(parser) : false;
 
@@ -100,6 +101,17 @@ public class PrototypeArgs {
             // Consume any trailing commas before checking for closing parenthesis
             while (isComma(TokenUtils.peek(parser))) {
                 consumeCommas(parser);
+            }
+
+            if (TokenUtils.peek(parser).text.equals("and") || TokenUtils.peek(parser).text.equals("or")) {
+                // backtrack to the opening parenthesis
+                parser.tokenIndex = index;
+                Node expr = ParsePrimary.parsePrimary(parser);
+                if (expr instanceof ListNode listNode) {
+                    // TODO add more checks here
+                    return listNode;
+                }
+                parser.throwError("Not implemented: and/or in argument list " + expr);
             }
 
             if (!TokenUtils.peek(parser).text.equals(")")) {
