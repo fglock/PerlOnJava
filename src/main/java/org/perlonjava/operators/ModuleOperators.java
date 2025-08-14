@@ -85,6 +85,14 @@ public class ModuleOperators {
                 } else {
                     // Use RuntimeIO.getPath to properly resolve the directory path first
                     Path dirPath = RuntimeIO.resolvePath(dirName);
+                    if (fileName.endsWith(".pm")) {
+                        // Try to find a .pmc file
+                        Path fullPath = dirPath.resolve(fileName + "c");
+                        if (Files.exists(fullPath)) {
+                            fullName = fullPath;
+                            break;
+                        }
+                    }
                     Path fullPath = dirPath.resolve(fileName);
                     if (Files.exists(fullPath)) {
                         fullName = fullPath;

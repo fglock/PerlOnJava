@@ -290,6 +290,7 @@ The following areas are currently under active development to enhance the functi
   - Process `\L`, `\U`, `\l`, `\u` in regex.
   - `Test::More` `skip` works.
   - UTF-16 is accepted in source code.
+  - Add support for `pmc` files.
   - Bugfix: methods can be called in all blessed reference types.
   - Bugfix: more robust `sprintf` formatting.
   - Bugfix: string constants can be larger than 64k.

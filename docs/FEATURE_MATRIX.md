@@ -333,6 +333,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`link`, `symlink`**: link is supported.
 - ✅  **`rename`**: `rename` is supported.
 - ✅  **`require` operator**: The `require` operator implemented; version checks are implemented.
+- ✅  **`require` operator**: `pmc` files are supported.
 - ✅  **`use` and `no` statements**: Module imports and version check via `use` and `no` are implemented; version checks are implemented. `use` arguments are executed at compile-time.
 - ✅  **`use version`**: `use version` enables the corresponding features, strictures, and warnings.
 - ✅  **Import methods**: `import`, `unimport` works.
