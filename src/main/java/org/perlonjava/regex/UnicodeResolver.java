@@ -54,7 +54,7 @@ public class UnicodeResolver {
                     return wrapProperty("IsPunctuation", negated);
                 case "XPosixUpper": case "Upper": case "Uppercase":
                     return wrapProperty("IsUppercase", negated);
-                case "XPosixWord": case "Word":
+                case "XPosixWord": case "Word": case "IsWord":
                     return wrapCharClass("\\p{IsAlphabetic}\\p{gc=Mn}\\p{gc=Me}\\p{gc=Mc}\\p{IsDigit}\\p{gc=Pc}", negated);
                 case "XPosixXDigit": case "Hex": case "Hex_Digit": case "XDigit":
                     return wrapProperty("IsHex_Digit", negated);
