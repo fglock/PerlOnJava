@@ -10,51 +10,19 @@ use Exporter 'import';
 our @EXPORT = qw(mkpath rmtree);
 our @EXPORT_OK = qw(make_path remove_tree mkpath rmtree);
 
-# Try to load Java backend
-my $has_java_backend = 0;
-eval {
-    require 'org.perlonjava.perlmodule.FilePath';
-    org::perlonjava::perlmodule::FilePath::initialize();
-    $has_java_backend = 1;
-};
-
-# Modern interface
-
 sub make_path {
-    if ($has_java_backend) {
-        return org::perlonjava::perlmodule::FilePath::make_path(@_);
-    }
-
-    # Fallback to pure Perl implementation
     _make_path_perl(@_);
 }
 
 sub remove_tree {
-    if ($has_java_backend) {
-        return org::perlonjava::perlmodule::FilePath::remove_tree(@_);
-    }
-
-    # Fallback to pure Perl implementation
     _remove_tree_perl(@_);
 }
 
-# Legacy interface
-
 sub mkpath {
-    if ($has_java_backend) {
-        return org::perlonjava::perlmodule::FilePath::mkpath(@_);
-    }
-
-    # Fallback to pure Perl implementation
     _mkpath_perl(@_);
 }
 
 sub rmtree {
-    if ($has_java_backend) {
-        return org::perlonjava::perlmodule::FilePath::rmtree(@_);
-    }
-
-    # Fallback to pure Perl implementation
     _rmtree_perl(@_);
 }
 
