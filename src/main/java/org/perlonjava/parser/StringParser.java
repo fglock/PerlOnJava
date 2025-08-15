@@ -423,7 +423,7 @@ public class StringParser {
             }
         }
 
-        parser.ctx.logDebug("v-string: <" + printable(vStringBuilder.toString()) + "> next:" + TokenUtils.peek(parser));
+        parser.ctx.logDebug("v-string: " + printable(vStringBuilder.toString()) + " next:" + TokenUtils.peek(parser));
 
         // Create a StringNode with the constructed v-string
         return new StringNode(vStringBuilder.toString(), true, currentIndex);

@@ -259,7 +259,7 @@ public class PrintVisitor implements Visitor {
     @Override
     public void visit(StringNode node) {
         appendIndent();
-        sb.append("StringNode: '").append(printable(node.value)).append("'\n");
+        sb.append("StringNode: ").append(printable(node.value)).append("\n");
         printAnnotations(node);
         indentLevel++;
         if (node.isVString) {
@@ -421,7 +421,8 @@ public class PrintVisitor implements Visitor {
             indentLevel++;
             node.annotations.forEach((key, value) -> {
                 appendIndent();
-                sb.append(key).append(": ").append(value).append("\n");
+                String v = printable(value.toString());
+                sb.append(key).append(": ").append(v).append("\n");
             });
             indentLevel--;
             indentLevel--;
