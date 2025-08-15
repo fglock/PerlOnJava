@@ -125,6 +125,7 @@ $os_name =~ s/\s+/_/g;
     d_crypt => 'define',
     d_double_has_inf => 'define',
     d_double_has_nan => 'define',
+    d_double_style_ieee => 'define',
 
     # Signal handling
     sig_name => 'HUP INT QUIT ILL TRAP ABRT BUS FPE KILL USR1 SEGV USR2 PIPE ALRM TERM',

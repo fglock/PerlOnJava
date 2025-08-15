@@ -880,8 +880,8 @@ public class ArgumentParser {
                     "    inPlaceEdit=" + inPlaceEdit + ",\n" +
                     "    code='" + (code != null ? code : "null") + "',\n" +
                     "    codeHasEncoding=" + codeHasEncoding + "\n" +
-                    "    fileName='" + ScalarUtils.printable(fileName) + "',\n" +
-                    "    inPlaceExtension='" + ScalarUtils.printable(inPlaceExtension) + "',\n" +
+                    "    fileName=" + ScalarUtils.printable(fileName) + ",\n" +
+                    "    inPlaceExtension=" + ScalarUtils.printable(inPlaceExtension) + ",\n" +
                     "    inputRecordSeparator=" + ScalarUtils.printable(inputRecordSeparator) + ",\n" +
                     "    outputRecordSeparator=" + ScalarUtils.printable(outputRecordSeparator) + ",\n" +
                     "    autoSplit=" + autoSplit + ",\n" +

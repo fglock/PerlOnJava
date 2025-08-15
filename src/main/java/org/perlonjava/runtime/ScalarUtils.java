@@ -19,6 +19,7 @@ public class ScalarUtils {
         }
 
         StringBuilder result = new StringBuilder();
+        result.append('\'');
         for (char c : string.toCharArray()) {
             if (Character.isISOControl(c)) {
                 result.append(String.format("\\x%02X", (int) c));
@@ -26,6 +27,7 @@ public class ScalarUtils {
                 result.append(c);
             }
         }
+        result.append('\'');
         return result.toString();
     }
 
