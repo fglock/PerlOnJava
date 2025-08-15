@@ -18,6 +18,8 @@ public class EmitForeach {
         Label loopEnd = new Label();
         Label continueLabel = new Label();
 
+        int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
+
         // Check if the variable is global
         boolean loopVariableIsGlobal = false;
         String globalVarName = null;
@@ -151,6 +153,8 @@ public class EmitForeach {
 
         mv.visitLabel(loopEnd);
         Local.localTeardown(localRecord, mv);
+
+        emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
         emitterVisitor.ctx.javaClassInfo.decrementStackLevel(1);
         mv.visitInsn(Opcodes.POP);
