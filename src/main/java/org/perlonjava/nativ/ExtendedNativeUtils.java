@@ -464,7 +464,7 @@ public class ExtendedNativeUtils extends NativeUtils {
         try {
             if (IS_WINDOWS) {
                 // Windows: Use 'net user' command
-                Process proc = Runtime.getRuntime().exec("net user");
+                Process proc = Runtime.getRuntime().exec(new String[]{"net", "user"});
                 try (Scanner scanner = new Scanner(proc.getInputStream())) {
                     boolean inUserList = false;
                     while (scanner.hasNextLine()) {
