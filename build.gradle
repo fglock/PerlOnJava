@@ -16,10 +16,10 @@ plugins {
     // Plugin for checking dependency updates
     id 'com.github.ben-manes.versions' version '0.52.0'
     // Plugin for automatically updating dependencies
-    id 'se.patrikerdes.use-latest-versions' version '0.2.18'
+    id 'se.patrikerdes.use-latest-versions' version '0.2.19'
     id 'application'
     // Plugin for creating OS packages (deb)
-    id 'com.netflix.nebula.ospackage' version '12.0.0'
+    id 'com.netflix.nebula.ospackage' version '12.1.0'
     // Plugin for creating fat/uber JARs
     id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
@@ -71,9 +71,9 @@ dependencies {
     implementation 'org.ow2.asm:asm:9.8'                           // ByteCode manipulation
     implementation 'org.ow2.asm:asm-util:9.8'                     // ASM utilities
     implementation 'com.ibm.icu:icu4j:77.1'                       // Unicode support
-    implementation 'com.alibaba.fastjson2:fastjson2:2.0.57'       // JSON processing
+    implementation 'com.alibaba.fastjson2:fastjson2:2.0.58'       // JSON processing
     implementation 'org.snakeyaml:snakeyaml-engine:2.10'           // YAML processing
-    implementation 'org.apache.commons:commons-csv:1.14.0'          // CSV processing
+    implementation 'org.apache.commons:commons-csv:1.14.1'          // CSV processing
     implementation 'net.java.dev.jna:jna:5.17.0'                   // Native access
     implementation 'net.java.dev.jna:jna-platform:5.17.0'          // Native access
 
