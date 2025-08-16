@@ -131,6 +131,27 @@ public class OperatorHandler {
         put("doFile", "doFile", "org/perlonjava/operators/ModuleOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("require", "require", "org/perlonjava/operators/ModuleOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;Z)Lorg/perlonjava/runtime/RuntimeScalar;");
 
+        // User/Group Information Functions
+        put("getlogin", "getlogin", "org/perlonjava/nativ/ExtendedNativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("getpwnam", "getpwnam", "org/perlonjava/nativ/ExtendedNativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeArray;");
+        put("getpwuid", "getpwuid", "org/perlonjava/nativ/ExtendedNativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeArray;");
+        put("getgrnam", "getgrnam", "org/perlonjava/nativ/ExtendedNativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeArray;");
+        put("getgrgid", "getgrgid", "org/perlonjava/nativ/ExtendedNativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeArray;");
+        put("getpwent", "getpwent", "org/perlonjava/nativ/ExtendedNativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeArray;");
+        put("getgrent", "getgrent", "org/perlonjava/nativ/ExtendedNativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeArray;");
+        put("setpwent", "setpwent", "org/perlonjava/nativ/ExtendedNativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("setgrent", "setgrent", "org/perlonjava/nativ/ExtendedNativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("endpwent", "endpwent", "org/perlonjava/nativ/ExtendedNativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("endgrent", "endgrent", "org/perlonjava/nativ/ExtendedNativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+
+        // Network Information Functions
+        put("gethostbyname", "gethostbyname", "org/perlonjava/nativ/ExtendedNativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeArray;");
+        put("gethostbyaddr", "gethostbyaddr", "org/perlonjava/nativ/ExtendedNativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeArray;");
+        put("getservbyname", "getservbyname", "org/perlonjava/nativ/ExtendedNativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeArray;");
+        put("getservbyport", "getservbyport", "org/perlonjava/nativ/ExtendedNativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeArray;");
+        put("getprotobyname", "getprotobyname", "org/perlonjava/nativ/ExtendedNativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeArray;");
+        put("getprotobynumber", "getprotobynumber", "org/perlonjava/nativ/ExtendedNativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeArray;");
+
         // Misc
         put("isa", "isa", "org/perlonjava/operators/ReferenceOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("bless", "bless", "org/perlonjava/operators/ReferenceOperators", "(Lorg/perlonjava/runtime/RuntimeScalar;Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeScalar;");
@@ -148,8 +169,8 @@ public class OperatorHandler {
         put("lstat", "lstat", "org/perlonjava/operators/Stat", "(Lorg/perlonjava/runtime/RuntimeScalar;)Lorg/perlonjava/runtime/RuntimeList;");
         put("vec", "vec", "org/perlonjava/operators/Vec", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("chmod", "chmod", "org/perlonjava/operators/Operator", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");
-        put("link", "link", "org/perlonjava/operators/NativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
-        put("symlink", "symlink", "org/perlonjava/operators/NativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("link", "link", "org/perlonjava/nativ/NativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
+        put("symlink", "symlink", "org/perlonjava/nativ/NativeUtils", "([Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
 
         put("unpack", "unpack", "org/perlonjava/operators/Unpack", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeList;");
         put("pack", "pack", "org/perlonjava/operators/Pack", "(Lorg/perlonjava/runtime/RuntimeList;)Lorg/perlonjava/runtime/RuntimeScalar;");

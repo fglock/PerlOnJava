@@ -380,6 +380,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`system` operator**: `system` is implemented.
 - ✅  **`exec` operator**: `exec` is implemented.
 - ❌  **`system` operator**: Indirect object notation for `system` and `exec` is not implemented.
+- ✅  **User/Group operators, Network info operators**: `getlogin`, `getpwnam`, `getpwuid`, `getgrnam`, `getgrgid`, `getpwent`, `getgrent`, `setpwent`, `setgrent`, `endpwent`, `endgrent`, `gethostbyname`, `gethostbyaddr`, `getservbyname`, `getservbyport`, `getprotobyname`, `getprotobynumber`.
 
 ## I/O Operations
 
@@ -614,8 +615,8 @@ The DBI module provides seamless integration with JDBC drivers:
 - ❌  **Auto-close files**: File auto-close depends on handling of object destruction, may be incompatible with JVM garbage collection.
 - ❌  **Low-level socket functions**: accept, bind, connect, getpeername, getsockname, getsockopt, listen, recv, send, setsockopt, shutdown, socket, socketpair
 - ❌  **System V interprocess communication functions**: msgctl, msgget, msgrcv, msgsnd, semctl, semget, semop, shmctl, shmget, shmread, shmwrite
-- ❌  **Fetching user and group info**: endgrent, endhostent, endnetent, endpwent, getgrent, getgrgid, getgrnam, getlogin, getpwent, getpwnam, getpwuid, setgrent, setpwent
-- ❌  **Fetching network info**: endprotoent, endservent, gethostbyaddr, gethostbyname, gethostent, getnetbyaddr, getnetbyname, getnetent, getprotobyname, getprotobynumber, getprotoent, getservbyname, getservbyport, getservent, sethostent, setnetent, setprotoent, setservent
+- ❌  **Fetching user and group info**: endhostent, endnetent
+- ❌  **Fetching network info**: endprotoent, endservent, gethostent, getnetbyaddr, getnetbyname, getnetent, getprotoent, getservbyname, getservent, sethostent, setnetent, setprotoent, setservent
 - ❌  **Keywords related to the control flow of the Perl program**: `dump` operator.
 - ❌  **Tail calls**: `goto` going to a different subroutine as a tail call is not supported.
 

@@ -100,12 +100,11 @@ public class CoreOperatorResolver {
             case "msgctl", "msgget", "msgrcv", "msgsnd", "semctl", "semget", "semop",
                  "shmctl", "shmget", "shmread", "shmwrite" ->
                     throw new PerlCompilerException(parser.tokenIndex, "Not implemented: System V IPC operator: " + token.text, parser.ctx.errorUtil);
-            case "endgrent", "endhostent", "endnetent", "endpwent", "getgrent", "getgrgid",
-                 "getgrnam", "getlogin", "getpwent", "getpwnam", "getpwuid", "setgrent", "setpwent" ->
+            case "endhostent", "endnetent" ->
                     throw new PerlCompilerException(parser.tokenIndex, "Not implemented: User/Group info operator: " + token.text, parser.ctx.errorUtil);
-            case "endprotoent", "endservent", "gethostbyaddr", "gethostbyname", "gethostent",
-                 "getnetbyaddr", "getnetbyname", "getnetent", "getprotobyname", "getprotobynumber",
-                 "getprotoent", "getservbyname", "getservbyport", "getservent", "sethostent",
+            case "endprotoent", "endservent", "gethostent",
+                 "getnetbyaddr", "getnetbyname", "getnetent",
+                 "getprotoent", "getservent", "sethostent",
                  "setnetent", "setprotoent", "setservent" ->
                     throw new PerlCompilerException(parser.tokenIndex, "Not implemented: Network info operator: " + token.text, parser.ctx.errorUtil);
             default -> parseWithPrototype(parser, token, currentIndex);
