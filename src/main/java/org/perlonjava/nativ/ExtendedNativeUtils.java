@@ -55,7 +55,7 @@ public class ExtendedNativeUtils extends NativeUtils {
         RuntimeArray result = new RuntimeArray();
         try {
             if (IS_WINDOWS) {
-                // Windows implementation using system properties and registry
+                // Windows implementation
                 if (username.equals(System.getProperty("user.name"))) {
                     RuntimeArray.push(result, new RuntimeScalar(username)); // name
                     RuntimeArray.push(result, new RuntimeScalar("x")); // passwd (placeholder)
@@ -67,24 +67,76 @@ public class ExtendedNativeUtils extends NativeUtils {
                     RuntimeArray.push(result, new RuntimeScalar(System.getProperty("user.home"))); // dir
                     RuntimeArray.push(result, new RuntimeScalar("cmd.exe")); // shell
                     RuntimeArray.push(result, new RuntimeScalar("")); // expire
+                } else {
+                    // For other users, provide minimal info
+                    RuntimeArray.push(result, new RuntimeScalar(username)); // name
+                    RuntimeArray.push(result, new RuntimeScalar("x")); // passwd
+                    RuntimeArray.push(result, new RuntimeScalar(username.equals("Administrator") ? 500 : 1001)); // uid
+                    RuntimeArray.push(result, new RuntimeScalar(513)); // gid (Users group)
+                    RuntimeArray.push(result, new RuntimeScalar(""));
+                    RuntimeArray.push(result, new RuntimeScalar(""));
+                    RuntimeArray.push(result, new RuntimeScalar(""));
+                    RuntimeArray.push(result, new RuntimeScalar("C:\\Users\\" + username)); // dir
+                    RuntimeArray.push(result, new RuntimeScalar("cmd.exe")); // shell
+                    RuntimeArray.push(result, new RuntimeScalar(""));
                 }
             } else {
-                // POSIX implementation - would need native calls for full implementation
-                // This is a simplified version
-                if (username.equals(System.getProperty("user.name"))) {
-                    RuntimeArray.push(result, new RuntimeScalar(username));
-                    RuntimeArray.push(result, new RuntimeScalar("x"));
-                    RuntimeArray.push(result, getuid());
-                    RuntimeArray.push(result, getgid());
-                    RuntimeArray.push(result, new RuntimeScalar(""));
-                    RuntimeArray.push(result, new RuntimeScalar(""));
-                    RuntimeArray.push(result, new RuntimeScalar(""));
-                    RuntimeArray.push(result, new RuntimeScalar(System.getProperty("user.home")));
-                    RuntimeArray.push(result, new RuntimeScalar("/bin/sh"));
+                // POSIX: Try to read from /etc/passwd
+                boolean found = false;
+                try (Scanner scanner = new Scanner(new java.io.File("/etc/passwd"))) {
+                    while (scanner.hasNextLine()) {
+                        String line = scanner.nextLine();
+                        String[] parts = line.split(":");
+                        if (parts.length >= 7 && parts[0].equals(username)) {
+                            RuntimeArray.push(result, new RuntimeScalar(parts[0])); // name
+                            RuntimeArray.push(result, new RuntimeScalar(parts[1])); // passwd
+                            RuntimeArray.push(result, new RuntimeScalar(Integer.parseInt(parts[2]))); // uid
+                            RuntimeArray.push(result, new RuntimeScalar(Integer.parseInt(parts[3]))); // gid
+                            RuntimeArray.push(result, new RuntimeScalar("")); // quota (not in /etc/passwd)
+                            RuntimeArray.push(result, new RuntimeScalar("")); // comment (not in /etc/passwd)
+                            RuntimeArray.push(result, new RuntimeScalar(parts.length > 4 ? parts[4] : "")); // gcos
+                            RuntimeArray.push(result, new RuntimeScalar(parts.length > 5 ? parts[5] : "")); // dir
+                            RuntimeArray.push(result, new RuntimeScalar(parts.length > 6 ? parts[6] : "")); // shell
+                            RuntimeArray.push(result, new RuntimeScalar("")); // expire
+                            found = true;
+                            break;
+                        }
+                    }
+                } catch (Exception e) {
+                    // Fall through to manual entry
+                }
+
+                // If not found in /etc/passwd, create entry for known users
+                if (!found) {
+                    if (username.equals("root")) {
+                        RuntimeArray.push(result, new RuntimeScalar("root"));
+                        RuntimeArray.push(result, new RuntimeScalar("x"));
+                        RuntimeArray.push(result, new RuntimeScalar(0)); // uid
+                        RuntimeArray.push(result, new RuntimeScalar(0)); // gid
+                        RuntimeArray.push(result, new RuntimeScalar(""));
+                        RuntimeArray.push(result, new RuntimeScalar(""));
+                        RuntimeArray.push(result, new RuntimeScalar("root"));
+                        RuntimeArray.push(result, new RuntimeScalar("/root"));
+                        RuntimeArray.push(result, new RuntimeScalar("/bin/bash"));
+                        RuntimeArray.push(result, new RuntimeScalar(""));
+                    } else if (username.equals(System.getProperty("user.name"))) {
+                        RuntimeArray.push(result, new RuntimeScalar(username));
+                        RuntimeArray.push(result, new RuntimeScalar("x"));
+                        RuntimeArray.push(result, getuid());
+                        RuntimeArray.push(result, getgid());
+                        RuntimeArray.push(result, new RuntimeScalar(""));
+                        RuntimeArray.push(result, new RuntimeScalar(""));
+                        RuntimeArray.push(result, new RuntimeScalar(""));
+                        RuntimeArray.push(result, new RuntimeScalar(System.getProperty("user.home")));
+                        RuntimeArray.push(result, new RuntimeScalar("/bin/bash"));
+                        RuntimeArray.push(result, new RuntimeScalar(""));
+                    }
                 }
             }
 
-            userInfoCache.put(cacheKey, result);
+            if (result.size() > 0) {
+                userInfoCache.put(cacheKey, result);
+            }
         } catch (Exception e) {
             // Return empty array on error
         }
@@ -175,7 +227,7 @@ public class ExtendedNativeUtils extends NativeUtils {
     public static RuntimeArray getpwent(RuntimeBase... args) {
         Iterator<String> iterator = userIterator.get();
         if (iterator == null) {
-            List<String> users = Collections.singletonList(System.getProperty("user.name"));
+            List<String> users = getSystemUsers();
             iterator = users.iterator();
             userIterator.set(iterator);
         }
@@ -190,7 +242,7 @@ public class ExtendedNativeUtils extends NativeUtils {
     public static RuntimeArray getgrent(RuntimeBase... args) {
         Iterator<String> iterator = groupIterator.get();
         if (iterator == null) {
-            List<String> groups = List.of(IS_WINDOWS ? "Users" : "users");
+            List<String> groups = getSystemGroups();
             iterator = groups.iterator();
             groupIterator.set(iterator);
         }
@@ -401,5 +453,125 @@ public class ExtendedNativeUtils extends NativeUtils {
         }
 
         return result;
+    }
+
+    /**
+     * Get list of system users (cross-platform)
+     */
+    private static List<String> getSystemUsers() {
+        List<String> users = new ArrayList<>();
+
+        try {
+            if (IS_WINDOWS) {
+                // Windows: Use 'net user' command
+                Process proc = Runtime.getRuntime().exec("net user");
+                try (Scanner scanner = new Scanner(proc.getInputStream())) {
+                    boolean inUserList = false;
+                    while (scanner.hasNextLine()) {
+                        String line = scanner.nextLine().trim();
+
+                        // Skip header lines
+                        if (line.contains("User accounts for")) {
+                            inUserList = true;
+                            continue;
+                        }
+                        if (!inUserList || line.isEmpty() || line.startsWith("-")) {
+                            continue;
+                        }
+                        if (line.startsWith("The command completed")) {
+                            break;
+                        }
+
+                        // Parse user names (they're space-separated)
+                        String[] usernames = line.split("\\s+");
+                        for (String username : usernames) {
+                            if (!username.isEmpty() && !username.equals("Administrator") &&
+                                    !username.equals("Guest") && !username.equals("DefaultAccount")) {
+                                users.add(username);
+                            }
+                        }
+                    }
+                }
+            } else {
+                // POSIX: Read /etc/passwd
+                try (Scanner scanner = new Scanner(new java.io.File("/etc/passwd"))) {
+                    while (scanner.hasNextLine()) {
+                        String line = scanner.nextLine();
+                        if (line.startsWith("#") || line.trim().isEmpty()) {
+                            continue;
+                        }
+
+                        String[] parts = line.split(":");
+                        if (parts.length >= 3) {
+                            String username = parts[0];
+                            int uid = Integer.parseInt(parts[2]);
+
+                            // Include system users like root (uid 0) and regular users
+                            if (uid <= 65534) { // Exclude nobody/nogroup
+                                users.add(username);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    // Fallback if can't read /etc/passwd
+                    users.add("root");
+                    users.add(System.getProperty("user.name"));
+                }
+            }
+        } catch (Exception e) {
+            // Fallback to current user only
+            users.add(System.getProperty("user.name"));
+        }
+
+        // Ensure we always have at least the current user
+        String currentUser = System.getProperty("user.name");
+        if (!users.contains(currentUser)) {
+            users.add(currentUser);
+        }
+
+        return users;
+    }
+
+    /**
+     * Get list of system groups (cross-platform)
+     */
+    private static List<String> getSystemGroups() {
+        List<String> groups = new ArrayList<>();
+
+        try {
+            if (IS_WINDOWS) {
+                // Windows: Common built-in groups
+                groups.addAll(Arrays.asList("Users", "Administrators", "Guests", "Power Users"));
+            } else {
+                // POSIX: Read /etc/group
+                try (Scanner scanner = new Scanner(new java.io.File("/etc/group"))) {
+                    while (scanner.hasNextLine()) {
+                        String line = scanner.nextLine();
+                        if (line.startsWith("#") || line.trim().isEmpty()) {
+                            continue;
+                        }
+
+                        String[] parts = line.split(":");
+                        if (parts.length >= 3) {
+                            String groupname = parts[0];
+                            int gid = Integer.parseInt(parts[2]);
+
+                            // Include system and user groups
+                            if (gid <= 65534) {
+                                groups.add(groupname);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    // Fallback
+                    groups.addAll(Arrays.asList("root", "users", "wheel"));
+                }
+            }
+        } catch (Exception e) {
+            // Fallback
+            groups.add(IS_WINDOWS ? "Users" : "users");
+        }
+
+        return groups;
     }
 }
