@@ -262,6 +262,9 @@ public class RuntimeIO implements RuntimeScalarReference {
         } else if (fileName.startsWith("+>")) {
             mode = "+>";
             modeEndIndex = 2;
+        } else if (fileName.startsWith("+<&=")) {
+            mode = "+<&=";
+            modeEndIndex = 4;
         } else if (fileName.startsWith("+<")) {
             mode = "+<";
             modeEndIndex = 2;
