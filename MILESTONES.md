@@ -9,6 +9,31 @@
 
 ## Completed Milestones
 
+- **v5.42.0**: 100k Tests Passed, Tie Support, and Total Compatibility
+  - Add `tie`, `tied`, `untie` operators.
+  - Add all `tie` types: scalar, array, hash, and handle.
+  - Add operators: `sysread`, `syswrite`, `kill`, `utime`, `chown`, `waitpid`, `umask`, `readlink`, `link`, `symlink`, `rename`.
+  - Add modules: `XSLoader`, `Encode`,`Config`, `Errno`, `Tie::Scalar`, `Tie::Array`, `Tie::Hash`, `Tie::Handle`, `Perl::OSType`, `Env`, `MIME::Base64`, `MIME::QuotedPrint`, `Digest::SHA`, `Digest::MD5`, `Digest`.
+  - Add key-value slices: `%c{"1", "3"}`.
+  - Add special variable: `$^X`.
+  - Add `W`, `H`, `F`, `h`, `c`, `u`, `C0`, `U0` formats to `pack`, `unpack`.
+  - Add dualvar.
+  - Add `DATA` file handle.
+  - Add Indirect method call.
+  - Add regex variables: `${^PREMATCH}`, `${^MATCH}`, `${^POSTMATCH}`.
+  - Add regex operators: `\N` not-newline, `\b{gcb}`, `\B{gcb}` boundary assertions.
+  - Add regex properties supported by Perl but missing in Java regex.
+  - Add command line switches: `-w`, `-W`, `-X`.
+  - Process `\L`, `\U`, `\l`, `\u` in regex.
+  - `Test::More` `skip` works.
+  - UTF-16 is accepted in source code.
+  - Add support for `pmc` files.
+  - Bugfix: methods can be called in all blessed reference types.
+  - Bugfix: more robust `sprintf` formatting.
+  - Bugfix: string constants can be larger than 64k.
+  - Bugfix: fixed foreach loops with global variables.
+
+
 - **v3.1.0**: Tracks Perl 5.42.0
   - Update Perl version to `5.42.0`.
   - Added features: `keyword_all`, `keyword_any`
@@ -272,29 +297,8 @@ The following areas are currently under active development to enhance the functi
 
 ## Upcoming Milestones
 
-- **v3.2.0**: Next minor version
-  - Add `tie`, `tied`, `untie` operators.
-  - Add all `tie` types: scalar, array, hash, and handle.
-  - Add operators: `sysread`, `syswrite`, `kill`, `utime`, `chown`, `waitpid`, `umask`, `readlink`, `link`, `symlink`, `rename`.
-  - Add modules: `XSLoader`, `Encode`,`Config`, `Errno`, `Tie::Scalar`, `Tie::Array`, `Tie::Hash`, `Tie::Handle`, `Perl::OSType`, `Env`, `MIME::Base64`, `MIME::QuotedPrint`, `Digest::SHA`, `Digest::MD5`, `Digest`.
-  - Add key-value slices: `%c{"1", "3"}`.
-  - Add special variable: `$^X`.
-  - Add `W`, `H`, `F`, `h`, `c`, `u`, `C0`, `U0` formats to `pack`, `unpack`.
-  - Add dualvar.
-  - Add `DATA` file handle.
-  - Add Indirect method call.
-  - Add regex variables: `${^PREMATCH}`, `${^MATCH}`, `${^POSTMATCH}`.
-  - Add regex operators: `\N` not-newline, `\b{gcb}`, `\B{gcb}` boundary assertions.
-  - Add regex properties supported by Perl but missing in Java regex.
-  - Add command line switches: `-w`, `-W`, `-X`.
-  - Process `\L`, `\U`, `\l`, `\u` in regex.
-  - `Test::More` `skip` works.
-  - UTF-16 is accepted in source code.
-  - Add support for `pmc` files.
-  - Bugfix: methods can be called in all blessed reference types.
-  - Bugfix: more robust `sprintf` formatting.
-  - Bugfix: string constants can be larger than 64k.
-  - Bugfix: fixed foreach loops with global variables.
+- **v5.42.1**: Next minor version
+
   - Planned release date: 2025-12-10.
 
 - Work in Progress

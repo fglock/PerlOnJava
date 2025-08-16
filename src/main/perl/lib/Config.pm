@@ -68,7 +68,7 @@ $os_name =~ s/\s+/_/g;
     osvers => $os_version,
 
     # PerlOnJava specific
-    perlonjava => '3.0.0',
+    perlonjava => '5.42.0',
     java_version => $java_version,
     java_vendor => $java_vendor,
     java_home => $java_home,
