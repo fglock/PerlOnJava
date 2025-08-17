@@ -184,7 +184,7 @@ sub subtest {
         $code->();
 
         # Print subtest plan
-        print "${Test_Indent}1..$Test_Count\n";
+        # print "${Test_Indent}1..$Test_Count\n";
         $result = $Failed_Count == 0;
     }
 
