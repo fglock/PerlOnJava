@@ -108,23 +108,23 @@ public class SprintfOperator {
         switch (conversion) {
             case 'd':
             case 'i':
-                return formatInteger(value.getInt(), flags, width, precision, "%d");
+                return formatInteger(value.getLong(), flags, width, precision, "%d");
 
             case 'u':
                 return formatUnsigned(value, flags, width, precision);
 
             case 'o':
             case 'O':  // Add support for uppercase O
-                return formatInteger(value.getInt(), flags, width, precision, "%o");
+                return formatInteger(value.getLong(), flags, width, precision, "%o");
 
             case 'x':
             case 'X':
                 String hexFormat = conversion == 'x' ? "%x" : "%X";
-                return formatInteger(value.getInt(), flags, width, precision, hexFormat);
+                return formatInteger(value.getLong(), flags, width, precision, hexFormat);
 
             case 'b':
             case 'B':  // Add support for uppercase B
-                return formatBinary(value.getInt(), width);
+                return formatBinary(value.getLong(), width);
 
             case 'e':
             case 'E':
@@ -144,7 +144,7 @@ public class SprintfOperator {
                 return formatString(value.toString(), flags, width, precision);
 
             case 'p':
-                return String.format("%x", value.getInt());
+                return String.format("%x", value.getLong());
 
             case 'n':
                 throw new PerlCompilerException("%n specifier not supported");
@@ -201,7 +201,7 @@ public class SprintfOperator {
         return result;
     }
 
-    private static String formatInteger(int value, String flags, int width,
+    private static String formatInteger(long value, String flags, int width,
                                         int precision, String format) {
         StringBuilder spec = new StringBuilder("%");
         spec.append(flags);
@@ -238,8 +238,8 @@ public class SprintfOperator {
         return String.format(spec.toString(), (long)dValue);
     }
 
-    private static String formatBinary(int value, int width) {
-        String binary = Integer.toBinaryString(value);
+    private static String formatBinary(long value, int width) {
+        String binary = Long.toBinaryString(value);
 
         // Apply default width if not specified
         if (width == 0) {
@@ -281,7 +281,7 @@ public class SprintfOperator {
             throw new PerlCompilerException("Cannot printf " + special + " with 'c'");
         }
 
-        return String.valueOf((char)value.getInt());
+        return String.valueOf((char)value.getLong());
     }
 
     private static String formatString(String value, String flags, int width,
