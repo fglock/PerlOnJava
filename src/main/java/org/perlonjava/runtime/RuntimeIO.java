@@ -825,7 +825,11 @@ public class RuntimeIO implements RuntimeScalarReference {
             lastAccesseddHandle.flush();
         }
         lastAccesseddHandle = this;
-        return ioHandle.write(data);
+        RuntimeScalar result = ioHandle.write(data);
+        if (data.endsWith("\n")) {
+            ioHandle.flush();
+        }
+        return result;
     }
 
     /**
