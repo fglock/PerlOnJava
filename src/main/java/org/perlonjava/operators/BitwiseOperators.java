@@ -35,7 +35,14 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise AND operation.
      */
     public static RuntimeScalar bitwiseAndBinary(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        return new RuntimeScalar(runtimeScalar.getLong() & arg2.getLong());
+        // Use long values to preserve full precision
+        long val1 = runtimeScalar.getLong();
+        long val2 = arg2.getLong();
+
+        // Perform AND operation preserving all bits
+        long result = val1 & val2;
+
+        return new RuntimeScalar(result);
     }
 
     /**
@@ -61,7 +68,14 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise OR operation.
      */
     public static RuntimeScalar bitwiseOrBinary(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        return new RuntimeScalar(runtimeScalar.getLong() | arg2.getLong());
+        // Use long values to preserve full precision
+        long val1 = runtimeScalar.getLong();
+        long val2 = arg2.getLong();
+
+        // Perform OR operation preserving all bits
+        long result = val1 | val2;
+
+        return new RuntimeScalar(result);
     }
 
     /**
@@ -87,7 +101,14 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise XOR operation.
      */
     public static RuntimeScalar bitwiseXorBinary(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        return new RuntimeScalar(runtimeScalar.getLong() ^ arg2.getLong());
+        // Use long values to preserve full precision
+        long val1 = runtimeScalar.getLong();
+        long val2 = arg2.getLong();
+
+        // Perform XOR operation preserving all bits
+        long result = val1 ^ val2;
+
+        return new RuntimeScalar(result);
     }
 
     /**
@@ -106,6 +127,7 @@ public class BitwiseOperators {
 
     /**
      * Performs a bitwise NOT operation on a numeric RuntimeScalar object.
+     * This method now properly handles 32-bit unsigned integer semantics like Perl.
      *
      * @param runtimeScalar The operand.
      * @return A new RuntimeScalar with the result of the bitwise NOT operation.
@@ -113,19 +135,14 @@ public class BitwiseOperators {
     public static RuntimeScalar bitwiseNotBinary(RuntimeScalar runtimeScalar) {
         long value = runtimeScalar.getLong();
 
-        // Perl uses 32-bit semantics for bitwise operations by default
-        // First cast to int to get 32-bit value, then apply NOT
-        int intValue = (int) value;
-        int intResult = ~intValue;
+        // Perl uses 32-bit semantics for bitwise operations
+        // Treat the input as an unsigned 32-bit value, then apply bitwise NOT
 
-        // Convert back to long, preserving sign extension
-        long result = intResult;
+        // First, ensure we're working with a 32-bit value by masking
+        long masked32bit = value & 0xFFFFFFFFL;
 
-        // If the result is negative, convert to unsigned 32-bit representation
-        if (result < 0) {
-            // Add 2^32 to convert to unsigned 32-bit value
-            result = result + 4294967296L; // 2^32
-        }
+        // Apply bitwise NOT and mask to 32 bits
+        long result = (~masked32bit) & 0xFFFFFFFFL;
 
         return new RuntimeScalar(result);
     }
