@@ -119,6 +119,7 @@ public class ListParser {
             expr.handle = FileHandle.parseFileHandle(parser);
             if (expr.handle == null || !isSpaceAfterPrintBlock(parser)) {
                 // Backtrack
+                expr.handle = null;
                 parser.tokenIndex = currentIndex;
                 hasParen = false;
             }
