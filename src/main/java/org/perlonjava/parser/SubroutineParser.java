@@ -10,6 +10,7 @@ import org.perlonjava.runtime.*;
 import org.perlonjava.symbols.SymbolTable;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -380,6 +381,10 @@ public class SubroutineParser {
 
                 // Retrieve the 'apply' method from the generated class
                 code.methodHandle = RuntimeCode.lookup.findVirtual(generatedClass, "apply", RuntimeCode.methodType);
+
+                // Set the __SUB__ instance field to codeRef
+                Field field = code.codeObject.getClass().getDeclaredField("__SUB__");
+                field.set(code.codeObject, codeRef);
             } catch (Exception e) {
                 // Handle any exceptions during subroutine creation
                 throw new PerlCompilerException("Subroutine error: " + e.getMessage());
