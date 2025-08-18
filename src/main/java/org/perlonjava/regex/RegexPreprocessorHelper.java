@@ -238,7 +238,7 @@ public class RegexPreprocessorHelper {
                             if (nextChar != -1 && nextChar < lastChar) {
                                 String rangeStart = Character.toString(lastChar);
                                 String rangeEnd = Character.toString(nextChar);
-                                RegexPreprocessor.regexError(s, offset,
+                                RegexPreprocessor.regexError(s, offset + 2,
                                     "Invalid [] range \"" + rangeStart + "-" + rangeEnd + "\" in regex");
                             }
                         }
@@ -483,17 +483,17 @@ public class RegexPreprocessorHelper {
 
         String content = s.substring(start, end);
 
-        try {
+        // try {
             // Parse and transform the extended character class
             String transformed = transformExtendedClass(content, s, start);
             sb.append(transformed);
 
             // Skip past the '])'
             return end + 1;
-        } catch (Exception e) {
-            RegexPreprocessor.regexError(s, start, e.getMessage());
-            return -1; // Never reached due to exception
-        }
+//        } catch (Exception e) {
+//            RegexPreprocessor.regexError(s, start, e.getMessage());
+//            return -1; // Never reached due to exception
+//        }
     }
 
     /**
@@ -731,7 +731,7 @@ public class RegexPreprocessorHelper {
             } else if (c == '-' && lastChar != -1 && i + 1 < content.length()) {
                 char nextChar = content.charAt(i + 1);
                 if (!Character.isWhitespace(nextChar) && nextChar != ']' && nextChar != '\\' && nextChar < lastChar) {
-                    RegexPreprocessor.regexError(originalRegex, classStart + i + 1,
+                    RegexPreprocessor.regexError(originalRegex, classStart + i + 3,
                         String.format("Invalid [] range \"%c-%c\" in regex", lastChar, nextChar));
                 }
             } else if (c != '-' && c != '^' && c != '[' && c != ':') {
