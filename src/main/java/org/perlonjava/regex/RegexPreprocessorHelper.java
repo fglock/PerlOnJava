@@ -148,10 +148,11 @@ public class RegexPreprocessorHelper {
         } else {
             int c2 = s.codePointAt(offset);
             if (c2 >= '1' && c2 <= '3') {
-                if (offset < length + 1) {
-                    int off = offset;
-                    int c3 = s.codePointAt(off++);
-                    int c4 = s.codePointAt(off++);
+                // Check if this might be an octal sequence \123
+                // We need at least 2 more characters after the current position
+                if (offset + 2 < length) {
+                    int c3 = s.codePointAt(offset + 1);
+                    int c4 = s.codePointAt(offset + 2);
                     if ((c3 >= '0' && c3 <= '7') && (c4 >= '0' && c4 <= '7')) {
                         // Handle \000 octal sequences
                         sb.append('0');
