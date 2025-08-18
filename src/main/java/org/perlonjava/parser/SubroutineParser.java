@@ -143,7 +143,7 @@ public class SubroutineParser {
     }
 
     private static boolean isValidIndirectMethod(String subName) {
-        if (CORE_PROTOTYPES.containsKey(subName)) {
+        if (CORE_PROTOTYPES.containsKey(subName) || subName.startsWith("CORE::")) {
             return false;
         }
         return true;
