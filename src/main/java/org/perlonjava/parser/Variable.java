@@ -104,6 +104,8 @@ public class Variable {
      * @return A Node representing the parsed code reference or subroutine call.
      */
     static Node parseCoderefVariable(Parser parser, LexerToken token) {
+        int index = parser.tokenIndex;
+
         // Set a flag to allow parentheses after a variable, as in &$sub(...)
         parser.parsingForLoopVariable = true;
         // Parse the variable following the `&` sigil
@@ -120,6 +122,13 @@ public class Variable {
 
         // Check if the node is an OperatorNode with a BinaryOperatorNode operand
         if (node instanceof OperatorNode operatorNode) {
+            if (operatorNode.operand instanceof IdentifierNode identifierNode
+                    && identifierNode.name.equals("CORE::__SUB__")
+                    && parser.ctx.symbolTable.isFeatureCategoryEnabled("current_sub")) {
+                // &CORE::__SUB__
+                return new OperatorNode("__SUB__", new ListNode(index), index);
+            }
+
             if (operatorNode.operand instanceof BinaryOperatorNode binaryOperatorNode) {
                 // If the operator is `(`, return the BinaryOperatorNode directly
                 if (binaryOperatorNode.operator.equals("(")) {
