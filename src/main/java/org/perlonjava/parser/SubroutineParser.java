@@ -213,23 +213,7 @@ public class SubroutineParser {
 
         // While there are attributes (denoted by a colon ':'), we keep parsing them.
         while (peek(parser).text.equals(":")) {
-            // Consume the colon operator.
-            TokenUtils.consume(parser, LexerTokenType.OPERATOR, ":");
-
-            String attrString = TokenUtils.consume(parser, LexerTokenType.IDENTIFIER).text;
-            if (parser.tokens.get(parser.tokenIndex).text.equals("(")) {
-                String argString = ((StringNode) StringParser.parseRawString(parser, "q")).value;
-
-                if (attrString.equals("prototype")) {
-                    //  :prototype($)
-                    prototype = argString;
-                }
-
-                attrString += "(" + argString + ")";
-            }
-
-            // Consume the attribute name (an identifier) and add it to the attributes list.
-            attributes.add(attrString);
+            prototype = consumeAttributes(parser, attributes);
         }
 
         ListNode signature = null;
@@ -247,6 +231,11 @@ public class SubroutineParser {
                 // If a prototype exists, we parse it using 'parseRawString' method which handles it like the 'q()' operator.
                 // This means it will take everything inside the parentheses as a literal string.
                 prototype = ((StringNode) StringParser.parseRawString(parser, "q")).value;
+
+                // While there are attributes after the prototype (denoted by a colon ':'), we keep parsing them.
+                while (peek(parser).text.equals(":")) {
+                    consumeAttributes(parser, attributes);
+                }
             }
         }
 
@@ -290,6 +279,28 @@ public class SubroutineParser {
             // Restore the previous subroutine context
             parser.ctx.symbolTable.setCurrentSubroutine(previousSubroutine);
         }
+    }
+
+    private static String consumeAttributes(Parser parser, List<String> attributes) {
+        // Consume the colon operator.
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, ":");
+        String prototype = null;
+
+        String attrString = TokenUtils.consume(parser, LexerTokenType.IDENTIFIER).text;
+        if (parser.tokens.get(parser.tokenIndex).text.equals("(")) {
+            String argString = ((StringNode) StringParser.parseRawString(parser, "q")).value;
+
+            if (attrString.equals("prototype")) {
+                //  :prototype($)
+                prototype = argString;
+            }
+
+            attrString += "(" + argString + ")";
+        }
+
+        // Consume the attribute name (an identifier) and add it to the attributes list.
+        attributes.add(attrString);
+        return prototype;
     }
 
     private static ListNode handleNamedSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block) {
