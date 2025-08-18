@@ -189,6 +189,8 @@ public class RegexPreprocessorHelper {
         //      \b       is rejected, Java doesn't support \b inside [...]
         boolean first = true;
         boolean afterCaret = false;
+        int lastChar = -1;  // Track last character for range validation
+        boolean wasEscape = false;  // Track if last char was from escape sequence
 
         while (offset < length) {
             final int c = s.codePointAt(offset);
@@ -199,6 +201,8 @@ public class RegexPreprocessorHelper {
                         sb.append("\\]");
                         first = false;
                         afterCaret = false;
+                        lastChar = ']';
+                        wasEscape = false;
                         break;
                     } else {
                         sb.append(Character.toChars(c));
@@ -210,16 +214,53 @@ public class RegexPreprocessorHelper {
                     }
                     sb.append(Character.toChars(c));
                     first = false;
+                    lastChar = -1;  // Reset for special chars
+                    wasEscape = false;
+                    break;
+                case '-':
+                    // Check for invalid range
+                    if (lastChar != -1 && !wasEscape && offset + 1 < length) {
+                        int nextPos = offset + 1;
+                        int nextChar = s.codePointAt(nextPos);
+
+                        // Skip if next is ], then it's a literal -
+                        if (nextChar != ']') {
+                            // Handle escaped next character
+                            if (nextChar == '\\' && nextPos + 1 < length) {
+                                nextChar = s.codePointAt(nextPos + 1);
+                                // Special handling for escape sequences
+                                if (nextChar == 'b' || nextChar == 'N' || nextChar == 'p' || nextChar == 'P') {
+                                    // These are special escapes, can't be in range
+                                    nextChar = -1;
+                                }
+                            }
+
+                            if (nextChar != -1 && nextChar < lastChar) {
+                                String rangeStart = Character.toString(lastChar);
+                                String rangeEnd = Character.toString(nextChar);
+                                RegexPreprocessor.regexError(s, offset,
+                                    "Invalid [] range \"" + rangeStart + "-" + rangeEnd + "\" in regex");
+                            }
+                        }
+                    }
+                    sb.append(Character.toChars(c));
+                    first = false;
+                    afterCaret = false;
+                    lastChar = -1;  // Reset after dash
+                    wasEscape = false;
                     break;
                 case '[':
                     // Check for character class like [:ascii:]
                     offset = RegexPreprocessor.handleCharacterClass(offset, s, sb, length);
                     first = false;
                     afterCaret = false;
+                    lastChar = -1;  // Reset for special constructs
+                    wasEscape = false;
                     break;
                 case '\\':  // Handle escape sequences
                     sb.append(Character.toChars(c));
                     offset++;
+                    wasEscape = true;
                     if (offset < length && s.charAt(offset) == 'N') {
                         if (offset + 1 < length && s.charAt(offset + 1) == '{') {
                             // Handle \N{...} constructs
@@ -245,9 +286,11 @@ public class RegexPreprocessorHelper {
                             // We need to handle this differently - maybe reject it
                             RegexPreprocessor.regexError(s, offset - 1, "\\N (non-newline) not supported inside character class");
                         }
+                        lastChar = -1;  // Can't use \N in ranges
                     } else if (s.codePointAt(offset) == 'b') {
                         rejected.append("\\b"); // Java doesn't support \b inside [...]
                         offset++;
+                        lastChar = -1;
                     } else {
                         int c2 = s.codePointAt(offset);
                         if (c2 >= '1' && c2 <= '3') {
@@ -265,6 +308,12 @@ public class RegexPreprocessorHelper {
                             sb.append('0');
                         }
                         sb.append(Character.toChars(c2));
+                        // Remember the actual character for range validation
+                        if (c2 != 'p' && c2 != 'P') {  // Skip property escapes
+                            lastChar = c2;
+                        } else {
+                            lastChar = -1;
+                        }
                     }
                     first = false;
                     afterCaret = false;
@@ -278,17 +327,23 @@ public class RegexPreprocessorHelper {
                     }
                     first = false;
                     afterCaret = false;
+                    lastChar = c;
+                    wasEscape = false;
                     break;
                 case '(', ')', '*', '?', '<', '>', '\'', '"', '`', '@', '#', '=', '&':
                     sb.append('\\');
                     sb.append(Character.toChars(c));
                     first = false;
                     afterCaret = false;
+                    lastChar = c;
+                    wasEscape = false;
                     break;
                 default:
                     sb.append(Character.toChars(c));
                     first = false;
                     afterCaret = false;
+                    lastChar = c;
+                    wasEscape = false;
                     break;
             }
             offset++;
@@ -436,7 +491,7 @@ public class RegexPreprocessorHelper {
             // Skip past the '])'
             return end + 1;
         } catch (Exception e) {
-            RegexPreprocessor.regexError(s, start, "Invalid extended character class: " + e.getMessage());
+            RegexPreprocessor.regexError(s, start, e.getMessage());
             return -1; // Never reached due to exception
         }
     }
@@ -605,6 +660,10 @@ public class RegexPreprocessorHelper {
                         RegexPreprocessor.regexError(originalRegex, tokenStart, "Unterminated character class");
                     }
                     String classContent = content.substring(i, classEnd + 1);
+
+                    // Validate character ranges in the class
+                    validateCharacterRanges(classContent, originalRegex, tokenStart);
+
                     tokens.add(new Token(TokenType.CHAR_CLASS, classContent, tokenStart));
                     i = classEnd + 1;
                     break;
@@ -639,6 +698,48 @@ public class RegexPreprocessorHelper {
 
         tokens.add(new Token(TokenType.EOF, "", contentStart + content.length()));
         return tokens;
+    }
+
+    private static void validateCharacterRanges(String charClass, String originalRegex, int classStart) {
+        if (!charClass.startsWith("[") || !charClass.endsWith("]")) {
+            return;
+        }
+
+        String content = charClass.substring(1, charClass.length() - 1);
+        int i = 0;
+        int lastChar = -1;
+        boolean inEscape = false;
+
+        while (i < content.length()) {
+            char c = content.charAt(i);
+
+            // Skip whitespace in extended character class
+            if (Character.isWhitespace(c)) {
+                i++;
+                continue;
+            }
+
+            if (inEscape) {
+                inEscape = false;
+                lastChar = -1;
+                i++;
+                continue;
+            }
+
+            if (c == '\\') {
+                inEscape = true;
+            } else if (c == '-' && lastChar != -1 && i + 1 < content.length()) {
+                char nextChar = content.charAt(i + 1);
+                if (!Character.isWhitespace(nextChar) && nextChar != ']' && nextChar != '\\' && nextChar < lastChar) {
+                    RegexPreprocessor.regexError(originalRegex, classStart + i + 1,
+                        String.format("Invalid [] range \"%c-%c\" in regex", lastChar, nextChar));
+                }
+            } else if (c != '-' && c != '^' && c != '[' && c != ':') {
+                lastChar = c;
+            }
+
+            i++;
+        }
     }
 
     /**
@@ -975,6 +1076,8 @@ public class RegexPreprocessorHelper {
 
             // Process the content - in extended character classes, spaces are ignored (xx mode)
             int i = 0;
+            int lastChar = -1;  // Track last character for range validation
+
             while (i < content.length()) {
                 char c = content.charAt(i);
 
@@ -982,6 +1085,16 @@ public class RegexPreprocessorHelper {
                 if (Character.isWhitespace(c)) {
                     i++;
                     continue;
+                }
+
+                // Check for invalid range
+                if (c == '-' && lastChar != -1 && i + 1 < content.length()) {
+                    char nextChar = content.charAt(i + 1);
+                    if (!Character.isWhitespace(nextChar) && nextChar != ']' && nextChar != '\\' && nextChar < lastChar) {
+                        throw new IllegalArgumentException(
+                            String.format("Invalid [] range \"%c-%c\"", lastChar, nextChar)
+                        );
+                    }
                 }
 
                 if (c == '\\') {
@@ -1044,6 +1157,7 @@ public class RegexPreprocessorHelper {
                     } else {
                         i++;
                     }
+                    lastChar = -1;  // Reset after escape
                 } else if (c == '[' && i + 1 < content.length() && content.charAt(i + 1) == ':') {
                     // POSIX class
                     int end = content.indexOf(":]", i + 2);
@@ -1065,8 +1179,12 @@ public class RegexPreprocessorHelper {
                     }
                     result.append(c);
                     i++;
+                    lastChar = -1;  // Reset after POSIX class
                 } else {
                     result.append(c);
+                    if (c != '-' && c != '^') {
+                        lastChar = c;  // Remember this character
+                    }
                     i++;
                 }
             }
