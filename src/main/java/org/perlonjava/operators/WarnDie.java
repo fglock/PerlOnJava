@@ -140,6 +140,20 @@ public class WarnDie {
 
         RuntimeScalar sig = getGlobalHash("main::SIG").get("__DIE__");
         if (sig.getDefinedBoolean()) {
+            RuntimeScalar sigHandler = new RuntimeScalar(sig);
+
+            // Undefine $SIG{__DIE__} before calling the handler to avoid infinite recursion
+            int level = DynamicVariableManager.getLocalLevel();
+            DynamicVariableManager.pushLocalVariable(sig);
+
+            RuntimeList res = RuntimeCode.apply(sigHandler, message.getArrayOfAlias(), RuntimeContextType.SCALAR);
+
+            // Restore $SIG{__DIE__}
+            DynamicVariableManager.popToLocalLevel(level);
+
+            return res;
+        }
+        if (sig.getDefinedBoolean()) {
             return RuntimeCode.apply(sig, message.getArrayOfAlias(), RuntimeContextType.SCALAR);
         }
 
