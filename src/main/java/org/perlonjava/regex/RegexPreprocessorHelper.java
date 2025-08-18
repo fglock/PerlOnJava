@@ -187,20 +187,34 @@ public class RegexPreprocessorHelper {
         //      [:^ascii:] becomes: \P{ASCII}
         //      \b       is rejected, Java doesn't support \b inside [...]
         boolean first = true;
+        boolean afterCaret = false;
+
         while (offset < length) {
             final int c = s.codePointAt(offset);
             switch (c) {
                 case ']':
-                    if (first) {
+                    // Special case: ] immediately after [ or [^ is a literal ]
+                    if (first || afterCaret) {
                         sb.append("\\]");
+                        first = false;
+                        afterCaret = false;
                         break;
                     } else {
                         sb.append(Character.toChars(c));
                         return offset;
                     }
+                case '^':
+                    if (first) {
+                        afterCaret = true;
+                    }
+                    sb.append(Character.toChars(c));
+                    first = false;
+                    break;
                 case '[':
                     // Check for character class like [:ascii:]
                     offset = RegexPreprocessor.handleCharacterClass(offset, s, sb, length);
+                    first = false;
+                    afterCaret = false;
                     break;
                 case '\\':  // Handle escape sequences
                     sb.append(Character.toChars(c));
@@ -251,6 +265,8 @@ public class RegexPreprocessorHelper {
                         }
                         sb.append(Character.toChars(c2));
                     }
+                    first = false;
+                    afterCaret = false;
                     break;
                 case ' ', '\t':
                     if (flag_xx) {
@@ -259,16 +275,21 @@ public class RegexPreprocessorHelper {
                         // make this space a "token", even inside /x
                         sb.append("\\").append(Character.toChars(c));
                     }
+                    first = false;
+                    afterCaret = false;
                     break;
-                case '(', ')', '*', '?', '<', '>', '\'', '"', '$', '@', '#', '=', '&':
+                case '(', ')', '*', '?', '<', '>', '\'', '"', '`', '@', '#', '=', '&':
                     sb.append('\\');
                     sb.append(Character.toChars(c));
+                    first = false;
+                    afterCaret = false;
                     break;
                 default:
                     sb.append(Character.toChars(c));
+                    first = false;
+                    afterCaret = false;
                     break;
             }
-            first = false;
             offset++;
         }
         return offset;
@@ -426,26 +447,72 @@ public class RegexPreprocessorHelper {
         int depth = 1;
         int i = start;
         boolean inEscape = false;
+        boolean inCharClass = false;
+        boolean firstInClass = false;
+        boolean afterCaret = false;
 
         while (i < s.length() && depth > 0) {
+            char c = s.charAt(i);
+
             if (inEscape) {
                 inEscape = false;
+                firstInClass = false;
+                afterCaret = false;
                 i++;
                 continue;
             }
 
-            char c = s.charAt(i);
             switch (c) {
                 case '\\':
                     inEscape = true;
+                    firstInClass = false;
+                    afterCaret = false;
                     break;
                 case '[':
+                    if (!inCharClass) {
+                        inCharClass = true;
+                        firstInClass = true;
+                        afterCaret = false;
+                    }
                     depth++;
                     break;
+                case '^':
+                    if (inCharClass && firstInClass) {
+                        afterCaret = true;
+                    }
+                    firstInClass = false;
+                    break;
                 case ']':
-                    depth--;
-                    if (depth == 0 && i + 1 < s.length() && s.charAt(i + 1) == ')') {
-                        return i;
+                    // Special case: ] immediately after [ or [^ is literal
+                    if (inCharClass && (firstInClass || afterCaret)) {
+                        // This is a literal ], don't decrease depth
+                        firstInClass = false;
+                        afterCaret = false;
+                    } else {
+                        depth--;
+                        if (inCharClass && depth > 0) {
+                            // We just closed a character class
+                            inCharClass = false;
+                        }
+
+                        if (depth == 0) {
+                            // Check if this ends the extended character class
+                            int j = i + 1;
+                            while (j < s.length() && Character.isWhitespace(s.charAt(j))) {
+                                j++;
+                            }
+                            if (j < s.length() && s.charAt(j) == ')') {
+                                return i;
+                            }
+                            // Not properly terminated
+                            return -1;
+                        }
+                    }
+                    break;
+                default:
+                    if (!Character.isWhitespace(c)) {
+                        firstInClass = false;
+                        afterCaret = false;
                     }
                     break;
             }
@@ -583,41 +650,45 @@ public class RegexPreprocessorHelper {
         boolean afterCaret = false;
 
         while (i < content.length()) {
-            // Skip whitespace in extended character class
-            while (i < content.length() && Character.isWhitespace(content.charAt(i))) {
-                i++;
-                first = false;
-            }
-
-            if (i >= content.length()) break;
+            char c = content.charAt(i);
 
             if (inEscape) {
                 inEscape = false;
-                i++;
                 first = false;
                 afterCaret = false;
+                i++;
                 continue;
             }
 
-            char c = content.charAt(i);
+            // In extended character classes, skip whitespace
+            if (Character.isWhitespace(c)) {
+                i++;
+                continue;
+            }
+
             if (c == '\\') {
                 inEscape = true;
+                first = false;
+                afterCaret = false;
             } else if (c == ']') {
                 // Special case: ] immediately after [ or [^ is a literal ]
                 if (first || afterCaret) {
-                    // This is a literal ], not the end
+                    // This is a literal ], not the closing bracket
                     first = false;
                     afterCaret = false;
                 } else {
+                    // This closes the character class
                     return i;
                 }
             } else if (c == '^' && first) {
                 afterCaret = true;
                 first = false;
             } else {
+                // Any non-whitespace character resets the flags
                 first = false;
                 afterCaret = false;
             }
+
             i++;
         }
 
