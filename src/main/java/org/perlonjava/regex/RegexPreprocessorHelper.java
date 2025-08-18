@@ -579,11 +579,23 @@ public class RegexPreprocessorHelper {
     private static int findCharClassEnd(String content, int start) {
         int i = start + 1; // Skip opening [
         boolean inEscape = false;
+        boolean first = true;
+        boolean afterCaret = false;
 
         while (i < content.length()) {
+            // Skip whitespace in extended character class
+            while (i < content.length() && Character.isWhitespace(content.charAt(i))) {
+                i++;
+                first = false;
+            }
+
+            if (i >= content.length()) break;
+
             if (inEscape) {
                 inEscape = false;
                 i++;
+                first = false;
+                afterCaret = false;
                 continue;
             }
 
@@ -591,7 +603,20 @@ public class RegexPreprocessorHelper {
             if (c == '\\') {
                 inEscape = true;
             } else if (c == ']') {
-                return i;
+                // Special case: ] immediately after [ or [^ is a literal ]
+                if (first || afterCaret) {
+                    // This is a literal ], not the end
+                    first = false;
+                    afterCaret = false;
+                } else {
+                    return i;
+                }
+            } else if (c == '^' && first) {
+                afterCaret = true;
+                first = false;
+            } else {
+                first = false;
+                afterCaret = false;
             }
             i++;
         }
