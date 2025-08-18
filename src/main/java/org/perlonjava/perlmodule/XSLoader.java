@@ -12,7 +12,7 @@ import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 public class XSLoader extends PerlModuleBase {
 
     /**
-     * Constructor for Warnings.
+     * Constructor for XSLoader.
      * Initializes the module with the name "XSLoader".
      */
     public XSLoader() {
