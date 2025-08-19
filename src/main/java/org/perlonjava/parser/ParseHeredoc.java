@@ -30,7 +30,19 @@ public class ParseHeredoc {
         tokenText = token.text;
         String delimiter = "";
         String identifier = "";
-        if (tokenText.length() == 1 && "'`\"".contains(tokenText)) {
+
+        // Check for backslash (which means single-quoted heredoc)
+        if (token.type == LexerTokenType.OPERATOR && tokenText.equals("\\")) {
+            delimiter = "'";
+            TokenUtils.consume(parser); // consume the backslash
+            token = TokenUtils.peek(parser); // get the identifier
+            if (token.type == LexerTokenType.IDENTIFIER) {
+                identifier = token.text;
+                TokenUtils.consume(parser);
+            } else {
+                throw new PerlCompilerException(parser.tokenIndex, "Expecting identifier after \\ in heredoc", parser.ctx.errorUtil);
+            }
+        } else if (tokenText.length() == 1 && "'`\"".contains(tokenText)) {
             delimiter = tokenText;
         } else if (token.type == LexerTokenType.IDENTIFIER) {
             delimiter = "\"";
