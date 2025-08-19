@@ -224,6 +224,21 @@ public class OperatorParser {
 
     static OperatorNode parseVariableDeclaration(Parser parser, String operator, int currentIndex) {
 
+        String varType = null;
+        if (peek(parser).type == IDENTIFIER) {
+            // If a package name follows, then it is a type declaration
+            int currentIndex2 = parser.tokenIndex;
+            String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
+            boolean packageExists = GlobalVariable.isPackageLoaded(packageName);
+            // System.out.println("maybe type: " + packageName + " " + packageExists);
+            if (packageExists) {
+                varType = packageName;
+            } else {
+                // Backtrack
+                parser.tokenIndex = currentIndex2;
+            }
+        }
+
         // Create OperatorNode ($, @, %), ListNode (includes undef), SubroutineNode
         Node operand = ParsePrimary.parsePrimary(parser);
         parser.ctx.logDebug("parseVariableDeclaration " + operator + ": " + operand);
@@ -466,7 +481,8 @@ public class OperatorParser {
                 case "getc" -> "main::STDIN";
                 case "fileno" ->
                         throw new PerlCompilerException(parser.tokenIndex, "Not enough arguments for " + token.text, parser.ctx.errorUtil);
-                default -> throw new PerlCompilerException(parser.tokenIndex, "Unexpected value: " + token.text, parser.ctx.errorUtil);
+                default ->
+                        throw new PerlCompilerException(parser.tokenIndex, "Unexpected value: " + token.text, parser.ctx.errorUtil);
             };
             handle = new IdentifierNode(defaultHandle, currentIndex);
         } else {

@@ -31,7 +31,7 @@ public class GlobalVariable {
             new CustomClassLoader(GlobalVariable.class.getClassLoader());
 
     // Cache for package existence checks
-    private static final Map<String, Boolean> packageExistsCache = new HashMap<>();
+    public static final Map<String, Boolean> packageExistsCache = new HashMap<>();
 
     // Flags used by operator override
 
