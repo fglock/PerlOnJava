@@ -201,8 +201,9 @@ public class ParseInfix {
         LexerToken nextToken = peek(parser);
         if (nextToken.text.equals("(")) {
             consume(parser);
-            consume(parser, LexerTokenType.OPERATOR, ")");
-            if (peek(parser).text.equals("]")) {
+            LexerToken next = consume(parser);
+            ListParser.consumeCommas(parser);
+            if (next.text.equals(")") && peek(parser).text.equals("]")) {
                 consume(parser);
                 return new ArrayList<>();
             }
