@@ -21,6 +21,7 @@ import static org.perlonjava.perlmodule.Feature.featureManager;
 import static org.perlonjava.perlmodule.Strict.useStrict;
 import static org.perlonjava.perlmodule.Universal.normalizeVersion;
 import static org.perlonjava.perlmodule.Warnings.useWarnings;
+import static org.perlonjava.runtime.GlobalVariable.packageExistsCache;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarTrue;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
 
@@ -458,6 +459,10 @@ public class StatementParser {
         if (packageName == null) {
             throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
         }
+
+        // Remember that this package exists
+        packageExistsCache.put(packageName, true);
+
         boolean isClass = token.text.equals("class");
         IdentifierNode nameNode = new IdentifierNode(packageName, parser.tokenIndex);
         OperatorNode packageNode = new OperatorNode(token.text, nameNode, parser.tokenIndex);
