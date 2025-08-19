@@ -17,6 +17,15 @@ public class EmitOperatorDeleteExists {
         //          IdentifierNode: a
         //        HashLiteralNode:
         //          NumberNode: 10
+
+        if (node.operand instanceof ListNode listNode && listNode.elements.size() == 1) {
+            Node operand2 = listNode.elements.get(0);
+            if (operand2 instanceof OperatorNode operatorNode && operatorNode.operator.equals("+")) {
+                // Unwrap the `+` operation
+                listNode.elements.set(0, operatorNode.operand);
+            }
+        }
+
         String operator = node.operator;
         if (node.operand instanceof ListNode operand) {
             if (operand.elements.size() == 1) {
