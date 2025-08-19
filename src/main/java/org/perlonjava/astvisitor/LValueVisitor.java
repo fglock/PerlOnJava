@@ -136,6 +136,16 @@ public class LValueVisitor implements Visitor {
 
     @Override
     public void visit(ListNode node) {
+        // Special case for ($a ? $b : $c)
+        if (node.elements.size() == 1) {
+            if (node.elements.get(0) instanceof TernaryOperatorNode) {
+                // ($a ? $b : $c)
+                node.elements.get(0).accept(this);
+                return;
+            }
+        }
+        
+        // A list is a LIST L-value most of the time
         context = RuntimeContextType.LIST; // ($a, $b)
     }
 
