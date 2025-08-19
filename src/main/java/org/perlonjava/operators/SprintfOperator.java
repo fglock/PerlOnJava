@@ -8,6 +8,8 @@ import org.perlonjava.runtime.RuntimeScalar;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
+
 public class SprintfOperator {
 
     // Pattern to match a complete format specifier
@@ -78,7 +80,8 @@ public class SprintfOperator {
 
             // Get the value to format
             if (argIndex >= list.size()) {
-                throw new PerlCompilerException("Missing argument for sprintf");
+                // throw new PerlCompilerException("Missing argument for sprintf");
+                list.elements.add(scalarUndef);
             }
             RuntimeScalar value = (RuntimeScalar) list.elements.get(argIndex++);
 
