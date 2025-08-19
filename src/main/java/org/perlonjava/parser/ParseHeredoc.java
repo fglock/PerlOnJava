@@ -98,7 +98,7 @@ public class ParseHeredoc {
                 // Debug: Log current token
                 parser.ctx.logDebug("Current token: " + token.text + ", type: " + token.type);
 
-                if (token.type == LexerTokenType.NEWLINE) {
+                if (token.type == LexerTokenType.NEWLINE || (!identifier.isEmpty() && token.type == LexerTokenType.EOF)) {
                     // End of the current line
                     String line = currentLine.toString();
                     lines.add(line);
