@@ -252,6 +252,8 @@ public class StringOperators {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);
         }
 
+        int codePoint = runtimeScalar.getInt(); // Get the integer representing the code point
+
         // Check if it's a double (which could be Inf or NaN)
         if (runtimeScalar.type == RuntimeScalarType.DOUBLE) {
             double doubleValue = runtimeScalar.getDouble();
@@ -260,9 +262,14 @@ public class StringOperators {
                         (doubleValue > 0 ? "Inf" : "-Inf");
                 throw new PerlCompilerException("Cannot chr " + value);
             }
+            if (doubleValue < 0) {
+                codePoint = 0xFFFD;  // Unicode replacement character
+            }
+        } else {
+            if (codePoint < 0) {
+                codePoint = 0xFFFD;  // Unicode replacement character
+            }
         }
-
-        int codePoint = runtimeScalar.getInt(); // Get the integer representing the code point
 
         // Convert the code point to a char array (to handle both BMP and non-BMP)
         char[] chars = Character.toChars(codePoint);
