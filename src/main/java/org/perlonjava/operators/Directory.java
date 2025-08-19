@@ -69,8 +69,13 @@ public class Directory {
 
             DirectoryStream<Path> stream = Files.newDirectoryStream(fullDirPath);
             DirectoryIO dirIO = new DirectoryIO(stream, dirPath);
-            dirHandle.type = RuntimeScalarType.GLOBREFERENCE;
-            dirHandle.value = new RuntimeGlob(null).setIO(new RuntimeIO(dirIO));
+
+            if ((dirHandle.type == RuntimeScalarType.GLOB || dirHandle.type == RuntimeScalarType.GLOBREFERENCE) && dirHandle.value instanceof RuntimeGlob glob) {
+                glob.setIO(new RuntimeIO(dirIO));
+            } else {
+                dirHandle.type = RuntimeScalarType.GLOBREFERENCE;
+                dirHandle.value = new RuntimeGlob(null).setIO(new RuntimeIO(dirIO));
+            }
 
             return scalarTrue;
         } catch (IOException e) {
