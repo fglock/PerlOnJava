@@ -20,7 +20,7 @@ public class ChownOperator {
      * @param args RuntimeList containing uid, gid, and file paths
      * @return RuntimeScalar with count of successfully changed files
      */
-    public static RuntimeScalar chown(RuntimeBase... args) {
+    public static RuntimeScalar chown(int ctx, RuntimeBase... args) {
         if (args.length < 2) {
             // Need at least uid and gid
             return new RuntimeScalar(0);

@@ -423,7 +423,7 @@ public class Operator {
      * @param args RuntimeBase array: [filename] or empty (uses $_)
      * @return RuntimeScalar with link target or undef on error
      */
-    public static RuntimeScalar readlink(RuntimeBase... args) {
+    public static RuntimeScalar readlink(int ctx, RuntimeBase... args) {
         String path = args[0].getFirst().toString();
         try {
             Path linkPath = RuntimeIO.resolvePath(path);
@@ -470,7 +470,7 @@ public class Operator {
      * @param args RuntimeBase array: [oldname, newname]
      * @return RuntimeScalar with 1 on success, 0 on failure
      */
-    public static RuntimeScalar rename(RuntimeBase... args) {
+    public static RuntimeScalar rename(int ctx, RuntimeBase... args) {
         if (args.length < 2) {
             throw new PerlCompilerException("Not enough arguments for rename");
         }

@@ -20,7 +20,7 @@ public class KillOperator {
      * @param args RuntimeBase array: [signal, pid1, pid2, ...]
      * @return RuntimeScalar with count of successfully signaled processes
      */
-    public static RuntimeScalar kill(RuntimeBase... args) {
+    public static RuntimeScalar kill(int ctx, RuntimeBase... args) {
         if (args.length < 2) {
             return new RuntimeScalar(0);
         }

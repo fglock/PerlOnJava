@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.RuntimeContextType.SCALAR;
 
 /**
  * Native implementation of Perl's waitpid operator using JNA
@@ -46,7 +47,7 @@ public class WaitpidOperator {
      *         - 0: if WNOHANG is set and process is still running
      *         - -1: for error conditions
      */
-    public static RuntimeScalar waitpid(RuntimeBase... args) {
+    public static RuntimeScalar waitpid(int ctx, RuntimeBase... args) {
         var list = new RuntimeArray(args);
 
         int pid = list.get(0).getInt();
@@ -197,7 +198,7 @@ public class WaitpidOperator {
      * @return true if process appears to be running, false if terminated/not found
      */
     public static boolean isProcessRunning(int pid) {
-        RuntimeScalar result = waitpid(
+        RuntimeScalar result = waitpid(SCALAR,
                 new RuntimeScalar(pid),
                 new RuntimeScalar(WNOHANG)
         );

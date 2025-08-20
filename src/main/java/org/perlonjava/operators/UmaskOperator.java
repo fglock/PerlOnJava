@@ -29,7 +29,7 @@ public class UmaskOperator {
      * @param args RuntimeBase array containing the new umask value (optional)
      * @return RuntimeScalar with the previous umask value
      */
-    public static RuntimeScalar umask(RuntimeBase... args) {
+    public static RuntimeScalar umask(int ctx, RuntimeBase... args) {
         RuntimeList argList = new RuntimeList(args);
 
         if (IS_WINDOWS) {
