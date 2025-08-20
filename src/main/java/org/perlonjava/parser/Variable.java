@@ -39,8 +39,12 @@ public class Variable {
 
         String varName = IdentifierParser.parseComplexIdentifier(parser);
         parser.ctx.logDebug("Parsing variable: " + varName);
-
+        
         if (varName != null) {
+            if (varName.startsWith("0") && varName.length() > 1) {
+                parser.throwError("Numeric variables with more than one digit may not start with '0'");
+            }
+
             // Check for non-ASCII characters in variable names under 'no utf8'
             if (!parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)) {
                 // Under 'no utf8', check if this is a multi-character identifier with non-ASCII
