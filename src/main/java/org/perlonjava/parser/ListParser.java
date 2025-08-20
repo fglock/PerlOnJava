@@ -91,7 +91,7 @@ public class ListParser {
                 TokenUtils.consume(parser);
                 hasParen = true;
             }
-            if (TokenUtils.peek(parser).text.equals("/") || TokenUtils.peek(parser).text.equals("//")) {
+            if (TokenUtils.peek(parser).text.equals("/") || TokenUtils.peek(parser).text.equals("//") || TokenUtils.peek(parser).text.equals("/=")) {
                 TokenUtils.consume(parser);
                 Node regex = StringParser.parseRawString(parser, "/");
                 if (regex != null) {
