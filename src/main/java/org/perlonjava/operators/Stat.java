@@ -1,11 +1,12 @@
 package org.perlonjava.operators;
 
-import org.perlonjava.runtime.RuntimeList;
-import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.*;
+import org.perlonjava.io.ClosedIOHandle;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.PosixFileAttributes;
@@ -13,6 +14,7 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.util.Set;
 
 import static org.perlonjava.operators.FileTestOperator.lastFileHandle;
+import static org.perlonjava.runtime.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.RuntimeIO.resolvePath;
 import static org.perlonjava.runtime.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.RuntimeScalarCache.scalarUndef;
@@ -58,6 +60,33 @@ public class Stat {
     public static RuntimeList stat(RuntimeScalar arg) {
         lastFileHandle.set(arg);
         RuntimeList res = new RuntimeList();
+
+        // Check if the argument is a file handle (GLOB or GLOBREFERENCE)
+        if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE) {
+            RuntimeIO fh = arg.getRuntimeIO();
+
+            // Check if fh is null (invalid filehandle)
+            if (fh == null) {
+                // Set $! to EBADF (Bad file descriptor) = 9
+                getGlobalVariable("main::!").set(9);
+                return res; // Return empty list
+            }
+
+            // Check for closed handle or no valid IO handles
+            if ((fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) &&
+                    fh.directoryIO == null) {
+                // Set $! to EBADF (Bad file descriptor) = 9
+                getGlobalVariable("main::!").set(9);
+                return res; // Return empty list
+            }
+
+            // For in-memory file handles (like PerlIO::scalar), we can't stat them
+            // They should return EBADF
+            getGlobalVariable("main::!").set(9);
+            return res;
+        }
+
+        // Handle string filenames
         try {
             Path path = resolvePath(arg.toString());
 
@@ -68,9 +97,15 @@ public class Stat {
             PosixFileAttributes posixAttr = Files.readAttributes(path, PosixFileAttributes.class);
 
             statInternal(res, basicAttr, posixAttr);
+            // Clear $! on success
+            getGlobalVariable("main::!").set(0);
+        } catch (NoSuchFileException e) {
+            // Set $! to ENOENT (No such file or directory) = 2
+            getGlobalVariable("main::!").set(2);
         } catch (IOException e) {
             // Returns the empty list if "stat" fails.
-            // e.printStackTrace();
+            // Set a generic error code for other IO errors
+            getGlobalVariable("main::!").set(5); // EIO (Input/output error)
         }
         return res;
     }
@@ -78,6 +113,33 @@ public class Stat {
     public static RuntimeList lstat(RuntimeScalar arg) {
         lastFileHandle.set(arg);
         RuntimeList res = new RuntimeList();
+
+        // Check if the argument is a file handle (GLOB or GLOBREFERENCE)
+        if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE) {
+            RuntimeIO fh = arg.getRuntimeIO();
+
+            // Check if fh is null (invalid filehandle)
+            if (fh == null) {
+                // Set $! to EBADF (Bad file descriptor) = 9
+                getGlobalVariable("main::!").set(9);
+                return res; // Return empty list
+            }
+
+            // Check for closed handle or no valid IO handles
+            if ((fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) &&
+                    fh.directoryIO == null) {
+                // Set $! to EBADF (Bad file descriptor) = 9
+                getGlobalVariable("main::!").set(9);
+                return res; // Return empty list
+            }
+
+            // For in-memory file handles (like PerlIO::scalar), we can't lstat them
+            // They should return EBADF
+            getGlobalVariable("main::!").set(9);
+            return res;
+        }
+
+        // Handle string filenames
         try {
             Path path = resolvePath(arg.toString());
 
@@ -90,9 +152,15 @@ public class Stat {
                     PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
 
             statInternal(res, basicAttr, posixAttr);
+            // Clear $! on success
+            getGlobalVariable("main::!").set(0);
+        } catch (NoSuchFileException e) {
+            // Set $! to ENOENT (No such file or directory) = 2
+            getGlobalVariable("main::!").set(2);
         } catch (IOException e) {
-            // Returns the empty list if "stat" fails.
-            // e.printStackTrace();
+            // Returns the empty list if "lstat" fails.
+            // Set a generic error code for other IO errors
+            getGlobalVariable("main::!").set(5); // EIO (Input/output error)
         }
         return res;
     }
@@ -114,4 +182,3 @@ public class Stat {
         res.add(scalarUndef);                            // 12 blocks (number of blocks) - not directly available
     }
 }
-

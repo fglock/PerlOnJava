@@ -1,7 +1,10 @@
 package org.perlonjava.operators;
 
+import org.perlonjava.io.ClosedIOHandle;
 import org.perlonjava.runtime.PerlCompilerException;
+import org.perlonjava.runtime.RuntimeIO;
 import org.perlonjava.runtime.RuntimeScalar;
+import org.perlonjava.runtime.RuntimeScalarType;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -56,6 +59,39 @@ public class FileTestOperator {
      */
     public static RuntimeScalar fileTest(String operator, RuntimeScalar fileHandle) {
         lastFileHandle.set(fileHandle);
+
+        // Check if the argument is a file handle (GLOB or GLOBREFERENCE)
+        if (fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
+            RuntimeIO fh = fileHandle.getRuntimeIO();
+
+            // Check if fh is null (invalid filehandle)
+            if (fh == null) {
+                // Set $! to EBADF (Bad file descriptor) = 9
+                getGlobalVariable("main::!").set(9);
+                return operator.equals("-l") ? scalarFalse : scalarUndef;
+            }
+
+            // Check for closed handle or no valid IO handles
+            if ((fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) &&
+                    fh.directoryIO == null) {
+                // Set $! to EBADF (Bad file descriptor) = 9
+                getGlobalVariable("main::!").set(9);
+                return operator.equals("-l") ? scalarFalse : scalarUndef;
+            }
+
+            // Special handling for -t operator on file handles
+            if (operator.equals("-t")) {
+                // Check if the file handle is a TTY
+                // For now, return false for all file handles as we don't have TTY detection
+                return scalarFalse;
+            }
+
+            // For most other operators on file handles, return undef and set EBADF
+            getGlobalVariable("main::!").set(9);
+            return operator.equals("-l") ? scalarFalse : scalarUndef;
+        }
+
+        // Handle string filenames
         String filePath = fileHandle.toString();
         Path path = resolvePath(filePath);
 
