@@ -11,6 +11,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.perlonjava.runtime.RuntimeContextType.SCALAR;
+
 /**
  * Extended native operations for missing Perl operators
  */
@@ -30,7 +32,7 @@ public class ExtendedNativeUtils extends NativeUtils {
     /**
      * Get login name of current user
      */
-    public static RuntimeScalar getlogin(RuntimeBase... args) {
+    public static RuntimeScalar getlogin(int ctx, RuntimeBase... args) {
         try {
             String username = System.getProperty("user.name");
             return new RuntimeScalar(username != null ? username : "");
@@ -42,7 +44,7 @@ public class ExtendedNativeUtils extends NativeUtils {
     /**
      * Get password entry by username
      */
-    public static RuntimeArray getpwnam(RuntimeBase... args) {
+    public static RuntimeArray getpwnam(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeArray();
         String username = args[0].toString();
 
@@ -59,8 +61,8 @@ public class ExtendedNativeUtils extends NativeUtils {
                 if (username.equals(System.getProperty("user.name"))) {
                     RuntimeArray.push(result, new RuntimeScalar(username)); // name
                     RuntimeArray.push(result, new RuntimeScalar("x")); // passwd (placeholder)
-                    RuntimeArray.push(result, getuid()); // uid
-                    RuntimeArray.push(result, getgid()); // gid
+                    RuntimeArray.push(result, getuid(SCALAR)); // uid
+                    RuntimeArray.push(result, getgid(SCALAR)); // gid
                     RuntimeArray.push(result, new RuntimeScalar("")); // quota
                     RuntimeArray.push(result, new RuntimeScalar("")); // comment
                     RuntimeArray.push(result, new RuntimeScalar("")); // gcos
@@ -122,8 +124,8 @@ public class ExtendedNativeUtils extends NativeUtils {
                     } else if (username.equals(System.getProperty("user.name"))) {
                         RuntimeArray.push(result, new RuntimeScalar(username));
                         RuntimeArray.push(result, new RuntimeScalar("x"));
-                        RuntimeArray.push(result, getuid());
-                        RuntimeArray.push(result, getgid());
+                        RuntimeArray.push(result, getuid(SCALAR));
+                        RuntimeArray.push(result, getgid(SCALAR));
                         RuntimeArray.push(result, new RuntimeScalar(""));
                         RuntimeArray.push(result, new RuntimeScalar(""));
                         RuntimeArray.push(result, new RuntimeScalar(""));
@@ -147,14 +149,14 @@ public class ExtendedNativeUtils extends NativeUtils {
     /**
      * Get password entry by UID
      */
-    public static RuntimeArray getpwuid(RuntimeBase... args) {
+    public static RuntimeArray getpwuid(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeArray();
 
         int uid = args[0].scalar().getInt();
-        int currentUid = getuid().getInt();
+        int currentUid = getuid(SCALAR).getInt();
 
         if (uid == currentUid) {
-            return getpwnam(new RuntimeScalar(System.getProperty("user.name")));
+            return getpwnam(ctx, new RuntimeScalar(System.getProperty("user.name")));
         }
 
         return new RuntimeArray(); // User not found
@@ -163,7 +165,7 @@ public class ExtendedNativeUtils extends NativeUtils {
     /**
      * Get group entry by name
      */
-    public static RuntimeArray getgrnam(RuntimeBase... args) {
+    public static RuntimeArray getgrnam(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeArray();
         String groupname = args[0].toString();
 
@@ -181,7 +183,7 @@ public class ExtendedNativeUtils extends NativeUtils {
                 if (groupname.equals("Users") || groupname.equals(computerName)) {
                     RuntimeArray.push(result, new RuntimeScalar(groupname)); // name
                     RuntimeArray.push(result, new RuntimeScalar("x")); // passwd
-                    RuntimeArray.push(result, getgid()); // gid
+                    RuntimeArray.push(result, getgid(SCALAR)); // gid
                     RuntimeArray members = new RuntimeArray();
                     RuntimeArray.push(members, new RuntimeScalar(System.getProperty("user.name")));
                     RuntimeArray.push(result, members); // members
@@ -191,7 +193,7 @@ public class ExtendedNativeUtils extends NativeUtils {
                 if (groupname.equals("users") || groupname.equals(System.getProperty("user.name"))) {
                     RuntimeArray.push(result, new RuntimeScalar(groupname));
                     RuntimeArray.push(result, new RuntimeScalar("x"));
-                    RuntimeArray.push(result, getgid());
+                    RuntimeArray.push(result, getgid(SCALAR));
                     RuntimeArray members = new RuntimeArray();
                     RuntimeArray.push(members, new RuntimeScalar(System.getProperty("user.name")));
                     RuntimeArray.push(result, members);
@@ -209,22 +211,22 @@ public class ExtendedNativeUtils extends NativeUtils {
     /**
      * Get group entry by GID
      */
-    public static RuntimeArray getgrgid(RuntimeBase... args) {
+    public static RuntimeArray getgrgid(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeArray();
 
         int gid = args[0].scalar().getInt();
-        int currentGid = getgid().getInt();
+        int currentGid = getgid(ctx).getInt();
 
         if (gid == currentGid) {
             String groupName = IS_WINDOWS ? "Users" : "users";
-            return getgrnam(new RuntimeScalar(groupName));
+            return getgrnam(ctx, new RuntimeScalar(groupName));
         }
 
         return new RuntimeArray();
     }
 
     // Iterator functions for user/group entries
-    public static RuntimeArray getpwent(RuntimeBase... args) {
+    public static RuntimeArray getpwent(int ctx, RuntimeBase... args) {
         Iterator<String> iterator = userIterator.get();
         if (iterator == null) {
             List<String> users = getSystemUsers();
@@ -233,13 +235,13 @@ public class ExtendedNativeUtils extends NativeUtils {
         }
 
         if (iterator.hasNext()) {
-            return getpwnam(new RuntimeScalar(iterator.next()));
+            return getpwnam(ctx, new RuntimeScalar(iterator.next()));
         }
 
         return new RuntimeArray(); // End of entries
     }
 
-    public static RuntimeArray getgrent(RuntimeBase... args) {
+    public static RuntimeArray getgrent(int ctx, RuntimeBase... args) {
         Iterator<String> iterator = groupIterator.get();
         if (iterator == null) {
             List<String> groups = getSystemGroups();
@@ -248,30 +250,30 @@ public class ExtendedNativeUtils extends NativeUtils {
         }
 
         if (iterator.hasNext()) {
-            return getgrnam(new RuntimeScalar(iterator.next()));
+            return getgrnam(ctx, new RuntimeScalar(iterator.next()));
         }
 
         return new RuntimeArray();
     }
 
-    public static RuntimeScalar setpwent(RuntimeBase... args) {
+    public static RuntimeScalar setpwent(int ctx, RuntimeBase... args) {
         userIterator.remove(); // Clear this thread's iterator
         userInfoCache.clear();
         return new RuntimeScalar(1);
     }
 
-    public static RuntimeScalar setgrent(RuntimeBase... args) {
+    public static RuntimeScalar setgrent(int ctx, RuntimeBase... args) {
         groupIterator.remove(); // Clear this thread's iterator
         groupInfoCache.clear();
         return new RuntimeScalar(1);
     }
 
-    public static RuntimeScalar endpwent(RuntimeBase... args) {
+    public static RuntimeScalar endpwent(int ctx, RuntimeBase... args) {
         userIterator.remove(); // Clear this thread's iterator
         return new RuntimeScalar(1);
     }
 
-    public static RuntimeScalar endgrent(RuntimeBase... args) {
+    public static RuntimeScalar endgrent(int ctx, RuntimeBase... args) {
         groupIterator.remove(); // Clear this thread's iterator
         return new RuntimeScalar(1);
     }
@@ -281,7 +283,7 @@ public class ExtendedNativeUtils extends NativeUtils {
     /**
      * Get host information by name
      */
-    public static RuntimeArray gethostbyname(RuntimeBase... args) {
+    public static RuntimeArray gethostbyname(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeArray();
         String hostname = args[0].toString();
 
@@ -315,7 +317,7 @@ public class ExtendedNativeUtils extends NativeUtils {
     /**
      * Get host information by address
      */
-    public static RuntimeArray gethostbyaddr(RuntimeBase... args) {
+    public static RuntimeArray gethostbyaddr(int ctx, RuntimeBase... args) {
         if (args.length < 2) return new RuntimeArray();
 
         try {
@@ -358,7 +360,7 @@ public class ExtendedNativeUtils extends NativeUtils {
     /**
      * Get service information by name and protocol
      */
-    public static RuntimeArray getservbyname(RuntimeBase... args) {
+    public static RuntimeArray getservbyname(int ctx, RuntimeBase... args) {
         if (args.length < 2) return new RuntimeArray();
 
         String service = args[0].toString();
@@ -386,7 +388,7 @@ public class ExtendedNativeUtils extends NativeUtils {
     /**
      * Get service information by port and protocol
      */
-    public static RuntimeArray getservbyport(RuntimeBase... args) {
+    public static RuntimeArray getservbyport(int ctx, RuntimeBase... args) {
         if (args.length < 2) return new RuntimeArray();
 
         int port = args[0].scalar().getInt();
@@ -414,7 +416,7 @@ public class ExtendedNativeUtils extends NativeUtils {
     /**
      * Get protocol information by name
      */
-    public static RuntimeArray getprotobyname(RuntimeBase... args) {
+    public static RuntimeArray getprotobyname(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeArray();
         String protocol = args[0].toString().toLowerCase();
 
@@ -436,7 +438,7 @@ public class ExtendedNativeUtils extends NativeUtils {
     /**
      * Get protocol information by number
      */
-    public static RuntimeArray getprotobynumber(RuntimeBase... args) {
+    public static RuntimeArray getprotobynumber(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeArray();
         int protoNum = args[0].scalar().getInt();
 

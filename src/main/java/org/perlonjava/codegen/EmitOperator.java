@@ -181,6 +181,9 @@ public class EmitOperator {
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
         EmitterVisitor listVisitor = emitterVisitor.with(RuntimeContextType.LIST);
         if (node.operand instanceof ListNode operand) {
+            // Push context
+            emitterVisitor.pushCallContext();
+
             // Create array for varargs operators
             MethodVisitor mv = emitterVisitor.ctx.mv;
 

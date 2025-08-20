@@ -26,7 +26,7 @@ public class TieOperators {
      * @return the object returned by the TIE* constructor method
      * @throws PerlCompilerException if the variable type is not supported or not yet implemented
      */
-    public static RuntimeScalar tie(RuntimeBase... scalars) {
+    public static RuntimeScalar tie(int ctx, RuntimeBase... scalars) {
         RuntimeScalar variable = scalars[0].getFirst();
         RuntimeScalar classArg = scalars[1].getFirst();
         String className = classArg.getBoolean() ? scalars[1].toString() : "main";
@@ -42,7 +42,7 @@ public class TieOperators {
         };
 
         // untie() if the variable is already tied
-        untie(variable);
+        untie(ctx, variable);
 
         // Call the Perl method
         RuntimeScalar self = RuntimeCode.call(
@@ -96,7 +96,7 @@ public class TieOperators {
      * @param scalars varargs where scalars[0] is the tied variable (must be a reference)
      * @return true on success, undef if the variable wasn't tied
      */
-    public static RuntimeScalar untie(RuntimeBase... scalars) {
+    public static RuntimeScalar untie(int ctx, RuntimeBase... scalars) {
         RuntimeScalar variable = (RuntimeScalar) scalars[0];
 
         switch (variable.type) {
@@ -162,7 +162,7 @@ public class TieOperators {
      * @param scalars varargs where scalars[0] is the potentially tied variable (must be a reference)
      * @return the object that the variable is tied to, or undef if not tied
      */
-    public static RuntimeScalar tied(RuntimeBase... scalars) {
+    public static RuntimeScalar tied(int ctx, RuntimeBase... scalars) {
         RuntimeScalar variable = (RuntimeScalar) scalars[0];
         switch (variable.type) {
             case REFERENCE -> {

@@ -29,7 +29,7 @@ public class NativeUtils {
      * @param args RuntimeScalar array containing [oldfile, newfile]
      * @return RuntimeScalar with 1 for success, 0 for failure
      */
-    public static RuntimeScalar symlink(RuntimeBase... args) {
+    public static RuntimeScalar symlink(int ctx, RuntimeBase... args) {
         if (args.length < 2) {
             return new RuntimeScalar(0);
         }
@@ -92,7 +92,7 @@ public class NativeUtils {
      * @param args RuntimeScalar array containing [oldfile, newfile]
      * @return RuntimeScalar with 1 for success, 0 for failure
      */
-    public static RuntimeScalar link(RuntimeBase... args) {
+    public static RuntimeScalar link(int ctx, RuntimeBase... args) {
         if (args.length < 2) {
             return new RuntimeScalar(0);
         }
@@ -126,7 +126,7 @@ public class NativeUtils {
      * @param args Unused (for API consistency)
      * @return RuntimeScalar with parent process ID
      */
-    public static RuntimeScalar getppid(RuntimeBase... args) {
+    public static RuntimeScalar getppid(int ctx, RuntimeBase... args) {
         if (IS_WINDOWS) {
             // Windows implementation
             int currentPid = Kernel32.INSTANCE.GetCurrentProcessId();
@@ -156,7 +156,7 @@ public class NativeUtils {
      * @param args Unused (for API consistency)
      * @return RuntimeScalar with user ID
      */
-    public static RuntimeScalar getuid(RuntimeBase... args) {
+    public static RuntimeScalar getuid(int ctx, RuntimeBase... args) {
         if (IS_WINDOWS) {
             // Simplified approach: use username hash
             try {
@@ -178,10 +178,10 @@ public class NativeUtils {
      * @param args Unused (for API consistency)
      * @return RuntimeScalar with effective user ID
      */
-    public static RuntimeScalar geteuid(RuntimeBase... args) {
+    public static RuntimeScalar geteuid(int ctx, RuntimeBase... args) {
         if (IS_WINDOWS) {
             // On Windows, effective UID is same as UID
-            return getuid(args);
+            return getuid(ctx, args);
         } else {
             return new RuntimeScalar(PosixLibrary.INSTANCE.geteuid());
         }
@@ -192,7 +192,7 @@ public class NativeUtils {
      * @param args Unused (for API consistency)
      * @return RuntimeScalar with group ID
      */
-    public static RuntimeScalar getgid(RuntimeBase... args) {
+    public static RuntimeScalar getgid(int ctx, RuntimeBase... args) {
         if (IS_WINDOWS) {
             // Simplified: use computer name for consistent group ID
             try {
@@ -214,10 +214,10 @@ public class NativeUtils {
      * @param args Unused (for API consistency)
      * @return RuntimeScalar with effective group ID
      */
-    public static RuntimeScalar getegid(RuntimeBase... args) {
+    public static RuntimeScalar getegid(int ctx, RuntimeBase... args) {
         if (IS_WINDOWS) {
             // On Windows, effective GID is same as GID
-            return getgid(args);
+            return getgid(ctx, args);
         } else {
             return new RuntimeScalar(PosixLibrary.INSTANCE.getegid());
         }

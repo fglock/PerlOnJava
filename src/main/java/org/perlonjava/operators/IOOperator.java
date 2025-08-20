@@ -171,7 +171,7 @@ public class IOOperator {
      * @args  file handle, file mode, arg list.
      * @return A RuntimeScalar indicating the result of the open operation.
      */
-    public static RuntimeScalar open(RuntimeBase... args) {
+    public static RuntimeScalar open(int ctx, RuntimeBase... args) {
     //public static RuntimeScalar open(RuntimeList runtimeList, RuntimeScalar fileHandle) {
 //        open FILEHANDLE,MODE,EXPR
 //        open FILEHANDLE,MODE,EXPR,LIST
@@ -226,7 +226,7 @@ public class IOOperator {
      * @param args The file handle.
      * @return A RuntimeScalar with the result of the close operation.
      */
-    public static RuntimeScalar close(RuntimeBase... args) {
+    public static RuntimeScalar close(int ctx, RuntimeBase... args) {
         RuntimeScalar handle = args.length == 1 ? ((RuntimeScalar) args[0]) : select(new RuntimeList(), RuntimeContextType.SCALAR);
         RuntimeIO fh = handle.getRuntimeIO();
 
@@ -367,7 +367,7 @@ public class IOOperator {
      * @param args Contains FILEHANDLE, TARGET, LENGTH and optional OFFSET
      * @return Number of bytes read, 0 at EOF, or undef on error
      */
-    public static RuntimeScalar sysread(RuntimeBase... args) {
+    public static RuntimeScalar sysread(int ctx, RuntimeBase... args) {
         if (args.length < 3) {
             throw new PerlCompilerException("Not enough arguments for sysread");
         }
@@ -506,7 +506,7 @@ public class IOOperator {
      * @param args Contains FILEHANDLE, SCALAR, optional LENGTH and OFFSET
      * @return Number of bytes written, or undef on error
      */
-    public static RuntimeScalar syswrite(RuntimeBase... args) {
+    public static RuntimeScalar syswrite(int ctx, RuntimeBase... args) {
         if (args.length < 2) {
             throw new PerlCompilerException("Not enough arguments for syswrite");
         }

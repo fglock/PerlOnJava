@@ -69,7 +69,7 @@ public class UtimeOperator {
      * @param args RuntimeBase containing access time, modification time, and file paths
      * @return RuntimeScalar with count of successfully changed files
      */
-    public static RuntimeScalar utime(RuntimeBase... args) {
+    public static RuntimeScalar utime(int ctx, RuntimeBase... args) {
         if (args.length < 2) {
             return new RuntimeScalar(0);
         }
