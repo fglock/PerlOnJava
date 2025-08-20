@@ -133,11 +133,11 @@ public class OperatorHandler {
 
         // User/Group Information Functions
         put("getlogin", "getlogin", "org/perlonjava/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
-        put("getpwnam", "getpwnam", "org/perlonjava/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeArray;");
-        put("getpwuid", "getpwuid", "org/perlonjava/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeArray;");
+        put("getpwnam", "getpwnam", "org/perlonjava/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeList;");
+        put("getpwuid", "getpwuid", "org/perlonjava/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeList;");
         put("getgrnam", "getgrnam", "org/perlonjava/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeArray;");
         put("getgrgid", "getgrgid", "org/perlonjava/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeArray;");
-        put("getpwent", "getpwent", "org/perlonjava/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeArray;");
+        put("getpwent", "getpwent", "org/perlonjava/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeList;");
         put("getgrent", "getgrent", "org/perlonjava/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeArray;");
         put("setpwent", "setpwent", "org/perlonjava/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");
         put("setgrent", "setgrent", "org/perlonjava/nativ/ExtendedNativeUtils", "(I[Lorg/perlonjava/runtime/RuntimeBase;)Lorg/perlonjava/runtime/RuntimeScalar;");

@@ -40,18 +40,22 @@ public class ExtendedNativeUtils extends NativeUtils {
             return new RuntimeScalar("");
         }
     }
-
     /**
-     * Get password entry by username
-     */
-    public static RuntimeArray getpwnam(int ctx, RuntimeBase... args) {
-        if (args.length < 1) return new RuntimeArray();
+      * Get password entry by username
+      */
+    public static RuntimeList getpwnam(int ctx, RuntimeBase... args) {
+        if (args.length < 1) return new RuntimeList();
         String username = args[0].toString();
 
-        // Check cache first
+        // In scalar context, return just the username
+        if (ctx == RuntimeContextType.SCALAR) {
+            return new RuntimeScalar(username).getList();
+        }
+
+        // Check cache first for full info
         String cacheKey = "user:" + username;
         if (userInfoCache.containsKey(cacheKey)) {
-            return userInfoCache.get(cacheKey);
+            return userInfoCache.get(cacheKey).getList();
         }
 
         RuntimeArray result = new RuntimeArray();
@@ -143,14 +147,14 @@ public class ExtendedNativeUtils extends NativeUtils {
             // Return empty array on error
         }
 
-        return result;
+        return result.getList();
     }
 
     /**
-     * Get password entry by UID
-     */
-    public static RuntimeArray getpwuid(int ctx, RuntimeBase... args) {
-        if (args.length < 1) return new RuntimeArray();
+      * Get password entry by UID
+      */
+    public static RuntimeList getpwuid(int ctx, RuntimeBase... args) {
+        if (args.length < 1) return new RuntimeList();
 
         int uid = args[0].scalar().getInt();
         int currentUid = getuid(SCALAR).getInt();
@@ -159,12 +163,12 @@ public class ExtendedNativeUtils extends NativeUtils {
             return getpwnam(ctx, new RuntimeScalar(System.getProperty("user.name")));
         }
 
-        return new RuntimeArray(); // User not found
+        return new RuntimeList(); // User not found
     }
 
     /**
-     * Get group entry by name
-     */
+      * Get group entry by name
+      */
     public static RuntimeArray getgrnam(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeArray();
         String groupname = args[0].toString();
@@ -226,7 +230,7 @@ public class ExtendedNativeUtils extends NativeUtils {
     }
 
     // Iterator functions for user/group entries
-    public static RuntimeArray getpwent(int ctx, RuntimeBase... args) {
+    public static RuntimeList getpwent(int ctx, RuntimeBase... args) {
         Iterator<String> iterator = userIterator.get();
         if (iterator == null) {
             List<String> users = getSystemUsers();
@@ -238,7 +242,7 @@ public class ExtendedNativeUtils extends NativeUtils {
             return getpwnam(ctx, new RuntimeScalar(iterator.next()));
         }
 
-        return new RuntimeArray(); // End of entries
+        return new RuntimeList(); // End of entries
     }
 
     public static RuntimeArray getgrent(int ctx, RuntimeBase... args) {
