@@ -114,7 +114,11 @@ public class RuntimeList extends RuntimeBase {
      * @param value The value to add.
      */
     public void add(RuntimeBase value) {
-        this.elements.add(value);
+        if (value instanceof RuntimeList list) {
+            this.elements.addAll(list.elements);
+        } else {
+            this.elements.add(value);
+        }
     }
     public void add(RuntimeScalar value) {
         this.elements.add(value);
