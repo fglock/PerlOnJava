@@ -87,10 +87,9 @@ public class FileHandle {
         LexerToken token = peek(parser);
         Node fileHandle = null;
 
-        // Handle glob expressions when we have brackets
-        // In Perl, {*STDOUT} and {\*STDOUT} are valid file handle expressions
-        if (hasBracket && token.type == LexerTokenType.OPERATOR && (token.text.equals("*") || token.text.equals("\\"))) {
-                // Parse glob expression: {*STDOUT}, {\*STDOUT}, etc.
+        // Handle glob or string expressions when we have brackets
+        if (hasBracket && token.type == LexerTokenType.OPERATOR && (token.text.equals("*") || token.text.equals("\\") || token.text.equals("\""))) {
+                // Parse glob expression: {*STDOUT}, {\*STDOUT}, {"STDOUT"} etc.
                 // ParsePrimary.parsePrimary() has logic to handle both * and \* cases
                 // and will create the appropriate glob or reference node
                 fileHandle = ParsePrimary.parsePrimary(parser);
