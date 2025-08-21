@@ -483,10 +483,7 @@ public class EmitOperator {
         EmitterContext ctx = emitterVisitor.ctx;
 
         // Emit the File Handle or file name
-        if (node instanceof OperatorNode || node instanceof BinaryOperatorNode) {
-            // If the left node is an operator, accept it in SCALAR context
-            node.accept(emitterVisitor);
-        } else if (node instanceof IdentifierNode) {
+        if (node instanceof IdentifierNode) {
             // `print FILE 123`
             // retrieve STDOUT, STDERR from GlobalIORef
             // fetch a global fileHandle by name
@@ -502,9 +499,8 @@ public class EmitOperator {
                     "getGlobalIO",
                     "(Ljava/lang/String;)Lorg/perlonjava/runtime/RuntimeGlob;",
                     false);
-        } else if (node instanceof BlockNode) {
-            // {STDERR}  or  {$fh}
-            // TODO
+        } else {
+            node.accept(emitterVisitor);
         }
     }
 
