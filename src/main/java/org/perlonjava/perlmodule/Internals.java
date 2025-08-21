@@ -23,7 +23,7 @@ public class Internals extends PerlModuleBase {
     public static void initialize() {
         Internals internals = new Internals();
         try {
-            internals.registerMethod("SvREADONLY", "svReadonly", "$$");
+            internals.registerMethod("SvREADONLY", "svReadonly", "$;$");
             internals.registerMethod("initialize_state_variable", "initializeStateVariable", "$$");
             internals.registerMethod("initialize_state_array", "initializeStateArray", "$$");
             internals.registerMethod("initialize_state_hash", "initializeStateHash", "$$");
