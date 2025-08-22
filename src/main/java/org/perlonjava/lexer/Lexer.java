@@ -1,5 +1,8 @@
 package org.perlonjava.lexer;
 
+import com.ibm.icu.lang.UCharacter;
+import com.ibm.icu.lang.UProperty;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -120,7 +123,7 @@ public class Lexer {
             }
         } else if (Character.isDigit(current)) {
             return consumeNumber();
-        } else if (Character.isLetter(current) || current == '_') {
+        } else if (current == '_' || UCharacter.hasBinaryProperty(current, UProperty.XID_START)) {
             return consumeIdentifier();
         } else if (current < 128 && isOperator[current]) {
             return consumeOperator();

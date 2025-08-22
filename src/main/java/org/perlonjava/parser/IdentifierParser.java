@@ -1,5 +1,7 @@
 package org.perlonjava.parser;
 
+import com.ibm.icu.lang.UCharacter;
+import com.ibm.icu.lang.UProperty;
 import org.perlonjava.lexer.LexerToken;
 import org.perlonjava.lexer.LexerTokenType;
 import org.perlonjava.runtime.PerlCompilerException;
@@ -88,9 +90,12 @@ public class IdentifierParser {
             // Assert valid Unicode start of identifier - \p{XID_Start}
             String id = token.text;
             int cp = id.codePointAt(0);
-            boolean valid = cp == '_' || Character.isUnicodeIdentifierStart(cp);
+            boolean valid = cp == '_' || UCharacter.hasBinaryProperty(cp, UProperty.XID_START);
             if (!valid) {
-                throw new PerlCompilerException("Unrecognized character \\x{" + Integer.toHexString(cp) + "};");
+                String hex = cp > 255
+                        ? "\\x{" + Integer.toHexString(cp) + "}"
+                        : String.format("\\x%02x", cp);
+                throw new PerlCompilerException("Unrecognized character " + hex + ";");
             }
         }
 
@@ -99,7 +104,7 @@ public class IdentifierParser {
             if (token.type == LexerTokenType.OPERATOR || token.type == LexerTokenType.NUMBER || token.type == LexerTokenType.STRING) {
                 if (token.text.equals("{")) {
                     String prefix = variableName.toString();
-                    if (prefix.equals("")) {
+                    if (prefix.isEmpty()) {
                         // `${` is not a valid name
                         return null;
                     }
