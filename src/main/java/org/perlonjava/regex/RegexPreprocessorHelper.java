@@ -370,7 +370,7 @@ public class RegexPreprocessorHelper {
         String negativeFlags = parts.length > 1 ? parts[1] : "";
 
         // Handle caret case
-        if (positiveFlags.charAt(0) == '^') {
+        if (!positiveFlags.isEmpty() && positiveFlags.charAt(0) == '^') {
             positiveFlags = positiveFlags.substring(1);
             Set<Character> negSet = new HashSet<>();
             for (char c : (negativeFlags + "imnsx").toCharArray()) {
