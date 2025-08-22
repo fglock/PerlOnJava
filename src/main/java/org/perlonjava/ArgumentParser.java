@@ -80,30 +80,45 @@ public class ArgumentParser {
      */
     private static void processArgs(String[] args, CompilerOptions parsedArgs) {
         boolean readingArgv = false; // Flag to indicate if we are reading non-switch arguments
+        int startIndex = 0;
 
-        // Iterate over each argument
+        // First pass: process switches until we find a non-switch argument or code is set
         for (int i = 0; i < args.length; i++) {
-            if (readingArgv || !args[i].startsWith("-")) {
-                // Process non-switch arguments (e.g., file names or positional arguments)
-                processNonSwitchArgument(args, parsedArgs, i);
-                readingArgv = true; // Once a non-switch argument is encountered, treat all subsequent arguments as such
-            } else {
-                String arg = args[i];
+            String arg = args[i];
 
-                if (arg.equals("--")) {
-                    // "--" indicates the end of switch arguments; subsequent arguments are treated as non-switch
-                    readingArgv = true;
-                    continue;
-                }
-
-                if (arg.startsWith("-") && !arg.startsWith("--")) {
-                    // Process clustered single-character switches (e.g., -e, -i)
-                    i = processClusteredSwitches(args, parsedArgs, arg, i);
-                } else {
-                    // Process long-form switches (e.g., --debug, --tokenize)
-                    i = processLongSwitches(args, parsedArgs, arg, i);
-                }
+            if (arg.equals("--")) {
+                startIndex = i + 1;
+                break;
             }
+
+            if (!arg.startsWith("-")) {
+                startIndex = i;
+                break;
+            }
+
+            if (arg.startsWith("-") && !arg.startsWith("--")) {
+                // Process clustered single-character switches
+                i = processClusteredSwitches(args, parsedArgs, arg, i);
+            } else {
+                // Process long-form switches
+                i = processLongSwitches(args, parsedArgs, arg, i);
+            }
+
+            // If code was set (e.g., by -e), stop processing switches
+            if (parsedArgs.code != null) {
+                startIndex = i + 1;
+                break;
+            }
+        }
+
+        // If -s is enabled and we haven't set code yet, process rudimentary switches
+        if (parsedArgs.rudimentarySwitchParsing && parsedArgs.code == null) {
+            startIndex = processRudimentarySwitches(args, parsedArgs, startIndex);
+        }
+
+        // Process remaining arguments (filename and @ARGV)
+        for (int i = startIndex; i < args.length; i++) {
+            processNonSwitchArgument(args, parsedArgs, i);
         }
     }
 
@@ -281,6 +296,10 @@ public class ArgumentParser {
                 case 'S':
                     // Enable PATH environment search for program
                     parsedArgs.usePathEnv = true;
+                    break;
+                case 's':
+                    // Enable rudimentary switch parsing
+                    parsedArgs.rudimentarySwitchParsing = true;
                     break;
                 case 'x':
                     parsedArgs.discardLeadingGarbage = true;
@@ -735,10 +754,15 @@ public class ArgumentParser {
         }
         // Perl tests require DynaLoader
         useStatements.append("use DynaLoader;\n");
-        // Prepend the use statements to the code
-        if (!useStatements.isEmpty()) {
-            parsedArgs.code = useStatements + parsedArgs.code;
-        }
+            // Prepend the use statements to the code
+            if (!useStatements.isEmpty()) {
+                parsedArgs.code = useStatements + parsedArgs.code;
+            }
+
+            // Prepend rudimentary switch assignments if any
+            if (parsedArgs.rudimentarySwitchAssignments != null) {
+                parsedArgs.code = parsedArgs.rudimentarySwitchAssignments.toString() + parsedArgs.code;
+            }
     }
 
     /**
@@ -760,6 +784,7 @@ public class ArgumentParser {
         System.out.println("  -[mM][-]module        execute \"use/no module...\" before executing program");
         System.out.println("  -n                    assume \"while (<>) { ... }\" loop around program");
         System.out.println("  -p                    assume loop like -n but print line also, like sed");
+        System.out.println("  -s                    enable rudimentary parsing for switches after program name");
         System.out.println("  -S                    look for programfile using PATH environment variable");
         System.out.println("  -w                    enable many useful warnings");
         System.out.println("  -W                    enable all warnings");
@@ -852,6 +877,8 @@ public class ArgumentParser {
         public String splitPattern = "' '"; // Default split pattern for -a
         public boolean lineEndingProcessing = false; // For -l
         public boolean usePathEnv = false; // For -S
+        public boolean rudimentarySwitchParsing = false; // For -s
+        public StringBuilder rudimentarySwitchAssignments = null; // Variable assignments from -s
         public boolean discardLeadingGarbage = false; // For -x
         List<ModuleUseStatement> moduleUseStatements = new ArrayList<>(); // For -m -M
         public boolean isUnicodeSource = false; // Set to true for UTF-16/UTF-32 source files
@@ -868,32 +895,92 @@ public class ArgumentParser {
         }
 
         @Override
-        public String toString() {
-            return "CompilerOptions{\n" +
-                    "    debugEnabled=" + debugEnabled + ",\n" +
-                    "    disassembleEnabled=" + disassembleEnabled + ",\n" +
-                    "    tokenizeOnly=" + tokenizeOnly + ",\n" +
-                    "    parseOnly=" + parseOnly + ",\n" +
-                    "    compileOnly=" + compileOnly + ",\n" +
-                    "    processOnly=" + processOnly + ",\n" +
-                    "    processAndPrint=" + processAndPrint + ",\n" +
-                    "    inPlaceEdit=" + inPlaceEdit + ",\n" +
-                    "    code='" + (code != null ? code : "null") + "',\n" +
-                    "    codeHasEncoding=" + codeHasEncoding + "\n" +
-                    "    fileName=" + ScalarUtils.printable(fileName) + ",\n" +
-                    "    inPlaceExtension=" + ScalarUtils.printable(inPlaceExtension) + ",\n" +
-                    "    inputRecordSeparator=" + ScalarUtils.printable(inputRecordSeparator) + ",\n" +
-                    "    outputRecordSeparator=" + ScalarUtils.printable(outputRecordSeparator) + ",\n" +
-                    "    autoSplit=" + autoSplit + ",\n" +
-                    "    useVersion=" + useVersion + ",\n" +
-                    "    lineEndingProcessing=" + lineEndingProcessing + ",\n" +
-                    "    discardLeadingGarbage=" + discardLeadingGarbage + ",\n" +
-                    "    splitPattern=" + ScalarUtils.printable(splitPattern) + ",\n" +
-                    "    argumentList=" + argumentList + ",\n" +
-                    "    inc=" + inc + ",\n" +
-                    "    moduleUseStatements=" + moduleUseStatements + "\n" +
-                    "    isUnicodeSource=" + isUnicodeSource + "\n" +
-                    "}";
+            public String toString() {
+                return "CompilerOptions{\n" +
+                        "    debugEnabled=" + debugEnabled + ",\n" +
+                        "    disassembleEnabled=" + disassembleEnabled + ",\n" +
+                        "    tokenizeOnly=" + tokenizeOnly + ",\n" +
+                        "    parseOnly=" + parseOnly + ",\n" +
+                        "    compileOnly=" + compileOnly + ",\n" +
+                        "    processOnly=" + processOnly + ",\n" +
+                        "    processAndPrint=" + processAndPrint + ",\n" +
+                        "    inPlaceEdit=" + inPlaceEdit + ",\n" +
+                        "    code='" + (code != null ? code : "null") + "',\n" +
+                        "    codeHasEncoding=" + codeHasEncoding + ",\n" +
+                        "    fileName=" + ScalarUtils.printable(fileName) + ",\n" +
+                        "    inPlaceExtension=" + ScalarUtils.printable(inPlaceExtension) + ",\n" +
+                        "    inputRecordSeparator=" + ScalarUtils.printable(inputRecordSeparator) + ",\n" +
+                        "    outputRecordSeparator=" + ScalarUtils.printable(outputRecordSeparator) + ",\n" +
+                        "    autoSplit=" + autoSplit + ",\n" +
+                        "    useVersion=" + useVersion + ",\n" +
+                        "    lineEndingProcessing=" + lineEndingProcessing + ",\n" +
+                        "    discardLeadingGarbage=" + discardLeadingGarbage + ",\n" +
+                        "    splitPattern=" + ScalarUtils.printable(splitPattern) + ",\n" +
+                        "    argumentList=" + argumentList + ",\n" +
+                        "    inc=" + inc + ",\n" +
+                        "    moduleUseStatements=" + moduleUseStatements + ",\n" +
+                        "    isUnicodeSource=" + isUnicodeSource + ",\n" +
+                        "    rudimentarySwitchParsing=" + rudimentarySwitchParsing + "\n" +
+                        "}";
+            }
         }
-    }
+
+        /**
+         * Processes rudimentary switches when -s is enabled.
+         * Removes switches from the argument list and sets corresponding variables.
+         *
+         * @param args       The command-line arguments.
+         * @param parsedArgs The CompilerOptions object to configure.
+         * @param startIndex The index to start processing from.
+         * @return The index of the first non-switch argument.
+         */
+        private static int processRudimentarySwitches(String[] args, CompilerOptions parsedArgs, int startIndex) {
+            int i = startIndex;
+
+            while (i < args.length) {
+                String arg = args[i];
+
+                // Stop processing on "--" or first non-switch argument
+                if (arg.equals("--") || !arg.startsWith("-")) {
+                    break;
+                }
+
+                // Process the switch
+                String varName;
+                String varValue = "1"; // Default value
+
+                if (arg.startsWith("--")) {
+                    // Handle --switch or --switch=value
+                    varName = "${" + arg.substring(1) + "}";
+                    int equalsIndex = varName.indexOf('=');
+                    if (equalsIndex != -1) {
+                        varValue = varName.substring(equalsIndex + 1, varName.length() - 1);
+                        varName = varName.substring(0, equalsIndex) + "}";
+                    }
+                } else {
+                    // Handle -switch or -switch=value
+                    varName = arg.substring(1);
+                    int equalsIndex = varName.indexOf('=');
+                    if (equalsIndex != -1) {
+                        varValue = varName.substring(equalsIndex + 1);
+                        varName = varName.substring(0, equalsIndex);
+                    }
+                }
+
+                // Add the variable assignment to be prepended to the code
+                if (parsedArgs.rudimentarySwitchAssignments == null) {
+                    parsedArgs.rudimentarySwitchAssignments = new StringBuilder();
+                }
+                parsedArgs.rudimentarySwitchAssignments
+                    .append("$main::")
+                    .append(varName)
+                    .append(" = '")
+                    .append(varValue.replace("'", "\\'"))
+                    .append("';\n");
+
+                i++;
+            }
+
+            return i;
+        }
 }
