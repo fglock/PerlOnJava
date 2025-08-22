@@ -156,7 +156,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Autoload**: `AUTOLOAD` mechanism is implemented; `$AUTOLOAD` variable is implemented.
 - ✅  **`class`**: `class` token is supported.
 - ✅  **Indirect object syntax** indirect object syntax is implemented.
-- ❌  **`__CLASS__`**: `__CLASS__` token is not yet supported.
+- ✅  **`__CLASS__`**: `__CLASS__` token is supported.
 - ❌  **`:isa`**: `:isa` class attribute is not yet supported.
 - ❌  **`method`**: `method` block is not yet supported.
 - ❌  **`field`**: `field` token is not yet supported.

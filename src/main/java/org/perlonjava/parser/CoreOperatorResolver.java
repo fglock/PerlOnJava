@@ -44,6 +44,10 @@ public class CoreOperatorResolver {
                 handleEmptyParentheses(parser);
                 yield new StringNode(parser.ctx.symbolTable.getCurrentPackage(), parser.tokenIndex);
             }
+            case "__CLASS__" -> {
+                handleEmptyParentheses(parser);
+                yield new StringNode(parser.ctx.symbolTable.getCurrentPackage(), parser.tokenIndex);
+            }
             case "__SUB__", "time", "times", "wait", "wantarray" -> {
                 handleEmptyParentheses(parser);
                 yield new OperatorNode(token.text, null, currentIndex);
