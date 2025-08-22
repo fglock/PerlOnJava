@@ -294,7 +294,7 @@ public class CompareOperators {
             }
         }
 
-        return getScalarInt(runtimeScalar.toString().compareTo(arg2.toString()));
+        return getScalarInt(Integer.compare(runtimeScalar.toString().compareTo(arg2.toString()), 0));
     }
 
     /**
