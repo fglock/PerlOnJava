@@ -52,6 +52,7 @@ public class ParserTables {
         CORE_PROTOTYPES.put("__FILE__", "");
         CORE_PROTOTYPES.put("__LINE__", "");
         CORE_PROTOTYPES.put("__PACKAGE__", "");
+        CORE_PROTOTYPES.put("__CLASS__", "");
         CORE_PROTOTYPES.put("__SUB__", "");
         CORE_PROTOTYPES.put("__DATA__", null);
         CORE_PROTOTYPES.put("__END__", null);

@@ -126,6 +126,8 @@ public class ParsePrimary {
                         parser.ctx.symbolTable.isFeatureCategoryEnabled(operator);
                 case "__SUB__" ->
                         parser.ctx.symbolTable.isFeatureCategoryEnabled("current_sub");
+                case "__CLASS__" ->
+                        parser.ctx.symbolTable.isFeatureCategoryEnabled("class");
                 case "method" ->
                         parser.ctx.symbolTable.isFeatureCategoryEnabled("class");
                 default -> true; // Most operators are always enabled
