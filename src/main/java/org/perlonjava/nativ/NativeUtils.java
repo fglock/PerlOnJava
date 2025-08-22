@@ -128,12 +128,7 @@ public class NativeUtils {
      */
     public static RuntimeScalar getppid(int ctx, RuntimeBase... args) {
         if (IS_WINDOWS) {
-            // Check if we're a forked child first
-            if (ForkUtils.isForkedChild()) {
-                return new RuntimeScalar(ForkUtils.getParentPid());
-            }
-
-            // Windows implementation for non-forked processes
+            // Windows implementation
             int currentPid = Kernel32.INSTANCE.GetCurrentProcessId();
             WinNT.HANDLE snapshot = Kernel32.INSTANCE.CreateToolhelp32Snapshot(
                     Tlhelp32.TH32CS_SNAPPROCESS, new WinDef.DWORD(0));
@@ -226,15 +221,5 @@ public class NativeUtils {
         } else {
             return new RuntimeScalar(PosixLibrary.INSTANCE.getegid());
         }
-    }
-
-    /**
-     * Fork a new process
-     * @param ctx Context (unused)
-     * @param args Arguments (unused)
-     * @return Child PID to parent, 0 to child, or undef on failure
-     */
-    public static RuntimeScalar fork(int ctx, RuntimeBase... args) {
-        return ForkUtils.fork(ctx, args);
     }
 }

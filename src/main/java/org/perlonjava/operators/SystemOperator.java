@@ -388,4 +388,24 @@ public class SystemOperator {
         Process process = processBuilder.start();
         return process.waitFor();
     }
+
+    /**
+     * Attempts to implement Perl's fork() function.
+     * <p>
+     * WARNING: True fork() cannot be implemented in Java due to JVM architecture constraints.
+     * This method always returns undef and sets an error message.
+     * <p>
+     * In real Perl, fork() creates a new process that is an exact copy of the current process.
+     * Java's JVM architecture makes this impossible - the JVM is a single process with
+     * multiple threads, and there's no way to "split" the JVM into two identical copies.
+     *
+     * @return Always returns undef
+     */
+    public static RuntimeScalar fork(RuntimeList args, int ctx) {
+        // Set $! to indicate why fork failed
+        setGlobalVariable("main::!", "fork() not supported on this platform (Java/JVM)");
+
+        // Return undef to indicate failure
+        return scalarUndef;
+    }
 }
