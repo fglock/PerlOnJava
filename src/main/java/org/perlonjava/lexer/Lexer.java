@@ -121,7 +121,7 @@ public class Lexer {
             } else {
                 return consumeWhitespace();
             }
-        } else if (Character.isDigit(current)) {
+        } else if (current >= '0' && current <= '9') {
             return consumeNumber();
         } else if (current == '_' || UCharacter.hasBinaryProperty(current, UProperty.XID_START)) {
             return consumeIdentifier();
@@ -146,7 +146,7 @@ public class Lexer {
 
     public LexerToken consumeNumber() {
         int start = position;
-        while (position < length && (Character.isDigit(input[position]) || input[position] == '_')) {
+        while (position < length && ((input[position] >= '0' && input[position] <= '9') || input[position] == '_')) {
             position++;
         }
         return new LexerToken(LexerTokenType.NUMBER, new String(input, start, position - start));
