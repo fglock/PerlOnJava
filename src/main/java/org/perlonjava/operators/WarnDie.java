@@ -1,5 +1,8 @@
 package org.perlonjava.operators;
 
+import com.sun.jna.Platform;
+import org.perlonjava.nativ.ForkUtils;
+import org.perlonjava.nativ.PosixLibrary;
 import org.perlonjava.perlmodule.Universal;
 import org.perlonjava.runtime.*;
 
@@ -204,16 +207,30 @@ public class WarnDie {
      * @return nothing
      */
     public static RuntimeScalar exit(RuntimeScalar runtimeScalar) {
-        try {
-            runEndBlocks();
-            RuntimeIO.closeAllHandles();
-        } catch (Throwable t) {
-            RuntimeIO.closeAllHandles();
-            String errorMessage = ErrorMessageUtil.stringifyException(t);
-            System.err.println(errorMessage);
-            System.exit(1);
+        int exitCode = runtimeScalar.getInt();
+
+        // Check if we're in a forked child process on POSIX systems
+        if (!Platform.isWindows() && ForkUtils.isForkedChild()) {
+            // Use POSIX _exit() to avoid JVM shutdown hooks in forked child
+            try {
+                PosixLibrary.INSTANCE._exit(exitCode);
+            } catch (Exception e) {
+                // Fallback to System.exit if _exit fails
+                System.exit(exitCode);
+            }
+        } else {
+            // Normal exit with cleanup
+            try {
+                runEndBlocks();
+                RuntimeIO.closeAllHandles();
+            } catch (Throwable t) {
+                RuntimeIO.closeAllHandles();
+                String errorMessage = ErrorMessageUtil.stringifyException(t);
+                System.err.println(errorMessage);
+                System.exit(1);
+            }
+            System.exit(exitCode);
         }
-        System.exit(runtimeScalar.getInt());
         return new RuntimeScalar(); // This line will never be reached
     }
 }
