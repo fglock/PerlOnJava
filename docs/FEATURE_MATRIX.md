@@ -69,7 +69,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - ✅  UTF-16 is accepted in source code.
 
 - ✅  Accept command line switches from the shebang line.
-- ✅  Accept command line switches: `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-s`, `-S`, `-x`, `-v`, `-V`, `-?`, `-w`, `-W`, `-X` are implemented.
+- ✅  Accept command line switches: `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-f`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-s`, `-S`, `-x`, `-v`, `-V`, `-?`, `-w`, `-W`, `-X` are implemented.
 - ❌  Missing command line switches include:
   - `-T`: Taint checks.
   - `-t`: Taint checks with warnings.
@@ -77,7 +77,6 @@ PerlOnJava implements most core Perl features with some key differences:
   - `-U`: Allows unsafe operations.
   - `-d[t][:debugger]`: Runs the program under the debugger.
   - `-D[number/list]`: Sets debugging flags.
-  - `-f`: Suppresses execution of `sitecustomize.pl`.
   - `-C [number/list]`: Controls Unicode features.
 
 ## Testing

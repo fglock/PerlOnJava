@@ -257,6 +257,9 @@ public class ArgumentParser {
                     parsedArgs.useVersion = true;
                     index = handleInlineCode(args, parsedArgs, index, j, arg);
                     break;
+                case 'f':
+                    // No-op: don't do $sitelib/sitecustomize.pl at startup
+                    break;
                 case 'i':
                     // Handle in-place editing specified with -i
                     index = handleInPlaceEditing(args, parsedArgs, index, j, arg);
@@ -781,6 +784,7 @@ public class ArgumentParser {
         System.out.println("  -c                    check syntax only (runs BEGIN and CHECK blocks)");
         System.out.println("  -e commandline        one line of program (several -e's allowed, omit programfile)");
         System.out.println("  -E commandline        like -e, but enables all optional features");
+        System.out.println("  -f                    don't do $sitelib/sitecustomize.pl at startup");
         System.out.println("  -F/pattern/           split() pattern for -a switch (//'s are optional)");
         System.out.println("  -g                    read all input in one go (slurp), rather than line-by-line");
         System.out.println("  -i[extension]         edit <> files in place (makes backup if extension supplied)");
