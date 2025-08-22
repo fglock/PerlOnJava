@@ -72,10 +72,6 @@ public class ForkUtils {
                 int errno = Native.getLastError();
                 GlobalVariable.getGlobalVariable("main::!").set(PosixLibrary.INSTANCE.strerror(errno));
                 return scalarUndef;
-            } else if (pid == 0) {
-                // We are in the child process
-                isForkedChild = true;
-                parentPid = PosixLibrary.INSTANCE.getppid();
             }
 
             return new RuntimeScalar(pid);
