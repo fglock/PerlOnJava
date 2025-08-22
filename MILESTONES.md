@@ -301,7 +301,7 @@ The following areas are currently under active development to enhance the functi
 
   - Add operators: `getlogin`, `getpwnam`, `getpwuid`, `getgrnam`, `getgrgid`, `getpwent`, `getgrent`, `setpwent`, `setgrent`, `endpwent`, `endgrent`, `gethostbyname`, `gethostbyaddr`, `getservbyname`, `getservbyport`, `getprotobyname`, `getprotobynumber`.
   - Add overload operators: `<=>`, `cmp`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `lt`, `le`, `gt`, `ge`, `eq`, `ne`, `qr`.
-  - Add command line switch: `-s` rudimentary switch parsing.
+  - Add command line switches: `-s`, `-f`.
   - Add `__CLASS__` keyword.
   - Planned release date: 2025-12-10.
 
