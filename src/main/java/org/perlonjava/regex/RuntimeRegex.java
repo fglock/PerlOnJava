@@ -443,17 +443,11 @@ public class RuntimeRegex implements RuntimeScalarReference {
                 // Try qr overload
                 RuntimeScalar overloadedResult = overloadCtx.tryOverload("(qr", new RuntimeArray(quotedRegex));
                 if (overloadedResult != null) {
-                    // The result must be a compiled regex or ref to compiled regex
+                    // The result must be a compiled regex
                     if (overloadedResult.type == RuntimeScalarType.REGEX) {
                         return (RuntimeRegex) overloadedResult.value;
-                    } else if (overloadedResult.type == RuntimeScalarType.REFERENCE) {
-                        // Dereference if it's a reference to a regex
-                        RuntimeScalar deref = overloadedResult.scalarDeref();
-                        if (deref.type == RuntimeScalarType.REGEX) {
-                            return (RuntimeRegex) deref.value;
-                        }
                     }
-                    throw new PerlCompilerException("qr overload must return a compiled regexp or ref to compiled regexp");
+                    throw new PerlCompilerException("Overloaded qr did not return a REGEXP");
                 }
 
                 // Try fallback to string conversion
