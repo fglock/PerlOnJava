@@ -54,6 +54,4 @@ public interface PosixLibrary extends Library {
     // Error handling
     int errno();
     String strerror(int errnum);
-
-    void _exit(int status);
 }
